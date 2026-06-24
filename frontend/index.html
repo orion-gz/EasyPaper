@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EasyPaper — AI 논문 번역</title>
+  <meta name="description" content="Gemma AI로 구동되는 학술 논문 실시간 번역 서비스. PDF와 번역문을 나란히 비교하세요." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf_viewer.min.css" />
+  <!-- KaTeX for LaTeX rendering (defer 없이 동기 로드 - window.katex 즉시 사용 가능) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="document.dispatchEvent(new Event('katex-ready'))"></script>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+
+  <!-- 로그인 화면 -->
+  <div id="login-screen" class="screen active">
+    <div class="upload-bg">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
+    <div class="upload-container">
+      <div class="logo">
+        <span class="logo-icon">⚗️</span>
+        <span class="logo-text">EasyPaper</span>
+      </div>
+      <h1 class="upload-title">학술 논문 번역 서비스<br /><span class="gradient-text">보안 로그인</span></h1>
+      
+      <div class="drop-zone" style="max-width: 400px; cursor: default; border: 1px solid var(--border-strong);">
+        <form id="login-form" class="drop-zone-inner" style="padding: 36px 32px; gap: 20px; width: 100%;">
+          <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
+            <label for="login-username" style="font-size: 13px; color: var(--text-secondary); font-weight: 500; text-align: left; width: 100%;">아이디 (Username)</label>
+            <input type="text" id="login-username" placeholder="아이디 입력" required style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
+          </div>
+          <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
+            <label for="login-password" style="font-size: 13px; color: var(--text-secondary); font-weight: 500; text-align: left; width: 100%;">비밀번호 (Password)</label>
+            <input type="password" id="login-password" placeholder="••••••••" required style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
+          </div>
+          <button type="submit" class="file-btn" style="width: 100%; justify-content: center; margin-top: 10px; padding: 12px 28px; border-radius: var(--radius-md); border: none;">로그인</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept=".pdf" multiple hidden />
+
+  <!-- 라이브러리 화면 -->
+  <div id="library-screen" class="screen">
+    <div class="upload-bg">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+    </div>
+    <div class="library-container">
+      <div class="library-header">
+        <div class="logo">
+          <span class="logo-icon">⚗️</span>
+          <span class="logo-text">내 라이브러리</span>
+        </div>
+        <button id="lib-upload-btn" class="file-btn" style="padding:8px 20px;font-size:13px">
+          + 새 논문 추가
+        </button>
+      </div>
+
+      <!-- 카테고리 필터 영역 -->
+      <div id="library-category-filters" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; align-items: center;"></div>
+
+      <div id="library-grid" class="library-grid">
+        <div class="lib-empty" id="lib-empty">
+          <div style="font-size:48px;margin-bottom:16px">📚</div>
+          <p>저장된 논문이 없습니다</p>
+          <p style="font-size:13px;color:var(--text-muted);margin-top:8px">PDF를 업로드하면 자동으로 저장됩니다</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 뷰어 화면 -->
+  <div id="viewer-screen" class="screen">
+
+    <!-- 상단 바 -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="back-btn" class="icon-btn" title="처음으로">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
+        </button>
+        <span class="logo-small">⚗️ EasyPaper</span>
+        <span id="doc-title" class="doc-title"></span>
+      </div>
+      <div class="topbar-center">
+        <span class="page-display">
+          <input type="number" id="page-input" min="1" value="1" title="페이지 번호 입력 후 Enter" />
+          <span id="page-total">/ 1</span>
+        </span>
+      </div>
+      <div class="topbar-right">
+        <div id="translation-progress-mini" class="progress-mini hidden">
+          <div class="progress-mini-bar" id="progress-mini-bar"></div>
+          <span id="progress-mini-text">0%</span>
+        </div>
+        <div class="translation-status" id="translation-status">
+          <div class="spinner hidden" id="translate-spinner"></div>
+          <span id="translate-status-text"></span>
+        </div>
+        <div id="viewer-trans-provider" style="margin-right: 8px;"></div>
+        <button id="theme-toggle-btn" class="icon-btn" title="화이트/다크 모드 전환">
+          <svg class="sun-icon hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <button id="zoom-out-btn" class="icon-btn" title="축소">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        </button>
+        <span id="zoom-level" class="zoom-label">100%</span>
+        <button id="zoom-in-btn" class="icon-btn" title="확대">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        </button>
+        <button id="sync-scroll-btn" class="icon-btn active hidden" title="스크롤 동기화" id="sync-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+        <button id="chat-toggle-btn" class="icon-btn" title="AI 어시스턴트 켜기/끄기">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button id="retranslate-btn" class="icon-btn" title="처음부터 다시 번역하기 (기존 캐시 삭제)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+        <button id="cancel-trans-btn" class="icon-btn hidden" title="번역 작업 중지" style="color: var(--error);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+        </button>
+        <button id="resume-trans-btn" class="icon-btn hidden" title="중단된 부분부터 이어서 번역하기" style="color: var(--success);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+        </button>
+        <button id="export-btn" class="icon-btn" title="번역 내보내기">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 메인 패널 -->
+    <main class="panels">
+      <!-- 단일 뷰어 스크롤 컨테이너 -->
+      <div class="viewer-scroll-container" id="viewer-scroll-container">
+        <!-- page-pair 요소가 동적으로 생성됨 -->
+      </div>
+
+      <!-- AI Chat Sidebar Resizer -->
+      <div id="chat-resizer" class="chat-resizer hidden"></div>
+
+      <!-- AI Chat Sidebar -->
+      <aside class="chat-sidebar hidden" id="chat-sidebar">
+        <div class="chat-header" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <div class="chat-title-area" style="display: flex; align-items: center; gap: 4px;">
+            <span class="chat-header-icon">💬</span>
+            <span class="chat-title">AI 어시스턴트</span>
+          </div>
+          <div id="chat-sidebar-provider"></div>
+          <button id="chat-close-btn" class="chat-close-btn" title="닫기">&times;</button>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-message assistant">
+            <div class="message-bubble">안녕하세요! 이 논문의 내용에 대해 궁금한 점을 질문하시면 해당 분야의 전문가로서 답변해 드립니다.<br><br><strong>💡 질문 예시:</strong><ul><li>이 논문의 핵심 연구 내용과 기여도를 요약해줘.</li><li>본문에서 제안하는 알고리즘/방법론의 상세 과정을 설명해줘.</li><li>실험 결과에서 제시된 주요 수치와 의의는 무엇이야?</li></ul></div>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <textarea id="chat-input" placeholder="논문에 대해 궁금한 점을 질문하세요..." rows="1"></textarea>
+          <button id="chat-send-btn" class="chat-send-btn" title="전송">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+      </aside>
+    </main>
+
+  </div>
+
+  <!-- 토스트 알림 -->
+  <div id="toast" class="toast"></div>
+
+  <!-- 공통 테마 토글 버튼 (업로드 & 라이브러리 화면용) -->
+  <div class="global-theme-toggle" id="global-theme-toggle">
+    <button id="global-theme-toggle-btn" title="화이트/다크 모드 전환">
+      <svg class="sun-icon hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button id="global-settings-btn" title="비밀번호 변경" class="hidden">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button id="global-logout-btn" title="로그아웃" class="hidden">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    </button>
+  </div>
+
+  <!-- EasyPaper 통합 설정 모달 -->
+  <div id="settings-modal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>⚙️ EasyPaper 설정</h2>
+        <button id="close-settings-btn" class="close-btn">&times;</button>
+      </div>
+      
+      <!-- 탭 내비게이션 -->
+      <div class="modal-tabs">
+        <button class="tab-btn active" data-tab="tab-general">일반 설정</button>
+        <button class="tab-btn" data-tab="tab-system">시스템 & 계정</button>
+      </div>
+      
+      <!-- 일반 설정 탭 -->
+      <div id="tab-general" class="tab-pane active">
+        <form id="general-settings-form" class="modal-form">
+          <div class="form-group">
+            <label for="setting-target-lang">번역 대상 언어</label>
+            <select id="setting-target-lang" class="form-select">
+              <option value="한국어">한국어 (Korean)</option>
+              <option value="영어">영어 (English)</option>
+              <option value="일본어">일본어 (Japanese)</option>
+              <option value="중국어">중국어 (Chinese)</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="setting-trans-style">번역 문체 (스타일)</label>
+            <select id="setting-trans-style" class="form-select">
+              <option value="academic">학술용 의역 (매끄럽고 자연스러움)</option>
+              <option value="literal">직역 (원문 대조 및 어순 유지)</option>
+              <option value="summary">요약 번역 (문단별 요점 정리)</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>번역 제외 문서 요소</label>
+            <div class="checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="setting-ignore-math" /> 수식 (LaTeX 수식 생략)
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="setting-ignore-table" checked /> 표 (Table 데이터 생략)
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="setting-ignore-refs" /> 참고문헌 (References 생략)
+              </label>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="setting-default-zoom">기본 PDF 확대 비율</label>
+            <select id="setting-default-zoom" class="form-select">
+              <option value="1.0">70%</option>
+              <option value="1.5">100% (기본)</option>
+              <option value="2.0">130%</option>
+              <option value="2.5">170%</option>
+            </select>
+          </div>
+          
+          <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <label>데이터 및 용량 관리</label>
+            <button type="button" id="clear-cache-btn" class="btn btn-secondary" style="width: 100%; color: var(--error); border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.05); font-weight: 600;">
+              🗑️ 브라우저 번역 캐시 비우기
+            </button>
+          </div>
+          
+          <div class="form-actions" style="margin-top: 15px;">
+            <button type="submit" class="btn btn-primary" style="width: 100%;">일반 설정 저장</button>
+          </div>
+        </form>
+      </div>
+      
+      <!-- 시스템 & 계정 탭 -->
+      <div id="tab-system" class="tab-pane">
+        <!-- 시스템 설정 폼 (Ollama, OpenAI, Gemini, Claude 통합 및 번역/대화 분리) -->
+        <form id="system-settings-form" class="modal-form" style="border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 10px;">
+          <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">🤖 AI 엔진 및 서버 설정</h3>
+          
+          <!-- 공통 Ollama 주소 -->
+          <div class="form-group hidden">
+            <label for="setting-ollama-host">Ollama API 주소 (로컬 AI 사용 시)</label>
+            <input type="text" id="setting-ollama-host" placeholder="http://localhost:11434" style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
+          </div>
+
+          <!-- API Key 관리 -->
+          <div class="hidden" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
+            <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 4px;">🔑 클라우드 API Key 설정</h4>
+            <div class="form-group">
+              <label for="setting-openai-key">OpenAI API Key</label>
+              <input type="password" id="setting-openai-key" placeholder="sk-..." style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
+            </div>
+            <div class="form-group">
+              <label for="setting-gemini-key">Gemini API Key</label>
+              <input type="password" id="setting-gemini-key" placeholder="AIzaSy..." style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
+            </div>
+            <div class="form-group">
+              <label for="setting-claude-key">Claude API Key</label>
+              <input type="password" id="setting-claude-key" placeholder="sk-ant-..." style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
+            </div>
+          </div>
+
+          <!-- 번역 AI 설정 -->
+          <div style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
+            <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 4px;">📖 논문 번역 (Translation) 설정</h4>
+            <div class="form-group">
+              <label>번역 AI 제공업체 및 모델</label>
+              <div id="setting-trans-provider"></div>
+            </div>
+          </div>
+
+          <!-- AI 어시스턴트 설정 -->
+          <div style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
+            <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 4px;">💬 AI 어시스턴트 (Chat) 설정</h4>
+            <div class="form-group">
+              <label>어시스턴트 AI 제공업체 및 모델</label>
+              <div id="setting-chat-provider"></div>
+            </div>
+          </div>
+
+          <div class="form-actions" style="margin-top: 20px;">
+            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">시스템 설정 저장</button>
+          </div>
+        </form>
+
+        <!-- 모델 다운로드 섹션 (Ollama 전용) -->
+        <div id="pull-model-section" class="modal-form hidden" style="border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 10px; padding-top: 10px;">
+          <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">📥 새 모델 다운로드 (Pull)</h3>
+          
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label style="margin-bottom: 6px;">💡 추천 번역 모델 (클릭하여 즉시 다운로드)</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="qwen3.5:9b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);">Qwen 3.5 9B (qwen3.5:9b)</button>
+              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="llama3.1:8b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);">Llama 3.1 8B (llama3.1:8b)</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="setting-pull-model-name">Ollama 모델명 직접 입력</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="setting-pull-model-name" placeholder="예: qwen2.5:7b, llama3, gemma2" style="flex: 1; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
+              <button type="button" id="setting-pull-model-btn" class="btn btn-primary" style="padding: 10px 18px; font-size: 13px; white-space: nowrap;">다운로드</button>
+            </div>
+          </div>
+          
+          <div id="pull-model-progress-area" class="hidden" style="margin-top: 15px; background: var(--bg-elevated); border: 1px solid var(--border-strong); padding: 12px; border-radius: var(--radius-md);">
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+              <span id="pull-status-text" style="color: var(--text-secondary);">대기 중...</span>
+              <span id="pull-pct-text" style="font-weight: 600; color: var(--accent-mid);">0%</span>
+            </div>
+            <div class="progress-bar-wrap" style="height: 6px; background: rgba(255, 255, 255, 0.05); border-radius: 3px; overflow: hidden;">
+              <div id="pull-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); transition: width 0.2s;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 계정 변경 폼 -->
+        <form id="change-credentials-form" class="modal-form" style="padding-top: 10px;">
+          <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">🔐 계정 비밀번호 변경</h3>
+          <div class="form-group">
+            <label for="change-current-password">현재 비밀번호</label>
+            <input type="password" id="change-current-password" placeholder="현재 비밀번호 입력" required />
+          </div>
+          <div class="form-group">
+            <label for="change-new-username">새 아이디</label>
+            <input type="text" id="change-new-username" placeholder="새 아이디 입력" required />
+          </div>
+          <div class="form-group">
+            <label for="change-new-password">새 비밀번호</label>
+            <input type="password" id="change-new-password" placeholder="새 비밀번호 입력" required />
+          </div>
+          <div class="form-group">
+            <label for="change-new-password-confirm">새 비밀번호 확인</label>
+            <input type="password" id="change-new-password-confirm" placeholder="새 비밀번호 확인 입력" required />
+          </div>
+          <div class="form-actions" style="margin-top: 10px;">
+            <button type="submit" class="btn btn-primary">계정 정보 변경</button>
+          </div>
+        </form>
+      </div>
+      
+    </div>
+  </div>
+
+
+  <!-- Google Drive 스타일 업로드 팝업 -->
+  <div id="upload-popup" class="upload-popup hidden">
+    <div class="upload-popup-header">
+      <span class="upload-popup-title" id="upload-popup-title">파일 업로드 중...</span>
+      <div class="upload-popup-controls">
+        <button id="upload-popup-minimize" class="popup-control-btn" title="최소화">−</button>
+        <button id="upload-popup-close" class="popup-control-btn" title="닫기">&times;</button>
+      </div>
+    </div>
+    <div class="upload-popup-body" id="upload-popup-body">
+      <div class="upload-item-row">
+        <div class="upload-item-icon">📄</div>
+        <div class="upload-item-info">
+          <div class="upload-item-name" id="upload-item-name">filename.pdf</div>
+          <div class="upload-item-status" id="upload-item-status">준비 중...</div>
+          <div class="upload-item-progress-container">
+            <div class="upload-item-progress-bar-wrap">
+              <div class="upload-item-progress-bar" id="upload-item-progress-bar"></div>
+            </div>
+          </div>
+        </div>
+        <div class="upload-item-circle-progress" id="upload-item-circle-progress">
+          <div class="spinner" id="upload-item-spinner" style="width:16px; height:16px;"></div>
+          <span class="upload-success-icon hidden" id="upload-item-success-icon">✓</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

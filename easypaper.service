@@ -1,0 +1,18 @@
+[Unit]
+Description=EasyPaper FastAPI Backend
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/programming/projects/EasyPaper/backend
+ExecStart=/home/ubuntu/programming/projects/EasyPaper/backend/.venv/bin/python main.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment="PATH=/home/ubuntu/programming/projects/EasyPaper/backend/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+[Install]
+WantedBy=multi-user.target
