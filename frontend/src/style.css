@@ -49,6 +49,10 @@
   --bg-page-pair:   rgba(255, 255, 255, 0.015);
   --bg-page-pair-hover: rgba(255, 255, 255, 0.03);
   --bg-dropzone:    rgba(15, 12, 28, 0.4);
+  --bg-page-block:  rgba(20, 17, 34, 0.45);
+  --bg-card:        rgba(255, 255, 255, 0.02);
+  --bg-card-hover:  rgba(255, 255, 255, 0.04);
+  --shadow-hover:   0 20px 40px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 /* ── 라이트 테마 토큰 (화사하고 깊이있는 모던 테마) ── */
@@ -74,6 +78,10 @@ body.light-theme {
   --bg-page-pair:   rgba(255, 255, 255, 0.85);
   --bg-page-pair-hover: rgba(0, 0, 0, 0.015);
   --bg-dropzone:    rgba(255, 255, 255, 0.5);
+  --bg-page-block:  var(--bg-surface);
+  --bg-card:        var(--bg-surface);
+  --bg-card-hover:  var(--bg-hover);
+  --shadow-hover:   0 16px 36px rgba(15, 23, 42, 0.08), 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
 /* ── 리셋 & 기본 ── */
@@ -190,7 +198,7 @@ html, body {
 .drop-zone {
   width: 100%;
   max-width: 540px;
-  border: 1.5px dashed rgba(255, 255, 255, 0.15);
+  border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius-xl);
   background: var(--bg-dropzone);
   backdrop-filter: blur(24px) saturate(120%);
@@ -578,7 +586,7 @@ html, body {
 .page-pair:hover {
   border-color: rgba(129, 140, 248, 0.15);
   background: var(--bg-page-pair-hover);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-hover);
   transform: translateY(-2px);
 }
 
@@ -759,7 +767,7 @@ body:not(.light-theme) .pdf-page-inner canvas {
   max-width: 820px;
   display: flex;
   flex-direction: column;
-  background: rgba(20, 17, 34, 0.45);
+  background: var(--bg-page-block);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -776,7 +784,7 @@ body:not(.light-theme) .pdf-page-inner canvas {
   font-size: 12px;
   font-weight: 700;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-trans-label);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -1016,7 +1024,7 @@ body:not(.light-theme) .pdf-page-inner canvas {
 
 /* 문서 카드 */
 .doc-card {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   padding: 24px;
@@ -1041,9 +1049,9 @@ body:not(.light-theme) .pdf-page-inner canvas {
 }
 .doc-card:hover {
   border-color: rgba(129, 140, 248, 0.2);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-card-hover);
   transform: translateY(-6px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-hover);
 }
 .doc-card:hover::before { opacity: 1; }
 
@@ -1939,10 +1947,12 @@ code.math-pending {
   min-width: 240px;
   max-height: 420px;
   overflow-y: auto;
-  background: #1a1828;
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  box-shadow: 0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   padding: 6px;
   display: none;
   animation: pickerFadeIn 0.15s ease;
@@ -2075,7 +2085,7 @@ code.math-pending {
   background: var(--bg-surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--border);
   backdrop-filter: blur(24px) saturate(120%);
   -webkit-backdrop-filter: blur(24px) saturate(120%);
   z-index: 200;
@@ -2211,4 +2221,71 @@ code.math-pending {
   background-color: rgba(124, 58, 237, 0.08) !important;
   outline: 2px dashed var(--accent-mid);
   outline-offset: -12px;
+}
+
+/* ── Light Theme UI Overrides ── */
+body.light-theme .upload-bg {
+  background: radial-gradient(circle at 10% 20%, #e2e8f0 0%, #f8fafc 60%),
+              radial-gradient(circle at 90% 80%, #f1f5f9 0%, #f8fafc 70%);
+}
+body.light-theme .orb-1 { background: rgba(79, 70, 229, 0.06); }
+body.light-theme .orb-2 { background: rgba(168, 85, 247, 0.05); }
+body.light-theme .orb-3 { background: rgba(16, 185, 129, 0.04); }
+
+body.light-theme .logo-text,
+body.light-theme .logo-small {
+  background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+body.light-theme .doc-progress-bar-wrap,
+body.light-theme .upload-item-progress-bar-wrap,
+body.light-theme .progress-mini-bar {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+body.light-theme .doc-delete-btn {
+  background: var(--bg-surface);
+}
+body.light-theme .doc-delete-btn:hover {
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+body.light-theme .chat-message.assistant .message-bubble {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+}
+
+body.light-theme .chat-input-area {
+  background: var(--bg-surface);
+}
+
+body.light-theme .upload-popup-body {
+  background: var(--bg-elevated);
+}
+
+body.light-theme .icon-btn.active,
+body.light-theme .progress-mini {
+  color: var(--accent-mid);
+}
+
+/* Light Theme Scrollbars */
+body.light-theme .translation-scroll-container::-webkit-scrollbar-thumb,
+body.light-theme .pdf-scroll-container::-webkit-scrollbar-thumb,
+body.light-theme .viewer-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+}
+body.light-theme .translation-scroll-container::-webkit-scrollbar-thumb:hover,
+body.light-theme .pdf-scroll-container::-webkit-scrollbar-thumb:hover,
+body.light-theme .viewer-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.16);
+}
+body.light-theme .library-grid::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+}
+body.light-theme .library-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.16);
 }
