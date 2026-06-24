@@ -9,7 +9,8 @@ from config import (
     get_chat_model,
     get_openai_api_key,
     get_gemini_api_key,
-    get_claude_api_key
+    get_claude_api_key,
+    get_agy_path
 )
 
 
@@ -523,7 +524,7 @@ async def stream_antigravity(prompt: str, model: str = None) -> AsyncGenerator[s
     import asyncio
     import os
     
-    agy_path = "/home/ubuntu/.local/bin/agy"
+    agy_path = get_agy_path()
     if not os.path.exists(agy_path):
         agy_path = "agy"
         

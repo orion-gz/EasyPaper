@@ -140,7 +140,7 @@ async def translate_page(
 @router.get("/health")
 async def health_check():
     """AI 제공자 및 상태를 확인합니다."""
-    from config import get_trans_provider, get_openai_api_key, get_gemini_api_key, get_claude_api_key
+    from config import get_trans_provider, get_openai_api_key, get_gemini_api_key, get_claude_api_key, get_agy_path
     provider = get_trans_provider()
     
     if provider == "openai":
@@ -154,7 +154,9 @@ async def health_check():
         return {"status": "ok" if has_key else "error", "provider": "claude", "model_available": has_key}
     elif provider == "antigravity":
         import os
-        has_cli = os.path.exists("/home/ubuntu/.local/bin/agy")
+        import shutil
+        agy_path = get_agy_path()
+        has_cli = bool(os.path.exists(agy_path) or shutil.which(agy_path))
         return {"status": "ok" if has_cli else "error", "provider": "antigravity", "model_available": has_cli}
         
     health = await check_ollama_health()
