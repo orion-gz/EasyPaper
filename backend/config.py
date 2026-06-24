@@ -172,3 +172,18 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(CACHE_DIR, exist_ok=True)
 os.makedirs(LIBRARY_DIR, exist_ok=True)
 
+# App host & port configuration
+APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
+APP_PORT = int(os.getenv("APP_PORT", "8000"))
+
+# Antigravity CLI path
+AGY_PATH = os.getenv("AGY_PATH", "/home/ubuntu/.local/bin/agy")
+
+def get_app_host() -> str:
+    return APP_HOST
+
+def get_app_port() -> int:
+    return APP_PORT
+
+def get_agy_path() -> str:
+    return AGY_PATH

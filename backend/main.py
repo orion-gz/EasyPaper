@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
 
-from config import CORS_ORIGINS, UPLOAD_DIR
+from config import CORS_ORIGINS, UPLOAD_DIR, APP_HOST, APP_PORT
 from routers import upload, translate, chat
 from routers import library as library_router
 from routers import jobs as jobs_router
@@ -80,4 +80,4 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("main:app", host=APP_HOST, port=APP_PORT, reload=False)
