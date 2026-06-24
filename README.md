@@ -1,7 +1,5 @@
 # ⚗️ EasyPaper
 
-🌐 **[English](README.md)** | **[한국어]**
-
 EasyPaper는 학술 PDF 논문을 AI로 번역하고 논문 내용을 기반으로 대화할 수 있는 통합 웹 서비스입니다. 
 논문을 업로드하면 원문 옆에 AI 번역본이 함께 표시되며, 궁금한 내용을 바로 질문할 수 있습니다. 
 
@@ -111,7 +109,7 @@ sudo journalctl -u easypaper -f
 
 EasyPaper 백엔드에는 Google Antigravity CLI(`agy`)를 서브프로세스로 호출하여 번역, 논문 태깅, 채팅을 처리하는 전용 `antigravity` LLM Provider 엔진이 포함되어 있습니다.
 
-`antigravity`를 사용하여 더 나은 번역과 질문을 받아보려면 아래 단계를 완료하세요:
+`antigravity`를 사용하여 더 나은 번역과 질문 응답을 받아보려면 아래 단계를 완료하세요:
 
 ### 1. `agy` CLI 설치 확인
 
