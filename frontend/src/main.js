@@ -798,9 +798,9 @@ const PROVIDER_CONFIG = [
   {
     id: 'ollama', label: 'Ollama (로컬)', icon: '🦙',
     models: [
-      { value: 'gemma:2b', label: 'gemma4 e4b' },
-      { value: 'qwen2.5:3b', label: 'qwen 3.6' },
-      { value: 'llama3.2', label: 'llamma 3.3' }
+      { value: 'gemma2:9b', label: 'gemma4 e4b' },
+      { value: 'qwen2.5:7b', label: 'qwen 3.6' },
+      { value: 'llama3.1:8b', label: 'llamma 3.3' }
     ]
   },
   {
@@ -808,24 +808,26 @@ const PROVIDER_CONFIG = [
     models: [
       { value: 'gpt-4o', label: 'GPT-4o' },
       { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+      { value: 'o1', label: 'o1 (추론형)' },
+      { value: 'o1-mini', label: 'o1-mini' },
+      { value: 'o3-mini', label: 'o3-mini (추론형 최신)' },
       { value: 'gpt-4.5-preview', label: 'GPT-4.5 Preview' }
     ]
   },
   {
     id: 'claude', label: 'Anthropic Claude', icon: '🧠',
     models: [
+      { value: 'claude-3-7-sonnet-20250219', label: 'Claude 3.7 Sonnet (최신)' },
       { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
-      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
-      { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' }
+      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' }
     ]
   },
   {
     id: 'gemini', label: 'Google Gemini', icon: '💎',
     models: [
-      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-      { value: 'gemini-2.0-pro-exp-02-05', label: 'Gemini 2.0 Pro Exp' }
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (최신)' },
+      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (최신)' },
+      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }
     ]
   }
 ]
@@ -880,6 +882,14 @@ class ProviderModelPicker {
     const hasGeminiKey = !!settingGeminiKey.value.trim()
     const hasClaudeKey = !!settingClaudeKey.value.trim()
     const downloaded = state.availableOllamaModels || []
+
+    // Ollama 다운로드 모델 매칭을 유연하게 처리하기 위한 헬퍼 함수
+    const isMatch = (installed, baseValue) => {
+      if (installed === baseValue) return true
+      const instClean = installed.split(':')[0].toLowerCase()
+      const baseClean = baseValue.split(':')[0].toLowerCase()
+      return instClean === baseClean || instClean.includes(baseClean) || baseClean.includes(instClean)
+    }
     
     let config = PROVIDER_CONFIG.map(p => {
       if (p.id === 'ollama') {
@@ -889,14 +899,14 @@ class ProviderModelPicker {
           return {
             ...p,
             models: downloaded.map(m => {
-              const base = baseModels.find(bm => bm.value === m)
+              const base = baseModels.find(bm => isMatch(m, bm.value))
               return { value: m, label: base ? base.label : m }
             })
           }
         } else {
           // 설정창: 기본 3대 모델(설치 여부 표시) + 기타 다운로드된 모델
           const modelsToShow = baseModels.map(bm => {
-            const isInstalled = downloaded.includes(bm.value)
+            const isInstalled = downloaded.some(m => isMatch(m, bm.value))
             return {
               value: bm.value,
               label: `${bm.label} ${isInstalled ? '(설치됨)' : '(미설치 - 클릭 시 다운로드)'}`,
@@ -904,12 +914,14 @@ class ProviderModelPicker {
             }
           })
           downloaded.forEach(m => {
-            if (!baseModels.some(bm => bm.value === m)) {
-              modelsToShow.push({
-                value: m,
-                label: `${m} (설치됨)`,
-                installed: true
-              })
+            if (!baseModels.some(bm => isMatch(m, bm.value))) {
+              if (!modelsToShow.some(ts => isMatch(m, ts.value))) {
+                modelsToShow.push({
+                  value: m,
+                  label: `${m} (설치됨)`,
+                  installed: true
+                })
+              }
             }
           })
           return { ...p, models: modelsToShow }
@@ -977,7 +989,8 @@ class ProviderModelPicker {
             
             // Ollama 미설치 모델 다운로드 처리
             if (prov.id === 'ollama' && !this.compact) {
-              if (!downloaded.includes(m.value)) {
+              const isInstalled = downloaded.some(dm => isMatch(dm, m.value))
+              if (!isInstalled) {
                 if (confirm(`'${m.label.split(' ')[0]}' (${m.value}) 모델이 설치되어 있지 않습니다. 다운로드하시겠습니까?\n(설정 창 하단에서 다운로드 진행 상태를 보실 수 있습니다)`)) {
                   this.container.classList.remove('open')
                   settingPullModelName.value = m.value
