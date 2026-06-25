@@ -52,17 +52,35 @@ def get_document(
             
         with get_db() as conn:
             cursor = conn.cursor()
+            pages = []
             if suffix:
                 cursor.execute(
                     "SELECT DISTINCT page_num FROM translations WHERE doc_id = ? AND suffix = ? ORDER BY page_num ASC",
                     (doc_id, suffix)
                 )
-            else:
+                pages = [r["page_num"] for r in cursor.fetchall()]
+            
+            if not pages:
+                # Fallback to the most recent suffix's pages
                 cursor.execute(
-                    "SELECT DISTINCT page_num FROM translations WHERE doc_id = ? ORDER BY page_num ASC",
+                    "SELECT suffix FROM translations WHERE doc_id = ? ORDER BY saved_at DESC LIMIT 1",
                     (doc_id,)
                 )
-            pages = [r["page_num"] for r in cursor.fetchall()]
+                row = cursor.fetchone()
+                if row:
+                    fallback_suffix = row["suffix"]
+                    cursor.execute(
+                        "SELECT DISTINCT page_num FROM translations WHERE doc_id = ? AND suffix = ? ORDER BY page_num ASC",
+                        (doc_id, fallback_suffix)
+                    )
+                    pages = [r["page_num"] for r in cursor.fetchall()]
+                else:
+                    # If no suffix found, query any pages
+                    cursor.execute(
+                        "SELECT DISTINCT page_num FROM translations WHERE doc_id = ? ORDER BY page_num ASC",
+                        (doc_id,)
+                    )
+                    pages = [r["page_num"] for r in cursor.fetchall()]
         doc["translated_pages"] = pages
         return doc
     return None
@@ -86,17 +104,35 @@ def list_documents(
     for doc in docs:
         with get_db() as conn:
             cursor = conn.cursor()
+            pages = []
             if suffix:
                 cursor.execute(
                     "SELECT DISTINCT page_num FROM translations WHERE doc_id = ? AND suffix = ? ORDER BY page_num ASC",
                     (doc["id"], suffix)
                 )
-            else:
+                pages = [r["page_num"] for r in cursor.fetchall()]
+            
+            if not pages:
+                # Fallback to the most recent suffix's pages
                 cursor.execute(
-                    "SELECT DISTINCT page_num FROM translations WHERE doc_id = ? ORDER BY page_num ASC",
+                    "SELECT suffix FROM translations WHERE doc_id = ? ORDER BY saved_at DESC LIMIT 1",
                     (doc["id"],)
                 )
-            pages = [r["page_num"] for r in cursor.fetchall()]
+                row = cursor.fetchone()
+                if row:
+                    fallback_suffix = row["suffix"]
+                    cursor.execute(
+                        "SELECT DISTINCT page_num FROM translations WHERE doc_id = ? AND suffix = ? ORDER BY page_num ASC",
+                        (doc["id"], fallback_suffix)
+                    )
+                    pages = [r["page_num"] for r in cursor.fetchall()]
+                else:
+                    # If no suffix found, query any pages
+                    cursor.execute(
+                        "SELECT DISTINCT page_num FROM translations WHERE doc_id = ? ORDER BY page_num ASC",
+                        (doc["id"],)
+                    )
+                    pages = [r["page_num"] for r in cursor.fetchall()]
         doc["translated_pages"] = pages
     return docs
 
@@ -118,9 +154,9 @@ def save_translation(doc_id: str, page_num: int, translation: str, suffix: str =
     db_save_translation(doc_id, page_num, translation, suffix)
 
 
-def get_translation(doc_id: str, page_num: int, suffix: str = "") -> Optional[str]:
+def get_translation(doc_id: str, page_num: int, suffix: str = "", fallback: bool = True) -> Optional[str]:
     """데이터베이스에서 번역 결과를 가져옵니다."""
-    return db_get_translation(doc_id, page_num, suffix)
+    return db_get_translation(doc_id, page_num, suffix, fallback)
 
 
 def clear_translations(doc_id: str) -> None:

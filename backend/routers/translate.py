@@ -51,7 +51,7 @@ async def translate_page(
 
     async def event_stream():
         # 1순위: 라이브러리 저장 번역 확인
-        lib_cached = lib_get_translation(session_id, page_num, suffix)
+        lib_cached = lib_get_translation(session_id, page_num, suffix, fallback=False)
         cached = lib_cached or get_cached_translation(session_id, page_num, suffix)
 
         if cached:
@@ -89,7 +89,7 @@ async def translate_page(
                 if chunk_idx == 0:
                     prev_context = ""
                     if page_num > 1:
-                        prev_cached = lib_get_translation(session_id, page_num - 1, suffix) or get_cached_translation(session_id, page_num - 1, suffix)
+                        prev_cached = lib_get_translation(session_id, page_num - 1, suffix, fallback=False) or get_cached_translation(session_id, page_num - 1, suffix)
                         if prev_cached:
                             prev_context = prev_cached
                 else:
