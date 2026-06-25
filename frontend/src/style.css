@@ -2442,16 +2442,43 @@ body.light-theme .message-quote {
 }
 
 /* ── PDF Figure/Image Overlay Highlights ── */
+.pdf-image-overlay-layer {
+  display: none !important;
+}
+
+#viewer-scroll-container.crop-mode .pdf-image-overlay-layer {
+  display: block !important;
+}
+
 .pdf-figure-overlay {
-  border: 2px dashed rgba(139, 92, 246, 0.35);
-  background: rgba(139, 92, 246, 0.04);
+  border: 2px dashed rgba(139, 92, 246, 0.45);
+  background: rgba(139, 92, 246, 0.05);
   border-radius: 4px;
   transition: all 0.2s ease-in-out;
+  pointer-events: auto !important;
 }
 
 .pdf-figure-overlay:hover {
-  background: rgba(139, 92, 246, 0.16);
-  border-color: rgba(139, 92, 246, 0.95);
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 1.0);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+}
+
+/* ── Capture Crop Mode Styling ── */
+#viewer-scroll-container.crop-mode .pdf-page-inner {
+  cursor: crosshair !important;
+}
+
+#viewer-scroll-container.crop-mode .textLayer,
+#viewer-scroll-container.crop-mode .pdf-sentence {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+#capture-area-btn.active {
+  background: var(--accent-mid, #8b5cf6) !important;
+  color: white !important;
+  border-color: var(--accent-mid, #8b5cf6) !important;
   box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
 }
 

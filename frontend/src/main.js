@@ -1816,15 +1816,16 @@ async function openFromLibrary(doc) {
   state.translatingPages = new Set()
   state.translatedPages  = new Set()
 
-  // 저장된 번역 미리 로드
+  // 저장된 번역 병렬 로드
   const opts = getTranslationOptions()
-  for (const pageNum of (doc.translated_pages || [])) {
+  const promises = (doc.translated_pages || []).map(async (pageNum) => {
     try {
       const res = await fetchLibraryTranslation(doc.id, pageNum, opts)
       state.translationCache[pageNum] = res.translation
       state.translatedPages.add(pageNum)
     } catch {}
-  }
+  })
+  await Promise.all(promises)
 
   // 채팅 내역 초기화 및 복원
   state.chatHistory = []
@@ -2203,6 +2204,7 @@ function hideSelectionMenu() {
 document.addEventListener('mouseup', (e) => {
   setTimeout(() => {
     try {
+      if (state.isCropMode) return
       if (e.target.closest('.pdf-figure-overlay') || (selectionMenu && selectionMenu.contains(e.target))) {
         return
       }

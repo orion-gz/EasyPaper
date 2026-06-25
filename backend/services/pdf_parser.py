@@ -255,32 +255,56 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
                 w = r.x1 - r.x0
                 h = r.y1 - r.y0
                 if w > 80 and h < 3: # 가로 방향 얇은 선 수집
+                    # running header / footer 필터링: 페이지 상단 65pt 이내 또는 하단 65pt 이내의 선 제외
+                    if r.y0 < 65 or r.y1 > page_height - 65:
+                        continue
                     horizontal_lines.append([r.x0, r.y0, r.x1, r.y1])
             
             if len(horizontal_lines) >= 2:
-                horizontal_lines.sort(key=lambda x: x[1])
-                table_groups = []
-                current_group = [horizontal_lines[0]]
+                # 가로 정렬도(overlap ratio) 기반의 alignment families 그룹화
+                families = []
+                for line in horizontal_lines:
+                    placed = False
+                    for fam in families:
+                        rep = fam[0] # Family 대표 선
+                        # 두 선의 수평 겹침 비율(overlap ratio) 계산
+                        intersection = max(0.0, min(line[2], rep[2]) - max(line[0], rep[0]))
+                        union = max(line[2], rep[2]) - min(line[0], rep[0])
+                        ratio = intersection / union if union > 0.0 else 0.0
+                        
+                        if ratio > 0.85:
+                            fam.append(line)
+                            placed = True
+                            break
+                    if not placed:
+                        families.append([line])
                 
-                for line in horizontal_lines[1:]:
-                    last_line = current_group[-1]
-                    y_diff = line[1] - last_line[3]
-                    x_overlap = not (line[2] < last_line[0] or last_line[2] < line[0])
+                # 각 패밀리 내부에서 세로 방향 인접 선들을 그룹화
+                for fam in families:
+                    if len(fam) < 2:
+                        continue
+                    fam.sort(key=lambda x: x[1])
                     
-                    if y_diff < 120 and x_overlap:
-                        current_group.append(line)
-                    else:
-                        table_groups.append(current_group)
-                        current_group = [line]
-                table_groups.append(current_group)
-                
-                for group in table_groups:
-                    if len(group) >= 2:
-                        gx0 = min(l[0] for l in group)
-                        gy0 = min(l[1] for l in group)
-                        gx1 = max(l[2] for l in group)
-                        gy1 = max(l[3] for l in group)
-                        raw_rects.append([gx0, gy0, gx1, gy1])
+                    table_groups = []
+                    current_group = [fam[0]]
+                    for line in fam[1:]:
+                        last_line = current_group[-1]
+                        y_diff = line[1] - last_line[3]
+                        
+                        if y_diff < 100: # 인접 임계값 100pt
+                            current_group.append(line)
+                        else:
+                            table_groups.append(current_group)
+                            current_group = [line]
+                    table_groups.append(current_group)
+                    
+                    for group in table_groups:
+                        if len(group) >= 2:
+                            gx0 = min(l[0] for l in group)
+                            gy0 = min(l[1] for l in group)
+                            gx1 = max(l[2] for l in group)
+                            gy1 = max(l[3] for l in group)
+                            raw_rects.append([gx0, gy0, gx1, gy1])
         except Exception:
             pass
         
