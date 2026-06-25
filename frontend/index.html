@@ -209,7 +209,8 @@
       <!-- 탭 내비게이션 -->
       <div class="modal-tabs">
         <button class="tab-btn active" data-tab="tab-general">일반 설정</button>
-        <button class="tab-btn" data-tab="tab-system">시스템 & 계정</button>
+        <button class="tab-btn" data-tab="tab-model">모델 설정</button>
+        <button class="tab-btn" data-tab="tab-account">계정 설정</button>
         <button class="tab-btn" data-tab="tab-advanced">고급 설정</button>
       </div>
       
@@ -273,30 +274,30 @@
         </form>
       </div>
       
-      <!-- 시스템 & 계정 탭 -->
-      <div id="tab-system" class="tab-pane">
+      <!-- 모델 설정 탭 -->
+      <div id="tab-model" class="tab-pane">
         <!-- 시스템 설정 폼 (Ollama, OpenAI, Gemini, Claude 통합 및 번역/대화 분리) -->
         <form id="system-settings-form" class="modal-form" style="border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 10px;">
           <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">🤖 AI 엔진 및 서버 설정</h3>
           
           <!-- 공통 Ollama 주소 -->
-          <div class="form-group hidden">
+          <div class="form-group" id="setting-ollama-host-group" style="display: none;">
             <label for="setting-ollama-host">Ollama API 주소 (로컬 AI 사용 시)</label>
             <input type="text" id="setting-ollama-host" placeholder="http://localhost:11434" style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
           </div>
 
           <!-- API Key 관리 -->
-          <div class="hidden" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
+          <div id="setting-apikeys-section" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px; display: none;">
             <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 4px;">🔑 클라우드 API Key 설정</h4>
-            <div class="form-group">
+            <div class="form-group" id="setting-openai-key-group" style="display: none;">
               <label for="setting-openai-key">OpenAI API Key</label>
               <input type="password" id="setting-openai-key" placeholder="sk-..." style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
             </div>
-            <div class="form-group">
+            <div class="form-group" id="setting-gemini-key-group" style="display: none;">
               <label for="setting-gemini-key">Gemini API Key</label>
               <input type="password" id="setting-gemini-key" placeholder="AIzaSy..." style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
             </div>
-            <div class="form-group">
+            <div class="form-group" id="setting-claude-key-group" style="display: none;">
               <label for="setting-claude-key">Claude API Key</label>
               <input type="password" id="setting-claude-key" placeholder="sk-ant-..." style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 14px;" />
             </div>
@@ -355,7 +356,10 @@
             </div>
           </div>
         </div>
+      </div>
 
+      <!-- 계정 설정 탭 -->
+      <div id="tab-account" class="tab-pane">
         <!-- 계정 변경 폼 -->
         <form id="change-credentials-form" class="modal-form" style="padding-top: 10px;">
           <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">🔐 계정 비밀번호 변경</h3>
