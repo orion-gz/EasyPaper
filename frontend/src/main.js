@@ -1048,7 +1048,7 @@ async function refreshSystemSettings() {
     
     const promptTemplate = $('setting-prompt-template')
     if (promptTemplate) {
-      promptTemplate.value = sys.translation_prompt_template || ''
+      promptTemplate.value = sys.translation_prompt_template || promptTemplate.value
     }
     
     updatePullModelSectionVisibility()
