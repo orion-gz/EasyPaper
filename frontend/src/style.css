@@ -2289,3 +2289,57 @@ body.light-theme .library-grid::-webkit-scrollbar-thumb {
 body.light-theme .library-grid::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.16);
 }
+
+/* ── Sentence Highlight for PDF-Translation 1-to-1 Mapping ── */
+.pdf-sentence, .trans-sentence {
+  transition: background-color 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.12s ease;
+  position: relative;
+  display: inline;
+  white-space: inherit;
+}
+
+.pdf-sentence {
+  color: transparent !important;
+}
+
+.pdf-sentence.sentence-highlight {
+  background-color: rgba(124, 58, 237, 0.25) !important;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.18);
+  border-radius: 3px;
+}
+
+.trans-sentence.sentence-highlight {
+  background-color: rgba(124, 58, 237, 0.25) !important;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.18);
+  border-radius: 3px;
+  color: var(--text-primary) !important;
+}
+
+/* For light theme, use slightly adjusted color */
+body.light-theme .pdf-sentence.sentence-highlight {
+  background-color: rgba(124, 58, 237, 0.20) !important;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+
+body.light-theme .trans-sentence.sentence-highlight {
+  background-color: rgba(124, 58, 237, 0.20) !important;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+  color: #000000 !important;
+}
+
+/* ── Sentence Click Pulse Highlight Effect ── */
+@keyframes sentencePulse {
+  0% {
+    background-color: rgba(124, 58, 237, 0.45) !important;
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.25) !important;
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.pdf-sentence.sentence-pulse, .trans-sentence.sentence-pulse {
+  animation: sentencePulse 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+  border-radius: 3px;
+}
