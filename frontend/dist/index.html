@@ -14,7 +14,7 @@
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
     onload="document.dispatchEvent(new Event('katex-ready'))"></script>
-  <script type="module" crossorigin src="/assets/index-GzrUeKmZ.js"></script>
+  <script type="module" crossorigin src="/assets/index-C7iDHh1N.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-vd8TvQHs.css">
 </head>
 <body>
@@ -211,6 +211,7 @@
       <div class="modal-tabs">
         <button class="tab-btn active" data-tab="tab-general">일반 설정</button>
         <button class="tab-btn" data-tab="tab-system">시스템 & 계정</button>
+        <button class="tab-btn" data-tab="tab-advanced">고급 설정</button>
       </div>
       
       <!-- 일반 설정 탭 -->
@@ -377,6 +378,29 @@
           </div>
           <div class="form-actions" style="margin-top: 10px;">
             <button type="submit" class="btn btn-primary">계정 정보 변경</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- 고급 설정 탭 -->
+      <div id="tab-advanced" class="tab-pane">
+        <form id="advanced-settings-form" class="modal-form">
+          <div class="form-group">
+            <label for="setting-prompt-template">번역 프롬프트 템플릿 (Prompt Template)</label>
+            <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; line-height: 1.4;">
+              번역 요청 시 AI 모델로 보내는 프롬프트 형식을 수정할 수 있습니다.<br>
+              <strong>사용 가능한 매개변수 (치환 태그):</strong><br>
+              - <code>{{LANG_INSTRUCTION}}</code>: 번역 대상 언어 지시어<br>
+              - <code>{{STYLE_INSTRUCTION}}</code>: 문체/스타일 지시어<br>
+              - <code>{{RULES_TEXT}}</code>: 선택 옵션 기반의 번역 제외 규칙 리스트<br>
+              - <code>{{CONTEXT_PART}}</code>: 이전 번역 및 논문 제목 등의 컨텍스트 정보<br>
+              - <code>{{TEXT}}</code>: 번역할 영어 원문<br>
+              - <code>{{TARGET_LANG}}</code>: 대상 언어명 (예: 한국어)
+            </p>
+            <textarea id="setting-prompt-template" rows="12" style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 13px; font-family: var(--font-mono); resize: vertical; line-height: 1.6;"></textarea>
+          </div>
+          <div class="form-actions" style="margin-top: 15px;">
+            <button type="submit" class="btn btn-primary" style="width: 100%;">고급 설정 저장</button>
           </div>
         </form>
       </div>

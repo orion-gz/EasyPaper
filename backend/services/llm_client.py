@@ -10,7 +10,8 @@ from config import (
     get_openai_api_key,
     get_gemini_api_key,
     get_claude_api_key,
-    get_agy_path
+    get_agy_path,
+    get_translation_prompt_template
 )
 
 
@@ -77,21 +78,17 @@ async def stream_translation(
     if context_part:
         context_part = f"\n[참고 문맥 정보]\n{context_part}"
 
-    prompt = f"""당신은 학술 논문 번역 전문가입니다. {lang_instruction}
-    
-번역 스타일:
-{style_instruction}
-    
-번역 규칙:
-{rules_text}
-{n+1}. 번역 텍스트를 중간에 절대 끊지 마세요. 반드시 주어진 원문 전체를 빠짐없이 완전하게 번역하여 출력하세요.
-{n+2}. 번역 시작 전 서론(예: '번역 결과:', '다음은 번역입니다:')을 절대 추가하지 마세요. 번역된 내용만 즉시 출력하세요.
-{n+3}. 제공된 [참고 문맥 정보](논문 제목 및 이전 번역)를 참고하여, 전문 용어 번역이나 문장 어조가 일관되게 이어지도록 하세요. 단, 이전 번역 내용을 답변에 다시 포함하여 출력해서는 안 되며, 오직 아래의 '원문'만 새로 번역해야 합니다.
-{context_part}
-원문:
-{text}
-    
-{target_lang} 번역:"""
+    # 5. 템플릿 로드 및 프롬프트 동적 조립 (하드코딩 제거)
+    template = get_translation_prompt_template()
+    prompt = (
+        template
+        .replace("{{LANG_INSTRUCTION}}", lang_instruction)
+        .replace("{{STYLE_INSTRUCTION}}", style_instruction)
+        .replace("{{RULES_TEXT}}", rules_text)
+        .replace("{{CONTEXT_PART}}", context_part)
+        .replace("{{TEXT}}", text)
+        .replace("{{TARGET_LANG}}", target_lang)
+    )
 
     messages = [
         {

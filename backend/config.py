@@ -187,3 +187,42 @@ def get_app_port() -> int:
 
 def get_agy_path() -> str:
     return AGY_PATH
+
+# ── Dynamic Translation Prompt Template ─────────────────
+PROMPT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "translation_prompt.txt")
+
+DEFAULT_PROMPT_TEMPLATE = """당신은 학술 논문 번역 전문가입니다. {{LANG_INSTRUCTION}}
+
+번역 스타일:
+{{STYLE_INSTRUCTION}}
+
+번역 규칙:
+{{RULES_TEXT}}
+- 번역 텍스트를 중간에 절대 끊지 마세요. 반드시 주어진 원문 전체를 빠짐없이 완전하게 번역하여 출력하세요.
+- 번역 시작 전 서론(예: '번역 결과:', '다음은 번역입니다:')을 절대 추가하지 마세요. 번역된 내용만 즉시 출력하세요.
+- 제공된 [참고 문맥 정보](논문 제목 및 이전 번역)를 참고하여, 전문 용어 번역이나 문장 어조가 일관되게 이어지도록 하세요. 단, 이전 번역 내용을 답변에 다시 포함하여 출력해서는 안 되며, 오직 아래의 '원문'만 새로 번역해야 합니다.
+
+{{CONTEXT_PART}}
+
+원문:
+{{TEXT}}
+
+{{TARGET_LANG}} 번역:"""
+
+def get_translation_prompt_template() -> str:
+    if not os.path.exists(PROMPT_FILE):
+        with open(PROMPT_FILE, "w", encoding="utf-8") as f:
+            f.write(DEFAULT_PROMPT_TEMPLATE.strip())
+        return DEFAULT_PROMPT_TEMPLATE.strip()
+    with open(PROMPT_FILE, "r", encoding="utf-8") as f:
+        return f.read().strip()
+
+def update_translation_prompt_template(new_template: str):
+    if not new_template or not new_template.strip():
+        # Fall back to default if empty
+        template_to_save = DEFAULT_PROMPT_TEMPLATE.strip()
+    else:
+        template_to_save = new_template.strip()
+    with open(PROMPT_FILE, "w", encoding="utf-8") as f:
+        f.write(template_to_save)
+

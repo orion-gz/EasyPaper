@@ -16,7 +16,9 @@ from config import (
     get_chat_model,
     get_openai_api_key,
     get_gemini_api_key,
-    get_claude_api_key
+    get_claude_api_key,
+    get_translation_prompt_template,
+    update_translation_prompt_template
 )
 from services.llm_client import check_ollama_health
 
@@ -148,6 +150,7 @@ class SystemSettingsRequest(BaseModel):
     openai_api_key: str = ""
     gemini_api_key: str = ""
     claude_api_key: str = ""
+    translation_prompt_template: str = ""
 
 @router.get("/settings/system")
 async def get_system_settings(current_user: str = Depends(get_current_user)):
@@ -163,7 +166,8 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
         "chat_model": get_chat_model(),
         "openai_api_key": get_openai_api_key(),
         "gemini_api_key": get_gemini_api_key(),
-        "claude_api_key": get_claude_api_key()
+        "claude_api_key": get_claude_api_key(),
+        "translation_prompt_template": get_translation_prompt_template()
     }
 
 @router.post("/settings/system")
@@ -187,6 +191,10 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
         gemini_api_key=data.gemini_api_key.strip(),
         claude_api_key=data.claude_api_key.strip()
     )
+    
+    # 고급 설정: 번역 프롬프트 템플릿 저장
+    update_translation_prompt_template(data.translation_prompt_template)
+    
     return {"message": "시스템 설정이 성공적으로 변경되었습니다."}
 
 @router.get("/settings/pull-model")
