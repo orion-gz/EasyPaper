@@ -157,9 +157,54 @@ def get_pdf_metadata(pdf_path: str) -> Dict[str, Any]:
     }
 
 
+def merge_bboxes(rects: list, threshold: float = 15.0) -> list:
+    """
+    서로 가깝거나 겹치는 바운딩 박스들을 병합합니다.
+    """
+    if not rects:
+        return []
+    
+    merged = True
+    while merged:
+        merged = False
+        new_rects = []
+        used = set()
+        
+        for i in range(len(rects)):
+            if i in used:
+                continue
+            r1 = rects[i]
+            x0, y0, x1, y1 = r1
+            
+            for j in range(i + 1, len(rects)):
+                if j in used:
+                    continue
+                r2 = rects[j]
+                
+                # 가로나 세로 거리 임계값 이내인지 판단
+                x_overlap = not (x1 + threshold < r2[0] or r2[2] + threshold < x0)
+                y_overlap = not (y1 + threshold < r2[1] or r2[3] + threshold < y0)
+                
+                if x_overlap and y_overlap:
+                    x0 = min(x0, r2[0])
+                    y0 = min(y0, r2[1])
+                    x1 = max(x1, r2[2])
+                    y1 = max(y1, r2[3])
+                    used.add(j)
+                    merged = True
+            
+            new_rects.append([x0, y0, x1, y1])
+            used.add(i)
+        
+        rects = new_rects
+        
+    return rects
+
+
 def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
     """
     PDF의 각 페이지에서 실제 그림/이미지(Figure)의 영역(백분율) 정보를 추출합니다.
+    인접한 이미지 조각들을 그룹화(Merge)하고 약간의 여백(Padding)을 제공하여 크롭 시 잘림 현상을 방지합니다.
     """
     doc = fitz.open(pdf_path)
     images_data = []
@@ -172,6 +217,7 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
             continue
             
         page_imgs = page.get_image_info(xrefs=True)
+        raw_rects = []
         for img in page_imgs:
             bbox = img.get("bbox")
             if not bbox:
@@ -180,9 +226,26 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
             w = x1 - x0
             h = y1 - y0
             # 너무 작거나 선 형태인 이미지(예: 1x1 또는 매우 얇은 테두리 등) 제외
+            if w < 15 or h < 15:
+                continue
+            raw_rects.append([x0, y0, x1, y1])
+        
+        # 바운딩 박스 그룹화 (인접 임계값 15포인트)
+        merged_rects = merge_bboxes(raw_rects, threshold=15.0)
+        
+        for r in merged_rects:
+            # 여백(Padding) 8포인트 적용하여 이미지 주변 텍스트/경계 포함되도록 보정
+            x0 = max(0.0, r[0] - 8.0)
+            y0 = max(0.0, r[1] - 8.0)
+            x1 = min(page_width, r[2] + 8.0)
+            y1 = min(page_height, r[3] + 8.0)
+            
+            w = x1 - x0
+            h = y1 - y0
+            # 보정 후 유효한 크기인지 최종 체크
             if w < 20 or h < 20:
                 continue
-            
+                
             # 백분율 좌표 계산
             left = (x0 / page_width) * 100
             top = (y0 / page_height) * 100
