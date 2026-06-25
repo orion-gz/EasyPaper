@@ -698,7 +698,7 @@ resumeTransBtn.addEventListener('click', async () => {
 
 // ── 뒤로 가기 ─────────────────────────────────────
 backBtn.addEventListener('click', () => {
-  if (confirm('라이브러리 화면으로 돌아갑니다.')) showLibraryScreen()
+  showLibraryScreen()
 })
 
 // ── 구분선 드래그 ─────────────────────────────────
