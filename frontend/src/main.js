@@ -806,28 +806,30 @@ const PROVIDER_CONFIG = [
   {
     id: 'openai', label: 'OpenAI', icon: '✦',
     models: [
+      { value: 'gpt-5.5-pro', label: 'GPT-5.5 Pro' },
+      { value: 'gpt-5.5', label: 'GPT-5.5' },
+      { value: 'gpt-5.4', label: 'GPT-5.4' },
+      { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
+      { value: 'gpt-5.4-nano', label: 'GPT-5.4 Nano' },
+      { value: 'o3', label: 'o3' },
       { value: 'gpt-4o', label: 'GPT-4o' },
-      { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-      { value: 'o1', label: 'o1 (추론형)' },
-      { value: 'o1-mini', label: 'o1-mini' },
-      { value: 'o3-mini', label: 'o3-mini (추론형 최신)' },
-      { value: 'gpt-4.5-preview', label: 'GPT-4.5 Preview' }
+      { value: 'gpt-4o-mini', label: 'GPT-4o Mini' }
     ]
   },
   {
     id: 'claude', label: 'Anthropic Claude', icon: '🧠',
     models: [
-      { value: 'claude-3-7-sonnet-20250219', label: 'Claude 3.7 Sonnet (최신)' },
-      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
-      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' }
+      { value: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
+      { value: 'claude-opus-4.7', label: 'Claude Opus 4.7' },
+      { value: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
+      { value: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' }
     ]
   },
   {
     id: 'gemini', label: 'Google Gemini', icon: '💎',
     models: [
-      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (최신)' },
-      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (최신)' },
-      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }
+      { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' }
     ]
   }
 ]
