@@ -203,8 +203,8 @@ def merge_bboxes(rects: list, threshold: float = 15.0) -> list:
 
 def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
     """
-    PDF의 각 페이지에서 실제 그림/이미지(Figure)의 영역(백분율) 정보를 추출합니다.
-    인접한 이미지 조각들을 그룹화(Merge)하고 약간의 여백(Padding)을 제공하여 크롭 시 잘림 현상을 방지합니다.
+    PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 벡터 그래픽스(도형, 차트) 영역 정보를 추출합니다.
+    인접한 이미지/도형 요소들을 그룹화(Merge)하고 마진(Padding)을 주어 크롭 시 잘림 현상을 방지합니다.
     """
     doc = fitz.open(pdf_path)
     images_data = []
@@ -216,8 +216,10 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
         if page_width == 0 or page_height == 0:
             continue
             
-        page_imgs = page.get_image_info(xrefs=True)
         raw_rects = []
+        
+        # 1. 래스터 이미지(Raster Images) 좌표 수집
+        page_imgs = page.get_image_info(xrefs=True)
         for img in page_imgs:
             bbox = img.get("bbox")
             if not bbox:
@@ -225,16 +227,38 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
             x0, y0, x1, y1 = bbox
             w = x1 - x0
             h = y1 - y0
-            # 너무 작거나 선 형태인 이미지(예: 1x1 또는 매우 얇은 테두리 등) 제외
-            if w < 15 or h < 15:
-                continue
-            raw_rects.append([x0, y0, x1, y1])
+            if w >= 15 and h >= 15:
+                raw_rects.append([x0, y0, x1, y1])
+                
+        # 2. 벡터 그래픽스(Vector Drawings - 선, 도형, 다이어그램 등) 좌표 수집
+        try:
+            drawings = page.get_drawings()
+            for d in drawings:
+                r = d.get("rect")
+                if not r or r.is_empty:
+                    continue
+                w = r.x1 - r.x0
+                h = r.y1 - r.y0
+                
+                # 가로선(구분선) 또는 세로선(경계선) 등 극단적인 비율은 제외
+                if w > page_width * 0.85 and h < 5:
+                    continue
+                if h > page_height * 0.85 and w < 5:
+                    continue
+                # 극도로 작아서 단일 마침표나 사소한 점으로 식별되는 영역 제외
+                if w < 5 and h < 5:
+                    continue
+                    
+                raw_rects.append([r.x0, r.y0, r.x1, r.y1])
+        except Exception:
+            pass
         
-        # 바운딩 박스 그룹화 (인접 임계값 15포인트)
+        # 3. 바운딩 박스 그룹화 (인접 임계값 15포인트)
         merged_rects = merge_bboxes(raw_rects, threshold=15.0)
         
+        # 4. 여백 보정 및 최소 규격 필터링
         for r in merged_rects:
-            # 여백(Padding) 8포인트 적용하여 이미지 주변 텍스트/경계 포함되도록 보정
+            # 여백(Padding) 8포인트 적용하여 차트 라벨이나 테두리가 잘리지 않도록 안전 확보
             x0 = max(0.0, r[0] - 8.0)
             y0 = max(0.0, r[1] - 8.0)
             x1 = min(page_width, r[2] + 8.0)
@@ -242,8 +266,8 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
             
             w = x1 - x0
             h = y1 - y0
-            # 보정 후 유효한 크기인지 최종 체크
-            if w < 20 or h < 20:
+            # 최종 크기가 가로/세로 40포인트 이상인 진짜 그림/도형/테이블만 선별
+            if w < 40 or h < 40:
                 continue
                 
             # 백분율 좌표 계산
