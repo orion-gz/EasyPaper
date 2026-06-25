@@ -2440,3 +2440,53 @@ body.light-theme .message-quote {
   background: rgba(0, 0, 0, 0.03);
   border-left-color: rgba(0, 0, 0, 0.2);
 }
+
+/* ── PDF Figure/Image Overlay Highlights ── */
+.pdf-figure-overlay {
+  border: 2px dashed rgba(139, 92, 246, 0.35);
+  background: rgba(139, 92, 246, 0.04);
+  border-radius: 4px;
+  transition: all 0.2s ease-in-out;
+}
+
+.pdf-figure-overlay:hover {
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.95);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
+}
+
+/* ── Chat Input Quote Area Image Preview ── */
+.chat-quote-img {
+  max-height: 80px;
+  max-width: calc(100% - 40px);
+  border-radius: 4px;
+  object-fit: contain;
+  margin: 4px 0;
+  border: 1px solid var(--border-strong, #444);
+  background: #111;
+  padding: 2px;
+  display: block;
+}
+
+body.light-theme .chat-quote-img {
+  background: #f5f5f5;
+  border-color: #ddd;
+}
+
+/* ── Chat Message Bubble Quoted Image ── */
+.message-quote-img {
+  max-height: 120px;
+  max-width: 100%;
+  border-radius: 4px;
+  margin-top: 4px;
+  border: 1px solid var(--border-strong);
+  background: #111;
+  padding: 2px;
+  display: block;
+}
+
+body.light-theme .message-quote-img {
+  background: #f5f5f5;
+  border-color: #ddd;
+}
+

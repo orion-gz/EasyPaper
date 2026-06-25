@@ -155,3 +155,48 @@ def get_pdf_metadata(pdf_path: str) -> Dict[str, Any]:
         "subject": meta.get("subject", ""),
         "total_pages": page_count,
     }
+
+
+def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
+    """
+    PDF의 각 페이지에서 실제 그림/이미지(Figure)의 영역(백분율) 정보를 추출합니다.
+    """
+    doc = fitz.open(pdf_path)
+    images_data = []
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        page_width = page.rect.width
+        page_height = page.rect.height
+        if page_width == 0 or page_height == 0:
+            continue
+            
+        page_imgs = page.get_image_info(xrefs=True)
+        for img in page_imgs:
+            bbox = img.get("bbox")
+            if not bbox:
+                continue
+            x0, y0, x1, y1 = bbox
+            w = x1 - x0
+            h = y1 - y0
+            # 너무 작거나 선 형태인 이미지(예: 1x1 또는 매우 얇은 테두리 등) 제외
+            if w < 20 or h < 20:
+                continue
+            
+            # 백분율 좌표 계산
+            left = (x0 / page_width) * 100
+            top = (y0 / page_height) * 100
+            width = (w / page_width) * 100
+            height = (h / page_height) * 100
+            
+            images_data.append({
+                "page": page_num + 1,
+                "left": left,
+                "top": top,
+                "width": width,
+                "height": height
+            })
+            
+    doc.close()
+    return images_data
+

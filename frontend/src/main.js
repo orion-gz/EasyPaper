@@ -1,7 +1,7 @@
 import './style.css'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages } from './pdfViewer.js'
-import { fetchLibrary, deleteLibraryDoc, fetchLibraryTranslation } from './library.js'
+import { fetchLibrary, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages } from './library.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -37,6 +37,10 @@ const state = {
   chatCurrentText: '',         // 현재 스트리밍 답변 텍스트 임시 저장
   availableOllamaModels: [],   // Ollama에서 설치된 모델 목록
   quotedText: null,            // AI 질문 시 인용구 보관용
+  documentImages: [],          // 문서 내 이미지 좌표 목록
+  quotedImage: null,           // AI 질문 시 인용 이미지 보관용 (Base64)
+  quotedImagePage: null,       // AI 질문 시 인용 이미지의 페이지 번호
+  pendingFigureQuote: null,    // 클릭 후 AI 질문 전 대기중인 인용 이미지 정보
 }
 
 // ── DOM 참조 ──────────────────────────────────────
@@ -189,7 +193,7 @@ function resetState() {
   Object.assign(state, {
     sessionId: null, filename: null, totalPages: 0, currentPage: 1,
     zoom: 1.5, translationCache: {}, translatingPages: new Set(), translatedPages: new Set(), pollingTimer: null,
-    chatHistory: [], chatActiveStream: null
+    chatHistory: [], chatActiveStream: null, quotedText: null, quotedImage: null, quotedImagePage: null, pendingFigureQuote: null, documentImages: []
   })
   viewerScrollContainer.innerHTML = ''
   if (uploadPopup) uploadPopup.classList.add('hidden')
@@ -291,6 +295,7 @@ async function handleFiles(files) {
 
     if (!isLibraryActive && pdfFiles.length === 1 && successCount === 1) {
       state.sessionId  = lastSessionId
+      await loadDocumentImages(lastSessionId)
       state.filename   = lastFilename
       state.totalPages = lastTotalPages
 
@@ -1780,8 +1785,19 @@ function createDocCard(doc) {
   return card
 }
 
+async function loadDocumentImages(docId) {
+  try {
+    const imgRes = await fetchLibraryDocImages(docId)
+    state.documentImages = imgRes.images || []
+  } catch (e) {
+    console.warn("이미지 좌표 로드 실패:", e)
+    state.documentImages = []
+  }
+}
+
 async function openFromLibrary(doc) {
   state.sessionId  = doc.id
+  await loadDocumentImages(doc.id)
   state.filename   = doc.filename
   state.totalPages = doc.total_pages
   state.translationCache = {}
@@ -2063,12 +2079,16 @@ function createSelectionMenu() {
 
   menu.querySelector('.ask-ai-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    const selection = window.getSelection()
-    const text = selection.toString().trim()
-    if (text) {
-      askAIAssistant(text)
+    if (state.pendingFigureQuote) {
+      askAIAssistantImage(state.pendingFigureQuote.base64Img, state.pendingFigureQuote.pageNum)
+    } else {
+      const selection = window.getSelection()
+      const text = selection.toString().trim()
+      if (text) {
+        askAIAssistant(text)
+      }
+      selection.removeAllRanges()
     }
-    selection.removeAllRanges()
     hideSelectionMenu()
   })
 
@@ -2164,6 +2184,7 @@ function hideSelectionMenu() {
   if (selectionMenu) {
     selectionMenu.classList.add('hidden')
   }
+  state.pendingFigureQuote = null
 }
 
 // 통합 텍스트 선택 종료 감지 리스너
@@ -2235,6 +2256,96 @@ window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   if (annotations[`page_${pageNum}`]) {
     applyAnnotationsFromOffsets(textLayerDiv, annotations[`page_${pageNum}`])
   }
+
+  renderImageOverlayLayer(textLayerDiv, pageNum)
+}
+
+function cropFigureFromCanvas(canvas, imgPercent) {
+  const tempCanvas = document.createElement('canvas')
+  const ctx = tempCanvas.getContext('2d')
+  
+  // Calculate raw pixels coordinates from percentages
+  const leftPx = (imgPercent.left / 100) * canvas.width
+  const topPx = (imgPercent.top / 100) * canvas.height
+  const widthPx = (imgPercent.width / 100) * canvas.width
+  const heightPx = (imgPercent.height / 100) * canvas.height
+  
+  tempCanvas.width = widthPx
+  tempCanvas.height = heightPx
+  
+  ctx.drawImage(
+    canvas,
+    leftPx, topPx, widthPx, heightPx,
+    0, 0, widthPx, heightPx
+  )
+  
+  return tempCanvas.toDataURL('image/png')
+}
+
+function renderImageOverlayLayer(textLayerDiv, pageNum) {
+  const pageImages = (state.documentImages || []).filter(img => img.page === pageNum)
+  const inner = textLayerDiv.parentElement
+  if (!inner) return
+  
+  // Remove existing layer if any
+  const oldLayer = inner.querySelector('.pdf-image-overlay-layer')
+  if (oldLayer) oldLayer.remove()
+  
+  if (pageImages.length === 0) return
+  
+  const layer = document.createElement('div')
+  layer.className = 'pdf-image-overlay-layer'
+  layer.style.position = 'absolute'
+  layer.style.top = '0'
+  layer.style.left = '0'
+  layer.style.width = '100%'
+  layer.style.height = '100%'
+  layer.style.pointerEvents = 'none'
+  layer.style.zIndex = '3'
+  
+  pageImages.forEach((imgPercent, idx) => {
+    const overlay = document.createElement('div')
+    overlay.className = 'pdf-figure-overlay'
+    overlay.dataset.page = pageNum
+    overlay.dataset.index = idx
+    overlay.style.position = 'absolute'
+    overlay.style.left = `${imgPercent.left}%`
+    overlay.style.top = `${imgPercent.top}%`
+    overlay.style.width = `${imgPercent.width}%`
+    overlay.style.height = `${imgPercent.height}%`
+    overlay.style.pointerEvents = 'auto'
+    overlay.style.cursor = 'pointer'
+    
+    overlay.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      
+      // Clear text selection
+      window.getSelection().removeAllRanges()
+      
+      const canvas = inner.querySelector('canvas')
+      if (!canvas) return
+      
+      try {
+        const base64Img = cropFigureFromCanvas(canvas, imgPercent)
+        state.pendingFigureQuote = {
+          pageNum: pageNum,
+          imgPercent: imgPercent,
+          base64Img: base64Img
+        }
+        
+        // Show selection menu
+        const rect = overlay.getBoundingClientRect()
+        showSelectionMenu(rect, false) // false = hide annotation options
+      } catch (err) {
+        console.error("그림 크롭 실패:", err)
+      }
+    })
+    
+    layer.appendChild(overlay)
+  })
+  
+  inner.appendChild(layer)
 }
 
 
@@ -2551,6 +2662,29 @@ async function sendChatMessage() {
     state.quotedText = null
     const quoteArea = $('chat-quote-area')
     if (quoteArea) quoteArea.classList.add('hidden')
+  } else if (state.quotedImage) {
+    const fullPayload = `[인용된 이미지 (Page ${state.quotedImagePage})]\n\n질문:\n${text}`
+    
+    // UI에 답장/인용구 레이아웃으로 표시
+    const userMsgHtml = `
+      <div class="message-quote">
+        <span class="quote-symbol">❝</span>
+        <img class="message-quote-img" src="${state.quotedImage}" alt="Quoted Figure" />
+      </div>
+      <div class="message-text">${escapeHtml(text)}</div>
+    `
+    appendChatMessage('user', userMsgHtml, true)
+    state.chatHistory.push({ role: 'user', content: fullPayload })
+    
+    // 인용 상태 초기화
+    state.quotedImage = null
+    state.quotedImagePage = null
+    const quoteArea = $('chat-quote-area')
+    if (quoteArea) quoteArea.classList.add('hidden')
+    const quoteImgEl = $('chat-quote-img')
+    if (quoteImgEl) quoteImgEl.classList.add('hidden')
+    const quoteTextEl = $('chat-quote-text')
+    if (quoteTextEl) quoteTextEl.classList.remove('hidden')
   } else {
     appendChatMessage('user', text)
     state.chatHistory.push({ role: 'user', content: text })
@@ -2706,8 +2840,14 @@ function initChatListeners() {
   if (quoteCloseBtn) {
     quoteCloseBtn.addEventListener('click', () => {
       state.quotedText = null
+      state.quotedImage = null
+      state.quotedImagePage = null
       const quoteArea = $('chat-quote-area')
       if (quoteArea) quoteArea.classList.add('hidden')
+      const quoteImgEl = $('chat-quote-img')
+      if (quoteImgEl) quoteImgEl.classList.add('hidden')
+      const quoteTextEl = $('chat-quote-text')
+      if (quoteTextEl) quoteTextEl.classList.remove('hidden')
     })
   }
 }
@@ -2723,10 +2863,50 @@ function askAIAssistant(text) {
   
   // 인용구 보관 및 영역 업데이트
   state.quotedText = text;
+  state.quotedImage = null;
+  state.quotedImagePage = null;
   
   const quoteTextEl = $('chat-quote-text');
+  const quoteImgEl = $('chat-quote-img');
   const quoteArea = $('chat-quote-area');
-  if (quoteTextEl) quoteTextEl.textContent = text;
+  
+  if (quoteImgEl) quoteImgEl.classList.add('hidden');
+  if (quoteTextEl) {
+    quoteTextEl.textContent = text;
+    quoteTextEl.classList.remove('hidden');
+  }
+  if (quoteArea) quoteArea.classList.remove('hidden');
+  
+  // 사이드바 활성화
+  if (chatSidebar.classList.contains('hidden')) {
+    toggleChatSidebar();
+  }
+  
+  // 입력 필드 초기화 및 포커싱
+  chatInput.value = '';
+  chatInput.style.height = 'auto';
+  chatInput.focus();
+}
+
+function askAIAssistantImage(base64Img, pageNum) {
+  if (!state.sessionId) {
+    showToast('논문을 먼저 업로드하거나 선택해주세요.', 'error');
+    return;
+  }
+  
+  state.quotedImage = base64Img;
+  state.quotedImagePage = pageNum;
+  state.quotedText = null;
+  
+  const quoteTextEl = $('chat-quote-text');
+  const quoteImgEl = $('chat-quote-img');
+  const quoteArea = $('chat-quote-area');
+  
+  if (quoteTextEl) quoteTextEl.classList.add('hidden');
+  if (quoteImgEl) {
+    quoteImgEl.src = base64Img;
+    quoteImgEl.classList.remove('hidden');
+  }
   if (quoteArea) quoteArea.classList.remove('hidden');
   
   // 사이드바 활성화
