@@ -799,8 +799,8 @@ const PROVIDER_CONFIG = [
     id: 'ollama', label: 'Ollama (로컬)', icon: '🦙',
     models: [
       { value: 'gemma2:9b', label: 'gemma4 e4b' },
-      { value: 'qwen2.5:7b', label: 'qwen 3.6' },
-      { value: 'llama3.1:8b', label: 'llamma 3.3' }
+      { value: 'llama3.1:8b', label: 'llamma 3.3' },
+      { value: 'custom_input', label: '✍️ 직접 입력 추가...' }
     ]
   },
   {
@@ -888,9 +888,10 @@ class ProviderModelPicker {
     // Ollama 다운로드 모델 매칭을 유연하게 처리하기 위한 헬퍼 함수
     const isMatch = (installed, baseValue) => {
       if (installed === baseValue) return true
+      if (baseValue === 'custom_input') return false
       const instClean = installed.split(':')[0].toLowerCase()
       const baseClean = baseValue.split(':')[0].toLowerCase()
-      return instClean === baseClean || instClean.includes(baseClean) || baseClean.includes(instClean)
+      return instClean === baseClean
     }
     
     let config = PROVIDER_CONFIG.map(p => {
@@ -898,16 +899,27 @@ class ProviderModelPicker {
         const baseModels = p.models
         if (this.compact) {
           // 뷰어 및 사이드바: 실제 다운로드된 모델만 띄움
+          const activeModels = []
+          const activeLabels = new Set()
+          downloaded.forEach(m => {
+            if (m === 'custom_input') return
+            const base = baseModels.find(bm => isMatch(m, bm.value))
+            const label = base ? base.label : m
+            if (!activeLabels.has(label)) {
+              activeLabels.add(label)
+              activeModels.push({ value: m, label: label })
+            }
+          })
           return {
             ...p,
-            models: downloaded.map(m => {
-              const base = baseModels.find(bm => isMatch(m, bm.value))
-              return { value: m, label: base ? base.label : m }
-            })
+            models: activeModels
           }
         } else {
-          // 설정창: 기본 3대 모델(설치 여부 표시) + 기타 다운로드된 모델
+          // 설정창: 기본 제공 모델(설치 여부 표시) + 기타 다운로드된 모델 + 직접입력 옵션
           const modelsToShow = baseModels.map(bm => {
+            if (bm.value === 'custom_input') {
+              return bm
+            }
             const isInstalled = downloaded.some(m => isMatch(m, bm.value))
             return {
               value: bm.value,
@@ -989,6 +1001,17 @@ class ProviderModelPicker {
           item.addEventListener('click', (e) => {
             e.stopPropagation()
             
+            // 직접 모델명 입력 추가 옵션 처리
+            if (m.value === 'custom_input') {
+              this.container.classList.remove('open')
+              const customName = prompt('추가로 다운로드하여 사용할 Ollama 모델명을 입력해 주세요 (예: mistral, qwen2.5:14b):')
+              if (customName && customName.trim()) {
+                settingPullModelName.value = customName.trim()
+                settingPullModelBtn.click()
+              }
+              return
+            }
+
             // Ollama 미설치 모델 다운로드 처리
             if (prov.id === 'ollama' && !this.compact) {
               const isInstalled = downloaded.some(dm => isMatch(dm, m.value))
