@@ -1707,6 +1707,13 @@ body.light-theme .chat-message.user .message-bubble {
   backdrop-filter: blur(10px);
   border-top: 1px solid var(--border);
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.chat-input-row {
+  display: flex;
   gap: 10px;
   align-items: flex-end;
 }
@@ -2342,4 +2349,94 @@ body.light-theme .trans-sentence.sentence-highlight {
 .pdf-sentence.sentence-pulse, .trans-sentence.sentence-pulse {
   animation: sentencePulse 0.8s cubic-bezier(0.25, 1, 0.5, 1);
   border-radius: 3px;
+}
+
+/* ── Chat Quoted Text Preview Styles ── */
+.chat-quote-area {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(124, 58, 237, 0.08);
+  border-left: 3px solid var(--accent-mid);
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  animation: fadeIn 0.2s ease-out;
+  position: relative;
+}
+
+.chat-quote-area.hidden {
+  display: none !important;
+}
+
+.chat-quote-symbol {
+  font-size: 16px;
+  color: var(--accent-mid);
+  line-height: 1;
+}
+
+.chat-quote-text {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-height: 34px;
+  word-break: break-all;
+}
+
+.chat-quote-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.chat-quote-close-btn:hover {
+  color: var(--error);
+}
+
+/* ── User Message Quoted Box Styles ── */
+.message-quote {
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 2px solid var(--text-muted);
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  font-style: italic;
+  display: flex;
+  gap: 6px;
+}
+
+.message-quote .quote-symbol {
+  color: var(--accent-mid);
+  font-size: 14px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.message-quote .quote-body {
+  flex: 1;
+  word-break: break-all;
+}
+
+/* Light Theme overrides */
+body.light-theme .chat-quote-area {
+  background: rgba(124, 58, 237, 0.05);
+}
+
+body.light-theme .message-quote {
+  background: rgba(0, 0, 0, 0.03);
+  border-left-color: rgba(0, 0, 0, 0.2);
 }

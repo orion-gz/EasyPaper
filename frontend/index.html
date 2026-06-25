@@ -168,13 +168,21 @@
           </div>
         </div>
         <div class="chat-input-area">
-          <textarea id="chat-input" placeholder="논문에 대해 궁금한 점을 질문하세요..." rows="1"></textarea>
-          <button id="chat-send-btn" class="chat-send-btn" title="전송">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
+          <!-- 인용 박스 -->
+          <div id="chat-quote-area" class="chat-quote-area hidden">
+            <span class="chat-quote-symbol">❝</span>
+            <div id="chat-quote-text" class="chat-quote-text"></div>
+            <button id="chat-quote-close-btn" class="chat-quote-close-btn" title="인용 취소">&times;</button>
+          </div>
+          <div class="chat-input-row" style="display: flex; gap: 10px; align-items: flex-end; width: 100%;">
+            <textarea id="chat-input" placeholder="논문에 대해 궁금한 점을 질문하세요..." rows="1"></textarea>
+            <button id="chat-send-btn" class="chat-send-btn" title="전송">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </aside>
     </main>

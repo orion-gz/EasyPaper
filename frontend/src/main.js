@@ -36,6 +36,7 @@ const state = {
   chatActiveStream: null,      // 현재 활성화된 채팅 스트림 abort 함수
   chatCurrentText: '',         // 현재 스트리밍 답변 텍스트 임시 저장
   availableOllamaModels: [],   // Ollama에서 설치된 모델 목록
+  quotedText: null,            // AI 질문 시 인용구 보관용
 }
 
 // ── DOM 참조 ──────────────────────────────────────
@@ -2532,8 +2533,28 @@ async function sendChatMessage() {
   chatInput.value = ''
   chatInput.style.height = 'auto'
   
-  appendChatMessage('user', text)
-  state.chatHistory.push({ role: 'user', content: text })
+  if (state.quotedText) {
+    const fullPayload = `[인용된 본문 내용]:\n"${state.quotedText}"\n\n[질문]:\n${text}`
+    
+    // UI에 답장/인용구 레이아웃으로 표시
+    const userMsgHtml = `
+      <div class="message-quote">
+        <span class="quote-symbol">❝</span>
+        <span class="quote-body">${escapeHtml(state.quotedText)}</span>
+      </div>
+      <div class="message-text">${escapeHtml(text)}</div>
+    `
+    appendChatMessage('user', userMsgHtml, true)
+    state.chatHistory.push({ role: 'user', content: fullPayload })
+    
+    // 인용 상태 초기화
+    state.quotedText = null
+    const quoteArea = $('chat-quote-area')
+    if (quoteArea) quoteArea.classList.add('hidden')
+  } else {
+    appendChatMessage('user', text)
+    state.chatHistory.push({ role: 'user', content: text })
+  }
   
   appendTypingIndicator()
   
@@ -2679,28 +2700,44 @@ function initChatListeners() {
       }
     })
   }
+
+  // 인용구 닫기(인용 취소) 버튼 리스너
+  const quoteCloseBtn = $('chat-quote-close-btn')
+  if (quoteCloseBtn) {
+    quoteCloseBtn.addEventListener('click', () => {
+      state.quotedText = null
+      const quoteArea = $('chat-quote-area')
+      if (quoteArea) quoteArea.classList.add('hidden')
+    })
+  }
 }
 
 // AI Chat Sidebar 리스너 초기화 실행
 initChatListeners()
 
-// ── 드래그 텍스트 AI 어시스턴트 연동 ────────────────────
 function askAIAssistant(text) {
   if (!state.sessionId) {
     showToast('논문을 먼저 업로드하거나 선택해주세요.', 'error');
     return;
   }
   
+  // 인용구 보관 및 영역 업데이트
+  state.quotedText = text;
+  
+  const quoteTextEl = $('chat-quote-text');
+  const quoteArea = $('chat-quote-area');
+  if (quoteTextEl) quoteTextEl.textContent = text;
+  if (quoteArea) quoteArea.classList.remove('hidden');
+  
+  // 사이드바 활성화
   if (chatSidebar.classList.contains('hidden')) {
     toggleChatSidebar();
   }
   
-  chatInput.value = `다음 본문 내용에 대해 설명해줘:\n\n"${text}"`;
-  
+  // 입력 필드 초기화 및 포커싱
+  chatInput.value = '';
   chatInput.style.height = 'auto';
-  chatInput.style.height = `${chatInput.scrollHeight}px`;
-  
-  sendChatMessage();
+  chatInput.focus();
 }
 
 if (viewerScrollContainer) {
