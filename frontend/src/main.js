@@ -298,7 +298,7 @@ async function handleFiles(files) {
 
     if (!isLibraryActive && pdfFiles.length === 1 && successCount === 1) {
       state.sessionId  = lastSessionId
-      await loadDocumentImages(lastSessionId)
+      loadDocumentImages(lastSessionId)
       state.filename   = lastFilename
       state.totalPages = lastTotalPages
 
@@ -1792,6 +1792,15 @@ async function loadDocumentImages(docId) {
   try {
     const imgRes = await fetchLibraryDocImages(docId)
     state.documentImages = imgRes.images || []
+    
+    // 이미 렌더링되어 있는 페이지들의 오버레이 레이어 갱신
+    document.querySelectorAll('.textLayer').forEach(textLayerDiv => {
+      const pageWrapper = textLayerDiv.closest('.pdf-page-wrapper')
+      if (pageWrapper) {
+        const pageNum = parseInt(pageWrapper.dataset.page)
+        renderImageOverlayLayer(textLayerDiv, pageNum)
+      }
+    })
   } catch (e) {
     console.warn("이미지 좌표 로드 실패:", e)
     state.documentImages = []
@@ -1800,7 +1809,7 @@ async function loadDocumentImages(docId) {
 
 async function openFromLibrary(doc) {
   state.sessionId  = doc.id
-  await loadDocumentImages(doc.id)
+  loadDocumentImages(doc.id)
   state.filename   = doc.filename
   state.totalPages = doc.total_pages
   state.translationCache = {}
@@ -2191,9 +2200,12 @@ function hideSelectionMenu() {
 }
 
 // 통합 텍스트 선택 종료 감지 리스너
-document.addEventListener('mouseup', () => {
+document.addEventListener('mouseup', (e) => {
   setTimeout(() => {
     try {
+      if (e.target.closest('.pdf-figure-overlay') || (selectionMenu && selectionMenu.contains(e.target))) {
+        return
+      }
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed || !selection.rangeCount) {
         hideSelectionMenu()
@@ -2930,6 +2942,7 @@ if (viewerScrollContainer) {
 window.addEventListener('resize', hideSelectionMenu);
 
 document.addEventListener('mousedown', (e) => {
+  if (e.target.closest('.pdf-figure-overlay')) return;
   if (selectionMenu && !selectionMenu.contains(e.target)) {
     setTimeout(() => {
       const selection = window.getSelection();
