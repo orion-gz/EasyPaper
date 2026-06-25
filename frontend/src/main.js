@@ -1046,6 +1046,11 @@ async function refreshSystemSettings() {
     chatSidebarPicker.setValue(sys.chat_provider || 'antigravity', sys.chat_model)
     settingChatPicker.setValue(sys.chat_provider || 'antigravity', sys.chat_model)
     
+    const promptTemplate = $('setting-prompt-template')
+    if (promptTemplate) {
+      promptTemplate.value = sys.translation_prompt_template || promptTemplate.value
+    }
+    
     updatePullModelSectionVisibility()
     
   } catch (err) {
@@ -1065,7 +1070,8 @@ async function changeProviderAndModel(type, newProvider, newModel) {
       chat_model: type === 'chat' ? newModel : (sys.chat_model || ''),
       openai_api_key: sys.openai_api_key || '',
       gemini_api_key: sys.gemini_api_key || '',
-      claude_api_key: sys.claude_api_key || ''
+      claude_api_key: sys.claude_api_key || '',
+      translation_prompt_template: sys.translation_prompt_template || ''
     }
     await saveSystemSettingsAPI(payload)
     // sync settings pickers
@@ -1281,7 +1287,8 @@ systemSettingsForm.addEventListener('submit', async (e) => {
     chat_model: chatModel,
     openai_api_key: settingOpenAIKey.value.trim(),
     gemini_api_key: settingGeminiKey.value.trim(),
-    claude_api_key: settingClaudeKey.value.trim()
+    claude_api_key: settingClaudeKey.value.trim(),
+    translation_prompt_template: $('setting-prompt-template').value
   }
   
   try {
@@ -1296,6 +1303,50 @@ systemSettingsForm.addEventListener('submit', async (e) => {
     showToast(err.message, 'error')
   }
 })
+
+// 고급 설정 폼 제출
+const advancedSettingsForm = $('advanced-settings-form')
+if (advancedSettingsForm) {
+  advancedSettingsForm.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    
+    const { provider: transProvider, model: transModel } = settingTransPicker.getValue()
+    const { provider: chatProvider, model: chatModel } = settingChatPicker.getValue()
+    
+    if (!transModel) {
+      showToast('번역 모델을 선택해주세요.', 'error')
+      return
+    }
+    if (!chatModel) {
+      showToast('어시스턴트 모델을 선택해주세요.', 'error')
+      return
+    }
+    
+    const settings = {
+      ollama_host: settingOllamaHost.value.trim(),
+      trans_provider: transProvider,
+      trans_model: transModel,
+      chat_provider: chatProvider,
+      chat_model: chatModel,
+      openai_api_key: settingOpenAIKey.value.trim(),
+      gemini_api_key: settingGeminiKey.value.trim(),
+      claude_api_key: settingClaudeKey.value.trim(),
+      translation_prompt_template: $('setting-prompt-template').value
+    }
+    
+    try {
+      await saveSystemSettingsAPI(settings)
+      // sync compact pickers
+      viewerTransPicker.setValue(transProvider, transModel)
+      chatSidebarPicker.setValue(chatProvider, chatModel)
+      showToast('고급 설정(번역 프롬프트)이 저장되었습니다.', 'success')
+      settingsModal.classList.add('hidden')
+      checkAIStatus()
+    } catch (err) {
+      showToast(err.message, 'error')
+    }
+  })
+}
 
 // 로컬 캐시 비우기
 clearCacheBtn.addEventListener('click', () => {
