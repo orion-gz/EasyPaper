@@ -2326,3 +2326,20 @@ body.light-theme .trans-sentence.sentence-highlight {
   box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
   color: #000000 !important;
 }
+
+/* ── Sentence Click Pulse Highlight Effect ── */
+@keyframes sentencePulse {
+  0% {
+    background-color: rgba(124, 58, 237, 0.45) !important;
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.25) !important;
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.pdf-sentence.sentence-pulse, .trans-sentence.sentence-pulse {
+  animation: sentencePulse 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+  border-radius: 3px;
+}

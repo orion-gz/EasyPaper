@@ -2218,6 +2218,17 @@ document.addEventListener('mouseup', () => {
 
 // PDF.js 텍스트 레이어 렌더 완료 콜백 등록
 window.onTextLayerRendered = (textLayerDiv, pageNum) => {
+  // 문장 1대1 매칭을 위한 세그멘테이션 추가
+  segmentElementIntoSentences(textLayerDiv, pageNum, 'pdf-sentence')
+
+  const transBlock = $(`trans-content-${pageNum}`)
+  if (transBlock) {
+    const transTextEl = transBlock.querySelector('.trans-text')
+    if (transTextEl && !transTextEl.dataset.segmented) {
+      segmentElementIntoSentences(transTextEl, pageNum, 'trans-sentence')
+    }
+  }
+
   if (!state.sessionId) return
   const annotations = loadAnnotations(state.sessionId)
   if (annotations[`page_${pageNum}`]) {
@@ -2839,21 +2850,7 @@ function segmentElementIntoSentences(container, pageNum, className) {
   container.dataset.segmented = 'true';
 }
 
-// PDF 텍스트 레이어 렌더링 완료 콜백 정의
-window.onTextLayerRendered = function(textLayerDiv, pageNum) {
-  segmentElementIntoSentences(textLayerDiv, pageNum, 'pdf-sentence');
-
-  // 번역문 엘리먼트가 존재하고 아직 세그멘테이션되지 않은 경우 세그멘테이션 진행
-  const transBlock = $(`trans-content-${pageNum}`);
-  if (transBlock) {
-    const transTextEl = transBlock.querySelector('.trans-text');
-    if (transTextEl && !transTextEl.dataset.segmented) {
-      segmentElementIntoSentences(transTextEl, pageNum, 'trans-sentence');
-    }
-  }
-};
-
-// 1대1 매칭 마우스 오버/아웃 이벤트 위임 등록
+// 1대1 매칭 마우스 오버/아웃 및 클릭 이벤트 위임 등록
 if (viewerScrollContainer) {
   viewerScrollContainer.addEventListener('mouseover', (e) => {
     const target = e.target.closest('.pdf-sentence, .trans-sentence');
@@ -2892,6 +2889,43 @@ if (viewerScrollContainer) {
     matches.forEach(el => {
       el.classList.remove('sentence-highlight');
     });
+  });
+
+  // 클릭 시 해당 매칭 문장으로 스크롤 이동 (양방향 지원)
+  viewerScrollContainer.addEventListener('click', (e) => {
+    const target = e.target.closest('.pdf-sentence, .trans-sentence');
+    if (!target) return;
+
+    const pageNum = target.dataset.page;
+    const sentenceIdx = target.dataset.sentenceIdx;
+    if (!pageNum || !sentenceIdx) return;
+
+    // 원문(PDF)을 클릭한 경우 -> 번역본으로 스크롤
+    if (target.classList.contains('pdf-sentence')) {
+      const match = viewerScrollContainer.querySelector(
+        `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"]`
+      );
+      if (match) {
+        match.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        
+        // 깜빡이는 애니메이션 효과 추가
+        match.classList.add('sentence-pulse');
+        setTimeout(() => match.classList.remove('sentence-pulse'), 1000);
+      }
+    }
+    // 번역본을 클릭한 경우 -> 원문으로 스크롤
+    else if (target.classList.contains('trans-sentence')) {
+      const match = viewerScrollContainer.querySelector(
+        `.pdf-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"]`
+      );
+      if (match) {
+        match.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        
+        // 깜빡이는 애니메이션 효과 추가
+        match.classList.add('sentence-pulse');
+        setTimeout(() => match.classList.remove('sentence-pulse'), 1000);
+      }
+    }
   });
 }
 
