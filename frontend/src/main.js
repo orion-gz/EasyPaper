@@ -794,6 +794,39 @@ const PROVIDER_CONFIG = [
       { value: 'Claude Opus 4.6 (Thinking)',   label: 'Claude Opus 4.6 (Thinking)' },
       { value: 'GPT-OSS 120B (Medium)',        label: 'GPT-OSS 120B (Medium)' },
     ]
+  },
+  {
+    id: 'ollama', label: 'Ollama (로컬)', icon: '🦙',
+    models: [
+      { value: 'gemma:2b', label: 'gemma4 e4b' },
+      { value: 'qwen2.5:3b', label: 'qwen 3.6' },
+      { value: 'llama3.2', label: 'llamma 3.3' }
+    ]
+  },
+  {
+    id: 'openai', label: 'OpenAI', icon: '✦',
+    models: [
+      { value: 'gpt-4o', label: 'GPT-4o' },
+      { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+      { value: 'gpt-4.5-preview', label: 'GPT-4.5 Preview' }
+    ]
+  },
+  {
+    id: 'claude', label: 'Anthropic Claude', icon: '🧠',
+    models: [
+      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
+      { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' }
+    ]
+  },
+  {
+    id: 'gemini', label: 'Google Gemini', icon: '💎',
+    models: [
+      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+      { value: 'gemini-2.0-pro-exp-02-05', label: 'Gemini 2.0 Pro Exp' }
+    ]
   }
 ]
 
@@ -841,12 +874,59 @@ class ProviderModelPicker {
 
   _rebuildPanel() {
     this._panel.innerHTML = ''
-    const config = PROVIDER_CONFIG.map(p => {
+    
+    // API Key가 입력되었는지 확인 (비어있지 않은지 여부)
+    const hasOpenAIKey = !!settingOpenAIKey.value.trim()
+    const hasGeminiKey = !!settingGeminiKey.value.trim()
+    const hasClaudeKey = !!settingClaudeKey.value.trim()
+    const downloaded = state.availableOllamaModels || []
+    
+    let config = PROVIDER_CONFIG.map(p => {
       if (p.id === 'ollama') {
-        return { ...p, models: (state.availableOllamaModels || []).map(m => ({ value: m, label: m })) }
+        const baseModels = p.models
+        if (this.compact) {
+          // 뷰어 및 사이드바: 실제 다운로드된 모델만 띄움
+          return {
+            ...p,
+            models: downloaded.map(m => {
+              const base = baseModels.find(bm => bm.value === m)
+              return { value: m, label: base ? base.label : m }
+            })
+          }
+        } else {
+          // 설정창: 기본 3대 모델(설치 여부 표시) + 기타 다운로드된 모델
+          const modelsToShow = baseModels.map(bm => {
+            const isInstalled = downloaded.includes(bm.value)
+            return {
+              value: bm.value,
+              label: `${bm.label} ${isInstalled ? '(설치됨)' : '(미설치 - 클릭 시 다운로드)'}`,
+              installed: isInstalled
+            }
+          })
+          downloaded.forEach(m => {
+            if (!baseModels.some(bm => bm.value === m)) {
+              modelsToShow.push({
+                value: m,
+                label: `${m} (설치됨)`,
+                installed: true
+              })
+            }
+          })
+          return { ...p, models: modelsToShow }
+        }
       }
       return p
     })
+
+    if (this.compact) {
+      // 뷰어에서는 API 키가 들어있는 공급업체만 띄우도록 필터링
+      config = config.map(p => {
+        if (p.id === 'openai' && !hasOpenAIKey) return { ...p, models: [] }
+        if (p.id === 'gemini' && !hasGeminiKey) return { ...p, models: [] }
+        if (p.id === 'claude' && !hasClaudeKey) return { ...p, models: [] }
+        return p
+      }).filter(p => p.models.length > 0)
+    }
 
     config.forEach((prov, i) => {
       if (i > 0) {
@@ -861,14 +941,12 @@ class ProviderModelPicker {
       header.className = 'picker-group-header'
 
       if (prov.id === 'antigravity') {
-        // 사용량 배지 포함 헤더
         header.innerHTML = `
           <span class="g-icon">${prov.icon}</span>
           <span>${prov.label}</span>
           <span class="agy-usage-badge" style="margin-left:auto;font-size:9px;background:rgba(139,92,246,0.2);color:#a78bfa;padding:2px 6px;border-radius:8px;font-weight:600;">로딩중...</span>
         `
         group.appendChild(header)
-        // 사용량 비동기 로드
         const badge = header.querySelector('.agy-usage-badge')
         getAgyUsageAPI().then(data => {
           if (data && data.ok !== false) {
@@ -887,7 +965,7 @@ class ProviderModelPicker {
         group.appendChild(header)
       }
 
-      const models = prov.models.length > 0 ? prov.models : [{ value: '', label: '모델 없음 (Ollama 연결 필요)' }]
+      const models = prov.models.length > 0 ? prov.models : [{ value: '', label: '모델 없음' }]
       models.forEach(m => {
         const item = document.createElement('div')
         item.className = 'picker-model-item' + (this._provider === prov.id && this._model === m.value ? ' selected' : '')
@@ -896,6 +974,19 @@ class ProviderModelPicker {
         if (m.value) {
           item.addEventListener('click', (e) => {
             e.stopPropagation()
+            
+            // Ollama 미설치 모델 다운로드 처리
+            if (prov.id === 'ollama' && !this.compact) {
+              if (!downloaded.includes(m.value)) {
+                if (confirm(`'${m.label.split(' ')[0]}' (${m.value}) 모델이 설치되어 있지 않습니다. 다운로드하시겠습니까?\n(설정 창 하단에서 다운로드 진행 상태를 보실 수 있습니다)`)) {
+                  this.container.classList.remove('open')
+                  settingPullModelName.value = m.value
+                  settingPullModelBtn.click()
+                }
+                return
+              }
+            }
+            
             this._provider = prov.id
             this._model = m.value
             this._updateBtn()
@@ -912,13 +1003,13 @@ class ProviderModelPicker {
   _updateBtn() {
     const prov = PROVIDER_CONFIG.find(p => p.id === this._provider)
     const icon = prov ? prov.icon : '?'
-    // 첫 단어만 (예: "Google Gemini" → "Gemini", "Anthropic Claude" → "Anthropic")
     const provShort = prov ? (prov.label === 'Google Gemini' ? 'Gemini' : prov.label === 'Anthropic Claude' ? 'Claude' : prov.label.split(' ')[0]) : this._provider
     let modelLabel = this._model || '(선택 안 됨)'
     if (prov) {
       const found = prov.models.find(m => m.value === this._model)
-      if (found) modelLabel = found.label.replace(' (추천)', '')
-      // else: 목록에 없으면 _model 값을 그대로 사용
+      if (found) {
+        modelLabel = found.label.replace(' (설치됨)', '').replace(' (미설치 - 클릭 시 다운로드)', '')
+      }
     }
     this._btn.querySelector('.picker-icon').textContent = icon
     this._btn.querySelector('.picker-label').textContent = `${provShort} · ${modelLabel}`
@@ -941,10 +1032,8 @@ class ProviderModelPicker {
     this._provider = provider || 'antigravity'
     const prov = PROVIDER_CONFIG.find(p => p.id === this._provider)
     if (model) {
-      // 모델 값이 있으면 무조건 그대로 사용 (목록에 없어도 허용)
       this._model = model
     } else if (prov && prov.models.length > 0) {
-      // 모델 미지정 시 첫 번째 모델로 기본값
       this._model = prov.models[0].value
     } else {
       this._model = ''
@@ -966,12 +1055,12 @@ const chatSidebarPicker = new ProviderModelPicker($('chat-sidebar-provider'), {
 
 const settingTransPicker = new ProviderModelPicker($('setting-trans-provider'), {
   compact: false,
-  onChange: () => {}
+  onChange: () => updateSettingsUIVisibility()
 })
 
 const settingChatPicker = new ProviderModelPicker($('setting-chat-provider'), {
   compact: false,
-  onChange: () => {}
+  onChange: () => updateSettingsUIVisibility()
 })
 
 const POPULAR_MODELS = {} // kept for backward compat
@@ -1022,11 +1111,62 @@ function updateModelDropdown(provider, selectEl, customGroupEl, customInputEl, c
   }
 }
 
-function updatePullModelSectionVisibility() {
-  if (settingTransPicker.getValue().provider === 'ollama' || settingChatPicker.getValue().provider === 'ollama') {
+function updateSettingsUIVisibility() {
+  const transVal = settingTransPicker ? settingTransPicker.getValue() : { provider: 'antigravity' }
+  const chatVal = settingChatPicker ? settingChatPicker.getValue() : { provider: 'antigravity' }
+  
+  const providers = new Set([transVal.provider, chatVal.provider])
+  
+  // 1. Ollama 주소 (로컬 AI 사용 시) 표시 여부
+  const hostGroup = $('setting-ollama-host-group')
+  if (hostGroup) {
+    hostGroup.style.display = providers.has('ollama') ? 'block' : 'none'
+  }
+  
+  // 2. Ollama 모델 다운로드 섹션 표시 여부
+  if (providers.has('ollama')) {
     pullModelSection.classList.remove('hidden')
   } else {
     pullModelSection.classList.add('hidden')
+  }
+  
+  // 3. API Keys 섹션 표시 여부
+  const keysSection = $('setting-apikeys-section')
+  const openaiGroup = $('setting-openai-key-group')
+  const geminiGroup = $('setting-gemini-key-group')
+  const claudeGroup = $('setting-claude-key-group')
+  
+  let showSection = false
+  
+  if (openaiGroup) {
+    if (providers.has('openai')) {
+      openaiGroup.style.display = 'block'
+      showSection = true
+    } else {
+      openaiGroup.style.display = 'none'
+    }
+  }
+  
+  if (geminiGroup) {
+    if (providers.has('gemini')) {
+      geminiGroup.style.display = 'block'
+      showSection = true
+    } else {
+      geminiGroup.style.display = 'none'
+    }
+  }
+  
+  if (claudeGroup) {
+    if (providers.has('claude')) {
+      claudeGroup.style.display = 'block'
+      showSection = true
+    } else {
+      claudeGroup.style.display = 'none'
+    }
+  }
+  
+  if (keysSection) {
+    keysSection.style.display = showSection ? 'block' : 'none'
   }
 }
 
@@ -1051,7 +1191,7 @@ async function refreshSystemSettings() {
       promptTemplate.value = sys.translation_prompt_template || promptTemplate.value
     }
     
-    updatePullModelSectionVisibility()
+    updateSettingsUIVisibility()
     
   } catch (err) {
     console.warn('System settings load error:', err)
