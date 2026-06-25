@@ -798,9 +798,10 @@ const PROVIDER_CONFIG = [
   {
     id: 'ollama', label: 'Ollama (로컬)', icon: '🦙',
     models: [
-      { value: 'gemma2:9b', label: 'gemma4 e4b' },
-      { value: 'llama3.1:8b', label: 'llamma 3.3' },
-      { value: 'custom_input', label: '✍️ 직접 입력 추가...' }
+      { value: 'gemma4:e4b', label: 'gemma4 e4b' },
+      { value: 'qwen3.5:9b', label: 'qwen3.5 9b' },
+      { value: 'llama3.1:8b', label: 'llamma 3.1' },
+      { value: 'custom_input', label: '직접 입력' }
     ]
   },
   {
