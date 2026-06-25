@@ -1005,11 +1005,18 @@ class ProviderModelPicker {
             // 직접 모델명 입력 추가 옵션 처리
             if (m.value === 'custom_input') {
               this.container.classList.remove('open')
-              const customName = prompt('추가로 다운로드하여 사용할 Ollama 모델명을 입력해 주세요 (예: mistral, qwen2.5:14b):')
-              if (customName && customName.trim()) {
-                settingPullModelName.value = customName.trim()
-                settingPullModelBtn.click()
+              if (pullModelSection) {
+                pullModelSection.classList.remove('hidden')
+                pullModelSection.scrollIntoView({ behavior: 'smooth', block: 'center' })
               }
+              if (settingPullModelName) {
+                settingPullModelName.focus()
+                settingPullModelName.style.outline = '2px solid var(--accent-mid)'
+                setTimeout(() => {
+                  settingPullModelName.style.outline = 'none'
+                }, 1500)
+              }
+              showToast('아래 "Ollama 모델명 직접 입력"란에 모델명을 적고 다운로드 버튼을 눌러주세요.', 'info')
               return
             }
 
