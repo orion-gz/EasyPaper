@@ -209,16 +209,27 @@ def db_save_translation(doc_id: str, page_num: int, translation: str, suffix: st
         )
         conn.commit()
 
-def db_get_translation(doc_id: str, page_num: int, suffix: str = "") -> Optional[str]:
+def db_get_translation(doc_id: str, page_num: int, suffix: str = "", fallback: bool = True) -> Optional[str]:
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT translation FROM translations WHERE doc_id = ? AND page_num = ? AND suffix = ?",
-            (doc_id, page_num, suffix)
-        )
-        row = cursor.fetchone()
-        if row:
-            return row["translation"]
+        if suffix:
+            cursor.execute(
+                "SELECT translation FROM translations WHERE doc_id = ? AND page_num = ? AND suffix = ?",
+                (doc_id, page_num, suffix)
+            )
+            row = cursor.fetchone()
+            if row:
+                return row["translation"]
+        
+        if fallback:
+            # Fallback: get the most recently saved translation for this page, regardless of suffix
+            cursor.execute(
+                "SELECT translation FROM translations WHERE doc_id = ? AND page_num = ? ORDER BY saved_at DESC LIMIT 1",
+                (doc_id, page_num)
+            )
+            row = cursor.fetchone()
+            if row:
+                return row["translation"]
         return None
 
 def db_list_translated_pages(doc_id: str, suffix: str = "") -> List[int]:

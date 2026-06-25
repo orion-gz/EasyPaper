@@ -329,7 +329,16 @@ def get_full_md_path(session_id: str, suffix: str = "") -> Optional[str]:
     """전체 MD 파일 경로를 반환합니다."""
     suffix_part = f"_{suffix}" if suffix else ""
     path = os.path.join(LIBRARY_DIR, session_id, f"translation{suffix_part}.md")
-    return path if os.path.exists(path) else None
+    if os.path.exists(path):
+        return path
+    
+    # Fallback: Find any translation_*.md file
+    import glob
+    files = glob.glob(os.path.join(LIBRARY_DIR, session_id, "translation_*.md"))
+    if files:
+        files.sort(key=os.path.getmtime, reverse=True)
+        return files[0]
+    return None
 
 
 def get_page_md(session_id: str, page_num: int, suffix: str = "") -> Optional[str]:
@@ -337,7 +346,25 @@ def get_page_md(session_id: str, page_num: int, suffix: str = "") -> Optional[st
     suffix_part = f"_{suffix}" if suffix else ""
     path = os.path.join(LIBRARY_DIR, session_id, "md", f"page_{page_num}{suffix_part}.md")
     if not os.path.exists(path):
-        return None
+        # Fallback 1: Try database translation cache
+        from services.library import get_translation as lib_get_translation
+        db_text = lib_get_translation(session_id, page_num, suffix)
+        if db_text:
+            return db_text
+            
+        # Fallback 2: Try any page MD file
+        md_dir = os.path.join(LIBRARY_DIR, session_id, "md")
+        if os.path.exists(md_dir):
+            import glob
+            files = glob.glob(os.path.join(md_dir, f"page_{page_num}_*.md"))
+            if files:
+                files.sort(key=os.path.getmtime, reverse=True)
+                path = files[0]
+            else:
+                return None
+        else:
+            return None
+
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
     # 헤더 제거 후 번역 본문만 반환
