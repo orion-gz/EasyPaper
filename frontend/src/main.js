@@ -1005,10 +1005,31 @@ class ProviderModelPicker {
             // 직접 모델명 입력 추가 옵션 처리
             if (m.value === 'custom_input') {
               this.container.classList.remove('open')
+              
+              // 1. 설정 모달 열기
+              if (settingsModal) {
+                settingsModal.classList.remove('hidden')
+              }
+              
+              // 2. '모델 설정' 탭 활성화 처리
+              const modelTabBtn = document.querySelector('.tab-btn[data-tab="tab-model"]')
+              const modelTabPane = $('tab-model')
+              if (modelTabBtn && modelTabPane) {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'))
+                document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'))
+                modelTabBtn.classList.add('active')
+                modelTabPane.classList.add('active')
+              }
+
+              // 3. Ollama 다운로드 섹션 보이기 및 스크롤
               if (pullModelSection) {
                 pullModelSection.classList.remove('hidden')
-                pullModelSection.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                setTimeout(() => {
+                  pullModelSection.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }, 100)
               }
+              
+              // 4. 입력 텍스트 상자 포커싱
               if (settingPullModelName) {
                 settingPullModelName.focus()
                 settingPullModelName.style.outline = '2px solid var(--accent-mid)'

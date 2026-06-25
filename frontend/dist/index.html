@@ -14,7 +14,7 @@
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
     onload="document.dispatchEvent(new Event('katex-ready'))"></script>
-  <script type="module" crossorigin src="/assets/index-JIcAPdpj.js"></script>
+  <script type="module" crossorigin src="/assets/index-C1hTY9Ja.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-vd8TvQHs.css">
 </head>
 <body>
@@ -210,7 +210,8 @@
       <!-- 탭 내비게이션 -->
       <div class="modal-tabs">
         <button class="tab-btn active" data-tab="tab-general">일반 설정</button>
-        <button class="tab-btn" data-tab="tab-system">시스템 & 계정</button>
+        <button class="tab-btn" data-tab="tab-model">모델 설정</button>
+        <button class="tab-btn" data-tab="tab-account">계정 설정</button>
         <button class="tab-btn" data-tab="tab-advanced">고급 설정</button>
       </div>
       
@@ -274,8 +275,8 @@
         </form>
       </div>
       
-      <!-- 시스템 & 계정 탭 -->
-      <div id="tab-system" class="tab-pane">
+      <!-- 모델 설정 탭 -->
+      <div id="tab-model" class="tab-pane">
         <!-- 시스템 설정 폼 (Ollama, OpenAI, Gemini, Claude 통합 및 번역/대화 분리) -->
         <form id="system-settings-form" class="modal-form" style="border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 10px;">
           <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">🤖 AI 엔진 및 서버 설정</h3>
@@ -356,7 +357,10 @@
             </div>
           </div>
         </div>
+      </div>
 
+      <!-- 계정 설정 탭 -->
+      <div id="tab-account" class="tab-pane">
         <!-- 계정 변경 폼 -->
         <form id="change-credentials-form" class="modal-form" style="padding-top: 10px;">
           <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">🔐 계정 비밀번호 변경</h3>
