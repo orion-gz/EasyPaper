@@ -2490,3 +2490,23 @@ body.light-theme .message-quote-img {
   border-color: #ddd;
 }
 
+/* ── Capture Crop Mode Styling ── */
+#viewer-scroll-container.crop-mode .pdf-page-inner {
+  cursor: crosshair !important;
+}
+
+#viewer-scroll-container.crop-mode .textLayer,
+#viewer-scroll-container.crop-mode .pdf-figure-overlay,
+#viewer-scroll-container.crop-mode .pdf-sentence {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+#capture-area-btn.active {
+  background: var(--accent-mid, #8b5cf6) !important;
+  color: white !important;
+  border-color: var(--accent-mid, #8b5cf6) !important;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
+}
+
+

@@ -41,6 +41,7 @@ const state = {
   quotedImage: null,           // AI 질문 시 인용 이미지 보관용 (Base64)
   quotedImagePage: null,       // AI 질문 시 인용 이미지의 페이지 번호
   pendingFigureQuote: null,    // 클릭 후 AI 질문 전 대기중인 인용 이미지 정보
+  isCropMode: false,           // 영역 캡처 모드 여부
 }
 
 // ── DOM 참조 ──────────────────────────────────────
@@ -117,6 +118,7 @@ const zoomLabel         = $('zoom-level')
 const syncScrollBtn     = $('sync-scroll-btn')
 const exportBtn         = $('export-btn')
 const retranslateBtn    = $('retranslate-btn')
+const captureAreaBtn    = $('capture-area-btn')
 const cancelTransBtn    = $('cancel-trans-btn')
 const resumeTransBtn    = $('resume-trans-btn')
 // (viewer/chat pickers are now ProviderModelPicker instances – see below)
@@ -193,8 +195,9 @@ function resetState() {
   Object.assign(state, {
     sessionId: null, filename: null, totalPages: 0, currentPage: 1,
     zoom: 1.5, translationCache: {}, translatingPages: new Set(), translatedPages: new Set(), pollingTimer: null,
-    chatHistory: [], chatActiveStream: null, quotedText: null, quotedImage: null, quotedImagePage: null, pendingFigureQuote: null, documentImages: []
+    chatHistory: [], chatActiveStream: null, quotedText: null, quotedImage: null, quotedImagePage: null, pendingFigureQuote: null, isCropMode: false, documentImages: []
   })
+  if (typeof toggleCropMode === 'function') toggleCropMode(false)
   viewerScrollContainer.innerHTML = ''
   if (uploadPopup) uploadPopup.classList.add('hidden')
   progressMini.classList.add('hidden')
@@ -3145,4 +3148,153 @@ if (viewerScrollContainer) {
     }
   });
 }
+
+// ── 영역 캡처 모드 (Manual Crop Tool) ──────────────────
+let isCropping = false
+let cropStart = { x: 0, y: 0 }
+let cropOverlay = null
+let cropPageEl = null
+
+function initCropTool() {
+  const container = viewerScrollContainer
+  if (!container) return
+  
+  container.addEventListener('mousedown', (e) => {
+    if (!state.isCropMode) return
+    const pageInner = e.target.closest('.pdf-page-inner')
+    if (!pageInner) return
+    
+    e.preventDefault()
+    e.stopPropagation()
+    
+    isCropping = true
+    cropPageEl = pageInner
+    
+    const rect = pageInner.getBoundingClientRect()
+    cropStart.x = e.clientX - rect.left
+    cropStart.y = e.clientY - rect.top
+    
+    cropOverlay = pageInner.querySelector('.pdf-crop-overlay')
+    if (!cropOverlay) {
+      cropOverlay = document.createElement('div')
+      cropOverlay.className = 'pdf-crop-overlay'
+      cropOverlay.style.position = 'absolute'
+      cropOverlay.style.border = '2px dashed var(--accent-mid, #8b5cf6)'
+      cropOverlay.style.background = 'rgba(139, 92, 246, 0.15)'
+      cropOverlay.style.pointerEvents = 'none'
+      cropOverlay.style.zIndex = '10'
+      pageInner.appendChild(cropOverlay)
+    }
+    
+    cropOverlay.style.left = `${cropStart.x}px`
+    cropOverlay.style.top = `${cropStart.y}px`
+    cropOverlay.style.width = '0px'
+    cropOverlay.style.height = '0px'
+    cropOverlay.style.display = 'block'
+  })
+  
+  container.addEventListener('mousemove', (e) => {
+    if (!state.isCropMode || !isCropping || !cropPageEl || !cropOverlay) return
+    
+    const rect = cropPageEl.getBoundingClientRect()
+    const currentX = Math.max(0, Math.min(rect.width, e.clientX - rect.left))
+    const currentY = Math.max(0, Math.min(rect.height, e.clientY - rect.top))
+    
+    const left = Math.min(cropStart.x, currentX)
+    const top = Math.min(cropStart.y, currentY)
+    const width = Math.abs(cropStart.x - currentX)
+    const height = Math.abs(cropStart.y - currentY)
+    
+    cropOverlay.style.left = `${left}px`
+    cropOverlay.style.top = `${top}px`
+    cropOverlay.style.width = `${width}px`
+    cropOverlay.style.height = `${height}px`
+  })
+  
+  container.addEventListener('mouseup', (e) => {
+    if (!state.isCropMode || !isCropping || !cropPageEl || !cropOverlay) return
+    isCropping = false
+    
+    const rect = cropPageEl.getBoundingClientRect()
+    const currentX = Math.max(0, Math.min(rect.width, e.clientX - rect.left))
+    const currentY = Math.max(0, Math.min(rect.height, e.clientY - rect.top))
+    
+    const left = Math.min(cropStart.x, currentX)
+    const top = Math.min(cropStart.y, currentY)
+    const width = Math.abs(cropStart.x - currentX)
+    const height = Math.abs(cropStart.y - currentY)
+    
+    cropOverlay.style.display = 'none'
+    
+    if (width < 10 || height < 10) {
+      cropPageEl = null
+      return
+    }
+    
+    const wrapper = cropPageEl.closest('.pdf-page-wrapper')
+    const pageNum = wrapper ? parseInt(wrapper.dataset.page) : 1
+    
+    const canvas = cropPageEl.querySelector('canvas')
+    if (canvas) {
+      try {
+        const dprScaleX = canvas.width / rect.width
+        const dprScaleY = canvas.height / rect.height
+        
+        const leftPx = left * dprScaleX
+        const topPx = top * dprScaleY
+        const widthPx = width * dprScaleX
+        const heightPx = height * dprScaleY
+        
+        const tempCanvas = document.createElement('canvas')
+        const ctx = tempCanvas.getContext('2d')
+        tempCanvas.width = widthPx
+        tempCanvas.height = heightPx
+        
+        ctx.drawImage(
+          canvas,
+          leftPx, topPx, widthPx, heightPx,
+          0, 0, widthPx, heightPx
+        )
+        
+        const base64Img = tempCanvas.toDataURL('image/png')
+        
+        toggleCropMode(false)
+        askAIAssistantImage(base64Img, pageNum)
+      } catch (err) {
+        console.error("Manual crop failed:", err)
+        showToast("캡처에 실패했습니다.", "error")
+      }
+    }
+    
+    cropPageEl = null
+  })
+}
+
+function toggleCropMode(forceState) {
+  state.isCropMode = forceState !== undefined ? forceState : !state.isCropMode
+  
+  if (state.isCropMode) {
+    viewerScrollContainer.classList.add('crop-mode')
+    if (captureAreaBtn) captureAreaBtn.classList.add('active')
+    showToast("마우스로 드래그하여 질문할 영역을 선택하세요.", "success")
+  } else {
+    viewerScrollContainer.classList.remove('crop-mode')
+    if (captureAreaBtn) captureAreaBtn.classList.remove('active')
+    document.querySelectorAll('.pdf-crop-overlay').forEach(el => el.remove())
+  }
+}
+
+// 영역 캡처 버튼 리스너 등록
+if (captureAreaBtn) {
+  captureAreaBtn.addEventListener('click', () => {
+    if (!state.sessionId) {
+      showToast("논문을 먼저 업로드하거나 선택해주세요.", "error")
+      return
+    }
+    toggleCropMode()
+  })
+}
+
+// 캡처 툴 초기화 실행
+initCropTool()
 

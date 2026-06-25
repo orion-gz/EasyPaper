@@ -203,8 +203,8 @@ def merge_bboxes(rects: list, threshold: float = 15.0) -> list:
 
 def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
     """
-    PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 벡터 그래픽스(도형, 차트) 영역 정보를 추출합니다.
-    인접한 이미지/도형 요소들을 그룹화(Merge)하고 마진(Padding)을 주어 크롭 시 잘림 현상을 방지합니다.
+    PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 테이블(Table)의 영역 정보를 추출합니다.
+    인접한 이미지/테이블 요소를 그룹화(Merge)하고 마진(Padding)을 주어 크롭 시 잘림 현상을 방지합니다.
     """
     doc = fitz.open(pdf_path)
     images_data = []
@@ -230,35 +230,66 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
             if w >= 15 and h >= 15:
                 raw_rects.append([x0, y0, x1, y1])
                 
-        # 2. 벡터 그래픽스(Vector Drawings - 선, 도형, 다이어그램 등) 좌표 수집
+        # 2-1. 내장 테이블 Finder 감지
+        try:
+            finder = page.find_tables()
+            if finder and finder.tables:
+                for table in finder.tables:
+                    bbox = table.bbox
+                    x0, y0, x1, y1 = bbox
+                    w = x1 - x0
+                    h = y1 - y0
+                    if w >= 15 and h >= 15:
+                        raw_rects.append([x0, y0, x1, y1])
+        except Exception:
+            pass
+
+        # 2-2. 가로 테이블 구분선(booktabs 등) 감지 Heuristic
         try:
             drawings = page.get_drawings()
+            horizontal_lines = []
             for d in drawings:
                 r = d.get("rect")
-                if not r or r.is_empty:
+                if not r:
                     continue
                 w = r.x1 - r.x0
                 h = r.y1 - r.y0
+                if w > 80 and h < 3: # 가로 방향 얇은 선 수집
+                    horizontal_lines.append([r.x0, r.y0, r.x1, r.y1])
+            
+            if len(horizontal_lines) >= 2:
+                horizontal_lines.sort(key=lambda x: x[1])
+                table_groups = []
+                current_group = [horizontal_lines[0]]
                 
-                # 가로선(구분선) 또는 세로선(경계선) 등 극단적인 비율은 제외
-                if w > page_width * 0.85 and h < 5:
-                    continue
-                if h > page_height * 0.85 and w < 5:
-                    continue
-                # 극도로 작아서 단일 마침표나 사소한 점으로 식별되는 영역 제외
-                if w < 5 and h < 5:
-                    continue
+                for line in horizontal_lines[1:]:
+                    last_line = current_group[-1]
+                    y_diff = line[1] - last_line[3]
+                    x_overlap = not (line[2] < last_line[0] or last_line[2] < line[0])
                     
-                raw_rects.append([r.x0, r.y0, r.x1, r.y1])
+                    if y_diff < 120 and x_overlap:
+                        current_group.append(line)
+                    else:
+                        table_groups.append(current_group)
+                        current_group = [line]
+                table_groups.append(current_group)
+                
+                for group in table_groups:
+                    if len(group) >= 2:
+                        gx0 = min(l[0] for l in group)
+                        gy0 = min(l[1] for l in group)
+                        gx1 = max(l[2] for l in group)
+                        gy1 = max(l[3] for l in group)
+                        raw_rects.append([gx0, gy0, gx1, gy1])
         except Exception:
             pass
         
-        # 3. 바운딩 박스 그룹화 (인접 임계값 15포인트)
-        merged_rects = merge_bboxes(raw_rects, threshold=15.0)
+        # 3. 바운딩 박스 그룹화 (인접 임계값을 4.0포인트로 대폭 좁혀서 과도하게 커지는 현상 방지)
+        merged_rects = merge_bboxes(raw_rects, threshold=4.0)
         
         # 4. 여백 보정 및 최소 규격 필터링
         for r in merged_rects:
-            # 여백(Padding) 8포인트 적용하여 차트 라벨이나 테두리가 잘리지 않도록 안전 확보
+            # 여백(Padding) 8포인트 적용하여 차트 라벨이나 테이블 테두리가 잘리지 않도록 안전 확보
             x0 = max(0.0, r[0] - 8.0)
             y0 = max(0.0, r[1] - 8.0)
             x1 = min(page_width, r[2] + 8.0)
@@ -266,7 +297,7 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
             
             w = x1 - x0
             h = y1 - y0
-            # 최종 크기가 가로/세로 40포인트 이상인 진짜 그림/도형/테이블만 선별
+            # 최종 크기가 가로/세로 40포인트 이상인 진짜 그림/테이블만 선별
             if w < 40 or h < 40:
                 continue
                 
