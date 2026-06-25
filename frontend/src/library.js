@@ -29,3 +29,10 @@ export async function deleteLibraryDoc(docId) {
   if (!res.ok) throw new Error('삭제 실패')
   return res.json()
 }
+
+export async function fetchLibraryDocImages(docId) {
+  const res = await fetch(`${API_BASE}/library/${docId}/images`)
+  if (!res.ok) throw new Error('이미지 정보 조회 실패')
+  return res.json()
+}
+

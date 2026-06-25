@@ -14,8 +14,8 @@
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
     onload="document.dispatchEvent(new Event('katex-ready'))"></script>
-  <script type="module" crossorigin src="/assets/index-CThSaKZI.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DleGzp7F.css">
+  <script type="module" crossorigin src="/assets/index-Cx5BB1D6.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-oyigqUSe.css">
 </head>
 <body>
 
@@ -126,6 +126,13 @@
         <button id="chat-toggle-btn" class="icon-btn" title="AI 어시스턴트 켜기/끄기">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </button>
+        <button id="capture-area-btn" class="icon-btn" title="영역 캡처하여 질문하기">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </button>
         <button id="retranslate-btn" class="icon-btn" title="처음부터 다시 번역하기 (기존 캐시 삭제)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         </button>
@@ -173,6 +180,7 @@
           <div id="chat-quote-area" class="chat-quote-area hidden">
             <span class="chat-quote-symbol">❝</span>
             <div id="chat-quote-text" class="chat-quote-text"></div>
+            <img id="chat-quote-img" class="chat-quote-img hidden" alt="Quoted Figure" />
             <button id="chat-quote-close-btn" class="chat-quote-close-btn" title="인용 취소">&times;</button>
           </div>
           <div class="chat-input-row" style="display: flex; gap: 10px; align-items: flex-end; width: 100%;">
