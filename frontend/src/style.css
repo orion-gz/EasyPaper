@@ -2304,8 +2304,20 @@ body.light-theme .library-grid::-webkit-scrollbar-thumb:hover {
 }
 
 .pdf-sentence {
-  display: inline;
+  display: inline !important;
+  position: static !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent;
   color: transparent !important;
+  font: inherit !important;
+  text-transform: inherit !important;
+  letter-spacing: inherit !important;
+  word-spacing: inherit !important;
+  white-space: inherit !important;
+  box-shadow: none !important;
+  transition: background-color 0.12s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .trans-sentence {
