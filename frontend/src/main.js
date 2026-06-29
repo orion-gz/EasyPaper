@@ -3074,18 +3074,23 @@ function alignSentencesToText(fullText, sentencesList) {
   const sentenceRanges = [];
   let searchStart = 0;
   
-  for (let k = 0; k < sentencesList.length; k++) {
-    const sText = sentencesList[k];
-    let cleanSent = '';
-    for (let i = 0; i < sText.length; i++) {
-      const char = sText[i];
+  // 모든 문장 미리 전처리
+  const cleanSents = sentencesList.map(s => {
+    let clean = '';
+    for (let i = 0; i < s.length; i++) {
+      const char = s[i];
       if (/[a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff]/.test(char)) {
-        cleanSent += char.toLowerCase();
+        clean += char.toLowerCase();
       }
     }
+    return clean;
+  });
+  
+  for (let k = 0; k < cleanSents.length; k++) {
+    const cleanSent = cleanSents[k];
+    const sText = sentencesList[k];
     
     if (!cleanSent) {
-      // 빈 문자열인 경우 (기호만 있음)
       const rawPos = cleanToRaw[searchStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
       sentenceRanges.push({
         text: sText,
@@ -3095,32 +3100,52 @@ function alignSentencesToText(fullText, sentencesList) {
       continue;
     }
     
+    // 1. 순차 검색 시도 (가장 최선)
     let idx = cleanText.indexOf(cleanSent, searchStart);
+    
+    // 2. 순차 검색 실패 시 전역 검색 시도 (정렬 어긋남 해결)
     if (idx === -1) {
-      // 못 찾은 경우 접두어 15자로 느슨한 검색 시도
+      idx = cleanText.indexOf(cleanSent);
+    }
+    
+    // 3. 접두어 기반 검색 시도 (사소한 문자 오차 해결)
+    if (idx === -1) {
       const prefix = cleanSent.substring(0, Math.min(15, cleanSent.length));
       idx = cleanText.indexOf(prefix, searchStart);
       if (idx === -1) {
-        idx = searchStart;
+        idx = cleanText.indexOf(prefix);
       }
     }
     
-    const cleanStart = idx;
-    const cleanEnd = Math.min(cleanText.length, idx + cleanSent.length);
-    
-    const rawStart = cleanToRaw[cleanStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
-    const lastCleanIdx = cleanEnd - 1;
-    const rawEnd = (cleanToRaw[lastCleanIdx] !== undefined)
-      ? cleanToRaw[lastCleanIdx] + 1
-      : (cleanToRaw[cleanToRaw.length - 1] ?? fullText.length);
+    if (idx !== -1) {
+      const cleanStart = idx;
+      const cleanEnd = Math.min(cleanText.length, idx + cleanSent.length);
       
-    sentenceRanges.push({
-      text: fullText.substring(rawStart, rawEnd),
-      start: rawStart,
-      end: rawEnd
-    });
-    
-    searchStart = cleanEnd;
+      const rawStart = cleanToRaw[cleanStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
+      const lastCleanIdx = cleanEnd - 1;
+      const rawEnd = (cleanToRaw[lastCleanIdx] !== undefined)
+        ? cleanToRaw[lastCleanIdx] + 1
+        : (cleanToRaw[cleanToRaw.length - 1] ?? fullText.length);
+        
+      sentenceRanges.push({
+        text: fullText.substring(rawStart, rawEnd),
+        start: rawStart,
+        end: rawEnd
+      });
+      
+      // 순차 검색 인덱스는 전방향 진행만 허용
+      if (cleanEnd > searchStart) {
+        searchStart = cleanEnd;
+      }
+    } else {
+      // 매칭 실패 폴백
+      const rawPos = cleanToRaw[searchStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
+      sentenceRanges.push({
+        text: sText,
+        start: rawPos,
+        end: rawPos
+      });
+    }
   }
   
   return sentenceRanges;
