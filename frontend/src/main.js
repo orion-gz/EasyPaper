@@ -3267,7 +3267,12 @@ function segmentTransElements(container, pageNum) {
 // ── 공통 문장 분리 유틸리티 ────────────────────────────────
 /**
  * 주어진 텍스트를 문장 단위로 분리합니다.
- * 조건: 구두점(.!?) 뒤에 공백이 오고, 다음 단어가 대문자로 시작할 때만 문장 끝으로 처리합니다.
+ *
+ * 문장 경계 판단 조건 (모두 만족해야 함):
+ *  1) 구두점(.!?) + 공백
+ *  2) 다음 첫 문자가 대문자 또는 한글/일구글/아랍본어 등 비라틴문자
+ * 
+ * 이는 영어와 한국어 모두에서 일관되게 작동합니다.
  */
 function splitIntoSentences(fullText) {
   const sentenceRanges = [];
@@ -3275,12 +3280,11 @@ function splitIntoSentences(fullText) {
     'al', 'fig', 'figs', 'eq', 'eqs', 'ref', 'refs', 'tab', 'tabs',
     'eg', 'ie', 'vol', 'no', 'vs', 'dr', 'prof', 'approx', 'etc', 'cf',
     'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
-    'sec', 'sect', 'app', 'chap', 'ch', 'pp', 'p', 'fig', 'figs', 'est', 'ave'
+    'sec', 'sect', 'app', 'chap', 'ch', 'pp', 'p', 'est', 'ave', 'st', 'dept'
   ]);
 
-  // 구두점 뒤에 공백 + 대문자가 오는 패턴만 문장 경계로 처리
-  // 또는 줄 끝(\n)으로 끝나는 경우
-  const candRegex = /([.!?]+)(\s+)/g;
+  // 구두점 + 공백 패턴
+  const candRegex = /([.!?]+)([ \t\n\r]+)/g;
   let lastIndex = 0;
   let match;
 
@@ -3290,23 +3294,24 @@ function splitIntoSentences(fullText) {
     const whitespace = match[2];
     const nextIndex = puncIndex + punc.length + whitespace.length;
 
-    // 구두점 다음 첫 번째 비공백 문자 확인
-    const afterWhitespace = fullText.substring(nextIndex).trimStart();
-    if (afterWhitespace.length === 0) {
-      // 텍스트 끝
-      const sentenceText = fullText.substring(lastIndex, nextIndex);
+    if (nextIndex >= fullText.length) {
+      // 텍스트 끝 부분
+      const sentenceText = fullText.substring(lastIndex, puncIndex + punc.length);
       if (sentenceText.trim()) {
-        sentenceRanges.push({ text: sentenceText, start: lastIndex, end: nextIndex });
+        sentenceRanges.push({ text: sentenceText, start: lastIndex, end: puncIndex + punc.length });
       }
       lastIndex = nextIndex;
       continue;
     }
 
-    const nextChar = afterWhitespace[0];
+    const nextChar = fullText[nextIndex];
     const isPeriod = punc.includes('.');
 
-    // 다음 문자가 소문자이면 문장 끝이 아님 (단, !? 는 항상 문장 끝으로)
-    if (isPeriod && /^[a-z0-9(\[{"']/.test(nextChar)) {
+    // 문장 경계 여부 판단:
+    // - 다음 문자가 소문자/숫자/특수문자라면 구분안함
+    // - 다음 문자가 대문자 또는 한글 등 본문 시작 신호이면 구분함
+    const isLowerOrDigitOrSpecial = /^[a-z0-9\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
+    if (isPeriod && isLowerOrDigitOrSpecial) {
       continue;
     }
 
@@ -3319,8 +3324,8 @@ function splitIntoSentences(fullText) {
       if (isAbbreviation) continue;
 
       // 숫자.숫자 패턴 (소수점)
-      const isDecimal = /\d$/.test(fullText.substring(lastIndex, puncIndex)) && /^\d/.test(afterWhitespace);
-      if (isDecimal) continue;
+      const charBeforePunc = fullText[puncIndex - 1];
+      if (charBeforePunc && /\d/.test(charBeforePunc) && /^\d/.test(nextChar)) continue;
     }
 
     const sentenceText = fullText.substring(lastIndex, puncIndex + punc.length);
@@ -3350,7 +3355,7 @@ function splitIntoSentences(fullText) {
 
 // 1대1 매칭 마우스 오버/아웃 및 클릭 이벤트 위임 등록
 if (viewerScrollContainer) {
-  // 특정 페이지의 PDF/번역본 문장 총 개수에 기반한 안전 1대1 매핑 인덱스 계산 및 해당 문장 범위의 PDF 엘리먼트들을 찾는 헬퍼
+  // PDF와 번역본의 문장 수 차이를 고려한 오프셋 기반 매핑 함수
   function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
     let pdfIdx = -1;
     let transIdx = -1;
@@ -3363,14 +3368,78 @@ if (viewerScrollContainer) {
       return { pdfIdx, transIdx, pdfElements };
     }
 
-    // PDF와 번역본이 동일한 splitIntoSentences() 알고리즘으로 분리되므로
-    // 같은 sentenceIdx = 같은 문장 순서. 직접 1대1 인덱스로 매핑합니다.
-    if (target.classList.contains('trans-sentence')) {
-      transIdx = sentenceIdx;
-      pdfIdx = sentenceIdx;
+    // 양측의 고유한 문장 인덱스 집합
+    const transIdxSet = new Set(transSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
+    const pdfIdxSet = new Set(pdfSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
+    const pdfCount = pdfIdxSet.size;
+    const transCount = transIdxSet.size;
+    const maxPdfIdx = Math.max(...pdfIdxSet);
+    const maxTransIdx = Math.max(...transIdxSet);
+
+    /**
+     * 핵심 매핑 로직:
+     * 
+     * PDF는 페이지 헤더(채널 이름, 학회명 등), 섹션 제목을 텍스트 레이어에 포함하지만
+     * LLM 번역본은 이를 생략하는 경우가 많습니다.
+     * => PDF 문장 수 > 번역본 문장 수 인 경우가 많음
+     * => 이 때 여분 문장은 페이지 앞부분에 몰림 (startOffset)
+     *
+     * 수식:
+     * - 문장 수 동일: 직접 1:1 매핑
+     * - PDF > 번역: startOffset = pdfCount - transCount
+     *   - 번역 idx i -> PDF idx = i + startOffset
+     *   - PDF idx j -> 번역 idx = max(0, j - startOffset)
+     * - 번역 > PDF: 이 경우도 표대화를 위해 동일하게 오프셋 기반로
+     *   - PDF idx j -> 번역 idx = j + (transCount - pdfCount)
+     *   - 번역 idx i -> PDF idx = max(0, i - (transCount - pdfCount))
+     *
+     * 크게 다륾 경우(차이 > 3)는 비례 매핑으로 폴백
+     */
+    const diff = pdfCount - transCount;
+    const absDiff = Math.abs(diff);
+
+    if (absDiff === 0) {
+      // 1:1 직접 매핑
+      pdfIdx = Math.min(maxPdfIdx, sentenceIdx);
+      transIdx = Math.min(maxTransIdx, sentenceIdx);
+    } else if (absDiff <= 5) {
+      // 오프셋 기반 매핑 (PDF와 번역본 중 어느 쪽이 더 많은지를 구분)
+      if (diff > 0) {
+        // PDF가 더 많음: PDF 앞에 데더 먹을 문장이 diff개 있다고 가정
+        const offset = diff;
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.min(maxPdfIdx, sentenceIdx + offset);
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.max(0, Math.min(maxTransIdx, sentenceIdx - offset));
+        }
+      } else {
+        // 번역본이 더 많음: 번역 앞에 데더 먹을 문장이 offset개 있다고 가정
+        const offset = -diff; // transCount - pdfCount
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.max(0, Math.min(maxPdfIdx, sentenceIdx - offset));
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.min(maxTransIdx, sentenceIdx + offset);
+        }
+      }
     } else {
-      pdfIdx = sentenceIdx;
-      transIdx = sentenceIdx;
+      // 큰 차이 → 비례(proportional) 매핑
+      if (pdfCount <= 1 || transCount <= 1) {
+        pdfIdx = 0;
+        transIdx = 0;
+      } else {
+        const fraction = sentenceIdx / Math.max(target.classList.contains('trans-sentence') ? (transCount - 1) : (pdfCount - 1), 1);
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.min(maxPdfIdx, Math.round(fraction * (pdfCount - 1)));
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.min(maxTransIdx, Math.round(fraction * (transCount - 1)));
+        }
+      }
     }
 
     // pdfIdx에 매핑되는 모든 PDF span 엘리먼트 수집
