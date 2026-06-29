@@ -3108,8 +3108,12 @@ function segmentPdfElements(container, pageNum) {
         const isCurrentHeader = fontSize > headerFsThreshold;
         const isLargeGap = gap > paraGapThreshold;
 
+        // 이전 노드가 순수 섹션 번호(예: "1.", "A.")인 경우는 제목과 하나의 문장으로 묶이도록 단락 분할을 건너뜁니다.
+        const prevText = collectTextNodesFromEl(sortedNodes[i - 1].el).map(n => n.nodeValue).join('').trim();
+        const isPrevSectionNum = /^(?:[IVXLCDM\d]+(?:\.[IVXLCDM\d]+)*\.?|[A-Z]\.?)$/i.test(prevText);
+
         // 이전/현재 폰트가 헤더 크기이거나, 줄간격이 기준치보다 크거나, 줄 흐름이 아예 바뀐 경우 단락 경계
-        if (isPrevHeader || isCurrentHeader || isLargeGap || gap < -50) {
+        if (!isPrevSectionNum && (isPrevHeader || isCurrentHeader || isLargeGap || gap < -50)) {
           if (!fullText.endsWith('\n\n')) {
             fullText += '\n\n';
           }
