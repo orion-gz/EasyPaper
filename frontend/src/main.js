@@ -3084,65 +3084,27 @@ function segmentPdfElements(container, pageNum) {
 
     if (textNodes.length === 0) return;
 
-    // PDF 텍스트는 노드 간에 띄어쓰기를 넣지 않습니다. (좌표 오차 방지)
+    // PDF 텍스트 노드 간 공백을 삽입하여 단어 경계를 보존합니다.
     let fullText = '';
     const nodeRanges = [];
     for (let i = 0; i < textNodes.length; i++) {
       const node = textNodes[i];
+      // 이전 노드와의 공백이 필요한지 판단: 앞 노드가 공백으로 끝나지 않고 현 노드가 공백으로 시작하지 않으면 공백 삽입
+      if (i > 0 && fullText.length > 0) {
+        const prevChar = fullText[fullText.length - 1];
+        const nextChar = node.nodeValue[0];
+        if (prevChar !== ' ' && nextChar !== ' ') {
+          fullText += ' ';
+        }
+      }
       const start = fullText.length;
       fullText += node.nodeValue;
       const end = fullText.length;
       nodeRanges.push({ node, start, end });
     }
 
-    // 스마트 문장 분할
-    const sentenceRanges = [];
-    const abbreviations = new Set([
-      'al', 'fig', 'figs', 'eq', 'eqs', 'ref', 'refs', 'tab', 'tabs',
-      'eg', 'ie', 'vol', 'no', 'vs', 'dr', 'prof', 'approx', 'etc', 'cf',
-      'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
-    ]);
-    const candRegex = /[.!?]+/g;
-    let lastIndex = 0;
-    let match;
-    
-    while ((match = candRegex.exec(fullText)) !== null) {
-      const puncIndex = match.index;
-      const punc = match[0];
-      const nextIndex = puncIndex + punc.length;
-      
-      const isPeriod = punc.includes('.');
-      const isDecimal = isPeriod && /^\d/.test(fullText.substring(nextIndex));
-      if (isDecimal) continue;
-      
-      const leftText = fullText.substring(lastIndex, puncIndex);
-      const words = leftText.trim().split(/[\s,()\[\]{}.]+/);
-      const lastWord = words.length > 0 ? words[words.length - 1].toLowerCase().replace(/[^a-z]/g, '') : '';
-      
-      const isAbbreviation = abbreviations.has(lastWord) || (lastWord.length === 1 && /^[a-z]$/i.test(lastWord));
-      if (isPeriod && isAbbreviation) continue;
-      
-      const sentenceText = fullText.substring(lastIndex, nextIndex);
-      if (sentenceText.trim()) {
-        sentenceRanges.push({
-          text: sentenceText,
-          start: lastIndex,
-          end: nextIndex
-        });
-      }
-      lastIndex = nextIndex;
-    }
-    
-    if (lastIndex < fullText.length) {
-      const remaining = fullText.substring(lastIndex);
-      if (remaining.trim()) {
-        sentenceRanges.push({
-          text: remaining,
-          start: lastIndex,
-          end: fullText.length
-        });
-      }
-    }
+    // 스마트 문장 분할 (대문자 시작 체크 포함)
+    const sentenceRanges = splitIntoSentences(fullText);
 
     // 물리적 DOM 쪼개기 수행
     for (const range of nodeRanges) {
@@ -3245,53 +3207,7 @@ function segmentTransElements(container, pageNum) {
     nodeRanges.push({ node, start, end });
   }
 
-  const sentenceRanges = [];
-  const abbreviations = new Set([
-    'al', 'fig', 'figs', 'eq', 'eqs', 'ref', 'refs', 'tab', 'tabs',
-    'eg', 'ie', 'vol', 'no', 'vs', 'dr', 'prof', 'approx', 'etc', 'cf',
-    'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
-  ]);
-  const candRegex = /[.!?]+/g;
-  let lastIndex = 0;
-  let match;
-  
-  while ((match = candRegex.exec(fullText)) !== null) {
-    const puncIndex = match.index;
-    const punc = match[0];
-    const nextIndex = puncIndex + punc.length;
-    
-    const isPeriod = punc.includes('.');
-    const isDecimal = isPeriod && /^\d/.test(fullText.substring(nextIndex));
-    if (isDecimal) continue;
-    
-    const leftText = fullText.substring(lastIndex, puncIndex);
-    const words = leftText.trim().split(/[\s,()\[\]{}.]+/);
-    const lastWord = words.length > 0 ? words[words.length - 1].toLowerCase().replace(/[^a-z]/g, '') : '';
-    
-    const isAbbreviation = abbreviations.has(lastWord) || (lastWord.length === 1 && /^[a-z]$/i.test(lastWord));
-    if (isPeriod && isAbbreviation) continue;
-    
-    const sentenceText = fullText.substring(lastIndex, nextIndex);
-    if (sentenceText.trim()) {
-      sentenceRanges.push({
-        text: sentenceText,
-        start: lastIndex,
-        end: nextIndex
-      });
-    }
-    lastIndex = nextIndex;
-  }
-  
-  if (lastIndex < fullText.length) {
-    const remaining = fullText.substring(lastIndex);
-    if (remaining.trim()) {
-      sentenceRanges.push({
-        text: remaining,
-        start: lastIndex,
-        end: fullText.length
-      });
-    }
-  }
+  const sentenceRanges = splitIntoSentences(fullText);
 
   for (const range of nodeRanges) {
     const parent = range.node.parentNode;
@@ -3348,6 +3264,90 @@ function segmentTransElements(container, pageNum) {
   container.dataset.segmented = 'true';
 }
 
+// ── 공통 문장 분리 유틸리티 ────────────────────────────────
+/**
+ * 주어진 텍스트를 문장 단위로 분리합니다.
+ * 조건: 구두점(.!?) 뒤에 공백이 오고, 다음 단어가 대문자로 시작할 때만 문장 끝으로 처리합니다.
+ */
+function splitIntoSentences(fullText) {
+  const sentenceRanges = [];
+  const abbreviations = new Set([
+    'al', 'fig', 'figs', 'eq', 'eqs', 'ref', 'refs', 'tab', 'tabs',
+    'eg', 'ie', 'vol', 'no', 'vs', 'dr', 'prof', 'approx', 'etc', 'cf',
+    'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+    'sec', 'sect', 'app', 'chap', 'ch', 'pp', 'p', 'fig', 'figs', 'est', 'ave'
+  ]);
+
+  // 구두점 뒤에 공백 + 대문자가 오는 패턴만 문장 경계로 처리
+  // 또는 줄 끝(\n)으로 끝나는 경우
+  const candRegex = /([.!?]+)(\s+)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = candRegex.exec(fullText)) !== null) {
+    const puncIndex = match.index;
+    const punc = match[1];
+    const whitespace = match[2];
+    const nextIndex = puncIndex + punc.length + whitespace.length;
+
+    // 구두점 다음 첫 번째 비공백 문자 확인
+    const afterWhitespace = fullText.substring(nextIndex).trimStart();
+    if (afterWhitespace.length === 0) {
+      // 텍스트 끝
+      const sentenceText = fullText.substring(lastIndex, nextIndex);
+      if (sentenceText.trim()) {
+        sentenceRanges.push({ text: sentenceText, start: lastIndex, end: nextIndex });
+      }
+      lastIndex = nextIndex;
+      continue;
+    }
+
+    const nextChar = afterWhitespace[0];
+    const isPeriod = punc.includes('.');
+
+    // 다음 문자가 소문자이면 문장 끝이 아님 (단, !? 는 항상 문장 끝으로)
+    if (isPeriod && /^[a-z0-9(\[{"']/.test(nextChar)) {
+      continue;
+    }
+
+    // 마침표의 경우 약어 체크
+    if (isPeriod) {
+      const leftText = fullText.substring(lastIndex, puncIndex);
+      const words = leftText.trim().split(/[\s,()\[\]{}.]+/);
+      const lastWord = words.length > 0 ? words[words.length - 1].toLowerCase().replace(/[^a-z]/g, '') : '';
+      const isAbbreviation = abbreviations.has(lastWord) || (lastWord.length === 1 && /^[a-z]$/i.test(lastWord));
+      if (isAbbreviation) continue;
+
+      // 숫자.숫자 패턴 (소수점)
+      const isDecimal = /\d$/.test(fullText.substring(lastIndex, puncIndex)) && /^\d/.test(afterWhitespace);
+      if (isDecimal) continue;
+    }
+
+    const sentenceText = fullText.substring(lastIndex, puncIndex + punc.length);
+    if (sentenceText.trim()) {
+      sentenceRanges.push({
+        text: sentenceText,
+        start: lastIndex,
+        end: puncIndex + punc.length
+      });
+    }
+    lastIndex = nextIndex;
+  }
+
+  if (lastIndex < fullText.length) {
+    const remaining = fullText.substring(lastIndex);
+    if (remaining.trim()) {
+      sentenceRanges.push({
+        text: remaining,
+        start: lastIndex,
+        end: fullText.length
+      });
+    }
+  }
+
+  return sentenceRanges;
+}
+
 // 1대1 매칭 마우스 오버/아웃 및 클릭 이벤트 위임 등록
 if (viewerScrollContainer) {
   // 특정 페이지의 PDF/번역본 문장 총 개수에 기반한 안전 1대1 매핑 인덱스 계산 및 해당 문장 범위의 PDF 엘리먼트들을 찾는 헬퍼
@@ -3363,33 +3363,17 @@ if (viewerScrollContainer) {
       return { pdfIdx, transIdx, pdfElements };
     }
 
-    const transIndices = Array.from(new Set(transSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)))).sort((a, b) => a - b);
-    const pdfIndices = Array.from(new Set(pdfSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)))).sort((a, b) => a - b);
-
-    const maxPdfIdx = pdfIndices.length > 0 ? pdfIndices[pdfIndices.length - 1] : 0;
-    const maxTransIdx = transIndices.length > 0 ? transIndices[transIndices.length - 1] : 0;
-
+    // PDF와 번역본이 동일한 splitIntoSentences() 알고리즘으로 분리되므로
+    // 같은 sentenceIdx = 같은 문장 순서. 직접 1대1 인덱스로 매핑합니다.
     if (target.classList.contains('trans-sentence')) {
       transIdx = sentenceIdx;
-      if (maxTransIdx === 0) {
-        pdfIdx = 0;
-      } else if (pdfIndices.includes(sentenceIdx)) {
-        pdfIdx = sentenceIdx;
-      } else {
-        pdfIdx = Math.min(maxPdfIdx, Math.round(sentenceIdx * (maxPdfIdx / maxTransIdx)));
-      }
+      pdfIdx = sentenceIdx;
     } else {
       pdfIdx = sentenceIdx;
-      if (maxPdfIdx === 0) {
-        transIdx = 0;
-      } else if (transIndices.includes(sentenceIdx)) {
-        transIdx = sentenceIdx;
-      } else {
-        transIdx = Math.min(maxTransIdx, Math.round(sentenceIdx * (maxTransIdx / maxPdfIdx)));
-      }
+      transIdx = sentenceIdx;
     }
 
-    // pdfIdx에 매핑되는 모든 원래 PDF span 엘리먼트 수집
+    // pdfIdx에 매핑되는 모든 PDF span 엘리먼트 수집
     pdfElements = pdfSpans.filter(el => parseInt(el.dataset.sentenceIdx || '0', 10) === pdfIdx);
 
     return { pdfIdx, transIdx, pdfElements };
