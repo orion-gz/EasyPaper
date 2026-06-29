@@ -3019,92 +3019,133 @@ function segmentElementIntoSentences(container, pageNum, className) {
   }
 }
 
-// PDF 텍스트 레이어 물리적 문장 쪼개기 구현 (글꼴/레이아웃 레이어에 무해한 인라인 span 삽입)
+// PDF 텍스트 레이어 물리적 문장 쪼개기 구현
+// 세로 간격(vertical gap)과 글자 크기(font-size)를 기반으로 단락 경계를 감지하여 \n\n 삽입
 function segmentPdfElements(container, pageNum) {
   try {
-    // textLayer 바로 하위의 span/div 엘리먼트 수집
     const elements = Array.from(container.children).filter(el => el.nodeType === 1);
     if (elements.length === 0) return;
 
-    // 2단 레이아웃 기하학적 정렬
-    const elementsWithCoords = elements.map(el => {
-      const leftMatch = el.style.left.match(/([\d.-]+)px/);
-      const topMatch = el.style.top.match(/([\d.-]+)px/);
-      const left = leftMatch ? parseFloat(leftMatch[1]) : 0;
-      const top = topMatch ? parseFloat(topMatch[1]) : 0;
-      return { el, left, top };
+    // 2단 레이아웃 감지 및 font-size 정보 수집
+    const nodes = elements.map(el => {
+      const leftMatch = el.style.left?.match(/([\d.-]+)px/);
+      const topMatch  = el.style.top?.match(/([\d.-]+)px/);
+      const fsMatch   = el.style.fontSize?.match(/([\d.]+)/);
+      return {
+        el,
+        left:     leftMatch ? parseFloat(leftMatch[1]) : 0,
+        top:      topMatch  ? parseFloat(topMatch[1])  : 0,
+        fontSize: fsMatch   ? parseFloat(fsMatch[1])   : 10,
+      };
     });
 
     const pageWidth = parseFloat(container.style.width) || 600;
     const mid = pageWidth / 2;
+    const leftCount  = nodes.filter(n => n.left < mid * 1.05).length;
+    const rightCount = nodes.filter(n => n.left > mid * 0.95).length;
+    const isTwoColumn = nodes.length > 5
+      && (leftCount  / nodes.length > 0.3)
+      && (rightCount / nodes.length > 0.3);
 
-    const leftCount = elementsWithCoords.filter(n => n.left < mid * 1.05).length;
-    const rightCount = elementsWithCoords.filter(n => n.left > mid * 0.95).length;
-    const isTwoColumn = elementsWithCoords.length > 5 && (leftCount / elementsWithCoords.length > 0.3) && (rightCount / elementsWithCoords.length > 0.3);
-
-    const sortedElements = [];
+    let sortedNodes;
     if (isTwoColumn) {
-      const leftEls = elementsWithCoords.filter(n => n.left < mid).sort((a, b) => a.top - b.top || a.left - b.left);
-      const rightEls = elementsWithCoords.filter(n => n.left >= mid).sort((a, b) => a.top - b.top || a.left - b.left);
-      leftEls.concat(rightEls).forEach(n => sortedElements.push(n.el));
+      const leftNs  = nodes.filter(n => n.left < mid).sort((a, b) => a.top - b.top || a.left - b.left);
+      const rightNs = nodes.filter(n => n.left >= mid).sort((a, b) => a.top - b.top || a.left - b.left);
+      sortedNodes = leftNs.concat(rightNs);
     } else {
-      elementsWithCoords.sort((a, b) => {
-        if (Math.abs(a.top - b.top) < 4) {
-          return a.left - b.left;
-        }
-        return a.top - b.top;
-      });
-      elementsWithCoords.forEach(n => sortedElements.push(n.el));
+      sortedNodes = [...nodes].sort((a, b) =>
+        Math.abs(a.top - b.top) < 4 ? a.left - b.left : a.top - b.top
+      );
     }
 
-    // 텍스트 노드 수집
-    const textNodes = [];
-    function collectTextNodes(node) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        if (node.nodeValue.trim()) {
-          textNodes.push(node);
-        }
-      } else {
-        if (
-          node.nodeName !== 'SCRIPT' && 
-          node.nodeName !== 'STYLE' && 
+    // 줄간격 중앙값(median line gap)과 글자크기 중앙값 계산
+    const gaps = [];
+    for (let i = 1; i < sortedNodes.length; i++) {
+      const gap = sortedNodes[i].top - sortedNodes[i - 1].top;
+      if (gap > 0) gaps.push(gap);
+    }
+    gaps.sort((a, b) => a - b);
+    const medianGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 14;
+    const paraGapThreshold = medianGap * 1.8; // 기준 줄간격의 1.8배 이상 벌어지면 단락 구분
+
+    const fontSizes = sortedNodes.map(n => n.fontSize).sort((a, b) => a - b);
+    const medianFontSize = fontSizes[Math.floor(fontSizes.length / 2)] || 10;
+    const headerFsThreshold = medianFontSize * 1.15; // 중앙값보다 15% 이상 큰 폰트는 헤더/제목으로 판정
+
+    // 텍스트 노드 수집 헬퍼
+    function collectTextNodesFromEl(el) {
+      const textNodes = [];
+      function walk(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          if (node.nodeValue.trim()) textNodes.push(node);
+        } else if (
+          node.nodeName !== 'SCRIPT' &&
+          node.nodeName !== 'STYLE' &&
           !node.classList?.contains('katex') &&
           !node.classList?.contains('katex-display-wrap')
         ) {
-          for (const child of node.childNodes) {
-            collectTextNodes(child);
+          for (const child of node.childNodes) walk(child);
+        }
+      }
+      walk(el);
+      return textNodes;
+    }
+
+    // 순차적으로 fullText 구성, 단락 경계에 \n\n 삽입
+    let fullText = '';
+    const nodeRanges = [];
+    let prevTop = null;
+    let prevFontSize = medianFontSize;
+
+    for (let i = 0; i < sortedNodes.length; i++) {
+      const { el, top, fontSize } = sortedNodes[i];
+      const elNodes = collectTextNodesFromEl(el);
+      if (elNodes.length === 0) continue;
+
+      if (fullText.length > 0) {
+        const gap = prevTop !== null ? top - prevTop : 0;
+        const isPrevHeader = prevFontSize > headerFsThreshold;
+        const isCurrentHeader = fontSize > headerFsThreshold;
+        const isLargeGap = gap > paraGapThreshold;
+
+        // 이전/현재 폰트가 헤더 크기이거나, 줄간격이 기준치보다 크거나, 줄 흐름이 아예 바뀐 경우 단락 경계
+        if (isPrevHeader || isCurrentHeader || isLargeGap || gap < -50) {
+          if (!fullText.endsWith('\n\n')) {
+            fullText += '\n\n';
+          }
+        } else {
+          // 일반 공백 삽입 조건
+          const prevChar = fullText[fullText.length - 1];
+          const nextChar = elNodes[0].nodeValue[0];
+          if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n') {
+            fullText += ' ';
           }
         }
       }
-    }
 
-    for (const el of sortedElements) {
-      collectTextNodes(el);
-    }
-
-    if (textNodes.length === 0) return;
-
-    // PDF 텍스트 노드 간 공백을 삽입하여 단어 경계를 보존합니다.
-    let fullText = '';
-    const nodeRanges = [];
-    for (let i = 0; i < textNodes.length; i++) {
-      const node = textNodes[i];
-      // 이전 노드와의 공백이 필요한지 판단: 앞 노드가 공백으로 끝나지 않고 현 노드가 공백으로 시작하지 않으면 공백 삽입
-      if (i > 0 && fullText.length > 0) {
-        const prevChar = fullText[fullText.length - 1];
-        const nextChar = node.nodeValue[0];
-        if (prevChar !== ' ' && nextChar !== ' ') {
-          fullText += ' ';
+      for (let j = 0; j < elNodes.length; j++) {
+        const node = elNodes[j];
+        if (j > 0) {
+          const prevChar = fullText[fullText.length - 1];
+          const nextChar = node.nodeValue[0];
+          if (prevChar !== ' ' && nextChar !== ' ') {
+            fullText += ' ';
+          }
         }
+        const start = fullText.length;
+        fullText += node.nodeValue;
+        nodeRanges.push({ node, start, end: fullText.length });
       }
-      const start = fullText.length;
-      fullText += node.nodeValue;
-      const end = fullText.length;
-      nodeRanges.push({ node, start, end });
+
+      prevTop = top;
+      prevFontSize = fontSize;
     }
 
-    // 스마트 문장 분할 (대문자 시작 체크 포함)
+    if (nodeRanges.length === 0) return;
+
+    // 단락 단위 인지 문장 분할
     const sentenceRanges = splitIntoSentences(fullText);
+    if (sentenceRanges.length === 0) return;
 
     // 물리적 DOM 쪼개기 수행
     for (const range of nodeRanges) {
@@ -3121,11 +3162,10 @@ function segmentPdfElements(container, pageNum) {
             sentenceIdx: i,
             startInNode: start - range.start,
             endInNode: end - range.start,
-            text: range.node.nodeValue.substring(start - range.start, end - range.start)
+            text: range.node.nodeValue.substring(start - range.start, end - range.start),
           });
         }
       }
-
       if (segments.length === 0) continue;
 
       const fragment = document.createDocumentFragment();
@@ -3159,7 +3199,6 @@ function segmentPdfElements(container, pageNum) {
       parent.replaceChild(fragment, range.node);
     }
 
-    // 상태 보관
     if (!state.pdfPageSentences) state.pdfPageSentences = {};
     state.pdfPageSentences[pageNum] = sentenceRanges;
 
@@ -3169,28 +3208,57 @@ function segmentPdfElements(container, pageNum) {
   }
 }
 
-// 번역본용 문장 쪼개기 (기존 방식 유지)
+// 번역본용 문장 쪼개기
+// HTML의 헤더(h2~h4) 및 <br><br> 개행 태그를 기준으로 문단(\n\n) 처리
 function segmentTransElements(container, pageNum) {
   const textNodes = [];
-  function collectTextNodes(node) {
+  const nodeParagraphBreak = [];
+
+  function walk(node, isFirstInBlock) {
     if (node.nodeType === Node.TEXT_NODE) {
       if (node.nodeValue.trim()) {
         textNodes.push(node);
+        nodeParagraphBreak.push(isFirstInBlock);
+        return true;
       }
+      return false;
+    } else if (
+      node.nodeName === 'SCRIPT' ||
+      node.nodeName === 'STYLE' ||
+      node.classList?.contains('katex') ||
+      node.classList?.contains('katex-display-wrap')
+    ) {
+      return false;
     } else {
-      if (
-        node.nodeName !== 'SCRIPT' && 
-        node.nodeName !== 'STYLE' && 
-        !node.classList?.contains('katex') &&
-        !node.classList?.contains('katex-display-wrap')
-      ) {
-        for (const child of node.childNodes) {
-          collectTextNodes(child);
+      const isBlock = ['H2', 'H3', 'H4', 'H5', 'H6', 'P', 'DIV', 'BLOCKQUOTE', 'LI'].includes(node.nodeName);
+      let firstChild = true;
+      let hadText = false;
+      
+      for (let i = 0; i < node.childNodes.length; i++) {
+        const child = node.childNodes[i];
+        
+        if (child.nodeName === 'BR') {
+          // 연속된 <br> 태그가 감지되면 단락 나눔으로 판정
+          const next = node.childNodes[i + 1];
+          if (next && next.nodeName === 'BR') {
+            firstChild = true;
+            i++; // 다음 BR 건너뜀
+          }
+          continue;
+        }
+        
+        const childFirst = isBlock ? firstChild : isFirstInBlock;
+        const childHadText = walk(child, childFirst && !hadText);
+        if (childHadText) {
+          hadText = true;
+          firstChild = false;
         }
       }
+      return hadText;
     }
   }
-  collectTextNodes(container);
+
+  walk(container, false);
 
   if (textNodes.length === 0) return;
 
@@ -3199,12 +3267,21 @@ function segmentTransElements(container, pageNum) {
   for (let i = 0; i < textNodes.length; i++) {
     const node = textNodes[i];
     if (i > 0) {
-      fullText += ' '; // 번역본은 노드 간 공백 구분자 적용
+      if (nodeParagraphBreak[i]) {
+        if (!fullText.endsWith('\n\n')) {
+          fullText += '\n\n';
+        }
+      } else {
+        const prevChar = fullText[fullText.length - 1];
+        const nextChar = node.nodeValue[0];
+        if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n') {
+          fullText += ' ';
+        }
+      }
     }
     const start = fullText.length;
     fullText += node.nodeValue;
-    const end = fullText.length;
-    nodeRanges.push({ node, start, end });
+    nodeRanges.push({ node, start, end: fullText.length });
   }
 
   const sentenceRanges = splitIntoSentences(fullText);
@@ -3223,7 +3300,7 @@ function segmentTransElements(container, pageNum) {
           sentenceIdx: i,
           startInNode: start - range.start,
           endInNode: end - range.start,
-          text: range.node.nodeValue.substring(start - range.start, end - range.start)
+          text: range.node.nodeValue.substring(start - range.start, end - range.start),
         });
       }
     }
@@ -3266,90 +3343,119 @@ function segmentTransElements(container, pageNum) {
 
 // ── 공통 문장 분리 유틸리티 ────────────────────────────────
 /**
- * 주어진 텍스트를 문장 단위로 분리합니다.
- *
- * 문장 경계 판단 조건 (모두 만족해야 함):
- *  1) 구두점(.!?) + 공백
- *  2) 다음 첫 문자가 대문자 또는 한글/일구글/아랍본어 등 비라틴문자
- * 
- * 이는 영어와 한국어 모두에서 일관되게 작동합니다.
+ * 주어진 텍스트를 단락과 문장 단위로 분리합니다.
+ * \n\n(단락 경계)는 강제 문장 경계로 판정합니다.
  */
 function splitIntoSentences(fullText) {
   const sentenceRanges = [];
+  
+  // 먼저 문단 단위(\n\n)로 1차 분할 수행
+  const paraRegex = /\n{2,}/g;
+  let lastParaIndex = 0;
+  let match;
+  const paras = [];
+  
+  while ((match = paraRegex.exec(fullText)) !== null) {
+    paras.push({
+      text: fullText.substring(lastParaIndex, match.index),
+      start: lastParaIndex,
+      end: match.index
+    });
+    lastParaIndex = paraRegex.lastIndex;
+  }
+  paras.push({
+    text: fullText.substring(lastParaIndex),
+    start: lastParaIndex,
+    end: fullText.length
+  });
+  
   const abbreviations = new Set([
     'al', 'fig', 'figs', 'eq', 'eqs', 'ref', 'refs', 'tab', 'tabs',
     'eg', 'ie', 'vol', 'no', 'vs', 'dr', 'prof', 'approx', 'etc', 'cf',
     'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
     'sec', 'sect', 'app', 'chap', 'ch', 'pp', 'p', 'est', 'ave', 'st', 'dept'
   ]);
-
-  // 구두점 + 공백 패턴
-  const candRegex = /([.!?]+)([ \t\n\r]+)/g;
-  let lastIndex = 0;
-  let match;
-
-  while ((match = candRegex.exec(fullText)) !== null) {
-    const puncIndex = match.index;
-    const punc = match[1];
-    const whitespace = match[2];
-    const nextIndex = puncIndex + punc.length + whitespace.length;
-
-    if (nextIndex >= fullText.length) {
-      // 텍스트 끝 부분
-      const sentenceText = fullText.substring(lastIndex, puncIndex + punc.length);
-      if (sentenceText.trim()) {
-        sentenceRanges.push({ text: sentenceText, start: lastIndex, end: puncIndex + punc.length });
+  
+  for (const para of paras) {
+    const paraText = para.text;
+    const paraStart = para.start;
+    if (!paraText.trim()) continue;
+    
+    // 문단 내부에서 구두점을 기준으로 2차 문장 분할
+    const candRegex = /([.!?]+)([ \t\n\r]+)/g;
+    let lastSentenceIndex = 0;
+    let sMatch;
+    
+    while ((sMatch = candRegex.exec(paraText)) !== null) {
+      const puncIndex = sMatch.index;
+      const punc = sMatch[1];
+      const whitespace = sMatch[2];
+      const nextIndex = puncIndex + punc.length + whitespace.length;
+      
+      if (nextIndex >= paraText.length) {
+        // 문단 끝 부분
+        const sentenceText = paraText.substring(lastSentenceIndex, puncIndex + punc.length);
+        if (sentenceText.trim()) {
+          sentenceRanges.push({
+            text: sentenceText,
+            start: paraStart + lastSentenceIndex,
+            end: paraStart + puncIndex + punc.length
+          });
+        }
+        lastSentenceIndex = nextIndex;
+        continue;
       }
-      lastIndex = nextIndex;
-      continue;
+      
+      const nextChar = paraText[nextIndex];
+      const isPeriod = punc.includes('.');
+      
+      // 다음 글자가 소문자/숫자/특수문자이면 문장 구분 안 함
+      const isLowerOrDigitOrSpecial = /^[a-z0-9\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
+      if (isPeriod && isLowerOrDigitOrSpecial) {
+        continue;
+      }
+      
+      // 섹션 번호 형식 ("1.", "2.1.") 등은 단일 문장으로 분할하지 않음
+      if (isPeriod) {
+        const leftText = paraText.substring(lastSentenceIndex, puncIndex).trim();
+        if (/^\d+(\.\d+)*$/.test(leftText)) {
+          continue;
+        }
+        
+        // 약어 매칭
+        const words = leftText.split(/[\s,()\[\]{}.]+/);
+        const lastWord = words.length > 0 ? words[words.length - 1].toLowerCase().replace(/[^a-z]/g, '') : '';
+        const isAbbreviation = abbreviations.has(lastWord) || (lastWord.length === 1 && /^[a-z]$/i.test(lastWord));
+        if (isAbbreviation) continue;
+        
+        // 소수점 패턴 (\d.\d)
+        const charBeforePunc = paraText[puncIndex - 1];
+        if (charBeforePunc && /\d/.test(charBeforePunc) && /^\d/.test(nextChar)) continue;
+      }
+      
+      const sentenceText = paraText.substring(lastSentenceIndex, puncIndex + punc.length);
+      if (sentenceText.trim()) {
+        sentenceRanges.push({
+          text: sentenceText,
+          start: paraStart + lastSentenceIndex,
+          end: paraStart + puncIndex + punc.length
+        });
+      }
+      lastSentenceIndex = nextIndex;
     }
-
-    const nextChar = fullText[nextIndex];
-    const isPeriod = punc.includes('.');
-
-    // 문장 경계 여부 판단:
-    // - 다음 문자가 소문자/숫자/특수문자라면 구분안함
-    // - 다음 문자가 대문자 또는 한글 등 본문 시작 신호이면 구분함
-    const isLowerOrDigitOrSpecial = /^[a-z0-9\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
-    if (isPeriod && isLowerOrDigitOrSpecial) {
-      continue;
+    
+    if (lastSentenceIndex < paraText.length) {
+      const remaining = paraText.substring(lastSentenceIndex);
+      if (remaining.trim()) {
+        sentenceRanges.push({
+          text: remaining,
+          start: paraStart + lastSentenceIndex,
+          end: paraStart + paraText.length
+        });
+      }
     }
-
-    // 마침표의 경우 약어 체크
-    if (isPeriod) {
-      const leftText = fullText.substring(lastIndex, puncIndex);
-      const words = leftText.trim().split(/[\s,()\[\]{}.]+/);
-      const lastWord = words.length > 0 ? words[words.length - 1].toLowerCase().replace(/[^a-z]/g, '') : '';
-      const isAbbreviation = abbreviations.has(lastWord) || (lastWord.length === 1 && /^[a-z]$/i.test(lastWord));
-      if (isAbbreviation) continue;
-
-      // 숫자.숫자 패턴 (소수점)
-      const charBeforePunc = fullText[puncIndex - 1];
-      if (charBeforePunc && /\d/.test(charBeforePunc) && /^\d/.test(nextChar)) continue;
-    }
-
-    const sentenceText = fullText.substring(lastIndex, puncIndex + punc.length);
-    if (sentenceText.trim()) {
-      sentenceRanges.push({
-        text: sentenceText,
-        start: lastIndex,
-        end: puncIndex + punc.length
-      });
-    }
-    lastIndex = nextIndex;
   }
-
-  if (lastIndex < fullText.length) {
-    const remaining = fullText.substring(lastIndex);
-    if (remaining.trim()) {
-      sentenceRanges.push({
-        text: remaining,
-        start: lastIndex,
-        end: fullText.length
-      });
-    }
-  }
-
+  
   return sentenceRanges;
 }
 
