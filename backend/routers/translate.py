@@ -4,10 +4,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from routers.upload import sessions, ensure_session
-from services.chunker import split_into_chunks
+from services.chunker import split_into_chunks, align_sentences
 from services.llm_client import stream_translation, check_ollama_health
-from services.cache import get_cached_translation, save_translation_cache
-from services.library import save_translation as lib_save_translation, get_translation as lib_get_translation, clear_translations as lib_clear_translations
+from services.cache import get_cached_translation, save_translation_cache, get_cached_translation_full
+from services.library import save_translation as lib_save_translation, get_translation as lib_get_translation, get_translation_full as lib_get_translation_full, clear_translations as lib_clear_translations
 
 router = APIRouter()
 
@@ -51,17 +51,18 @@ async def translate_page(
 
     async def event_stream():
         # 1순위: 라이브러리 저장 번역 확인
-        lib_cached = lib_get_translation(session_id, page_num, suffix, fallback=False)
-        cached = lib_cached or get_cached_translation(session_id, page_num, suffix)
+        full_cached = lib_get_translation_full(session_id, page_num, suffix, fallback=False) or get_cached_translation_full(session_id, page_num, suffix)
+        cached_text = full_cached.get("translation")
+        cached_sentences = full_cached.get("sentences", [])
 
-        if cached:
+        if cached_text:
             chunk_size = 100
-            for i in range(0, len(cached), chunk_size):
-                chunk = cached[i:i + chunk_size]
+            for i in range(0, len(cached_text), chunk_size):
+                chunk = cached_text[i:i + chunk_size]
                 data = json.dumps({"content": chunk, "done": False, "cached": True}, ensure_ascii=False)
                 yield f"data: {data}\n\n"
                 await asyncio.sleep(0.01)
-            yield f"data: {json.dumps({'content': '', 'done': True, 'cached': True})}\n\n"
+            yield f"data: {json.dumps({'content': '', 'done': True, 'cached': True, 'sentences': cached_sentences}, ensure_ascii=False)}\n\n"
             return
 
         # 텍스트가 없는 페이지 처리
@@ -69,13 +70,14 @@ async def translate_page(
             msg = "이 페이지에는 번역할 텍스트가 없습니다."
             data = json.dumps({"content": msg, "done": False, "cached": False}, ensure_ascii=False)
             yield f"data: {data}\n\n"
-            yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False})}\n\n"
+            yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False, 'sentences': []}, ensure_ascii=False)}\n\n"
             return
 
         # 청크 분할
         chunks = split_into_chunks(page_text)
         full_translation = []
         doc_title = session.get("metadata", {}).get("title") or session.get("filename", "")
+        sentences = []
 
         try:
             for chunk_idx, chunk in enumerate(chunks):
@@ -115,15 +117,24 @@ async def translate_page(
 
             # 완성된 번역 캐시 저장 (파일 캐시 + 라이브러리 영구 저장)
             complete_translation = "\n\n".join(full_translation)
-            save_translation_cache(session_id, page_num, complete_translation, suffix)
-            lib_save_translation(session_id, page_num, complete_translation, suffix)
+            
+            # 문장 매핑 생성
+            sentences = align_sentences(page_text, complete_translation)
+            payload_data = {
+                "translation": complete_translation,
+                "sentences": sentences
+            }
+            payload_json = json.dumps(payload_data, ensure_ascii=False)
+            
+            save_translation_cache(session_id, page_num, payload_json, suffix)
+            lib_save_translation(session_id, page_num, payload_json, suffix)
 
         except Exception as e:
             error_data = json.dumps({"error": str(e), "done": True})
             yield f"data: {error_data}\n\n"
             return
 
-        yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False})}\n\n"
+        yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False, 'sentences': sentences}, ensure_ascii=False)}\n\n"
 
 
     return StreamingResponse(

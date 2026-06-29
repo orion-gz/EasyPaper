@@ -1,5 +1,6 @@
 import os
 import shutil
+import json
 from typing import Optional, List
 from config import LIBRARY_DIR
 from services.db import (
@@ -156,7 +157,28 @@ def save_translation(doc_id: str, page_num: int, translation: str, suffix: str =
 
 def get_translation(doc_id: str, page_num: int, suffix: str = "", fallback: bool = True) -> Optional[str]:
     """데이터베이스에서 번역 결과를 가져옵니다."""
-    return db_get_translation(doc_id, page_num, suffix, fallback)
+    val = db_get_translation(doc_id, page_num, suffix, fallback)
+    if val and val.startswith("{"):
+        try:
+            data = json.loads(val)
+            if isinstance(data, dict) and "translation" in data:
+                return data["translation"]
+        except Exception:
+            pass
+    return val
+
+
+def get_translation_full(doc_id: str, page_num: int, suffix: str = "", fallback: bool = True) -> dict:
+    """데이터베이스에서 번역 결과와 문장 매핑 데이터를 통째로 가져옵니다."""
+    val = db_get_translation(doc_id, page_num, suffix, fallback)
+    if val and val.startswith("{"):
+        try:
+            data = json.loads(val)
+            if isinstance(data, dict) and "translation" in data:
+                return data
+        except Exception:
+            pass
+    return {"translation": val or "", "sentences": []}
 
 
 def clear_translations(doc_id: str) -> None:

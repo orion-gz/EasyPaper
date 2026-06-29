@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from config import LIBRARY_DIR
-from services.chunker import split_into_chunks
+from services.chunker import split_into_chunks, align_sentences
 from services.llm_client import stream_translation
 from services.library import save_translation, get_translation, get_document
 
@@ -205,8 +205,16 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                     doc_title=doc_title,
                     prev_context=prev_context
                 )
+                # 문장 매핑 생성 및 JSON Payload 구성
+                sentences = align_sentences(text, translation)
+                payload_data = {
+                    "translation": translation,
+                    "sentences": sentences
+                }
+                payload_json = json.dumps(payload_data, ensure_ascii=False)
+
                 # 라이브러리 JSON + MD 저장
-                save_translation(session_id, page_num, translation, suffix)
+                save_translation(session_id, page_num, payload_json, suffix)
                 _save_page_md(session_id, page_num, translation, suffix)
 
                 if page_num not in job["completed_pages"]:

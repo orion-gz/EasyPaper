@@ -41,12 +41,23 @@ async def get_page_translation(
     ignore_table: bool = True,
     ignore_refs: bool = False
 ):
-    """특정 페이지의 번역 MD 내용을 반환합니다."""
+    """특정 페이지의 번역 MD 내용 및 매핑 데이터를 반환합니다."""
     suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
-    text = get_page_md(session_id, page_num, suffix)
-    if text is None:
-        raise HTTPException(status_code=404, detail="아직 번역되지 않은 페이지입니다.")
-    return {"page_num": page_num, "translation": text}
+    
+    from services.library import get_translation_full
+    full_cached = get_translation_full(session_id, page_num, suffix)
+    
+    if not full_cached.get("translation"):
+        text = get_page_md(session_id, page_num, suffix)
+        if text is None:
+            raise HTTPException(status_code=404, detail="아직 번역되지 않은 페이지입니다.")
+        return {"page_num": page_num, "translation": text, "sentences": []}
+        
+    return {
+        "page_num": page_num,
+        "translation": full_cached["translation"],
+        "sentences": full_cached.get("sentences", [])
+    }
 
 
 @router.get("/jobs/{session_id}/download")

@@ -55,10 +55,16 @@ async def get_library_translation(
     suffix = ""
     if target_lang is not None and style is not None:
         suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
-    translation = get_translation(doc_id, page_num, suffix)
-    if translation is None:
+        
+    from services.library import get_translation_full
+    full_cached = get_translation_full(doc_id, page_num, suffix)
+    if not full_cached.get("translation"):
         raise HTTPException(status_code=404, detail="번역이 없습니다.")
-    return {"page": page_num, "translation": translation}
+    return {
+        "page": page_num,
+        "translation": full_cached["translation"],
+        "sentences": full_cached.get("sentences", [])
+    }
 
 
 @router.get("/library/{doc_id}/pdf")

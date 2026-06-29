@@ -28,6 +28,7 @@ const state = {
   zoom: 1.5,
   syncScroll: true,
   translationCache: {},        // pageNum → 번역 텍스트
+  translationSentences: {},    // pageNum → 문장 매핑 데이터
   translatingPages: new Set(), // 현재 번역 중인 페이지 (폴링 중복 방지용)
   translatedPages: new Set(),  // 번역 완료된 페이지
   pollingTimer: null,          // 잡 폴링 타이머
@@ -196,7 +197,7 @@ function resetState() {
   
   Object.assign(state, {
     sessionId: null, filename: null, totalPages: 0, currentPage: 1,
-    zoom: 1.5, translationCache: {}, translatingPages: new Set(), translatedPages: new Set(), pollingTimer: null,
+    zoom: 1.5, translationCache: {}, translationSentences: {}, translatingPages: new Set(), translatedPages: new Set(), pollingTimer: null,
     chatHistory: [], chatActiveStream: null, quotedText: null, quotedImage: null, quotedImagePage: null, pendingFigureQuote: null, isCropMode: false, documentImages: []
   })
   if (typeof toggleCropMode === 'function') toggleCropMode(false)
@@ -371,6 +372,7 @@ async function initScrollViewer() {
           const opts = getTranslationOptions()
           const res = await fetchLibraryTranslation(currentSessionId, pageNum, opts)
           state.translationCache[pageNum] = res.translation
+          state.translationSentences[pageNum] = res.sentences || []
           // 패치하는 중에 사용자가 다른 세션으로 이동하지 않았는지 확인
           if (state.sessionId === currentSessionId) {
             renderTransContent(pageNum, res.translation, true)
@@ -558,6 +560,7 @@ function startJobPolling(sessionId) {
       const data = await getPageTranslation(sessionId, pageNum, getTranslationOptions())
       if (data?.translation) {
         state.translationCache[pageNum] = data.translation
+        state.translationSentences[pageNum] = data.sentences || []
         state.translatedPages.add(pageNum)
         state.translatingPages.delete(pageNum)
         renderTransContent(pageNum, data.translation, false)
@@ -643,6 +646,7 @@ exportBtn.addEventListener('click', async () => {
       try {
         const res = await fetchLibraryTranslation(state.sessionId, pageNum, opts)
         state.translationCache[pageNum] = res.translation
+        state.translationSentences[pageNum] = res.sentences || []
       } catch (err) {
         console.warn(`Failed to fetch translation for page ${pageNum} during export:`, err)
       }
@@ -672,6 +676,7 @@ retranslateBtn.addEventListener('click', async () => {
   if (confirm('기존 번역 캐시를 삭제하고 처음부터 다시 번역을 시작하시겠습니까?\n(확인을 누르면 기존 번역이 완전히 초기화되고 새로 번역을 진행합니다.)')) {
     // 1. 로컬 번역 정보 전체 비우기
     state.translationCache = {}
+    state.translationSentences = {}
     state.translatingPages.clear()
     state.translatedPages.clear()
     
@@ -1495,6 +1500,7 @@ generalSettingsForm.addEventListener('submit', async (e) => {
     if (confirm('번역 설정을 즉시 변경하고 다시 번역하시겠습니까?\n(확인을 누르면 기존 번역이 초기화되고 새로 번역을 시작합니다.)')) {
       // 로컬 번역 정보 전체 비우기
       state.translationCache = {}
+      state.translationSentences = {}
       state.translatingPages.clear()
       state.translatedPages.clear()
       
@@ -1853,6 +1859,7 @@ async function openFromLibrary(doc) {
   state.filename   = doc.filename
   state.totalPages = doc.total_pages
   state.translationCache = {}
+  state.translationSentences = {}
   state.translatingPages = new Set()
   // 번역이 완료된 페이지 번호만 기록하고 번역본 로드는 lazy-load에 위임
   state.translatedPages  = new Set(doc.translated_pages || [])
@@ -3019,6 +3026,75 @@ function segmentElementIntoSentences(container, pageNum, className) {
   }
 }
 
+// 주어진 텍스트에서 원문 문장들의 정확한 문자 범위(start, end)를 유니코드 인지 방식으로 추출하여 매핑합니다.
+function alignSentencesToText(fullText, sentencesList) {
+  const cleanToRaw = [];
+  let cleanText = '';
+  
+  for (let i = 0; i < fullText.length; i++) {
+    const char = fullText[i];
+    // 알파벳, 숫자, 한글, 한자 등의 문자만 정렬 비교 대상으로 삼음
+    if (/[a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff]/.test(char)) {
+      cleanToRaw.push(i);
+      cleanText += char.toLowerCase();
+    }
+  }
+  
+  const sentenceRanges = [];
+  let searchStart = 0;
+  
+  for (let k = 0; k < sentencesList.length; k++) {
+    const sText = sentencesList[k];
+    let cleanSent = '';
+    for (let i = 0; i < sText.length; i++) {
+      const char = sText[i];
+      if (/[a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff]/.test(char)) {
+        cleanSent += char.toLowerCase();
+      }
+    }
+    
+    if (!cleanSent) {
+      // 빈 문자열인 경우 (기호만 있음)
+      const rawPos = cleanToRaw[searchStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
+      sentenceRanges.push({
+        text: sText,
+        start: rawPos,
+        end: rawPos
+      });
+      continue;
+    }
+    
+    let idx = cleanText.indexOf(cleanSent, searchStart);
+    if (idx === -1) {
+      // 못 찾은 경우 접두어 15자로 느슨한 검색 시도
+      const prefix = cleanSent.substring(0, Math.min(15, cleanSent.length));
+      idx = cleanText.indexOf(prefix, searchStart);
+      if (idx === -1) {
+        idx = searchStart;
+      }
+    }
+    
+    const cleanStart = idx;
+    const cleanEnd = Math.min(cleanText.length, idx + cleanSent.length);
+    
+    const rawStart = cleanToRaw[cleanStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
+    const lastCleanIdx = cleanEnd - 1;
+    const rawEnd = (cleanToRaw[lastCleanIdx] !== undefined)
+      ? cleanToRaw[lastCleanIdx] + 1
+      : (cleanToRaw[cleanToRaw.length - 1] ?? fullText.length);
+      
+    sentenceRanges.push({
+      text: fullText.substring(rawStart, rawEnd),
+      start: rawStart,
+      end: rawEnd
+    });
+    
+    searchStart = cleanEnd;
+  }
+  
+  return sentenceRanges;
+}
+
 // PDF 텍스트 레이어 물리적 문장 쪼개기 구현
 // 세로 간격(vertical gap)과 글자 크기(font-size)를 기반으로 단락 경계를 감지하여 \n\n 삽입
 function segmentPdfElements(container, pageNum) {
@@ -3148,7 +3224,14 @@ function segmentPdfElements(container, pageNum) {
     if (nodeRanges.length === 0) return;
 
     // 단락 단위 인지 문장 분할
-    const sentenceRanges = splitIntoSentences(fullText);
+    let sentenceRanges;
+    const sentences = state.translationSentences && state.translationSentences[pageNum];
+    if (sentences && sentences.length > 0) {
+      const srcSents = sentences.map(s => s.src);
+      sentenceRanges = alignSentencesToText(fullText, srcSents);
+    } else {
+      sentenceRanges = splitIntoSentences(fullText);
+    }
     if (sentenceRanges.length === 0) return;
 
     // 물리적 DOM 쪼개기 수행
@@ -3288,7 +3371,14 @@ function segmentTransElements(container, pageNum) {
     nodeRanges.push({ node, start, end: fullText.length });
   }
 
-  const sentenceRanges = splitIntoSentences(fullText);
+  let sentenceRanges;
+  const sentences = state.translationSentences && state.translationSentences[pageNum];
+  if (sentences && sentences.length > 0) {
+    const transSents = sentences.map(s => s.trans);
+    sentenceRanges = alignSentencesToText(fullText, transSents);
+  } else {
+    sentenceRanges = splitIntoSentences(fullText);
+  }
 
   for (const range of nodeRanges) {
     const parent = range.node.parentNode;
@@ -3505,49 +3595,57 @@ if (viewerScrollContainer) {
      *
      * 크게 다륾 경우(차이 > 3)는 비례 매핑으로 폴백
      */
-    const diff = pdfCount - transCount;
-    const absDiff = Math.abs(diff);
-
-    if (absDiff === 0) {
-      // 1:1 직접 매핑
+    // 만약 사전에 백엔드에서 정렬 매핑한 문장이 존재하면 1:1 직접 매핑을 적용합니다.
+    const sentences = state.translationSentences && state.translationSentences[pageNum];
+    if (sentences && sentences.length > 0) {
       pdfIdx = Math.min(maxPdfIdx, sentenceIdx);
       transIdx = Math.min(maxTransIdx, sentenceIdx);
-    } else if (absDiff <= 5) {
-      // 오프셋 기반 매핑 (PDF와 번역본 중 어느 쪽이 더 많은지를 구분)
-      if (diff > 0) {
-        // PDF가 더 많음: PDF 앞에 데더 먹을 문장이 diff개 있다고 가정
-        const offset = diff;
-        if (target.classList.contains('trans-sentence')) {
-          transIdx = sentenceIdx;
-          pdfIdx = Math.min(maxPdfIdx, sentenceIdx + offset);
-        } else {
-          pdfIdx = sentenceIdx;
-          transIdx = Math.max(0, Math.min(maxTransIdx, sentenceIdx - offset));
-        }
-      } else {
-        // 번역본이 더 많음: 번역 앞에 데더 먹을 문장이 offset개 있다고 가정
-        const offset = -diff; // transCount - pdfCount
-        if (target.classList.contains('trans-sentence')) {
-          transIdx = sentenceIdx;
-          pdfIdx = Math.max(0, Math.min(maxPdfIdx, sentenceIdx - offset));
-        } else {
-          pdfIdx = sentenceIdx;
-          transIdx = Math.min(maxTransIdx, sentenceIdx + offset);
-        }
-      }
     } else {
-      // 큰 차이 → 비례(proportional) 매핑
-      if (pdfCount <= 1 || transCount <= 1) {
-        pdfIdx = 0;
-        transIdx = 0;
-      } else {
-        const fraction = sentenceIdx / Math.max(target.classList.contains('trans-sentence') ? (transCount - 1) : (pdfCount - 1), 1);
-        if (target.classList.contains('trans-sentence')) {
-          transIdx = sentenceIdx;
-          pdfIdx = Math.min(maxPdfIdx, Math.round(fraction * (pdfCount - 1)));
+      // 기존 오프셋/비례식 알고리즘 폴백 (기존 캐시 대응)
+      const diff = pdfCount - transCount;
+      const absDiff = Math.abs(diff);
+
+      if (absDiff === 0) {
+        // 1:1 직접 매핑
+        pdfIdx = Math.min(maxPdfIdx, sentenceIdx);
+        transIdx = Math.min(maxTransIdx, sentenceIdx);
+      } else if (absDiff <= 5) {
+        // 오프셋 기반 매핑 (PDF와 번역본 중 어느 쪽이 더 많은지를 구분)
+        if (diff > 0) {
+          // PDF가 더 많음: PDF 앞에 데더 먹을 문장이 diff개 있다고 가정
+          const offset = diff;
+          if (target.classList.contains('trans-sentence')) {
+            transIdx = sentenceIdx;
+            pdfIdx = Math.min(maxPdfIdx, sentenceIdx + offset);
+          } else {
+            pdfIdx = sentenceIdx;
+            transIdx = Math.max(0, Math.min(maxTransIdx, sentenceIdx - offset));
+          }
         } else {
-          pdfIdx = sentenceIdx;
-          transIdx = Math.min(maxTransIdx, Math.round(fraction * (transCount - 1)));
+          // 번역본이 더 많음: 번역 앞에 데더 먹을 문장이 offset개 있다고 가정
+          const offset = -diff; // transCount - pdfCount
+          if (target.classList.contains('trans-sentence')) {
+            transIdx = sentenceIdx;
+            pdfIdx = Math.max(0, Math.min(maxPdfIdx, sentenceIdx - offset));
+          } else {
+            pdfIdx = sentenceIdx;
+            transIdx = Math.min(maxTransIdx, sentenceIdx + offset);
+          }
+        }
+      } else {
+        // 큰 차이 → 비례(proportional) 매핑
+        if (pdfCount <= 1 || transCount <= 1) {
+          pdfIdx = 0;
+          transIdx = 0;
+        } else {
+          const fraction = sentenceIdx / Math.max(target.classList.contains('trans-sentence') ? (transCount - 1) : (pdfCount - 1), 1);
+          if (target.classList.contains('trans-sentence')) {
+            transIdx = sentenceIdx;
+            pdfIdx = Math.min(maxPdfIdx, Math.round(fraction * (pdfCount - 1)));
+          } else {
+            pdfIdx = sentenceIdx;
+            transIdx = Math.min(maxTransIdx, Math.round(fraction * (transCount - 1)));
+          }
         }
       }
     }
