@@ -429,8 +429,10 @@ function translatePage(pageNum) {
 function formatTranslationHtml(text) {
   if (!text) return ''
 
+  // 문장 정렬용 태그([S0], [S1] 등)가 번역창에 출력되지 않도록 제거
+  let t = text.replace(/\[[sS]\d+\]/g, '')
+
   const mathBlocks = []
-  let t = text
 
   // 1. 블록 수식: $$...$$
   t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, f) => {

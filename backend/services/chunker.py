@@ -210,3 +210,77 @@ def align_sentences(src_text: str, tgt_text: str) -> List[dict]:
         s_sents = split_into_sentences(src_text)
         t_sents = split_into_sentences(tgt_text)
         return align_paragraph(s_sents, t_sents)
+
+
+def tag_source_text(text: str) -> tuple[str, List[str]]:
+    """
+    텍스트의 각 문장 시작 부분에 [S0], [S1], ... 문장 식별자 태그를 삽입합니다.
+    """
+    if not text.strip():
+        return "", []
+    paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+    tagged_paras = []
+    src_sentences = []
+    
+    idx = 0
+    for para in paras:
+        sents = split_into_sentences(para)
+        tagged_sents = []
+        for s in sents:
+            src_sentences.append(s)
+            tagged_sents.append(f"[S{idx}] {s}")
+            idx += 1
+        tagged_paras.append(" ".join(tagged_sents))
+        
+    tagged_text = "\n\n".join(tagged_paras)
+    return tagged_text, src_sentences
+
+
+def parse_tagged_translation(tagged_translation: str, src_sentences: List[str]) -> tuple[str, List[dict]]:
+    """
+    [S0], [S1] 태그가 포함된 번역본을 파싱하여, 태그가 제거된 깨끗한 번역본과
+    각 문장이 1대1 매핑된 문장 쌍 리스트를 반환합니다.
+    """
+    N = len(src_sentences)
+    if N == 0:
+        return tagged_translation, []
+        
+    # [S0], [S1] ... 태그 찾기 (대소문자 구분 없음)
+    tag_pattern = re.compile(r'\[[sS](\d+)\]')
+    matches = list(tag_pattern.finditer(tagged_translation))
+    
+    # 태그가 하나도 없는 경우 폴백 (기존 매칭 알고리즘 활용)
+    if not matches:
+        cleaned = re.sub(r'\[[sS]\d+\]', '', tagged_translation).strip()
+        tgt_sents = split_into_sentences(cleaned)
+        aligned = align_paragraph(src_sentences, tgt_sents)
+        return cleaned, aligned
+        
+    # 태그별 텍스트 범위 파싱
+    tag_to_text = {}
+    for i in range(len(matches)):
+        start = matches[i].end()
+        end = matches[i+1].start() if i + 1 < len(matches) else len(tagged_translation)
+        idx = int(matches[i].group(1))
+        content = tagged_translation[start:end].strip()
+        tag_to_text[idx] = content
+        
+    # 깨끗한 번역본 구성 (원문 태그 완전 제거)
+    cleaned_translation = tagged_translation
+    for m in reversed(matches):
+        start, end = m.span()
+        cleaned_translation = cleaned_translation[:start] + cleaned_translation[end:]
+        
+    cleaned_translation = re.sub(r' +', ' ', cleaned_translation).strip()
+    cleaned_translation = re.sub(r'\n\n+', '\n\n', cleaned_translation)
+    
+    # 원문 문장 리스트 기준으로 1대1 쌍을 구성 (누락된 태그는 비워두거나 인접 문장 텍스트로 보완)
+    aligned_sentences = []
+    for idx in range(N):
+        trans_content = tag_to_text.get(idx, "")
+        aligned_sentences.append({
+            "src": src_sentences[idx],
+            "trans": trans_content
+        })
+        
+    return cleaned_translation, aligned_sentences

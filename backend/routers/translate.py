@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from routers.upload import sessions, ensure_session
-from services.chunker import split_into_chunks, align_sentences
+from services.chunker import split_into_chunks, align_sentences, tag_source_text, parse_tagged_translation
 from services.llm_client import stream_translation, check_ollama_health
 from services.cache import get_cached_translation, save_translation_cache, get_cached_translation_full
 from services.library import save_translation as lib_save_translation, get_translation as lib_get_translation, get_translation_full as lib_get_translation_full, clear_translations as lib_clear_translations
@@ -73,8 +73,11 @@ async def translate_page(
             yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False, 'sentences': []}, ensure_ascii=False)}\n\n"
             return
 
+        # 원문 태깅 처리
+        tagged_page_text, src_sentences = tag_source_text(page_text)
+
         # 청크 분할
-        chunks = split_into_chunks(page_text)
+        chunks = split_into_chunks(tagged_page_text)
         full_translation = []
         doc_title = session.get("metadata", {}).get("title") or session.get("filename", "")
         sentences = []
@@ -118,10 +121,10 @@ async def translate_page(
             # 완성된 번역 캐시 저장 (파일 캐시 + 라이브러리 영구 저장)
             complete_translation = "\n\n".join(full_translation)
             
-            # 문장 매핑 생성
-            sentences = align_sentences(page_text, complete_translation)
+            # 태그 분석 및 매핑 생성
+            cleaned_translation, sentences = parse_tagged_translation(complete_translation, src_sentences)
             payload_data = {
-                "translation": complete_translation,
+                "translation": cleaned_translation,
                 "sentences": sentences
             }
             payload_json = json.dumps(payload_data, ensure_ascii=False)

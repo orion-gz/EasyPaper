@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from config import LIBRARY_DIR
-from services.chunker import split_into_chunks, align_sentences
+from services.chunker import split_into_chunks, align_sentences, tag_source_text, parse_tagged_translation
 from services.llm_client import stream_translation
 from services.library import save_translation, get_translation, get_document
 
@@ -195,8 +195,11 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                     pass
 
             try:
+                # 원문 태깅 처리
+                tagged_text, src_sentences = tag_source_text(text)
+
                 translation = await _translate_page(
-                    text,
+                    tagged_text,
                     target_lang=target_lang,
                     style=style,
                     ignore_math=ignore_math,
@@ -205,17 +208,17 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                     doc_title=doc_title,
                     prev_context=prev_context
                 )
-                # 문장 매핑 생성 및 JSON Payload 구성
-                sentences = align_sentences(text, translation)
+                # 태그 분석 및 매핑 생성
+                cleaned_translation, sentences = parse_tagged_translation(translation, src_sentences)
                 payload_data = {
-                    "translation": translation,
+                    "translation": cleaned_translation,
                     "sentences": sentences
                 }
                 payload_json = json.dumps(payload_data, ensure_ascii=False)
 
                 # 라이브러리 JSON + MD 저장
                 save_translation(session_id, page_num, payload_json, suffix)
-                _save_page_md(session_id, page_num, translation, suffix)
+                _save_page_md(session_id, page_num, cleaned_translation, suffix)
 
                 if page_num not in job["completed_pages"]:
                     job["completed_pages"].append(page_num)
