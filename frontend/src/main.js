@@ -522,6 +522,20 @@ function renderTransContent(pageNum, text, cached = false) {
   
   // 문장 1대1 매칭을 위한 세그멘테이션 추가
   segmentElementIntoSentences(el, pageNum, 'trans-sentence')
+
+  // PDF 텍스트 레이어가 이미 로드되어 있는 경우, 최신 문장 정렬 매핑을 바탕으로 재세그멘테이션 실행
+  const textLayerDiv = document.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"] .textLayer`)
+  if (textLayerDiv) {
+    segmentElementIntoSentences(textLayerDiv, pageNum, 'pdf-sentence')
+    
+    // 주석(Annotation) 하이라이트 복원
+    if (state.sessionId) {
+      const annotations = loadAnnotations(state.sessionId)
+      if (annotations[`page_${pageNum}`]) {
+        reRenderPageAnnotations(textLayerDiv, pageNum)
+      }
+    }
+  }
   
   if (statusEl) { statusEl.textContent = '✓ 완료'; statusEl.classList.add('done') }
 }
@@ -3015,9 +3029,24 @@ if (uploadPopupClose) {
 }
 
 // ── PDF-번역본 문장 1대1 매칭 및 하이라이트 ────────────────
-// ── PDF-번역본 문장 1대1 매칭 및 하이라이트 ────────────────
+// 문장 세그멘테이션(span 태그 생성)을 제거하고 순수 텍스트 노드로 원복합니다.
+function clearSegmentation(container, className) {
+  if (!container) return;
+  container.querySelectorAll(`.${className}`).forEach(span => {
+    const textNode = document.createTextNode(span.textContent);
+    span.replaceWith(textNode);
+  });
+  container.normalize();
+  delete container.dataset.segmented;
+}
+
 function segmentElementIntoSentences(container, pageNum, className) {
   if (!container) return;
+
+  // 이미 세그멘테이션이 적용되어 있다면 기존 세그멘테이션 원복 후 재수행
+  if (container.dataset.segmented === 'true') {
+    clearSegmentation(container, className);
+  }
 
   if (className === 'pdf-sentence') {
     segmentPdfElements(container, pageNum);
