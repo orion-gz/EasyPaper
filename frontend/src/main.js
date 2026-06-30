@@ -23,6 +23,7 @@ window.fetch = async function (...args) {
 const state = {
   sessionId: null,
   filename: null,
+  title: null,
   totalPages: 0,
   currentPage: 1,
   zoom: 1.5,
@@ -196,7 +197,7 @@ function resetState() {
   if (state.chatActiveStream) { state.chatActiveStream(); state.chatActiveStream = null }
   
   Object.assign(state, {
-    sessionId: null, filename: null, totalPages: 0, currentPage: 1,
+    sessionId: null, filename: null, title: null, totalPages: 0, currentPage: 1,
     zoom: 1.5, translationCache: {}, translationSentences: {}, translatingPages: new Set(), translatedPages: new Set(), pollingTimer: null,
     chatHistory: [], chatActiveStream: null, quotedText: null, quotedImage: null, quotedImagePage: null, pendingFigureQuote: null, isCropMode: false, documentImages: []
   })
@@ -249,6 +250,7 @@ async function handleFiles(files) {
   let lastSessionId = null
   let lastFilename = ""
   let lastTotalPages = 0
+  let lastTitle = ""
 
   for (let i = 0; i < pdfFiles.length; i++) {
     const file = pdfFiles[i]
@@ -271,6 +273,7 @@ async function handleFiles(files) {
       lastSessionId = result.session_id
       lastFilename = result.filename
       lastTotalPages = result.total_pages
+      lastTitle = (result.metadata && result.metadata.title) ? result.metadata.title : result.filename
       successCount++
 
       if (isLibraryActive) {
@@ -304,9 +307,11 @@ async function handleFiles(files) {
       loadDocumentImages(lastSessionId)
       state.filename   = lastFilename
       state.totalPages = lastTotalPages
+      state.title      = lastTitle
 
       await loadPDF(`/api/pdf-file/${state.sessionId}`)
-      docTitle.textContent = lastFilename
+      docTitle.textContent = lastTitle
+      docTitle.title = lastFilename
       pageTotal.textContent = `/ ${state.totalPages}`
       pageInput.max   = state.totalPages
       pageInput.value = 1
@@ -1838,11 +1843,13 @@ function createDocCard(doc) {
       `</div>`
   }
 
+  const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+
   const card = document.createElement('div')
   card.className = 'doc-card'
   card.innerHTML = `
     <div class="doc-card-icon">📄</div>
-    <div class="doc-card-title">${escapeHtml(doc.filename)}</div>
+    <div class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(displayTitle)}</div>
     ${tagsHtml}
     <div class="doc-card-meta">
       <span>📅 ${date}</span><span>📑 ${total}페이지</span>
@@ -1867,7 +1874,8 @@ function createDocCard(doc) {
   card.querySelector('.doc-open-btn').addEventListener('click', (e) => { e.stopPropagation(); openFromLibrary(doc) })
   card.querySelector('.doc-delete-btn').addEventListener('click', async (e) => {
     e.stopPropagation()
-    if (!confirm(`"${doc.filename}"을 삭제할까요?`)) return
+    const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+    if (!confirm(`"${displayTitle}"을 삭제할까요?`)) return
     try { await deleteLibraryDoc(doc.id); showToast('삭제되었습니다', 'success'); await renderLibrary() }
     catch { showToast('삭제 실패', 'error') }
   })
@@ -1898,6 +1906,8 @@ async function openFromLibrary(doc) {
   state.sessionId  = doc.id
   loadDocumentImages(doc.id)
   state.filename   = doc.filename
+  const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+  state.title      = displayTitle
   state.totalPages = doc.total_pages
   state.translationCache = {}
   state.translationSentences = {}
@@ -1927,7 +1937,8 @@ async function openFromLibrary(doc) {
   }
 
   await loadPDF(`/api/library/${doc.id}/pdf`)
-  docTitle.textContent  = doc.filename
+  docTitle.textContent  = displayTitle
+  docTitle.title        = doc.filename
   pageTotal.textContent = `/ ${doc.total_pages}`
   pageInput.max   = doc.total_pages
   pageInput.value = 1
