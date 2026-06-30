@@ -375,6 +375,31 @@ html, body {
   background-clip: text;
 }
 
+.logo-small-btn {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  font-family: 'Outfit', var(--font-body);
+  background: linear-gradient(135deg, #ffffff, #a1a1aa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.logo-small-btn:hover {
+  opacity: 0.8;
+  transform: scale(0.98);
+}
+.logo-small-btn:active {
+  transform: scale(0.95);
+}
+
 .doc-title {
   font-size: 13px;
   font-weight: 500;
@@ -2268,7 +2293,8 @@ body.light-theme .orb-2 { background: rgba(168, 85, 247, 0.05); }
 body.light-theme .orb-3 { background: rgba(16, 185, 129, 0.04); }
 
 body.light-theme .logo-text,
-body.light-theme .logo-small {
+body.light-theme .logo-small,
+body.light-theme .logo-small-btn {
   background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

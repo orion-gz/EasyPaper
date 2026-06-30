@@ -1,7 +1,7 @@
 import './style.css'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages } from './pdfViewer.js'
-import { fetchLibrary, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata } from './library.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -128,6 +128,7 @@ const cancelTransBtn    = $('cancel-trans-btn')
 const resumeTransBtn    = $('resume-trans-btn')
 // (viewer/chat pickers are now ProviderModelPicker instances – see below)
 const backBtn           = $('back-btn')
+const logoBtn           = $('logo-btn')
 const viewerScrollContainer = $('viewer-scroll-container')
 const translateSpinner      = $('translate-spinner')
 const translateStatusText   = $('translate-status-text')
@@ -309,6 +310,7 @@ async function handleFiles(files) {
       state.filename   = lastFilename
       state.totalPages = lastTotalPages
       state.title      = lastTitle
+      history.pushState({ screen: 'viewer', docId: lastSessionId }, '', `#viewer?id=${lastSessionId}`)
 
       await loadPDF(`/api/pdf-file/${state.sessionId}`)
       docTitle.textContent = lastTitle
@@ -320,7 +322,7 @@ async function handleFiles(files) {
       showViewer()
       await initScrollViewer()
     } else if (!isLibraryActive) {
-      showLibraryScreen()
+      await showLibraryScreen()
     }
   } else {
     uploadPopupTitle.textContent = '업로드 실패'
@@ -803,8 +805,18 @@ resumeTransBtn.addEventListener('click', async () => {
 
 // ── 뒤로 가기 ─────────────────────────────────────
 backBtn.addEventListener('click', () => {
-  showLibraryScreen()
+  if (history.state?.screen === 'viewer') {
+    history.back()
+  } else {
+    showLibraryScreen()
+  }
 })
+
+if (logoBtn) {
+  logoBtn.addEventListener('click', () => {
+    showLibraryScreen()
+  })
+}
 
 // ── 논문 제목 수정 (Viewer 화면) ──────────────────
 if (docTitleEditBtn) {
@@ -914,7 +926,11 @@ async function checkAuthentication() {
     loginScreen.classList.remove('active')
     globalLogoutBtn.classList.remove('hidden')
     globalSettingsBtn.classList.remove('hidden')
-    showLibraryScreen()
+    if (location.hash && location.hash.startsWith('#viewer?id=')) {
+      await handleRouting()
+    } else {
+      await showLibraryScreen()
+    }
     await loadLibraryCount()
     await refreshSystemSettings()
   } else {
@@ -1788,7 +1804,10 @@ async function loadLibraryCount() {
   } catch {}
 }
 
-async function showLibraryScreen() {
+async function showLibraryScreen(shouldPushState = true) {
+  if (shouldPushState) {
+    history.pushState({ screen: 'library' }, '', '#library')
+  }
   loginScreen.classList.remove('active')
   viewerScreen.classList.remove('active')
   libraryScreen.classList.add('active')
@@ -2035,7 +2054,10 @@ async function loadDocumentImages(docId) {
   }
 }
 
-async function openFromLibrary(doc) {
+async function openFromLibrary(doc, shouldPushState = true) {
+  if (shouldPushState) {
+    history.pushState({ screen: 'viewer', docId: doc.id }, '', `#viewer?id=${doc.id}`)
+  }
   state.sessionId  = doc.id
   loadDocumentImages(doc.id)
   state.filename   = doc.filename
@@ -4243,4 +4265,36 @@ if (captureAreaBtn) {
 
 // 캡처 툴 초기화 실행
 initCropTool()
+
+// ── 해시 라우팅 및 뒤로가기 제어 ──────────────────────
+async function handleRouting() {
+  const hash = location.hash
+  if (hash.startsWith('#viewer?id=')) {
+    const docId = hash.split('?id=')[1]
+    if (docId) {
+      if (state.sessionId === docId && viewerScreen.classList.contains('active')) {
+        return
+      }
+      try {
+        const doc = await fetchLibraryDoc(docId)
+        if (doc) {
+          await openFromLibrary(doc, false)
+          return
+        }
+      } catch (err) {
+        console.error("Failed to load doc from hash route:", err)
+        showToast("논문을 불러오지 못했습니다.", "error")
+      }
+    }
+    location.hash = 'library'
+  } else {
+    if (!libraryScreen.classList.contains('active')) {
+      await showLibraryScreen(false)
+    }
+  }
+}
+
+window.addEventListener('popstate', () => {
+  handleRouting()
+})
 
