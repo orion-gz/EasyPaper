@@ -4266,6 +4266,89 @@ if (captureAreaBtn) {
 // 캡처 툴 초기화 실행
 initCropTool()
 
+// ── 번역 창 접기 및 너비 크기 조절 ──────────────────────
+const toggleTransPaneBtn = $('toggle-trans-pane-btn')
+const transWidthDecBtn   = $('trans-width-dec-btn')
+const transWidthIncBtn   = $('trans-width-inc-btn')
+const transWidthLabel    = $('trans-width-label')
+
+let isTransPaneCollapsed = false
+let currentTransPaneWidth = 620
+
+function updateTransPaneWidth(newWidth) {
+  currentTransPaneWidth = Math.max(320, Math.min(newWidth, 820))
+  document.documentElement.style.setProperty('--trans-pane-width', `${currentTransPaneWidth}px`)
+  if (transWidthLabel) {
+    transWidthLabel.textContent = `${currentTransPaneWidth}px`
+  }
+  localStorage.setItem('trans-pane-width', currentTransPaneWidth)
+}
+
+if (toggleTransPaneBtn) {
+  toggleTransPaneBtn.addEventListener('click', () => {
+    isTransPaneCollapsed = !isTransPaneCollapsed
+    document.body.classList.toggle('collapse-translation', isTransPaneCollapsed)
+    toggleTransPaneBtn.classList.toggle('collapsed', isTransPaneCollapsed)
+    localStorage.setItem('trans-pane-collapsed', isTransPaneCollapsed)
+    
+    if (isTransPaneCollapsed) {
+      if (transWidthDecBtn) {
+        transWidthDecBtn.setAttribute('disabled', 'true')
+        transWidthDecBtn.style.opacity = '0.3'
+      }
+      if (transWidthIncBtn) {
+        transWidthIncBtn.setAttribute('disabled', 'true')
+        transWidthIncBtn.style.opacity = '0.3'
+      }
+      showToast('번역 창이 접혔습니다.', 'info')
+    } else {
+      if (transWidthDecBtn) {
+        transWidthDecBtn.removeAttribute('disabled')
+        transWidthDecBtn.style.opacity = '1'
+      }
+      if (transWidthIncBtn) {
+        transWidthIncBtn.removeAttribute('disabled')
+        transWidthIncBtn.style.opacity = '1'
+      }
+      showToast('번역 창이 펼쳐졌습니다.', 'info')
+    }
+  })
+}
+
+if (transWidthDecBtn) {
+  transWidthDecBtn.addEventListener('click', () => {
+    updateTransPaneWidth(currentTransPaneWidth - 50)
+  })
+}
+
+if (transWidthIncBtn) {
+  transWidthIncBtn.addEventListener('click', () => {
+    updateTransPaneWidth(currentTransPaneWidth + 50)
+  })
+}
+
+// 초기 로드 시 localStorage 상태 복원
+(function initTransPaneControls() {
+  const savedCollapsed = localStorage.getItem('trans-pane-collapsed') === 'true'
+  const savedWidth = parseInt(localStorage.getItem('trans-pane-width')) || 620
+
+  updateTransPaneWidth(savedWidth)
+  
+  if (savedCollapsed && toggleTransPaneBtn) {
+    isTransPaneCollapsed = true
+    document.body.classList.add('collapse-translation')
+    toggleTransPaneBtn.classList.add('collapsed')
+    if (transWidthDecBtn) {
+      transWidthDecBtn.setAttribute('disabled', 'true')
+      transWidthDecBtn.style.opacity = '0.3'
+    }
+    if (transWidthIncBtn) {
+      transWidthIncBtn.setAttribute('disabled', 'true')
+      transWidthIncBtn.style.opacity = '0.3'
+    }
+  }
+})()
+
 // ── 해시 라우팅 및 뒤로가기 제어 ──────────────────────
 async function handleRouting() {
   const hash = location.hash

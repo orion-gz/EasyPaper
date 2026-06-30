@@ -2649,4 +2649,24 @@ body.light-theme .message-quote-img {
   box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
 }
 
+/* ── 번역 창 너비 커스텀 변수 바인딩 ── */
+.trans-page-block {
+  width: var(--trans-pane-width, 620px) !important;
+}
+
+/* 번역 창 접기 상태 클래스 */
+.collapse-translation .trans-page-block {
+  display: none !important;
+}
+.collapse-translation .page-pair {
+  justify-content: center !important;
+}
+
+/* 접혀있을 때 버튼 상태 가시화 */
+#toggle-trans-pane-btn.collapsed {
+  color: var(--accent-mid) !important;
+  background: rgba(139, 92, 246, 0.15) !important;
+  border-color: var(--accent-mid) !important;
+}
+
 
