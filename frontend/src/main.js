@@ -399,6 +399,7 @@ async function initScrollViewer() {
 
 let isTransPaneCollapsed = false
 let currentTransPaneWidth = 620
+let hasLibraryStateInHistory = false
 
 // ── 번역 블록 생성 ────────────────────────────────
 function createTransBlock(pageNum) {
@@ -816,10 +817,10 @@ resumeTransBtn.addEventListener('click', async () => {
 
 // ── 뒤로 가기 ─────────────────────────────────────
 backBtn.addEventListener('click', () => {
-  if (history.state?.screen === 'viewer') {
+  if (hasLibraryStateInHistory) {
     history.back()
   } else {
-    showLibraryScreen()
+    showLibraryScreen(true)
   }
 })
 
@@ -1816,6 +1817,7 @@ async function loadLibraryCount() {
 }
 
 async function showLibraryScreen(shouldPushState = true) {
+  hasLibraryStateInHistory = true
   if (shouldPushState) {
     history.pushState({ screen: 'library' }, '', '#library')
   }
