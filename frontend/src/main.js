@@ -42,6 +42,8 @@ const state = {
   quotedImagePage: null,       // AI 질문 시 인용 이미지의 페이지 번호
   pendingFigureQuote: null,    // 클릭 후 AI 질문 전 대기중인 인용 이미지 정보
   isCropMode: false,           // 영역 캡처 모드 여부
+  pdfPageSentences: {},        // pageNum → sentenceRanges 보관용
+  pdfPageElements: {},         // pageNum → elRanges 보관용
 }
 
 // ── DOM 참조 ──────────────────────────────────────
@@ -353,13 +355,32 @@ async function initScrollViewer() {
     viewerScrollContainer.appendChild(createPagePair(i))
   }
 
-  // 이미 완료된 번역 즉시 로드 (라이브러리 내노드)
-  for (const [pageNum, text] of Object.entries(state.translationCache)) {
-    renderTransContent(parseInt(pageNum), text, true)
-  }
-
   await renderScrollView(viewerScrollContainer, state.zoom, {
-    onPageVisible: (pageNum) => updatePageDisplay(pageNum)
+    onPageVisible: async (pageNum) => {
+      updatePageDisplay(pageNum)
+      
+      // 페이지가 가시화되었을 때 번역 완료된 페이지인데 캐시가 없는 경우 레이지 로딩 적용
+      if (state.translationCache[pageNum]) {
+        if (state.translationCache[pageNum] !== '__fetching__') {
+          renderTransContent(pageNum, state.translationCache[pageNum], true)
+        }
+      } else if (state.translatedPages.has(pageNum)) {
+        state.translationCache[pageNum] = '__fetching__'
+        const currentSessionId = state.sessionId
+        try {
+          const opts = getTranslationOptions()
+          const res = await fetchLibraryTranslation(currentSessionId, pageNum, opts)
+          state.translationCache[pageNum] = res.translation
+          // 패치하는 중에 사용자가 다른 세션으로 이동하지 않았는지 확인
+          if (state.sessionId === currentSessionId) {
+            renderTransContent(pageNum, res.translation, true)
+          }
+        } catch (err) {
+          console.warn(`Failed to lazy load translation for page ${pageNum}:`, err)
+          delete state.translationCache[pageNum]
+        }
+      }
+    }
   })
 
   // 백그라운드 잡 폴링 시작
@@ -609,8 +630,27 @@ zoomInBtn.addEventListener('click',  () => setZoom(state.zoom + 0.2))
 zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.2))
 
 // ── 내보내기 ──────────────────────────────────────
-exportBtn.addEventListener('click', () => {
+exportBtn.addEventListener('click', async () => {
+  // 캐시에 로드되지 않은 번역 완료 페이지가 있다면 다운로드 전 비동기로 로드
+  const missingPages = Array.from(state.translatedPages).filter(pageNum => {
+    return !state.translationCache[pageNum] || state.translationCache[pageNum] === '__fetching__'
+  })
+  
+  if (missingPages.length > 0) {
+    showToast('전체 번역 데이터를 가져오는 중입니다...', 'info')
+    const opts = getTranslationOptions()
+    await Promise.all(missingPages.map(async (pageNum) => {
+      try {
+        const res = await fetchLibraryTranslation(state.sessionId, pageNum, opts)
+        state.translationCache[pageNum] = res.translation
+      } catch (err) {
+        console.warn(`Failed to fetch translation for page ${pageNum} during export:`, err)
+      }
+    }))
+  }
+
   const pages = Object.entries(state.translationCache)
+    .filter(([_, text]) => text && text !== '__fetching__')
     .sort(([a], [b]) => Number(a) - Number(b))
     .map(([num, text]) => `## ${num}페이지\n\n${text}`)
     .join('\n\n---\n\n')
@@ -1814,18 +1854,8 @@ async function openFromLibrary(doc) {
   state.totalPages = doc.total_pages
   state.translationCache = {}
   state.translatingPages = new Set()
-  state.translatedPages  = new Set()
-
-  // 저장된 번역 병렬 로드
-  const opts = getTranslationOptions()
-  const promises = (doc.translated_pages || []).map(async (pageNum) => {
-    try {
-      const res = await fetchLibraryTranslation(doc.id, pageNum, opts)
-      state.translationCache[pageNum] = res.translation
-      state.translatedPages.add(pageNum)
-    } catch {}
-  })
-  await Promise.all(promises)
+  // 번역이 완료된 페이지 번호만 기록하고 번역본 로드는 lazy-load에 위임
+  state.translatedPages  = new Set(doc.translated_pages || [])
 
   // 채팅 내역 초기화 및 복원
   state.chatHistory = []
@@ -2978,58 +3008,288 @@ if (uploadPopupClose) {
 }
 
 // ── PDF-번역본 문장 1대1 매칭 및 하이라이트 ────────────────
+// ── PDF-번역본 문장 1대1 매칭 및 하이라이트 ────────────────
 function segmentElementIntoSentences(container, pageNum, className) {
   if (!container) return;
 
+  if (className === 'pdf-sentence') {
+    segmentPdfElements(container, pageNum);
+  } else {
+    segmentTransElements(container, pageNum);
+  }
+}
+
+// PDF 텍스트 레이어 물리적 문장 쪼개기 구현
+// 세로 간격(vertical gap)과 글자 크기(font-size)를 기반으로 단락 경계를 감지하여 \n\n 삽입
+function segmentPdfElements(container, pageNum) {
+  try {
+    const elements = Array.from(container.children).filter(el => el.nodeType === 1);
+    if (elements.length === 0) return;
+
+    // 2단 레이아웃 감지 및 font-size 정보 수집
+    const nodes = elements.map(el => {
+      const leftMatch = el.style.left?.match(/([\d.-]+)px/);
+      const topMatch  = el.style.top?.match(/([\d.-]+)px/);
+      const fsMatch   = el.style.fontSize?.match(/([\d.]+)/);
+      return {
+        el,
+        left:     leftMatch ? parseFloat(leftMatch[1]) : 0,
+        top:      topMatch  ? parseFloat(topMatch[1])  : 0,
+        fontSize: fsMatch   ? parseFloat(fsMatch[1])   : 10,
+      };
+    });
+
+    const pageWidth = parseFloat(container.style.width) || 600;
+    const mid = pageWidth / 2;
+    const leftCount  = nodes.filter(n => n.left < mid * 1.05).length;
+    const rightCount = nodes.filter(n => n.left > mid * 0.95).length;
+    const isTwoColumn = nodes.length > 5
+      && (leftCount  / nodes.length > 0.3)
+      && (rightCount / nodes.length > 0.3);
+
+    let sortedNodes;
+    if (isTwoColumn) {
+      const leftNs  = nodes.filter(n => n.left < mid).sort((a, b) => a.top - b.top || a.left - b.left);
+      const rightNs = nodes.filter(n => n.left >= mid).sort((a, b) => a.top - b.top || a.left - b.left);
+      sortedNodes = leftNs.concat(rightNs);
+    } else {
+      sortedNodes = [...nodes].sort((a, b) =>
+        Math.abs(a.top - b.top) < 4 ? a.left - b.left : a.top - b.top
+      );
+    }
+
+    // 줄간격 중앙값(median line gap)과 글자크기 중앙값 계산
+    const gaps = [];
+    for (let i = 1; i < sortedNodes.length; i++) {
+      const gap = sortedNodes[i].top - sortedNodes[i - 1].top;
+      if (gap > 0) gaps.push(gap);
+    }
+    gaps.sort((a, b) => a - b);
+    const medianGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 14;
+    const paraGapThreshold = medianGap * 1.8; // 기준 줄간격의 1.8배 이상 벌어지면 단락 구분
+
+    const fontSizes = sortedNodes.map(n => n.fontSize).sort((a, b) => a - b);
+    const medianFontSize = fontSizes[Math.floor(fontSizes.length / 2)] || 10;
+    const headerFsThreshold = medianFontSize * 1.15; // 중앙값보다 15% 이상 큰 폰트는 헤더/제목으로 판정
+
+    // 텍스트 노드 수집 헬퍼
+    function collectTextNodesFromEl(el) {
+      const textNodes = [];
+      function walk(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          if (node.nodeValue.trim()) textNodes.push(node);
+        } else if (
+          node.nodeName !== 'SCRIPT' &&
+          node.nodeName !== 'STYLE' &&
+          !node.classList?.contains('katex') &&
+          !node.classList?.contains('katex-display-wrap')
+        ) {
+          for (const child of node.childNodes) walk(child);
+        }
+      }
+      walk(el);
+      return textNodes;
+    }
+
+    // 순차적으로 fullText 구성, 단락 경계에 \n\n 삽입
+    let fullText = '';
+    const nodeRanges = [];
+    let prevTop = null;
+    let prevFontSize = medianFontSize;
+
+    for (let i = 0; i < sortedNodes.length; i++) {
+      const { el, top, fontSize } = sortedNodes[i];
+      const elNodes = collectTextNodesFromEl(el);
+      if (elNodes.length === 0) continue;
+
+      if (fullText.length > 0) {
+        const gap = prevTop !== null ? top - prevTop : 0;
+        const isPrevHeader = prevFontSize > headerFsThreshold;
+        const isCurrentHeader = fontSize > headerFsThreshold;
+        const isLargeGap = gap > paraGapThreshold;
+
+        // 이전 노드가 순수 섹션 번호(예: "1.", "A.")인 경우는 제목과 하나의 문장으로 묶이도록 단락 분할을 건너뜁니다.
+        const prevText = collectTextNodesFromEl(sortedNodes[i - 1].el).map(n => n.nodeValue).join('').trim();
+        const isPrevSectionNum = /^(?:[IVXLCDM\d]+(?:\.[IVXLCDM\d]+)*\.?|[A-Z]\.?)$/i.test(prevText);
+
+        // 이전/현재 폰트가 헤더 크기이거나, 줄간격이 기준치보다 크거나, 줄 흐름이 아예 바뀐 경우 단락 경계
+        if (!isPrevSectionNum && (isPrevHeader || isCurrentHeader || isLargeGap || gap < -50)) {
+          if (!fullText.endsWith('\n\n')) {
+            fullText += '\n\n';
+          }
+        } else {
+          // 일반 공백 삽입 조건
+          const prevChar = fullText[fullText.length - 1];
+          const nextChar = elNodes[0].nodeValue[0];
+          if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n') {
+            fullText += ' ';
+          }
+        }
+      }
+
+      for (let j = 0; j < elNodes.length; j++) {
+        const node = elNodes[j];
+        if (j > 0) {
+          const prevChar = fullText[fullText.length - 1];
+          const nextChar = node.nodeValue[0];
+          if (prevChar !== ' ' && nextChar !== ' ') {
+            fullText += ' ';
+          }
+        }
+        const start = fullText.length;
+        fullText += node.nodeValue;
+        nodeRanges.push({ node, start, end: fullText.length });
+      }
+
+      prevTop = top;
+      prevFontSize = fontSize;
+    }
+
+    if (nodeRanges.length === 0) return;
+
+    // 단락 단위 인지 문장 분할
+    const sentenceRanges = splitIntoSentences(fullText);
+    if (sentenceRanges.length === 0) return;
+
+    // 물리적 DOM 쪼개기 수행
+    for (const range of nodeRanges) {
+      const parent = range.node.parentNode;
+      if (!parent) continue;
+
+      const segments = [];
+      for (let i = 0; i < sentenceRanges.length; i++) {
+        const sent = sentenceRanges[i];
+        const start = Math.max(range.start, sent.start);
+        const end = Math.min(range.end, sent.end);
+        if (start < end) {
+          segments.push({
+            sentenceIdx: i,
+            startInNode: start - range.start,
+            endInNode: end - range.start,
+            text: range.node.nodeValue.substring(start - range.start, end - range.start),
+          });
+        }
+      }
+      if (segments.length === 0) continue;
+
+      const fragment = document.createDocumentFragment();
+      let lastIdx = 0;
+      segments.sort((a, b) => a.startInNode - b.startInNode);
+
+      for (const seg of segments) {
+        if (seg.startInNode > lastIdx) {
+          fragment.appendChild(document.createTextNode(
+            range.node.nodeValue.substring(lastIdx, seg.startInNode)
+          ));
+        }
+
+        const span = document.createElement('span');
+        span.className = 'pdf-sentence';
+        span.dataset.page = pageNum;
+        span.dataset.sentenceIdx = seg.sentenceIdx;
+        span.textContent = seg.text;
+        span.style.cursor = 'pointer';
+        
+        fragment.appendChild(span);
+        lastIdx = seg.endInNode;
+      }
+
+      if (lastIdx < range.node.nodeValue.length) {
+        fragment.appendChild(document.createTextNode(
+          range.node.nodeValue.substring(lastIdx)
+        ));
+      }
+
+      parent.replaceChild(fragment, range.node);
+    }
+
+    if (!state.pdfPageSentences) state.pdfPageSentences = {};
+    state.pdfPageSentences[pageNum] = sentenceRanges;
+
+    container.dataset.segmented = 'true';
+  } catch (err) {
+    console.warn(`segmentPdfElements failed for p.${pageNum}:`, err);
+  }
+}
+
+// 번역본용 문장 쪼개기
+// HTML의 헤더(h2~h4) 및 <br><br> 개행 태그를 기준으로 문단(\n\n) 처리
+function segmentTransElements(container, pageNum) {
   const textNodes = [];
-  function collectTextNodes(node) {
+  const nodeParagraphBreak = [];
+
+  function walk(node, isFirstInBlock) {
     if (node.nodeType === Node.TEXT_NODE) {
       if (node.nodeValue.trim()) {
         textNodes.push(node);
+        nodeParagraphBreak.push(isFirstInBlock);
+        return true;
       }
+      return false;
+    } else if (
+      node.nodeName === 'SCRIPT' ||
+      node.nodeName === 'STYLE' ||
+      node.classList?.contains('katex') ||
+      node.classList?.contains('katex-display-wrap')
+    ) {
+      return false;
     } else {
-      // KaTeX 수식 구조가 깨지는 것을 방지하기 위해 .katex 및 .katex-display-wrap 내부 노드는 제외
-      if (
-        node.nodeName !== 'SCRIPT' && 
-        node.nodeName !== 'STYLE' && 
-        !node.classList?.contains('katex') &&
-        !node.classList?.contains('katex-display-wrap')
-      ) {
-        for (const child of node.childNodes) {
-          collectTextNodes(child);
+      const isBlock = ['H2', 'H3', 'H4', 'H5', 'H6', 'P', 'DIV', 'BLOCKQUOTE', 'LI'].includes(node.nodeName);
+      let firstChild = true;
+      let hadText = false;
+      
+      for (let i = 0; i < node.childNodes.length; i++) {
+        const child = node.childNodes[i];
+        
+        if (child.nodeName === 'BR') {
+          // 연속된 <br> 태그가 감지되면 단락 나눔으로 판정
+          const next = node.childNodes[i + 1];
+          if (next && next.nodeName === 'BR') {
+            firstChild = true;
+            i++; // 다음 BR 건너뜀
+          }
+          continue;
+        }
+        
+        const childFirst = isBlock ? firstChild : isFirstInBlock;
+        const childHadText = walk(child, childFirst && !hadText);
+        if (childHadText) {
+          hadText = true;
+          firstChild = false;
         }
       }
+      return hadText;
     }
   }
-  collectTextNodes(container);
+
+  walk(container, false);
 
   if (textNodes.length === 0) return;
 
-  // 전체 텍스트 수집 및 노드별 문자열 범위 계산
   let fullText = '';
   const nodeRanges = [];
-  for (const node of textNodes) {
+  for (let i = 0; i < textNodes.length; i++) {
+    const node = textNodes[i];
+    if (i > 0) {
+      if (nodeParagraphBreak[i]) {
+        if (!fullText.endsWith('\n\n')) {
+          fullText += '\n\n';
+        }
+      } else {
+        const prevChar = fullText[fullText.length - 1];
+        const nextChar = node.nodeValue[0];
+        if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n') {
+          fullText += ' ';
+        }
+      }
+    }
     const start = fullText.length;
     fullText += node.nodeValue;
-    const end = fullText.length;
-    nodeRanges.push({ node, start, end });
+    nodeRanges.push({ node, start, end: fullText.length });
   }
 
-  // 정규식을 활용하여 문장 단위 분할 (영어/한국어 지원)
-  const sentenceRanges = [];
-  const regex = /[^.!?\s][^.!?]*(?:[.!?]+(?=\s|$)|$)/g;
-  let match;
-  while ((match = regex.exec(fullText)) !== null) {
-    const start = match.index;
-    const end = start + match[0].length;
-    sentenceRanges.push({ text: match[0], start, end });
-  }
+  const sentenceRanges = splitIntoSentences(fullText);
 
-  if (sentenceRanges.length === 0 && fullText.trim()) {
-    sentenceRanges.push({ text: fullText, start: 0, end: fullText.length });
-  }
-
-  // 각 텍스트 노드를 문장 단위의 span 태그로 감싸서 분할 반영
   for (const range of nodeRanges) {
     const parent = range.node.parentNode;
     if (!parent) continue;
@@ -3044,7 +3304,7 @@ function segmentElementIntoSentences(container, pageNum, className) {
           sentenceIdx: i,
           startInNode: start - range.start,
           endInNode: end - range.start,
-          text: range.node.nodeValue.substring(start - range.start, end - range.start)
+          text: range.node.nodeValue.substring(start - range.start, end - range.start),
         });
       }
     }
@@ -3063,7 +3323,7 @@ function segmentElementIntoSentences(container, pageNum, className) {
       }
 
       const span = document.createElement('span');
-      span.className = className;
+      span.className = 'trans-sentence';
       span.dataset.page = pageNum;
       span.dataset.sentenceIdx = seg.sentenceIdx;
       span.textContent = seg.text;
@@ -3085,81 +3345,318 @@ function segmentElementIntoSentences(container, pageNum, className) {
   container.dataset.segmented = 'true';
 }
 
+// ── 공통 문장 분리 유틸리티 ────────────────────────────────
+/**
+ * 주어진 텍스트를 단락과 문장 단위로 분리합니다.
+ * \n\n(단락 경계)는 강제 문장 경계로 판정합니다.
+ */
+function splitIntoSentences(fullText) {
+  const sentenceRanges = [];
+  
+  // 먼저 문단 단위(\n\n)로 1차 분할 수행
+  const paraRegex = /\n{2,}/g;
+  let lastParaIndex = 0;
+  let match;
+  const paras = [];
+  
+  while ((match = paraRegex.exec(fullText)) !== null) {
+    paras.push({
+      text: fullText.substring(lastParaIndex, match.index),
+      start: lastParaIndex,
+      end: match.index
+    });
+    lastParaIndex = paraRegex.lastIndex;
+  }
+  paras.push({
+    text: fullText.substring(lastParaIndex),
+    start: lastParaIndex,
+    end: fullText.length
+  });
+  
+  const abbreviations = new Set([
+    'al', 'fig', 'figs', 'eq', 'eqs', 'ref', 'refs', 'tab', 'tabs',
+    'eg', 'ie', 'vol', 'no', 'vs', 'dr', 'prof', 'approx', 'etc', 'cf',
+    'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+    'sec', 'sect', 'app', 'chap', 'ch', 'pp', 'p', 'est', 'ave', 'st', 'dept'
+  ]);
+  
+  for (const para of paras) {
+    const paraText = para.text;
+    const paraStart = para.start;
+    if (!paraText.trim()) continue;
+    
+    // 문단 내부에서 구두점을 기준으로 2차 문장 분할
+    const candRegex = /([.!?]+)([ \t\n\r]+)/g;
+    let lastSentenceIndex = 0;
+    let sMatch;
+    
+    while ((sMatch = candRegex.exec(paraText)) !== null) {
+      const puncIndex = sMatch.index;
+      const punc = sMatch[1];
+      const whitespace = sMatch[2];
+      const nextIndex = puncIndex + punc.length + whitespace.length;
+      
+      if (nextIndex >= paraText.length) {
+        // 문단 끝 부분
+        const sentenceText = paraText.substring(lastSentenceIndex, puncIndex + punc.length);
+        if (sentenceText.trim()) {
+          sentenceRanges.push({
+            text: sentenceText,
+            start: paraStart + lastSentenceIndex,
+            end: paraStart + puncIndex + punc.length
+          });
+        }
+        lastSentenceIndex = nextIndex;
+        continue;
+      }
+      
+      const nextChar = paraText[nextIndex];
+      const isPeriod = punc.includes('.');
+      
+      // 다음 글자가 소문자/숫자/특수문자이면 문장 구분 안 함
+      const isLowerOrDigitOrSpecial = /^[a-z0-9\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
+      if (isPeriod && isLowerOrDigitOrSpecial) {
+        continue;
+      }
+      
+      // 섹션 번호 형식 ("1.", "2.1.") 등은 단일 문장으로 분할하지 않음
+      if (isPeriod) {
+        const leftText = paraText.substring(lastSentenceIndex, puncIndex).trim();
+        if (/^\d+(\.\d+)*$/.test(leftText)) {
+          continue;
+        }
+        
+        // 약어 매칭
+        const words = leftText.split(/[\s,()\[\]{}.]+/);
+        const lastWord = words.length > 0 ? words[words.length - 1].toLowerCase().replace(/[^a-z]/g, '') : '';
+        const isAbbreviation = abbreviations.has(lastWord) || (lastWord.length === 1 && /^[a-z]$/i.test(lastWord));
+        if (isAbbreviation) continue;
+        
+        // 소수점 패턴 (\d.\d)
+        const charBeforePunc = paraText[puncIndex - 1];
+        if (charBeforePunc && /\d/.test(charBeforePunc) && /^\d/.test(nextChar)) continue;
+      }
+      
+      const sentenceText = paraText.substring(lastSentenceIndex, puncIndex + punc.length);
+      if (sentenceText.trim()) {
+        sentenceRanges.push({
+          text: sentenceText,
+          start: paraStart + lastSentenceIndex,
+          end: paraStart + puncIndex + punc.length
+        });
+      }
+      lastSentenceIndex = nextIndex;
+    }
+    
+    if (lastSentenceIndex < paraText.length) {
+      const remaining = paraText.substring(lastSentenceIndex);
+      if (remaining.trim()) {
+        sentenceRanges.push({
+          text: remaining,
+          start: paraStart + lastSentenceIndex,
+          end: paraStart + paraText.length
+        });
+      }
+    }
+  }
+  
+  return sentenceRanges;
+}
+
 // 1대1 매칭 마우스 오버/아웃 및 클릭 이벤트 위임 등록
 if (viewerScrollContainer) {
+  // PDF와 번역본의 문장 수 차이를 고려한 오프셋 기반 매핑 함수
+  function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
+    let pdfIdx = -1;
+    let transIdx = -1;
+    let pdfElements = [];
+
+    const transSpans = Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${pageNum}"]`));
+    const pdfSpans = Array.from(viewerScrollContainer.querySelectorAll(`.pdf-sentence[data-page="${pageNum}"]`));
+
+    if (transSpans.length === 0 || pdfSpans.length === 0) {
+      return { pdfIdx, transIdx, pdfElements };
+    }
+
+    // 양측의 고유한 문장 인덱스 집합
+    const transIdxSet = new Set(transSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
+    const pdfIdxSet = new Set(pdfSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
+    const pdfCount = pdfIdxSet.size;
+    const transCount = transIdxSet.size;
+    const maxPdfIdx = Math.max(...pdfIdxSet);
+    const maxTransIdx = Math.max(...transIdxSet);
+
+    /**
+     * 핵심 매핑 로직:
+     * 
+     * PDF는 페이지 헤더(채널 이름, 학회명 등), 섹션 제목을 텍스트 레이어에 포함하지만
+     * LLM 번역본은 이를 생략하는 경우가 많습니다.
+     * => PDF 문장 수 > 번역본 문장 수 인 경우가 많음
+     * => 이 때 여분 문장은 페이지 앞부분에 몰림 (startOffset)
+     *
+     * 수식:
+     * - 문장 수 동일: 직접 1:1 매핑
+     * - PDF > 번역: startOffset = pdfCount - transCount
+     *   - 번역 idx i -> PDF idx = i + startOffset
+     *   - PDF idx j -> 번역 idx = max(0, j - startOffset)
+     * - 번역 > PDF: 이 경우도 표대화를 위해 동일하게 오프셋 기반로
+     *   - PDF idx j -> 번역 idx = j + (transCount - pdfCount)
+     *   - 번역 idx i -> PDF idx = max(0, i - (transCount - pdfCount))
+     *
+     * 크게 다륾 경우(차이 > 3)는 비례 매핑으로 폴백
+     */
+    const diff = pdfCount - transCount;
+    const absDiff = Math.abs(diff);
+
+    if (absDiff === 0) {
+      // 1:1 직접 매핑
+      pdfIdx = Math.min(maxPdfIdx, sentenceIdx);
+      transIdx = Math.min(maxTransIdx, sentenceIdx);
+    } else if (absDiff <= 5) {
+      // 오프셋 기반 매핑 (PDF와 번역본 중 어느 쪽이 더 많은지를 구분)
+      if (diff > 0) {
+        // PDF가 더 많음: PDF 앞에 데더 먹을 문장이 diff개 있다고 가정
+        const offset = diff;
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.min(maxPdfIdx, sentenceIdx + offset);
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.max(0, Math.min(maxTransIdx, sentenceIdx - offset));
+        }
+      } else {
+        // 번역본이 더 많음: 번역 앞에 데더 먹을 문장이 offset개 있다고 가정
+        const offset = -diff; // transCount - pdfCount
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.max(0, Math.min(maxPdfIdx, sentenceIdx - offset));
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.min(maxTransIdx, sentenceIdx + offset);
+        }
+      }
+    } else {
+      // 큰 차이 → 비례(proportional) 매핑
+      if (pdfCount <= 1 || transCount <= 1) {
+        pdfIdx = 0;
+        transIdx = 0;
+      } else {
+        const fraction = sentenceIdx / Math.max(target.classList.contains('trans-sentence') ? (transCount - 1) : (pdfCount - 1), 1);
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.min(maxPdfIdx, Math.round(fraction * (pdfCount - 1)));
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.min(maxTransIdx, Math.round(fraction * (transCount - 1)));
+        }
+      }
+    }
+
+    // pdfIdx에 매핑되는 모든 PDF span 엘리먼트 수집
+    pdfElements = pdfSpans.filter(el => parseInt(el.dataset.sentenceIdx || '0', 10) === pdfIdx);
+
+    return { pdfIdx, transIdx, pdfElements };
+  }
+
   viewerScrollContainer.addEventListener('mouseover', (e) => {
-    const target = e.target.closest('.pdf-sentence, .trans-sentence');
-    if (!target) return;
+    try {
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) return;
 
-    const pageNum = target.dataset.page;
-    const sentenceIdx = target.dataset.sentenceIdx;
-    if (!pageNum || !sentenceIdx) return;
+      // 타겟이 번역본 문장이거나, PDF 원본의 pdf-sentence 엘리먼트인 경우
+      const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
+      if (!target) return;
 
-    // 기존의 모든 하이라이트 제거
-    viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => {
-      el.classList.remove('sentence-highlight');
-    });
+      const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
+      if (!pageWrapper) return;
+      const pageNum = pageWrapper.dataset.page;
+      if (!pageNum) return;
 
-    // 매칭되는 동일 페이지의 문장들을 찾아 하이라이트 클래스 적용
-    const matches = viewerScrollContainer.querySelectorAll(
-      `.pdf-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"], .trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"]`
-    );
-    matches.forEach(el => {
-      el.classList.add('sentence-highlight');
-    });
+      const sentenceIdx = parseInt(target.dataset.sentenceIdx, 10);
+      if (isNaN(sentenceIdx)) return;
+
+      const { pdfIdx, transIdx, pdfElements } = getMappedElementsAndIndices(target, pageNum, sentenceIdx);
+
+      // 기존의 모든 하이라이트 제거
+      viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => {
+        el.classList.remove('sentence-highlight');
+      });
+
+      // 1. PDF 엘리먼트들 하이라이트
+      pdfElements.forEach(el => {
+        el.classList.add('sentence-highlight');
+      });
+
+      // 2. 번역본 문장 하이라이트
+      if (transIdx !== -1) {
+        const matchTrans = viewerScrollContainer.querySelector(
+          `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${transIdx}"]`
+        );
+        if (matchTrans) {
+          matchTrans.classList.add('sentence-highlight');
+        }
+      }
+    } catch (err) {
+      console.warn("mouseover highlight mapping failed:", err);
+    }
   });
 
   viewerScrollContainer.addEventListener('mouseout', (e) => {
-    const target = e.target.closest('.pdf-sentence, .trans-sentence');
-    if (!target) return;
-
-    const pageNum = target.dataset.page;
-    const sentenceIdx = target.dataset.sentenceIdx;
-    if (!pageNum || !sentenceIdx) return;
-
-    // 하이라이트 해제
-    const matches = viewerScrollContainer.querySelectorAll(
-      `.pdf-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"], .trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"]`
-    );
-    matches.forEach(el => {
-      el.classList.remove('sentence-highlight');
-    });
+    try {
+      viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => {
+        el.classList.remove('sentence-highlight');
+      });
+    } catch (err) {
+      // no-op
+    }
   });
 
   // 클릭 시 해당 매칭 문장으로 스크롤 이동 (양방향 지원)
   viewerScrollContainer.addEventListener('click', (e) => {
-    const target = e.target.closest('.pdf-sentence, .trans-sentence');
-    if (!target) return;
+    try {
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) return;
 
-    const pageNum = target.dataset.page;
-    const sentenceIdx = target.dataset.sentenceIdx;
-    if (!pageNum || !sentenceIdx) return;
+      const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
+      if (!target) return;
 
-    // 원문(PDF)을 클릭한 경우 -> 번역본으로 스크롤
-    if (target.classList.contains('pdf-sentence')) {
-      const match = viewerScrollContainer.querySelector(
-        `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"]`
-      );
-      if (match) {
-        match.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-        
-        // 깜빡이는 애니메이션 효과 추가
-        match.classList.add('sentence-pulse');
-        setTimeout(() => match.classList.remove('sentence-pulse'), 1000);
+      const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
+      if (!pageWrapper) return;
+      const pageNum = pageWrapper.dataset.page;
+      if (!pageNum) return;
+
+      const sentenceIdx = parseInt(target.dataset.sentenceIdx, 10);
+      if (isNaN(sentenceIdx)) return;
+
+      const { pdfIdx, transIdx, pdfElements } = getMappedElementsAndIndices(target, pageNum, sentenceIdx);
+      if (pdfIdx === -1 || transIdx === -1) return;
+
+      // 번역본 클릭 -> PDF로 스크롤
+      if (target.classList.contains('trans-sentence')) {
+        if (pdfElements.length > 0) {
+          const firstEl = pdfElements[0];
+          firstEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+          pdfElements.forEach(el => {
+            el.classList.add('sentence-pulse');
+            setTimeout(() => el.classList.remove('sentence-pulse'), 1000);
+          });
+        }
+      } 
+      // PDF 클릭 -> 번역본으로 스크롤
+      else {
+        if (transIdx !== -1) {
+          const match = viewerScrollContainer.querySelector(
+            `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${transIdx}"]`
+          );
+          if (match) {
+            match.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+            match.classList.add('sentence-pulse');
+            setTimeout(() => match.classList.remove('sentence-pulse'), 1000);
+          }
+        }
       }
-    }
-    // 번역본을 클릭한 경우 -> 원문으로 스크롤
-    else if (target.classList.contains('trans-sentence')) {
-      const match = viewerScrollContainer.querySelector(
-        `.pdf-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"]`
-      );
-      if (match) {
-        match.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-        
-        // 깜빡이는 애니메이션 효과 추가
-        match.classList.add('sentence-pulse');
-        setTimeout(() => match.classList.remove('sentence-pulse'), 1000);
-      }
+    } catch (err) {
+      console.warn("click scroll mapping failed:", err);
     }
   });
 }

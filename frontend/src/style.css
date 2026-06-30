@@ -2300,18 +2300,33 @@ body.light-theme .library-grid::-webkit-scrollbar-thumb:hover {
 /* ── Sentence Highlight for PDF-Translation 1-to-1 Mapping ── */
 .pdf-sentence, .trans-sentence {
   transition: background-color 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.12s ease;
-  position: relative;
-  display: inline;
   white-space: inherit;
 }
 
 .pdf-sentence {
+  display: inline !important;
+  position: static !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent;
   color: transparent !important;
+  font: inherit !important;
+  text-transform: inherit !important;
+  letter-spacing: inherit !important;
+  word-spacing: inherit !important;
+  white-space: inherit !important;
+  box-shadow: none !important;
+  transition: background-color 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.trans-sentence {
+  position: relative;
+  display: inline;
 }
 
 .pdf-sentence.sentence-highlight {
   background-color: rgba(124, 58, 237, 0.25) !important;
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.18);
   border-radius: 3px;
 }
 
@@ -2325,7 +2340,6 @@ body.light-theme .library-grid::-webkit-scrollbar-thumb:hover {
 /* For light theme, use slightly adjusted color */
 body.light-theme .pdf-sentence.sentence-highlight {
   background-color: rgba(124, 58, 237, 0.20) !important;
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
 }
 
 body.light-theme .trans-sentence.sentence-highlight {
