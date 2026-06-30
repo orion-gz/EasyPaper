@@ -3809,12 +3809,11 @@ if (viewerScrollContainer) {
 
       // 2. 번역본 문장 하이라이트
       if (transIdx !== -1) {
-        const matchTrans = viewerScrollContainer.querySelector(
+        viewerScrollContainer.querySelectorAll(
           `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${transIdx}"]`
-        );
-        if (matchTrans) {
-          matchTrans.classList.add('sentence-highlight');
-        }
+        ).forEach(el => {
+          el.classList.add('sentence-highlight');
+        });
       }
     } catch (err) {
       console.warn("mouseover highlight mapping failed:", err);
