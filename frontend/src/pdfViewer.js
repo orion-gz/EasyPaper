@@ -12,6 +12,8 @@ let pdfjsLib = null
 let pdfDoc = null
 let currentScale = 1.5
 let pageObserver = null
+let pageVisibilityObserver = null
+let visiblePageHeights = {}
 
 async function loadPDFJS() {
   if (pdfjsLib) return pdfjsLib
@@ -76,7 +78,10 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     })
   }
 
-  // ─── IntersectionObserver ───────────────────────
+  if (pageVisibilityObserver) { pageVisibilityObserver.disconnect(); pageVisibilityObserver = null }
+  visiblePageHeights = {}
+
+  // ─── IntersectionObserver (페이지 렌더링용: 미리 600px 앞서 로딩) ───
   pageObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       const pageNum = parseInt(entry.target.dataset.page)
@@ -85,7 +90,6 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
           rendered.add(pageNum)
           _renderPage(entry.target, pageNum)
         }
-        onPageVisible?.(pageNum)
       }
     })
   }, {
@@ -94,7 +98,40 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     threshold: 0.01,
   })
 
-  wrappers.forEach(w => pageObserver.observe(w))
+  // ─── IntersectionObserver (현재 보고 있는 페이지 추적용: 마진 없이 실시간 감지) ───
+  pageVisibilityObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const pageNum = parseInt(entry.target.dataset.page)
+      if (entry.isIntersecting) {
+        visiblePageHeights[pageNum] = entry.intersectionRect.height
+      } else {
+        delete visiblePageHeights[pageNum]
+      }
+    })
+
+    // 가장 많이 노출되고 있는 페이지 산출
+    let maxPageNum = -1
+    let maxHeight = -1
+    for (const [page, height] of Object.entries(visiblePageHeights)) {
+      if (height > maxHeight) {
+        maxHeight = height
+        maxPageNum = parseInt(page)
+      }
+    }
+
+    if (maxPageNum !== -1) {
+      onPageVisible?.(maxPageNum)
+    }
+  }, {
+    root: container,
+    rootMargin: '0px 0px',
+    threshold: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], // 정밀한 노출 비율 판정
+  })
+
+  wrappers.forEach(w => {
+    pageObserver.observe(w)
+    pageVisibilityObserver.observe(w)
+  })
 }
 
 async function _renderPage(wrapper, pageNum) {
