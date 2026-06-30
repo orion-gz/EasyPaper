@@ -4358,33 +4358,43 @@ viewerScrollContainer.addEventListener('click', (e) => {
 
 // ── 해시 라우팅 및 뒤로가기 제어 ──────────────────────
 async function handleRouting() {
-  const hash = location.hash
-  if (hash.startsWith('#viewer?id=')) {
-    const docId = hash.split('?id=')[1]
-    if (docId) {
-      if (state.sessionId === docId && viewerScreen.classList.contains('active')) {
-        return
-      }
-      try {
+  try {
+    const hash = location.hash
+    console.log("[Router] handleRouting triggered. Current hash:", hash)
+    
+    if (hash.startsWith('#viewer?id=')) {
+      const docId = hash.split('?id=')[1]
+      if (docId) {
+        if (state.sessionId === docId && viewerScreen.classList.contains('active')) {
+          console.log("[Router] Viewer already active for document:", docId)
+          return
+        }
+        console.log("[Router] Routing to viewer for document:", docId)
         const doc = await fetchLibraryDoc(docId)
         if (doc) {
           await openFromLibrary(doc, false)
           return
         }
-      } catch (err) {
-        console.error("Failed to load doc from hash route:", err)
-        showToast("논문을 불러오지 못했습니다.", "error")
+      }
+      location.hash = 'library'
+    } else {
+      console.log("[Router] Routing to Library screen. Library active state:", libraryScreen.classList.contains('active'))
+      if (!libraryScreen.classList.contains('active')) {
+        await showLibraryScreen(false)
       }
     }
-    location.hash = 'library'
-  } else {
-    if (!libraryScreen.classList.contains('active')) {
-      await showLibraryScreen(false)
-    }
+  } catch (err) {
+    console.error("[Router] Error in handleRouting:", err)
   }
 }
 
-window.addEventListener('popstate', () => {
+window.addEventListener('popstate', (e) => {
+  console.log("[Router] popstate fired. state:", e.state)
+  handleRouting()
+})
+
+window.addEventListener('hashchange', () => {
+  console.log("[Router] hashchange fired")
   handleRouting()
 })
 
