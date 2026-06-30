@@ -3158,6 +3158,7 @@ function alignSentencesToText(fullText, sentencesList) {
       }
     } else {
       // 매칭 실패 폴백
+      console.warn(`[alignSentencesToText] Failed to match sentence on page ${pageNum}:`, sText);
       const rawPos = cleanToRaw[searchStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
       sentenceRanges.push({
         text: sText,
