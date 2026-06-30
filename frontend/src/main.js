@@ -397,13 +397,23 @@ async function initScrollViewer() {
   startJobPolling(state.sessionId)
 }
 
+let isTransPaneCollapsed = false
+let currentTransPaneWidth = 620
+
 // ── 번역 블록 생성 ────────────────────────────────
 function createTransBlock(pageNum) {
   const block = document.createElement('div')
   block.className = 'trans-page-block'
   block.id = `trans-block-${pageNum}`
   block.dataset.page = pageNum
+  
+  const arrow = isTransPaneCollapsed ? '▶' : '◀'
+  const btnTitle = isTransPaneCollapsed ? '번역 창 펴기' : '번역 창 접기'
+  
   block.innerHTML = `
+    <div class="trans-resizer-handle">
+      <button class="trans-collapse-btn" title="${btnTitle}">${arrow}</button>
+    </div>
     <div class="trans-page-label">
       <span>📄 ${pageNum}페이지</span>
       <span class="trans-page-status" id="trans-status-${pageNum}">대기 중</span>
@@ -4266,86 +4276,77 @@ if (captureAreaBtn) {
 // 캡처 툴 초기화 실행
 initCropTool()
 
-// ── 번역 창 접기 및 너비 크기 조절 ──────────────────────
-const toggleTransPaneBtn = $('toggle-trans-pane-btn')
-const transWidthDecBtn   = $('trans-width-dec-btn')
-const transWidthIncBtn   = $('trans-width-inc-btn')
-const transWidthLabel    = $('trans-width-label')
-
-let isTransPaneCollapsed = false
-let currentTransPaneWidth = 620
-
+// ── 번역 창 접기 및 너비 크기 조절 (드래그/버튼 연동) ──────────────────────
 function updateTransPaneWidth(newWidth) {
   currentTransPaneWidth = Math.max(320, Math.min(newWidth, 820))
   document.documentElement.style.setProperty('--trans-pane-width', `${currentTransPaneWidth}px`)
-  if (transWidthLabel) {
-    transWidthLabel.textContent = `${currentTransPaneWidth}px`
-  }
   localStorage.setItem('trans-pane-width', currentTransPaneWidth)
 }
 
-if (toggleTransPaneBtn) {
-  toggleTransPaneBtn.addEventListener('click', () => {
-    isTransPaneCollapsed = !isTransPaneCollapsed
-    document.body.classList.toggle('collapse-translation', isTransPaneCollapsed)
-    toggleTransPaneBtn.classList.toggle('collapsed', isTransPaneCollapsed)
-    localStorage.setItem('trans-pane-collapsed', isTransPaneCollapsed)
-    
-    if (isTransPaneCollapsed) {
-      if (transWidthDecBtn) {
-        transWidthDecBtn.setAttribute('disabled', 'true')
-        transWidthDecBtn.style.opacity = '0.3'
-      }
-      if (transWidthIncBtn) {
-        transWidthIncBtn.setAttribute('disabled', 'true')
-        transWidthIncBtn.style.opacity = '0.3'
-      }
-      showToast('번역 창이 접혔습니다.', 'info')
-    } else {
-      if (transWidthDecBtn) {
-        transWidthDecBtn.removeAttribute('disabled')
-        transWidthDecBtn.style.opacity = '1'
-      }
-      if (transWidthIncBtn) {
-        transWidthIncBtn.removeAttribute('disabled')
-        transWidthIncBtn.style.opacity = '1'
-      }
-      showToast('번역 창이 펼쳐졌습니다.', 'info')
-    }
-  })
-}
+// 드래그 리사이저 핸들 조작 바인딩 (이벤트 위임)
+let isResizingTrans = false
+let resizerStartX = 0
+let resizerStartWidth = 0
 
-if (transWidthDecBtn) {
-  transWidthDecBtn.addEventListener('click', () => {
-    updateTransPaneWidth(currentTransPaneWidth - 50)
-  })
-}
+viewerScrollContainer.addEventListener('mousedown', (e) => {
+  const handle = e.target.closest('.trans-resizer-handle')
+  if (!handle) return
+  if (e.target.closest('.trans-collapse-btn')) return // 접기 버튼 클릭은 무시
+  if (isTransPaneCollapsed) return // 접혀있는 상태에서는 드래그 금지
+  
+  isResizingTrans = true
+  resizerStartX = e.clientX
+  resizerStartWidth = currentTransPaneWidth
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  document.body.classList.add('resizing-trans')
+})
 
-if (transWidthIncBtn) {
-  transWidthIncBtn.addEventListener('click', () => {
-    updateTransPaneWidth(currentTransPaneWidth + 50)
-  })
-}
+document.addEventListener('mousemove', (e) => {
+  if (!isResizingTrans) return
+  // 우측에 배치되어 있으므로 왼쪽으로 당기면(dx가 음수) 커지고, 오른쪽으로 밀면 작아짐
+  const dx = resizerStartX - e.clientX
+  updateTransPaneWidth(resizerStartWidth + dx)
+})
 
-// 초기 로드 시 localStorage 상태 복원
+document.addEventListener('mouseup', () => {
+  if (isResizingTrans) {
+    isResizingTrans = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    document.body.classList.remove('resizing-trans')
+  }
+})
+
+// 인라인 접기/펴기 버튼 클릭 이벤트 바인딩 (이벤트 위임)
+viewerScrollContainer.addEventListener('click', (e) => {
+  const btn = e.target.closest('.trans-collapse-btn')
+  if (!btn) return
+  e.stopPropagation()
+  
+  isTransPaneCollapsed = !isTransPaneCollapsed
+  document.body.classList.toggle('collapse-translation', isTransPaneCollapsed)
+  localStorage.setItem('trans-pane-collapsed', isTransPaneCollapsed)
+  
+  // 모든 페이지 쌍의 인라인 화살표 상태 동기화
+  document.querySelectorAll('.trans-collapse-btn').forEach(b => {
+    b.textContent = isTransPaneCollapsed ? '▶' : '◀'
+    b.title = isTransPaneCollapsed ? '번역 창 펴기' : '번역 창 접기'
+  })
+  
+  showToast(isTransPaneCollapsed ? '번역 창이 접혔습니다.' : '번역 창이 펼쳐졌습니다.', 'info')
+})
+
+// 초기 로드 시 localStorage 상태 복원 및 초기화 실행
 (function initTransPaneControls() {
   const savedCollapsed = localStorage.getItem('trans-pane-collapsed') === 'true'
   const savedWidth = parseInt(localStorage.getItem('trans-pane-width')) || 620
 
   updateTransPaneWidth(savedWidth)
   
-  if (savedCollapsed && toggleTransPaneBtn) {
+  if (savedCollapsed) {
     isTransPaneCollapsed = true
     document.body.classList.add('collapse-translation')
-    toggleTransPaneBtn.classList.add('collapsed')
-    if (transWidthDecBtn) {
-      transWidthDecBtn.setAttribute('disabled', 'true')
-      transWidthDecBtn.style.opacity = '0.3'
-    }
-    if (transWidthIncBtn) {
-      transWidthIncBtn.setAttribute('disabled', 'true')
-      transWidthIncBtn.style.opacity = '0.3'
-    }
   }
 })()
 

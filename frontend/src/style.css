@@ -2652,21 +2652,109 @@ body.light-theme .message-quote-img {
 /* ── 번역 창 너비 커스텀 변수 바인딩 ── */
 .trans-page-block {
   width: var(--trans-pane-width, 620px) !important;
+  position: relative !important;
 }
 
 /* 번역 창 접기 상태 클래스 */
 .collapse-translation .trans-page-block {
-  display: none !important;
-}
-.collapse-translation .page-pair {
-  justify-content: center !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
 }
 
-/* 접혀있을 때 버튼 상태 가시화 */
-#toggle-trans-pane-btn.collapsed {
-  color: var(--accent-mid) !important;
-  background: rgba(139, 92, 246, 0.15) !important;
-  border-color: var(--accent-mid) !important;
+.collapse-translation .trans-page-block .trans-page-label,
+.collapse-translation .trans-page-block .trans-page-content {
+  display: none !important;
+}
+
+.collapse-translation .page-pair {
+  justify-content: center !important;
+  gap: 0 !important; /* 접혔을 때는 갭 제거 */
+}
+
+/* 드래그 너비 조절 핸들 */
+.trans-resizer-handle {
+  position: absolute;
+  top: 0;
+  left: -24px; /* gap 40px의 한가운데 배치 */
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 100;
+  background: transparent;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.trans-resizer-handle:hover,
+body.resizing-trans .trans-resizer-handle {
+  background: rgba(139, 92, 246, 0.25) !important;
+}
+.trans-resizer-handle::after {
+  content: '';
+  width: 2px;
+  height: 32px;
+  background: var(--border-strong);
+  border-radius: 1px;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+.trans-resizer-handle:hover::after,
+body.resizing-trans .trans-resizer-handle::after {
+  opacity: 1;
+}
+
+/* 접혔을 때 핸들 위치 밀착 조정 */
+.collapse-translation .trans-resizer-handle {
+  left: -12px !important;
+  width: 24px !important;
+  cursor: default !important;
+}
+.collapse-translation .trans-resizer-handle::after {
+  display: none !important;
+}
+
+/* 번역 창 접기/펴기 인라인 버튼 */
+.trans-collapse-btn {
+  position: absolute;
+  top: 16px;
+  left: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 110;
+  outline: none;
+}
+.trans-collapse-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent-mid);
+  border-color: var(--accent-mid);
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25);
+}
+.trans-collapse-btn:active {
+  transform: scale(0.95);
+}
+
+.collapse-translation .trans-collapse-btn {
+  left: 0px !important;
 }
 
 
