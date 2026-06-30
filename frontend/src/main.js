@@ -3229,8 +3229,8 @@ function segmentPdfElements(container, pageNum) {
     function collectTextNodesFromEl(el) {
       const textNodes = [];
       function walk(node) {
-        if (node.nodeType === Node.TEXT_NODE) {
-          if (node.nodeValue.trim()) textNodes.push(node);
+        if (node.nodeType === 3) {
+          if (node.nodeValue && node.nodeValue.trim()) textNodes.push(node);
         } else if (
           node.nodeName !== 'SCRIPT' &&
           node.nodeName !== 'STYLE' &&
@@ -3380,8 +3380,8 @@ function segmentTransElements(container, pageNum) {
     const nodeParagraphBreak = [];
 
     function walk(node, isFirstInBlock) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        if (node.nodeValue.trim()) {
+      if (node.nodeType === 3) {
+        if (node.nodeValue && node.nodeValue.trim()) {
           textNodes.push(node);
           nodeParagraphBreak.push(isFirstInBlock);
           return true;
@@ -3447,8 +3447,8 @@ function segmentTransElements(container, pageNum) {
         } else {
           const prevChar = fullText[fullText.length - 1];
           let nextChar = ' ';
-          if (node.nodeType === Node.TEXT_NODE) {
-            nextChar = node.nodeValue[0];
+          if (node.nodeType === 3) {
+            nextChar = node.nodeValue ? node.nodeValue[0] : ' ';
           }
           if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n') {
             fullText += ' ';
@@ -3457,8 +3457,8 @@ function segmentTransElements(container, pageNum) {
       }
       const start = fullText.length;
       let nodeText = '';
-      if (node.nodeType === Node.TEXT_NODE) {
-        nodeText = node.nodeValue;
+      if (node.nodeType === 3) {
+        nodeText = node.nodeValue || '';
       } else {
         // 수식 기호 복원 ($...$ 또는 $$...$$) - 안전하게 디코딩
         let formula = '';
@@ -3488,7 +3488,7 @@ function segmentTransElements(container, pageNum) {
       const parent = range.node.parentNode;
       if (!parent) continue;
 
-      if (range.node.nodeType === Node.TEXT_NODE) {
+      if (range.node.nodeType === 3) {
         const segments = [];
         for (let i = 0; i < sentenceRanges.length; i++) {
           const sent = sentenceRanges[i];
