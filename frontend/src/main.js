@@ -817,11 +817,7 @@ resumeTransBtn.addEventListener('click', async () => {
 
 // ── 뒤로 가기 ─────────────────────────────────────
 backBtn.addEventListener('click', () => {
-  if (hasLibraryStateInHistory) {
-    history.back()
-  } else {
-    showLibraryScreen(true)
-  }
+  showLibraryScreen()
 })
 
 if (logoBtn) {
@@ -4378,8 +4374,8 @@ async function handleRouting() {
       }
       location.hash = 'library'
     } else {
-      console.log("[Router] Routing to Library screen. Library active state:", libraryScreen.classList.contains('active'))
-      if (!libraryScreen.classList.contains('active')) {
+      console.log("[Router] Routing to Library screen. Viewer active:", viewerScreen.classList.contains('active'), "Library active:", libraryScreen.classList.contains('active'))
+      if (viewerScreen.classList.contains('active') || !libraryScreen.classList.contains('active')) {
         await showLibraryScreen(false)
       }
     }
