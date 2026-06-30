@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from services.auth import get_current_user
 from services.library import (
     list_documents, get_document, delete_document,
-    get_translation, get_pdf_path
+    get_translation, get_pdf_path, update_document_metadata
 )
 
 router = APIRouter()
@@ -97,4 +97,30 @@ async def get_library_document_images(doc_id: str):
         return {"images": images}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"이미지 좌표 추출 실패: {str(e)}")
+
+
+@router.put("/library/{doc_id}/metadata")
+async def update_doc_metadata(
+    doc_id: str,
+    payload: dict,
+    current_user: str = Depends(get_current_user)
+):
+    """문서의 메타데이터(예: 제목 등)를 업데이트합니다."""
+    doc = get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
+    if doc.get("username") != current_user:
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+    
+    meta = doc.get("metadata") or {}
+    meta.update(payload)
+    
+    update_document_metadata(doc_id, meta)
+    
+    # 활성 메모리 세션도 업데이트하여 정합성 유지
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id]["metadata"] = meta
+        
+    return {"status": "success", "metadata": meta}
 

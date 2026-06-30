@@ -1,7 +1,7 @@
 import './style.css'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages } from './pdfViewer.js'
-import { fetchLibrary, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages } from './library.js'
+import { fetchLibrary, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata } from './library.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -114,6 +114,7 @@ const uploadItemProgressBar = $('upload-item-progress-bar')
 const uploadItemSpinner  = $('upload-item-spinner')
 const uploadItemSuccessIcon = $('upload-item-success-icon')
 const docTitle          = $('doc-title')
+const docTitleEditBtn   = $('doc-title-edit-btn')
 const pageInput         = $('page-input')
 const pageTotal         = $('page-total')
 const zoomInBtn         = $('zoom-in-btn')
@@ -804,6 +805,73 @@ resumeTransBtn.addEventListener('click', async () => {
 backBtn.addEventListener('click', () => {
   showLibraryScreen()
 })
+
+// ── 논문 제목 수정 (Viewer 화면) ──────────────────
+if (docTitleEditBtn) {
+  docTitleEditBtn.addEventListener('click', () => {
+    const oldTitle = state.title || state.filename || ''
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.value = oldTitle
+    input.style.background = 'var(--bg-elevated)'
+    input.style.border = '1px solid var(--accent-mid)'
+    input.style.borderRadius = 'var(--radius-sm)'
+    input.style.color = 'var(--text-primary)'
+    input.style.fontSize = '14px'
+    input.style.fontWeight = '600'
+    input.style.padding = '2px 6px'
+    input.style.outline = 'none'
+    input.style.minWidth = '200px'
+    input.style.maxWidth = '400px'
+
+    docTitle.innerHTML = ''
+    docTitle.appendChild(input)
+    docTitleEditBtn.style.display = 'none'
+    input.focus()
+    input.select()
+
+    let isSaving = false
+    async function save() {
+      if (isSaving) return
+      isSaving = true
+      const newTitle = input.value.trim()
+      if (newTitle && newTitle !== oldTitle) {
+        try {
+          await updateLibraryDocMetadata(state.sessionId, { title: newTitle })
+          state.title = newTitle
+          docTitle.textContent = newTitle
+          showToast('제목이 변경되었습니다.', 'success')
+        } catch (err) {
+          showToast('제목 변경 실패: ' + err.message, 'error')
+          docTitle.textContent = oldTitle
+        }
+      } else {
+        docTitle.textContent = oldTitle
+      }
+      docTitleEditBtn.style.display = 'inline-flex'
+    }
+
+    input.addEventListener('keydown', async (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault()
+        await save()
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault()
+        isSaving = true
+        docTitle.textContent = oldTitle
+        docTitleEditBtn.style.display = 'inline-flex'
+      }
+    })
+
+    input.addEventListener('blur', async () => {
+      setTimeout(async () => {
+        if (!isSaving) {
+          await save()
+        }
+      }, 100)
+    })
+  })
+}
 
 // ── 구분선 드래그 ─────────────────────────────────
 const divider          = $('divider')
@@ -1863,6 +1931,9 @@ function createDocCard(doc) {
     </div>
     <div class="doc-card-actions">
       <button class="doc-open-btn" data-id="${doc.id}">열기</button>
+      <button class="doc-edit-btn" data-id="${doc.id}" title="제목 수정">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg>
+      </button>
       <button class="doc-delete-btn" data-id="${doc.id}" title="삭제">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
@@ -1878,6 +1949,68 @@ function createDocCard(doc) {
     if (!confirm(`"${displayTitle}"을 삭제할까요?`)) return
     try { await deleteLibraryDoc(doc.id); showToast('삭제되었습니다', 'success'); await renderLibrary() }
     catch { showToast('삭제 실패', 'error') }
+  })
+  
+  card.querySelector('.doc-edit-btn').addEventListener('click', (e) => {
+    e.stopPropagation()
+    const titleEl = card.querySelector('.doc-card-title')
+    const oldTitle = displayTitle
+    
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.value = oldTitle
+    input.style.width = '100%'
+    input.style.padding = '4px 8px'
+    input.style.background = 'var(--bg-elevated)'
+    input.style.border = '1px solid var(--accent-mid)'
+    input.style.borderRadius = 'var(--radius-sm)'
+    input.style.color = 'var(--text-primary)'
+    input.style.fontSize = '13px'
+    input.style.fontWeight = '600'
+    input.style.outline = 'none'
+    
+    titleEl.innerHTML = ''
+    titleEl.appendChild(input)
+    input.focus()
+    input.select()
+    
+    let isSaving = false
+    async function save() {
+      if (isSaving) return
+      isSaving = true
+      const newTitle = input.value.trim()
+      if (newTitle && newTitle !== oldTitle) {
+        try {
+          await updateLibraryDocMetadata(doc.id, { title: newTitle })
+          showToast('제목이 변경되었습니다.', 'success')
+          await renderLibrary()
+        } catch (err) {
+          showToast('제목 변경 실패: ' + err.message, 'error')
+          titleEl.textContent = oldTitle
+        }
+      } else {
+        titleEl.textContent = oldTitle
+      }
+    }
+    
+    input.addEventListener('keydown', async (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault()
+        await save()
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault()
+        isSaving = true
+        titleEl.textContent = oldTitle
+      }
+    })
+    
+    input.addEventListener('blur', async () => {
+      setTimeout(async () => {
+        if (!isSaving) {
+          await save()
+        }
+      }, 100)
+    })
   })
   card.addEventListener('click', () => openFromLibrary(doc))
   return card

@@ -1160,6 +1160,34 @@ body:not(.light-theme) .pdf-page-inner canvas {
   transform: translateY(0);
 }
 
+.doc-edit-btn {
+  width: 36px; height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+}
+.doc-edit-btn:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+  color: var(--accent-mid);
+  background: rgba(139, 92, 246, 0.12);
+  transform: translateY(-1px);
+}
+.doc-edit-btn:active {
+  transform: translateY(0);
+}
+
+.doc-title-edit-btn:hover {
+  opacity: 1 !important;
+  color: var(--accent-mid) !important;
+}
+
 /* ── 글로벌 테마 토글 버튼 ── */
 .global-theme-toggle {
   position: fixed;
