@@ -2653,6 +2653,7 @@ body.light-theme .message-quote-img {
 .trans-page-block {
   width: var(--trans-pane-width, 620px) !important;
   position: relative !important;
+  overflow: visible !important; /* 핸들이 외부에 노출될 수 있도록 클리핑 방지 */
 }
 
 /* 번역 창 접기 상태 클래스 */
