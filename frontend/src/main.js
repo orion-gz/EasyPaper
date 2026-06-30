@@ -3077,7 +3077,7 @@ function segmentElementIntoSentences(container, pageNum, className) {
 
 
 // 주어진 텍스트에서 원문 문장들의 정확한 문자 범위(start, end)를 유니코드 인지 방식으로 추출하여 매핑합니다.
-function alignSentencesToText(fullText, sentencesList) {
+function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
   const cleanToRaw = [];
   let cleanText = '';
   
@@ -3305,7 +3305,7 @@ function segmentPdfElements(container, pageNum) {
     const sentences = state.translationSentences && state.translationSentences[pageNum];
     if (sentences && sentences.length > 0) {
       const srcSents = sentences.map(s => s.src);
-      sentenceRanges = alignSentencesToText(fullText, srcSents);
+      sentenceRanges = alignSentencesToText(fullText, srcSents, pageNum);
     } else {
       sentenceRanges = splitIntoSentences(fullText);
     }
@@ -3479,7 +3479,7 @@ function segmentTransElements(container, pageNum) {
     const sentences = state.translationSentences && state.translationSentences[pageNum];
     if (sentences && sentences.length > 0) {
       const transSents = sentences.map(s => s.trans);
-      sentenceRanges = alignSentencesToText(fullText, transSents);
+      sentenceRanges = alignSentencesToText(fullText, transSents, pageNum);
     } else {
       sentenceRanges = splitIntoSentences(fullText);
     }
