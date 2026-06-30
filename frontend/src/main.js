@@ -3098,8 +3098,8 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
   
   for (let i = 0; i < fullText.length; i++) {
     const char = fullText[i];
-    // 알파벳, 숫자, 한글, 한자 등의 문자만 정렬 비교 대상으로 삼음
-    if (/[a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff]/.test(char)) {
+    // 알파벳, 숫자, 한글, 한자 및 그리스 문자(수식 기호 대응)만 비교 대상으로 삼음
+    if (/[a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff\u0370-\u03ff]/.test(char)) {
       cleanToRaw.push(i);
       cleanText += char.toLowerCase();
     }
@@ -3108,13 +3108,13 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
   const sentenceRanges = [];
   let searchStart = 0;
   
-  // 모든 문장 미리 전처리 - null/undefined 방어
+  // 모든 문장 미리 전처리 - null/undefined 방어 및 그리스 문자 대응
   const cleanSents = (sentencesList || []).map(s => {
     const text = s || '';
     let clean = '';
     for (let i = 0; i < text.length; i++) {
       const char = text[i];
-      if (/[a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff]/.test(char)) {
+      if (/[a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff\u0370-\u03ff]/.test(char)) {
         clean += char.toLowerCase();
       }
     }
@@ -3181,6 +3181,32 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
         start: rawPos,
         end: rawPos
       });
+    }
+  }
+
+  // 매칭 실패(길이 0)인 문장들의 범위를 주변 매칭 성공 문장들 사이의 간격으로 보간(Interpolation)
+  // 수식 등의 기호만 있는 문장들이 누락 없이 PDF 텍스트 레이어에 적절한 인덱스로 마킹되도록 지원
+  for (let k = 0; k < sentenceRanges.length; k++) {
+    if (sentenceRanges[k].start === sentenceRanges[k].end) {
+      let prevEnd = 0;
+      for (let i = k - 1; i >= 0; i--) {
+        if (sentenceRanges[i].end > sentenceRanges[i].start) {
+          prevEnd = sentenceRanges[i].end;
+          break;
+        }
+      }
+      let nextStart = fullText.length;
+      for (let i = k + 1; i < sentenceRanges.length; i++) {
+        if (sentenceRanges[i].end > sentenceRanges[i].start) {
+          nextStart = sentenceRanges[i].start;
+          break;
+        }
+      }
+      
+      if (prevEnd < nextStart) {
+        sentenceRanges[k].start = prevEnd;
+        sentenceRanges[k].end = nextStart;
+      }
     }
   }
   
