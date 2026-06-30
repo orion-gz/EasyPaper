@@ -3093,11 +3093,12 @@ function alignSentencesToText(fullText, sentencesList) {
   const sentenceRanges = [];
   let searchStart = 0;
   
-  // 모든 문장 미리 전처리
-  const cleanSents = sentencesList.map(s => {
+  // 모든 문장 미리 전처리 - null/undefined 방어
+  const cleanSents = (sentencesList || []).map(s => {
+    const text = s || '';
     let clean = '';
-    for (let i = 0; i < s.length; i++) {
-      const char = s[i];
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
       if (/[a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff]/.test(char)) {
         clean += char.toLowerCase();
       }
@@ -3107,7 +3108,7 @@ function alignSentencesToText(fullText, sentencesList) {
   
   for (let k = 0; k < cleanSents.length; k++) {
     const cleanSent = cleanSents[k];
-    const sText = sentencesList[k];
+    const sText = sentencesList[k] || '';
     
     if (!cleanSent) {
       const rawPos = cleanToRaw[searchStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
