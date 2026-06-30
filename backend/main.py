@@ -71,7 +71,14 @@ if os.path.exists(FRONTEND_DIST):
             from fastapi import HTTPException
             raise HTTPException(status_code=404)
         index = os.path.join(FRONTEND_DIST, "index.html")
-        return FileResponse(index)
+        return FileResponse(
+            index,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
 else:
     @app.get("/")
     async def root():
