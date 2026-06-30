@@ -155,3 +155,190 @@ def get_pdf_metadata(pdf_path: str) -> Dict[str, Any]:
         "subject": meta.get("subject", ""),
         "total_pages": page_count,
     }
+
+
+def merge_bboxes(rects: list, threshold: float = 15.0) -> list:
+    """
+    서로 가깝거나 겹치는 바운딩 박스들을 병합합니다.
+    """
+    if not rects:
+        return []
+    
+    merged = True
+    while merged:
+        merged = False
+        new_rects = []
+        used = set()
+        
+        for i in range(len(rects)):
+            if i in used:
+                continue
+            r1 = rects[i]
+            x0, y0, x1, y1 = r1
+            
+            for j in range(i + 1, len(rects)):
+                if j in used:
+                    continue
+                r2 = rects[j]
+                
+                # 가로나 세로 거리 임계값 이내인지 판단
+                x_overlap = not (x1 + threshold < r2[0] or r2[2] + threshold < x0)
+                y_overlap = not (y1 + threshold < r2[1] or r2[3] + threshold < y0)
+                
+                if x_overlap and y_overlap:
+                    x0 = min(x0, r2[0])
+                    y0 = min(y0, r2[1])
+                    x1 = max(x1, r2[2])
+                    y1 = max(y1, r2[3])
+                    used.add(j)
+                    merged = True
+            
+            new_rects.append([x0, y0, x1, y1])
+            used.add(i)
+        
+        rects = new_rects
+        
+    return rects
+
+
+def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
+    """
+    PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 테이블(Table)의 영역 정보를 추출합니다.
+    인접한 이미지/테이블 요소를 그룹화(Merge)하고 마진(Padding)을 주어 크롭 시 잘림 현상을 방지합니다.
+    """
+    doc = fitz.open(pdf_path)
+    images_data = []
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        page_width = page.rect.width
+        page_height = page.rect.height
+        if page_width == 0 or page_height == 0:
+            continue
+            
+        raw_rects = []
+        
+        # 1. 래스터 이미지(Raster Images) 좌표 수집
+        page_imgs = page.get_image_info(xrefs=True)
+        for img in page_imgs:
+            bbox = img.get("bbox")
+            if not bbox:
+                continue
+            x0, y0, x1, y1 = bbox
+            w = x1 - x0
+            h = y1 - y0
+            if w >= 15 and h >= 15:
+                raw_rects.append([x0, y0, x1, y1])
+                
+        # 2-1. 내장 테이블 Finder 감지
+        try:
+            finder = page.find_tables()
+            if finder and finder.tables:
+                for table in finder.tables:
+                    bbox = table.bbox
+                    x0, y0, x1, y1 = bbox
+                    w = x1 - x0
+                    h = y1 - y0
+                    if w >= 15 and h >= 15:
+                        raw_rects.append([x0, y0, x1, y1])
+        except Exception:
+            pass
+
+        # 2-2. 가로 테이블 구분선(booktabs 등) 감지 Heuristic
+        try:
+            drawings = page.get_drawings()
+            horizontal_lines = []
+            for d in drawings:
+                r = d.get("rect")
+                if not r:
+                    continue
+                w = r.x1 - r.x0
+                h = r.y1 - r.y0
+                if w > 80 and h < 3: # 가로 방향 얇은 선 수집
+                    # running header / footer 필터링: 페이지 상단 65pt 이내 또는 하단 65pt 이내의 선 제외
+                    if r.y0 < 65 or r.y1 > page_height - 65:
+                        continue
+                    horizontal_lines.append([r.x0, r.y0, r.x1, r.y1])
+            
+            if len(horizontal_lines) >= 2:
+                # 가로 정렬도(overlap ratio) 기반의 alignment families 그룹화
+                families = []
+                for line in horizontal_lines:
+                    placed = False
+                    for fam in families:
+                        rep = fam[0] # Family 대표 선
+                        # 두 선의 수평 겹침 비율(overlap ratio) 계산
+                        intersection = max(0.0, min(line[2], rep[2]) - max(line[0], rep[0]))
+                        union = max(line[2], rep[2]) - min(line[0], rep[0])
+                        ratio = intersection / union if union > 0.0 else 0.0
+                        
+                        if ratio > 0.85:
+                            fam.append(line)
+                            placed = True
+                            break
+                    if not placed:
+                        families.append([line])
+                
+                # 각 패밀리 내부에서 세로 방향 인접 선들을 그룹화
+                for fam in families:
+                    if len(fam) < 2:
+                        continue
+                    fam.sort(key=lambda x: x[1])
+                    
+                    table_groups = []
+                    current_group = [fam[0]]
+                    for line in fam[1:]:
+                        last_line = current_group[-1]
+                        y_diff = line[1] - last_line[3]
+                        
+                        if y_diff < 100: # 인접 임계값 100pt
+                            current_group.append(line)
+                        else:
+                            table_groups.append(current_group)
+                            current_group = [line]
+                    table_groups.append(current_group)
+                    
+                    for group in table_groups:
+                        if len(group) >= 2:
+                            gx0 = min(l[0] for l in group)
+                            gy0 = min(l[1] for l in group)
+                            gx1 = max(l[2] for l in group)
+                            gy1 = max(l[3] for l in group)
+                            raw_rects.append([gx0, gy0, gx1, gy1])
+        except Exception:
+            pass
+        
+        # 3. 바운딩 박스 그룹화 (인접 임계값을 4.0포인트로 대폭 좁혀서 과도하게 커지는 현상 방지)
+        merged_rects = merge_bboxes(raw_rects, threshold=4.0)
+        
+        # 4. 여백 보정 및 최소 규격 필터링
+        for r in merged_rects:
+            # 여백(Padding) 8포인트 적용하여 차트 라벨이나 테이블 테두리가 잘리지 않도록 안전 확보
+            x0 = max(0.0, r[0] - 8.0)
+            y0 = max(0.0, r[1] - 8.0)
+            x1 = min(page_width, r[2] + 8.0)
+            y1 = min(page_height, r[3] + 8.0)
+            
+            w = x1 - x0
+            h = y1 - y0
+            # 최종 크기가 가로/세로 40포인트 이상인 진짜 그림/테이블만 선별
+            if w < 40 or h < 40:
+                continue
+                
+            # 백분율 좌표 계산
+            left = (x0 / page_width) * 100
+            top = (y0 / page_height) * 100
+            width = (w / page_width) * 100
+            height = (h / page_height) * 100
+            
+            images_data.append({
+                "page": page_num + 1,
+                "left": left,
+                "top": top,
+                "width": width,
+                "height": height
+            })
+            
+    doc.close()
+    return images_data
+

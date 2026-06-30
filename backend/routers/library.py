@@ -76,3 +76,19 @@ async def delete_library_document(doc_id: str):
     if not delete_document(doc_id):
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
     return {"message": "문서가 삭제되었습니다."}
+
+
+@router.get("/library/{doc_id}/images")
+async def get_library_document_images(doc_id: str):
+    """특정 문서의 모든 페이지에서 이미지/Figure 좌표 정보(백분율) 목록을 반환합니다."""
+    pdf_path = get_pdf_path(doc_id)
+    if not pdf_path:
+        raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
+    
+    try:
+        from services.pdf_parser import extract_pdf_images
+        images = extract_pdf_images(pdf_path)
+        return {"images": images}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"이미지 좌표 추출 실패: {str(e)}")
+
