@@ -2365,6 +2365,41 @@ body.light-theme .trans-sentence.sentence-highlight {
   border-radius: 3px;
 }
 
+/* ── KaTeX Formula Sentence Highlight & Layout overrides ── */
+.katex-display-wrap.trans-sentence {
+  display: block !important; /* Preserve block layout, override display: inline */
+}
+.katex-inline-wrap.trans-sentence {
+  display: inline-block !important; /* Preserve inline block layout */
+}
+.katex-display-wrap.trans-sentence.sentence-highlight,
+.katex-inline-wrap.trans-sentence.sentence-highlight {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+.katex-display-wrap.trans-sentence.sentence-highlight .katex-html,
+.katex-inline-wrap.trans-sentence.sentence-highlight .katex-html {
+  background-color: rgba(124, 58, 237, 0.25) !important;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.18);
+  border-radius: 3px;
+  color: var(--text-primary) !important;
+}
+body.light-theme .katex-display-wrap.trans-sentence.sentence-highlight .katex-html,
+body.light-theme .katex-inline-wrap.trans-sentence.sentence-highlight .katex-html {
+  background-color: rgba(124, 58, 237, 0.20) !important;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+  color: #000000 !important;
+}
+.katex-display-wrap.trans-sentence.sentence-pulse,
+.katex-inline-wrap.trans-sentence.sentence-pulse {
+  animation: none !important;
+}
+.katex-display-wrap.trans-sentence.sentence-pulse .katex-html,
+.katex-inline-wrap.trans-sentence.sentence-pulse .katex-html {
+  animation: sentencePulse 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+  border-radius: 3px;
+}
+
 /* ── Chat Quoted Text Preview Styles ── */
 .chat-quote-area {
   display: flex;
