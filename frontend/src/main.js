@@ -477,9 +477,13 @@ function formatTranslationHtml(text) {
     if (window.katex) {
       try {
         const r = window.katex.renderToString(item.formula, { displayMode: item.display, throwOnError: false, output: 'html' })
-        return item.display ? `<div class="katex-display-wrap">${r}</div>` : r
+        if (item.display) {
+          return `<div class="katex-display-wrap" data-formula="${encodeURIComponent(item.formula)}" data-display="true">${r}</div>`
+        } else {
+          return `<span class="katex-inline-wrap" data-formula="${encodeURIComponent(item.formula)}" data-display="false">${r}</span>`
+        }
       } catch (e) {
-        return `<code class="math-error">${escapeHtml(item.formula)}</code>`
+        return `<code class="math-error" data-formula="${encodeURIComponent(item.formula)}" data-display="${item.display}">${escapeHtml(item.formula)}</code>`
       }
     }
     // KaTeX 미로드 시 pending 마킹 → 나중에 applyKatexToElement()로 재처리
@@ -498,9 +502,15 @@ function applyKatexToElement(el) {
       const formula = decodeURIComponent(code.dataset.formula || '')
       const display = code.dataset.display === 'true'
       const r = window.katex.renderToString(formula, { displayMode: display, throwOnError: false, output: 'html' })
-      const wrapper = display ? Object.assign(document.createElement('div'), { className: 'katex-display-wrap', innerHTML: r }) : Object.assign(document.createElement('span'), { innerHTML: r })
+      const wrapper = display
+        ? Object.assign(document.createElement('div'), { className: 'katex-display-wrap', innerHTML: r })
+        : Object.assign(document.createElement('span'), { className: 'katex-inline-wrap', innerHTML: r })
+      wrapper.dataset.formula = encodeURIComponent(formula)
+      wrapper.dataset.display = display.toString()
       code.replaceWith(wrapper)
-    } catch (e) { code.classList.remove('math-pending') }
+    } catch (e) {
+      code.classList.remove('math-pending')
+    }
   })
 }
 
@@ -3035,8 +3045,15 @@ if (uploadPopupClose) {
 function clearSegmentation(container, className) {
   if (!container) return;
   container.querySelectorAll(`.${className}`).forEach(span => {
-    const textNode = document.createTextNode(span.textContent);
-    span.replaceWith(textNode);
+    if (span.classList.contains('katex-display-wrap') || span.classList.contains('katex-inline-wrap') || span.classList.contains('math-pending') || span.classList.contains('math-error')) {
+      span.classList.remove(className);
+      delete span.dataset.page;
+      delete span.dataset.sentenceIdx;
+      span.style.cursor = '';
+    } else {
+      const textNode = document.createTextNode(span.textContent);
+      span.replaceWith(textNode);
+    }
   });
   container.normalize();
   delete container.dataset.segmented;
@@ -3367,11 +3384,19 @@ function segmentTransElements(container, pageNum) {
       return false;
     } else if (
       node.nodeName === 'SCRIPT' ||
-      node.nodeName === 'STYLE' ||
-      node.classList?.contains('katex') ||
-      node.classList?.contains('katex-display-wrap')
+      node.nodeName === 'STYLE'
     ) {
       return false;
+    } else if (
+      node.classList?.contains('katex-display-wrap') ||
+      node.classList?.contains('katex-inline-wrap') ||
+      node.classList?.contains('math-pending') ||
+      node.classList?.contains('math-error')
+    ) {
+      // 수식 블록은 단일 원자 노드로 수집하여 쪼개짐 방지
+      textNodes.push(node);
+      nodeParagraphBreak.push(isFirstInBlock);
+      return true;
     } else {
       const isBlock = ['H2', 'H3', 'H4', 'H5', 'H6', 'P', 'DIV', 'BLOCKQUOTE', 'LI'].includes(node.nodeName);
       let firstChild = true;
@@ -3416,14 +3441,27 @@ function segmentTransElements(container, pageNum) {
         }
       } else {
         const prevChar = fullText[fullText.length - 1];
-        const nextChar = node.nodeValue[0];
+        let nextChar = ' ';
+        if (node.nodeType === Node.TEXT_NODE) {
+          nextChar = node.nodeValue[0];
+        }
         if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n') {
           fullText += ' ';
         }
       }
     }
     const start = fullText.length;
-    fullText += node.nodeValue;
+    let nodeText = '';
+    if (node.nodeType === Node.TEXT_NODE) {
+      nodeText = node.nodeValue;
+    } else {
+      // 수식 기호 복원 ($...$ 또는 $$...$$)
+      const formula = decodeURIComponent(node.dataset.formula || '');
+      const display = node.dataset.display === 'true';
+      const delim = display ? '$$' : '$';
+      nodeText = delim + formula + delim;
+    }
+    fullText += nodeText;
     nodeRanges.push({ node, start, end: fullText.length });
   }
 
@@ -3440,52 +3478,80 @@ function segmentTransElements(container, pageNum) {
     const parent = range.node.parentNode;
     if (!parent) continue;
 
-    const segments = [];
-    for (let i = 0; i < sentenceRanges.length; i++) {
-      const sent = sentenceRanges[i];
-      const start = Math.max(range.start, sent.start);
-      const end = Math.min(range.end, sent.end);
-      if (start < end) {
-        segments.push({
-          sentenceIdx: i,
-          startInNode: start - range.start,
-          endInNode: end - range.start,
-          text: range.node.nodeValue.substring(start - range.start, end - range.start),
-        });
+    if (range.node.nodeType === Node.TEXT_NODE) {
+      const segments = [];
+      for (let i = 0; i < sentenceRanges.length; i++) {
+        const sent = sentenceRanges[i];
+        const start = Math.max(range.start, sent.start);
+        const end = Math.min(range.end, sent.end);
+        if (start < end) {
+          segments.push({
+            sentenceIdx: i,
+            startInNode: start - range.start,
+            endInNode: end - range.start,
+            text: range.node.nodeValue.substring(start - range.start, end - range.start),
+          });
+        }
       }
-    }
 
-    if (segments.length === 0) continue;
+      if (segments.length === 0) continue;
 
-    const fragment = document.createDocumentFragment();
-    let lastIdx = 0;
-    segments.sort((a, b) => a.startInNode - b.startInNode);
+      const fragment = document.createDocumentFragment();
+      let lastIdx = 0;
+      segments.sort((a, b) => a.startInNode - b.startInNode);
 
-    for (const seg of segments) {
-      if (seg.startInNode > lastIdx) {
+      for (const seg of segments) {
+        if (seg.startInNode > lastIdx) {
+          fragment.appendChild(document.createTextNode(
+            range.node.nodeValue.substring(lastIdx, seg.startInNode)
+          ));
+        }
+
+        const span = document.createElement('span');
+        span.className = 'trans-sentence';
+        span.dataset.page = pageNum;
+        span.dataset.sentenceIdx = seg.sentenceIdx;
+        span.textContent = seg.text;
+        span.style.cursor = 'pointer';
+        
+        fragment.appendChild(span);
+        lastIdx = seg.endInNode;
+      }
+
+      if (lastIdx < range.node.nodeValue.length) {
         fragment.appendChild(document.createTextNode(
-          range.node.nodeValue.substring(lastIdx, seg.startInNode)
+          range.node.nodeValue.substring(lastIdx)
         ));
       }
 
-      const span = document.createElement('span');
-      span.className = 'trans-sentence';
-      span.dataset.page = pageNum;
-      span.dataset.sentenceIdx = seg.sentenceIdx;
-      span.textContent = seg.text;
-      span.style.cursor = 'pointer';
-      
-      fragment.appendChild(span);
-      lastIdx = seg.endInNode;
-    }
+      parent.replaceChild(fragment, range.node);
+    } else {
+      // 수식 엘리먼트 자체를 1:1 매칭 문장 스팬으로 마킹
+      let matchedIdx = -1;
+      for (let i = 0; i < sentenceRanges.length; i++) {
+        const sent = sentenceRanges[i];
+        if (range.start >= sent.start && range.end <= sent.end) {
+          matchedIdx = i;
+          break;
+        }
+      }
+      if (matchedIdx === -1) {
+        for (let i = 0; i < sentenceRanges.length; i++) {
+          const sent = sentenceRanges[i];
+          if (range.start < sent.end && range.end > sent.start) {
+            matchedIdx = i;
+            break;
+          }
+        }
+      }
 
-    if (lastIdx < range.node.nodeValue.length) {
-      fragment.appendChild(document.createTextNode(
-        range.node.nodeValue.substring(lastIdx)
-      ));
+      if (matchedIdx !== -1) {
+        range.node.classList.add('trans-sentence');
+        range.node.dataset.page = pageNum;
+        range.node.dataset.sentenceIdx = matchedIdx;
+        range.node.style.cursor = 'pointer';
+      }
     }
-
-    parent.replaceChild(fragment, range.node);
   }
 
   container.dataset.segmented = 'true';
