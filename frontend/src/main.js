@@ -372,7 +372,7 @@ async function initScrollViewer() {
           const opts = getTranslationOptions()
           const res = await fetchLibraryTranslation(currentSessionId, pageNum, opts)
           state.translationCache[pageNum] = res.translation
-          state.translationSentences[pageNum] = res.sentences || []
+          state.translationSentences[pageNum] = preprocessSentences(res.sentences || [])
           // 패치하는 중에 사용자가 다른 세션으로 이동하지 않았는지 확인
           if (state.sessionId === currentSessionId) {
             renderTransContent(pageNum, res.translation, true)
@@ -586,7 +586,7 @@ function startJobPolling(sessionId) {
       const data = await getPageTranslation(sessionId, pageNum, getTranslationOptions())
       if (data?.translation) {
         state.translationCache[pageNum] = data.translation
-        state.translationSentences[pageNum] = data.sentences || []
+        state.translationSentences[pageNum] = preprocessSentences(data.sentences || [])
         state.translatedPages.add(pageNum)
         state.translatingPages.delete(pageNum)
         renderTransContent(pageNum, data.translation, false)
@@ -672,7 +672,7 @@ exportBtn.addEventListener('click', async () => {
       try {
         const res = await fetchLibraryTranslation(state.sessionId, pageNum, opts)
         state.translationCache[pageNum] = res.translation
-        state.translationSentences[pageNum] = res.sentences || []
+        state.translationSentences[pageNum] = preprocessSentences(res.sentences || [])
       } catch (err) {
         console.warn(`Failed to fetch translation for page ${pageNum} during export:`, err)
       }
@@ -3072,6 +3072,40 @@ function segmentElementIntoSentences(container, pageNum, className) {
   } else {
     segmentTransElements(container, pageNum);
   }
+}
+
+function preprocessSentences(rawSentences) {
+  if (!rawSentences || rawSentences.length === 0) return [];
+  
+  const cleanSentences = [];
+  let pendingSrcs = [];
+  
+  for (const s of rawSentences) {
+    if (!s.trans || !s.trans.trim()) {
+      pendingSrcs.push(s.src);
+    } else {
+      let mergedSrc = s.src;
+      if (pendingSrcs.length > 0) {
+        mergedSrc = pendingSrcs.join('\n') + '\n' + mergedSrc;
+        pendingSrcs = [];
+      }
+      cleanSentences.push({
+        src: mergedSrc,
+        trans: s.trans
+      });
+    }
+  }
+  
+  if (pendingSrcs.length > 0 && cleanSentences.length > 0) {
+    const last = cleanSentences[cleanSentences.length - 1];
+    last.src = last.src + '\n' + pendingSrcs.join('\n');
+  }
+  
+  if (cleanSentences.length === 0) {
+    return rawSentences;
+  }
+  
+  return cleanSentences;
 }
 
 // 주어진 텍스트에서 원문 문장들의 정확한 문자 범위(start, end)를 유니코드 인지 방식으로 추출하여 매핑합니다.
