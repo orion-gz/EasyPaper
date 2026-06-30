@@ -372,7 +372,7 @@ async function initScrollViewer() {
           const opts = getTranslationOptions()
           const res = await fetchLibraryTranslation(currentSessionId, pageNum, opts)
           state.translationCache[pageNum] = res.translation
-          state.translationSentences[pageNum] = preprocessSentences(res.sentences || [])
+          state.translationSentences[pageNum] = res.sentences || []
           // 패치하는 중에 사용자가 다른 세션으로 이동하지 않았는지 확인
           if (state.sessionId === currentSessionId) {
             renderTransContent(pageNum, res.translation, true)
@@ -586,7 +586,7 @@ function startJobPolling(sessionId) {
       const data = await getPageTranslation(sessionId, pageNum, getTranslationOptions())
       if (data?.translation) {
         state.translationCache[pageNum] = data.translation
-        state.translationSentences[pageNum] = preprocessSentences(data.sentences || [])
+        state.translationSentences[pageNum] = data.sentences || []
         state.translatedPages.add(pageNum)
         state.translatingPages.delete(pageNum)
         renderTransContent(pageNum, data.translation, false)
@@ -672,7 +672,7 @@ exportBtn.addEventListener('click', async () => {
       try {
         const res = await fetchLibraryTranslation(state.sessionId, pageNum, opts)
         state.translationCache[pageNum] = res.translation
-        state.translationSentences[pageNum] = preprocessSentences(res.sentences || [])
+        state.translationSentences[pageNum] = res.sentences || []
       } catch (err) {
         console.warn(`Failed to fetch translation for page ${pageNum} during export:`, err)
       }
@@ -3074,39 +3074,7 @@ function segmentElementIntoSentences(container, pageNum, className) {
   }
 }
 
-function preprocessSentences(rawSentences) {
-  if (!rawSentences || rawSentences.length === 0) return [];
-  
-  const cleanSentences = [];
-  let pendingSrcs = [];
-  
-  for (const s of rawSentences) {
-    if (!s.trans || !s.trans.trim()) {
-      pendingSrcs.push(s.src);
-    } else {
-      let mergedSrc = s.src;
-      if (pendingSrcs.length > 0) {
-        mergedSrc = pendingSrcs.join('\n') + '\n' + mergedSrc;
-        pendingSrcs = [];
-      }
-      cleanSentences.push({
-        src: mergedSrc,
-        trans: s.trans
-      });
-    }
-  }
-  
-  if (pendingSrcs.length > 0 && cleanSentences.length > 0) {
-    const last = cleanSentences[cleanSentences.length - 1];
-    last.src = last.src + '\n' + pendingSrcs.join('\n');
-  }
-  
-  if (cleanSentences.length === 0) {
-    return rawSentences;
-  }
-  
-  return cleanSentences;
-}
+
 
 // 주어진 텍스트에서 원문 문장들의 정확한 문자 범위(start, end)를 유니코드 인지 방식으로 추출하여 매핑합니다.
 function alignSentencesToText(fullText, sentencesList) {
@@ -3763,8 +3731,31 @@ if (viewerScrollContainer) {
     // 만약 사전에 백엔드에서 정렬 매핑한 문장이 존재하면 1:1 직접 매핑을 적용합니다.
     const sentences = state.translationSentences && state.translationSentences[pageNum];
     if (sentences && sentences.length > 0) {
-      pdfIdx = Math.min(maxPdfIdx, sentenceIdx);
-      transIdx = Math.min(maxTransIdx, sentenceIdx);
+      // LLM에 의해 병합된 빈 번역 문장을 감지하여 상위 그룹 인덱스로 매핑
+      const parentIdxMap = [];
+      let lastActiveIdx = 0;
+      for (let i = 0; i < sentences.length; i++) {
+        if (sentences[i].trans && sentences[i].trans.trim()) {
+          lastActiveIdx = i;
+        }
+        parentIdxMap[i] = lastActiveIdx;
+      }
+      let firstActiveIdx = sentences.findIndex(s => s.trans && s.trans.trim());
+      if (firstActiveIdx === -1) firstActiveIdx = 0;
+      for (let i = 0; i < firstActiveIdx; i++) {
+        parentIdxMap[i] = firstActiveIdx;
+      }
+
+      const parentIdx = parentIdxMap[sentenceIdx] ?? sentenceIdx;
+      pdfIdx = parentIdx;
+      transIdx = parentIdx;
+
+      // 동일한 그룹에 속하는 모든 PDF 엘리먼트 수집
+      pdfElements = pdfSpans.filter(el => {
+        const idx = parseInt(el.dataset.sentenceIdx || '0', 10);
+        return parentIdxMap[idx] === parentIdx;
+      });
+      return { pdfIdx, transIdx, pdfElements };
     } else {
       // 기존 오프셋/비례식 알고리즘 폴백 (기존 캐시 대응)
       const diff = pdfCount - transCount;
