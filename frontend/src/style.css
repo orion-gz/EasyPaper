@@ -2759,4 +2759,76 @@ body.resizing-trans .trans-resizer-handle::after {
   right: -12px;
 }
 
+/* ── 뷰어 상단 툴바 리파인 디자인 ── */
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px !important;
+}
+
+/* 캡슐 스타일 세그먼트 버튼 그룹 */
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 2px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.toolbar-group:hover {
+  border-color: var(--border-strong-hover, rgba(255, 255, 255, 0.15));
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+}
+
+/* 그룹 내 아이콘 버튼 */
+.toolbar-group .icon-btn {
+  background: transparent !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+  box-shadow: none !important;
+}
+.toolbar-group .icon-btn:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary);
+}
+.toolbar-group .icon-btn.active {
+  background: rgba(139, 92, 246, 0.15) !important;
+  color: var(--accent-mid) !important;
+}
+
+/* 그룹 내 줌 레벨 스팬 */
+.toolbar-group .zoom-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 0 6px;
+  min-width: 44px;
+  text-align: center;
+  user-select: none;
+  font-family: var(--font-sans);
+}
+
+/* 세그먼트 구분선 */
+.toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-strong);
+  margin: 0 4px;
+  opacity: 0.5;
+  align-self: center;
+}
+
 
