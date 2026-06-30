@@ -507,6 +507,21 @@ function applyKatexToElement(el) {
         : Object.assign(document.createElement('span'), { className: 'katex-inline-wrap', innerHTML: r })
       wrapper.dataset.formula = encodeURIComponent(formula)
       wrapper.dataset.display = display.toString()
+      
+      // 세그멘테이션 데이터 및 마킹 속성 보존
+      if (code.classList.contains('trans-sentence')) {
+        wrapper.classList.add('trans-sentence');
+      }
+      if (code.dataset.page) {
+        wrapper.dataset.page = code.dataset.page;
+      }
+      if (code.dataset.sentenceIdx) {
+        wrapper.dataset.sentenceIdx = code.dataset.sentenceIdx;
+      }
+      if (code.style.cursor) {
+        wrapper.style.cursor = code.style.cursor;
+      }
+
       code.replaceWith(wrapper)
     } catch (e) {
       code.classList.remove('math-pending')
@@ -3537,21 +3552,15 @@ function segmentTransElements(container, pageNum) {
         parent.replaceChild(fragment, range.node);
       } else {
         // 수식 엘리먼트 자체를 1:1 매칭 문장 스팬으로 마킹
+        // 단순 앞선 경계 겹침 대신, 문자 범위 교집합(intersection)이 가장 큰 문장 매치
         let matchedIdx = -1;
+        let maxOverlap = 0;
         for (let i = 0; i < sentenceRanges.length; i++) {
           const sent = sentenceRanges[i];
-          if (range.start >= sent.start && range.end <= sent.end) {
+          const overlap = Math.max(0, Math.min(range.end, sent.end) - Math.max(range.start, sent.start));
+          if (overlap > maxOverlap) {
+            maxOverlap = overlap;
             matchedIdx = i;
-            break;
-          }
-        }
-        if (matchedIdx === -1) {
-          for (let i = 0; i < sentenceRanges.length; i++) {
-            const sent = sentenceRanges[i];
-            if (range.start < sent.end && range.end > sent.start) {
-              matchedIdx = i;
-              break;
-            }
           }
         }
 
