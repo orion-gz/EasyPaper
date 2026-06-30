@@ -2365,6 +2365,51 @@ body.light-theme .trans-sentence.sentence-highlight {
   border-radius: 3px;
 }
 
+/* ── KaTeX Formula Sentence Highlight & Layout overrides ── */
+.katex-display-wrap.trans-sentence {
+  display: block !important; /* Preserve block layout, override display: inline */
+  text-align: center !important;
+}
+.katex-display-wrap.trans-sentence .katex-display {
+  display: inline-block !important; /* Restrict width to equation content, center it */
+  text-align: center !important;
+  margin: 0.5em 0 !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  transition: background-color 0.15s, box-shadow 0.15s;
+}
+.katex-inline-wrap.trans-sentence {
+  display: inline-block !important; /* Preserve inline block layout */
+  padding: 0 4px !important;
+  border-radius: 3px !important;
+  transition: background-color 0.15s, box-shadow 0.15s;
+}
+.katex-display-wrap.trans-sentence.sentence-highlight,
+.katex-inline-wrap.trans-sentence.sentence-highlight {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+.katex-display-wrap.trans-sentence.sentence-highlight .katex-display,
+.katex-inline-wrap.trans-sentence.sentence-highlight .katex {
+  background-color: rgba(124, 58, 237, 0.25) !important;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.18) !important;
+  border-radius: 4px !important;
+}
+body.light-theme .katex-display-wrap.trans-sentence.sentence-highlight .katex-display,
+body.light-theme .katex-inline-wrap.trans-sentence.sentence-highlight .katex {
+  background-color: rgba(124, 58, 237, 0.20) !important;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15) !important;
+}
+.katex-display-wrap.trans-sentence.sentence-pulse,
+.katex-inline-wrap.trans-sentence.sentence-pulse {
+  animation: none !important;
+}
+.katex-display-wrap.trans-sentence.sentence-pulse .katex-display,
+.katex-inline-wrap.trans-sentence.sentence-pulse .katex {
+  animation: sentencePulse 0.8s cubic-bezier(0.25, 1, 0.5, 1) !important;
+  border-radius: 4px !important;
+}
+
 /* ── Chat Quoted Text Preview Styles ── */
 .chat-quote-area {
   display: flex;
