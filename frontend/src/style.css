@@ -2678,17 +2678,16 @@ body.light-theme .message-quote-img {
   gap: 0 !important; /* 접혔을 때는 갭 제거 */
 }
 
-/* 드래그 너비 조절 핸들 */
+/* 드래그 너비 조절 핸들 (우측 사이드 배치) */
 .trans-resizer-handle {
   position: absolute;
   top: 0;
-  left: -24px; /* gap 40px의 한가운데 배치 */
+  right: -4px; /* 우측 테두리에 걸쳐 배치 */
   width: 8px;
   height: 100%;
   cursor: col-resize;
   z-index: 100;
   background: transparent;
-  border-radius: 4px;
   transition: background-color 0.2s;
   display: flex;
   align-items: center;
@@ -2714,7 +2713,7 @@ body.resizing-trans .trans-resizer-handle::after {
 
 /* 접혔을 때 핸들 위치 밀착 조정 */
 .collapse-translation .trans-resizer-handle {
-  left: -12px !important;
+  right: -12px !important;
   width: 24px !important;
   cursor: default !important;
 }
@@ -2722,40 +2721,42 @@ body.resizing-trans .trans-resizer-handle::after {
   display: none !important;
 }
 
-/* 번역 창 접기/펴기 인라인 버튼 */
+/* 번역 창 접기/펴기 임머시브(Immersive) 버튼 */
 .trans-collapse-btn {
   position: absolute;
-  top: 16px;
-  left: -8px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  top: 40px; /* 상단 부근 고정 */
+  right: -12px; /* 테두리 바깥에 결합 */
+  width: 12px;
+  height: 48px;
+  border-radius: 0 4px 4px 0;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
+  border-left: none; /* 왼쪽 테두리를 지워 일체감 구현 */
   color: var(--text-secondary);
-  font-size: 10px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 110;
+  padding: 0;
   outline: none;
+}
+.trans-collapse-btn svg {
+  transition: transform 0.2s;
 }
 .trans-collapse-btn:hover {
   background: var(--bg-hover);
   color: var(--accent-mid);
-  border-color: var(--accent-mid);
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25);
+  width: 16px;
+  right: -16px;
+  border-radius: 0 6px 6px 0;
+  box-shadow: 4px 0 12px rgba(139, 92, 246, 0.2);
 }
 .trans-collapse-btn:active {
-  transform: scale(0.95);
-}
-
-.collapse-translation .trans-collapse-btn {
-  left: 0px !important;
+  width: 12px;
+  right: -12px;
 }
 
 

@@ -407,20 +407,21 @@ function createTransBlock(pageNum) {
   block.id = `trans-block-${pageNum}`
   block.dataset.page = pageNum
   
-  const arrow = isTransPaneCollapsed ? '▶' : '◀'
+  const leftChevron = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`
+  const rightChevron = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`
+  const chevron = isTransPaneCollapsed ? rightChevron : leftChevron
   const btnTitle = isTransPaneCollapsed ? '번역 창 펴기' : '번역 창 접기'
   
   block.innerHTML = `
-    <div class="trans-resizer-handle">
-      <button class="trans-collapse-btn" title="${btnTitle}">${arrow}</button>
-    </div>
     <div class="trans-page-label">
       <span>📄 ${pageNum}페이지</span>
       <span class="trans-page-status" id="trans-status-${pageNum}">대기 중</span>
     </div>
     <div class="trans-page-content" id="trans-content-${pageNum}">
       <div class="trans-page-placeholder">스크롤하면 자동으로 번역됩니다</div>
-    </div>`
+    </div>
+    <div class="trans-resizer-handle"></div>
+    <button class="trans-collapse-btn" title="${btnTitle}">${chevron}</button>`
   return block
 }
 
@@ -4304,8 +4305,8 @@ viewerScrollContainer.addEventListener('mousedown', (e) => {
 
 document.addEventListener('mousemove', (e) => {
   if (!isResizingTrans) return
-  // 우측에 배치되어 있으므로 왼쪽으로 당기면(dx가 음수) 커지고, 오른쪽으로 밀면 작아짐
-  const dx = resizerStartX - e.clientX
+  // 우측에 배치되어 있으므로 오른쪽으로 당기면(dx가 양수) 커지고, 왼쪽으로 밀면 작아짐
+  const dx = e.clientX - resizerStartX
   updateTransPaneWidth(resizerStartWidth + dx)
 })
 
@@ -4328,9 +4329,12 @@ viewerScrollContainer.addEventListener('click', (e) => {
   document.body.classList.toggle('collapse-translation', isTransPaneCollapsed)
   localStorage.setItem('trans-pane-collapsed', isTransPaneCollapsed)
   
+  const leftChevron = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`
+  const rightChevron = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`
+  
   // 모든 페이지 쌍의 인라인 화살표 상태 동기화
   document.querySelectorAll('.trans-collapse-btn').forEach(b => {
-    b.textContent = isTransPaneCollapsed ? '▶' : '◀'
+    b.innerHTML = isTransPaneCollapsed ? rightChevron : leftChevron
     b.title = isTransPaneCollapsed ? '번역 창 펴기' : '번역 창 접기'
   })
   
