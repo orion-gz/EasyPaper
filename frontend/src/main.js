@@ -2563,24 +2563,53 @@ function createAnnHoverTooltip() {
     e.preventDefault(); e.stopPropagation()
     if (!activeHoveredSpan) return
 
-    const startOffset = parseInt(activeHoveredSpan.dataset.startOffset)
-    const endOffset = parseInt(activeHoveredSpan.dataset.endOffset)
+    const sentenceEl = activeHoveredSpan.closest('.pdf-sentence')
+    if (!sentenceEl) return
+    const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
     const pageWrapper = activeHoveredSpan.closest('.pdf-page-wrapper')
     if (!pageWrapper) return
-    const pageNum = parseInt(pageWrapper.dataset.page)
+    const pageNum = parseInt(pageWrapper.dataset.page, 10)
     const textLayerDiv = pageWrapper.querySelector('.textLayer')
 
-    const annotations = loadAnnotations(state.sessionId)
-    if (annotations[`page_${pageNum}`]) {
-      const originalCount = annotations[`page_${pageNum}`].length
-      annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
-        return !(ann.startOffset === startOffset && ann.endOffset === endOffset)
-      })
+    // 문장에 속하는 모든 PDF 엘리먼트 가져오기
+    const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
 
-      if (annotations[`page_${pageNum}`].length !== originalCount) {
-        saveAnnotations(state.sessionId, annotations)
-        showToast('어노테이션이 삭제되었습니다 ✓', 'success')
-        reRenderPageAnnotations(textLayerDiv, pageNum)
+    if (pdfElements && pdfElements.length > 0) {
+      const firstEl = pdfElements[0]
+      const lastEl = pdfElements[pdfElements.length - 1]
+
+      const firstWalker = document.createTreeWalker(firstEl, NodeFilter.SHOW_TEXT)
+      const firstNodes = []
+      while (firstWalker.nextNode()) firstNodes.push(firstWalker.currentNode)
+
+      const lastWalker = document.createTreeWalker(lastEl, NodeFilter.SHOW_TEXT)
+      const lastNodes = []
+      while (lastWalker.nextNode()) lastNodes.push(lastWalker.currentNode)
+
+      if (firstNodes.length > 0 && lastNodes.length > 0) {
+        const r = document.createRange()
+        r.setStart(firstNodes[0], 0)
+        r.setEnd(lastNodes[lastNodes.length - 1], lastNodes[lastNodes.length - 1].length)
+
+        const sentenceOffsets = getPageTextOffset(r, textLayerDiv)
+        if (sentenceOffsets.startOffset !== null && sentenceOffsets.endOffset !== null) {
+          const annotations = loadAnnotations(state.sessionId)
+          if (annotations[`page_${pageNum}`]) {
+            const originalCount = annotations[`page_${pageNum}`].length
+            annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+              // 문장 오프셋 내에 시작점 또는 끝점이 겹치는 하이라이트/밑줄들을 모두 삭제 대상으로 식별
+              const isOverlapping = (ann.startOffset >= sentenceOffsets.startOffset && ann.startOffset <= sentenceOffsets.endOffset) ||
+                                    (ann.endOffset >= sentenceOffsets.startOffset && ann.endOffset <= sentenceOffsets.endOffset);
+              return !isOverlapping;
+            })
+
+            if (annotations[`page_${pageNum}`].length !== originalCount) {
+              saveAnnotations(state.sessionId, annotations)
+              showToast('문장 어노테이션이 일괄 삭제되었습니다 ✓', 'success')
+              reRenderPageAnnotations(textLayerDiv, pageNum)
+            }
+          }
+        }
       }
     }
     hideAnnHoverTooltip()
@@ -4370,15 +4399,21 @@ if (viewerScrollContainer) {
             state.hoverSelectedPdfElements = pdfElements;
             state.hoverSelectedPageNum = pageNum;
 
-            const walker = document.createTreeWalker(pdfTarget, NodeFilter.SHOW_TEXT);
-            const nodes = [];
-            while (walker.nextNode()) {
-              nodes.push(walker.currentNode);
-            }
-            if (nodes.length > 0) {
+            const firstEl = pdfElements[0];
+            const lastEl = pdfElements[pdfElements.length - 1];
+
+            const firstWalker = document.createTreeWalker(firstEl, NodeFilter.SHOW_TEXT);
+            const firstNodes = [];
+            while (firstWalker.nextNode()) firstNodes.push(firstWalker.currentNode);
+
+            const lastWalker = document.createTreeWalker(lastEl, NodeFilter.SHOW_TEXT);
+            const lastNodes = [];
+            while (lastWalker.nextNode()) lastNodes.push(lastWalker.currentNode);
+
+            if (firstNodes.length > 0 && lastNodes.length > 0) {
               const range = document.createRange();
-              range.setStart(nodes[0], 0);
-              range.setEnd(nodes[nodes.length - 1], nodes[nodes.length - 1].length);
+              range.setStart(firstNodes[0], 0);
+              range.setEnd(lastNodes[lastNodes.length - 1], lastNodes[lastNodes.length - 1].length);
 
               curSel.removeAllRanges();
               curSel.addRange(range);
