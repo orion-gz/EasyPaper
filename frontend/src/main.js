@@ -2635,6 +2635,37 @@ function hideAnnHoverTooltipWithDelay() {
 }
 
 function handleAnnotate(type, color) {
+  // 1. 호버 지연 대기에 의한 문장 전체 선택 모드 대응
+  if (state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
+    const pageNum = state.hoverSelectedPageNum;
+    const textLayerDiv = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"] .textLayer`);
+    if (textLayerDiv) {
+      state.hoverSelectedPdfElements.forEach(el => {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) {
+          nodes.push(walker.currentNode);
+        }
+        if (nodes.length > 0) {
+          const r = document.createRange();
+          r.setStart(nodes[0], 0);
+          r.setEnd(nodes[nodes.length - 1], nodes[nodes.length - 1].length);
+          
+          if (type === 'clear') {
+            clearAnnotationsInRange(r, textLayerDiv, pageNum);
+          } else {
+            applyAnnotationToRange(r, type, textLayerDiv, pageNum, color);
+          }
+        }
+      });
+      window.getSelection().removeAllRanges();
+      hideSelectionMenu();
+      state.hoverSelectedPdfElements = null;
+      return;
+    }
+  }
+
+  // 2. 일반 마우스 드래그 선택 대응
   const selection = window.getSelection()
   if (!selection.rangeCount) return
   const range = selection.getRangeAt(0)
@@ -2737,6 +2768,7 @@ document.addEventListener('mouseup', (e) => {
       }
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed || !selection.rangeCount) {
+        state.hoverSelectedPdfElements = null
         hideSelectionMenu()
         return
       }
@@ -4325,21 +4357,35 @@ if (viewerScrollContainer) {
           const curSel = window.getSelection();
           if (curSel && !curSel.isCollapsed) return;
 
-          const walker = document.createTreeWalker(pdfTarget, NodeFilter.SHOW_TEXT);
-          const nodes = [];
-          while (walker.nextNode()) {
-            nodes.push(walker.currentNode);
-          }
-          if (nodes.length > 0) {
-            const range = document.createRange();
-            range.setStart(nodes[0], 0);
-            range.setEnd(nodes[nodes.length - 1], nodes[nodes.length - 1].length);
+          const sentenceIdx = parseInt(pdfTarget.dataset.sentenceIdx, 10);
+          if (isNaN(sentenceIdx)) return;
 
-            curSel.removeAllRanges();
-            curSel.addRange(range);
+          const pageWrapper = pdfTarget.closest('.pdf-page-wrapper');
+          if (!pageWrapper) return;
+          const pageNum = parseInt(pageWrapper.dataset.page, 10);
 
-            const rect = pdfTarget.getBoundingClientRect();
-            showSelectionMenu(rect, true);
+          const { pdfIdx, transIdx, pdfElements } = getMappedElementsAndIndices(pdfTarget, pageNum, sentenceIdx);
+
+          if (pdfElements && pdfElements.length > 0) {
+            state.hoverSelectedPdfElements = pdfElements;
+            state.hoverSelectedPageNum = pageNum;
+
+            const walker = document.createTreeWalker(pdfTarget, NodeFilter.SHOW_TEXT);
+            const nodes = [];
+            while (walker.nextNode()) {
+              nodes.push(walker.currentNode);
+            }
+            if (nodes.length > 0) {
+              const range = document.createRange();
+              range.setStart(nodes[0], 0);
+              range.setEnd(nodes[nodes.length - 1], nodes[nodes.length - 1].length);
+
+              curSel.removeAllRanges();
+              curSel.addRange(range);
+
+              const rect = pdfTarget.getBoundingClientRect();
+              showSelectionMenu(rect, true);
+            }
           }
         }, 700);
       }
