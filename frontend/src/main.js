@@ -4501,6 +4501,7 @@ function showOutlineSidebar() {
 // 목차 이벤트 바인딩
 if (outlineToggleBtn) {
   outlineToggleBtn.addEventListener('click', () => {
+    alert("목차 버튼 클릭됨! 사이드바 클래스: " + outlineSidebar.className)
     console.log("[Outline] Toggle button clicked. Sidebar:", outlineSidebar, "ToggleBtn:", outlineToggleBtn)
     if (!outlineSidebar) {
       showToast('목차 사이드바를 찾을 수 없습니다.', 'error')
