@@ -2366,6 +2366,260 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations) {
   })
 }
 
+// ── Floating Markdown Memo 관리 ─────────────────────────
+function loadMemos(sessionId) {
+  if (!sessionId) return {}
+  const key = `easypaper_memos_${sessionId}`
+  try {
+    return JSON.parse(localStorage.getItem(key)) || {}
+  } catch (e) {
+    return {}
+  }
+}
+
+function saveMemos(sessionId, memos) {
+  if (!sessionId) return
+  const key = `easypaper_memos_${sessionId}`
+  localStorage.setItem(key, JSON.stringify(memos))
+}
+
+function updateMemoConnectorLine(pageWrapper, memo, sentenceEl) {
+  let svg = pageWrapper.querySelector('.memo-connector-svg')
+  if (!svg) {
+    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('class', 'memo-connector-svg')
+    pageWrapper.appendChild(svg)
+  }
+
+  let path = svg.getElementById(`connector_${memo.id}`)
+  if (!path) {
+    path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    path.setAttribute('id', `connector_${memo.id}`)
+    path.setAttribute('stroke', 'var(--accent-mid)')
+    path.setAttribute('stroke-width', '1.5')
+    path.setAttribute('stroke-dasharray', '4,4')
+    path.setAttribute('fill', 'none')
+    path.setAttribute('opacity', '0.6')
+    svg.appendChild(path)
+  }
+
+  if (!sentenceEl) {
+    path.setAttribute('d', '')
+    return
+  }
+
+  const anchorX = sentenceEl.offsetLeft + sentenceEl.offsetWidth / 2
+  const anchorY = sentenceEl.offsetTop + sentenceEl.offsetHeight / 2
+
+  const memoLeft = (memo.x / 100) * pageWrapper.offsetWidth
+  const memoTop = (memo.y / 100) * pageWrapper.offsetHeight
+  const memoWidth = 260
+  const memoEl = pageWrapper.querySelector(`.floating-memo[data-id="${memo.id}"]`)
+  const memoHeight = memoEl ? memoEl.offsetHeight : 160
+
+  const memoCenterX = memoLeft + memoWidth / 2
+  const memoCenterY = memoTop + memoHeight / 2
+
+  let targetX = memoCenterX
+  let targetY = memoCenterY
+
+  if (anchorX < memoLeft) {
+    targetX = memoLeft
+  } else if (anchorX > memoLeft + memoWidth) {
+    targetX = memoLeft + memoWidth
+  }
+
+  if (anchorY < memoTop) {
+    targetY = memoTop
+  } else if (anchorY > memoTop + memoHeight) {
+    targetY = memoTop + memoHeight
+  }
+
+  const cpX1 = anchorX + (targetX - anchorX) * 0.5
+  const cpY1 = anchorY
+  const cpX2 = anchorX + (targetX - anchorX) * 0.5
+  const cpY2 = targetY
+  path.setAttribute('d', `M ${anchorX} ${anchorY} C ${cpX1} ${cpY1}, ${cpX2} ${cpY2}, ${targetX} ${targetY}`)
+}
+
+function renderPageMemos(pageNum) {
+  const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+  if (!pageWrapper) return
+
+  pageWrapper.querySelectorAll('.floating-memo').forEach(el => el.remove())
+  const svg = pageWrapper.querySelector('.memo-connector-svg')
+  if (svg) svg.innerHTML = ''
+
+  if (!state.sessionId) return
+  const allMemos = loadMemos(state.sessionId)
+  const pageMemos = allMemos[`page_${pageNum}`] || []
+
+  pageMemos.forEach(memo => {
+    const memoEl = document.createElement('div')
+    memoEl.className = 'floating-memo'
+    memoEl.setAttribute('data-id', memo.id)
+    memoEl.style.left = `${memo.x}%`
+    memoEl.style.top = `${memo.y}%`
+
+    const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${memo.sentenceIdx}"]`)
+    let isEditing = !memo.content.trim()
+
+    function updateCardContent() {
+      const body = memoEl.querySelector('.floating-memo-body')
+      const actions = memoEl.querySelector('.floating-memo-actions')
+
+      if (isEditing) {
+        body.innerHTML = `<textarea class="floating-memo-textarea" placeholder="메모를 입력하세요 (Markdown 지원)...">${memo.content}</textarea>`
+        actions.innerHTML = `
+          <button class="floating-memo-action-btn save-btn" title="저장">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </button>
+          <button class="floating-memo-action-btn delete delete-btn" title="삭제">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        `
+
+        const textarea = body.querySelector('.floating-memo-textarea')
+        textarea.focus()
+        
+        actions.querySelector('.save-btn').addEventListener('click', (e) => {
+          e.stopPropagation()
+          memo.content = textarea.value
+          isEditing = false
+          
+          const allMemosObj = loadMemos(state.sessionId)
+          allMemosObj[`page_${pageNum}`] = pageMemos
+          saveMemos(state.sessionId, allMemosObj)
+          
+          updateCardContent()
+          setTimeout(() => {
+            updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+          }, 30)
+        })
+      } else {
+        const renderedHtml = window.marked ? window.marked.parse(memo.content) : memo.content
+        body.innerHTML = `<div class="floating-memo-render">${renderedHtml}</div>`
+        actions.innerHTML = `
+          <button class="floating-memo-action-btn edit-btn" title="편집">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/><path d="m15 5 3 3"/></svg>
+          </button>
+          <button class="floating-memo-action-btn delete delete-btn" title="삭제">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        `
+
+        actions.querySelector('.edit-btn').addEventListener('click', (e) => {
+          e.stopPropagation()
+          isEditing = true
+          updateCardContent()
+        })
+      }
+
+      actions.querySelector('.delete-btn').addEventListener('click', (e) => {
+        e.stopPropagation()
+        if (confirm('이 메모를 삭제하시겠습니까?')) {
+          const allMemosObj = loadMemos(state.sessionId)
+          allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
+          saveMemos(state.sessionId, allMemosObj)
+          
+          memoEl.remove()
+          const pNode = pageWrapper.querySelector(`.memo-connector-svg #connector_${memo.id}`)
+          if (pNode) pNode.remove()
+        }
+      })
+    }
+
+    memoEl.innerHTML = `
+      <div class="floating-memo-header">
+        <div class="floating-memo-title">
+          <span>📝 Memo</span>
+        </div>
+        <div class="floating-memo-actions"></div>
+      </div>
+      <div class="floating-memo-body"></div>
+    `
+
+    updateCardContent()
+    pageWrapper.appendChild(memoEl)
+
+    const header = memoEl.querySelector('.floating-memo-header')
+    header.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation()
+      const startMouseX = e.clientX
+      const startMouseY = e.clientY
+      const startX = memo.x
+      const startY = memo.y
+
+      const onMouseMove = (moveEvt) => {
+        const dx = moveEvt.clientX - startMouseX
+        const dy = moveEvt.clientY - startMouseY
+
+        const dxPct = (dx / pageWrapper.offsetWidth) * 100
+        const dyPct = (dy / pageWrapper.offsetHeight) * 100
+
+        const newX = Math.min(Math.max(1, startX + dxPct), 90)
+        const newY = Math.min(Math.max(1, startY + dyPct), 95)
+
+        memo.x = newX
+        memo.y = newY
+
+        memoEl.style.left = `${newX}%`
+        memoEl.style.top = `${newY}%`
+
+        updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+      }
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+
+        const allMemosObj = loadMemos(state.sessionId)
+        allMemosObj[`page_${pageNum}`] = pageMemos
+        saveMemos(state.sessionId, allMemosObj)
+      }
+
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    })
+
+    setTimeout(() => {
+      updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+    }, 50)
+  })
+}
+
+function createFloatingMemoForSentence(pageNum, sentenceIdx) {
+  if (!state.sessionId) return
+
+  const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+  if (!pageWrapper) return
+
+  const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${sentenceIdx}"]`)
+  if (!sentenceEl) return
+
+  const leftPct = Math.min(Math.max(10, ((sentenceEl.offsetLeft + sentenceEl.offsetWidth / 2) / pageWrapper.offsetWidth) * 100), 70)
+  const topPct = Math.min(Math.max(10, ((sentenceEl.offsetTop + sentenceEl.offsetHeight) / pageWrapper.offsetHeight) * 100 + 4), 85)
+
+  const allMemosObj = loadMemos(state.sessionId)
+  if (!allMemosObj[`page_${pageNum}`]) {
+    allMemosObj[`page_${pageNum}`] = []
+  }
+
+  const newMemo = {
+    id: `memo_${Date.now()}`,
+    pageNum: pageNum,
+    sentenceIdx: sentenceIdx,
+    content: '',
+    x: leftPct,
+    y: topPct
+  }
+
+  allMemosObj[`page_${pageNum}`].push(newMemo)
+  saveMemos(state.sessionId, allMemosObj)
+
+  renderPageMemos(pageNum)
+}
+
 // ── 팝업 툴팁 선택 메뉴 관리 ──
 let selectionMenu = null
 let sentenceHoverTimer = null
@@ -2407,6 +2661,11 @@ function createSelectionMenu() {
       <!-- 지우기 버튼 -->
       <button class="menu-btn clear-btn" title="지우기">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+      </button>
+      
+      <!-- 메모 추가 버튼 -->
+      <button class="menu-btn memo-btn" title="메모 추가">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
       </button>
       
       <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
@@ -2499,6 +2758,25 @@ function createSelectionMenu() {
     handleAnnotate('clear')
   })
 
+  menu.querySelector('.memo-btn').addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation()
+    const selection = window.getSelection()
+    if (!selection.rangeCount) return
+    const range = selection.getRangeAt(0)
+    let container = range.commonAncestorContainer
+    if (container && container.nodeType === 3) {
+      container = container.parentElement || container.parentNode
+    }
+    const sentenceEl = container.closest('.pdf-sentence')
+    const pageWrapper = container.closest('.pdf-page-wrapper')
+    if (sentenceEl && pageWrapper) {
+      const pageNum = parseInt(pageWrapper.dataset.page, 10)
+      const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
+      createFloatingMemoForSentence(pageNum, sentenceIdx)
+    }
+    hideSelectionMenu()
+  })
+
   menu.querySelector('.ask-ai-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
     if (state.pendingFigureQuote) {
@@ -2533,6 +2811,10 @@ function createAnnHoverTooltip() {
   tooltip.innerHTML = `
     <button class="menu-btn delete-ann-btn" title="삭제">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+    </button>
+    <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
+    <button class="menu-btn memo-ann-btn" title="메모 추가">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
     </button>
     <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
     <button class="menu-btn ask-ai-btn ask-ai-ann-btn" title="AI 어시스턴트에게 질문">
@@ -2611,6 +2893,19 @@ function createAnnHoverTooltip() {
           }
         }
       }
+    }
+    hideAnnHoverTooltip()
+  })
+
+  tooltip.querySelector('.memo-ann-btn').addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation()
+    if (!activeHoveredSpan) return
+    const sentenceEl = activeHoveredSpan.closest('.pdf-sentence')
+    const pageWrapper = activeHoveredSpan.closest('.pdf-page-wrapper')
+    if (sentenceEl && pageWrapper) {
+      const pageNum = parseInt(pageWrapper.dataset.page, 10)
+      const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
+      createFloatingMemoForSentence(pageNum, sentenceIdx)
     }
     hideAnnHoverTooltip()
   })
@@ -2754,6 +3049,9 @@ function reRenderPageAnnotations(textLayerDiv, pageNum) {
 
   const annotations = loadAnnotations(state.sessionId)
   applyAnnotationsFromOffsets(textLayerDiv, annotations[`page_${pageNum}`] || [])
+
+  // Restore floating memos for the page
+  renderPageMemos(pageNum)
 }
 
 function showSelectionMenu(rect, showAnnotateGroup) {
@@ -2868,6 +3166,9 @@ window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   }
 
   renderImageOverlayLayer(textLayerDiv, pageNum)
+
+  // Render floating memos
+  renderPageMemos(pageNum)
 }
 
 function cropFigureFromCanvas(canvas, imgPercent) {
@@ -4743,11 +5044,28 @@ viewerScrollContainer.addEventListener('mousedown', (e) => {
   document.body.classList.add('resizing-trans')
 })
 
+function triggerMemosRedraw() {
+  document.querySelectorAll('.pdf-page-wrapper').forEach(wrapper => {
+    const pageNum = parseInt(wrapper.dataset.page, 10)
+    if (!isNaN(pageNum)) {
+      const allMemos = loadMemos(state.sessionId)
+      const pageMemos = allMemos[`page_${pageNum}`] || []
+      pageMemos.forEach(memo => {
+        const sentenceEl = wrapper.querySelector(`.pdf-sentence[data-sentence-idx="${memo.sentenceIdx}"]`)
+        if (sentenceEl) {
+          updateMemoConnectorLine(wrapper, memo, sentenceEl)
+        }
+      })
+    }
+  })
+}
+
 document.addEventListener('mousemove', (e) => {
   if (!isResizingTrans) return
   // 우측에 배치되어 있으므로 오른쪽으로 당기면(dx가 양수) 커지고, 왼쪽으로 밀면 작아짐
   const dx = e.clientX - resizerStartX
   updateTransPaneWidth(resizerStartWidth + dx)
+  triggerMemosRedraw()
 })
 
 document.addEventListener('mouseup', () => {
@@ -4758,6 +5076,8 @@ document.addEventListener('mouseup', () => {
     document.body.classList.remove('resizing-trans')
   }
 })
+
+window.addEventListener('resize', triggerMemosRedraw)
 
 // 인라인 접기/펴기 버튼 클릭 이벤트 바인딩 (이벤트 위임)
 viewerScrollContainer.addEventListener('click', (e) => {
