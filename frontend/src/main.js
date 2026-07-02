@@ -2548,16 +2548,26 @@ function updateMemoConnectorLine(pageWrapper, memo, sentenceEl) {
     pageWrapper.appendChild(svg)
   }
 
+  const isLight = document.body.classList.contains('light-theme')
+  let strokeColor = 'var(--accent-mid)'
+  const colorMode = memo.color || 'default'
+  if (colorMode === 'yellow') strokeColor = isLight ? '#ca8a04' : '#eab308'
+  else if (colorMode === 'green') strokeColor = isLight ? '#059669' : '#10b981'
+  else if (colorMode === 'blue') strokeColor = isLight ? '#2563eb' : '#3b82f6'
+  else if (colorMode === 'red') strokeColor = isLight ? '#e11d48' : '#f43f5e'
+
   let path = svg.getElementById(`connector_${memo.id}`)
   if (!path) {
     path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     path.setAttribute('id', `connector_${memo.id}`)
-    path.setAttribute('stroke', 'var(--accent-mid)')
+    path.setAttribute('stroke', strokeColor)
     path.setAttribute('stroke-width', '1.5')
     path.setAttribute('stroke-dasharray', '4,4')
     path.setAttribute('fill', 'none')
     path.setAttribute('opacity', '0.6')
     svg.appendChild(path)
+  } else {
+    path.setAttribute('stroke', strokeColor)
   }
 
   if (!sentenceEl) {
@@ -2630,7 +2640,7 @@ function renderPageMemos(pageNum) {
 
   pageMemos.forEach(memo => {
     const memoEl = document.createElement('div')
-    memoEl.className = 'floating-memo'
+    memoEl.className = `floating-memo color-${memo.color || 'default'}`
     memoEl.setAttribute('data-id', memo.id)
     memoEl.style.left = `${memo.x}%`
     memoEl.style.top = `${memo.y}%`
@@ -2756,6 +2766,13 @@ function renderPageMemos(pageNum) {
         <div class="floating-memo-title" title="${sentenceText}">
           <span>📝 ${shortTitle}</span>
         </div>
+        <div class="floating-memo-color-picker">
+          <span class="color-dot default ${!memo.color || memo.color === 'default' ? 'selected' : ''}" data-color="default" title="기본"></span>
+          <span class="color-dot yellow ${memo.color === 'yellow' ? 'selected' : ''}" data-color="yellow" title="노랑"></span>
+          <span class="color-dot green ${memo.color === 'green' ? 'selected' : ''}" data-color="green" title="초록"></span>
+          <span class="color-dot blue ${memo.color === 'blue' ? 'selected' : ''}" data-color="blue" title="파랑"></span>
+          <span class="color-dot red ${memo.color === 'red' ? 'selected' : ''}" data-color="red" title="빨강"></span>
+        </div>
         <div class="floating-memo-actions"></div>
       </div>
       <div class="floating-memo-body"></div>
@@ -2770,6 +2787,26 @@ function renderPageMemos(pageNum) {
       e.stopPropagation()
       isEditing = true
       updateCardContent()
+    })
+
+    const colorDots = memoEl.querySelectorAll('.color-dot')
+    colorDots.forEach(dot => {
+      dot.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const selectedColor = dot.getAttribute('data-color')
+        
+        colorDots.forEach(d => d.classList.remove('selected'))
+        dot.classList.add('selected')
+        
+        memoEl.className = `floating-memo color-${selectedColor}`
+        
+        memo.color = selectedColor
+        const allMemosObj = loadMemos(state.sessionId)
+        allMemosObj[`page_${pageNum}`] = pageMemos
+        saveMemos(state.sessionId, allMemosObj)
+        
+        updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+      })
     })
 
     pageWrapper.appendChild(memoEl)
