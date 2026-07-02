@@ -3001,4 +3001,14 @@ body.light-theme .color-dot.selected {
   box-shadow: 0 0 0 1.5px var(--accent-mid);
 }
 
+/* 클릭으로 매칭/이동 시 고정 하이라이트 유지 스타일 */
+.pdf-sentence.active-mapped-sentence, .trans-sentence.active-mapped-sentence {
+  background-color: rgba(139, 92, 246, 0.28) !important;
+  border-radius: var(--radius-xs);
+  transition: background-color 0.15s ease;
+}
+body.light-theme .pdf-sentence.active-mapped-sentence, body.light-theme .trans-sentence.active-mapped-sentence {
+  background-color: rgba(139, 92, 246, 0.18) !important;
+}
+
 

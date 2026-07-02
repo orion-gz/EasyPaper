@@ -2528,14 +2528,14 @@ function createAnnHoverTooltip() {
   const tooltip = document.createElement('div')
   tooltip.id = 'ann-hover-tooltip'
   tooltip.className = 'selection-menu hidden'
-  tooltip.style.cssText = 'position: absolute; z-index: 10005; padding: 2px 4px; gap: 4px; height: 32px; display: flex; align-items: center; box-shadow: var(--shadow-md);'
+  tooltip.style.cssText = 'position: absolute; z-index: 10005; padding: 2px 4px; gap: 6px; height: 32px; display: flex; align-items: center; box-shadow: var(--shadow-md);'
   tooltip.innerHTML = `
-    <button class="menu-btn delete-ann-btn" title="삭제" style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+    <button class="menu-btn delete-ann-btn" title="삭제" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
     </button>
-    <div style="width: 1px; background: var(--border-strong); height: 12px; margin: 0 2px;"></div>
-    <button class="menu-btn ask-ai-ann-btn" title="AI에게 질문" style="display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--accent-mid); padding: 0 4px; background: transparent; border: none; cursor: pointer; height: 26px;">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+    <div style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
+    <button class="menu-btn ask-ai-ann-btn" title="AI 어시스턴트에게 질문" style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--accent-mid); padding: 0 8px; background: transparent; border: none; cursor: pointer; height: 28px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
       <span>Ask AI</span>
     </button>
   `
@@ -4362,14 +4362,20 @@ if (viewerScrollContainer) {
     }
   });
 
-  // 클릭 시 해당 매칭 문장으로 스크롤 이동 (양방향 지원)
+  // 클릭 시 해당 매칭 문장으로 스크롤 이동 및 양방향 고정 하이라이트 매칭 적용
   viewerScrollContainer.addEventListener('click', (e) => {
     try {
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed) return;
 
       const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
-      if (!target) return;
+      if (!target) {
+        // 문장이 아닌 곳 클릭 시 기존 매칭 하이라이트 제거
+        viewerScrollContainer.querySelectorAll('.active-mapped-sentence').forEach(el => {
+          el.classList.remove('active-mapped-sentence');
+        });
+        return;
+      }
 
       const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
       if (!pageWrapper) return;
@@ -4381,6 +4387,23 @@ if (viewerScrollContainer) {
 
       const { pdfIdx, transIdx, pdfElements } = getMappedElementsAndIndices(target, pageNum, sentenceIdx);
       if (pdfIdx === -1 || transIdx === -1) return;
+
+      // 1. 기존 매칭 하이라이트 제거
+      viewerScrollContainer.querySelectorAll('.active-mapped-sentence').forEach(el => {
+        el.classList.remove('active-mapped-sentence');
+      });
+
+      // 2. 신규 고정 매칭 하이라이트 지정
+      pdfElements.forEach(el => {
+        el.classList.add('active-mapped-sentence');
+      });
+      if (transIdx !== -1) {
+        viewerScrollContainer.querySelectorAll(
+          `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${transIdx}"]`
+        ).forEach(el => {
+          el.classList.add('active-mapped-sentence');
+        });
+      }
 
       // 번역본 클릭 -> PDF로 스크롤
       if (target.classList.contains('trans-sentence')) {
