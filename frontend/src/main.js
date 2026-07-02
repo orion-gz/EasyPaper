@@ -43,6 +43,8 @@ const state = {
   quotedImage: null,           // AI 질문 시 인용 이미지 보관용 (Base64)
   quotedImagePage: null,       // AI 질문 시 인용 이미지의 페이지 번호
   pendingFigureQuote: null,    // 클릭 후 AI 질문 전 대기중인 인용 이미지 정보
+  activeHighlightColor: '#eab308', // 기본 하이라이트 노란색
+  activeUnderlineColor: '#ef4444',  // 기본 밑줄 빨간색
   isCropMode: false,           // 영역 캡처 모드 여부
   pdfPageSentences: {},        // pageNum → sentenceRanges 보관용
   pdfPageElements: {},         // pageNum → elRanges 보관용
@@ -205,7 +207,8 @@ function resetState() {
   Object.assign(state, {
     sessionId: null, filename: null, title: null, totalPages: 0, currentPage: 1,
     zoom: 1.5, translationCache: {}, translationSentences: {}, translatingPages: new Set(), translatedPages: new Set(), pollingTimer: null,
-    chatHistory: [], chatActiveStream: null, quotedText: null, quotedImage: null, quotedImagePage: null, pendingFigureQuote: null, isCropMode: false, documentImages: []
+    chatHistory: [], chatActiveStream: null, quotedText: null, quotedImage: null, quotedImagePage: null, pendingFigureQuote: null,
+    activeHighlightColor: '#eab308', activeUnderlineColor: '#ef4444', isCropMode: false, documentImages: []
   })
   if (typeof toggleCropMode === 'function') toggleCropMode(false)
   viewerScrollContainer.innerHTML = ''
@@ -2218,15 +2221,29 @@ function getPageTextOffset(range, textLayerDiv) {
   return { startOffset, endOffset }
 }
 
+function hexToRgba(hex, alpha) {
+  if (!hex) return '';
+  let cleanHex = hex.replace('#', '');
+  if (cleanHex.length === 3) {
+    cleanHex = cleanHex.split('').map(c => c + c).join('');
+  }
+  const num = parseInt(cleanHex, 16);
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // Range 객체를 받아와 화면에 어노테이션(하이라이트/밑줄)을 실제로 렌더링하고 로컬에 저장
-function applyAnnotationToRange(range, type, textLayerDiv, pageNum) {
+function applyAnnotationToRange(range, type, textLayerDiv, pageNum, color) {
   const offsets = getPageTextOffset(range, textLayerDiv)
   if (offsets.startOffset === null || offsets.endOffset === null) return
   
   const text = range.toString()
+  const chosenColor = color || (type === 'highlight' ? state.activeHighlightColor : state.activeUnderlineColor)
 
   // 1. DOM에 스타일 적용 (텍스트 노드 분할)
-  applyAnnotationToRangeWithoutSave(range, type)
+  applyAnnotationToRangeWithoutSave(range, type, chosenColor)
 
   // 2. LocalStorage에 저장
   const annotations = loadAnnotations(state.sessionId)
@@ -2237,14 +2254,15 @@ function applyAnnotationToRange(range, type, textLayerDiv, pageNum) {
     type,
     text,
     startOffset: offsets.startOffset,
-    endOffset: offsets.endOffset
+    endOffset: offsets.endOffset,
+    color: chosenColor
   })
   saveAnnotations(state.sessionId, annotations)
   showToast(type === 'highlight' ? '하이라이트가 추가되었습니다 ✓' : '밑줄이 추가되었습니다 ✓', 'success')
 }
 
 // 저장 없이 DOM 상에 직접 span을 감싸서 스타일 입히는 헬퍼
-function applyAnnotationToRangeWithoutSave(range, type) {
+function applyAnnotationToRangeWithoutSave(range, type, color) {
   const textNodes = []
   const commonAncestor = range.commonAncestorContainer
   
@@ -2279,7 +2297,15 @@ function applyAnnotationToRangeWithoutSave(range, type) {
     if (startOffset >= endOffset) return
 
     const span = document.createElement('span')
-    span.className = type === 'highlight' ? 'pdf-annotation-highlight' : 'pdf-annotation-underline'
+    if (type === 'highlight') {
+      span.className = 'pdf-annotation-highlight'
+      const baseColor = color || '#eab308'
+      span.style.backgroundColor = hexToRgba(baseColor, 0.4)
+    } else {
+      span.className = 'pdf-annotation-underline'
+      const baseColor = color || '#ef4444'
+      span.style.borderBottomColor = baseColor
+    }
     
     const subRange = document.createRange()
     subRange.setStart(node, startOffset)
@@ -2324,7 +2350,7 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations) {
       try {
         range.setStart(startNode, startNodeOffset)
         range.setEnd(endNode, endNodeOffset)
-        applyAnnotationToRangeWithoutSave(range, ann.type)
+        applyAnnotationToRangeWithoutSave(range, ann.type, ann.color)
       } catch (e) {
         console.warn("Failed to restore annotation:", ann, e)
       }
@@ -2342,13 +2368,36 @@ function createSelectionMenu() {
   menu.id = 'selection-menu'
   menu.className = 'selection-menu hidden'
   menu.innerHTML = `
-    <div class="menu-annotate-group" style="display: flex; gap: 4px; align-items: center;">
+    <div class="menu-annotate-group" style="display: flex; gap: 4px; align-items: center; padding: 2px 6px;">
+      <!-- 하이라이트 아이콘 버튼 -->
       <button class="menu-btn highlight-btn" title="하이라이트">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       </button>
+      <!-- 하이라이트 색상 선택 서클 -->
+      <div class="color-options highlight-colors" style="display: flex; gap: 4px; margin-right: 6px;">
+        <span class="color-dot" data-color="#eab308" style="background: #eab308;" title="노랑"></span>
+        <span class="color-dot" data-color="#22c55e" style="background: #22c55e;" title="초록"></span>
+        <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
+        <span class="color-dot" data-color="#ec4899" style="background: #ec4899;" title="핑크"></span>
+      </div>
+      
+      <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 4px;"></div>
+      
+      <!-- 밑줄 아이콘 버튼 -->
       <button class="menu-btn underline-btn" title="밑줄">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
       </button>
+      <!-- 밑줄 색상 선택 서클 -->
+      <div class="color-options underline-colors" style="display: flex; gap: 4px; margin-right: 6px;">
+        <span class="color-dot" data-color="#ef4444" style="background: #ef4444;" title="빨강"></span>
+        <span class="color-dot" data-color="#f97316" style="background: #f97316;" title="주황"></span>
+        <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
+        <span class="color-dot" data-color="#a855f7" style="background: #a855f7;" title="보라"></span>
+      </div>
+      
+      <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 4px;"></div>
+      
+      <!-- 지우기 버튼 -->
       <button class="menu-btn clear-btn" title="지우기">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
       </button>
@@ -2367,16 +2416,62 @@ function createSelectionMenu() {
     e.stopPropagation();
   });
   
-  menu.querySelector('.highlight-btn').addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation(); handleAnnotate('highlight')
+  const highlightBtn = menu.querySelector('.highlight-btn')
+  const underlineBtn = menu.querySelector('.underline-btn')
+
+  function updateActiveColors() {
+    highlightBtn.querySelector('svg').style.color = state.activeHighlightColor
+    underlineBtn.querySelector('svg').style.color = state.activeUnderlineColor
+    
+    menu.querySelectorAll('.highlight-colors .color-dot').forEach(dot => {
+      if (dot.dataset.color === state.activeHighlightColor) {
+        dot.classList.add('selected')
+      } else {
+        dot.classList.remove('selected')
+      }
+    })
+    menu.querySelectorAll('.underline-colors .color-dot').forEach(dot => {
+      if (dot.dataset.color === state.activeUnderlineColor) {
+        dot.classList.add('selected')
+      } else {
+        dot.classList.remove('selected')
+      }
+    })
+  }
+
+  // 컬러 서클 클릭 핸들러 바인딩
+  menu.querySelectorAll('.highlight-colors .color-dot').forEach(dot => {
+    dot.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      state.activeHighlightColor = dot.dataset.color
+      updateActiveColors()
+      handleAnnotate('highlight', state.activeHighlightColor)
+    })
+  })
+  
+  menu.querySelectorAll('.underline-colors .color-dot').forEach(dot => {
+    dot.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      state.activeUnderlineColor = dot.dataset.color
+      updateActiveColors()
+      handleAnnotate('underline', state.activeUnderlineColor)
+    })
   })
 
-  menu.querySelector('.underline-btn').addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation(); handleAnnotate('underline')
+  // 아이콘 클릭 핸들러 바인딩
+  highlightBtn.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    handleAnnotate('highlight', state.activeHighlightColor)
+  })
+
+  underlineBtn.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    handleAnnotate('underline', state.activeUnderlineColor)
   })
 
   menu.querySelector('.clear-btn').addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation(); handleAnnotate('clear')
+    e.preventDefault(); e.stopPropagation();
+    handleAnnotate('clear')
   })
 
   menu.querySelector('.ask-ai-btn').addEventListener('click', (e) => {
@@ -2394,10 +2489,11 @@ function createSelectionMenu() {
     hideSelectionMenu()
   })
 
+  updateActiveColors()
   return menu
 }
 
-function handleAnnotate(type) {
+function handleAnnotate(type, color) {
   const selection = window.getSelection()
   if (!selection.rangeCount) return
   const range = selection.getRangeAt(0)
@@ -2416,7 +2512,7 @@ function handleAnnotate(type) {
   if (type === 'clear') {
     clearAnnotationsInRange(range, textLayerDiv, pageNum)
   } else {
-    applyAnnotationToRange(range, type, textLayerDiv, pageNum)
+    applyAnnotationToRange(range, type, textLayerDiv, pageNum, color)
   }
 
   hideSelectionMenu()
@@ -4449,7 +4545,8 @@ async function loadPDFOutline() {
       for (let p = 1; p <= state.totalPages; p++) {
         const div = document.createElement('div')
         div.className = 'outline-item depth-0'
-        div.innerHTML = `<span>📄</span> <span>${p} 페이지</span>`
+        const iconSvg = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
+        div.innerHTML = `${iconSvg}<span>${p} 페이지</span>`
         div.addEventListener('click', () => {
           scrollToPage(viewerScrollContainer, p)
         })
@@ -4463,7 +4560,10 @@ async function loadPDFOutline() {
       items.forEach(item => {
         const div = document.createElement('div')
         div.className = `outline-item depth-${depth}`
-        div.innerHTML = `<span>🔖</span> <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(item.title)}</span>`
+        const iconSvg = depth === 0 
+          ? `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
+          : `<svg width="5" height="5" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.4; margin-right:8px; flex-shrink:0; margin-left:4px;"><circle cx="12" cy="12" r="10"/></svg>`
+        div.innerHTML = `${iconSvg}<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(item.title)}</span>`
         if (item.pageNum) {
           div.addEventListener('click', () => {
             scrollToPage(viewerScrollContainer, item.pageNum)
