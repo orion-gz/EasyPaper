@@ -2369,33 +2369,33 @@ function createSelectionMenu() {
   menu.className = 'selection-menu hidden'
   menu.innerHTML = `
     <div class="menu-annotate-group" style="display: flex; gap: 4px; align-items: center; padding: 2px 6px;">
-      <!-- 하이라이트 아이콘 버튼 -->
-      <button class="menu-btn highlight-btn" title="하이라이트">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-      </button>
-      <!-- 하이라이트 색상 선택 서클 -->
-      <div class="color-options highlight-colors" style="display: flex; gap: 4px; margin-right: 6px;">
-        <span class="color-dot" data-color="#eab308" style="background: #eab308;" title="노랑"></span>
-        <span class="color-dot" data-color="#22c55e" style="background: #22c55e;" title="초록"></span>
-        <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
-        <span class="color-dot" data-color="#ec4899" style="background: #ec4899;" title="핑크"></span>
+      <!-- 하이라이트 그룹 -->
+      <div class="annotate-button-wrapper highlight-wrapper" style="position: relative; display: flex;">
+        <button class="menu-btn highlight-btn" title="하이라이트">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+        <!-- 서브 팝오버 툴팁 -->
+        <div class="color-popover highlight-popover hidden">
+          <span class="color-dot" data-color="#eab308" style="background: #eab308;" title="노랑"></span>
+          <span class="color-dot" data-color="#22c55e" style="background: #22c55e;" title="초록"></span>
+          <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
+          <span class="color-dot" data-color="#ec4899" style="background: #ec4899;" title="핑크"></span>
+        </div>
       </div>
       
-      <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 4px;"></div>
-      
-      <!-- 밑줄 아이콘 버튼 -->
-      <button class="menu-btn underline-btn" title="밑줄">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
-      </button>
-      <!-- 밑줄 색상 선택 서클 -->
-      <div class="color-options underline-colors" style="display: flex; gap: 4px; margin-right: 6px;">
-        <span class="color-dot" data-color="#ef4444" style="background: #ef4444;" title="빨강"></span>
-        <span class="color-dot" data-color="#f97316" style="background: #f97316;" title="주황"></span>
-        <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
-        <span class="color-dot" data-color="#a855f7" style="background: #a855f7;" title="보라"></span>
+      <!-- 밑줄 그룹 -->
+      <div class="annotate-button-wrapper underline-wrapper" style="position: relative; display: flex;">
+        <button class="menu-btn underline-btn" title="밑줄">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
+        </button>
+        <!-- 서브 팝오버 툴팁 -->
+        <div class="color-popover underline-popover hidden">
+          <span class="color-dot" data-color="#ef4444" style="background: #ef4444;" title="빨강"></span>
+          <span class="color-dot" data-color="#f97316" style="background: #f97316;" title="주황"></span>
+          <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
+          <span class="color-dot" data-color="#a855f7" style="background: #a855f7;" title="보라"></span>
+        </div>
       </div>
-      
-      <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 4px;"></div>
       
       <!-- 지우기 버튼 -->
       <button class="menu-btn clear-btn" title="지우기">
@@ -2418,19 +2418,21 @@ function createSelectionMenu() {
   
   const highlightBtn = menu.querySelector('.highlight-btn')
   const underlineBtn = menu.querySelector('.underline-btn')
+  const highlightPopover = menu.querySelector('.highlight-popover')
+  const underlinePopover = menu.querySelector('.underline-popover')
 
   function updateActiveColors() {
     highlightBtn.querySelector('svg').style.color = state.activeHighlightColor
     underlineBtn.querySelector('svg').style.color = state.activeUnderlineColor
     
-    menu.querySelectorAll('.highlight-colors .color-dot').forEach(dot => {
+    menu.querySelectorAll('.highlight-popover .color-dot').forEach(dot => {
       if (dot.dataset.color === state.activeHighlightColor) {
         dot.classList.add('selected')
       } else {
         dot.classList.remove('selected')
       }
     })
-    menu.querySelectorAll('.underline-colors .color-dot').forEach(dot => {
+    menu.querySelectorAll('.underline-popover .color-dot').forEach(dot => {
       if (dot.dataset.color === state.activeUnderlineColor) {
         dot.classList.add('selected')
       } else {
@@ -2440,42 +2442,50 @@ function createSelectionMenu() {
   }
 
   // 컬러 서클 클릭 핸들러 바인딩
-  menu.querySelectorAll('.highlight-colors .color-dot').forEach(dot => {
+  menu.querySelectorAll('.highlight-popover .color-dot').forEach(dot => {
     dot.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation();
       state.activeHighlightColor = dot.dataset.color
       updateActiveColors()
+      highlightPopover.classList.add('hidden')
       handleAnnotate('highlight', state.activeHighlightColor)
     })
   })
   
-  menu.querySelectorAll('.underline-colors .color-dot').forEach(dot => {
+  menu.querySelectorAll('.underline-popover .color-dot').forEach(dot => {
     dot.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation();
       state.activeUnderlineColor = dot.dataset.color
       updateActiveColors()
+      underlinePopover.classList.add('hidden')
       handleAnnotate('underline', state.activeUnderlineColor)
     })
   })
 
-  // 아이콘 클릭 핸들러 바인딩
+  // 아이콘 클릭 핸들러 바인딩 (서브 컬러 팝오버 토글)
   highlightBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    handleAnnotate('highlight', state.activeHighlightColor)
+    underlinePopover.classList.add('hidden')
+    highlightPopover.classList.toggle('hidden')
   })
 
   underlineBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    handleAnnotate('underline', state.activeUnderlineColor)
+    highlightPopover.classList.add('hidden')
+    underlinePopover.classList.toggle('hidden')
   })
 
   menu.querySelector('.clear-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
+    highlightPopover.classList.add('hidden')
+    underlinePopover.classList.add('hidden')
     handleAnnotate('clear')
   })
 
   menu.querySelector('.ask-ai-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
+    highlightPopover.classList.add('hidden')
+    underlinePopover.classList.add('hidden')
     if (state.pendingFigureQuote) {
       askAIAssistantImage(state.pendingFigureQuote.base64Img, state.pendingFigureQuote.pageNum)
     } else {
@@ -2581,6 +2591,7 @@ function showSelectionMenu(rect, showAnnotateGroup) {
 function hideSelectionMenu() {
   if (selectionMenu) {
     selectionMenu.classList.add('hidden')
+    selectionMenu.querySelectorAll('.color-popover').forEach(p => p.classList.add('hidden'))
   }
   state.pendingFigureQuote = null
 }
