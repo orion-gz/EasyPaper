@@ -2497,7 +2497,14 @@ function renderPageMemos(pageNum) {
           }, 30)
         })
       } else {
-        const renderedHtml = window.marked ? window.marked.parse(memo.content) : memo.content
+        let renderedHtml = memo.content
+        if (window.marked) {
+          if (typeof window.marked.parse === 'function') {
+            renderedHtml = window.marked.parse(memo.content)
+          } else if (typeof window.marked === 'function') {
+            renderedHtml = window.marked(memo.content)
+          }
+        }
         body.innerHTML = `<div class="floating-memo-render">${renderedHtml}</div>`
         actions.innerHTML = `
           <button class="floating-memo-action-btn edit-btn" title="편집">
@@ -2760,15 +2767,25 @@ function createSelectionMenu() {
 
   menu.querySelector('.memo-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation()
-    const selection = window.getSelection()
-    if (!selection.rangeCount) return
-    const range = selection.getRangeAt(0)
-    let container = range.commonAncestorContainer
-    if (container && container.nodeType === 3) {
-      container = container.parentElement || container.parentNode
+    let sentenceEl = null
+    let pageWrapper = null
+
+    if (state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
+      sentenceEl = state.hoverSelectedPdfElements[0]
+      pageWrapper = sentenceEl.closest('.pdf-page-wrapper')
+    } else {
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0)
+        let startContainer = range.startContainer
+        if (startContainer) {
+          const parent = startContainer.nodeType === 3 ? startContainer.parentElement : startContainer
+          sentenceEl = parent.closest('.pdf-sentence')
+          pageWrapper = parent.closest('.pdf-page-wrapper')
+        }
+      }
     }
-    const sentenceEl = container.closest('.pdf-sentence')
-    const pageWrapper = container.closest('.pdf-page-wrapper')
+
     if (sentenceEl && pageWrapper) {
       const pageNum = parseInt(pageWrapper.dataset.page, 10)
       const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
