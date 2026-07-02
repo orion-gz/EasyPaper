@@ -2519,8 +2519,15 @@ function updateMemoConnectorLine(pageWrapper, memo, sentenceEl) {
   const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
   const startEl = (pdfElements && pdfElements.length > 0) ? pdfElements[0] : sentenceEl
 
-  const anchorX = startEl.offsetLeft
-  const anchorY = startEl.offsetTop + startEl.offsetHeight / 2
+  let anchorX = startEl.offsetLeft
+  let anchorY = startEl.offsetTop + startEl.offsetHeight / 2
+
+  let curr = startEl.offsetParent
+  while (curr && curr !== pageWrapper) {
+    anchorX += curr.offsetLeft || 0
+    anchorY += curr.offsetTop || 0
+    curr = curr.offsetParent
+  }
 
   const memoLeft = (memo.x / 100) * pageWrapper.offsetWidth
   const memoTop = (memo.y / 100) * pageWrapper.offsetHeight
@@ -2733,8 +2740,17 @@ function createFloatingMemoForSentence(pageNum, sentenceIdx) {
 
   const sentenceText = sentenceEl ? sentenceEl.textContent.trim() : ''
 
-  const leftPct = Math.min(Math.max(10, ((sentenceEl.offsetLeft + sentenceEl.offsetWidth / 2) / pageWrapper.offsetWidth) * 100), 70)
-  const topPct = Math.min(Math.max(10, ((sentenceEl.offsetTop + sentenceEl.offsetHeight) / pageWrapper.offsetHeight) * 100 + 4), 85)
+  let sentenceX = sentenceEl.offsetLeft
+  let sentenceY = sentenceEl.offsetTop
+  let curr = sentenceEl.offsetParent
+  while (curr && curr !== pageWrapper) {
+    sentenceX += curr.offsetLeft || 0
+    sentenceY += curr.offsetTop || 0
+    curr = curr.offsetParent
+  }
+
+  const leftPct = Math.min(Math.max(10, ((sentenceX + sentenceEl.offsetWidth / 2) / pageWrapper.offsetWidth) * 100), 70)
+  const topPct = Math.min(Math.max(10, ((sentenceY + sentenceEl.offsetHeight) / pageWrapper.offsetHeight) * 100 + 4), 85)
 
   const allMemosObj = loadMemos(state.sessionId)
   if (!allMemosObj[`page_${pageNum}`]) {
