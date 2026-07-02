@@ -121,12 +121,26 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
 
     if (maxPageNum !== -1) {
       onPageVisible?.(maxPageNum)
+      // 비동기 다음 페이지 프리렌더링 (Canvas 로딩 속도 최적화)
+      setTimeout(() => {
+        triggerRender(maxPageNum + 1)
+      }, 150)
     }
   }, {
     root: container,
     rootMargin: '0px 0px',
     threshold: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], // 정밀한 노출 비율 판정
   })
+
+  function triggerRender(pNum) {
+    if (pNum >= 1 && pNum <= numPages && !rendered.has(pNum)) {
+      const targetWrapper = container.querySelector(`.pdf-page-wrapper[data-page="${pNum}"]`)
+      if (targetWrapper) {
+        rendered.add(pNum)
+        _renderPage(targetWrapper, pNum)
+      }
+    }
+  }
 
   wrappers.forEach(w => {
     pageObserver.observe(w)
@@ -234,3 +248,50 @@ export async function reRenderAll(container, newZoom, callbacks) {
 export function setScale(s) { currentScale = s }
 export function getScale()  { return currentScale }
 export function getTotalPages() { return pdfDoc ? pdfDoc.numPages : 0 }
+
+/** PDF.js 목차(Outline) 비동기 추출 함수 */
+export async function getPDFOutline() {
+  if (!pdfDoc) return null
+  try {
+    const outline = await pdfDoc.getOutline()
+    if (!outline || outline.length === 0) return null
+
+    async function resolveItems(items) {
+      const resolved = []
+      for (const item of items) {
+        let pageNum = null
+        if (item.dest) {
+          try {
+            let destObj = item.dest
+            if (typeof destObj === 'string') {
+              destObj = await pdfDoc.getDestination(destObj)
+            }
+            if (Array.isArray(destObj) && destObj.length > 0) {
+              const ref = destObj[0]
+              if (ref && typeof ref === 'object') {
+                const pageIndex = await pdfDoc.getPageIndex(ref)
+                pageNum = pageIndex + 1
+              } else if (typeof ref === 'number') {
+                pageNum = ref + 1
+              }
+            }
+          } catch (e) {
+            console.warn("Failed to resolve destination for outline item:", item.title, e)
+          }
+        }
+        const subItems = (item.items && item.items.length > 0) ? await resolveItems(item.items) : []
+        resolved.push({
+          title: item.title,
+          pageNum: pageNum,
+          items: subItems
+        })
+      }
+      return resolved
+    }
+
+    return await resolveItems(outline)
+  } catch (err) {
+    console.error("Error loading PDF outline:", err)
+    return null
+  }
+}

@@ -1270,48 +1270,61 @@ body.light-theme .pdf-annotation-underline {
   border-bottom: 2px solid rgba(220, 53, 69, 0.9) !important;
 }
 
-/* ── 텍스트 선택 팝업 메뉴 ── */
+/* ── 텍스트 선택 팝업 메뉴 리파인 ── */
 .selection-menu {
   position: absolute;
   display: flex;
-  background: var(--bg-surface);
+  align-items: center;
+  background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  padding: 4px 8px;
-  gap: 6px;
-  box-shadow: var(--shadow-md), var(--shadow-glow);
+  padding: 3px 6px;
+  gap: 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 1px 0 rgba(255,255,255,0.05);
   z-index: 9999;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  height: 38px;
+  box-sizing: border-box;
   animation: popupScale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes popupScale {
-  from { transform: scale(0.8) translateY(10px); opacity: 0; }
+  from { transform: scale(0.8) translateY(8px); opacity: 0; }
   to { transform: scale(1) translateY(0); opacity: 1; }
 }
 
 .selection-menu .menu-btn {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border: none;
   background: transparent;
-  font-size: 16px;
   cursor: pointer;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+  padding: 0;
 }
 
 .selection-menu .menu-btn:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .selection-menu .menu-btn.ask-ai-btn {
   width: auto;
   white-space: nowrap;
-  padding: 0 10px;
+  padding: 0 8px;
+  color: var(--accent-mid) !important;
+  font-family: var(--font-sans);
+}
+
+.selection-menu .menu-btn.ask-ai-btn:hover {
+  background: rgba(139, 92, 246, 0.15) !important;
+  color: var(--accent-mid) !important;
 }
 
 /* ── 비밀번호 변경 모달 스타일 ── */
@@ -2829,6 +2842,98 @@ body.resizing-trans .trans-resizer-handle::after {
   margin: 0 4px;
   opacity: 0.5;
   align-self: center;
+}
+
+/* ── 좌측 목차 사이드바 ── */
+.outline-sidebar {
+  position: fixed;
+  top: var(--topbar-h);
+  left: 0;
+  bottom: 0;
+  width: 260px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border-strong);
+  box-shadow: 4px 0 30px rgba(0, 0, 0, 0.2);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateX(0);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.outline-sidebar.hidden {
+  transform: translateX(-100%);
+  display: flex !important; /* 슬라이딩 동작을 위해 숨겨진 상태에서도 layout 유지 */
+}
+.outline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.outline-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+.outline-close-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.15s;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.outline-close-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.outline-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+.outline-item {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.12s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.outline-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.outline-item.depth-1 { padding-left: 22px; font-weight: 400; opacity: 0.85; }
+.outline-item.depth-2 { padding-left: 32px; font-weight: 400; opacity: 0.75; }
+.outline-item.depth-3 { padding-left: 42px; font-weight: 400; opacity: 0.65; }
+
+/* ── 문장 더블클릭 수정 모드 스타일 ── */
+.trans-sentence.inline-editing {
+  background: rgba(139, 92, 246, 0.15) !important;
+  outline: 2px solid var(--accent-mid) !important;
+  border-radius: var(--radius-sm);
+  padding: 2px 4px;
+  cursor: text !important;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
 }
 
 

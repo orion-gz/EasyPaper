@@ -5,6 +5,8 @@ from services.library import (
     list_documents, get_document, delete_document,
     get_translation, get_pdf_path, update_document_metadata
 )
+from pydantic import BaseModel
+import json
 
 router = APIRouter()
 
@@ -65,6 +67,44 @@ async def get_library_translation(
         "translation": full_cached["translation"],
         "sentences": full_cached.get("sentences", [])
     }
+
+
+class UpdateTranslationPayload(BaseModel):
+    translation: str
+    sentences: list[dict]
+
+
+@router.put("/library/{doc_id}/translation/{page_num}")
+async def update_library_translation(
+    doc_id: str,
+    page_num: int,
+    payload: UpdateTranslationPayload,
+    target_lang: Optional[str] = None,
+    style: Optional[str] = None,
+    ignore_math: Optional[bool] = None,
+    ignore_table: Optional[bool] = None,
+    ignore_refs: Optional[bool] = None
+):
+    """라이브러리의 특정 페이지 번역 데이터를 수정하여 캐시 및 DB에 저장합니다."""
+    suffix = ""
+    if target_lang is not None and style is not None:
+        suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
+
+    from services.library import save_translation
+    from services.cache import save_translation_cache
+
+    payload_dict = {
+        "translation": payload.translation,
+        "sentences": payload.sentences
+    }
+    payload_json = json.dumps(payload_dict, ensure_ascii=False)
+
+    # DB에 영구 저장
+    save_translation(doc_id, page_num, payload_json, suffix)
+    # 메모리 캐시 최신화
+    save_translation_cache(doc_id, page_num, payload_json, suffix)
+
+    return {"status": "success"}
 
 
 @router.get("/library/{doc_id}/pdf")

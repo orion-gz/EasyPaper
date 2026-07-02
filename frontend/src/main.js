@@ -1,7 +1,7 @@
 import './style.css'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI } from './api.js'
-import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata } from './library.js'
+import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline } from './pdfViewer.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation } from './library.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -143,6 +143,10 @@ const chatSidebar        = $('chat-sidebar')
 const chatResizer        = $('chat-resizer')
 const chatCloseBtn       = $('chat-close-btn')
 const chatMessages       = $('chat-messages')
+const outlineToggleBtn   = $('outline-toggle-btn')
+const outlineSidebar     = $('outline-sidebar')
+const outlineCloseBtn    = $('outline-close-btn')
+const outlineContent     = $('outline-content')
 const chatInput          = $('chat-input')
 const chatSendBtn        = $('chat-send-btn')
 
@@ -211,6 +215,7 @@ function resetState() {
   if (chatSidebar) chatSidebar.classList.add('hidden')
   if (chatResizer) chatResizer.classList.add('hidden')
   if (chatToggleBtn) chatToggleBtn.classList.remove('active')
+  hideOutlineSidebar()
   resetChatUI()
 }
 
@@ -321,6 +326,8 @@ async function handleFiles(files) {
 
       showViewer()
       await initScrollViewer()
+      hideOutlineSidebar()
+      await loadPDFOutline()
     } else if (!isLibraryActive) {
       await showLibraryScreen()
     }
@@ -389,6 +396,25 @@ async function initScrollViewer() {
           console.warn(`Failed to lazy load translation for page ${pageNum}:`, err)
           delete state.translationCache[pageNum]
         }
+      }
+
+      // 비동기 다음 페이지 번역 프리페칭 및 미리 렌더링
+      const nextPage = pageNum + 1
+      if (nextPage <= state.totalPages && !state.translationCache[nextPage] && state.translatedPages.has(nextPage)) {
+        state.translationCache[nextPage] = '__fetching__'
+        const currentSessionId = state.sessionId
+        const opts = getTranslationOptions()
+        fetchLibraryTranslation(currentSessionId, nextPage, opts).then(res => {
+          if (state.sessionId === currentSessionId) {
+            state.translationCache[nextPage] = res.translation
+            state.translationSentences[nextPage] = res.sentences || []
+            renderTransContent(nextPage, res.translation, true)
+          }
+        }).catch(err => {
+          if (state.sessionId === currentSessionId) {
+            delete state.translationCache[nextPage]
+          }
+        })
       }
     }
   })
@@ -2109,6 +2135,8 @@ async function openFromLibrary(doc, shouldPushState = true) {
 
   showViewer()
   await initScrollViewer()
+  hideOutlineSidebar()
+  await loadPDFOutline()
 }
 
 function escapeHtml(str) {
@@ -2313,14 +2341,21 @@ function createSelectionMenu() {
   menu.id = 'selection-menu'
   menu.className = 'selection-menu hidden'
   menu.innerHTML = `
-    <div class="menu-annotate-group" style="display: flex; gap: 6px; align-items: center;">
-      <button class="menu-btn highlight-btn" title="하이라이트">🟡</button>
-      <button class="menu-btn underline-btn" title="밑줄">🔴</button>
-      <button class="menu-btn clear-btn" title="지우기">❌</button>
-      <div class="menu-divider" style="width: 1px; background: var(--border-strong); margin: 0 4px; align-self: stretch;"></div>
+    <div class="menu-annotate-group" style="display: flex; gap: 4px; align-items: center;">
+      <button class="menu-btn highlight-btn" title="하이라이트">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+      <button class="menu-btn underline-btn" title="밑줄">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
+      </button>
+      <button class="menu-btn clear-btn" title="지우기">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+      </button>
+      <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 4px;"></div>
     </div>
-    <button class="menu-btn ask-ai-btn" title="AI 어시스턴트에게 물어보기" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text-primary); padding: 0 6px;">
-      <span>🤖 AI 어시스턴트에게 물어보기</span>
+    <button class="menu-btn ask-ai-btn" title="AI 어시스턴트에게 질문" style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--accent-mid); padding: 0 8px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+      <span>Ask AI</span>
     </button>
   `
   document.body.appendChild(menu)
@@ -4393,4 +4428,157 @@ window.addEventListener('hashchange', () => {
   console.log("[Router] hashchange fired")
   handleRouting()
 })
+
+// ── 논문 목차(Outline) 제어 및 바인딩 ─────────────────
+async function loadPDFOutline() {
+  if (!outlineContent) return
+  outlineContent.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:20px;">목차 로드 중...</div>'
+  
+  try {
+    const outline = await getPDFOutline()
+    outlineContent.innerHTML = ''
+    
+    if (!outline || outline.length === 0) {
+      outlineContent.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:20px;">목차 정보가 없는 PDF입니다.</div>'
+      return
+    }
+    
+    function renderTree(items, depth = 0) {
+      items.forEach(item => {
+        const div = document.createElement('div')
+        div.className = `outline-item depth-${depth}`
+        div.innerHTML = `<span>🔖</span> <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(item.title)}</span>`
+        if (item.pageNum) {
+          div.addEventListener('click', () => {
+            scrollToPage(viewerScrollContainer, item.pageNum)
+          })
+          div.title = `${item.pageNum}페이지로 이동`
+        }
+        outlineContent.appendChild(div)
+        if (item.items && item.items.length > 0) {
+          renderTree(item.items, depth + 1)
+        }
+      })
+    }
+    
+    renderTree(outline)
+  } catch (err) {
+    console.error("Outline load error:", err)
+    outlineContent.innerHTML = '<div style="font-size:12px; color:var(--error); text-align:center; padding:20px;">목차 로드 실패</div>'
+  }
+}
+
+function hideOutlineSidebar() {
+  if (outlineSidebar) {
+    outlineSidebar.classList.add('hidden')
+    if (outlineToggleBtn) outlineToggleBtn.classList.remove('active')
+  }
+}
+
+function showOutlineSidebar() {
+  if (outlineSidebar) {
+    outlineSidebar.classList.remove('hidden')
+    if (outlineToggleBtn) outlineToggleBtn.classList.add('active')
+  }
+}
+
+// 목차 이벤트 바인딩
+if (outlineToggleBtn) {
+  outlineToggleBtn.addEventListener('click', () => {
+    if (outlineSidebar.classList.contains('hidden')) {
+      showOutlineSidebar()
+    } else {
+      hideOutlineSidebar()
+    }
+  })
+}
+if (outlineCloseBtn) {
+  outlineCloseBtn.addEventListener('click', hideOutlineSidebar)
+}
+
+// ── 번역 문장 더블클릭 수동 수정 (Inline Edit) ──────
+if (viewerScrollContainer) {
+  viewerScrollContainer.addEventListener('dblclick', (e) => {
+    const span = e.target.closest('.trans-sentence')
+    if (!span) return
+    
+    if (span.getAttribute('contenteditable') === 'true') return
+    
+    e.preventDefault()
+    e.stopPropagation()
+    
+    const pageNum = parseInt(span.dataset.page)
+    const sentenceIdx = parseInt(span.dataset.sentenceIdx)
+    if (isNaN(pageNum) || isNaN(sentenceIdx)) return
+    
+    const originalText = span.textContent.trim()
+    span.contentEditable = true
+    span.classList.add('inline-editing')
+    span.focus()
+    
+    // 포커스 시 텍스트 맨 뒤에 캐럿 배치
+    const range = document.createRange()
+    range.selectNodeContents(span)
+    range.collapse(false)
+    const selection = window.getSelection()
+    selection.removeAllRanges()
+    selection.addRange(range)
+    
+    let finished = false
+    
+    async function finishEdit(commit) {
+      if (finished) return
+      finished = true
+      span.contentEditable = false
+      span.classList.remove('inline-editing')
+      
+      if (commit) {
+        const newText = span.textContent.trim()
+        if (newText && newText !== originalText) {
+          try {
+            // 1. 상태 업데이트
+            const oldText = state.translationSentences[pageNum][sentenceIdx].trans
+            state.translationSentences[pageNum][sentenceIdx].trans = newText
+            
+            // 캐시 텍스트 치환
+            if (state.translationCache[pageNum]) {
+              state.translationCache[pageNum] = state.translationCache[pageNum].replace(oldText, newText)
+            }
+            
+            // 2. 백엔드 API 연동 저장
+            const payload = {
+              translation: state.translationCache[pageNum],
+              sentences: state.translationSentences[pageNum]
+            }
+            await updateLibraryTranslation(state.sessionId, pageNum, payload, getTranslationOptions())
+            
+            showToast('문장 번역이 수정되어 저장되었습니다.', 'success')
+          } catch (err) {
+            console.error("Failed to save edited translation:", err)
+            showToast('번역 수정 저장 실패', 'error')
+            span.textContent = originalText
+          }
+        } else {
+          span.textContent = originalText
+        }
+      } else {
+        span.textContent = originalText
+      }
+    }
+    
+    span.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Enter') {
+        evt.preventDefault()
+        finishEdit(true)
+      } else if (evt.key === 'Escape') {
+        evt.preventDefault()
+        finishEdit(false)
+      }
+    })
+    
+    span.addEventListener('blur', () => {
+      finishEdit(true)
+    })
+  })
+}
 

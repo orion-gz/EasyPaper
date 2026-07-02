@@ -48,3 +48,15 @@ export async function updateLibraryDocMetadata(docId, payload) {
   return res.json()
 }
 
+export async function updateLibraryTranslation(docId, pageNum, payload, options = {}) {
+  const res = await fetch(`${API_BASE}/library/${docId}/translation/${pageNum}${buildQuery(options)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  })
+  if (!res.ok) throw new Error('번역 수정 저장 실패')
+  return res.json()
+}
+
