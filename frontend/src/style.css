@@ -10,6 +10,7 @@
   --bg-surface:     rgba(13, 11, 22, 0.7);
   --bg-elevated:    rgba(23, 20, 38, 0.75);
   --bg-hover:       rgba(39, 34, 64, 0.8);
+  --bg-panel:       rgba(20, 18, 36, 0.95);
 
   --border:         rgba(255, 255, 255, 0.05);
   --border-strong:  rgba(255, 255, 255, 0.1);
@@ -61,6 +62,7 @@ body.light-theme {
   --bg-surface:     rgba(255, 255, 255, 0.8);
   --bg-elevated:    rgba(241, 245, 249, 0.85);
   --bg-hover:       rgba(226, 232, 240, 0.9);
+  --bg-panel:       rgba(255, 255, 255, 0.98);
 
   --border:         rgba(0, 0, 0, 0.04);
   --border-strong:  rgba(0, 0, 0, 0.08);
@@ -3181,7 +3183,7 @@ body.light-theme .floating-memo-render code {
   width: 100vw;
   height: 100vh;
   z-index: 11000;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;
@@ -3198,9 +3200,9 @@ body.light-theme .floating-memo-render code {
 .custom-confirm-modal {
   width: 320px;
   background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-lg);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.06);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
   padding: 20px;
   transform: scale(0.92);
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -3209,6 +3211,10 @@ body.light-theme .floating-memo-render code {
   gap: 14px;
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
+}
+body.light-theme .custom-confirm-modal {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 .custom-confirm-modal-wrapper.active .custom-confirm-modal {
   transform: scale(1);
