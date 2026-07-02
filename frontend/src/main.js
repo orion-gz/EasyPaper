@@ -2529,13 +2529,13 @@ function createAnnHoverTooltip() {
   const tooltip = document.createElement('div')
   tooltip.id = 'ann-hover-tooltip'
   tooltip.className = 'selection-menu hidden'
-  tooltip.style.cssText = 'position: absolute; z-index: 10005; padding: 2px 4px; gap: 6px; height: 32px; display: flex; align-items: center; box-shadow: var(--shadow-md);'
+  tooltip.style.cssText = 'position: absolute; z-index: 10005;'
   tooltip.innerHTML = `
-    <button class="menu-btn delete-ann-btn" title="삭제" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+    <button class="menu-btn delete-ann-btn" title="삭제">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
     </button>
-    <div style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
-    <button class="menu-btn ask-ai-ann-btn" title="AI 어시스턴트에게 질문" style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--accent-mid); padding: 0 8px; background: transparent; border: none; cursor: pointer; height: 28px;">
+    <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
+    <button class="menu-btn ask-ai-btn ask-ai-ann-btn" title="AI 어시스턴트에게 질문">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
       <span>Ask AI</span>
     </button>
