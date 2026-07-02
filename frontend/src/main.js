@@ -4311,7 +4311,7 @@ if (viewerScrollContainer) {
       }
 
       const selection = window.getSelection();
-      if (selection && !selection.isCollapsed) return;
+      if (selection && !selection.isCollapsed && !annSpan) return;
 
       // 타겟이 번역본 문장이거나, PDF 원본의 pdf-sentence 엘리먼트인 경우
       const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
