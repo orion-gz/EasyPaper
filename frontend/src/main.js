@@ -2369,44 +2369,37 @@ function createSelectionMenu() {
   menu.className = 'selection-menu'
   menu.innerHTML = `
     <div class="menu-annotate-group" style="display: flex; gap: 6px; align-items: center; padding: 2px 4px;">
-      <!-- 하이라이트 아이콘 버튼 (즉시 적용) -->
-      <button class="menu-btn highlight-btn" title="하이라이트">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-      </button>
-      
-      <!-- 밑줄 아이콘 버튼 (즉시 적용) -->
-      <button class="menu-btn underline-btn" title="밑줄">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
-      </button>
-      
-      <!-- 지우기 버튼 -->
-      <button class="menu-btn clear-btn" title="지우기">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-      </button>
-      
-      <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
-      
-      <!-- 색상 프리셋 그룹 -->
-      <div class="color-preset-section">
-        <!-- 하이라이트 색상 도트들 -->
-        <div class="inline-color-group highlight-colors" title="하이라이트 색상 변경 및 적용">
+      <!-- 하이라이트 그룹 -->
+      <div class="expand-wrapper highlight-wrapper">
+        <button class="menu-btn highlight-btn" title="하이라이트">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+        <div class="expand-colors highlight-colors">
           <span class="color-dot" data-color="#eab308" style="background: #eab308;" title="노랑"></span>
           <span class="color-dot" data-color="#22c55e" style="background: #22c55e;" title="초록"></span>
           <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
           <span class="color-dot" data-color="#ec4899" style="background: #ec4899;" title="핑크"></span>
         </div>
-        
-        <div style="width: 1px; background: var(--border-strong); height: 12px; opacity: 0.5;"></div>
-        
-        <!-- 밑줄 색상 도트들 -->
-        <div class="inline-color-group underline-colors" title="밑줄 색상 변경 및 적용">
+      </div>
+      
+      <!-- 밑줄 그룹 -->
+      <div class="expand-wrapper underline-wrapper">
+        <button class="menu-btn underline-btn" title="밑줄">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
+        </button>
+        <div class="expand-colors underline-colors">
           <span class="color-dot" data-color="#ef4444" style="background: #ef4444;" title="빨강"></span>
           <span class="color-dot" data-color="#f97316" style="background: #f97316;" title="주황"></span>
           <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
           <span class="color-dot" data-color="#a855f7" style="background: #a855f7;" title="보라"></span>
         </div>
       </div>
-
+      
+      <!-- 지우기 버튼 -->
+      <button class="menu-btn clear-btn" title="지우기">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+      </button>
+      
       <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
     </div>
     <button class="menu-btn ask-ai-btn" title="AI 어시스턴트에게 질문" style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--accent-mid); padding: 0 8px;">
@@ -2424,6 +2417,8 @@ function createSelectionMenu() {
   
   const highlightBtn = menu.querySelector('.highlight-btn')
   const underlineBtn = menu.querySelector('.underline-btn')
+  const highlightWrapper = menu.querySelector('.highlight-wrapper')
+  const underlineWrapper = menu.querySelector('.underline-wrapper')
 
   function updateActiveColors() {
     highlightBtn.querySelector('svg').style.color = state.activeHighlightColor
@@ -2445,7 +2440,7 @@ function createSelectionMenu() {
     })
   }
 
-  // 컬러 서클 클릭 핸들러 바인딩 (클릭 시 마킹 즉시 적용)
+  // 컬러 서클 클릭 핸들러 바인딩 (클릭 시 마킹 즉시 적용 및 메뉴 닫기)
   menu.querySelectorAll('.highlight-colors .color-dot').forEach(dot => {
     dot.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -2464,15 +2459,25 @@ function createSelectionMenu() {
     })
   })
 
-  // 메인 아이콘 클릭 시 즉시 대표 활성화 색상으로 마킹 처리 적용
+  // 메인 아이콘 클릭 시 즉시 토글 혹은 적용
   highlightBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    handleAnnotate('highlight', state.activeHighlightColor)
+    if (highlightWrapper.classList.contains('expanded')) {
+      handleAnnotate('highlight', state.activeHighlightColor)
+    } else {
+      underlineWrapper.classList.remove('expanded')
+      highlightWrapper.classList.add('expanded')
+    }
   })
 
   underlineBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    handleAnnotate('underline', state.activeUnderlineColor)
+    if (underlineWrapper.classList.contains('expanded')) {
+      handleAnnotate('underline', state.activeUnderlineColor)
+    } else {
+      highlightWrapper.classList.remove('expanded')
+      underlineWrapper.classList.add('expanded')
+    }
   })
 
   menu.querySelector('.clear-btn').addEventListener('click', (e) => {
@@ -2587,7 +2592,7 @@ function showSelectionMenu(rect, showAnnotateGroup) {
 function hideSelectionMenu() {
   if (selectionMenu) {
     selectionMenu.classList.add('hidden')
-    selectionMenu.querySelectorAll('.color-popover').forEach(p => p.classList.add('hidden'))
+    selectionMenu.querySelectorAll('.expand-wrapper').forEach(w => w.classList.remove('expanded'))
   }
   state.pendingFigureQuote = null
 }

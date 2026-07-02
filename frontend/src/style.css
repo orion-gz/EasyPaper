@@ -2937,18 +2937,40 @@ body.resizing-trans .trans-resizer-handle::after {
 }
 
 /* ── 텍스트 선택 메뉴 내 컬러 피커 스타일 ── */
-/* ── 텍스트 선택 메뉴 내 컬러 피커 스타일 ── */
-.color-preset-section {
+.expand-wrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  height: 32px;
+  transition: all 0.2s ease;
 }
-.inline-color-group {
+.expand-wrapper.expanded {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-strong);
+}
+body.light-theme .expand-wrapper.expanded {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.expand-colors {
   display: flex;
-  gap: 5px;
+  gap: 4px;
+  overflow: hidden;
+  width: 0;
+  opacity: 0;
+  height: 100%;
   align-items: center;
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, padding 0.2s ease;
+  box-sizing: border-box;
 }
+.expand-wrapper.expanded .expand-colors {
+  width: 82px;
+  opacity: 1;
+  padding: 0 6px;
+}
+
 .color-dot {
   width: 14px;
   height: 14px;
@@ -2957,6 +2979,7 @@ body.resizing-trans .trans-resizer-handle::after {
   transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
   border: 1px solid rgba(255, 255, 255, 0.25);
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 .color-dot:hover {
   transform: scale(1.25);
