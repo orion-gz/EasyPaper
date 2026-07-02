@@ -2937,79 +2937,17 @@ body.resizing-trans .trans-resizer-handle::after {
 }
 
 /* ── 텍스트 선택 메뉴 내 컬러 피커 스타일 ── */
-.color-popover {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  padding: 4px 6px;
-  display: flex;
-  gap: 6px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3), 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  z-index: 10000;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s cubic-bezier(0.16, 1, 0.3, 1), transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
-  height: 26px;
-  align-items: center;
-  box-sizing: border-box;
-}
-.color-popover:not(.hidden) {
-  opacity: 1;
-  pointer-events: all;
-  transform: translateX(-50%) translateY(0);
-}
-
-/* 스플릿 버튼 스타일 */
-.annotate-split-wrapper {
+/* ── 텍스트 선택 메뉴 내 컬러 피커 스타일 ── */
+.color-preset-section {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  height: 28px;
-  box-sizing: border-box;
+  gap: 8px;
+  padding: 0 4px;
 }
-body.light-theme .annotate-split-wrapper {
-  background: rgba(0, 0, 0, 0.02);
-}
-.annotate-split-wrapper .menu-btn {
-  border: none !important;
-  background: transparent !important;
-  transition: background 0.15s;
-  height: 100% !important;
-  border-radius: 0 !important;
-}
-.annotate-split-wrapper .menu-btn:hover {
-  background: var(--bg-hover) !important;
-}
-.color-popover::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border-width: 4px;
-  border-style: solid;
-  border-color: var(--bg-panel) transparent transparent transparent;
-}
-.color-popover::before {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border-width: 5px;
-  border-style: solid;
-  border-color: var(--border-strong) transparent transparent transparent;
-  z-index: -1;
-  margin-top: 1px;
+.inline-color-group {
+  display: flex;
+  gap: 5px;
+  align-items: center;
 }
 .color-dot {
   width: 14px;
