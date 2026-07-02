@@ -1,4 +1,3 @@
-alert("main.js script started executing!");
 import './style.css'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline } from './pdfViewer.js'
@@ -4374,7 +4373,7 @@ viewerScrollContainer.addEventListener('click', (e) => {
   })
   
   showToast(isTransPaneCollapsed ? '번역 창이 접혔습니다.' : '번역 창이 펼쳐졌습니다.', 'info')
-})
+});
 
 // 초기 로드 시 localStorage 상태 복원 및 초기화 실행
 (function initTransPaneControls() {
@@ -4502,7 +4501,6 @@ function showOutlineSidebar() {
 // 목차 이벤트 바인딩
 if (outlineToggleBtn) {
   outlineToggleBtn.addEventListener('click', () => {
-    alert("목차 버튼 클릭됨! 사이드바 클래스: " + outlineSidebar.className)
     console.log("[Outline] Toggle button clicked. Sidebar:", outlineSidebar, "ToggleBtn:", outlineToggleBtn)
     if (!outlineSidebar) {
       showToast('목차 사이드바를 찾을 수 없습니다.', 'error')
