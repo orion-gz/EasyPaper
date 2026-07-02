@@ -2140,7 +2140,8 @@ async function openFromLibrary(doc, shouldPushState = true) {
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  if (str === null || str === undefined) return ''
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
 
 libUploadBtn.addEventListener('click', () => { fileInput.click() })
@@ -4439,7 +4440,22 @@ async function loadPDFOutline() {
     outlineContent.innerHTML = ''
     
     if (!outline || outline.length === 0) {
-      outlineContent.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:20px;">목차 정보가 없는 PDF입니다.</div>'
+      // 목차 메타데이터가 존재하지 않는 경우를 대비한 전체 페이지 리스트 폴백(Fallback) 렌더링
+      const infoMsg = document.createElement('div')
+      infoMsg.style.cssText = 'font-size:11px; color:var(--text-muted); padding:4px 10px 12px; border-bottom:1px dashed var(--border); margin-bottom:8px; line-height:1.4;'
+      infoMsg.textContent = '💡 본 PDF에 목차(TOC) 정보가 존재하지 않아, 전체 페이지 리스트를 대신 제공합니다.'
+      outlineContent.appendChild(infoMsg)
+      
+      for (let p = 1; p <= state.totalPages; p++) {
+        const div = document.createElement('div')
+        div.className = 'outline-item depth-0'
+        div.innerHTML = `<span>📄</span> <span>${p} 페이지</span>`
+        div.addEventListener('click', () => {
+          scrollToPage(viewerScrollContainer, p)
+        })
+        div.title = `${p}페이지로 이동`
+        outlineContent.appendChild(div)
+      }
       return
     }
     
@@ -4485,6 +4501,7 @@ function showOutlineSidebar() {
 // 목차 이벤트 바인딩
 if (outlineToggleBtn) {
   outlineToggleBtn.addEventListener('click', () => {
+    console.log("[Outline] Toggle button clicked. Sidebar hidden state:", outlineSidebar.classList.contains('hidden'))
     if (outlineSidebar.classList.contains('hidden')) {
       showOutlineSidebar()
     } else {
