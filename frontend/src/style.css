@@ -3011,6 +3011,24 @@ body.light-theme .pdf-sentence.active-mapped-sentence, body.light-theme .trans-s
   background-color: rgba(139, 92, 246, 0.18) !important;
 }
 
+/* 메모를 보유한 원문 문장 하이라이트 스타일 */
+.pdf-sentence.pdf-sentence-has-memo {
+  background-color: rgba(99, 102, 241, 0.18) !important;
+  border-bottom: 1.5px dashed rgba(99, 102, 241, 0.6) !important;
+  border-radius: var(--radius-xs);
+  transition: all 0.2s ease;
+}
+body.light-theme .pdf-sentence.pdf-sentence-has-memo {
+  background-color: rgba(99, 102, 241, 0.1) !important;
+  border-bottom: 1.5px dashed rgba(99, 102, 241, 0.45) !important;
+}
+.pdf-sentence.pdf-sentence-has-memo:hover {
+  background-color: rgba(99, 102, 241, 0.28) !important;
+}
+body.light-theme .pdf-sentence.pdf-sentence-has-memo:hover {
+  background-color: rgba(99, 102, 241, 0.16) !important;
+}
+
 /* ── Floating Markdown Memo Styles ── */
 .floating-memo {
   position: absolute;
@@ -3152,6 +3170,7 @@ body.light-theme .floating-memo-render code {
   height: 100%;
   pointer-events: none;
   z-index: 9990;
+  overflow: visible !important;
 }
 
 

@@ -1,4 +1,5 @@
 import './style.css'
+import { marked } from 'marked'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation } from './library.js'
@@ -2366,6 +2367,111 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations) {
   })
 }
 
+// PDF와 번역본의 문장 수 차이를 고려한 오프셋 기반 매핑 함수
+function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
+  let pdfIdx = -1;
+  let transIdx = -1;
+  let pdfElements = [];
+
+  const transSpans = Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${pageNum}"]`));
+  const pdfSpans = Array.from(viewerScrollContainer.querySelectorAll(`.pdf-sentence[data-page="${pageNum}"]`));
+
+  if (transSpans.length === 0 || pdfSpans.length === 0) {
+    return { pdfIdx, transIdx, pdfElements };
+  }
+
+  // 양측의 고유한 문장 인덱스 집합
+  const transIdxSet = new Set(transSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
+  const pdfIdxSet = new Set(pdfSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
+  const pdfCount = pdfIdxSet.size;
+  const transCount = transIdxSet.size;
+  const maxPdfIdx = Math.max(...pdfIdxSet);
+  const maxTransIdx = Math.max(...transIdxSet);
+
+  // 만약 사전에 백엔드에서 정렬 매핑한 문장이 존재하면 1:1 직접 매핑을 적용합니다.
+  const sentences = state.translationSentences && state.translationSentences[pageNum];
+  if (sentences && sentences.length > 0) {
+    // LLM에 의해 병합된 빈 번역 문장을 감지하여 상위 그룹 인덱스로 매핑
+    const parentIdxMap = [];
+    let lastActiveIdx = 0;
+    for (let i = 0; i < sentences.length; i++) {
+      if (sentences[i].trans && sentences[i].trans.trim()) {
+        lastActiveIdx = i;
+      }
+      parentIdxMap[i] = lastActiveIdx;
+    }
+    let firstActiveIdx = sentences.findIndex(s => s.trans && s.trans.trim());
+    if (firstActiveIdx === -1) firstActiveIdx = 0;
+    for (let i = 0; i < firstActiveIdx; i++) {
+      parentIdxMap[i] = firstActiveIdx;
+    }
+
+    const parentIdx = parentIdxMap[sentenceIdx] ?? sentenceIdx;
+    pdfIdx = parentIdx;
+    transIdx = parentIdx;
+
+    // 동일한 그룹에 속하는 모든 PDF 엘리먼트 수집
+    pdfElements = pdfSpans.filter(el => {
+      const idx = parseInt(el.dataset.sentenceIdx || '0', 10);
+      return parentIdxMap[idx] === parentIdx;
+    });
+    return { pdfIdx, transIdx, pdfElements };
+  } else {
+    // 기존 오프셋/비례식 알고리즘 폴백 (기존 캐시 대응)
+    const diff = pdfCount - transCount;
+    const absDiff = Math.abs(diff);
+
+    if (absDiff === 0) {
+      // 1:1 직접 매핑
+      pdfIdx = Math.min(maxPdfIdx, sentenceIdx);
+      transIdx = Math.min(maxTransIdx, sentenceIdx);
+    } else if (absDiff <= 5) {
+      // 오프셋 기반 매핑 (PDF와 번역본 중 어느 쪽이 더 많은지를 구분)
+      if (diff > 0) {
+        // PDF가 더 많음: PDF 앞에 데더 먹을 문장이 diff개 있다고 가정
+        const offset = diff;
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.min(maxPdfIdx, sentenceIdx + offset);
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.max(0, Math.min(maxTransIdx, sentenceIdx - offset));
+        }
+      } else {
+        // 번역본이 더 많음: 번역 앞에 데더 먹을 문장이 offset개 있다고 가정
+        const offset = -diff; // transCount - pdfCount
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.max(0, Math.min(maxPdfIdx, sentenceIdx - offset));
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.min(maxTransIdx, sentenceIdx + offset);
+        }
+      }
+    } else {
+      // 큰 차이 → 비례(proportional) 매핑
+      if (pdfCount <= 1 || transCount <= 1) {
+        pdfIdx = 0;
+        transIdx = 0;
+      } else {
+        const fraction = sentenceIdx / Math.max(target.classList.contains('trans-sentence') ? (transCount - 1) : (pdfCount - 1), 1);
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.min(maxPdfIdx, Math.round(fraction * (pdfCount - 1)));
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.min(maxTransIdx, Math.round(fraction * (transCount - 1)));
+        }
+      }
+    }
+  }
+
+  // pdfIdx에 매핑되는 모든 PDF span 엘리먼트 수집
+  pdfElements = pdfSpans.filter(el => parseInt(el.dataset.sentenceIdx || '0', 10) === pdfIdx);
+
+  return { pdfIdx, transIdx, pdfElements };
+}
+
 // ── Floating Markdown Memo 관리 ─────────────────────────
 function loadMemos(sessionId) {
   if (!sessionId) return {}
@@ -2408,8 +2514,13 @@ function updateMemoConnectorLine(pageWrapper, memo, sentenceEl) {
     return
   }
 
-  const anchorX = sentenceEl.offsetLeft + sentenceEl.offsetWidth / 2
-  const anchorY = sentenceEl.offsetTop + sentenceEl.offsetHeight / 2
+  const sentenceIdx = memo.sentenceIdx
+  const pageNum = parseInt(pageWrapper.dataset.page, 10)
+  const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
+  const startEl = (pdfElements && pdfElements.length > 0) ? pdfElements[0] : sentenceEl
+
+  const anchorX = startEl.offsetLeft
+  const anchorY = startEl.offsetTop + startEl.offsetHeight / 2
 
   const memoLeft = (memo.x / 100) * pageWrapper.offsetWidth
   const memoTop = (memo.y / 100) * pageWrapper.offsetHeight
@@ -2449,6 +2560,11 @@ function renderPageMemos(pageNum) {
   pageWrapper.querySelectorAll('.floating-memo').forEach(el => el.remove())
   const svg = pageWrapper.querySelector('.memo-connector-svg')
   if (svg) svg.innerHTML = ''
+  
+  // Clear any existing sentence has-memo highlights
+  pageWrapper.querySelectorAll('.pdf-sentence-has-memo').forEach(el => {
+    el.classList.remove('pdf-sentence-has-memo')
+  })
 
   if (!state.sessionId) return
   const allMemos = loadMemos(state.sessionId)
@@ -2462,6 +2578,13 @@ function renderPageMemos(pageNum) {
     memoEl.style.top = `${memo.y}%`
 
     const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${memo.sentenceIdx}"]`)
+    if (sentenceEl) {
+      const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, memo.sentenceIdx)
+      if (pdfElements) {
+        pdfElements.forEach(el => el.classList.add('pdf-sentence-has-memo'))
+      }
+    }
+
     let isEditing = !memo.content.trim()
 
     function updateCardContent() {
@@ -2498,11 +2621,11 @@ function renderPageMemos(pageNum) {
         })
       } else {
         let renderedHtml = memo.content
-        if (window.marked) {
-          if (typeof window.marked.parse === 'function') {
-            renderedHtml = window.marked.parse(memo.content)
-          } else if (typeof window.marked === 'function') {
-            renderedHtml = window.marked(memo.content)
+        if (marked && typeof marked.parse === 'function') {
+          try {
+            renderedHtml = marked.parse(memo.content)
+          } catch (e) {
+            console.error("Markdown parsing failed:", e)
           }
         }
         body.innerHTML = `<div class="floating-memo-render">${renderedHtml}</div>`
@@ -2529,17 +2652,20 @@ function renderPageMemos(pageNum) {
           allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
           saveMemos(state.sessionId, allMemosObj)
           
-          memoEl.remove()
-          const pNode = pageWrapper.querySelector(`.memo-connector-svg #connector_${memo.id}`)
-          if (pNode) pNode.remove()
+          renderPageMemos(pageNum)
         }
       })
     }
 
+    const sentenceText = (sentenceEl ? sentenceEl.textContent.trim() : '') || memo.sentenceText || ''
+    const shortTitle = sentenceText
+      ? (sentenceText.length > 20 ? sentenceText.substring(0, 20) + '...' : sentenceText)
+      : 'Memo'
+
     memoEl.innerHTML = `
       <div class="floating-memo-header">
-        <div class="floating-memo-title">
-          <span>📝 Memo</span>
+        <div class="floating-memo-title" title="${sentenceText}">
+          <span>📝 ${shortTitle}</span>
         </div>
         <div class="floating-memo-actions"></div>
       </div>
@@ -2564,8 +2690,9 @@ function renderPageMemos(pageNum) {
         const dxPct = (dx / pageWrapper.offsetWidth) * 100
         const dyPct = (dy / pageWrapper.offsetHeight) * 100
 
-        const newX = Math.min(Math.max(1, startX + dxPct), 90)
-        const newY = Math.min(Math.max(1, startY + dyPct), 95)
+        // Clamp to a wide bounds so it can float outside page wrapper boundaries anywhere on screen
+        const newX = Math.min(Math.max(-150, startX + dxPct), 250)
+        const newY = Math.min(Math.max(-150, startY + dyPct), 250)
 
         memo.x = newX
         memo.y = newY
@@ -2604,6 +2731,8 @@ function createFloatingMemoForSentence(pageNum, sentenceIdx) {
   const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${sentenceIdx}"]`)
   if (!sentenceEl) return
 
+  const sentenceText = sentenceEl ? sentenceEl.textContent.trim() : ''
+
   const leftPct = Math.min(Math.max(10, ((sentenceEl.offsetLeft + sentenceEl.offsetWidth / 2) / pageWrapper.offsetWidth) * 100), 70)
   const topPct = Math.min(Math.max(10, ((sentenceEl.offsetTop + sentenceEl.offsetHeight) / pageWrapper.offsetHeight) * 100 + 4), 85)
 
@@ -2616,6 +2745,7 @@ function createFloatingMemoForSentence(pageNum, sentenceIdx) {
     id: `memo_${Date.now()}`,
     pageNum: pageNum,
     sentenceIdx: sentenceIdx,
+    sentenceText: sentenceText,
     content: '',
     x: leftPct,
     y: topPct
@@ -4559,129 +4689,6 @@ function splitIntoSentences(fullText) {
 // 1대1 매칭 마우스 오버/아웃 및 클릭 이벤트 위임 등록
 if (viewerScrollContainer) {
   // PDF와 번역본의 문장 수 차이를 고려한 오프셋 기반 매핑 함수
-  function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
-    let pdfIdx = -1;
-    let transIdx = -1;
-    let pdfElements = [];
-
-    const transSpans = Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${pageNum}"]`));
-    const pdfSpans = Array.from(viewerScrollContainer.querySelectorAll(`.pdf-sentence[data-page="${pageNum}"]`));
-
-    if (transSpans.length === 0 || pdfSpans.length === 0) {
-      return { pdfIdx, transIdx, pdfElements };
-    }
-
-    // 양측의 고유한 문장 인덱스 집합
-    const transIdxSet = new Set(transSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
-    const pdfIdxSet = new Set(pdfSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
-    const pdfCount = pdfIdxSet.size;
-    const transCount = transIdxSet.size;
-    const maxPdfIdx = Math.max(...pdfIdxSet);
-    const maxTransIdx = Math.max(...transIdxSet);
-
-    /**
-     * 핵심 매핑 로직:
-     * 
-     * PDF는 페이지 헤더(채널 이름, 학회명 등), 섹션 제목을 텍스트 레이어에 포함하지만
-     * LLM 번역본은 이를 생략하는 경우가 많습니다.
-     * => PDF 문장 수 > 번역본 문장 수 인 경우가 많음
-     * => 이 때 여분 문장은 페이지 앞부분에 몰림 (startOffset)
-     *
-     * 수식:
-     * - 문장 수 동일: 직접 1:1 매핑
-     * - PDF > 번역: startOffset = pdfCount - transCount
-     *   - 번역 idx i -> PDF idx = i + startOffset
-     *   - PDF idx j -> 번역 idx = max(0, j - startOffset)
-     * - 번역 > PDF: 이 경우도 표대화를 위해 동일하게 오프셋 기반로
-     *   - PDF idx j -> 번역 idx = j + (transCount - pdfCount)
-     *   - 번역 idx i -> PDF idx = max(0, i - (transCount - pdfCount))
-     *
-     * 크게 다륾 경우(차이 > 3)는 비례 매핑으로 폴백
-     */
-    // 만약 사전에 백엔드에서 정렬 매핑한 문장이 존재하면 1:1 직접 매핑을 적용합니다.
-    const sentences = state.translationSentences && state.translationSentences[pageNum];
-    if (sentences && sentences.length > 0) {
-      // LLM에 의해 병합된 빈 번역 문장을 감지하여 상위 그룹 인덱스로 매핑
-      const parentIdxMap = [];
-      let lastActiveIdx = 0;
-      for (let i = 0; i < sentences.length; i++) {
-        if (sentences[i].trans && sentences[i].trans.trim()) {
-          lastActiveIdx = i;
-        }
-        parentIdxMap[i] = lastActiveIdx;
-      }
-      let firstActiveIdx = sentences.findIndex(s => s.trans && s.trans.trim());
-      if (firstActiveIdx === -1) firstActiveIdx = 0;
-      for (let i = 0; i < firstActiveIdx; i++) {
-        parentIdxMap[i] = firstActiveIdx;
-      }
-
-      const parentIdx = parentIdxMap[sentenceIdx] ?? sentenceIdx;
-      pdfIdx = parentIdx;
-      transIdx = parentIdx;
-
-      // 동일한 그룹에 속하는 모든 PDF 엘리먼트 수집
-      pdfElements = pdfSpans.filter(el => {
-        const idx = parseInt(el.dataset.sentenceIdx || '0', 10);
-        return parentIdxMap[idx] === parentIdx;
-      });
-      return { pdfIdx, transIdx, pdfElements };
-    } else {
-      // 기존 오프셋/비례식 알고리즘 폴백 (기존 캐시 대응)
-      const diff = pdfCount - transCount;
-      const absDiff = Math.abs(diff);
-
-      if (absDiff === 0) {
-        // 1:1 직접 매핑
-        pdfIdx = Math.min(maxPdfIdx, sentenceIdx);
-        transIdx = Math.min(maxTransIdx, sentenceIdx);
-      } else if (absDiff <= 5) {
-        // 오프셋 기반 매핑 (PDF와 번역본 중 어느 쪽이 더 많은지를 구분)
-        if (diff > 0) {
-          // PDF가 더 많음: PDF 앞에 데더 먹을 문장이 diff개 있다고 가정
-          const offset = diff;
-          if (target.classList.contains('trans-sentence')) {
-            transIdx = sentenceIdx;
-            pdfIdx = Math.min(maxPdfIdx, sentenceIdx + offset);
-          } else {
-            pdfIdx = sentenceIdx;
-            transIdx = Math.max(0, Math.min(maxTransIdx, sentenceIdx - offset));
-          }
-        } else {
-          // 번역본이 더 많음: 번역 앞에 데더 먹을 문장이 offset개 있다고 가정
-          const offset = -diff; // transCount - pdfCount
-          if (target.classList.contains('trans-sentence')) {
-            transIdx = sentenceIdx;
-            pdfIdx = Math.max(0, Math.min(maxPdfIdx, sentenceIdx - offset));
-          } else {
-            pdfIdx = sentenceIdx;
-            transIdx = Math.min(maxTransIdx, sentenceIdx + offset);
-          }
-        }
-      } else {
-        // 큰 차이 → 비례(proportional) 매핑
-        if (pdfCount <= 1 || transCount <= 1) {
-          pdfIdx = 0;
-          transIdx = 0;
-        } else {
-          const fraction = sentenceIdx / Math.max(target.classList.contains('trans-sentence') ? (transCount - 1) : (pdfCount - 1), 1);
-          if (target.classList.contains('trans-sentence')) {
-            transIdx = sentenceIdx;
-            pdfIdx = Math.min(maxPdfIdx, Math.round(fraction * (pdfCount - 1)));
-          } else {
-            pdfIdx = sentenceIdx;
-            transIdx = Math.min(maxTransIdx, Math.round(fraction * (transCount - 1)));
-          }
-        }
-      }
-    }
-
-    // pdfIdx에 매핑되는 모든 PDF span 엘리먼트 수집
-    pdfElements = pdfSpans.filter(el => parseInt(el.dataset.sentenceIdx || '0', 10) === pdfIdx);
-
-    return { pdfIdx, transIdx, pdfElements };
-  }
-
   viewerScrollContainer.addEventListener('mousemove', () => {
     state.hoverSelectionDisabled = false;
   });
