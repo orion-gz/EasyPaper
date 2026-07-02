@@ -4858,8 +4858,21 @@ if (viewerScrollContainer) {
           return;
         }
         if (target) {
-          selection.removeAllRanges();
-          hideSelectionMenu();
+          const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
+          const hoveredPageNum = pageWrapper ? parseInt(pageWrapper.dataset.page, 10) : -1;
+          const hoveredSentenceIdx = parseInt(target.dataset.sentenceIdx, 10);
+
+          const isSameAsSelected = (hoveredPageNum === state.hoverSelectedPageNum && hoveredSentenceIdx === state.hoverSelectedSentenceIdx);
+
+          if (!isSameAsSelected) {
+            selection.removeAllRanges();
+            hideSelectionMenu();
+            state.hoverSelectedPdfElements = null;
+            state.hoverSelectedPageNum = null;
+            state.hoverSelectedSentenceIdx = null;
+          } else {
+            return;
+          }
         } else {
           return;
         }
@@ -4887,6 +4900,7 @@ if (viewerScrollContainer) {
           if (pdfElements && pdfElements.length > 0) {
             state.hoverSelectedPdfElements = pdfElements;
             state.hoverSelectedPageNum = pageNum;
+            state.hoverSelectedSentenceIdx = pdfIdx;
 
             const firstEl = pdfElements[0];
             const lastEl = pdfElements[pdfElements.length - 1];
