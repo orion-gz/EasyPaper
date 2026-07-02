@@ -2680,7 +2680,8 @@ function renderPageMemos(pageNum) {
           updateCardContent()
         })
 
-        body.addEventListener('dblclick', (e) => {
+        body.addEventListener('click', (e) => {
+          if (e.target.closest('a')) return
           e.stopPropagation()
           isEditing = true
           updateCardContent()
