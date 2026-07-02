@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+  <script>
+    window.addEventListener('error', function(event) {
+      alert("Captured JS error: " + event.message + "\nFile: " + event.filename + "\nLine: " + event.lineno + ":" + event.colno);
+    }, true);
+    window.addEventListener('unhandledrejection', function(event) {
+      alert("Captured JS rejection: " + event.reason);
+    });
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EasyPaper — AI 논문 번역</title>
