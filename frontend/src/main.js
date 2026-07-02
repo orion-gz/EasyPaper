@@ -2785,6 +2785,11 @@ function hideSelectionMenu() {
     selectionMenu.querySelectorAll('.expand-wrapper').forEach(w => w.classList.remove('expanded'))
   }
   state.pendingFigureQuote = null
+  state.hoverSelectionDisabled = true
+  if (sentenceHoverTimer) {
+    clearTimeout(sentenceHoverTimer)
+    sentenceHoverTimer = null
+  }
 }
 
 // 통합 텍스트 선택 종료 감지 리스너
@@ -4359,6 +4364,10 @@ if (viewerScrollContainer) {
     return { pdfIdx, transIdx, pdfElements };
   }
 
+  viewerScrollContainer.addEventListener('mousemove', () => {
+    state.hoverSelectionDisabled = false;
+  });
+
   viewerScrollContainer.addEventListener('mouseover', (e) => {
     try {
       if (sentenceHoverTimer) {
@@ -4379,9 +4388,9 @@ if (viewerScrollContainer) {
       if (!target) return;
 
       // PDF 텍스트 문장에 마우스가 700ms 동안 머물러 있으면 문장 단위 자동 드래그 선택 및 툴팁 띄우기
-      // 단, 이미 어노테이션이 입혀진 span 위에 올라온 경우는 작동 제외
+      // 단, 이미 어노테이션이 입혀진 span 위에 올라온 경우나 호버 자동 선택이 비활성화된 경우는 작동 제외
       const pdfTarget = e.target.closest('.pdf-sentence');
-      if (pdfTarget && !annSpan) {
+      if (pdfTarget && !annSpan && !state.hoverSelectionDisabled) {
         sentenceHoverTimer = setTimeout(() => {
           const curSel = window.getSelection();
           if (curSel && !curSel.isCollapsed) return;
@@ -4483,6 +4492,12 @@ if (viewerScrollContainer) {
   // 클릭 시 해당 매칭 문장으로 스크롤 이동 및 양방향 고정 하이라이트 매칭 적용
   viewerScrollContainer.addEventListener('click', (e) => {
     try {
+      state.hoverSelectionDisabled = true;
+      if (sentenceHoverTimer) {
+        clearTimeout(sentenceHoverTimer);
+        sentenceHoverTimer = null;
+      }
+
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed) return;
 
