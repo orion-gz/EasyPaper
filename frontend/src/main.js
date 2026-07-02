@@ -2599,11 +2599,8 @@ function renderPageMemos(pageNum) {
       const actions = memoEl.querySelector('.floating-memo-actions')
 
       if (isEditing) {
-        body.innerHTML = `<textarea class="floating-memo-textarea" placeholder="메모를 입력하세요 (Markdown 지원)...">${memo.content}</textarea>`
+        body.innerHTML = `<textarea class="floating-memo-textarea" placeholder="메모를 입력하세요 (Markdown 및 LaTeX 지원)...">${memo.content}</textarea>`
         actions.innerHTML = `
-          <button class="floating-memo-action-btn save-btn" title="저장">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-          </button>
           <button class="floating-memo-action-btn delete delete-btn" title="삭제">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
           </button>
@@ -2612,19 +2609,34 @@ function renderPageMemos(pageNum) {
         const textarea = body.querySelector('.floating-memo-textarea')
         textarea.focus()
         
-        actions.querySelector('.save-btn').addEventListener('click', (e) => {
-          e.stopPropagation()
+        textarea.addEventListener('input', () => {
           memo.content = textarea.value
-          isEditing = false
-          
           const allMemosObj = loadMemos(state.sessionId)
           allMemosObj[`page_${pageNum}`] = pageMemos
           saveMemos(state.sessionId, allMemosObj)
-          
-          updateCardContent()
+          updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+        })
+
+        textarea.addEventListener('blur', () => {
           setTimeout(() => {
-            updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
-          }, 30)
+            const exists = memoEl.parentNode !== null
+            if (exists) {
+              isEditing = false
+              updateCardContent()
+              updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+            }
+          }, 150)
+        })
+
+        actions.querySelector('.delete-btn').addEventListener('mousedown', (e) => {
+          e.stopPropagation()
+          e.preventDefault()
+          if (confirm('이 메모를 삭제하시겠습니까?')) {
+            const allMemosObj = loadMemos(state.sessionId)
+            allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
+            saveMemos(state.sessionId, allMemosObj)
+            renderPageMemos(pageNum)
+          }
         })
       } else {
         let renderedHtml = memo.content
@@ -2636,6 +2648,23 @@ function renderPageMemos(pageNum) {
           }
         }
         body.innerHTML = `<div class="floating-memo-render">${renderedHtml}</div>`
+        
+        if (window.renderMathInElement) {
+          try {
+            window.renderMathInElement(body, {
+              delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\(', right: '\\)', display: false },
+                { left: '\\[', right: '\\]', display: true }
+              ],
+              throwOnError: false
+            })
+          } catch (e) {
+            console.warn("KaTeX rendering failed inside memo:", e)
+          }
+        }
+
         actions.innerHTML = `
           <button class="floating-memo-action-btn edit-btn" title="편집">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/><path d="m15 5 3 3"/></svg>
@@ -2650,18 +2679,23 @@ function renderPageMemos(pageNum) {
           isEditing = true
           updateCardContent()
         })
-      }
 
-      actions.querySelector('.delete-btn').addEventListener('click', (e) => {
-        e.stopPropagation()
-        if (confirm('이 메모를 삭제하시겠습니까?')) {
-          const allMemosObj = loadMemos(state.sessionId)
-          allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
-          saveMemos(state.sessionId, allMemosObj)
-          
-          renderPageMemos(pageNum)
-        }
-      })
+        body.addEventListener('dblclick', (e) => {
+          e.stopPropagation()
+          isEditing = true
+          updateCardContent()
+        })
+
+        actions.querySelector('.delete-btn').addEventListener('click', (e) => {
+          e.stopPropagation()
+          if (confirm('이 메모를 삭제하시겠습니까?')) {
+            const allMemosObj = loadMemos(state.sessionId)
+            allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
+            saveMemos(state.sessionId, allMemosObj)
+            renderPageMemos(pageNum)
+          }
+        })
+      }
     }
 
     const sentenceText = (sentenceEl ? sentenceEl.textContent.trim() : '') || memo.sentenceText || ''
