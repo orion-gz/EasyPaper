@@ -4308,7 +4308,6 @@ if (viewerScrollContainer) {
       const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
       if (annSpan) {
         showAnnotationHoverTooltip(annSpan);
-        return;
       }
 
       const selection = window.getSelection();
@@ -4319,8 +4318,9 @@ if (viewerScrollContainer) {
       if (!target) return;
 
       // PDF 텍스트 문장에 마우스가 700ms 동안 머물러 있으면 문장 단위 자동 드래그 선택 및 툴팁 띄우기
+      // 단, 이미 어노테이션이 입혀진 span 위에 올라온 경우는 작동 제외
       const pdfTarget = e.target.closest('.pdf-sentence');
-      if (pdfTarget) {
+      if (pdfTarget && !annSpan) {
         sentenceHoverTimer = setTimeout(() => {
           const curSel = window.getSelection();
           if (curSel && !curSel.isCollapsed) return;
