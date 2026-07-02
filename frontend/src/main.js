@@ -2680,12 +2680,6 @@ function renderPageMemos(pageNum) {
           updateCardContent()
         })
 
-        body.addEventListener('click', (e) => {
-          if (e.target.closest('a')) return
-          e.stopPropagation()
-          isEditing = true
-          updateCardContent()
-        })
 
         actions.querySelector('.delete-btn').addEventListener('click', (e) => {
           e.stopPropagation()
@@ -2715,6 +2709,16 @@ function renderPageMemos(pageNum) {
     `
 
     updateCardContent()
+
+    const body = memoEl.querySelector('.floating-memo-body')
+    body.addEventListener('click', (e) => {
+      if (isEditing) return
+      if (e.target.closest('a')) return
+      e.stopPropagation()
+      isEditing = true
+      updateCardContent()
+    })
+
     pageWrapper.appendChild(memoEl)
 
     const header = memoEl.querySelector('.floating-memo-header')
