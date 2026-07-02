@@ -2954,16 +2954,40 @@ body.resizing-trans .trans-resizer-handle::after {
   z-index: 10000;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1) 0.15s, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1) 0.15s;
+  transition: opacity 0.12s cubic-bezier(0.16, 1, 0.3, 1), transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
   height: 26px;
   align-items: center;
   box-sizing: border-box;
 }
-.annotate-button-wrapper:hover .color-popover {
+.color-popover:not(.hidden) {
   opacity: 1;
   pointer-events: all;
   transform: translateX(-50%) translateY(0);
-  transition-delay: 0s;
+}
+
+/* 스플릿 버튼 스타일 */
+.annotate-split-wrapper {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  height: 28px;
+  box-sizing: border-box;
+}
+body.light-theme .annotate-split-wrapper {
+  background: rgba(0, 0, 0, 0.02);
+}
+.annotate-split-wrapper .menu-btn {
+  border: none !important;
+  background: transparent !important;
+  transition: background 0.15s;
+  height: 100% !important;
+  border-radius: 0 !important;
+}
+.annotate-split-wrapper .menu-btn:hover {
+  background: var(--bg-hover) !important;
 }
 .color-popover::after {
   content: '';
