@@ -3,8 +3,10 @@ from fastapi.responses import FileResponse
 from services.auth import get_current_user
 from services.library import (
     list_documents, get_document, delete_document,
-    get_translation, get_pdf_path
+    get_translation, get_pdf_path, update_document_metadata
 )
+from pydantic import BaseModel
+import json
 
 router = APIRouter()
 
@@ -67,6 +69,44 @@ async def get_library_translation(
     }
 
 
+class UpdateTranslationPayload(BaseModel):
+    translation: str
+    sentences: list[dict]
+
+
+@router.put("/library/{doc_id}/translation/{page_num}")
+async def update_library_translation(
+    doc_id: str,
+    page_num: int,
+    payload: UpdateTranslationPayload,
+    target_lang: Optional[str] = None,
+    style: Optional[str] = None,
+    ignore_math: Optional[bool] = None,
+    ignore_table: Optional[bool] = None,
+    ignore_refs: Optional[bool] = None
+):
+    """라이브러리의 특정 페이지 번역 데이터를 수정하여 캐시 및 DB에 저장합니다."""
+    suffix = ""
+    if target_lang is not None and style is not None:
+        suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
+
+    from services.library import save_translation
+    from services.cache import save_translation_cache
+
+    payload_dict = {
+        "translation": payload.translation,
+        "sentences": payload.sentences
+    }
+    payload_json = json.dumps(payload_dict, ensure_ascii=False)
+
+    # DB에 영구 저장
+    save_translation(doc_id, page_num, payload_json, suffix)
+    # 메모리 캐시 최신화
+    save_translation_cache(doc_id, page_num, payload_json, suffix)
+
+    return {"status": "success"}
+
+
 @router.get("/library/{doc_id}/pdf")
 async def get_library_pdf(doc_id: str):
     """라이브러리 PDF 파일을 서빙합니다."""
@@ -97,4 +137,30 @@ async def get_library_document_images(doc_id: str):
         return {"images": images}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"이미지 좌표 추출 실패: {str(e)}")
+
+
+@router.put("/library/{doc_id}/metadata")
+async def update_doc_metadata(
+    doc_id: str,
+    payload: dict,
+    current_user: str = Depends(get_current_user)
+):
+    """문서의 메타데이터(예: 제목 등)를 업데이트합니다."""
+    doc = get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
+    if doc.get("username") != current_user:
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+    
+    meta = doc.get("metadata") or {}
+    meta.update(payload)
+    
+    update_document_metadata(doc_id, meta)
+    
+    # 활성 메모리 세션도 업데이트하여 정합성 유지
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id]["metadata"] = meta
+        
+    return {"status": "success", "metadata": meta}
 

@@ -1,7 +1,8 @@
 import './style.css'
+import { marked } from 'marked'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI } from './api.js'
-import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages } from './pdfViewer.js'
-import { fetchLibrary, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages } from './library.js'
+import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline } from './pdfViewer.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation } from './library.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -23,6 +24,7 @@ window.fetch = async function (...args) {
 const state = {
   sessionId: null,
   filename: null,
+  title: null,
   totalPages: 0,
   currentPage: 1,
   zoom: 1.5,
@@ -42,6 +44,8 @@ const state = {
   quotedImage: null,           // AI 질문 시 인용 이미지 보관용 (Base64)
   quotedImagePage: null,       // AI 질문 시 인용 이미지의 페이지 번호
   pendingFigureQuote: null,    // 클릭 후 AI 질문 전 대기중인 인용 이미지 정보
+  activeHighlightColor: '#eab308', // 기본 하이라이트 노란색
+  activeUnderlineColor: '#ef4444',  // 기본 밑줄 빨간색
   isCropMode: false,           // 영역 캡처 모드 여부
   pdfPageSentences: {},        // pageNum → sentenceRanges 보관용
   pdfPageElements: {},         // pageNum → elRanges 보관용
@@ -113,6 +117,7 @@ const uploadItemProgressBar = $('upload-item-progress-bar')
 const uploadItemSpinner  = $('upload-item-spinner')
 const uploadItemSuccessIcon = $('upload-item-success-icon')
 const docTitle          = $('doc-title')
+const docTitleEditBtn   = $('doc-title-edit-btn')
 const pageInput         = $('page-input')
 const pageTotal         = $('page-total')
 const zoomInBtn         = $('zoom-in-btn')
@@ -126,6 +131,7 @@ const cancelTransBtn    = $('cancel-trans-btn')
 const resumeTransBtn    = $('resume-trans-btn')
 // (viewer/chat pickers are now ProviderModelPicker instances – see below)
 const backBtn           = $('back-btn')
+const logoBtn           = $('logo-btn')
 const viewerScrollContainer = $('viewer-scroll-container')
 const translateSpinner      = $('translate-spinner')
 const translateStatusText   = $('translate-status-text')
@@ -140,6 +146,10 @@ const chatSidebar        = $('chat-sidebar')
 const chatResizer        = $('chat-resizer')
 const chatCloseBtn       = $('chat-close-btn')
 const chatMessages       = $('chat-messages')
+const outlineToggleBtn   = $('outline-toggle-btn')
+const outlineSidebar     = $('outline-sidebar')
+const outlineCloseBtn    = $('outline-close-btn')
+const outlineContent     = $('outline-content')
 const chatInput          = $('chat-input')
 const chatSendBtn        = $('chat-send-btn')
 
@@ -196,9 +206,10 @@ function resetState() {
   if (state.chatActiveStream) { state.chatActiveStream(); state.chatActiveStream = null }
   
   Object.assign(state, {
-    sessionId: null, filename: null, totalPages: 0, currentPage: 1,
+    sessionId: null, filename: null, title: null, totalPages: 0, currentPage: 1,
     zoom: 1.5, translationCache: {}, translationSentences: {}, translatingPages: new Set(), translatedPages: new Set(), pollingTimer: null,
-    chatHistory: [], chatActiveStream: null, quotedText: null, quotedImage: null, quotedImagePage: null, pendingFigureQuote: null, isCropMode: false, documentImages: []
+    chatHistory: [], chatActiveStream: null, quotedText: null, quotedImage: null, quotedImagePage: null, pendingFigureQuote: null,
+    activeHighlightColor: '#eab308', activeUnderlineColor: '#ef4444', isCropMode: false, documentImages: []
   })
   if (typeof toggleCropMode === 'function') toggleCropMode(false)
   viewerScrollContainer.innerHTML = ''
@@ -208,6 +219,7 @@ function resetState() {
   if (chatSidebar) chatSidebar.classList.add('hidden')
   if (chatResizer) chatResizer.classList.add('hidden')
   if (chatToggleBtn) chatToggleBtn.classList.remove('active')
+  hideOutlineSidebar()
   resetChatUI()
 }
 
@@ -249,6 +261,7 @@ async function handleFiles(files) {
   let lastSessionId = null
   let lastFilename = ""
   let lastTotalPages = 0
+  let lastTitle = ""
 
   for (let i = 0; i < pdfFiles.length; i++) {
     const file = pdfFiles[i]
@@ -271,6 +284,7 @@ async function handleFiles(files) {
       lastSessionId = result.session_id
       lastFilename = result.filename
       lastTotalPages = result.total_pages
+      lastTitle = (result.metadata && result.metadata.title) ? result.metadata.title : result.filename
       successCount++
 
       if (isLibraryActive) {
@@ -304,17 +318,22 @@ async function handleFiles(files) {
       loadDocumentImages(lastSessionId)
       state.filename   = lastFilename
       state.totalPages = lastTotalPages
+      state.title      = lastTitle
+      history.pushState({ screen: 'viewer', docId: lastSessionId }, '', `#viewer?id=${lastSessionId}`)
 
       await loadPDF(`/api/pdf-file/${state.sessionId}`)
-      docTitle.textContent = lastFilename
+      docTitle.textContent = lastTitle
+      docTitle.title = lastFilename
       pageTotal.textContent = `/ ${state.totalPages}`
       pageInput.max   = state.totalPages
       pageInput.value = 1
 
       showViewer()
       await initScrollViewer()
+      hideOutlineSidebar()
+      await loadPDFOutline()
     } else if (!isLibraryActive) {
-      showLibraryScreen()
+      await showLibraryScreen()
     }
   } else {
     uploadPopupTitle.textContent = '업로드 실패'
@@ -382,6 +401,25 @@ async function initScrollViewer() {
           delete state.translationCache[pageNum]
         }
       }
+
+      // 비동기 다음 페이지 번역 프리페칭 및 미리 렌더링
+      const nextPage = pageNum + 1
+      if (nextPage <= state.totalPages && !state.translationCache[nextPage] && state.translatedPages.has(nextPage)) {
+        state.translationCache[nextPage] = '__fetching__'
+        const currentSessionId = state.sessionId
+        const opts = getTranslationOptions()
+        fetchLibraryTranslation(currentSessionId, nextPage, opts).then(res => {
+          if (state.sessionId === currentSessionId) {
+            state.translationCache[nextPage] = res.translation
+            state.translationSentences[nextPage] = res.sentences || []
+            renderTransContent(nextPage, res.translation, true)
+          }
+        }).catch(err => {
+          if (state.sessionId === currentSessionId) {
+            delete state.translationCache[nextPage]
+          }
+        })
+      }
     }
   })
 
@@ -389,12 +427,22 @@ async function initScrollViewer() {
   startJobPolling(state.sessionId)
 }
 
+let isTransPaneCollapsed = false
+let currentTransPaneWidth = 620
+let hasLibraryStateInHistory = false
+
 // ── 번역 블록 생성 ────────────────────────────────
 function createTransBlock(pageNum) {
   const block = document.createElement('div')
   block.className = 'trans-page-block'
   block.id = `trans-block-${pageNum}`
   block.dataset.page = pageNum
+  
+  const leftChevron = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`
+  const rightChevron = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`
+  const chevron = isTransPaneCollapsed ? rightChevron : leftChevron
+  const btnTitle = isTransPaneCollapsed ? '번역 창 펴기' : '번역 창 접기'
+  
   block.innerHTML = `
     <div class="trans-page-label">
       <span>📄 ${pageNum}페이지</span>
@@ -402,7 +450,9 @@ function createTransBlock(pageNum) {
     </div>
     <div class="trans-page-content" id="trans-content-${pageNum}">
       <div class="trans-page-placeholder">스크롤하면 자동으로 번역됩니다</div>
-    </div>`
+    </div>
+    <div class="trans-resizer-handle"></div>
+    <button class="trans-collapse-btn" title="${btnTitle}">${chevron}</button>`
   return block
 }
 
@@ -800,6 +850,79 @@ backBtn.addEventListener('click', () => {
   showLibraryScreen()
 })
 
+if (logoBtn) {
+  logoBtn.addEventListener('click', () => {
+    showLibraryScreen()
+  })
+}
+
+// ── 논문 제목 수정 (Viewer 화면) ──────────────────
+if (docTitleEditBtn) {
+  docTitleEditBtn.addEventListener('click', () => {
+    const oldTitle = state.title || state.filename || ''
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.value = oldTitle
+    input.style.background = 'var(--bg-elevated)'
+    input.style.border = '1px solid var(--accent-mid)'
+    input.style.borderRadius = 'var(--radius-sm)'
+    input.style.color = 'var(--text-primary)'
+    input.style.fontSize = '14px'
+    input.style.fontWeight = '600'
+    input.style.padding = '2px 6px'
+    input.style.outline = 'none'
+    input.style.minWidth = '200px'
+    input.style.maxWidth = '400px'
+
+    docTitle.innerHTML = ''
+    docTitle.appendChild(input)
+    docTitleEditBtn.style.display = 'none'
+    input.focus()
+    input.select()
+
+    let isSaving = false
+    async function save() {
+      if (isSaving) return
+      isSaving = true
+      const newTitle = input.value.trim()
+      if (newTitle && newTitle !== oldTitle) {
+        try {
+          await updateLibraryDocMetadata(state.sessionId, { title: newTitle })
+          state.title = newTitle
+          docTitle.textContent = newTitle
+          showToast('제목이 변경되었습니다.', 'success')
+        } catch (err) {
+          showToast('제목 변경 실패: ' + err.message, 'error')
+          docTitle.textContent = oldTitle
+        }
+      } else {
+        docTitle.textContent = oldTitle
+      }
+      docTitleEditBtn.style.display = 'inline-flex'
+    }
+
+    input.addEventListener('keydown', async (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault()
+        await save()
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault()
+        isSaving = true
+        docTitle.textContent = oldTitle
+        docTitleEditBtn.style.display = 'inline-flex'
+      }
+    })
+
+    input.addEventListener('blur', async () => {
+      setTimeout(async () => {
+        if (!isSaving) {
+          await save()
+        }
+      }, 100)
+    })
+  })
+}
+
 // ── 구분선 드래그 ─────────────────────────────────
 const divider          = $('divider')
 if (divider) {
@@ -841,7 +964,11 @@ async function checkAuthentication() {
     loginScreen.classList.remove('active')
     globalLogoutBtn.classList.remove('hidden')
     globalSettingsBtn.classList.remove('hidden')
-    showLibraryScreen()
+    if (location.hash && location.hash.startsWith('#viewer?id=')) {
+      await handleRouting()
+    } else {
+      await showLibraryScreen()
+    }
     await loadLibraryCount()
     await refreshSystemSettings()
   } else {
@@ -1715,7 +1842,11 @@ async function loadLibraryCount() {
   } catch {}
 }
 
-async function showLibraryScreen() {
+async function showLibraryScreen(shouldPushState = true) {
+  hasLibraryStateInHistory = true
+  if (shouldPushState) {
+    history.pushState({ screen: 'library' }, '', '#library')
+  }
   loginScreen.classList.remove('active')
   viewerScreen.classList.remove('active')
   libraryScreen.classList.add('active')
@@ -1838,11 +1969,13 @@ function createDocCard(doc) {
       `</div>`
   }
 
+  const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+
   const card = document.createElement('div')
   card.className = 'doc-card'
   card.innerHTML = `
     <div class="doc-card-icon">📄</div>
-    <div class="doc-card-title">${escapeHtml(doc.filename)}</div>
+    <div class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(displayTitle)}</div>
     ${tagsHtml}
     <div class="doc-card-meta">
       <span>📅 ${date}</span><span>📑 ${total}페이지</span>
@@ -1856,6 +1989,9 @@ function createDocCard(doc) {
     </div>
     <div class="doc-card-actions">
       <button class="doc-open-btn" data-id="${doc.id}">열기</button>
+      <button class="doc-edit-btn" data-id="${doc.id}" title="제목 수정">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg>
+      </button>
       <button class="doc-delete-btn" data-id="${doc.id}" title="삭제">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
@@ -1867,9 +2003,72 @@ function createDocCard(doc) {
   card.querySelector('.doc-open-btn').addEventListener('click', (e) => { e.stopPropagation(); openFromLibrary(doc) })
   card.querySelector('.doc-delete-btn').addEventListener('click', async (e) => {
     e.stopPropagation()
-    if (!confirm(`"${doc.filename}"을 삭제할까요?`)) return
+    const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+    if (!confirm(`"${displayTitle}"을 삭제할까요?`)) return
     try { await deleteLibraryDoc(doc.id); showToast('삭제되었습니다', 'success'); await renderLibrary() }
     catch { showToast('삭제 실패', 'error') }
+  })
+  
+  card.querySelector('.doc-edit-btn').addEventListener('click', (e) => {
+    e.stopPropagation()
+    const titleEl = card.querySelector('.doc-card-title')
+    const oldTitle = displayTitle
+    
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.value = oldTitle
+    input.style.width = '100%'
+    input.style.padding = '4px 8px'
+    input.style.background = 'var(--bg-elevated)'
+    input.style.border = '1px solid var(--accent-mid)'
+    input.style.borderRadius = 'var(--radius-sm)'
+    input.style.color = 'var(--text-primary)'
+    input.style.fontSize = '13px'
+    input.style.fontWeight = '600'
+    input.style.outline = 'none'
+    
+    titleEl.innerHTML = ''
+    titleEl.appendChild(input)
+    input.focus()
+    input.select()
+    
+    let isSaving = false
+    async function save() {
+      if (isSaving) return
+      isSaving = true
+      const newTitle = input.value.trim()
+      if (newTitle && newTitle !== oldTitle) {
+        try {
+          await updateLibraryDocMetadata(doc.id, { title: newTitle })
+          showToast('제목이 변경되었습니다.', 'success')
+          await renderLibrary()
+        } catch (err) {
+          showToast('제목 변경 실패: ' + err.message, 'error')
+          titleEl.textContent = oldTitle
+        }
+      } else {
+        titleEl.textContent = oldTitle
+      }
+    }
+    
+    input.addEventListener('keydown', async (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault()
+        await save()
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault()
+        isSaving = true
+        titleEl.textContent = oldTitle
+      }
+    })
+    
+    input.addEventListener('blur', async () => {
+      setTimeout(async () => {
+        if (!isSaving) {
+          await save()
+        }
+      }, 100)
+    })
   })
   card.addEventListener('click', () => openFromLibrary(doc))
   return card
@@ -1894,10 +2093,15 @@ async function loadDocumentImages(docId) {
   }
 }
 
-async function openFromLibrary(doc) {
+async function openFromLibrary(doc, shouldPushState = true) {
+  if (shouldPushState) {
+    history.pushState({ screen: 'viewer', docId: doc.id }, '', `#viewer?id=${doc.id}`)
+  }
   state.sessionId  = doc.id
   loadDocumentImages(doc.id)
   state.filename   = doc.filename
+  const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+  state.title      = displayTitle
   state.totalPages = doc.total_pages
   state.translationCache = {}
   state.translationSentences = {}
@@ -1927,17 +2131,21 @@ async function openFromLibrary(doc) {
   }
 
   await loadPDF(`/api/library/${doc.id}/pdf`)
-  docTitle.textContent  = doc.filename
+  docTitle.textContent  = displayTitle
+  docTitle.title        = doc.filename
   pageTotal.textContent = `/ ${doc.total_pages}`
   pageInput.max   = doc.total_pages
   pageInput.value = 1
 
   showViewer()
   await initScrollViewer()
+  hideOutlineSidebar()
+  await loadPDFOutline()
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  if (str === null || str === undefined) return ''
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
 
 libUploadBtn.addEventListener('click', () => { fileInput.click() })
@@ -2014,15 +2222,29 @@ function getPageTextOffset(range, textLayerDiv) {
   return { startOffset, endOffset }
 }
 
+function hexToRgba(hex, alpha) {
+  if (!hex) return '';
+  let cleanHex = hex.replace('#', '');
+  if (cleanHex.length === 3) {
+    cleanHex = cleanHex.split('').map(c => c + c).join('');
+  }
+  const num = parseInt(cleanHex, 16);
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // Range 객체를 받아와 화면에 어노테이션(하이라이트/밑줄)을 실제로 렌더링하고 로컬에 저장
-function applyAnnotationToRange(range, type, textLayerDiv, pageNum) {
+function applyAnnotationToRange(range, type, textLayerDiv, pageNum, color) {
   const offsets = getPageTextOffset(range, textLayerDiv)
   if (offsets.startOffset === null || offsets.endOffset === null) return
   
   const text = range.toString()
+  const chosenColor = color || (type === 'highlight' ? state.activeHighlightColor : state.activeUnderlineColor)
 
   // 1. DOM에 스타일 적용 (텍스트 노드 분할)
-  applyAnnotationToRangeWithoutSave(range, type)
+  applyAnnotationToRangeWithoutSave(range, type, chosenColor, offsets.startOffset, offsets.endOffset)
 
   // 2. LocalStorage에 저장
   const annotations = loadAnnotations(state.sessionId)
@@ -2033,14 +2255,15 @@ function applyAnnotationToRange(range, type, textLayerDiv, pageNum) {
     type,
     text,
     startOffset: offsets.startOffset,
-    endOffset: offsets.endOffset
+    endOffset: offsets.endOffset,
+    color: chosenColor
   })
   saveAnnotations(state.sessionId, annotations)
   showToast(type === 'highlight' ? '하이라이트가 추가되었습니다 ✓' : '밑줄이 추가되었습니다 ✓', 'success')
 }
 
 // 저장 없이 DOM 상에 직접 span을 감싸서 스타일 입히는 헬퍼
-function applyAnnotationToRangeWithoutSave(range, type) {
+function applyAnnotationToRangeWithoutSave(range, type, color, overallStartOffset, overallEndOffset) {
   const textNodes = []
   const commonAncestor = range.commonAncestorContainer
   
@@ -2075,7 +2298,23 @@ function applyAnnotationToRangeWithoutSave(range, type) {
     if (startOffset >= endOffset) return
 
     const span = document.createElement('span')
-    span.className = type === 'highlight' ? 'pdf-annotation-highlight' : 'pdf-annotation-underline'
+    if (type === 'highlight') {
+      span.className = 'pdf-annotation-highlight'
+      const baseColor = color || '#eab308'
+      span.style.backgroundColor = hexToRgba(baseColor, 0.4)
+    } else {
+      span.className = 'pdf-annotation-underline'
+      const baseColor = color || '#ef4444'
+      span.style.borderBottomColor = baseColor
+    }
+    
+    // 호버 툴팁 매칭 및 간편 삭제 처리를 위해 데이터셋 부여
+    if (overallStartOffset !== undefined && overallStartOffset !== null) {
+      span.dataset.startOffset = overallStartOffset
+    }
+    if (overallEndOffset !== undefined && overallEndOffset !== null) {
+      span.dataset.endOffset = overallEndOffset
+    }
     
     const subRange = document.createRange()
     subRange.setStart(node, startOffset)
@@ -2120,7 +2359,7 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations) {
       try {
         range.setStart(startNode, startNodeOffset)
         range.setEnd(endNode, endNodeOffset)
-        applyAnnotationToRangeWithoutSave(range, ann.type)
+        applyAnnotationToRangeWithoutSave(range, ann.type, ann.color, ann.startOffset, ann.endOffset)
       } catch (e) {
         console.warn("Failed to restore annotation:", ann, e)
       }
@@ -2128,24 +2367,557 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations) {
   })
 }
 
+// PDF와 번역본의 문장 수 차이를 고려한 오프셋 기반 매핑 함수
+function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
+  let pdfIdx = -1;
+  let transIdx = -1;
+  let pdfElements = [];
+
+  const transSpans = Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${pageNum}"]`));
+  const pdfSpans = Array.from(viewerScrollContainer.querySelectorAll(`.pdf-sentence[data-page="${pageNum}"]`));
+
+  if (transSpans.length === 0 || pdfSpans.length === 0) {
+    return { pdfIdx, transIdx, pdfElements };
+  }
+
+  // 양측의 고유한 문장 인덱스 집합
+  const transIdxSet = new Set(transSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
+  const pdfIdxSet = new Set(pdfSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
+  const pdfCount = pdfIdxSet.size;
+  const transCount = transIdxSet.size;
+  const maxPdfIdx = Math.max(...pdfIdxSet);
+  const maxTransIdx = Math.max(...transIdxSet);
+
+  // 만약 사전에 백엔드에서 정렬 매핑한 문장이 존재하면 1:1 직접 매핑을 적용합니다.
+  const sentences = state.translationSentences && state.translationSentences[pageNum];
+  if (sentences && sentences.length > 0) {
+    // LLM에 의해 병합된 빈 번역 문장을 감지하여 상위 그룹 인덱스로 매핑
+    const parentIdxMap = [];
+    let lastActiveIdx = 0;
+    for (let i = 0; i < sentences.length; i++) {
+      if (sentences[i].trans && sentences[i].trans.trim()) {
+        lastActiveIdx = i;
+      }
+      parentIdxMap[i] = lastActiveIdx;
+    }
+    let firstActiveIdx = sentences.findIndex(s => s.trans && s.trans.trim());
+    if (firstActiveIdx === -1) firstActiveIdx = 0;
+    for (let i = 0; i < firstActiveIdx; i++) {
+      parentIdxMap[i] = firstActiveIdx;
+    }
+
+    const parentIdx = parentIdxMap[sentenceIdx] ?? sentenceIdx;
+    pdfIdx = parentIdx;
+    transIdx = parentIdx;
+
+    // 동일한 그룹에 속하는 모든 PDF 엘리먼트 수집
+    pdfElements = pdfSpans.filter(el => {
+      const idx = parseInt(el.dataset.sentenceIdx || '0', 10);
+      return parentIdxMap[idx] === parentIdx;
+    });
+    return { pdfIdx, transIdx, pdfElements };
+  } else {
+    // 기존 오프셋/비례식 알고리즘 폴백 (기존 캐시 대응)
+    const diff = pdfCount - transCount;
+    const absDiff = Math.abs(diff);
+
+    if (absDiff === 0) {
+      // 1:1 직접 매핑
+      pdfIdx = Math.min(maxPdfIdx, sentenceIdx);
+      transIdx = Math.min(maxTransIdx, sentenceIdx);
+    } else if (absDiff <= 5) {
+      // 오프셋 기반 매핑 (PDF와 번역본 중 어느 쪽이 더 많은지를 구분)
+      if (diff > 0) {
+        // PDF가 더 많음: PDF 앞에 데더 먹을 문장이 diff개 있다고 가정
+        const offset = diff;
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.min(maxPdfIdx, sentenceIdx + offset);
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.max(0, Math.min(maxTransIdx, sentenceIdx - offset));
+        }
+      } else {
+        // 번역본이 더 많음: 번역 앞에 데더 먹을 문장이 offset개 있다고 가정
+        const offset = -diff; // transCount - pdfCount
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.max(0, Math.min(maxPdfIdx, sentenceIdx - offset));
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.min(maxTransIdx, sentenceIdx + offset);
+        }
+      }
+    } else {
+      // 큰 차이 → 비례(proportional) 매핑
+      if (pdfCount <= 1 || transCount <= 1) {
+        pdfIdx = 0;
+        transIdx = 0;
+      } else {
+        const fraction = sentenceIdx / Math.max(target.classList.contains('trans-sentence') ? (transCount - 1) : (pdfCount - 1), 1);
+        if (target.classList.contains('trans-sentence')) {
+          transIdx = sentenceIdx;
+          pdfIdx = Math.min(maxPdfIdx, Math.round(fraction * (pdfCount - 1)));
+        } else {
+          pdfIdx = sentenceIdx;
+          transIdx = Math.min(maxTransIdx, Math.round(fraction * (transCount - 1)));
+        }
+      }
+    }
+  }
+
+  // pdfIdx에 매핑되는 모든 PDF span 엘리먼트 수집
+  pdfElements = pdfSpans.filter(el => parseInt(el.dataset.sentenceIdx || '0', 10) === pdfIdx);
+
+  return { pdfIdx, transIdx, pdfElements };
+}
+
+// 커스텀 다이얼로그 확인 모달 유틸리티
+function showCustomConfirm(message) {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div')
+    modal.className = 'custom-confirm-modal-wrapper'
+    modal.innerHTML = `
+      <div class="custom-confirm-modal">
+        <div class="custom-confirm-modal-header">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span class="custom-confirm-modal-title">메모 삭제</span>
+        </div>
+        <div class="custom-confirm-modal-body">
+          ${message.replace(/\n/g, '<br>')}
+        </div>
+        <div class="custom-confirm-modal-footer">
+          <button class="custom-confirm-btn cancel-btn">취소</button>
+          <button class="custom-confirm-btn confirm-btn">삭제</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    // Trigger transition
+    setTimeout(() => modal.classList.add('active'), 10)
+
+    const cleanup = (value) => {
+      modal.classList.remove('active')
+      setTimeout(() => {
+        modal.remove()
+        resolve(value)
+      }, 200)
+    }
+
+    modal.querySelector('.cancel-btn').addEventListener('click', (e) => {
+      e.stopPropagation()
+      cleanup(false)
+    })
+
+    modal.querySelector('.confirm-btn').addEventListener('click', (e) => {
+      e.stopPropagation()
+      cleanup(true)
+    })
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        cleanup(false)
+      }
+    })
+  })
+}
+
+// ── Floating Markdown Memo 관리 ─────────────────────────
+function loadMemos(sessionId) {
+  if (!sessionId) return {}
+  const key = `easypaper_memos_${sessionId}`
+  try {
+    return JSON.parse(localStorage.getItem(key)) || {}
+  } catch (e) {
+    return {}
+  }
+}
+
+function saveMemos(sessionId, memos) {
+  if (!sessionId) return
+  const key = `easypaper_memos_${sessionId}`
+  localStorage.setItem(key, JSON.stringify(memos))
+}
+
+function updateMemoConnectorLine(pageWrapper, memo, sentenceEl) {
+  let svg = pageWrapper.querySelector('.memo-connector-svg')
+  if (!svg) {
+    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('class', 'memo-connector-svg')
+    pageWrapper.appendChild(svg)
+  }
+
+  let path = svg.getElementById(`connector_${memo.id}`)
+  if (!path) {
+    path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    path.setAttribute('id', `connector_${memo.id}`)
+    path.setAttribute('stroke', 'var(--accent-mid)')
+    path.setAttribute('stroke-width', '1.5')
+    path.setAttribute('stroke-dasharray', '4,4')
+    path.setAttribute('fill', 'none')
+    path.setAttribute('opacity', '0.6')
+    svg.appendChild(path)
+  }
+
+  if (!sentenceEl) {
+    path.setAttribute('d', '')
+    return
+  }
+
+  const sentenceIdx = memo.sentenceIdx
+  const pageNum = parseInt(pageWrapper.dataset.page, 10)
+  const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
+  const startEl = (pdfElements && pdfElements.length > 0) ? pdfElements[0] : sentenceEl
+
+  let anchorX = startEl.offsetLeft
+  let anchorY = startEl.offsetTop + startEl.offsetHeight / 2
+
+  let curr = startEl.offsetParent
+  while (curr && curr !== pageWrapper) {
+    anchorX += curr.offsetLeft || 0
+    anchorY += curr.offsetTop || 0
+    curr = curr.offsetParent
+  }
+
+  const memoLeft = (memo.x / 100) * pageWrapper.offsetWidth
+  const memoTop = (memo.y / 100) * pageWrapper.offsetHeight
+  const memoWidth = 260
+  const memoEl = pageWrapper.querySelector(`.floating-memo[data-id="${memo.id}"]`)
+  const memoHeight = memoEl ? memoEl.offsetHeight : 160
+
+  const memoCenterX = memoLeft + memoWidth / 2
+  const memoCenterY = memoTop + memoHeight / 2
+
+  let targetX = memoCenterX
+  let targetY = memoCenterY
+
+  if (anchorX < memoLeft) {
+    targetX = memoLeft
+  } else if (anchorX > memoLeft + memoWidth) {
+    targetX = memoLeft + memoWidth
+  }
+
+  if (anchorY < memoTop) {
+    targetY = memoTop
+  } else if (anchorY > memoTop + memoHeight) {
+    targetY = memoTop + memoHeight
+  }
+
+  const cpX1 = anchorX + (targetX - anchorX) * 0.5
+  const cpY1 = anchorY
+  const cpX2 = anchorX + (targetX - anchorX) * 0.5
+  const cpY2 = targetY
+  path.setAttribute('d', `M ${anchorX} ${anchorY} C ${cpX1} ${cpY1}, ${cpX2} ${cpY2}, ${targetX} ${targetY}`)
+}
+
+function renderPageMemos(pageNum) {
+  const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+  if (!pageWrapper) return
+
+  pageWrapper.querySelectorAll('.floating-memo').forEach(el => el.remove())
+  const svg = pageWrapper.querySelector('.memo-connector-svg')
+  if (svg) svg.innerHTML = ''
+  
+  // Clear any existing sentence has-memo highlights
+  pageWrapper.querySelectorAll('.pdf-sentence-has-memo').forEach(el => {
+    el.classList.remove('pdf-sentence-has-memo')
+  })
+
+  if (!state.sessionId) return
+  const allMemos = loadMemos(state.sessionId)
+  const pageMemos = allMemos[`page_${pageNum}`] || []
+
+  pageMemos.forEach(memo => {
+    const memoEl = document.createElement('div')
+    memoEl.className = 'floating-memo'
+    memoEl.setAttribute('data-id', memo.id)
+    memoEl.style.left = `${memo.x}%`
+    memoEl.style.top = `${memo.y}%`
+
+    const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${memo.sentenceIdx}"]`)
+    if (sentenceEl) {
+      const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, memo.sentenceIdx)
+      if (pdfElements) {
+        pdfElements.forEach(el => el.classList.add('pdf-sentence-has-memo'))
+      }
+    }
+
+    let isEditing = !memo.content.trim()
+
+    function updateCardContent() {
+      const body = memoEl.querySelector('.floating-memo-body')
+      const actions = memoEl.querySelector('.floating-memo-actions')
+
+      if (isEditing) {
+        body.innerHTML = `<textarea class="floating-memo-textarea" placeholder="메모를 입력하세요 (Markdown 및 LaTeX 지원)...">${memo.content}</textarea>`
+        actions.innerHTML = `
+          <button class="floating-memo-action-btn delete delete-btn" title="삭제">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        `
+
+        const textarea = body.querySelector('.floating-memo-textarea')
+        textarea.focus()
+        
+        textarea.addEventListener('input', () => {
+          memo.content = textarea.value
+          const allMemosObj = loadMemos(state.sessionId)
+          allMemosObj[`page_${pageNum}`] = pageMemos
+          saveMemos(state.sessionId, allMemosObj)
+          updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+        })
+
+        textarea.addEventListener('blur', () => {
+          setTimeout(() => {
+            const exists = memoEl.parentNode !== null
+            if (exists) {
+              isEditing = false
+              updateCardContent()
+              updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+            }
+          }, 150)
+        })
+
+        actions.querySelector('.delete-btn').addEventListener('mousedown', async (e) => {
+          e.stopPropagation()
+          e.preventDefault()
+          const confirmDelete = await showCustomConfirm('이 메모를 삭제하시겠습니까?')
+          if (confirmDelete) {
+            const allMemosObj = loadMemos(state.sessionId)
+            allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
+            saveMemos(state.sessionId, allMemosObj)
+            renderPageMemos(pageNum)
+          }
+        })
+      } else {
+        let renderedHtml = memo.content
+        if (marked && typeof marked.parse === 'function') {
+          try {
+            renderedHtml = marked.parse(memo.content)
+          } catch (e) {
+            console.error("Markdown parsing failed:", e)
+          }
+        }
+        body.innerHTML = `<div class="floating-memo-render">${renderedHtml}</div>`
+        
+        if (window.renderMathInElement) {
+          try {
+            window.renderMathInElement(body, {
+              delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\(', right: '\\)', display: false },
+                { left: '\\[', right: '\\]', display: true }
+              ],
+              throwOnError: false
+            })
+          } catch (e) {
+            console.warn("KaTeX rendering failed inside memo:", e)
+          }
+        }
+
+        actions.innerHTML = `
+          <button class="floating-memo-action-btn edit-btn" title="편집">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/><path d="m15 5 3 3"/></svg>
+          </button>
+          <button class="floating-memo-action-btn delete delete-btn" title="삭제">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        `
+
+        actions.querySelector('.edit-btn').addEventListener('click', (e) => {
+          e.stopPropagation()
+          isEditing = true
+          updateCardContent()
+        })
+
+
+        actions.querySelector('.delete-btn').addEventListener('click', async (e) => {
+          e.stopPropagation()
+          const confirmDelete = await showCustomConfirm('이 메모를 삭제하시겠습니까?')
+          if (confirmDelete) {
+            const allMemosObj = loadMemos(state.sessionId)
+            allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
+            saveMemos(state.sessionId, allMemosObj)
+            renderPageMemos(pageNum)
+          }
+        })
+      }
+    }
+
+    const sentenceText = (sentenceEl ? sentenceEl.textContent.trim() : '') || memo.sentenceText || ''
+    const shortTitle = sentenceText
+      ? (sentenceText.length > 20 ? sentenceText.substring(0, 20) + '...' : sentenceText)
+      : 'Memo'
+
+    memoEl.innerHTML = `
+      <div class="floating-memo-header">
+        <div class="floating-memo-title" title="${sentenceText}">
+          <span>📝 ${shortTitle}</span>
+        </div>
+        <div class="floating-memo-actions"></div>
+      </div>
+      <div class="floating-memo-body"></div>
+    `
+
+    updateCardContent()
+
+    const body = memoEl.querySelector('.floating-memo-body')
+    body.addEventListener('click', (e) => {
+      if (isEditing) return
+      if (e.target.closest('a')) return
+      e.stopPropagation()
+      isEditing = true
+      updateCardContent()
+    })
+
+    pageWrapper.appendChild(memoEl)
+
+    const header = memoEl.querySelector('.floating-memo-header')
+    header.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation()
+      const startMouseX = e.clientX
+      const startMouseY = e.clientY
+      const startX = memo.x
+      const startY = memo.y
+
+      const onMouseMove = (moveEvt) => {
+        const dx = moveEvt.clientX - startMouseX
+        const dy = moveEvt.clientY - startMouseY
+
+        const dxPct = (dx / pageWrapper.offsetWidth) * 100
+        const dyPct = (dy / pageWrapper.offsetHeight) * 100
+
+        // Clamp to a wide bounds so it can float outside page wrapper boundaries anywhere on screen
+        const newX = Math.min(Math.max(-150, startX + dxPct), 250)
+        const newY = Math.min(Math.max(-150, startY + dyPct), 250)
+
+        memo.x = newX
+        memo.y = newY
+
+        memoEl.style.left = `${newX}%`
+        memoEl.style.top = `${newY}%`
+
+        updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+      }
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+
+        const allMemosObj = loadMemos(state.sessionId)
+        allMemosObj[`page_${pageNum}`] = pageMemos
+        saveMemos(state.sessionId, allMemosObj)
+      }
+
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    })
+
+    setTimeout(() => {
+      updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+    }, 50)
+  })
+}
+
+function createFloatingMemoForSentence(pageNum, sentenceIdx) {
+  if (!state.sessionId) return
+
+  const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+  if (!pageWrapper) return
+
+  const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${sentenceIdx}"]`)
+  if (!sentenceEl) return
+
+  const sentenceText = sentenceEl ? sentenceEl.textContent.trim() : ''
+
+  let sentenceX = sentenceEl.offsetLeft
+  let sentenceY = sentenceEl.offsetTop
+  let curr = sentenceEl.offsetParent
+  while (curr && curr !== pageWrapper) {
+    sentenceX += curr.offsetLeft || 0
+    sentenceY += curr.offsetTop || 0
+    curr = curr.offsetParent
+  }
+
+  const leftPct = Math.min(Math.max(10, ((sentenceX + sentenceEl.offsetWidth / 2) / pageWrapper.offsetWidth) * 100), 70)
+  const topPct = Math.min(Math.max(10, ((sentenceY + sentenceEl.offsetHeight) / pageWrapper.offsetHeight) * 100 + 4), 85)
+
+  const allMemosObj = loadMemos(state.sessionId)
+  if (!allMemosObj[`page_${pageNum}`]) {
+    allMemosObj[`page_${pageNum}`] = []
+  }
+
+  const newMemo = {
+    id: `memo_${Date.now()}`,
+    pageNum: pageNum,
+    sentenceIdx: sentenceIdx,
+    sentenceText: sentenceText,
+    content: '',
+    x: leftPct,
+    y: topPct
+  }
+
+  allMemosObj[`page_${pageNum}`].push(newMemo)
+  saveMemos(state.sessionId, allMemosObj)
+
+  renderPageMemos(pageNum)
+}
+
 // ── 팝업 툴팁 선택 메뉴 관리 ──
 let selectionMenu = null
+let sentenceHoverTimer = null
 
 function createSelectionMenu() {
   if (selectionMenu) return selectionMenu
   
   const menu = document.createElement('div')
   menu.id = 'selection-menu'
-  menu.className = 'selection-menu hidden'
+  menu.className = 'selection-menu'
   menu.innerHTML = `
-    <div class="menu-annotate-group" style="display: flex; gap: 6px; align-items: center;">
-      <button class="menu-btn highlight-btn" title="하이라이트">🟡</button>
-      <button class="menu-btn underline-btn" title="밑줄">🔴</button>
-      <button class="menu-btn clear-btn" title="지우기">❌</button>
-      <div class="menu-divider" style="width: 1px; background: var(--border-strong); margin: 0 4px; align-self: stretch;"></div>
+    <div class="menu-annotate-group" style="display: flex; gap: 6px; align-items: center; padding: 2px 4px;">
+      <!-- 하이라이트 그룹 -->
+      <div class="expand-wrapper highlight-wrapper">
+        <button class="menu-btn highlight-btn" title="하이라이트 (우클릭: 색상 변경)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+        <div class="expand-colors highlight-colors">
+          <span class="color-dot" data-color="#eab308" style="background: #eab308;" title="노랑"></span>
+          <span class="color-dot" data-color="#22c55e" style="background: #22c55e;" title="초록"></span>
+          <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
+          <span class="color-dot" data-color="#ec4899" style="background: #ec4899;" title="핑크"></span>
+        </div>
+      </div>
+      
+      <!-- 밑줄 그룹 -->
+      <div class="expand-wrapper underline-wrapper">
+        <button class="menu-btn underline-btn" title="밑줄 (우클릭: 색상 변경)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
+        </button>
+        <div class="expand-colors underline-colors">
+          <span class="color-dot" data-color="#ef4444" style="background: #ef4444;" title="빨강"></span>
+          <span class="color-dot" data-color="#f97316" style="background: #f97316;" title="주황"></span>
+          <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
+          <span class="color-dot" data-color="#a855f7" style="background: #a855f7;" title="보라"></span>
+        </div>
+      </div>
+      
+      <!-- 지우기 버튼 -->
+      <button class="menu-btn clear-btn" title="지우기">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+      </button>
+      
+      <!-- 메모 추가 버튼 -->
+      <button class="menu-btn memo-btn" title="메모 추가">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+      </button>
+      
+      <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
     </div>
-    <button class="menu-btn ask-ai-btn" title="AI 어시스턴트에게 물어보기" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text-primary); padding: 0 6px;">
-      <span>🤖 AI 어시스턴트에게 물어보기</span>
+    <button class="menu-btn ask-ai-btn" title="AI 어시스턴트에게 질문" style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--accent-mid); padding: 0 8px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+      <span>Ask AI</span>
     </button>
   `
   document.body.appendChild(menu)
@@ -2156,16 +2928,108 @@ function createSelectionMenu() {
     e.stopPropagation();
   });
   
-  menu.querySelector('.highlight-btn').addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation(); handleAnnotate('highlight')
+  const highlightBtn = menu.querySelector('.highlight-btn')
+  const underlineBtn = menu.querySelector('.underline-btn')
+  const highlightWrapper = menu.querySelector('.highlight-wrapper')
+  const underlineWrapper = menu.querySelector('.underline-wrapper')
+
+  function updateActiveColors() {
+    highlightBtn.querySelector('svg').style.color = state.activeHighlightColor
+    underlineBtn.querySelector('svg').style.color = state.activeUnderlineColor
+    
+    menu.querySelectorAll('.highlight-colors .color-dot').forEach(dot => {
+      if (dot.dataset.color === state.activeHighlightColor) {
+        dot.classList.add('selected')
+      } else {
+        dot.classList.remove('selected')
+      }
+    })
+    menu.querySelectorAll('.underline-colors .color-dot').forEach(dot => {
+      if (dot.dataset.color === state.activeUnderlineColor) {
+        dot.classList.add('selected')
+      } else {
+        dot.classList.remove('selected')
+      }
+    })
+  }
+
+  // 컬러 서클 클릭 핸들러 바인딩 (클릭 시 마킹 즉시 적용 및 메뉴 닫기)
+  menu.querySelectorAll('.highlight-colors .color-dot').forEach(dot => {
+    dot.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      state.activeHighlightColor = dot.dataset.color
+      updateActiveColors()
+      handleAnnotate('highlight', state.activeHighlightColor)
+    })
+  })
+  
+  menu.querySelectorAll('.underline-colors .color-dot').forEach(dot => {
+    dot.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      state.activeUnderlineColor = dot.dataset.color
+      updateActiveColors()
+      handleAnnotate('underline', state.activeUnderlineColor)
+    })
   })
 
-  menu.querySelector('.underline-btn').addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation(); handleAnnotate('underline')
+  // 메인 아이콘 좌클릭: 활성화된 기존 색상으로 즉시 마킹 처리 적용
+  highlightBtn.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    handleAnnotate('highlight', state.activeHighlightColor)
+  })
+
+  // 메인 아이콘 우클릭: 색상 선택기 확장 토글
+  highlightBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    underlineWrapper.classList.remove('expanded')
+    highlightWrapper.classList.toggle('expanded')
+  })
+
+  // 메인 밑줄 좌클릭: 활성화된 기존 색상으로 즉시 마킹 처리 적용
+  underlineBtn.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    handleAnnotate('underline', state.activeUnderlineColor)
+  })
+
+  // 메인 밑줄 우클릭: 색상 선택기 확장 토글
+  underlineBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    highlightWrapper.classList.remove('expanded')
+    underlineWrapper.classList.toggle('expanded')
   })
 
   menu.querySelector('.clear-btn').addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation(); handleAnnotate('clear')
+    e.preventDefault(); e.stopPropagation();
+    handleAnnotate('clear')
+  })
+
+  menu.querySelector('.memo-btn').addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation()
+    let sentenceEl = null
+    let pageWrapper = null
+
+    if (state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
+      sentenceEl = state.hoverSelectedPdfElements[0]
+      pageWrapper = sentenceEl.closest('.pdf-page-wrapper')
+    } else {
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0)
+        let startContainer = range.startContainer
+        if (startContainer) {
+          const parent = startContainer.nodeType === 3 ? startContainer.parentElement : startContainer
+          sentenceEl = parent.closest('.pdf-sentence')
+          pageWrapper = parent.closest('.pdf-page-wrapper')
+        }
+      }
+    }
+
+    if (sentenceEl && pageWrapper) {
+      const pageNum = parseInt(pageWrapper.dataset.page, 10)
+      const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
+      createFloatingMemoForSentence(pageNum, sentenceIdx)
+    }
+    hideSelectionMenu()
   })
 
   menu.querySelector('.ask-ai-btn').addEventListener('click', (e) => {
@@ -2183,10 +3047,204 @@ function createSelectionMenu() {
     hideSelectionMenu()
   })
 
+  updateActiveColors()
   return menu
 }
 
-function handleAnnotate(type) {
+// ── 어노테이션(하이라이트/밑줄) 마우스 호버 툴팁 관리 ──
+let annHoverTooltip = null
+let annHoverHideTimer = null
+let activeHoveredSpan = null
+
+function createAnnHoverTooltip() {
+  if (annHoverTooltip) return annHoverTooltip
+
+  const tooltip = document.createElement('div')
+  tooltip.id = 'ann-hover-tooltip'
+  tooltip.className = 'selection-menu hidden'
+  tooltip.style.cssText = 'position: absolute; z-index: 10005;'
+  tooltip.innerHTML = `
+    <button class="menu-btn delete-ann-btn" title="삭제">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+    </button>
+    <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
+    <button class="menu-btn memo-ann-btn" title="메모 추가">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+    </button>
+    <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
+    <button class="menu-btn ask-ai-btn ask-ai-ann-btn" title="AI 어시스턴트에게 질문">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+      <span>Ask AI</span>
+    </button>
+  `
+  document.body.appendChild(tooltip)
+  annHoverTooltip = tooltip
+
+  tooltip.addEventListener('mousedown', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+  })
+
+  tooltip.addEventListener('mouseenter', () => {
+    if (annHoverHideTimer) {
+      clearTimeout(annHoverHideTimer)
+      annHoverHideTimer = null
+    }
+  })
+
+  tooltip.addEventListener('mouseleave', () => {
+    hideAnnHoverTooltipWithDelay()
+  })
+
+  tooltip.querySelector('.delete-ann-btn').addEventListener('click', async (e) => {
+    e.preventDefault(); e.stopPropagation()
+    if (!activeHoveredSpan) return
+
+    const sentenceEl = activeHoveredSpan.closest('.pdf-sentence')
+    if (!sentenceEl) return
+    const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
+    const pageWrapper = activeHoveredSpan.closest('.pdf-page-wrapper')
+    if (!pageWrapper) return
+    const pageNum = parseInt(pageWrapper.dataset.page, 10)
+    const textLayerDiv = pageWrapper.querySelector('.textLayer')
+
+    // 문장에 속하는 모든 PDF 엘리먼트 가져오기
+    const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
+
+    if (pdfElements && pdfElements.length > 0) {
+      const firstEl = pdfElements[0]
+      const lastEl = pdfElements[pdfElements.length - 1]
+
+      const firstWalker = document.createTreeWalker(firstEl, NodeFilter.SHOW_TEXT)
+      const firstNodes = []
+      while (firstWalker.nextNode()) firstNodes.push(firstWalker.currentNode)
+
+      const lastWalker = document.createTreeWalker(lastEl, NodeFilter.SHOW_TEXT)
+      const lastNodes = []
+      while (lastWalker.nextNode()) lastNodes.push(lastWalker.currentNode)
+
+      if (firstNodes.length > 0 && lastNodes.length > 0) {
+        const r = document.createRange()
+        r.setStart(firstNodes[0], 0)
+        r.setEnd(lastNodes[lastNodes.length - 1], lastNodes[lastNodes.length - 1].length)
+
+        const sentenceOffsets = getPageTextOffset(r, textLayerDiv)
+        if (sentenceOffsets.startOffset !== null && sentenceOffsets.endOffset !== null) {
+          const annotations = loadAnnotations(state.sessionId)
+          if (annotations[`page_${pageNum}`]) {
+            const originalCount = annotations[`page_${pageNum}`].length
+            annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+              // 문장 오프셋 내에 시작점 또는 끝점이 겹치는 하이라이트/밑줄들을 모두 삭제 대상으로 식별
+              const isOverlapping = (ann.startOffset >= sentenceOffsets.startOffset && ann.startOffset <= sentenceOffsets.endOffset) ||
+                                    (ann.endOffset >= sentenceOffsets.startOffset && ann.endOffset <= sentenceOffsets.endOffset);
+              return !isOverlapping;
+            })
+
+            if (annotations[`page_${pageNum}`].length !== originalCount) {
+              saveAnnotations(state.sessionId, annotations)
+              showToast('문장 어노테이션이 일괄 삭제되었습니다 ✓', 'success')
+              reRenderPageAnnotations(textLayerDiv, pageNum)
+            }
+          }
+        }
+      }
+    }
+    hideAnnHoverTooltip()
+  })
+
+  tooltip.querySelector('.memo-ann-btn').addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation()
+    if (!activeHoveredSpan) return
+    const sentenceEl = activeHoveredSpan.closest('.pdf-sentence')
+    const pageWrapper = activeHoveredSpan.closest('.pdf-page-wrapper')
+    if (sentenceEl && pageWrapper) {
+      const pageNum = parseInt(pageWrapper.dataset.page, 10)
+      const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
+      createFloatingMemoForSentence(pageNum, sentenceIdx)
+    }
+    hideAnnHoverTooltip()
+  })
+
+  tooltip.querySelector('.ask-ai-ann-btn').addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation()
+    if (!activeHoveredSpan) return
+    const text = activeHoveredSpan.textContent.trim()
+    if (text) {
+      askAIAssistant(text)
+    }
+    hideAnnHoverTooltip()
+  })
+
+  return tooltip
+}
+
+function showAnnotationHoverTooltip(annSpan) {
+  if (annHoverHideTimer) {
+    clearTimeout(annHoverHideTimer)
+    annHoverHideTimer = null
+  }
+
+  activeHoveredSpan = annSpan
+  const tooltip = createAnnHoverTooltip()
+  tooltip.classList.remove('hidden')
+
+  const rect = annSpan.getBoundingClientRect()
+  const tooltipWidth = tooltip.offsetWidth || 110
+  const tooltipHeight = tooltip.offsetHeight || 32
+
+  const left = rect.left + rect.width / 2 - tooltipWidth / 2 + window.scrollX
+  const top = rect.top - tooltipHeight - 6 + window.scrollY
+
+  tooltip.style.left = `${Math.max(8, left)}px`
+  tooltip.style.top = `${Math.max(8, top)}px`
+}
+
+function hideAnnHoverTooltip() {
+  if (annHoverTooltip) {
+    annHoverTooltip.classList.add('hidden')
+  }
+  activeHoveredSpan = null
+}
+
+function hideAnnHoverTooltipWithDelay() {
+  if (annHoverHideTimer) clearTimeout(annHoverHideTimer)
+  annHoverHideTimer = setTimeout(() => {
+    hideAnnHoverTooltip()
+  }, 250)
+}
+
+function handleAnnotate(type, color) {
+  // 1. 호버 지연 대기에 의한 문장 전체 선택 모드 대응
+  if (state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
+    const pageNum = state.hoverSelectedPageNum;
+    const textLayerDiv = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"] .textLayer`);
+    if (textLayerDiv) {
+      state.hoverSelectedPdfElements.forEach(el => {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) {
+          nodes.push(walker.currentNode);
+        }
+        if (nodes.length > 0) {
+          const r = document.createRange();
+          r.setStart(nodes[0], 0);
+          r.setEnd(nodes[nodes.length - 1], nodes[nodes.length - 1].length);
+          
+          if (type === 'clear') {
+            clearAnnotationsInRange(r, textLayerDiv, pageNum);
+          } else {
+            applyAnnotationToRange(r, type, textLayerDiv, pageNum, color);
+          }
+        }
+      });
+      window.getSelection().removeAllRanges();
+      hideSelectionMenu();
+      state.hoverSelectedPdfElements = null;
+      return;
+    }
+  }
+
+  // 2. 일반 마우스 드래그 선택 대응
   const selection = window.getSelection()
   if (!selection.rangeCount) return
   const range = selection.getRangeAt(0)
@@ -2205,7 +3263,7 @@ function handleAnnotate(type) {
   if (type === 'clear') {
     clearAnnotationsInRange(range, textLayerDiv, pageNum)
   } else {
-    applyAnnotationToRange(range, type, textLayerDiv, pageNum)
+    applyAnnotationToRange(range, type, textLayerDiv, pageNum, color)
   }
 
   hideSelectionMenu()
@@ -2246,6 +3304,9 @@ function reRenderPageAnnotations(textLayerDiv, pageNum) {
 
   const annotations = loadAnnotations(state.sessionId)
   applyAnnotationsFromOffsets(textLayerDiv, annotations[`page_${pageNum}`] || [])
+
+  // Restore floating memos for the page
+  renderPageMemos(pageNum)
 }
 
 function showSelectionMenu(rect, showAnnotateGroup) {
@@ -2274,8 +3335,14 @@ function showSelectionMenu(rect, showAnnotateGroup) {
 function hideSelectionMenu() {
   if (selectionMenu) {
     selectionMenu.classList.add('hidden')
+    selectionMenu.querySelectorAll('.expand-wrapper').forEach(w => w.classList.remove('expanded'))
   }
   state.pendingFigureQuote = null
+  state.hoverSelectionDisabled = true
+  if (sentenceHoverTimer) {
+    clearTimeout(sentenceHoverTimer)
+    sentenceHoverTimer = null
+  }
 }
 
 // 통합 텍스트 선택 종료 감지 리스너
@@ -2288,6 +3355,7 @@ document.addEventListener('mouseup', (e) => {
       }
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed || !selection.rangeCount) {
+        state.hoverSelectedPdfElements = null
         hideSelectionMenu()
         return
       }
@@ -2353,6 +3421,9 @@ window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   }
 
   renderImageOverlayLayer(textLayerDiv, pageNum)
+
+  // Render floating memos
+  renderPageMemos(pageNum)
 }
 
 function cropFigureFromCanvas(canvas, imgPercent) {
@@ -3726,137 +4797,75 @@ function splitIntoSentences(fullText) {
 // 1대1 매칭 마우스 오버/아웃 및 클릭 이벤트 위임 등록
 if (viewerScrollContainer) {
   // PDF와 번역본의 문장 수 차이를 고려한 오프셋 기반 매핑 함수
-  function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
-    let pdfIdx = -1;
-    let transIdx = -1;
-    let pdfElements = [];
-
-    const transSpans = Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${pageNum}"]`));
-    const pdfSpans = Array.from(viewerScrollContainer.querySelectorAll(`.pdf-sentence[data-page="${pageNum}"]`));
-
-    if (transSpans.length === 0 || pdfSpans.length === 0) {
-      return { pdfIdx, transIdx, pdfElements };
-    }
-
-    // 양측의 고유한 문장 인덱스 집합
-    const transIdxSet = new Set(transSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
-    const pdfIdxSet = new Set(pdfSpans.map(s => parseInt(s.dataset.sentenceIdx || '0', 10)));
-    const pdfCount = pdfIdxSet.size;
-    const transCount = transIdxSet.size;
-    const maxPdfIdx = Math.max(...pdfIdxSet);
-    const maxTransIdx = Math.max(...transIdxSet);
-
-    /**
-     * 핵심 매핑 로직:
-     * 
-     * PDF는 페이지 헤더(채널 이름, 학회명 등), 섹션 제목을 텍스트 레이어에 포함하지만
-     * LLM 번역본은 이를 생략하는 경우가 많습니다.
-     * => PDF 문장 수 > 번역본 문장 수 인 경우가 많음
-     * => 이 때 여분 문장은 페이지 앞부분에 몰림 (startOffset)
-     *
-     * 수식:
-     * - 문장 수 동일: 직접 1:1 매핑
-     * - PDF > 번역: startOffset = pdfCount - transCount
-     *   - 번역 idx i -> PDF idx = i + startOffset
-     *   - PDF idx j -> 번역 idx = max(0, j - startOffset)
-     * - 번역 > PDF: 이 경우도 표대화를 위해 동일하게 오프셋 기반로
-     *   - PDF idx j -> 번역 idx = j + (transCount - pdfCount)
-     *   - 번역 idx i -> PDF idx = max(0, i - (transCount - pdfCount))
-     *
-     * 크게 다륾 경우(차이 > 3)는 비례 매핑으로 폴백
-     */
-    // 만약 사전에 백엔드에서 정렬 매핑한 문장이 존재하면 1:1 직접 매핑을 적용합니다.
-    const sentences = state.translationSentences && state.translationSentences[pageNum];
-    if (sentences && sentences.length > 0) {
-      // LLM에 의해 병합된 빈 번역 문장을 감지하여 상위 그룹 인덱스로 매핑
-      const parentIdxMap = [];
-      let lastActiveIdx = 0;
-      for (let i = 0; i < sentences.length; i++) {
-        if (sentences[i].trans && sentences[i].trans.trim()) {
-          lastActiveIdx = i;
-        }
-        parentIdxMap[i] = lastActiveIdx;
-      }
-      let firstActiveIdx = sentences.findIndex(s => s.trans && s.trans.trim());
-      if (firstActiveIdx === -1) firstActiveIdx = 0;
-      for (let i = 0; i < firstActiveIdx; i++) {
-        parentIdxMap[i] = firstActiveIdx;
-      }
-
-      const parentIdx = parentIdxMap[sentenceIdx] ?? sentenceIdx;
-      pdfIdx = parentIdx;
-      transIdx = parentIdx;
-
-      // 동일한 그룹에 속하는 모든 PDF 엘리먼트 수집
-      pdfElements = pdfSpans.filter(el => {
-        const idx = parseInt(el.dataset.sentenceIdx || '0', 10);
-        return parentIdxMap[idx] === parentIdx;
-      });
-      return { pdfIdx, transIdx, pdfElements };
-    } else {
-      // 기존 오프셋/비례식 알고리즘 폴백 (기존 캐시 대응)
-      const diff = pdfCount - transCount;
-      const absDiff = Math.abs(diff);
-
-      if (absDiff === 0) {
-        // 1:1 직접 매핑
-        pdfIdx = Math.min(maxPdfIdx, sentenceIdx);
-        transIdx = Math.min(maxTransIdx, sentenceIdx);
-      } else if (absDiff <= 5) {
-        // 오프셋 기반 매핑 (PDF와 번역본 중 어느 쪽이 더 많은지를 구분)
-        if (diff > 0) {
-          // PDF가 더 많음: PDF 앞에 데더 먹을 문장이 diff개 있다고 가정
-          const offset = diff;
-          if (target.classList.contains('trans-sentence')) {
-            transIdx = sentenceIdx;
-            pdfIdx = Math.min(maxPdfIdx, sentenceIdx + offset);
-          } else {
-            pdfIdx = sentenceIdx;
-            transIdx = Math.max(0, Math.min(maxTransIdx, sentenceIdx - offset));
-          }
-        } else {
-          // 번역본이 더 많음: 번역 앞에 데더 먹을 문장이 offset개 있다고 가정
-          const offset = -diff; // transCount - pdfCount
-          if (target.classList.contains('trans-sentence')) {
-            transIdx = sentenceIdx;
-            pdfIdx = Math.max(0, Math.min(maxPdfIdx, sentenceIdx - offset));
-          } else {
-            pdfIdx = sentenceIdx;
-            transIdx = Math.min(maxTransIdx, sentenceIdx + offset);
-          }
-        }
-      } else {
-        // 큰 차이 → 비례(proportional) 매핑
-        if (pdfCount <= 1 || transCount <= 1) {
-          pdfIdx = 0;
-          transIdx = 0;
-        } else {
-          const fraction = sentenceIdx / Math.max(target.classList.contains('trans-sentence') ? (transCount - 1) : (pdfCount - 1), 1);
-          if (target.classList.contains('trans-sentence')) {
-            transIdx = sentenceIdx;
-            pdfIdx = Math.min(maxPdfIdx, Math.round(fraction * (pdfCount - 1)));
-          } else {
-            pdfIdx = sentenceIdx;
-            transIdx = Math.min(maxTransIdx, Math.round(fraction * (transCount - 1)));
-          }
-        }
-      }
-    }
-
-    // pdfIdx에 매핑되는 모든 PDF span 엘리먼트 수집
-    pdfElements = pdfSpans.filter(el => parseInt(el.dataset.sentenceIdx || '0', 10) === pdfIdx);
-
-    return { pdfIdx, transIdx, pdfElements };
-  }
+  viewerScrollContainer.addEventListener('mousemove', () => {
+    state.hoverSelectionDisabled = false;
+  });
 
   viewerScrollContainer.addEventListener('mouseover', (e) => {
     try {
+      if (sentenceHoverTimer) {
+        clearTimeout(sentenceHoverTimer);
+        sentenceHoverTimer = null;
+      }
+
+      const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
+      if (annSpan) {
+        showAnnotationHoverTooltip(annSpan);
+      }
+
       const selection = window.getSelection();
-      if (selection && !selection.isCollapsed) return;
+      if (selection && !selection.isCollapsed && !annSpan) return;
 
       // 타겟이 번역본 문장이거나, PDF 원본의 pdf-sentence 엘리먼트인 경우
       const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
       if (!target) return;
+
+      // PDF 텍스트 문장에 마우스가 700ms 동안 머물러 있으면 문장 단위 자동 드래그 선택 및 툴팁 띄우기
+      // 단, 이미 어노테이션이 입혀진 span 위에 올라온 경우나 호버 자동 선택이 비활성화된 경우는 작동 제외
+      const pdfTarget = e.target.closest('.pdf-sentence');
+      if (pdfTarget && !annSpan && !state.hoverSelectionDisabled) {
+        sentenceHoverTimer = setTimeout(() => {
+          const curSel = window.getSelection();
+          if (curSel && !curSel.isCollapsed) return;
+
+          const sentenceIdx = parseInt(pdfTarget.dataset.sentenceIdx, 10);
+          if (isNaN(sentenceIdx)) return;
+
+          const pageWrapper = pdfTarget.closest('.pdf-page-wrapper');
+          if (!pageWrapper) return;
+          const pageNum = parseInt(pageWrapper.dataset.page, 10);
+
+          const { pdfIdx, transIdx, pdfElements } = getMappedElementsAndIndices(pdfTarget, pageNum, sentenceIdx);
+
+          if (pdfElements && pdfElements.length > 0) {
+            state.hoverSelectedPdfElements = pdfElements;
+            state.hoverSelectedPageNum = pageNum;
+
+            const firstEl = pdfElements[0];
+            const lastEl = pdfElements[pdfElements.length - 1];
+
+            const firstWalker = document.createTreeWalker(firstEl, NodeFilter.SHOW_TEXT);
+            const firstNodes = [];
+            while (firstWalker.nextNode()) firstNodes.push(firstWalker.currentNode);
+
+            const lastWalker = document.createTreeWalker(lastEl, NodeFilter.SHOW_TEXT);
+            const lastNodes = [];
+            while (lastWalker.nextNode()) lastNodes.push(lastWalker.currentNode);
+
+            if (firstNodes.length > 0 && lastNodes.length > 0) {
+              const range = document.createRange();
+              range.setStart(firstNodes[0], 0);
+              range.setEnd(lastNodes[lastNodes.length - 1], lastNodes[lastNodes.length - 1].length);
+
+              curSel.removeAllRanges();
+              curSel.addRange(range);
+
+              const rect = pdfTarget.getBoundingClientRect();
+              showSelectionMenu(rect, true);
+            }
+          }
+        }, 700);
+      }
 
       const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
       if (!pageWrapper) return;
@@ -3893,6 +4902,18 @@ if (viewerScrollContainer) {
 
   viewerScrollContainer.addEventListener('mouseout', (e) => {
     try {
+      if (sentenceHoverTimer) {
+        clearTimeout(sentenceHoverTimer);
+        sentenceHoverTimer = null;
+      }
+
+      const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
+      if (annSpan) {
+        if (!e.relatedTarget || !e.relatedTarget.closest('#ann-hover-tooltip')) {
+          hideAnnHoverTooltipWithDelay();
+        }
+      }
+
       viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => {
         el.classList.remove('sentence-highlight');
       });
@@ -3901,14 +4922,26 @@ if (viewerScrollContainer) {
     }
   });
 
-  // 클릭 시 해당 매칭 문장으로 스크롤 이동 (양방향 지원)
+  // 클릭 시 해당 매칭 문장으로 스크롤 이동 및 양방향 고정 하이라이트 매칭 적용
   viewerScrollContainer.addEventListener('click', (e) => {
     try {
+      state.hoverSelectionDisabled = true;
+      if (sentenceHoverTimer) {
+        clearTimeout(sentenceHoverTimer);
+        sentenceHoverTimer = null;
+      }
+
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed) return;
 
       const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
-      if (!target) return;
+      if (!target) {
+        // 문장이 아닌 곳 클릭 시 기존 매칭 하이라이트 제거
+        viewerScrollContainer.querySelectorAll('.active-mapped-sentence').forEach(el => {
+          el.classList.remove('active-mapped-sentence');
+        });
+        return;
+      }
 
       const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
       if (!pageWrapper) return;
@@ -3920,6 +4953,23 @@ if (viewerScrollContainer) {
 
       const { pdfIdx, transIdx, pdfElements } = getMappedElementsAndIndices(target, pageNum, sentenceIdx);
       if (pdfIdx === -1 || transIdx === -1) return;
+
+      // 1. 기존 매칭 하이라이트 제거
+      viewerScrollContainer.querySelectorAll('.active-mapped-sentence').forEach(el => {
+        el.classList.remove('active-mapped-sentence');
+      });
+
+      // 2. 신규 고정 매칭 하이라이트 지정
+      pdfElements.forEach(el => {
+        el.classList.add('active-mapped-sentence');
+      });
+      if (transIdx !== -1) {
+        viewerScrollContainer.querySelectorAll(
+          `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${transIdx}"]`
+        ).forEach(el => {
+          el.classList.add('active-mapped-sentence');
+        });
+      }
 
       // 번역본 클릭 -> PDF로 스크롤
       if (target.classList.contains('trans-sentence')) {
@@ -4099,4 +5149,321 @@ if (captureAreaBtn) {
 
 // 캡처 툴 초기화 실행
 initCropTool()
+
+// ── 번역 창 접기 및 너비 크기 조절 (드래그/버튼 연동) ──────────────────────
+function updateTransPaneWidth(newWidth) {
+  currentTransPaneWidth = Math.max(320, Math.min(newWidth, 820))
+  document.documentElement.style.setProperty('--trans-pane-width', `${currentTransPaneWidth}px`)
+  localStorage.setItem('trans-pane-width', currentTransPaneWidth)
+}
+
+// 드래그 리사이저 핸들 조작 바인딩 (이벤트 위임)
+let isResizingTrans = false
+let resizerStartX = 0
+let resizerStartWidth = 0
+
+viewerScrollContainer.addEventListener('mousedown', (e) => {
+  const handle = e.target.closest('.trans-resizer-handle')
+  if (!handle) return
+  if (e.target.closest('.trans-collapse-btn')) return // 접기 버튼 클릭은 무시
+  if (isTransPaneCollapsed) return // 접혀있는 상태에서는 드래그 금지
+  
+  isResizingTrans = true
+  resizerStartX = e.clientX
+  resizerStartWidth = currentTransPaneWidth
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  document.body.classList.add('resizing-trans')
+})
+
+function triggerMemosRedraw() {
+  document.querySelectorAll('.pdf-page-wrapper').forEach(wrapper => {
+    const pageNum = parseInt(wrapper.dataset.page, 10)
+    if (!isNaN(pageNum)) {
+      const allMemos = loadMemos(state.sessionId)
+      const pageMemos = allMemos[`page_${pageNum}`] || []
+      pageMemos.forEach(memo => {
+        const sentenceEl = wrapper.querySelector(`.pdf-sentence[data-sentence-idx="${memo.sentenceIdx}"]`)
+        if (sentenceEl) {
+          updateMemoConnectorLine(wrapper, memo, sentenceEl)
+        }
+      })
+    }
+  })
+}
+
+document.addEventListener('mousemove', (e) => {
+  if (!isResizingTrans) return
+  // 우측에 배치되어 있으므로 오른쪽으로 당기면(dx가 양수) 커지고, 왼쪽으로 밀면 작아짐
+  const dx = e.clientX - resizerStartX
+  updateTransPaneWidth(resizerStartWidth + dx)
+  triggerMemosRedraw()
+})
+
+document.addEventListener('mouseup', () => {
+  if (isResizingTrans) {
+    isResizingTrans = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    document.body.classList.remove('resizing-trans')
+  }
+})
+
+window.addEventListener('resize', triggerMemosRedraw)
+
+// 인라인 접기/펴기 버튼 클릭 이벤트 바인딩 (이벤트 위임)
+viewerScrollContainer.addEventListener('click', (e) => {
+  const btn = e.target.closest('.trans-collapse-btn')
+  if (!btn) return
+  e.stopPropagation()
+  
+  isTransPaneCollapsed = !isTransPaneCollapsed
+  document.body.classList.toggle('collapse-translation', isTransPaneCollapsed)
+  localStorage.setItem('trans-pane-collapsed', isTransPaneCollapsed)
+  
+  const leftChevron = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`
+  const rightChevron = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`
+  
+  // 모든 페이지 쌍의 인라인 화살표 상태 동기화
+  document.querySelectorAll('.trans-collapse-btn').forEach(b => {
+    b.innerHTML = isTransPaneCollapsed ? rightChevron : leftChevron
+    b.title = isTransPaneCollapsed ? '번역 창 펴기' : '번역 창 접기'
+  })
+  
+  showToast(isTransPaneCollapsed ? '번역 창이 접혔습니다.' : '번역 창이 펼쳐졌습니다.', 'info')
+});
+
+// 초기 로드 시 localStorage 상태 복원 및 초기화 실행
+(function initTransPaneControls() {
+  const savedCollapsed = localStorage.getItem('trans-pane-collapsed') === 'true'
+  const savedWidth = parseInt(localStorage.getItem('trans-pane-width')) || 620
+
+  updateTransPaneWidth(savedWidth)
+  
+  if (savedCollapsed) {
+    isTransPaneCollapsed = true
+    document.body.classList.add('collapse-translation')
+  }
+})()
+
+// ── 해시 라우팅 및 뒤로가기 제어 ──────────────────────
+async function handleRouting() {
+  try {
+    const hash = location.hash
+    console.log("[Router] handleRouting triggered. Current hash:", hash)
+    
+    if (hash.startsWith('#viewer?id=')) {
+      const docId = hash.split('?id=')[1]
+      if (docId) {
+        if (state.sessionId === docId && viewerScreen.classList.contains('active')) {
+          console.log("[Router] Viewer already active for document:", docId)
+          return
+        }
+        console.log("[Router] Routing to viewer for document:", docId)
+        const doc = await fetchLibraryDoc(docId)
+        if (doc) {
+          await openFromLibrary(doc, false)
+          return
+        }
+      }
+      location.hash = 'library'
+    } else {
+      console.log("[Router] Routing to Library screen. Viewer active:", viewerScreen.classList.contains('active'), "Library active:", libraryScreen.classList.contains('active'))
+      if (viewerScreen.classList.contains('active') || !libraryScreen.classList.contains('active')) {
+        await showLibraryScreen(false)
+      }
+    }
+  } catch (err) {
+    console.error("[Router] Error in handleRouting:", err)
+  }
+}
+
+window.addEventListener('popstate', (e) => {
+  console.log("[Router] popstate fired. state:", e.state)
+  handleRouting()
+})
+
+window.addEventListener('hashchange', () => {
+  console.log("[Router] hashchange fired")
+  handleRouting()
+})
+
+// ── 논문 목차(Outline) 제어 및 바인딩 ─────────────────
+async function loadPDFOutline() {
+  if (!outlineContent) return
+  outlineContent.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:20px;">목차 로드 중...</div>'
+  
+  try {
+    const outline = await getPDFOutline()
+    outlineContent.innerHTML = ''
+    
+    if (!outline || outline.length === 0) {
+      // 목차 메타데이터가 존재하지 않는 경우를 대비한 전체 페이지 리스트 폴백(Fallback) 렌더링
+      const infoMsg = document.createElement('div')
+      infoMsg.style.cssText = 'font-size:11px; color:var(--text-muted); padding:4px 10px 12px; border-bottom:1px dashed var(--border); margin-bottom:8px; line-height:1.4;'
+      infoMsg.textContent = '💡 본 PDF에 목차(TOC) 정보가 존재하지 않아, 전체 페이지 리스트를 대신 제공합니다.'
+      outlineContent.appendChild(infoMsg)
+      
+      for (let p = 1; p <= state.totalPages; p++) {
+        const div = document.createElement('div')
+        div.className = 'outline-item depth-0'
+        const iconSvg = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
+        div.innerHTML = `${iconSvg}<span>${p} 페이지</span>`
+        div.addEventListener('click', () => {
+          scrollToPage(viewerScrollContainer, p)
+        })
+        div.title = `${p}페이지로 이동`
+        outlineContent.appendChild(div)
+      }
+      return
+    }
+    
+    function renderTree(items, depth = 0) {
+      items.forEach(item => {
+        const div = document.createElement('div')
+        div.className = `outline-item depth-${depth}`
+        const iconSvg = depth === 0 
+          ? `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
+          : `<svg width="5" height="5" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.4; margin-right:8px; flex-shrink:0; margin-left:4px;"><circle cx="12" cy="12" r="10"/></svg>`
+        div.innerHTML = `${iconSvg}<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(item.title)}</span>`
+        if (item.pageNum) {
+          div.addEventListener('click', () => {
+            scrollToPage(viewerScrollContainer, item.pageNum)
+          })
+          div.title = `${item.pageNum}페이지로 이동`
+        }
+        outlineContent.appendChild(div)
+        if (item.items && item.items.length > 0) {
+          renderTree(item.items, depth + 1)
+        }
+      })
+    }
+    
+    renderTree(outline)
+  } catch (err) {
+    console.error("Outline load error:", err)
+    outlineContent.innerHTML = '<div style="font-size:12px; color:var(--error); text-align:center; padding:20px;">목차 로드 실패</div>'
+  }
+}
+
+function hideOutlineSidebar() {
+  if (outlineSidebar) {
+    outlineSidebar.classList.add('hidden')
+    if (outlineToggleBtn) outlineToggleBtn.classList.remove('active')
+  }
+}
+
+function showOutlineSidebar() {
+  if (outlineSidebar) {
+    outlineSidebar.classList.remove('hidden')
+    if (outlineToggleBtn) outlineToggleBtn.classList.add('active')
+  }
+}
+
+// 목차 이벤트 바인딩
+if (outlineToggleBtn) {
+  outlineToggleBtn.addEventListener('click', () => {
+    console.log("[Outline] Toggle button clicked. Sidebar:", outlineSidebar, "ToggleBtn:", outlineToggleBtn)
+    if (!outlineSidebar) {
+      showToast('목차 사이드바를 찾을 수 없습니다.', 'error')
+      return
+    }
+    if (outlineSidebar.classList.contains('hidden')) {
+      showOutlineSidebar()
+    } else {
+      hideOutlineSidebar()
+    }
+  })
+} else {
+  console.error("[Outline] outlineToggleBtn is null!")
+}
+if (outlineCloseBtn) {
+  outlineCloseBtn.addEventListener('click', hideOutlineSidebar)
+}
+
+// ── 번역 문장 더블클릭 수동 수정 (Inline Edit) ──────
+if (viewerScrollContainer) {
+  viewerScrollContainer.addEventListener('dblclick', (e) => {
+    const span = e.target.closest('.trans-sentence')
+    if (!span) return
+    
+    if (span.getAttribute('contenteditable') === 'true') return
+    
+    e.preventDefault()
+    e.stopPropagation()
+    
+    const pageNum = parseInt(span.dataset.page)
+    const sentenceIdx = parseInt(span.dataset.sentenceIdx)
+    if (isNaN(pageNum) || isNaN(sentenceIdx)) return
+    
+    const originalText = span.textContent.trim()
+    span.contentEditable = true
+    span.classList.add('inline-editing')
+    span.focus()
+    
+    // 포커스 시 텍스트 맨 뒤에 캐럿 배치
+    const range = document.createRange()
+    range.selectNodeContents(span)
+    range.collapse(false)
+    const selection = window.getSelection()
+    selection.removeAllRanges()
+    selection.addRange(range)
+    
+    let finished = false
+    
+    async function finishEdit(commit) {
+      if (finished) return
+      finished = true
+      span.contentEditable = false
+      span.classList.remove('inline-editing')
+      
+      if (commit) {
+        const newText = span.textContent.trim()
+        if (newText && newText !== originalText) {
+          try {
+            // 1. 상태 업데이트
+            const oldText = state.translationSentences[pageNum][sentenceIdx].trans
+            state.translationSentences[pageNum][sentenceIdx].trans = newText
+            
+            // 캐시 텍스트 치환
+            if (state.translationCache[pageNum]) {
+              state.translationCache[pageNum] = state.translationCache[pageNum].replace(oldText, newText)
+            }
+            
+            // 2. 백엔드 API 연동 저장
+            const payload = {
+              translation: state.translationCache[pageNum],
+              sentences: state.translationSentences[pageNum]
+            }
+            await updateLibraryTranslation(state.sessionId, pageNum, payload, getTranslationOptions())
+            
+            showToast('문장 번역이 수정되어 저장되었습니다.', 'success')
+          } catch (err) {
+            console.error("Failed to save edited translation:", err)
+            showToast('번역 수정 저장 실패', 'error')
+            span.textContent = originalText
+          }
+        } else {
+          span.textContent = originalText
+        }
+      } else {
+        span.textContent = originalText
+      }
+    }
+    
+    span.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Enter') {
+        evt.preventDefault()
+        finishEdit(true)
+      } else if (evt.key === 'Escape') {
+        evt.preventDefault()
+        finishEdit(false)
+      }
+    })
+    
+    span.addEventListener('blur', () => {
+      finishEdit(true)
+    })
+  })
+}
 

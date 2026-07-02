@@ -143,14 +143,107 @@ def clean_text_for_translation(text: str) -> str:
 
 
 
+def _extract_paper_title(doc: fitz.Document) -> str:
+    """PDF 첫 페이지의 텍스트와 폰트 크기를 분석하여 논문의 실제 제목을 추출합니다."""
+    if len(doc) == 0:
+        return ""
+    
+    try:
+        page = doc[0]
+        blocks = page.get_text("dict")["blocks"]
+        
+        spans_info = []
+        for b in blocks:
+            if "lines" not in b:
+                continue
+            for line in b["lines"]:
+                for span in line["spans"]:
+                    text = span["text"].strip()
+                    if not text or len(text) < 2:
+                        continue
+                    # 너무 작거나 숫자로만 이루어진 스팬은 무시
+                    if text.isdigit():
+                        continue
+                    
+                    bbox = span["bbox"]
+                    y0 = bbox[1]
+                    height = page.rect.height
+                    
+                    # 상단 8% 미만 또는 하단 15% 초과 영역에 있으면서 폰트가 작은 경우(헤더/푸터) 무시
+                    if (y0 < height * 0.08 or y0 > height * 0.85) and span["size"] < 12:
+                        continue
+                        
+                    spans_info.append({
+                        "text": text,
+                        "size": span["size"],
+                        "font": span["font"],
+                        "bbox": bbox
+                    })
+        
+        if not spans_info:
+            return ""
+            
+        # 가장 큰 폰트 크기 찾기
+        max_size = max(s["size"] for s in spans_info)
+        
+        # 최상위 폰트 크기(최대 크기의 90% 이상인 것들)에 해당하는 스팬 수집
+        title_spans = []
+        for s in spans_info:
+            if s["size"] >= max_size * 0.9:
+                title_spans.append(s)
+                
+        if not title_spans:
+            return ""
+            
+        # 읽기 순서대로 정렬 (y좌표 우선, x좌표 차선)
+        title_spans.sort(key=lambda s: (s["bbox"][1], s["bbox"][0]))
+        
+        # 연속된 텍스트 결합
+        title_parts = []
+        for s in title_spans:
+            lower_text = s["text"].lower()
+            if lower_text in ["abstract", "introduction", "keywords", "key words"]:
+                continue
+            title_parts.append(s["text"])
+            
+        title_text = " ".join(title_parts).strip()
+        title_text = re.sub(r'\s+', ' ', title_text)
+        
+        # 유효한 제목 길이 제한
+        if 5 <= len(title_text) <= 250:
+            return title_text
+    except Exception as e:
+        print(f"Failed to extract title from PDF content: {e}")
+        
+    return ""
+
+
 def get_pdf_metadata(pdf_path: str) -> Dict[str, Any]:
     """PDF 메타데이터를 반환합니다."""
     doc = fitz.open(pdf_path)
     meta = doc.metadata or {}
     page_count = len(doc)
+    
+    # 1. 문서 텍스트 분석을 통한 실제 논문 제목 추출 시도
+    extracted_title = _extract_paper_title(doc)
+    
+    # 2. 메타데이터 제목 획득
+    meta_title = meta.get("title", "").strip()
+    
+    # 3. 우선순위 결정: 추출된 제목이 있으면 최우선 사용, 없으면 메타데이터 제목 사용
+    # 단, 메타데이터 제목이 무의미한 템플릿(Word, untitled 등)인 경우도 필터링
+    title = ""
+    if extracted_title:
+        title = extracted_title
+    elif meta_title:
+        lower_meta = meta_title.lower()
+        invalid_keywords = ["microsoft", "word", "untitled", "layout", "template", "document", "pdf", "page"]
+        if not any(k in lower_meta for k in invalid_keywords) and len(meta_title) >= 4:
+            title = meta_title
+            
     doc.close()
     return {
-        "title": meta.get("title", ""),
+        "title": title,
         "author": meta.get("author", ""),
         "subject": meta.get("subject", ""),
         "total_pages": page_count,
