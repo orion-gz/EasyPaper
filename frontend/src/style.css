@@ -2854,7 +2854,7 @@ body.resizing-trans .trans-resizer-handle::after {
   background: var(--bg-panel);
   border-right: 1px solid var(--border-strong);
   box-shadow: 4px 0 30px rgba(0, 0, 0, 0.2);
-  z-index: 90;
+  z-index: 120 !important;
   display: flex;
   flex-direction: column;
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);

@@ -4501,13 +4501,19 @@ function showOutlineSidebar() {
 // 목차 이벤트 바인딩
 if (outlineToggleBtn) {
   outlineToggleBtn.addEventListener('click', () => {
-    console.log("[Outline] Toggle button clicked. Sidebar hidden state:", outlineSidebar.classList.contains('hidden'))
+    console.log("[Outline] Toggle button clicked. Sidebar:", outlineSidebar, "ToggleBtn:", outlineToggleBtn)
+    if (!outlineSidebar) {
+      showToast('목차 사이드바를 찾을 수 없습니다.', 'error')
+      return
+    }
     if (outlineSidebar.classList.contains('hidden')) {
       showOutlineSidebar()
     } else {
       hideOutlineSidebar()
     }
   })
+} else {
+  console.error("[Outline] outlineToggleBtn is null!")
 }
 if (outlineCloseBtn) {
   outlineCloseBtn.addEventListener('click', hideOutlineSidebar)
