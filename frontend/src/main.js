@@ -2472,6 +2472,57 @@ function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
   return { pdfIdx, transIdx, pdfElements };
 }
 
+// 커스텀 다이얼로그 확인 모달 유틸리티
+function showCustomConfirm(message) {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div')
+    modal.className = 'custom-confirm-modal-wrapper'
+    modal.innerHTML = `
+      <div class="custom-confirm-modal">
+        <div class="custom-confirm-modal-header">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span class="custom-confirm-modal-title">메모 삭제</span>
+        </div>
+        <div class="custom-confirm-modal-body">
+          ${message.replace(/\n/g, '<br>')}
+        </div>
+        <div class="custom-confirm-modal-footer">
+          <button class="custom-confirm-btn cancel-btn">취소</button>
+          <button class="custom-confirm-btn confirm-btn">삭제</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    // Trigger transition
+    setTimeout(() => modal.classList.add('active'), 10)
+
+    const cleanup = (value) => {
+      modal.classList.remove('active')
+      setTimeout(() => {
+        modal.remove()
+        resolve(value)
+      }, 200)
+    }
+
+    modal.querySelector('.cancel-btn').addEventListener('click', (e) => {
+      e.stopPropagation()
+      cleanup(false)
+    })
+
+    modal.querySelector('.confirm-btn').addEventListener('click', (e) => {
+      e.stopPropagation()
+      cleanup(true)
+    })
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        cleanup(false)
+      }
+    })
+  })
+}
+
 // ── Floating Markdown Memo 관리 ─────────────────────────
 function loadMemos(sessionId) {
   if (!sessionId) return {}
@@ -2628,10 +2679,11 @@ function renderPageMemos(pageNum) {
           }, 150)
         })
 
-        actions.querySelector('.delete-btn').addEventListener('mousedown', (e) => {
+        actions.querySelector('.delete-btn').addEventListener('mousedown', async (e) => {
           e.stopPropagation()
           e.preventDefault()
-          if (confirm('이 메모를 삭제하시겠습니까?')) {
+          const confirmDelete = await showCustomConfirm('이 메모를 삭제하시겠습니까?')
+          if (confirmDelete) {
             const allMemosObj = loadMemos(state.sessionId)
             allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
             saveMemos(state.sessionId, allMemosObj)
@@ -2681,9 +2733,10 @@ function renderPageMemos(pageNum) {
         })
 
 
-        actions.querySelector('.delete-btn').addEventListener('click', (e) => {
+        actions.querySelector('.delete-btn').addEventListener('click', async (e) => {
           e.stopPropagation()
-          if (confirm('이 메모를 삭제하시겠습니까?')) {
+          const confirmDelete = await showCustomConfirm('이 메모를 삭제하시겠습니까?')
+          if (confirmDelete) {
             const allMemosObj = loadMemos(state.sessionId)
             allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
             saveMemos(state.sessionId, allMemosObj)
