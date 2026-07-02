@@ -2375,7 +2375,7 @@ function createSelectionMenu() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </button>
         <!-- 서브 팝오버 툴팁 -->
-        <div class="color-popover highlight-popover hidden">
+        <div class="color-popover highlight-popover">
           <span class="color-dot" data-color="#eab308" style="background: #eab308;" title="노랑"></span>
           <span class="color-dot" data-color="#22c55e" style="background: #22c55e;" title="초록"></span>
           <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
@@ -2389,7 +2389,7 @@ function createSelectionMenu() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
         </button>
         <!-- 서브 팝오버 툴팁 -->
-        <div class="color-popover underline-popover hidden">
+        <div class="color-popover underline-popover">
           <span class="color-dot" data-color="#ef4444" style="background: #ef4444;" title="빨강"></span>
           <span class="color-dot" data-color="#f97316" style="background: #f97316;" title="주황"></span>
           <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
@@ -2418,8 +2418,6 @@ function createSelectionMenu() {
   
   const highlightBtn = menu.querySelector('.highlight-btn')
   const underlineBtn = menu.querySelector('.underline-btn')
-  const highlightPopover = menu.querySelector('.highlight-popover')
-  const underlinePopover = menu.querySelector('.underline-popover')
 
   function updateActiveColors() {
     highlightBtn.querySelector('svg').style.color = state.activeHighlightColor
@@ -2447,7 +2445,6 @@ function createSelectionMenu() {
       e.preventDefault(); e.stopPropagation();
       state.activeHighlightColor = dot.dataset.color
       updateActiveColors()
-      highlightPopover.classList.add('hidden')
       handleAnnotate('highlight', state.activeHighlightColor)
     })
   })
@@ -2457,35 +2454,28 @@ function createSelectionMenu() {
       e.preventDefault(); e.stopPropagation();
       state.activeUnderlineColor = dot.dataset.color
       updateActiveColors()
-      underlinePopover.classList.add('hidden')
       handleAnnotate('underline', state.activeUnderlineColor)
     })
   })
 
-  // 아이콘 클릭 핸들러 바인딩 (서브 컬러 팝오버 토글)
+  // 아이콘 클릭 시 즉시 활성화 색상으로 마킹 처리 적용
   highlightBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    underlinePopover.classList.add('hidden')
-    highlightPopover.classList.toggle('hidden')
+    handleAnnotate('highlight', state.activeHighlightColor)
   })
 
   underlineBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    highlightPopover.classList.add('hidden')
-    underlinePopover.classList.toggle('hidden')
+    handleAnnotate('underline', state.activeUnderlineColor)
   })
 
   menu.querySelector('.clear-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    highlightPopover.classList.add('hidden')
-    underlinePopover.classList.add('hidden')
     handleAnnotate('clear')
   })
 
   menu.querySelector('.ask-ai-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    highlightPopover.classList.add('hidden')
-    underlinePopover.classList.add('hidden')
     if (state.pendingFigureQuote) {
       askAIAssistantImage(state.pendingFigureQuote.base64Img, state.pendingFigureQuote.pageNum)
     } else {
