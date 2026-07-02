@@ -4325,13 +4325,22 @@ if (viewerScrollContainer) {
           const curSel = window.getSelection();
           if (curSel && !curSel.isCollapsed) return;
 
-          const range = document.createRange();
-          range.selectNodeContents(pdfTarget);
-          curSel.removeAllRanges();
-          curSel.addRange(range);
+          const walker = document.createTreeWalker(pdfTarget, NodeFilter.SHOW_TEXT);
+          const nodes = [];
+          while (walker.nextNode()) {
+            nodes.push(walker.currentNode);
+          }
+          if (nodes.length > 0) {
+            const range = document.createRange();
+            range.setStart(nodes[0], 0);
+            range.setEnd(nodes[nodes.length - 1], nodes[nodes.length - 1].length);
 
-          const rect = pdfTarget.getBoundingClientRect();
-          showSelectionMenu(rect, true);
+            curSel.removeAllRanges();
+            curSel.addRange(range);
+
+            const rect = pdfTarget.getBoundingClientRect();
+            showSelectionMenu(rect, true);
+          }
         }, 700);
       }
 
