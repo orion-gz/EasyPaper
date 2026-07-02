@@ -2368,6 +2368,7 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations) {
 
 // ── 팝업 툴팁 선택 메뉴 관리 ──
 let selectionMenu = null
+let sentenceHoverTimer = null
 
 function createSelectionMenu() {
   if (selectionMenu) return selectionMenu
@@ -4299,6 +4300,11 @@ if (viewerScrollContainer) {
 
   viewerScrollContainer.addEventListener('mouseover', (e) => {
     try {
+      if (sentenceHoverTimer) {
+        clearTimeout(sentenceHoverTimer);
+        sentenceHoverTimer = null;
+      }
+
       const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
       if (annSpan) {
         showAnnotationHoverTooltip(annSpan);
@@ -4311,6 +4317,23 @@ if (viewerScrollContainer) {
       // 타겟이 번역본 문장이거나, PDF 원본의 pdf-sentence 엘리먼트인 경우
       const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
       if (!target) return;
+
+      // PDF 텍스트 문장에 마우스가 700ms 동안 머물러 있으면 문장 단위 자동 드래그 선택 및 툴팁 띄우기
+      const pdfTarget = e.target.closest('.pdf-sentence');
+      if (pdfTarget) {
+        sentenceHoverTimer = setTimeout(() => {
+          const curSel = window.getSelection();
+          if (curSel && !curSel.isCollapsed) return;
+
+          const range = document.createRange();
+          range.selectNodeContents(pdfTarget);
+          curSel.removeAllRanges();
+          curSel.addRange(range);
+
+          const rect = pdfTarget.getBoundingClientRect();
+          showSelectionMenu(rect, true);
+        }, 700);
+      }
 
       const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
       if (!pageWrapper) return;
@@ -4347,6 +4370,11 @@ if (viewerScrollContainer) {
 
   viewerScrollContainer.addEventListener('mouseout', (e) => {
     try {
+      if (sentenceHoverTimer) {
+        clearTimeout(sentenceHoverTimer);
+        sentenceHoverTimer = null;
+      }
+
       const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
       if (annSpan) {
         if (!e.relatedTarget || !e.relatedTarget.closest('#ann-hover-tooltip')) {
