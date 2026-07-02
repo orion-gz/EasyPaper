@@ -2243,7 +2243,7 @@ function applyAnnotationToRange(range, type, textLayerDiv, pageNum, color) {
   const chosenColor = color || (type === 'highlight' ? state.activeHighlightColor : state.activeUnderlineColor)
 
   // 1. DOM에 스타일 적용 (텍스트 노드 분할)
-  applyAnnotationToRangeWithoutSave(range, type, chosenColor)
+  applyAnnotationToRangeWithoutSave(range, type, chosenColor, offsets.startOffset, offsets.endOffset)
 
   // 2. LocalStorage에 저장
   const annotations = loadAnnotations(state.sessionId)
@@ -2262,7 +2262,7 @@ function applyAnnotationToRange(range, type, textLayerDiv, pageNum, color) {
 }
 
 // 저장 없이 DOM 상에 직접 span을 감싸서 스타일 입히는 헬퍼
-function applyAnnotationToRangeWithoutSave(range, type, color) {
+function applyAnnotationToRangeWithoutSave(range, type, color, overallStartOffset, overallEndOffset) {
   const textNodes = []
   const commonAncestor = range.commonAncestorContainer
   
@@ -2305,6 +2305,14 @@ function applyAnnotationToRangeWithoutSave(range, type, color) {
       span.className = 'pdf-annotation-underline'
       const baseColor = color || '#ef4444'
       span.style.borderBottomColor = baseColor
+    }
+    
+    // 호버 툴팁 매칭 및 간편 삭제 처리를 위해 데이터셋 부여
+    if (overallStartOffset !== undefined && overallStartOffset !== null) {
+      span.dataset.startOffset = overallStartOffset
+    }
+    if (overallEndOffset !== undefined && overallEndOffset !== null) {
+      span.dataset.endOffset = overallEndOffset
     }
     
     const subRange = document.createRange()
@@ -2350,7 +2358,7 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations) {
       try {
         range.setStart(startNode, startNodeOffset)
         range.setEnd(endNode, endNodeOffset)
-        applyAnnotationToRangeWithoutSave(range, ann.type, ann.color)
+        applyAnnotationToRangeWithoutSave(range, ann.type, ann.color, ann.startOffset, ann.endOffset)
       } catch (e) {
         console.warn("Failed to restore annotation:", ann, e)
       }
@@ -2371,7 +2379,7 @@ function createSelectionMenu() {
     <div class="menu-annotate-group" style="display: flex; gap: 6px; align-items: center; padding: 2px 4px;">
       <!-- 하이라이트 그룹 -->
       <div class="expand-wrapper highlight-wrapper">
-        <button class="menu-btn highlight-btn" title="하이라이트">
+        <button class="menu-btn highlight-btn" title="하이라이트 (우클릭: 색상 변경)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </button>
         <div class="expand-colors highlight-colors">
@@ -2384,7 +2392,7 @@ function createSelectionMenu() {
       
       <!-- 밑줄 그룹 -->
       <div class="expand-wrapper underline-wrapper">
-        <button class="menu-btn underline-btn" title="밑줄">
+        <button class="menu-btn underline-btn" title="밑줄 (우클릭: 색상 변경)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
         </button>
         <div class="expand-colors underline-colors">
@@ -2459,25 +2467,30 @@ function createSelectionMenu() {
     })
   })
 
-  // 메인 아이콘 클릭 시 즉시 토글 혹은 적용
+  // 메인 아이콘 좌클릭: 활성화된 기존 색상으로 즉시 마킹 처리 적용
   highlightBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    if (highlightWrapper.classList.contains('expanded')) {
-      handleAnnotate('highlight', state.activeHighlightColor)
-    } else {
-      underlineWrapper.classList.remove('expanded')
-      highlightWrapper.classList.add('expanded')
-    }
+    handleAnnotate('highlight', state.activeHighlightColor)
   })
 
+  // 메인 아이콘 우클릭: 색상 선택기 확장 토글
+  highlightBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    underlineWrapper.classList.remove('expanded')
+    highlightWrapper.classList.toggle('expanded')
+  })
+
+  // 메인 밑줄 좌클릭: 활성화된 기존 색상으로 즉시 마킹 처리 적용
   underlineBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    if (underlineWrapper.classList.contains('expanded')) {
-      handleAnnotate('underline', state.activeUnderlineColor)
-    } else {
-      highlightWrapper.classList.remove('expanded')
-      underlineWrapper.classList.add('expanded')
-    }
+    handleAnnotate('underline', state.activeUnderlineColor)
+  })
+
+  // 메인 밑줄 우클릭: 색상 선택기 확장 토글
+  underlineBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    highlightWrapper.classList.remove('expanded')
+    underlineWrapper.classList.toggle('expanded')
   })
 
   menu.querySelector('.clear-btn').addEventListener('click', (e) => {
@@ -2502,6 +2515,122 @@ function createSelectionMenu() {
 
   updateActiveColors()
   return menu
+}
+
+// ── 어노테이션(하이라이트/밑줄) 마우스 호버 툴팁 관리 ──
+let annHoverTooltip = null
+let annHoverHideTimer = null
+let activeHoveredSpan = null
+
+function createAnnHoverTooltip() {
+  if (annHoverTooltip) return annHoverTooltip
+
+  const tooltip = document.createElement('div')
+  tooltip.id = 'ann-hover-tooltip'
+  tooltip.className = 'selection-menu hidden'
+  tooltip.style.cssText = 'position: absolute; z-index: 10005; padding: 2px 4px; gap: 4px; height: 32px; display: flex; align-items: center; box-shadow: var(--shadow-md);'
+  tooltip.innerHTML = `
+    <button class="menu-btn delete-ann-btn" title="삭제" style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+    </button>
+    <div style="width: 1px; background: var(--border-strong); height: 12px; margin: 0 2px;"></div>
+    <button class="menu-btn ask-ai-ann-btn" title="AI에게 질문" style="display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--accent-mid); padding: 0 4px; background: transparent; border: none; cursor: pointer; height: 26px;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+      <span>Ask AI</span>
+    </button>
+  `
+  document.body.appendChild(tooltip)
+  annHoverTooltip = tooltip
+
+  tooltip.addEventListener('mousedown', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+  })
+
+  tooltip.addEventListener('mouseenter', () => {
+    if (annHoverHideTimer) {
+      clearTimeout(annHoverHideTimer)
+      annHoverHideTimer = null
+    }
+  })
+
+  tooltip.addEventListener('mouseleave', () => {
+    hideAnnHoverTooltipWithDelay()
+  })
+
+  tooltip.querySelector('.delete-ann-btn').addEventListener('click', async (e) => {
+    e.preventDefault(); e.stopPropagation()
+    if (!activeHoveredSpan) return
+
+    const startOffset = parseInt(activeHoveredSpan.dataset.startOffset)
+    const endOffset = parseInt(activeHoveredSpan.dataset.endOffset)
+    const pageWrapper = activeHoveredSpan.closest('.pdf-page-wrapper')
+    if (!pageWrapper) return
+    const pageNum = parseInt(pageWrapper.dataset.page)
+    const textLayerDiv = pageWrapper.querySelector('.textLayer')
+
+    const annotations = loadAnnotations(state.sessionId)
+    if (annotations[`page_${pageNum}`]) {
+      const originalCount = annotations[`page_${pageNum}`].length
+      annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+        return !(ann.startOffset === startOffset && ann.endOffset === endOffset)
+      })
+
+      if (annotations[`page_${pageNum}`].length !== originalCount) {
+        saveAnnotations(state.sessionId, annotations)
+        showToast('어노테이션이 삭제되었습니다 ✓', 'success')
+        reRenderPageAnnotations(textLayerDiv, pageNum)
+      }
+    }
+    hideAnnHoverTooltip()
+  })
+
+  tooltip.querySelector('.ask-ai-ann-btn').addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation()
+    if (!activeHoveredSpan) return
+    const text = activeHoveredSpan.textContent.trim()
+    if (text) {
+      askAIAssistant(text)
+    }
+    hideAnnHoverTooltip()
+  })
+
+  return tooltip
+}
+
+function showAnnotationHoverTooltip(annSpan) {
+  if (annHoverHideTimer) {
+    clearTimeout(annHoverHideTimer)
+    annHoverHideTimer = null
+  }
+
+  activeHoveredSpan = annSpan
+  const tooltip = createAnnHoverTooltip()
+  tooltip.classList.remove('hidden')
+
+  const rect = annSpan.getBoundingClientRect()
+  const tooltipWidth = tooltip.offsetWidth || 110
+  const tooltipHeight = tooltip.offsetHeight || 32
+
+  const left = rect.left + rect.width / 2 - tooltipWidth / 2 + window.scrollX
+  const top = rect.top - tooltipHeight - 6 + window.scrollY
+
+  tooltip.style.left = `${Math.max(8, left)}px`
+  tooltip.style.top = `${Math.max(8, top)}px`
+}
+
+function hideAnnHoverTooltip() {
+  if (annHoverTooltip) {
+    annHoverTooltip.classList.add('hidden')
+  }
+  activeHoveredSpan = null
+}
+
+function hideAnnHoverTooltipWithDelay() {
+  if (annHoverHideTimer) clearTimeout(annHoverHideTimer)
+  annHoverHideTimer = setTimeout(() => {
+    hideAnnHoverTooltip()
+  }, 250)
 }
 
 function handleAnnotate(type, color) {
@@ -4170,6 +4299,12 @@ if (viewerScrollContainer) {
 
   viewerScrollContainer.addEventListener('mouseover', (e) => {
     try {
+      const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
+      if (annSpan) {
+        showAnnotationHoverTooltip(annSpan);
+        return;
+      }
+
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed) return;
 
@@ -4212,6 +4347,13 @@ if (viewerScrollContainer) {
 
   viewerScrollContainer.addEventListener('mouseout', (e) => {
     try {
+      const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
+      if (annSpan) {
+        if (!e.relatedTarget || !e.relatedTarget.closest('#ann-hover-tooltip')) {
+          hideAnnHoverTooltipWithDelay();
+        }
+      }
+
       viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => {
         el.classList.remove('sentence-highlight');
       });
