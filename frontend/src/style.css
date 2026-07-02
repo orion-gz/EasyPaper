@@ -3078,6 +3078,15 @@ body.light-theme .floating-memo-header {
   display: flex;
   align-items: center;
   gap: 4px;
+  max-width: 110px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.floating-memo-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 
 .floating-memo-actions {

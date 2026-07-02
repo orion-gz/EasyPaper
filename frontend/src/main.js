@@ -4850,11 +4850,21 @@ if (viewerScrollContainer) {
         showAnnotationHoverTooltip(annSpan);
       }
 
-      const selection = window.getSelection();
-      if (selection && !selection.isCollapsed && !annSpan) return;
-
-      // 타겟이 번역본 문장이거나, PDF 원본의 pdf-sentence 엘리먼트인 경우
       const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
+
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && !annSpan) {
+        if (e.buttons === 1) {
+          return;
+        }
+        if (target) {
+          selection.removeAllRanges();
+          hideSelectionMenu();
+        } else {
+          return;
+        }
+      }
+
       if (!target) return;
 
       // PDF 텍스트 문장에 마우스가 700ms 동안 머물러 있으면 문장 단위 자동 드래그 선택 및 툴팁 띄우기
