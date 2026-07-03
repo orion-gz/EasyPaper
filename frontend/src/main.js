@@ -3888,13 +3888,7 @@ async function sendChatMessage() {
     const fullPayload = `[인용된 본문 내용]:\n"${state.quotedText}"\n\n[질문]:\n${text}`
     
     // UI에 답장/인용구 레이아웃으로 표시
-    const userMsgHtml = `
-      <div class="message-quote">
-        <span class="quote-symbol">❝</span>
-        <span class="quote-body">${escapeHtml(state.quotedText)}</span>
-      </div>
-      <div class="message-text">${escapeHtml(text)}</div>
-    `
+    const userMsgHtml = `<div class="message-quote"><span class="quote-symbol">❝</span><span class="quote-body">${escapeHtml(state.quotedText)}</span></div><div class="message-text">${escapeHtml(text)}</div>`
     appendChatMessage('user', userMsgHtml, true)
     state.chatHistory.push({ role: 'user', content: fullPayload })
     
@@ -3906,13 +3900,7 @@ async function sendChatMessage() {
     const fullPayload = `[인용된 이미지 (Page ${state.quotedImagePage})]\n\n질문:\n${text}`
     
     // UI에 답장/인용구 레이아웃으로 표시
-    const userMsgHtml = `
-      <div class="message-quote">
-        <span class="quote-symbol">❝</span>
-        <img class="message-quote-img" src="${state.quotedImage}" alt="Quoted Figure" />
-      </div>
-      <div class="message-text">${escapeHtml(text)}</div>
-    `
+    const userMsgHtml = `<div class="message-quote"><span class="quote-symbol">❝</span><img class="message-quote-img" src="${state.quotedImage}" alt="Quoted Figure" /></div><div class="message-text">${escapeHtml(text)}</div>`
     appendChatMessage('user', userMsgHtml, true)
     state.chatHistory.push({ role: 'user', content: fullPayload })
     
