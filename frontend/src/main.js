@@ -2119,11 +2119,9 @@ async function openFromLibrary(doc, shouldPushState = true) {
     if (history && history.length > 0) {
       for (const msg of history) {
         state.chatHistory.push({ role: msg.role, content: msg.content })
-        appendChatMessage(
-          msg.role,
-          msg.role === 'assistant' ? formatChatHtml(msg.content) : msg.content,
-          msg.role === 'assistant'
-        )
+        const isAssistant = msg.role === 'assistant'
+        const renderedContent = isAssistant ? formatChatHtml(msg.content) : formatUserChatHtml(msg.content)
+        appendChatMessage(msg.role, renderedContent, true)
       }
     }
   } catch (err) {
@@ -3649,6 +3647,39 @@ function formatChatHtml(text) {
     .replace(/<br><ul>/g, '<ul>')
     .replace(/<br><li>/g, '<li>')
     .replace(/<\/li><br>/g, '</li>')
+}
+
+function formatUserChatHtml(content) {
+  if (!content) return ''
+  
+  if (content.startsWith('[인용된 본문 내용]:')) {
+    const marker = '\n\n[질문]:\n'
+    const markerIdx = content.indexOf(marker)
+    if (markerIdx !== -1) {
+      const firstQuote = content.indexOf('"', 12)
+      const lastQuote = content.lastIndexOf('"', markerIdx)
+      let quoteText = ''
+      if (firstQuote !== -1 && lastQuote !== -1 && lastQuote > firstQuote) {
+        quoteText = content.substring(firstQuote + 1, lastQuote)
+      } else {
+        quoteText = content.substring(21, markerIdx)
+      }
+      const questionText = content.substring(markerIdx + marker.length)
+      return `<div class="message-quote"><span class="quote-symbol">❝</span><span class="quote-body">${escapeHtml(quoteText)}</span></div><div class="message-text">${escapeHtml(questionText)}</div>`
+    }
+  }
+  
+  if (content.startsWith('[인용된 이미지')) {
+    const marker = ']\n\n질문:\n'
+    const markerIdx = content.indexOf(marker)
+    if (markerIdx !== -1) {
+      const pageInfo = content.substring(1, markerIdx)
+      const questionText = content.substring(markerIdx + marker.length)
+      return `<div class="message-quote"><span class="quote-symbol">❝</span><span class="quote-body" style="font-size: 11px; opacity: 0.85;">📷 ${escapeHtml(pageInfo)}</span></div><div class="message-text">${escapeHtml(questionText)}</div>`
+    }
+  }
+  
+  return escapeHtml(content)
 }
 
 function updateChatSendBtnIcon(isGenerating) {
