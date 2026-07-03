@@ -11,6 +11,7 @@ from config import (
     get_gemini_api_key,
     get_claude_api_key,
     get_agy_path,
+    get_agy_env,
     get_translation_prompt_template
 )
 
@@ -558,7 +559,8 @@ async def stream_antigravity(prompt: str, model: str = None) -> AsyncGenerator[s
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
+            env=get_agy_env()
         )
         
         import codecs

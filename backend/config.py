@@ -188,6 +188,14 @@ def get_app_port() -> int:
 def get_agy_path() -> str:
     return AGY_PATH
 
+def get_agy_env() -> dict:
+    env = os.environ.copy()
+    if "HOME" not in env or not env["HOME"]:
+        env["HOME"] = "/home/ubuntu"
+    if "USER" not in env or not env["USER"]:
+        env["USER"] = "ubuntu"
+    return env
+
 # ── Dynamic Translation Prompt Template ─────────────────
 PROMPT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "translation_prompt.txt")
 

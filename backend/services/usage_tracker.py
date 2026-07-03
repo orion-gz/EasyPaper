@@ -61,10 +61,17 @@ def _get_antigravity_cloud_quota(retry=True) -> dict:
     # Add parent directory to sys.path to allow imports from config if needed
     sys.path.append(str(Path(__file__).parent.parent))
     try:
-        from config import get_agy_path
+        from config import get_agy_path, get_agy_env
     except ImportError:
         def get_agy_path():
             return os.getenv("AGY_PATH", "/home/ubuntu/.local/bin/agy")
+        def get_agy_env():
+            env = os.environ.copy()
+            if "HOME" not in env or not env["HOME"]:
+                env["HOME"] = "/home/ubuntu"
+            if "USER" not in env or not env["USER"]:
+                env["USER"] = "ubuntu"
+            return env
 
     token_path = os.path.expanduser("~/.gemini/antigravity-cli/antigravity-oauth-token")
     if not os.path.exists(token_path):
@@ -149,7 +156,8 @@ def _get_antigravity_cloud_quota(retry=True) -> dict:
                     [agy_path, "--dangerously-skip-permissions", "models"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=5.0
+                    timeout=5.0,
+                    env=get_agy_env()
                 )
                 return _get_antigravity_cloud_quota(retry=False)
             except Exception:
