@@ -2548,16 +2548,26 @@ function updateMemoConnectorLine(pageWrapper, memo, sentenceEl) {
     pageWrapper.appendChild(svg)
   }
 
+  const isLight = document.body.classList.contains('light-theme')
+  let strokeColor = 'var(--accent-mid)'
+  const colorMode = memo.color || 'default'
+  if (colorMode === 'yellow') strokeColor = isLight ? '#ca8a04' : '#eab308'
+  else if (colorMode === 'green') strokeColor = isLight ? '#059669' : '#10b981'
+  else if (colorMode === 'blue') strokeColor = isLight ? '#2563eb' : '#3b82f6'
+  else if (colorMode === 'red') strokeColor = isLight ? '#e11d48' : '#f43f5e'
+
   let path = svg.getElementById(`connector_${memo.id}`)
   if (!path) {
     path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     path.setAttribute('id', `connector_${memo.id}`)
-    path.setAttribute('stroke', 'var(--accent-mid)')
+    path.setAttribute('stroke', strokeColor)
     path.setAttribute('stroke-width', '1.5')
     path.setAttribute('stroke-dasharray', '4,4')
     path.setAttribute('fill', 'none')
     path.setAttribute('opacity', '0.6')
     svg.appendChild(path)
+  } else {
+    path.setAttribute('stroke', strokeColor)
   }
 
   if (!sentenceEl) {
@@ -2630,7 +2640,7 @@ function renderPageMemos(pageNum) {
 
   pageMemos.forEach(memo => {
     const memoEl = document.createElement('div')
-    memoEl.className = 'floating-memo'
+    memoEl.className = `floating-memo color-${memo.color || 'default'}`
     memoEl.setAttribute('data-id', memo.id)
     memoEl.style.left = `${memo.x}%`
     memoEl.style.top = `${memo.y}%`
@@ -2756,6 +2766,13 @@ function renderPageMemos(pageNum) {
         <div class="floating-memo-title" title="${sentenceText}">
           <span>📝 ${shortTitle}</span>
         </div>
+        <div class="floating-memo-color-picker">
+          <span class="color-dot default ${!memo.color || memo.color === 'default' ? 'selected' : ''}" data-color="default" title="기본"></span>
+          <span class="color-dot yellow ${memo.color === 'yellow' ? 'selected' : ''}" data-color="yellow" title="노랑"></span>
+          <span class="color-dot green ${memo.color === 'green' ? 'selected' : ''}" data-color="green" title="초록"></span>
+          <span class="color-dot blue ${memo.color === 'blue' ? 'selected' : ''}" data-color="blue" title="파랑"></span>
+          <span class="color-dot red ${memo.color === 'red' ? 'selected' : ''}" data-color="red" title="빨강"></span>
+        </div>
         <div class="floating-memo-actions"></div>
       </div>
       <div class="floating-memo-body"></div>
@@ -2770,6 +2787,26 @@ function renderPageMemos(pageNum) {
       e.stopPropagation()
       isEditing = true
       updateCardContent()
+    })
+
+    const colorDots = memoEl.querySelectorAll('.color-dot')
+    colorDots.forEach(dot => {
+      dot.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const selectedColor = dot.getAttribute('data-color')
+        
+        colorDots.forEach(d => d.classList.remove('selected'))
+        dot.classList.add('selected')
+        
+        memoEl.className = `floating-memo color-${selectedColor}`
+        
+        memo.color = selectedColor
+        const allMemosObj = loadMemos(state.sessionId)
+        allMemosObj[`page_${pageNum}`] = pageMemos
+        saveMemos(state.sessionId, allMemosObj)
+        
+        updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+      })
     })
 
     pageWrapper.appendChild(memoEl)
@@ -4813,11 +4850,34 @@ if (viewerScrollContainer) {
         showAnnotationHoverTooltip(annSpan);
       }
 
-      const selection = window.getSelection();
-      if (selection && !selection.isCollapsed && !annSpan) return;
-
-      // 타겟이 번역본 문장이거나, PDF 원본의 pdf-sentence 엘리먼트인 경우
       const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
+
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && !annSpan) {
+        if (e.buttons === 1) {
+          return;
+        }
+        if (target) {
+          const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
+          const hoveredPageNum = pageWrapper ? parseInt(pageWrapper.dataset.page, 10) : -1;
+          const hoveredSentenceIdx = parseInt(target.dataset.sentenceIdx, 10);
+
+          const isSameAsSelected = (hoveredPageNum === state.hoverSelectedPageNum && hoveredSentenceIdx === state.hoverSelectedSentenceIdx);
+
+          if (!isSameAsSelected) {
+            selection.removeAllRanges();
+            hideSelectionMenu();
+            state.hoverSelectedPdfElements = null;
+            state.hoverSelectedPageNum = null;
+            state.hoverSelectedSentenceIdx = null;
+          } else {
+            return;
+          }
+        } else {
+          return;
+        }
+      }
+
       if (!target) return;
 
       // PDF 텍스트 문장에 마우스가 700ms 동안 머물러 있으면 문장 단위 자동 드래그 선택 및 툴팁 띄우기
@@ -4840,6 +4900,7 @@ if (viewerScrollContainer) {
           if (pdfElements && pdfElements.length > 0) {
             state.hoverSelectedPdfElements = pdfElements;
             state.hoverSelectedPageNum = pageNum;
+            state.hoverSelectedSentenceIdx = pdfIdx;
 
             const firstEl = pdfElements[0];
             const lastEl = pdfElements[pdfElements.length - 1];
