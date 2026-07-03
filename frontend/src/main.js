@@ -3684,6 +3684,7 @@ function regenerateResponse(assistantMsgEl) {
     state.chatHistory,
     (token) => {
       if (firstToken) {
+        if (!token.trim()) return;
         removeTypingIndicator();
         replyBubble = appendChatMessage('assistant', '', true).querySelector('.message-bubble');
         firstToken = false;
@@ -3923,6 +3924,7 @@ async function sendChatMessage() {
     // onToken
     (token) => {
       if (firstToken) {
+        if (!token.trim()) return
         removeTypingIndicator()
         replyBubble = appendChatMessage('assistant', '', true).querySelector('.message-bubble')
         firstToken = false
