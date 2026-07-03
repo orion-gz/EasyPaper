@@ -813,11 +813,6 @@ body:not(.light-theme) .pdf-page-inner canvas {
   color: var(--text-secondary);
   background: var(--bg-trans-label);
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   flex-shrink: 0;
 }
 
