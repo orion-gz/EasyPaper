@@ -2905,6 +2905,7 @@ function createFloatingMemoForSentence(pageNum, sentenceIdx) {
 // ── 팝업 툴팁 선택 메뉴 관리 ──
 let selectionMenu = null
 let sentenceHoverTimer = null
+let selectionMenuHideTimer = null
 
 function createSelectionMenu() {
   if (selectionMenu) return selectionMenu
@@ -2959,6 +2960,17 @@ function createSelectionMenu() {
   `
   document.body.appendChild(menu)
   selectionMenu = menu
+
+  menu.addEventListener('mouseenter', () => {
+    if (selectionMenuHideTimer) {
+      clearTimeout(selectionMenuHideTimer)
+      selectionMenuHideTimer = null
+    }
+  })
+
+  menu.addEventListener('mouseleave', () => {
+    hideSelectionMenuWithDelay()
+  })
   
   menu.addEventListener('mousedown', (e) => {
     e.preventDefault();
@@ -3380,6 +3392,24 @@ function hideSelectionMenu() {
     clearTimeout(sentenceHoverTimer)
     sentenceHoverTimer = null
   }
+  if (selectionMenuHideTimer) {
+    clearTimeout(selectionMenuHideTimer)
+    selectionMenuHideTimer = null
+  }
+}
+
+function hideSelectionMenuWithDelay() {
+  if (selectionMenuHideTimer) clearTimeout(selectionMenuHideTimer)
+  selectionMenuHideTimer = setTimeout(() => {
+    const selection = window.getSelection()
+    if (selection) {
+      selection.removeAllRanges()
+    }
+    hideSelectionMenu()
+    state.hoverSelectedPdfElements = null
+    state.hoverSelectedPageNum = null
+    state.hoverSelectedSentenceIdx = null
+  }, 250)
 }
 
 // 통합 텍스트 선택 종료 감지 리스너
@@ -4873,12 +4903,12 @@ if (viewerScrollContainer) {
           const isSameAsSelected = (hoveredPageNum === state.hoverSelectedPageNum && hoveredSentenceIdx === state.hoverSelectedSentenceIdx);
 
           if (!isSameAsSelected) {
-            selection.removeAllRanges();
-            hideSelectionMenu();
-            state.hoverSelectedPdfElements = null;
-            state.hoverSelectedPageNum = null;
-            state.hoverSelectedSentenceIdx = null;
+            hideSelectionMenuWithDelay();
           } else {
+            if (selectionMenuHideTimer) {
+              clearTimeout(selectionMenuHideTimer);
+              selectionMenuHideTimer = null;
+            }
             return;
           }
         } else {
