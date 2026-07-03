@@ -26,7 +26,7 @@ async def get_agy_usage():
 async def get_agy_models():
     """agy models 명령으로 실제 지원 모델 목록 반환"""
     import os
-    from config import get_agy_path
+    from config import get_agy_path, get_agy_env
     agy_path = get_agy_path()
     if not os.path.exists(agy_path):
         agy_path = "agy"
@@ -35,6 +35,7 @@ async def get_agy_models():
             agy_path, "models",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=get_agy_env()
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
         models = [

@@ -1513,7 +1513,7 @@ async function changeProviderAndModel(type, newProvider, newModel) {
     } else {
       settingChatPicker.setValue(newProvider, newModel)
     }
-    updatePullModelSectionVisibility()
+    updateSettingsUIVisibility()
     await checkAIStatus()
     showToast(`${type === 'trans' ? '번역' : '어시스턴트'} AI가 변경되었습니다.`, 'success')
     if (type === 'trans' && state.sessionId) {
