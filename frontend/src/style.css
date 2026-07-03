@@ -1864,6 +1864,45 @@ body.light-theme .chat-message.user .message-bubble {
   to { opacity: 1; transform: translateY(-5px); }
 }
 
+/* AI Chat Loading Progress Bar */
+.chat-loading-progress {
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  position: relative;
+  overflow: hidden;
+  display: none;
+  flex-shrink: 0;
+}
+body.light-theme .chat-loading-progress {
+  background: rgba(0, 0, 0, 0.05);
+}
+.chat-loading-progress.active {
+  display: block;
+}
+.chat-loading-progress-bar {
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 1px;
+  animation: chatLoadingScan 1.2s infinite ease-in-out;
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+@keyframes chatLoadingScan {
+  0% {
+    left: -40%;
+  }
+  50% {
+    left: 60%;
+  }
+  100% {
+    left: 140%;
+  }
+}
+
 /* Selection Tooltip Style */
 .selection-tooltip {
   position: fixed;
