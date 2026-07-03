@@ -39,8 +39,9 @@ cd EasyPaper
 2. **AI 카테고리 자동 태깅** — 업로드 후 AI가 논문 초록과 본문을 분석하여 카테고리 태그(예: `VLM`, `VLA`, `GAN`, `CNN`,`Optimizer` 등)를 자동으로 부여합니다.
 3. **정밀한 1:1 문장 매칭 & 스크롤 이동** — 원문 PDF 문장과 번역문 문장 간의 마우스 오버 하이라이트 및 클릭 시 반대편 패널 위치 자동 스크롤(양방향) 기능을 지원합니다. LLM 의미론적 태깅 정렬 방식(Semantic Tag Alignment)을 통해 정밀도 높은 문장 정렬을 제공합니다.
 4. **듀얼 패널 뷰어** — 원본 PDF와 AI 번역 결과를 나란히 보며 읽을 수 있고, 패널 너비를 자유롭게 조절할 수 있습니다.
-5. **AI 채팅 어시스턴트** — 논문 내용을 바탕으로 질문하거나, 핵심 결과·수식 등을 자연어로 물어볼 수 있습니다.
-6. **통합 모델 선택기** — UI 안에서 제공업체와 AI 모델(Ollama, Gemini, Claude, OpenAI)을 즉시 전환할 수 있습니다.
+5. **AI 채팅 어시스턴트** — 논문 내용을 바탕으로 질문할 수 있으며, 답변 생성 대기 상태의 **선형 프로그레스 바(Linear Loader)**와 **현대적인 알약(Capsule) 디자인 UI**를 제공합니다.
+6. **통합 모델 선택기** — UI 안에서 제공업체와 AI 모델(Ollama, Gemini, Claude, OpenAI, Antigravity)을 즉시 전환할 수 있습니다.
+7. **자유 배치 Floating 메모** — 논문 본문 및 번역문 위에 메모를 자유롭게 배치하여 기록할 수 있습니다. 실시간 Markdown & LaTeX 수식 렌더링, 5색 테마 컬러 피커, 글래스모피즘 기반 커스텀 삭제 대화상자를 지원합니다.
 
 ---
 
@@ -146,6 +147,11 @@ agy
 EasyPaper는 백그라운드 번역 작업을 중단 없이 실행하기 위해 `agy --dangerously-skip-permissions` 플래그를 사용합니다. 이 플래그는 대화형 권한 확인 프롬프트를 건너뛰고 자동으로 승인합니다.
 
 서버 실행 사용자가 `agy` 바이너리를 실행할 수 있는 권한을 가지고 있으며, `~/.gemini/antigravity-cli/settings.json`에 정의된 워크스페이스 디렉토리에 접근 가능한지 확인하세요.
+
+### 4. systemd 서비스 실행 시 환경변수 주의사항
+Linux 서버에서 `easypaper.service` 데몬을 통해 실행할 경우, systemd 컨텍스트에 `$HOME` 환경 변수가 누락되어 `agy` 자식 프로세스 실행 시 `$HOME is not defined` 에러와 함께 무한 대기(Hang) 현상이 일어날 수 있습니다.
+
+이를 위해 백엔드 코드 내부적으로 호출 시 `/home/ubuntu` 경로와 `ubuntu` 유저 정보를 환경변수 딕셔너리에 동적으로 주입(`get_agy_env()`)하여 안전망을 확보해 두었습니다. 서비스 설정 파일 내 `User=ubuntu` 속성이 실제 서버 실행 계정명과 일치하는지 최종 확인해 주시기 바랍니다.
 
 > **Antigravity를 사용하지 않는 경우:** `.env` 파일에서 `TRANS_PROVIDER`와 `CHAT_PROVIDER`를 `ollama`로 설정하거나, Gemini·OpenAI·Claude API 키를 등록하여 사용하세요.
 
