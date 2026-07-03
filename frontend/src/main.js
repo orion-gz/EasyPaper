@@ -3820,15 +3820,7 @@ function appendTypingIndicator() {
   
   const bubbleEl = document.createElement('div')
   bubbleEl.className = 'message-bubble'
-  bubbleEl.innerHTML = `
-    <div class="typing-container" style="display: flex; align-items: center; gap: 8px;">
-      <span class="typing-text" style="font-size: 12px; color: var(--text-secondary);">AI가 답변을 준비하고 있습니다</span>
-      <div class="typing-indicator" style="display: flex; gap: 3px; align-items: center;">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-    </div>`
+  bubbleEl.innerHTML = `<div class="typing-container" style="display: flex; align-items: center; gap: 8px;"><span class="typing-text" style="font-size: 12px; color: var(--text-secondary);">AI가 답변을 준비하고 있습니다</span><div class="typing-indicator" style="display: flex; gap: 3px; align-items: center;"><span></span><span></span><span></span></div></div>`
   
   msgEl.appendChild(bubbleEl)
   chatMessages.appendChild(msgEl)
