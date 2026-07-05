@@ -3614,22 +3614,22 @@ function formatChatHtml(text) {
   // 1. 블록 수식: $$...$$
   t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, f) => {
     const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: true })
-    return `___MB_${id}___`
+    return `MATHBLOCK${id}`
   })
   // 2. 블록 수식: \[...\]
   t = t.replace(/\\\[([\s\S]*?)\\\]/g, (_, f) => {
     const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: true })
-    return `___MB_${id}___`
+    return `MATHBLOCK${id}`
   })
   // 3. 인라인: $...$
   t = t.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (_, f) => {
     const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: false })
-    return `___MB_${id}___`
+    return `MATHBLOCK${id}`
   })
   // 4. 인라인: \(...\)
   t = t.replace(/\\\(([\s\S]*?)\\\)/g, (_, f) => {
     const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: false })
-    return `___MB_${id}___`
+    return `MATHBLOCK${id}`
   })
 
   // 5. 마크다운 렌더링 (marked 사용)
@@ -3641,7 +3641,7 @@ function formatChatHtml(text) {
   }
 
   // 6. 수식 플레이스홀더 복원
-  html = html.replace(/___MB_(\d+)___/g, (_, idStr) => {
+  html = html.replace(/MATHBLOCK(\d+)/g, (_, idStr) => {
     const item = mathBlocks[parseInt(idStr)]
     if (!item) return _
     if (window.katex) {
