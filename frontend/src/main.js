@@ -505,6 +505,10 @@ function formatTranslationHtml(text) {
     return `___MB_${id}___`
   })
 
+  // 4.5. 이스케이프된 볼드체 복원 및 공백 트리밍
+  t = t.replace(/\\\*\*/g, '**')
+  t = t.replace(/\*\*\s*([^*]+?)\s*\*\*/g, '**$1**')
+
   // 5. 마크다운 헤더 & 이스케이프 처리
   const lines = t.split('\n')
   const htmlParts = lines.map(line => {
@@ -3631,6 +3635,10 @@ function formatChatHtml(text) {
     const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: false })
     return `MATHBLOCK${id}`
   })
+
+  // 4.3. 이스케이프된 볼드체 기호(\**, \__) 복원
+  t = t.replace(/\\\*\*/g, '**')
+  t = t.replace(/\\__/g, '__')
 
   // 4.5. 볼드체 기호(**, __) 내부의 불필요한 앞뒤 공백 제거
   t = t.replace(/\*\*\s*([\s\S]*?)\s*\*\*/g, '**$1**')
