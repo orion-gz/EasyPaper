@@ -506,7 +506,7 @@ function formatTranslationHtml(text) {
   })
 
   // 4.5. 이스케이프된 볼드체 복원 및 공백 트리밍
-  t = t.replace(/\\\*\*/g, '**')
+  t = t.replace(/\\+\*\*/g, '**')
   t = t.replace(/\*\*\s*([^*]+?)\s*\*\*/g, '**$1**')
 
   // 5. 마크다운 헤더 & 이스케이프 처리
@@ -3637,8 +3637,8 @@ function formatChatHtml(text) {
   })
 
   // 4.3. 이스케이프된 볼드체 기호(\**, \__) 복원
-  t = t.replace(/\\\*\*/g, '**')
-  t = t.replace(/\\__/g, '__')
+  t = t.replace(/\\+\*\*/g, '**')
+  t = t.replace(/\\+__/g, '__')
 
   // 4.5. 볼드체 기호(**, __) 내부의 불필요한 앞뒤 공백 제거
   t = t.replace(/\*\*\s*([\s\S]*?)\s*\*\*/g, '**$1**')
@@ -3786,7 +3786,8 @@ function regenerateResponse(assistantMsgEl) {
       state.chatActiveStream = null;
       
       if (replyBubble) {
-        applyKatexToElement(replyBubble)
+        replyBubble.innerHTML = formatChatHtml(accumulatedText);
+        applyKatexToElement(replyBubble);
         if (replyBubble.parentElement) {
           appendActionButtons(replyBubble.parentElement, 'assistant', accumulatedText);
         }
@@ -4007,8 +4008,11 @@ async function sendChatMessage() {
       state.chatActiveStream = null
       state.chatHistory.push({ role: 'assistant', content: accumulatedText })
       
-      if (replyBubble && replyBubble.parentElement) {
-        appendActionButtons(replyBubble.parentElement, 'assistant', accumulatedText)
+      if (replyBubble) {
+        replyBubble.innerHTML = formatChatHtml(accumulatedText)
+        if (replyBubble.parentElement) {
+          appendActionButtons(replyBubble.parentElement, 'assistant', accumulatedText)
+        }
       }
       
       chatInput.disabled = false
