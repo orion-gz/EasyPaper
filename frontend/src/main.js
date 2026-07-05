@@ -3632,6 +3632,10 @@ function formatChatHtml(text) {
     return `MATHBLOCK${id}`
   })
 
+  // 4.5. 볼드체 기호(**, __) 내부의 불필요한 앞뒤 공백 제거
+  t = t.replace(/\*\*\s*([\s\S]*?)\s*\*\*/g, '**$1**')
+  t = t.replace(/__\s*([\s\S]*?)\s*__/g, '__$1__')
+
   // 5. 마크다운 렌더링 (marked 사용)
   let html = ''
   if (marked && typeof marked.parse === 'function') {
