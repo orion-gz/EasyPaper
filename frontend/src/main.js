@@ -3606,47 +3606,61 @@ function resetChatUI() {
 function formatChatHtml(text) {
   if (!text) return ''
 
-  let html = formatTranslationHtml(text)
+  // 0. 문장 정렬용 태그([S0], [S1] 등) 제거
+  let t = text.replace(/\[[sS]\d+\]/g, '')
 
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-  
-  html = html.replace(/```([\s\S]*?)```/g, (match, code) => {
-    const cleanCode = code.replace(/<br>/g, '\n')
-    return `<pre style="background: var(--bg-hover); padding: 10px; border-radius: var(--radius-sm); overflow-x: auto; font-family: var(--font-mono); font-size: 12px; margin: 8px 0; border: 1px solid var(--border-strong); white-space: pre-wrap; word-break: break-all;">${cleanCode}</pre>`
+  const mathBlocks = []
+
+  // 1. 블록 수식: $$...$$
+  t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, f) => {
+    const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: true })
+    return `___MB_${id}___`
+  })
+  // 2. 블록 수식: \[...\]
+  t = t.replace(/\\\[([\s\S]*?)\\\]/g, (_, f) => {
+    const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: true })
+    return `___MB_${id}___`
+  })
+  // 3. 인라인: $...$
+  t = t.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (_, f) => {
+    const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: false })
+    return `___MB_${id}___`
+  })
+  // 4. 인라인: \(...\)
+  t = t.replace(/\\\(([\s\S]*?)\\\)/g, (_, f) => {
+    const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: false })
+    return `___MB_${id}___`
   })
 
-  html = html.replace(/`(.*?)`/g, '<code style="background: var(--bg-hover); padding: 2px 5px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--border-strong);">$1</code>')
+  // 5. 마크다운 렌더링 (marked 사용)
+  let html = ''
+  if (marked && typeof marked.parse === 'function') {
+    html = marked.parse(t)
+  } else {
+    html = t.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>')
+  }
 
-  const lines = html.split('<br>')
-  let inList = false
-  const processedLines = []
-
-  for (let line of lines) {
-    let trimmed = line.trim()
-    
-    if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
-      if (!inList) {
-        processedLines.push('<ul>')
-        inList = true
+  // 6. 수식 플레이스홀더 복원
+  html = html.replace(/___MB_(\d+)___/g, (_, idStr) => {
+    const item = mathBlocks[parseInt(idStr)]
+    if (!item) return _
+    if (window.katex) {
+      try {
+        const r = window.katex.renderToString(item.formula, { displayMode: item.display, throwOnError: false, output: 'html' })
+        if (item.display) {
+          return `<div class="katex-display-wrap" data-formula="${encodeURIComponent(item.formula)}" data-display="true">${r}</div>`
+        } else {
+          return `<span class="katex-inline-wrap" data-formula="${encodeURIComponent(item.formula)}" data-display="false">${r}</span>`
+        }
+      } catch (e) {
+        return `<code class="math-error" data-formula="${encodeURIComponent(item.formula)}" data-display="${item.display}">${escapeHtml(item.formula)}</code>`
       }
-      processedLines.push(`<li>${trimmed.substring(2)}</li>`)
-    } else {
-      if (inList) {
-        processedLines.push('</ul>')
-        inList = false
-      }
-      processedLines.push(line)
     }
-  }
-  if (inList) {
-    processedLines.push('</ul>')
-  }
+    const delim = item.display ? '$$' : '$'
+    return `<code class="math-pending" data-formula="${encodeURIComponent(item.formula)}" data-display="${item.display}">${escapeHtml(delim + item.formula + delim)}</code>`
+  })
 
-  return processedLines.join('<br>')
-    .replace(/<\/ul><br>/g, '</ul>')
-    .replace(/<br><ul>/g, '<ul>')
-    .replace(/<br><li>/g, '<li>')
-    .replace(/<\/li><br>/g, '</li>')
+  return html
 }
 
 function formatUserChatHtml(content) {
