@@ -1921,7 +1921,6 @@ body.light-theme .chat-input-area {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   transition: border-color 0.25s, box-shadow 0.25s;
-  overflow: hidden;
 }
 
 .chat-input-box:focus-within {
@@ -3771,8 +3770,8 @@ body.light-theme .viewer-read-btn.active svg {
 
 /* ── Integrated Quoted Box Styling inside Chat Input ── */
 .chat-input-box .chat-quote-area {
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-lg);
+  border-top-left-radius: 19px;
+  border-top-right-radius: 19px;
   border-left: 3px solid var(--accent-mid);
   border-bottom: 1px solid var(--border-strong);
   margin-bottom: 0;
