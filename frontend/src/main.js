@@ -2122,6 +2122,19 @@ function createDocCard(doc) {
     </button>
   `
 
+  let progressHtml = ''
+  if (!isDone) {
+    progressHtml = `
+      <div class="doc-card-progress">
+        <div class="doc-progress-bar-wrap"><div class="doc-progress-bar" style="width:${pct}%"></div></div>
+        <div class="doc-progress-label">
+          <span>번역 중 (${translated}/${total}p)</span>
+          <span>${pct}%</span>
+        </div>
+      </div>
+    `
+  }
+
   const card = document.createElement('div')
   card.className = 'doc-card'
   card.innerHTML = `
@@ -2132,13 +2145,7 @@ function createDocCard(doc) {
     <div class="doc-card-meta">
       ${dateHtml}<span>📑 ${total}페이지</span>
     </div>
-    <div class="doc-card-progress">
-      <div class="doc-progress-bar-wrap"><div class="doc-progress-bar" style="width:${pct}%"></div></div>
-      <div class="doc-progress-label ${isDone ? 'done' : ''}">
-        <span>${isDone ? '✓ 번역 완료' : `번역 ${translated}/${total}페이지`}</span>
-        <span>${pct}%</span>
-      </div>
-    </div>
+    ${progressHtml}
     <div class="doc-card-actions">
       <button class="doc-open-btn" data-id="${doc.id}">열기</button>
       <button class="doc-edit-btn" data-id="${doc.id}" title="제목 수정">
