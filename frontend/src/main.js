@@ -22,6 +22,7 @@ window.fetch = async function (...args) {
 
 // ── 상태 ──────────────────────────────────────────
 const state = {
+  currentLibraryTab: 'archive', // 'archive' (보관함) 또는 'history' (히스토리)
   sessionId: null,
   filename: null,
   title: null,
@@ -105,6 +106,8 @@ const libUploadBtn      = $('lib-upload-btn')
 const libraryGrid       = $('library-grid')
 const libraryCategoryFilters = $('library-category-filters')
 const libraryCountBadge = $('library-count-badge')
+const libTabArchive     = $('lib-tab-archive')
+const libTabHistory     = $('lib-tab-history')
 
 // Google Drive Style Upload Popup references
 const uploadPopup        = $('upload-popup')
@@ -1861,12 +1864,35 @@ setInterval(checkAIStatus, 30000)
 async function loadLibraryCount() {
   try {
     const data = await fetchLibrary(getTranslationOptions())
-    const count = data.total || 0
-    if (count > 0 && libraryCountBadge) {
-      libraryCountBadge.textContent = count
+    const docs = data.documents || []
+    const unreadCount = docs.filter(doc => doc.metadata?.read !== true).length
+    if (unreadCount > 0 && libraryCountBadge) {
+      libraryCountBadge.textContent = unreadCount
       libraryCountBadge.classList.remove('hidden')
+    } else if (libraryCountBadge) {
+      libraryCountBadge.classList.add('hidden')
     }
   } catch {}
+}
+
+// 탭 클릭 이벤트 리스너 등록
+if (libTabArchive && libTabHistory) {
+  libTabArchive.addEventListener('click', () => {
+    if (state.currentLibraryTab === 'archive') return
+    state.currentLibraryTab = 'archive'
+    libTabArchive.classList.add('active')
+    libTabHistory.classList.remove('active')
+    activeCategoryFilter = 'ALL'
+    renderLibrary()
+  })
+  libTabHistory.addEventListener('click', () => {
+    if (state.currentLibraryTab === 'history') return
+    state.currentLibraryTab = 'history'
+    libTabHistory.classList.add('active')
+    libTabArchive.classList.remove('active')
+    activeCategoryFilter = 'ALL'
+    renderLibrary()
+  })
 }
 
 async function showLibraryScreen(shouldPushState = true) {
@@ -1894,19 +1920,25 @@ async function renderLibrary() {
   libraryCategoryFilters.innerHTML = ''
   try {
     const data = await fetchLibrary(getTranslationOptions())
-    const docs = data.documents || []
-    if (docs.length > 0) {
-      if (libraryCountBadge) {
-        libraryCountBadge.textContent = docs.length
-        libraryCountBadge.classList.remove('hidden')
-      }
-    } else {
-      if (libraryCountBadge) {
-        libraryCountBadge.classList.add('hidden')
-      }
+    const allDocs = data.documents || []
+
+    // 보관함 뱃지에는 안읽은 논문 개수 표시
+    const unreadCount = allDocs.filter(doc => doc.metadata?.read !== true).length
+    if (unreadCount > 0 && libraryCountBadge) {
+      libraryCountBadge.textContent = unreadCount
+      libraryCountBadge.classList.remove('hidden')
+    } else if (libraryCountBadge) {
+      libraryCountBadge.classList.add('hidden')
     }
+
+    // 현재 선택된 탭에 따라 논문 목록 필터링
+    const docs = allDocs.filter(doc => {
+      const isRead = doc.metadata?.read === true
+      return state.currentLibraryTab === 'history' ? isRead : !isRead
+    })
+
     if (docs.length === 0) {
-      libraryGrid.appendChild(createEmptyState()); return
+      libraryGrid.appendChild(createEmptyState(state.currentLibraryTab === 'history')); return
     }
 
     // Extract unique categories
@@ -1966,18 +1998,24 @@ function filterLibraryCards(docs) {
     : docs.filter(doc => (doc.metadata?.categories || []).includes(activeCategoryFilter))
 
   if (filteredDocs.length === 0) {
-    libraryGrid.appendChild(createEmptyState()); return
+    libraryGrid.appendChild(createEmptyState(state.currentLibraryTab === 'history')); return
   }
 
   filteredDocs.forEach(doc => libraryGrid.appendChild(createDocCard(doc)))
 }
 
-function createEmptyState() {
+function createEmptyState(isHistory = false) {
   const el = document.createElement('div')
   el.className = 'lib-empty'
-  el.innerHTML = `<div style="font-size:48px;margin-bottom:16px">📚</div>
-    <p>저장된 논문이 없습니다</p>
-    <p style="font-size:13px;color:var(--text-muted);margin-top:8px">PDF를 업로드하면 자동으로 저장됩니다</p>`
+  if (isHistory) {
+    el.innerHTML = `<div style="font-size:48px;margin-bottom:16px">📖</div>
+      <p>읽은 논문이 없습니다</p>
+      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">보관함에서 논문의 체크 아이콘을 눌러 읽음 처리해 보세요</p>`
+  } else {
+    el.innerHTML = `<div style="font-size:48px;margin-bottom:16px">📚</div>
+      <p>보관함에 저장된 논문이 없습니다</p>
+      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">새 논문을 추가하거나 PDF를 업로드해 보세요</p>`
+  }
   return el
 }
 
@@ -1997,10 +2035,20 @@ function createDocCard(doc) {
   }
 
   const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+  const isRead = doc.metadata?.read === true
+
+  const checkBtnHtml = `
+    <button class="doc-card-check-btn ${isRead ? 'checked' : ''}" data-id="${doc.id}" title="${isRead ? '읽지 않음으로 표시' : '읽음으로 표시'}">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    </button>
+  `
 
   const card = document.createElement('div')
   card.className = 'doc-card'
   card.innerHTML = `
+    ${checkBtnHtml}
     <div class="doc-card-icon">📄</div>
     <div class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(displayTitle)}</div>
     ${tagsHtml}
@@ -2026,6 +2074,20 @@ function createDocCard(doc) {
         </svg>
       </button>
     </div>`
+
+  card.querySelector('.doc-card-check-btn').addEventListener('click', async (e) => {
+    e.stopPropagation()
+    const currentReadState = doc.metadata?.read === true
+    const nextReadState = !currentReadState
+    try {
+      await updateLibraryDocMetadata(doc.id, { read: nextReadState })
+      showToast(nextReadState ? '읽은 논문으로 표시되었습니다.' : '보관함으로 이동되었습니다.', 'success')
+      await renderLibrary()
+      await loadLibraryCount()
+    } catch (err) {
+      showToast('상태 변경 실패: ' + err.message, 'error')
+    }
+  })
 
   card.querySelector('.doc-open-btn').addEventListener('click', (e) => { e.stopPropagation(); openFromLibrary(doc) })
   card.querySelector('.doc-delete-btn').addEventListener('click', async (e) => {

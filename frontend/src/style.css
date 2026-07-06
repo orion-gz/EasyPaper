@@ -3515,5 +3515,77 @@ body.light-theme .floating-memo.color-red .floating-memo-render {
   color: #9f1239 !important;
 }
 
+/* ── Library Tab Styles ── */
+.library-tabs-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 2px;
+}
+.library-tab-btn {
+  background: none;
+  border: none;
+  padding: 8px 18px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+  font-family: var(--font-sans);
+  position: relative;
+}
+.library-tab-btn:hover {
+  color: var(--text-primary);
+}
+.library-tab-btn.active {
+  color: var(--accent-mid);
+  border-bottom-color: var(--accent-mid);
+  font-weight: 600;
+}
+
+/* ── Checkbox/Read Mark button style on doc-card ── */
+.doc-card-check-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+.doc-card-check-btn svg {
+  opacity: 0;
+  transform: scale(0.6);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--accent-mid);
+}
+.doc-card-check-btn:hover {
+  border-color: var(--accent-mid);
+  background: var(--bg-hover);
+}
+.doc-card-check-btn:hover svg {
+  opacity: 0.5;
+  transform: scale(1);
+}
+.doc-card-check-btn.checked {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: var(--accent-mid);
+}
+.doc-card-check-btn.checked svg {
+  opacity: 1;
+  transform: scale(1);
+  color: var(--accent-mid);
+}
+
 
 
