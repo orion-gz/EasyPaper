@@ -418,7 +418,7 @@ html, body {
 
 /* 버튼 */
 .icon-btn {
-  width: 38px; height: 38px;
+  width: 32px; height: 32px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
@@ -443,6 +443,42 @@ html, body {
   color: #c084fc;
   border-color: rgba(124, 58, 237, 0.4);
   box-shadow: 0 0 15px rgba(124, 58, 237, 0.15);
+}
+
+/* ── Unified Zoom Group Refinement ── */
+.view-group {
+  display: inline-flex !important;
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg) !important;
+  padding: 2px;
+  gap: 0;
+  box-shadow: var(--shadow-sm);
+  height: 32px;
+  box-sizing: border-box;
+}
+.view-group .icon-btn {
+  width: 28px !important;
+  height: 26px !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 50% !important;
+  color: var(--text-secondary) !important;
+  box-shadow: none !important;
+}
+.view-group .icon-btn:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+  transform: none !important;
+}
+.view-group .zoom-label {
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 44px;
+  text-align: center;
+  color: var(--text-secondary);
+  user-select: none;
 }
 
 .nav-btn {
@@ -721,27 +757,33 @@ body:not(.light-theme) .pdf-page-inner canvas {
 .page-display {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 12px;
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: 600;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  box-shadow: var(--shadow-sm);
+  height: 32px;
+  box-sizing: border-box;
 }
 .page-display input[type=number] {
-  width: 52px;
+  width: 32px;
   text-align: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 13px;
+  background: transparent;
+  border: none;
+  color: var(--accent-mid);
+  font-size: 12.5px;
   font-weight: 700;
-  font-family: var(--font-body);
-  padding: 4px 6px;
+  font-family: var(--font-sans);
+  padding: 0;
   outline: none;
-  transition: border-color 0.2s;
+  transition: color 0.2s;
 }
 .page-display input[type=number]:focus {
-  border-color: var(--accent-mid);
+  color: var(--text-primary);
 }
 .page-display input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
 
@@ -2130,7 +2172,7 @@ code.math-pending {
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s;
-  height: 34px;
+  height: 32px;
   min-width: 140px;
   font-family: var(--font-sans);
 }
@@ -3646,9 +3688,9 @@ body.light-theme .doc-card-check-btn.checked {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
-  border-radius: 15px;
+  border-radius: 16px;
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text-secondary);
