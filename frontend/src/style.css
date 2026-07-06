@@ -2240,7 +2240,7 @@ code.math-pending {
   min-width: 240px;
   max-height: 420px;
   overflow-y: auto;
-  background: var(--bg-surface);
+  background: #13111e;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md), 0 0 0 1px var(--border);
@@ -2249,6 +2249,9 @@ code.math-pending {
   padding: 6px;
   display: none;
   animation: pickerFadeIn 0.15s ease;
+}
+body.light-theme .provider-picker-panel {
+  background: #ffffff;
 }
 .provider-picker.open .provider-picker-panel { display: block; }
 @keyframes pickerFadeIn {
