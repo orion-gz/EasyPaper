@@ -660,15 +660,23 @@ function updatePageDisplay(pageNum) {
 
 function updateProgressMini() {
   if (!state.totalPages) return
-  updateProgressMiniRaw(state.translatedPages.size, state.totalPages)
+  const done = state.translatedPages.size
+  const total = state.totalPages
+  const isRunning = done < total
+  updateProgressMiniRaw(done, total, isRunning)
 }
 
-function updateProgressMiniRaw(done, total) {
+function updateProgressMiniRaw(done, total, isRunning = true) {
   if (!total) return
   const pct = Math.round((done / total) * 100)
-  progressMini.classList.remove('hidden')
-  progressMiniBar.style.setProperty('--progress', `${pct}%`)
-  progressMiniText.textContent = `${pct}%`
+  
+  if (pct >= 100 || !isRunning) {
+    progressMini.classList.add('hidden')
+  } else {
+    progressMini.classList.remove('hidden')
+    progressMiniBar.style.setProperty('--progress', `${pct}%`)
+    progressMiniText.textContent = `${pct}%`
+  }
 }
 
 // ── 잡 폰링 ───────────────────────────────────────
@@ -694,7 +702,8 @@ function startJobPolling(sessionId) {
 
     const done  = state.translatedPages.size
     const total = job.total_pages || state.totalPages
-    updateProgressMiniRaw(done, total)
+    const isRunning = job.status === 'running' || job.status === 'pending'
+    updateProgressMiniRaw(done, total, isRunning)
 
     if (job.status === 'running') {
       translateSpinner.classList.remove('hidden')
