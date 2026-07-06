@@ -3518,6 +3518,7 @@ body.light-theme .floating-memo.color-red .floating-memo-render {
 /* ── Library Tab Styles (Pill Capsule Layout) ── */
 .library-tabs-container {
   display: inline-flex;
+  align-self: flex-start;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 30px;
