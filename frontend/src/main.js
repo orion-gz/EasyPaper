@@ -110,6 +110,7 @@ const libraryCategoryFilters = $('library-category-filters')
 const libraryCountBadge = $('library-count-badge')
 const libTabArchive     = $('lib-tab-archive')
 const libTabHistory     = $('lib-tab-history')
+const libraryStatsContainer = $('library-stats-container')
 
 // Google Drive Style Upload Popup references
 const uploadPopup        = $('upload-popup')
@@ -1979,20 +1980,23 @@ async function renderLibrary() {
         return rDate.getFullYear() === thisYear && rDate.getMonth() === thisMonth
       }).length
       
-      const statsWidget = document.createElement('div')
-      statsWidget.className = 'library-stats-widget'
-      statsWidget.innerHTML = `
-        <div class="library-stats-item">
-          <span class="library-stats-label">📅 이번 달 읽은 논문</span>
-          <span class="library-stats-value">${thisMonthCount}<span>편</span></span>
-        </div>
-        <div style="width: 1px; height: 28px; background: var(--border-strong);"></div>
-        <div class="library-stats-item">
-          <span class="library-stats-label">🏆 누적 완독 논문</span>
-          <span class="library-stats-value">${readDocs.length}<span>편</span></span>
+      libraryStatsContainer.innerHTML = `
+        <div class="library-stats-widget">
+          <div class="library-stats-item">
+            <span class="library-stats-label">📅 이번 달 읽은 논문</span>
+            <span class="library-stats-value">${thisMonthCount}<span>편</span></span>
+          </div>
+          <div style="width: 1px; height: 28px; background: var(--border-strong);"></div>
+          <div class="library-stats-item">
+            <span class="library-stats-label">🏆 누적 완독 논문</span>
+            <span class="library-stats-value">${readDocs.length}<span>편</span></span>
+          </div>
         </div>
       `
-      libraryGrid.appendChild(statsWidget)
+      libraryStatsContainer.classList.remove('hidden')
+    } else {
+      libraryStatsContainer.classList.add('hidden')
+      libraryStatsContainer.innerHTML = ''
     }
 
     if (docs.length === 0) {
