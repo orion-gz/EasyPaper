@@ -475,6 +475,28 @@ function translatePage(pageNum) {
   if (statusEl) statusEl.textContent = '번역 중...'
 }
 
+// ── 코드 블록 외부의 볼드체를 <strong> 태그로 미리 변환 ──
+function replaceBoldOutsideCode(text) {
+  const blocks = text.split(/(```[\s\S]*?```)/g)
+  const processedBlocks = blocks.map(block => {
+    if (block.startsWith('```') && block.endsWith('```')) {
+      return block
+    }
+    const subBlocks = block.split(/(`[^`\n]+?`)/g)
+    const processedSubBlocks = subBlocks.map(subBlock => {
+      if (subBlock.startsWith('`') && subBlock.endsWith('`')) {
+        return subBlock
+      }
+      let res = subBlock
+      res = res.replace(/\*\*((?:(?!\*\*)[\s\S])+?)\*\*/g, '<strong>$1</strong>')
+      res = res.replace(/__((?:(?!__)[\s\S])+?)__/g, '<strong>$1</strong>')
+      return res
+    })
+    return processedSubBlocks.join('')
+  })
+  return processedBlocks.join('')
+}
+
 // ── 번역 텍스트 포맷팅 (LaTeX & HTML 처리) ─────────
 function formatTranslationHtml(text) {
   if (!text) return ''
@@ -508,6 +530,7 @@ function formatTranslationHtml(text) {
   // 4.5. 이스케이프된 볼드체 복원 및 공백 트리밍
   t = t.replace(/\\+\*\*/g, '**')
   t = t.replace(/\*\*\s*([^*]+?)\s*\*\*/g, '**$1**')
+  t = replaceBoldOutsideCode(t)
 
   // 5. 마크다운 헤더 & 이스케이프 처리
   const lines = t.split('\n')
@@ -3643,6 +3666,9 @@ function formatChatHtml(text) {
   // 4.5. 볼드체 기호(**, __) 내부의 불필요한 앞뒤 공백 제거
   t = t.replace(/\*\*\s*([\s\S]*?)\s*\*\*/g, '**$1**')
   t = t.replace(/__\s*([\s\S]*?)\s*__/g, '__$1__')
+
+  // 4.7. 코드 블록 외부의 볼드체를 <strong> 태그로 미리 변환 (문장 부호 경계 파싱 버그 극복)
+  t = replaceBoldOutsideCode(t)
 
   // 5. 마크다운 렌더링 (marked 사용)
   let html = ''
