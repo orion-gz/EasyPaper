@@ -23,6 +23,8 @@ window.fetch = async function (...args) {
 // ── 상태 ──────────────────────────────────────────
 const state = {
   currentLibraryTab: 'archive', // 'archive' (보관함) 또는 'history' (히스토리)
+  currentDocId: null,
+  currentDocMetadata: {},
   sessionId: null,
   filename: null,
   title: null,
@@ -135,6 +137,7 @@ const resumeTransBtn    = $('resume-trans-btn')
 // (viewer/chat pickers are now ProviderModelPicker instances – see below)
 const backBtn           = $('back-btn')
 const logoBtn           = $('logo-btn')
+const viewerReadToggleBtn = $('viewer-read-toggle-btn')
 const viewerScrollContainer = $('viewer-scroll-container')
 const translateSpinner      = $('translate-spinner')
 const translateStatusText   = $('translate-status-text')
@@ -883,6 +886,32 @@ backBtn.addEventListener('click', () => {
 if (logoBtn) {
   logoBtn.addEventListener('click', () => {
     showLibraryScreen()
+  })
+}
+
+// ── 뷰어 내 독서 완료 토글 버튼 바인딩 ──
+if (viewerReadToggleBtn) {
+  viewerReadToggleBtn.addEventListener('click', async () => {
+    if (!state.currentDocId) return
+    const currentReadState = state.currentDocMetadata.read === true
+    const nextReadState = !currentReadState
+    const payload = { read: nextReadState }
+    if (nextReadState) {
+      payload.read_at = new Date().toISOString()
+    } else {
+      payload.read_at = null
+    }
+    
+    try {
+      await updateLibraryDocMetadata(state.currentDocId, payload)
+      state.currentDocMetadata.read = nextReadState
+      state.currentDocMetadata.read_at = payload.read_at
+      viewerReadToggleBtn.classList.toggle('active', nextReadState)
+      showToast(nextReadState ? '읽은 논문으로 표시되었습니다.' : '보관함으로 이동되었습니다.', 'success')
+      await loadLibraryCount()
+    } catch (err) {
+      showToast('상태 변경 실패: ' + err.message, 'error')
+    }
   })
 }
 
@@ -1937,6 +1966,35 @@ async function renderLibrary() {
       return state.currentLibraryTab === 'history' ? isRead : !isRead
     })
 
+    // 히스토리 탭인 경우 상단에 독서 현황 통계 요약 카드 렌더링
+    if (state.currentLibraryTab === 'history') {
+      const now = new Date()
+      const thisYear = now.getFullYear()
+      const thisMonth = now.getMonth()
+      
+      const readDocs = allDocs.filter(d => d.metadata?.read === true)
+      const thisMonthCount = readDocs.filter(d => {
+        if (!d.metadata?.read_at) return false
+        const rDate = new Date(d.metadata.read_at)
+        return rDate.getFullYear() === thisYear && rDate.getMonth() === thisMonth
+      }).length
+      
+      const statsWidget = document.createElement('div')
+      statsWidget.className = 'library-stats-widget'
+      statsWidget.innerHTML = `
+        <div class="library-stats-item">
+          <span class="library-stats-label">📅 이번 달 읽은 논문</span>
+          <span class="library-stats-value">${thisMonthCount}<span>편</span></span>
+        </div>
+        <div style="width: 1px; height: 28px; background: var(--border-strong);"></div>
+        <div class="library-stats-item">
+          <span class="library-stats-label">🏆 누적 완독 논문</span>
+          <span class="library-stats-value">${readDocs.length}<span>편</span></span>
+        </div>
+      `
+      libraryGrid.appendChild(statsWidget)
+    }
+
     if (docs.length === 0) {
       libraryGrid.appendChild(createEmptyState(state.currentLibraryTab === 'history')); return
     }
@@ -2037,6 +2095,12 @@ function createDocCard(doc) {
   const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
   const isRead = doc.metadata?.read === true
 
+  let dateHtml = `<span>📅 등록: ${date}</span>`
+  if (isRead && doc.metadata?.read_at) {
+    const readDateStr = new Date(doc.metadata.read_at).toLocaleDateString('ko-KR', { year:'numeric', month:'short', day:'numeric' })
+    dateHtml = `<span>✅ 완독: ${readDateStr}</span>`
+  }
+
   const checkBtnHtml = `
     <button class="doc-card-check-btn ${isRead ? 'checked' : ''}" data-id="${doc.id}" title="${isRead ? '읽지 않음으로 표시' : '읽음으로 표시'}">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -2053,7 +2117,7 @@ function createDocCard(doc) {
     <div class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(displayTitle)}</div>
     ${tagsHtml}
     <div class="doc-card-meta">
-      <span>📅 ${date}</span><span>📑 ${total}페이지</span>
+      ${dateHtml}<span>📑 ${total}페이지</span>
     </div>
     <div class="doc-card-progress">
       <div class="doc-progress-bar-wrap"><div class="doc-progress-bar" style="width:${pct}%"></div></div>
@@ -2079,8 +2143,15 @@ function createDocCard(doc) {
     e.stopPropagation()
     const currentReadState = doc.metadata?.read === true
     const nextReadState = !currentReadState
+    const payload = { read: nextReadState }
+    if (nextReadState) {
+      payload.read_at = new Date().toISOString()
+    } else {
+      payload.read_at = null
+    }
+    
     try {
-      await updateLibraryDocMetadata(doc.id, { read: nextReadState })
+      await updateLibraryDocMetadata(doc.id, payload)
       showToast(nextReadState ? '읽은 논문으로 표시되었습니다.' : '보관함으로 이동되었습니다.', 'success')
       await renderLibrary()
       await loadLibraryCount()
@@ -2189,6 +2260,13 @@ async function openFromLibrary(doc, shouldPushState = true) {
   state.sessionId  = doc.id
   loadDocumentImages(doc.id)
   state.filename   = doc.filename
+  state.currentDocId = doc.id
+  state.currentDocMetadata = doc.metadata || {}
+  
+  if (viewerReadToggleBtn) {
+    const isRead = state.currentDocMetadata.read === true
+    viewerReadToggleBtn.classList.toggle('active', isRead)
+  }
   const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
   state.title      = displayTitle
   state.totalPages = doc.total_pages

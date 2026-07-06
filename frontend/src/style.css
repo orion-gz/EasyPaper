@@ -3602,5 +3602,89 @@ body.light-theme .doc-card-check-btn.checked {
   color: #059669;
 }
 
+/* ── Library Statistics Widget ── */
+.library-stats-widget {
+  grid-column: 1 / -1;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 16px 24px;
+  display: flex;
+  gap: 40px;
+  align-items: center;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(20px);
+}
+.library-stats-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.library-stats-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.library-stats-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.library-stats-value span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* ── Viewer Topbar "독서 완료" Toggle Button ── */
+.viewer-read-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 15px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--font-sans);
+}
+.viewer-read-btn svg {
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+.viewer-read-btn:hover {
+  border-color: var(--accent-mid);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.viewer-read-btn.active {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #10b981;
+}
+.viewer-read-btn.active svg {
+  color: #10b981;
+}
+body.light-theme .viewer-read-btn.active {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #059669;
+}
+body.light-theme .viewer-read-btn.active svg {
+  color: #059669;
+}
+
 
 
