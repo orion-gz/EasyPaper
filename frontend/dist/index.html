@@ -14,8 +14,8 @@
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
     onload="document.dispatchEvent(new Event('katex-ready'))"></script>
-  <script type="module" crossorigin src="/assets/index-a5xo3mrO.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-D1N2LEBl.css">
+  <script type="module" crossorigin src="/assets/index-D9si93Dl.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CZpIrRgH.css">
 </head>
 <body>
 
@@ -68,6 +68,15 @@
         </button>
       </div>
 
+      <!-- 탭 영역 -->
+      <div class="library-tabs-container">
+        <button id="lib-tab-archive" class="library-tab-btn active" data-tab="archive">📥 보관함</button>
+        <button id="lib-tab-history" class="library-tab-btn" data-tab="history">✅ 히스토리</button>
+      </div>
+
+      <!-- 독서 통계 위젯 영역 -->
+      <div id="library-stats-container" class="hidden" style="margin-bottom: 16px;"></div>
+
       <!-- 카테고리 필터 영역 -->
       <div id="library-category-filters" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; align-items: center;"></div>
 
@@ -91,6 +100,14 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
         </button>
         <button id="logo-btn" class="logo-small-btn" title="라이브러리로 돌아가기">⚗️ EasyPaper</button>
+        <!-- 독서 완료 토글 버튼 -->
+        <button id="viewer-read-toggle-btn" class="viewer-read-btn" title="독서 완료 상태 토글" style="margin-left: 8px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          <span class="read-btn-text">독서 완료</span>
+        </button>
         <button id="outline-toggle-btn" class="icon-btn" title="논문 목차 보기" style="margin-left: 6px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
         </button>

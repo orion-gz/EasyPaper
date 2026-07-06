@@ -22,6 +22,9 @@ window.fetch = async function (...args) {
 
 // ── 상태 ──────────────────────────────────────────
 const state = {
+  currentLibraryTab: 'archive', // 'archive' (보관함) 또는 'history' (히스토리)
+  currentDocId: null,
+  currentDocMetadata: {},
   sessionId: null,
   filename: null,
   title: null,
@@ -105,6 +108,9 @@ const libUploadBtn      = $('lib-upload-btn')
 const libraryGrid       = $('library-grid')
 const libraryCategoryFilters = $('library-category-filters')
 const libraryCountBadge = $('library-count-badge')
+const libTabArchive     = $('lib-tab-archive')
+const libTabHistory     = $('lib-tab-history')
+const libraryStatsContainer = $('library-stats-container')
 
 // Google Drive Style Upload Popup references
 const uploadPopup        = $('upload-popup')
@@ -132,6 +138,7 @@ const resumeTransBtn    = $('resume-trans-btn')
 // (viewer/chat pickers are now ProviderModelPicker instances – see below)
 const backBtn           = $('back-btn')
 const logoBtn           = $('logo-btn')
+const viewerReadToggleBtn = $('viewer-read-toggle-btn')
 const viewerScrollContainer = $('viewer-scroll-container')
 const translateSpinner      = $('translate-spinner')
 const translateStatusText   = $('translate-status-text')
@@ -880,6 +887,32 @@ backBtn.addEventListener('click', () => {
 if (logoBtn) {
   logoBtn.addEventListener('click', () => {
     showLibraryScreen()
+  })
+}
+
+// ── 뷰어 내 독서 완료 토글 버튼 바인딩 ──
+if (viewerReadToggleBtn) {
+  viewerReadToggleBtn.addEventListener('click', async () => {
+    if (!state.currentDocId) return
+    const currentReadState = state.currentDocMetadata.read === true
+    const nextReadState = !currentReadState
+    const payload = { read: nextReadState }
+    if (nextReadState) {
+      payload.read_at = new Date().toISOString()
+    } else {
+      payload.read_at = null
+    }
+    
+    try {
+      await updateLibraryDocMetadata(state.currentDocId, payload)
+      state.currentDocMetadata.read = nextReadState
+      state.currentDocMetadata.read_at = payload.read_at
+      viewerReadToggleBtn.classList.toggle('active', nextReadState)
+      showToast(nextReadState ? '읽은 논문으로 표시되었습니다.' : '보관함으로 이동되었습니다.', 'success')
+      await loadLibraryCount()
+    } catch (err) {
+      showToast('상태 변경 실패: ' + err.message, 'error')
+    }
   })
 }
 
@@ -1861,12 +1894,35 @@ setInterval(checkAIStatus, 30000)
 async function loadLibraryCount() {
   try {
     const data = await fetchLibrary(getTranslationOptions())
-    const count = data.total || 0
-    if (count > 0 && libraryCountBadge) {
-      libraryCountBadge.textContent = count
+    const docs = data.documents || []
+    const unreadCount = docs.filter(doc => doc.metadata?.read !== true).length
+    if (unreadCount > 0 && libraryCountBadge) {
+      libraryCountBadge.textContent = unreadCount
       libraryCountBadge.classList.remove('hidden')
+    } else if (libraryCountBadge) {
+      libraryCountBadge.classList.add('hidden')
     }
   } catch {}
+}
+
+// 탭 클릭 이벤트 리스너 등록
+if (libTabArchive && libTabHistory) {
+  libTabArchive.addEventListener('click', () => {
+    if (state.currentLibraryTab === 'archive') return
+    state.currentLibraryTab = 'archive'
+    libTabArchive.classList.add('active')
+    libTabHistory.classList.remove('active')
+    activeCategoryFilter = 'ALL'
+    renderLibrary()
+  })
+  libTabHistory.addEventListener('click', () => {
+    if (state.currentLibraryTab === 'history') return
+    state.currentLibraryTab = 'history'
+    libTabHistory.classList.add('active')
+    libTabArchive.classList.remove('active')
+    activeCategoryFilter = 'ALL'
+    renderLibrary()
+  })
 }
 
 async function showLibraryScreen(shouldPushState = true) {
@@ -1894,19 +1950,57 @@ async function renderLibrary() {
   libraryCategoryFilters.innerHTML = ''
   try {
     const data = await fetchLibrary(getTranslationOptions())
-    const docs = data.documents || []
-    if (docs.length > 0) {
-      if (libraryCountBadge) {
-        libraryCountBadge.textContent = docs.length
-        libraryCountBadge.classList.remove('hidden')
-      }
-    } else {
-      if (libraryCountBadge) {
-        libraryCountBadge.classList.add('hidden')
-      }
+    const allDocs = data.documents || []
+
+    // 보관함 뱃지에는 안읽은 논문 개수 표시
+    const unreadCount = allDocs.filter(doc => doc.metadata?.read !== true).length
+    if (unreadCount > 0 && libraryCountBadge) {
+      libraryCountBadge.textContent = unreadCount
+      libraryCountBadge.classList.remove('hidden')
+    } else if (libraryCountBadge) {
+      libraryCountBadge.classList.add('hidden')
     }
+
+    // 현재 선택된 탭에 따라 논문 목록 필터링
+    const docs = allDocs.filter(doc => {
+      const isRead = doc.metadata?.read === true
+      return state.currentLibraryTab === 'history' ? isRead : !isRead
+    })
+
+    // 히스토리 탭인 경우 상단에 독서 현황 통계 요약 카드 렌더링
+    if (state.currentLibraryTab === 'history') {
+      const now = new Date()
+      const thisYear = now.getFullYear()
+      const thisMonth = now.getMonth()
+      
+      const readDocs = allDocs.filter(d => d.metadata?.read === true)
+      const thisMonthCount = readDocs.filter(d => {
+        if (!d.metadata?.read_at) return false
+        const rDate = new Date(d.metadata.read_at)
+        return rDate.getFullYear() === thisYear && rDate.getMonth() === thisMonth
+      }).length
+      
+      libraryStatsContainer.innerHTML = `
+        <div class="library-stats-widget">
+          <div class="library-stats-item">
+            <span class="library-stats-label">📅 이번 달 읽은 논문</span>
+            <span class="library-stats-value">${thisMonthCount}<span>편</span></span>
+          </div>
+          <div style="width: 1px; height: 28px; background: var(--border-strong);"></div>
+          <div class="library-stats-item">
+            <span class="library-stats-label">🏆 누적 완독 논문</span>
+            <span class="library-stats-value">${readDocs.length}<span>편</span></span>
+          </div>
+        </div>
+      `
+      libraryStatsContainer.classList.remove('hidden')
+    } else {
+      libraryStatsContainer.classList.add('hidden')
+      libraryStatsContainer.innerHTML = ''
+    }
+
     if (docs.length === 0) {
-      libraryGrid.appendChild(createEmptyState()); return
+      libraryGrid.appendChild(createEmptyState(state.currentLibraryTab === 'history')); return
     }
 
     // Extract unique categories
@@ -1966,18 +2060,24 @@ function filterLibraryCards(docs) {
     : docs.filter(doc => (doc.metadata?.categories || []).includes(activeCategoryFilter))
 
   if (filteredDocs.length === 0) {
-    libraryGrid.appendChild(createEmptyState()); return
+    libraryGrid.appendChild(createEmptyState(state.currentLibraryTab === 'history')); return
   }
 
   filteredDocs.forEach(doc => libraryGrid.appendChild(createDocCard(doc)))
 }
 
-function createEmptyState() {
+function createEmptyState(isHistory = false) {
   const el = document.createElement('div')
   el.className = 'lib-empty'
-  el.innerHTML = `<div style="font-size:48px;margin-bottom:16px">📚</div>
-    <p>저장된 논문이 없습니다</p>
-    <p style="font-size:13px;color:var(--text-muted);margin-top:8px">PDF를 업로드하면 자동으로 저장됩니다</p>`
+  if (isHistory) {
+    el.innerHTML = `<div style="font-size:48px;margin-bottom:16px">📖</div>
+      <p>읽은 논문이 없습니다</p>
+      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">보관함에서 논문의 체크 아이콘을 눌러 읽음 처리해 보세요</p>`
+  } else {
+    el.innerHTML = `<div style="font-size:48px;margin-bottom:16px">📚</div>
+      <p>보관함에 저장된 논문이 없습니다</p>
+      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">새 논문을 추가하거나 PDF를 업로드해 보세요</p>`
+  }
   return el
 }
 
@@ -1997,15 +2097,31 @@ function createDocCard(doc) {
   }
 
   const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+  const isRead = doc.metadata?.read === true
+
+  let dateHtml = `<span>📅 등록: ${date}</span>`
+  if (isRead && doc.metadata?.read_at) {
+    const readDateStr = new Date(doc.metadata.read_at).toLocaleDateString('ko-KR', { year:'numeric', month:'short', day:'numeric' })
+    dateHtml = `<span>✅ 완독: ${readDateStr}</span>`
+  }
+
+  const checkBtnHtml = `
+    <button class="doc-card-check-btn ${isRead ? 'checked' : ''}" data-id="${doc.id}" title="${isRead ? '읽지 않음으로 표시' : '읽음으로 표시'}">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    </button>
+  `
 
   const card = document.createElement('div')
   card.className = 'doc-card'
   card.innerHTML = `
+    ${checkBtnHtml}
     <div class="doc-card-icon">📄</div>
     <div class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(displayTitle)}</div>
     ${tagsHtml}
     <div class="doc-card-meta">
-      <span>📅 ${date}</span><span>📑 ${total}페이지</span>
+      ${dateHtml}<span>📑 ${total}페이지</span>
     </div>
     <div class="doc-card-progress">
       <div class="doc-progress-bar-wrap"><div class="doc-progress-bar" style="width:${pct}%"></div></div>
@@ -2026,6 +2142,27 @@ function createDocCard(doc) {
         </svg>
       </button>
     </div>`
+
+  card.querySelector('.doc-card-check-btn').addEventListener('click', async (e) => {
+    e.stopPropagation()
+    const currentReadState = doc.metadata?.read === true
+    const nextReadState = !currentReadState
+    const payload = { read: nextReadState }
+    if (nextReadState) {
+      payload.read_at = new Date().toISOString()
+    } else {
+      payload.read_at = null
+    }
+    
+    try {
+      await updateLibraryDocMetadata(doc.id, payload)
+      showToast(nextReadState ? '읽은 논문으로 표시되었습니다.' : '보관함으로 이동되었습니다.', 'success')
+      await renderLibrary()
+      await loadLibraryCount()
+    } catch (err) {
+      showToast('상태 변경 실패: ' + err.message, 'error')
+    }
+  })
 
   card.querySelector('.doc-open-btn').addEventListener('click', (e) => { e.stopPropagation(); openFromLibrary(doc) })
   card.querySelector('.doc-delete-btn').addEventListener('click', async (e) => {
@@ -2127,6 +2264,13 @@ async function openFromLibrary(doc, shouldPushState = true) {
   state.sessionId  = doc.id
   loadDocumentImages(doc.id)
   state.filename   = doc.filename
+  state.currentDocId = doc.id
+  state.currentDocMetadata = doc.metadata || {}
+  
+  if (viewerReadToggleBtn) {
+    const isRead = state.currentDocMetadata.read === true
+    viewerReadToggleBtn.classList.toggle('active', isRead)
+  }
   const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
   state.title      = displayTitle
   state.totalPages = doc.total_pages

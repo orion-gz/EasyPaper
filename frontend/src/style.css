@@ -3515,5 +3515,174 @@ body.light-theme .floating-memo.color-red .floating-memo-render {
   color: #9f1239 !important;
 }
 
+/* ── Library Tab Styles (Pill Capsule Layout) ── */
+.library-tabs-container {
+  display: inline-flex;
+  align-self: flex-start;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 30px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
+}
+.library-tab-btn {
+  background: none;
+  border: none;
+  padding: 6px 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 20px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--font-sans);
+}
+.library-tab-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.library-tab-btn.active {
+  color: #fff !important;
+  background: var(--accent-mid);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+body.light-theme .library-tab-btn.active {
+  color: #fff !important;
+}
+
+/* ── Custom Checked Badge on Document Card ── */
+.doc-card-check-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 10;
+  color: var(--text-muted);
+}
+.doc-card-check-btn svg {
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.doc-card-check-btn:hover {
+  border-color: var(--accent-mid);
+  background: rgba(139, 92, 246, 0.05);
+  color: var(--accent-mid);
+  transform: scale(1.05);
+}
+.doc-card-check-btn:hover svg {
+  opacity: 0.6;
+  transform: scale(1);
+}
+.doc-card-check-btn.checked {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.15);
+}
+.doc-card-check-btn.checked svg {
+  opacity: 1;
+  transform: scale(1);
+}
+body.light-theme .doc-card-check-btn.checked {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #059669;
+}
+
+/* ── Library Statistics Widget ── */
+.library-stats-widget {
+  display: inline-flex;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 12px 24px;
+  gap: 40px;
+  align-items: center;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(20px);
+}
+.library-stats-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.library-stats-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.library-stats-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.library-stats-value span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* ── Viewer Topbar "독서 완료" Toggle Button ── */
+.viewer-read-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 15px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--font-sans);
+}
+.viewer-read-btn svg {
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+.viewer-read-btn:hover {
+  border-color: var(--accent-mid);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.viewer-read-btn.active {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #10b981;
+}
+.viewer-read-btn.active svg {
+  color: #10b981;
+}
+body.light-theme .viewer-read-btn.active {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #059669;
+}
+body.light-theme .viewer-read-btn.active svg {
+  color: #059669;
+}
+
 
 
