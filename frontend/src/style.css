@@ -1914,18 +1914,17 @@ body.light-theme .chat-input-area {
   background: rgba(255, 255, 255, 0.85);
 }
 
-.chat-input-row {
+.chat-input-box {
   display: flex;
-  gap: 8px;
-  align-items: flex-end;
+  flex-direction: column;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
-  border-radius: 20px;
-  padding: 6px 6px 6px 14px;
+  border-radius: var(--radius-lg);
   transition: border-color 0.25s, box-shadow 0.25s;
+  overflow: hidden;
 }
 
-.chat-input-row:focus-within {
+.chat-input-box:focus-within {
   border-color: var(--accent-mid);
   box-shadow: 0 0 16px rgba(139, 92, 246, 0.12);
 }
@@ -1934,14 +1933,58 @@ body.light-theme .chat-input-area {
   flex: 1;
   background: transparent;
   border: none;
-  padding: 6px 0;
+  padding: 12px 14px 6px;
   color: var(--text-primary);
   font-size: 13.5px;
   font-family: var(--font-body);
   resize: none;
   max-height: 110px;
   outline: none;
-  line-height: 1.5;
+  line-height: 1.55;
+  box-sizing: border-box;
+}
+
+.chat-input-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px 8px 8px;
+}
+
+/* ── Chat Model Picker inside Footer Refinement ── */
+.chat-input-footer .provider-picker-btn {
+  height: 28px !important;
+  min-width: unset !important;
+  font-size: 11px !important;
+  padding: 0 10px 0 8px !important;
+  border-radius: 14px !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: var(--border) !important;
+  color: var(--text-secondary) !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+.chat-input-footer .provider-picker-btn:hover {
+  background: var(--bg-hover) !important;
+  border-color: var(--accent-mid) !important;
+  color: var(--text-primary) !important;
+}
+.chat-input-footer .provider-picker-btn .picker-icon {
+  font-size: 12px !important;
+}
+.chat-input-footer .provider-picker-btn .picker-arrow {
+  font-size: 8px !important;
+}
+.chat-input-footer .provider-picker-panel {
+  bottom: calc(100% + 6px) !important;
+  top: auto !important;
+  right: auto !important;
+  left: 0 !important;
+  animation: pickerFadeUp 0.15s ease !important;
+}
+@keyframes pickerFadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .chat-send-btn {
@@ -3724,6 +3767,20 @@ body.light-theme .viewer-read-btn.active {
 }
 body.light-theme .viewer-read-btn.active svg {
   color: #059669;
+}
+
+/* ── Integrated Quoted Box Styling inside Chat Input ── */
+.chat-input-box .chat-quote-area {
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  border-left: 3px solid var(--accent-mid);
+  border-bottom: 1px solid var(--border-strong);
+  margin-bottom: 0;
+  background: rgba(139, 92, 246, 0.05);
+  padding: 10px 14px;
+}
+body.light-theme .chat-input-box .chat-quote-area {
+  background: rgba(139, 92, 246, 0.03);
 }
 
 

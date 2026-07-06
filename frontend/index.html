@@ -225,7 +225,6 @@
             <span class="chat-header-icon">💬</span>
             <span class="chat-title">AI 어시스턴트</span>
           </div>
-          <div id="chat-sidebar-provider"></div>
           <button id="chat-close-btn" class="chat-close-btn" title="닫기">&times;</button>
         </div>
         <!-- AI Chat Loading Progress Bar -->
@@ -238,21 +237,24 @@
           </div>
         </div>
         <div class="chat-input-area">
-          <!-- 인용 박스 -->
-          <div id="chat-quote-area" class="chat-quote-area hidden">
-            <span class="chat-quote-symbol">❝</span>
-            <div id="chat-quote-text" class="chat-quote-text"></div>
-            <img id="chat-quote-img" class="chat-quote-img hidden" alt="Quoted Figure" />
-            <button id="chat-quote-close-btn" class="chat-quote-close-btn" title="인용 취소">&times;</button>
-          </div>
-          <div class="chat-input-row">
+          <div class="chat-input-box">
+            <!-- 인용 박스 -->
+            <div id="chat-quote-area" class="chat-quote-area hidden">
+              <span class="chat-quote-symbol">❝</span>
+              <div id="chat-quote-text" class="chat-quote-text"></div>
+              <img id="chat-quote-img" class="chat-quote-img hidden" alt="Quoted Figure" />
+              <button id="chat-quote-close-btn" class="chat-quote-close-btn" title="인용 취소">&times;</button>
+            </div>
             <textarea id="chat-input" placeholder="논문에 대해 궁금한 점을 질문하세요..." rows="1"></textarea>
-            <button id="chat-send-btn" class="chat-send-btn" title="전송">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
-            </button>
+            <div class="chat-input-footer">
+              <div id="chat-sidebar-provider"></div>
+              <button id="chat-send-btn" class="chat-send-btn" title="전송">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="22" y1="2" x2="11" y2="13"/>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </aside>
