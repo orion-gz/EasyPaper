@@ -3515,76 +3515,90 @@ body.light-theme .floating-memo.color-red .floating-memo-render {
   color: #9f1239 !important;
 }
 
-/* ── Library Tab Styles ── */
+/* ── Library Tab Styles (Pill Capsule Layout) ── */
 .library-tabs-container {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 2px;
+  display: inline-flex;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 30px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
 }
 .library-tab-btn {
   background: none;
   border: none;
-  padding: 8px 18px;
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 500;
+  padding: 6px 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s ease;
+  border-radius: 20px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   font-family: var(--font-sans);
-  position: relative;
 }
 .library-tab-btn:hover {
   color: var(--text-primary);
+  background: var(--bg-hover);
 }
 .library-tab-btn.active {
-  color: var(--accent-mid);
-  border-bottom-color: var(--accent-mid);
-  font-weight: 600;
+  color: #fff !important;
+  background: var(--accent-mid);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+body.light-theme .library-tab-btn.active {
+  color: #fff !important;
 }
 
-/* ── Checkbox/Read Mark button style on doc-card ── */
+/* ── Custom Checked Badge on Document Card ── */
 .doc-card-check-btn {
   position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  border: 1.5px solid var(--border-strong);
-  background: var(--bg-elevated);
+  top: 18px;
+  right: 18px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 10;
+  color: var(--text-muted);
 }
 .doc-card-check-btn svg {
   opacity: 0;
-  transform: scale(0.6);
+  transform: scale(0.5);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  color: var(--accent-mid);
 }
 .doc-card-check-btn:hover {
   border-color: var(--accent-mid);
-  background: var(--bg-hover);
+  background: rgba(139, 92, 246, 0.05);
+  color: var(--accent-mid);
+  transform: scale(1.05);
 }
 .doc-card-check-btn:hover svg {
-  opacity: 0.5;
+  opacity: 0.6;
   transform: scale(1);
 }
 .doc-card-check-btn.checked {
-  background: rgba(139, 92, 246, 0.15);
-  border-color: var(--accent-mid);
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.15);
 }
 .doc-card-check-btn.checked svg {
   opacity: 1;
   transform: scale(1);
-  color: var(--accent-mid);
+}
+body.light-theme .doc-card-check-btn.checked {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #059669;
 }
 
 
