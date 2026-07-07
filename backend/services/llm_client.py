@@ -559,8 +559,23 @@ async def stream_claude_code(prompt: str, model: str = None) -> AsyncGenerator[s
         
     # --print - : stdin으로 프롬프트를 받아 처리 (--print 인자로 넘기면 Claude가 수학 기호를 _MB_N 으로 치환하는 버그 발생)
     cmd = [claude_path, "--permission-mode", "dontAsk", "--output-format", "text", "--print", "-"]
+
+    # model 값이 'sonnet|high' 처럼 파이프(|)로 모델과 effort를 구분할 수 있음
+    model_name = None
+    effort_level = None
     if model and model.strip() and model.strip().lower() not in ["custom", "default"]:
-        cmd.extend(["--model", model.strip()])
+        raw = model.strip()
+        if "|" in raw:
+            parts = raw.split("|", 1)
+            model_name = parts[0].strip() or None
+            effort_level = parts[1].strip() or None
+        else:
+            model_name = raw
+
+    if model_name:
+        cmd.extend(["--model", model_name])
+    if effort_level:
+        cmd.extend(["--effort", effort_level])
 
     # 프롬프트에 직접 출력 포맷 지시 추가 (뷰어가 markdown+LaTeX를 렌더링하므로 그대로 출력 허용)
     guided_prompt = (

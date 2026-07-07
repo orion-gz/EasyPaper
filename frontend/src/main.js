@@ -1094,10 +1094,30 @@ const PROVIDER_CONFIG = [
   {
     id: 'claude_code', label: 'Claude Code', icon: '🤖',
     models: [
-      { value: 'sonnet',  label: 'Sonnet · Sonnet 5' },
-      { value: 'fable',   label: 'Fable · Fable 5' },
-      { value: 'opus',    label: 'Opus · Opus 4.8' },
-      { value: 'haiku',   label: 'Haiku · Haiku 4.5' }
+      // Sonnet
+      { value: 'sonnet|low',    label: 'Sonnet · Low',    group: 'Sonnet 5' },
+      { value: 'sonnet|medium', label: 'Sonnet · Medium', group: 'Sonnet 5' },
+      { value: 'sonnet|high',   label: 'Sonnet · High',   group: 'Sonnet 5' },
+      { value: 'sonnet|xhigh',  label: 'Sonnet · xHigh',  group: 'Sonnet 5' },
+      { value: 'sonnet|max',    label: 'Sonnet · Max',    group: 'Sonnet 5' },
+      // Fable
+      { value: 'fable|low',    label: 'Fable · Low',    group: 'Fable 5' },
+      { value: 'fable|medium', label: 'Fable · Medium', group: 'Fable 5' },
+      { value: 'fable|high',   label: 'Fable · High',   group: 'Fable 5' },
+      { value: 'fable|xhigh',  label: 'Fable · xHigh',  group: 'Fable 5' },
+      { value: 'fable|max',    label: 'Fable · Max',    group: 'Fable 5' },
+      // Opus
+      { value: 'opus|low',    label: 'Opus · Low',    group: 'Opus 4.8' },
+      { value: 'opus|medium', label: 'Opus · Medium', group: 'Opus 4.8' },
+      { value: 'opus|high',   label: 'Opus · High',   group: 'Opus 4.8' },
+      { value: 'opus|xhigh',  label: 'Opus · xHigh',  group: 'Opus 4.8' },
+      { value: 'opus|max',    label: 'Opus · Max',    group: 'Opus 4.8' },
+      // Haiku
+      { value: 'haiku|low',    label: 'Haiku · Low',    group: 'Haiku 4.5' },
+      { value: 'haiku|medium', label: 'Haiku · Medium', group: 'Haiku 4.5' },
+      { value: 'haiku|high',   label: 'Haiku · High',   group: 'Haiku 4.5' },
+      { value: 'haiku|xhigh',  label: 'Haiku · xHigh',  group: 'Haiku 4.5' },
+      { value: 'haiku|max',    label: 'Haiku · Max',    group: 'Haiku 4.5' },
     ]
   },
   {
@@ -1302,7 +1322,21 @@ class ProviderModelPicker {
       }
 
       const models = prov.models.length > 0 ? prov.models : [{ value: '', label: '모델 없음' }]
+      let lastGroup = null
       models.forEach(m => {
+        // group 속성이 있으면 새 그룹이 시작될 때 소제목 삽입 (claude_code effort 그룹핑)
+        if (m.group && m.group !== lastGroup) {
+          if (lastGroup !== null) {
+            const subDiv = document.createElement('div')
+            subDiv.style.cssText = 'height:1px;background:var(--border);margin:3px 8px;'
+            group.appendChild(subDiv)
+          }
+          const subHeader = document.createElement('div')
+          subHeader.style.cssText = 'padding:4px 10px 2px 10px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);opacity:0.7;'
+          subHeader.textContent = m.group
+          group.appendChild(subHeader)
+          lastGroup = m.group
+        }
         const item = document.createElement('div')
         item.className = 'picker-model-item' + (this._provider === prov.id && this._model === m.value ? ' selected' : '')
         item.style.position = 'relative'
