@@ -1081,14 +1081,18 @@ const PROVIDER_CONFIG = [
   {
     id: 'antigravity', label: 'Antigravity', icon: '⚡',
     models: [
-      { value: 'Gemini 3.5 Flash (Medium)',    label: 'Gemini 3.5 Flash (Medium)' },
-      { value: 'Gemini 3.5 Flash (High)',      label: 'Gemini 3.5 Flash (High)' },
-      { value: 'Gemini 3.5 Flash (Low)',       label: 'Gemini 3.5 Flash (Low)' },
-      { value: 'Gemini 3.1 Pro (Low)',         label: 'Gemini 3.1 Pro (Low)' },
-      { value: 'Gemini 3.1 Pro (High)',        label: 'Gemini 3.1 Pro (High)' },
-      { value: 'Claude Sonnet 4.6 (Thinking)', label: 'Claude Sonnet 4.6 (Thinking)' },
-      { value: 'Claude Opus 4.6 (Thinking)',   label: 'Claude Opus 4.6 (Thinking)' },
-      { value: 'GPT-OSS 120B (Medium)',        label: 'GPT-OSS 120B (Medium)' },
+      // Gemini 3.5 Flash
+      { value: 'Gemini 3.5 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.5 Flash' },
+      { value: 'Gemini 3.5 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.5 Flash' },
+      { value: 'Gemini 3.5 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.5 Flash' },
+      // Gemini 3.1 Pro
+      { value: 'Gemini 3.1 Pro (Low)',  label: 'Pro · Low',  group: 'Gemini 3.1 Pro' },
+      { value: 'Gemini 3.1 Pro (High)', label: 'Pro · High', group: 'Gemini 3.1 Pro' },
+      // Claude
+      { value: 'Claude Sonnet 4.6 (Thinking)', label: 'Sonnet · Thinking', group: 'Claude' },
+      { value: 'Claude Opus 4.6 (Thinking)',   label: 'Opus · Thinking',   group: 'Claude' },
+      // GPT
+      { value: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B · Medium', group: 'GPT' },
     ]
   },
   {
