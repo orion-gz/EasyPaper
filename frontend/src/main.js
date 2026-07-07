@@ -50,6 +50,7 @@ const state = {
   activeHighlightColor: '#eab308', // 기본 하이라이트 노란색
   activeUnderlineColor: '#ef4444',  // 기본 밑줄 빨간색
   isCropMode: false,           // 영역 캡처 모드 여부
+  isSelectionDragging: false,   // 마우스 드래그 선택 중인지 여부
   pdfPageSentences: {},        // pageNum → sentenceRanges 보관용
   pdfPageElements: {},         // pageNum → elRanges 보관용
   cliAvailability: { antigravity: true, claude_code: true }
@@ -4501,6 +4502,7 @@ if (viewerScrollContainer) {
 window.addEventListener('resize', hideSelectionMenu);
 
 document.addEventListener('mousedown', (e) => {
+  state.isSelectionDragging = true;
   if (e.target.closest('.pdf-figure-overlay')) return;
   if (selectionMenu && !selectionMenu.contains(e.target)) {
     setTimeout(() => {
@@ -4510,6 +4512,10 @@ document.addEventListener('mousedown', (e) => {
       }
     }, 20);
   }
+});
+
+document.addEventListener('mouseup', () => {
+  state.isSelectionDragging = false;
 });
 
 // KaTeX 로드 완료 후 페이지 내 pending 수식 전부 재처리
@@ -4868,7 +4874,7 @@ function segmentPdfElements(container, pageNum) {
         span.dataset.page = pageNum;
         span.dataset.sentenceIdx = seg.sentenceIdx;
         span.textContent = seg.text;
-        span.style.cursor = 'pointer';
+        span.style.cursor = 'inherit';
         
         fragment.appendChild(span);
         lastIdx = seg.endInNode;
@@ -5254,7 +5260,7 @@ if (viewerScrollContainer) {
       // PDF 텍스트 문장에 마우스가 700ms 동안 머물러 있으면 문장 단위 자동 드래그 선택 및 툴팁 띄우기
       // 단, 이미 어노테이션이 입혀진 span 위에 올라온 경우나 호버 자동 선택이 비활성화된 경우는 작동 제외
       const pdfTarget = e.target.closest('.pdf-sentence');
-      if (pdfTarget && !annSpan && !state.hoverSelectionDisabled) {
+      if (pdfTarget && !annSpan && !state.hoverSelectionDisabled && !state.isSelectionDragging) {
         sentenceHoverTimer = setTimeout(() => {
           const curSel = window.getSelection();
           if (curSel && !curSel.isCollapsed) return;
