@@ -165,6 +165,13 @@ def _extract_paper_title(doc: fitz.Document) -> str:
                     if text.isdigit():
                         continue
                     
+                    # arXiv 스탬프 및 학회/저널 프리프린트 헤더 필터링
+                    lower_text = text.lower()
+                    if "arxiv" in lower_text:
+                        continue
+                    if any(kw in lower_text for kw in ["preprint", "under review", "submitted to", "accepted as"]):
+                        continue
+                    
                     bbox = span["bbox"]
                     y0 = bbox[1]
                     height = page.rect.height
