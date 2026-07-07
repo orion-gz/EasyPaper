@@ -1299,31 +1299,8 @@ class ProviderModelPicker {
 
       const header = document.createElement('div')
       header.className = 'picker-group-header'
-
-      if (prov.id === 'antigravity') {
-        header.innerHTML = `
-          <span class="g-icon">${prov.icon}</span>
-          <span>${prov.label}</span>
-          <span class="agy-usage-badge" style="margin-left:auto;font-size:9px;background:rgba(139,92,246,0.2);color:#a78bfa;padding:2px 6px;border-radius:8px;font-weight:600;">로딩중...</span>
-        `
-        group.appendChild(header)
-        const badge = header.querySelector('.agy-usage-badge')
-        getAgyUsageAPI().then(data => {
-          if (data && data.ok !== false) {
-            const pct = data.daily_used_pct || 0
-            const remaining = data.daily_remaining ?? '?'
-            const color = pct > 80 ? '#f87171' : pct > 50 ? '#fbbf24' : '#a78bfa'
-            badge.style.background = pct > 80 ? 'rgba(248,113,113,0.2)' : pct > 50 ? 'rgba(251,191,36,0.2)' : 'rgba(139,92,246,0.2)'
-            badge.style.color = color
-            badge.textContent = `오늘 ${data.today}회 · 잔여 ${remaining}`
-          } else {
-            badge.textContent = '사용량 미확인'
-          }
-        }).catch(() => { badge.textContent = '사용량 미확인' })
-      } else {
-        header.innerHTML = `<span class="g-icon">${prov.icon}</span><span>${prov.label}</span>`
-        group.appendChild(header)
-      }
+      header.innerHTML = `<span class="g-icon">${prov.icon}</span><span>${prov.label}</span>`
+      group.appendChild(header)
 
       const models = prov.models.length > 0 ? prov.models : [{ value: '', label: '모델 없음' }]
       let lastGroup = null
