@@ -158,11 +158,15 @@ def _extract_paper_title(doc: fitz.Document) -> str:
                 continue
             for line in b["lines"]:
                 for span in line["spans"]:
-                    text = span["text"].strip()
-                    if not text or len(text) < 2:
+                    text = span["text"]
+                    stripped = text.strip()
+                    if not stripped:
                         continue
-                    # 너무 작거나 숫자로만 이루어진 스팬은 무시
-                    if text.isdigit():
+                    # 단일 문자이면서 폰트 크기가 작은 경우(노이즈) 무시
+                    if len(stripped) < 2 and span["size"] < 12:
+                        continue
+                    # 숫자로만 이루어진 스팬은 무시
+                    if stripped.isdigit():
                         continue
                     
                     # arXiv 스탬프 및 학회/저널 프리프린트 헤더 필터링
@@ -243,7 +247,7 @@ def _extract_paper_title(doc: fitz.Document) -> str:
         title_parts = []
         for i, s in enumerate(sorted_spans):
             text = s["text"]
-            lower_text = text.lower()
+            lower_text = text.strip().lower()
             if lower_text in ["abstract", "introduction", "keywords", "key words"]:
                 continue
             if i == 0:
