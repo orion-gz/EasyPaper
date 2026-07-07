@@ -558,7 +558,7 @@ async def stream_claude_code(prompt: str, model: str = None) -> AsyncGenerator[s
         claude_path = "claude"
         
     cmd = [claude_path, "--permission-mode", "dontAsk"]
-    if model and model.strip() and model.strip().lower() != "custom":
+    if model and model.strip() and model.strip().lower() not in ["custom", "default"]:
         cmd.extend(["--model", model.strip()])
 
     guided_prompt = (

@@ -1091,12 +1091,13 @@ const PROVIDER_CONFIG = [
     ]
   },
   {
-    id: 'claude_code', label: 'Claude Code (CLI)', icon: '🤖',
+    id: 'claude_code', label: 'Claude Code', icon: '🤖',
     models: [
-      { value: 'sonnet', label: 'Claude 3.5 Sonnet (추천)' },
-      { value: 'haiku',  label: 'Claude 3.5 Haiku' },
-      { value: 'opus',   label: 'Claude 3 Opus' },
-      { value: 'fable',  label: 'Claude Fable 5' }
+      { value: 'default', label: 'Default (추천) · Sonnet 5' },
+      { value: 'sonnet',  label: 'Sonnet · Sonnet 5' },
+      { value: 'fable',   label: 'Fable · Fable 5' },
+      { value: 'opus',    label: 'Opus · Opus 4.8' },
+      { value: 'haiku',   label: 'Haiku · Haiku 4.5' }
     ]
   },
   {
