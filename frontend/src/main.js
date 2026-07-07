@@ -517,22 +517,22 @@ function formatTranslationHtml(text) {
   // 1. 블록 수식: $$...$$
   t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, f) => {
     const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: true })
-    return `___MB_${id}___`
+    return `::MATH_FLT_PLACEHOLDER_${id}::`
   })
   // 2. 블록 수식: \[...\]
   t = t.replace(/\\\[([\s\S]*?)\\\]/g, (_, f) => {
     const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: true })
-    return `___MB_${id}___`
+    return `::MATH_FLT_PLACEHOLDER_${id}::`
   })
   // 3. 인라인: $...$
   t = t.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (_, f) => {
     const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: false })
-    return `___MB_${id}___`
+    return `::MATH_FLT_PLACEHOLDER_${id}::`
   })
   // 4. 인라인: \(...\)
   t = t.replace(/\\\(([\s\S]*?)\\\)/g, (_, f) => {
     const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: false })
-    return `___MB_${id}___`
+    return `::MATH_FLT_PLACEHOLDER_${id}::`
   })
 
   // 4.5. 이스케이프된 볼드체 복원 및 공백 트리밍
@@ -556,7 +556,7 @@ function formatTranslationHtml(text) {
   html = html.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
 
   // 7. 수식 플레이스홀더 복원
-  html = html.replace(/___MB_(\d+)___/g, (_, idStr) => {
+  html = html.replace(/::MATH_FLT_PLACEHOLDER_(\d+)::/g, (_, idStr) => {
     const item = mathBlocks[parseInt(idStr)]
     if (!item) return _
     if (window.katex) {
