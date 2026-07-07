@@ -552,19 +552,22 @@ async def check_ollama_health() -> dict:
 async def stream_claude_code(prompt: str, model: str = None) -> AsyncGenerator[str, None]:
     import asyncio
     import os
+    import re as _re
     
     claude_path = get_claude_code_path()
     if not os.path.exists(claude_path):
         claude_path = "claude"
         
-    cmd = [claude_path, "--permission-mode", "dontAsk"]
+    cmd = [claude_path, "--permission-mode", "dontAsk", "--output-format", "text"]
     if model and model.strip() and model.strip().lower() not in ["custom", "default"]:
         cmd.extend(["--model", model.strip()])
 
     guided_prompt = (
         "You are a direct-output assistant. "
-        "Output ONLY the result — no preambles, no explanations, no 'Here is the translation', "
-        "no markdown code fences around the entire output, no commentary at the start or end. "
+        "Output ONLY plain text — absolutely NO HTML tags (e.g. <strong>, <em>, <b>, <i>), "
+        "NO markdown bold (**text**), NO markdown italic (*text*), "
+        "NO markdown code fences, no preambles, no explanations, no commentary. "
+        "Do NOT apply any text formatting whatsoever. "
         "Start the output immediately with the translated/answered content.\n\n"
         f"{prompt}"
     )
@@ -577,6 +580,9 @@ async def stream_claude_code(prompt: str, model: str = None) -> AsyncGenerator[s
 
     cmd.extend(["--print", guided_prompt])
     
+    # HTML 인라인 태그 제거 헬퍼 (Claude가 간혹 <strong> 등을 스스로 삽입하는 경우 대비)
+    _html_tag_re = _re.compile(r'</?(?:strong|em|b|i|u|s|code|mark)\b[^>]*>', _re.IGNORECASE)
+
     try:
         process = await asyncio.create_subprocess_exec(
             *cmd,
@@ -594,11 +600,12 @@ async def stream_claude_code(prompt: str, model: str = None) -> AsyncGenerator[s
                 break
             decoded = decoder.decode(chunk)
             if decoded:
-                yield decoded
+                cleaned = _html_tag_re.sub("", decoded)
+                yield cleaned
         
         final_decoded = decoder.decode(b"", final=True)
         if final_decoded:
-            yield final_decoded
+            yield _html_tag_re.sub("", final_decoded)
             
         await process.wait()
         
