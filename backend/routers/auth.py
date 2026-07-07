@@ -175,7 +175,7 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
     trans_provider = data.trans_provider.strip().lower()
     chat_provider = data.chat_provider.strip().lower()
     
-    if trans_provider not in ["ollama", "openai", "gemini", "claude", "antigravity"] or chat_provider not in ["ollama", "openai", "gemini", "claude", "antigravity"]:
+    if trans_provider not in ["ollama", "openai", "gemini", "claude", "antigravity", "claude_code"] or chat_provider not in ["ollama", "openai", "gemini", "claude", "antigravity", "claude_code"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="올바르지 않은 AI 제공업체입니다."

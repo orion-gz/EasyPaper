@@ -172,6 +172,13 @@ async def health_check():
         agy_path = get_agy_path()
         has_cli = bool(os.path.exists(agy_path) or shutil.which(agy_path))
         return {"status": "ok" if has_cli else "error", "provider": "antigravity", "model_available": has_cli}
+    elif provider == "claude_code":
+        import os
+        import shutil
+        from config import get_claude_code_path
+        claude_path = get_claude_code_path()
+        has_cli = bool(os.path.exists(claude_path) or shutil.which(claude_path))
+        return {"status": "ok" if has_cli else "error", "provider": "claude_code", "model_available": has_cli}
         
     health = await check_ollama_health()
     health["provider"] = "ollama"

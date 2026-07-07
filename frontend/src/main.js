@@ -1091,6 +1091,15 @@ const PROVIDER_CONFIG = [
     ]
   },
   {
+    id: 'claude_code', label: 'Claude Code (CLI)', icon: '🤖',
+    models: [
+      { value: 'sonnet', label: 'Claude 3.5 Sonnet (추천)' },
+      { value: 'haiku',  label: 'Claude 3.5 Haiku' },
+      { value: 'opus',   label: 'Claude 3 Opus' },
+      { value: 'fable',  label: 'Claude Fable 5' }
+    ]
+  },
+  {
     id: 'ollama', label: 'Ollama (로컬)', icon: '🦙',
     models: [
       { value: 'gemma4:e4b', label: 'gemma4 e4b' },

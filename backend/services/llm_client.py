@@ -12,6 +12,7 @@ from config import (
     get_claude_api_key,
     get_agy_path,
     get_agy_env,
+    get_claude_code_path,
     get_translation_prompt_template
 )
 
@@ -120,6 +121,10 @@ async def stream_translation(
         return
     elif provider == "antigravity":
         async for token in stream_antigravity(prompt, model=model):
+            yield token
+        return
+    elif provider == "claude_code":
+        async for token in stream_claude_code(prompt, model=model):
             yield token
         return
 
@@ -447,6 +452,25 @@ async def stream_chat(
         async for token in stream_antigravity(chat_prompt, model=model):
             yield token
         return
+    elif provider == "claude_code":
+        try:
+            from services.usage_tracker import record_call
+            record_call("chat")
+        except Exception:
+            pass
+        formatted_prompt = []
+        formatted_prompt.append(f"System instructions:\n{system_prompt}\n")
+        formatted_prompt.append("Conversation history:")
+        for msg in history_messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            role_label = "User" if role == "user" else "Assistant"
+            formatted_prompt.append(f"[{role_label}]: {content}")
+        
+        chat_prompt = "\n".join(formatted_prompt)
+        async for token in stream_claude_code(chat_prompt, model=model):
+            yield token
+        return
 
     # Fallback to Ollama:
     payload = {
@@ -523,6 +547,66 @@ async def check_ollama_health() -> dict:
             }
     except Exception as e:
         return {"status": "error", "detail": str(e), "model_available": False}
+
+
+async def stream_claude_code(prompt: str, model: str = None) -> AsyncGenerator[str, None]:
+    import asyncio
+    import os
+    
+    claude_path = get_claude_code_path()
+    if not os.path.exists(claude_path):
+        claude_path = "claude"
+        
+    cmd = [claude_path, "--permission-mode", "dontAsk"]
+    if model and model.strip() and model.strip().lower() != "custom":
+        cmd.extend(["--model", model.strip()])
+
+    guided_prompt = (
+        "You are a direct-output assistant. "
+        "Output ONLY the result — no preambles, no explanations, no 'Here is the translation', "
+        "no markdown code fences around the entire output, no commentary at the start or end. "
+        "Start the output immediately with the translated/answered content.\n\n"
+        f"{prompt}"
+    )
+
+    try:
+        from services.usage_tracker import record_call
+        record_call("translate")
+    except Exception:
+        pass
+
+    cmd.extend(["--print", guided_prompt])
+    
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=get_agy_env()
+        )
+        
+        import codecs
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        
+        while True:
+            chunk = await process.stdout.read(1024)
+            if not chunk:
+                break
+            decoded = decoder.decode(chunk)
+            if decoded:
+                yield decoded
+        
+        final_decoded = decoder.decode(b"", final=True)
+        if final_decoded:
+            yield final_decoded
+            
+        await process.wait()
+        
+        if process.returncode and process.returncode != 0:
+            stderr_out = await process.stderr.read()
+            print(f"[Claude Code CLI Error] code={process.returncode} stderr={stderr_out.decode('utf-8', errors='replace')}")
+    except Exception as e:
+        print(f"[Claude Code CLI Exec Error] {e}")
 
 
 async def stream_antigravity(prompt: str, model: str = None) -> AsyncGenerator[str, None]:
@@ -620,6 +704,9 @@ Category Tags:"""
                 tokens.append(token)
         elif provider == "antigravity":
             async for token in stream_antigravity(prompt, model=model):
+                tokens.append(token)
+        elif provider == "claude_code":
+            async for token in stream_claude_code(prompt, model=model):
                 tokens.append(token)
         else:
             # Fallback to Ollama chat api
