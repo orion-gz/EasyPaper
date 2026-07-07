@@ -413,6 +413,24 @@ export async function getAgyModelsAPI() {
   return res.json()
 }
 
+/**
+ * 시스템 업데이트 API 요청을 보냅니다.
+ */
+export async function triggerSystemUpdateAPI() {
+  const res = await fetch(`${API_BASE}/settings/update`, {
+    method: 'POST'
+  })
+  if (!res.ok) {
+    try {
+      const err = await res.json()
+      throw new Error(err.detail || '업데이트 실패')
+    } catch {
+      throw new Error('업데이트 실패')
+    }
+  }
+  return res.json()
+}
+
 
 
 

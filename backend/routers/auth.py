@@ -236,4 +236,74 @@ async def pull_model_stream(model_name: str, current_user: str = Depends(get_cur
     )
 
 
+@router.post("/settings/update")
+async def system_update(current_user: str = Depends(get_current_user)):
+    """깃허브 최신 커밋을 풀(pull) 받고, 프론트엔드를 빌드한 뒤 systemd 서비스를 재기동합니다."""
+    import subprocess
+    import asyncio
+    import os
+    
+    try:
+        # 프로젝트 루트 디렉토리 찾기
+        project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        
+        # 1. git pull origin main
+        pull_proc = await asyncio.create_subprocess_exec(
+            "git", "pull", "origin", "main",
+            cwd=project_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        stdout, stderr = await pull_proc.communicate()
+        if pull_proc.returncode != 0:
+            return {
+                "ok": False,
+                "message": f"Git pull 실패: {stderr.decode('utf-8', errors='replace')}"
+            }
+        
+        pull_output = stdout.decode('utf-8', errors='replace')
+        
+        # 2. 만약 pull 된 내용이 있으면 (또는 무조건 안전하게) 프론트엔드를 빌드합니다.
+        if "Already up-to-date" not in pull_output and "Already up to date" not in pull_output:
+            frontend_dir = os.path.join(project_dir, "frontend")
+            if os.path.exists(frontend_dir):
+                # npm install && npm run build
+                build_proc = await asyncio.create_subprocess_exec(
+                    "npm", "run", "build",
+                    cwd=frontend_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                build_stdout, build_stderr = await build_proc.communicate()
+                if build_proc.returncode != 0:
+                    return {
+                        "ok": False,
+                        "message": f"프론트엔드 빌드 실패: {build_stderr.decode('utf-8', errors='replace')}"
+                    }
+        
+        # 3. 비동기로 1초 후에 systemd 서비스 재시작 명령을 백그라운드로 실행
+        async def restart_server():
+            await asyncio.sleep(1.0)
+            proc = await asyncio.create_subprocess_exec(
+                "sudo", "systemctl", "restart", "easypaper",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            await proc.communicate()
+            
+        asyncio.create_task(restart_server())
+        
+        return {
+            "ok": True,
+            "message": "업데이트가 성공적으로 적용되었습니다. 서버가 1초 후에 재시작됩니다.",
+            "output": pull_output
+        }
+        
+    except Exception as e:
+        return {
+            "ok": False,
+            "message": f"업데이트 중 알 수 없는 오류 발생: {str(e)}"
+        }
+
+
 

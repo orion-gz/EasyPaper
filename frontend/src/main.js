@@ -1,6 +1,6 @@
 import './style.css'
 import { marked } from 'marked'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI, fetchCliAvailability } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI, fetchCliAvailability, triggerSystemUpdateAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation } from './library.js'
 
@@ -1882,6 +1882,53 @@ if (advancedSettingsForm) {
       checkAIStatus()
     } catch (err) {
       showToast(err.message, 'error')
+    }
+  })
+}
+
+// 시스템 자동 업데이트 실행
+const systemUpdateBtn = $('system-update-btn')
+const systemUpdateStatus = $('system-update-status')
+if (systemUpdateBtn) {
+  systemUpdateBtn.addEventListener('click', async () => {
+    if (!confirm('정말 깃허브 최신 코드로 자동 업데이트를 실행하시겠습니까?\n업데이트가 완료되면 서비스 데몬이 자동으로 재기동되며 약 3~5초간 접속이 중단될 수 있습니다.')) {
+      return
+    }
+    
+    systemUpdateBtn.disabled = true
+    systemUpdateBtn.textContent = '🔄 업데이트 진행 중...'
+    systemUpdateStatus.style.color = 'var(--text-secondary)'
+    systemUpdateStatus.textContent = 'GitHub 코드 가져오는 중...'
+    
+    try {
+      const res = await triggerSystemUpdateAPI()
+      if (res.ok) {
+        systemUpdateStatus.style.color = '#10b981' // 초록색
+        systemUpdateStatus.textContent = '업데이트 성공! 잠시 후 자동 새로고침됩니다.'
+        showToast(res.message, 'success')
+        
+        // 5초 후에 페이지 새로고침
+        setTimeout(() => {
+          location.reload()
+        }, 5000)
+      } else {
+        systemUpdateBtn.disabled = false
+        systemUpdateBtn.textContent = '🚀 최신 업데이트 실행'
+        systemUpdateStatus.style.color = '#ef4444' // 빨간색
+        systemUpdateStatus.textContent = res.message
+        showToast(res.message, 'error')
+      }
+    } catch (err) {
+      systemUpdateBtn.disabled = false
+      systemUpdateBtn.textContent = '🚀 최신 업데이트 실행'
+      systemUpdateStatus.style.color = '#ef4444'
+      systemUpdateStatus.textContent = '서버 재시작 대기 중...'
+      showToast('서버 재기동을 감지했습니다. 잠시 후 새로고침합니다.', 'info')
+      
+      // 5초 후에 페이지 새로고침
+      setTimeout(() => {
+        location.reload()
+      }, 5000)
     }
   })
 }
