@@ -40,6 +40,12 @@ export async function checkHealth() {
   return res.json()
 }
 
+export async function fetchCliAvailability() {
+  const res = await fetch(`${API_BASE}/translate/availability`)
+  if (!res.ok) throw new Error('CLI 상태 조회 실패')
+  return res.json()
+}
+
 export async function getSession(sessionId) {
   const res = await fetch(`${API_BASE}/session/${sessionId}`)
   if (!res.ok) throw new Error('세션 조회 실패')

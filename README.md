@@ -155,5 +155,37 @@ Linux 서버에서 `easypaper.service` 데몬을 통해 실행할 경우, system
 
 > **Antigravity를 사용하지 않는 경우:** `.env` 파일에서 `TRANS_PROVIDER`와 `CHAT_PROVIDER`를 `ollama`로 설정하거나, Gemini·OpenAI·Claude API 키를 등록하여 사용하세요.
 
+---
 
+## 🤖 Claude Code CLI (`claude`) 연동 가이드
 
+EasyPaper는 Anthropic의 Claude Code CLI(`claude`)를 서브프로세스로 연동하여 실시간 논문 번역 및 AI 어시스턴트(채팅), 그리고 자동 카테고리 태깅 엔진으로 사용할 수 있는 `claude_code` LLM Provider를 지원합니다.
+
+`claude_code`를 사용하여 우수한 한국어 번역 결과와 뛰어난 논문 분석 기능을 경험해 보세요.
+
+### 1. `claude` CLI 설치 확인
+서버 환경에 Claude Code CLI가 설치되어 있어야 합니다.
+- EasyPaper는 기본적으로 `/home/ubuntu/.local/bin/claude` 경로를 먼저 확인합니다.
+- 해당 경로에 없으면 시스템 `PATH`에서 `claude`를 찾아 실행합니다.
+- 환경변수 `CLAUDE_CODE_PATH`를 통해 커스텀 설치 경로를 수동 지정할 수도 있습니다.
+
+### 2. Anthropic 계정 인증
+Claude Code CLI는 EasyPaper 서버를 실행하는 OS 사용자 계정에서 미리 로그인이 완료되어 있어야 합니다.
+
+```bash
+# 최초 1회 로그인을 수행합니다 (인증 창이 열립니다)
+claude auth
+```
+
+인증이 성공적으로 완료되었는지 확인하려면 다음 명령어를 터미널에서 실행하여 정상 작동하는지 점검하세요:
+```bash
+/home/ubuntu/.local/bin/claude --version
+```
+
+### 3. 무인 자동 실행 및 권한 정책
+EasyPaper는 논문 번역 및 채팅 요청을 백그라운드에서 실시간으로 스트리밍하기 위해 `--permission-mode dontAsk` 플래그를 사용합니다. 이를 통해 대화형 동의 확인 절차를 건너뛰고 비대화식(`--print`) 출력을 바로 수집합니다.
+
+### 4. 동적 드롭다운 표시
+EasyPaper는 기동 시 로컬 환경에 `claude` 실행 파일이 유효하게 설치되어 있고 실행 가능한지 백엔드에서 자체 진단합니다.
+- 설치가 확인되면 라이브러리 및 뷰어 화면의 모델 선택 드롭다운에 **`🤖 Claude Code`** 공급자 그룹과 관련 모델(`Sonnet`, `Fable`, `Opus`, `Haiku`)이 자동으로 활성화되어 나타납니다.
+- 설치되어 있지 않다면 드롭다운 목록에 노출되지 않아 잘못된 선택으로 인한 오류를 예방합니다.
