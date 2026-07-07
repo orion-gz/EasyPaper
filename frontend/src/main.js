@@ -1094,7 +1094,6 @@ const PROVIDER_CONFIG = [
   {
     id: 'claude_code', label: 'Claude Code', icon: '🤖',
     models: [
-      { value: 'default', label: 'Default (추천) · Sonnet 5' },
       { value: 'sonnet',  label: 'Sonnet · Sonnet 5' },
       { value: 'fable',   label: 'Fable · Fable 5' },
       { value: 'opus',    label: 'Opus · Opus 4.8' },
