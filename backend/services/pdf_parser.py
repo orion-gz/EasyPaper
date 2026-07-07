@@ -193,27 +193,80 @@ def _extract_paper_title(doc: fitz.Document) -> str:
         # 가장 큰 폰트 크기 찾기
         max_size = max(s["size"] for s in spans_info)
         
-        # 최상위 폰트 크기(최대 크기의 90% 이상인 것들)에 해당하는 스팬 수집
+        # 최상위 폰트 크기(최대 크기의 78% 이상인 것들 - Small Caps 지원용)에 해당하는 스팬 수집
         title_spans = []
         for s in spans_info:
-            if s["size"] >= max_size * 0.9:
+            if s["size"] >= max_size * 0.78:
                 title_spans.append(s)
                 
         if not title_spans:
             return ""
             
-        # 읽기 순서대로 정렬 (y좌표 우선, x좌표 차선)
-        title_spans.sort(key=lambda s: (s["bbox"][1], s["bbox"][0]))
+        # 1. y좌표 기준으로 1차 정렬한 뒤, 동적으로 같은 행(Line)에 있는 스팬들을 묶어서 그룹화합니다.
+        #    이렇게 하면 PDF 렌더링 시 y좌표가 소수점 단위로 미세하게 다른 스팬들이 엉뚱하게 정렬되는 문제를 방지합니다.
+        def sort_spans_by_reading_order(spans_list):
+            if not spans_list:
+                return []
+            sorted_by_y = sorted(spans_list, key=lambda s: s["bbox"][1])
+            lines_list = []
+            current_line = []
+            current_y = None
+            for s in sorted_by_y:
+                y0 = s["bbox"][1]
+                y1 = s["bbox"][3]
+                h = y1 - y0
+                if current_y is None:
+                    current_line.append(s)
+                    current_y = y0
+                else:
+                    # y0 차이가 글자 높이의 50% 미만이거나 8픽셀 미만이면 같은 행으로 간주
+                    if abs(y0 - current_y) < max(h * 0.5, 8.0):
+                        current_line.append(s)
+                    else:
+                        current_line.sort(key=lambda x: x["bbox"][0])
+                        lines_list.append(current_line)
+                        current_line = [s]
+                        current_y = y0
+            if current_line:
+                current_line.sort(key=lambda x: x["bbox"][0])
+                lines_list.append(current_line)
+            
+            flat = []
+            for line_item in lines_list:
+                flat.extend(line_item)
+            return flat
+
+        sorted_spans = sort_spans_by_reading_order(title_spans)
         
-        # 연속된 텍스트 결합
+        # 2. 정렬된 스팬들을 결합할 때, 단어 중간에 폰트 크기 변경으로 쪼개진 스팬(gap < 2.5px)은 공백 없이 결합하고,
+        #    일반적인 띄어쓰기는 공백을 유지하여 자연스러운 문장으로 결합합니다.
         title_parts = []
-        for s in title_spans:
-            lower_text = s["text"].lower()
+        for i, s in enumerate(sorted_spans):
+            text = s["text"]
+            lower_text = text.lower()
             if lower_text in ["abstract", "introduction", "keywords", "key words"]:
                 continue
-            title_parts.append(s["text"])
+            if i == 0:
+                title_parts.append(text)
+            else:
+                prev_s = sorted_spans[i - 1]
+                prev_y0 = prev_s["bbox"][1]
+                curr_y0 = s["bbox"][1]
+                prev_x1 = prev_s["bbox"][2]
+                curr_x0 = s["bbox"][0]
+                
+                is_same_line = abs(curr_y0 - prev_y0) < 5.0
+                gap = curr_x0 - prev_x1
+                
+                if is_same_line and gap < 2.5:
+                    title_parts.append(text)
+                else:
+                    if title_parts[-1].endswith(" ") or text.startswith(" "):
+                        title_parts.append(text)
+                    else:
+                        title_parts.append(" " + text)
             
-        title_text = " ".join(title_parts).strip()
+        title_text = "".join(title_parts).strip()
         title_text = re.sub(r'\s+', ' ', title_text)
         
         # 유효한 제목 길이 제한
