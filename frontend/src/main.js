@@ -808,7 +808,8 @@ exportBtn.addEventListener('click', async () => {
 retranslateBtn.addEventListener('click', async () => {
   if (!state.sessionId) return
   
-  if (confirm('기존 번역 캐시를 삭제하고 처음부터 다시 번역을 시작하시겠습니까?\n(확인을 누르면 기존 번역이 완전히 초기화되고 새로 번역을 진행합니다.)')) {
+  const ok = await showCustomConfirm('기존 번역 캐시를 삭제하고 처음부터 다시 번역을 시작하시겠습니까?\n(확인을 누르면 기존 번역이 완전히 초기화되고 새로 번역을 진행합니다.)', { title: '재번역 시작', confirmText: '재번역', danger: true })
+  if (ok) {
     // 1. 로컬 번역 정보 전체 비우기
     state.translationCache = {}
     state.translationSentences = {}
@@ -847,7 +848,8 @@ retranslateBtn.addEventListener('click', async () => {
 cancelTransBtn.addEventListener('click', async () => {
   if (!state.sessionId) return
   
-  if (confirm('현재 진행 중인 백그라운드 번역 작업을 중지하시겠습니까?')) {
+  const ok = await showCustomConfirm('현재 진행 중인 백그라운드 번역 작업을 중지하시겠습니까?', { title: '번역 작업 중지', confirmText: '중지', danger: true })
+  if (ok) {
     try {
       showToast('번역 중지 요청 중...', 'info')
       await cancelJobAPI(state.sessionId)
@@ -1063,7 +1065,8 @@ loginForm.addEventListener('submit', async (e) => {
 
 // 로그아웃 버튼 클릭 이벤트
 globalLogoutBtn.addEventListener('click', async () => {
-  if (!confirm('로그아웃 하시겠습니까?')) return
+  const ok = await showCustomConfirm('로그아웃 하시겠습니까?', { title: '로그아웃', confirmText: '로그아웃', danger: false })
+  if (!ok) return
   try {
     await logoutAPI()
     showToast('로그아웃되었습니다.', 'success')
@@ -1323,7 +1326,7 @@ class ProviderModelPicker {
         item.style.position = 'relative'
         item.textContent = m.label
         if (m.value) {
-          item.addEventListener('click', (e) => {
+          item.addEventListener('click', async (e) => {
             e.stopPropagation()
             
             // 직접 모델명 입력 추가 옵션 처리
@@ -1369,7 +1372,8 @@ class ProviderModelPicker {
             if (prov.id === 'ollama' && !this.compact) {
               const isInstalled = downloaded.some(dm => isMatch(dm, m.value))
               if (!isInstalled) {
-                if (confirm(`'${m.label.split(' ')[0]}' (${m.value}) 모델이 설치되어 있지 않습니다. 다운로드하시겠습니까?\n(설정 창 하단에서 다운로드 진행 상태를 보실 수 있습니다)`)) {
+                const ok = await showCustomConfirm(`'${m.label.split(' ')[0]}' (${m.value}) 모델이 설치되어 있지 않습니다. 다운로드하시겠습니까?\n(설정 창 하단에서 다운로드 진행 상태를 보실 수 있습니다)`, { title: '모델 다운로드', confirmText: '다운로드', danger: false })
+                if (ok) {
                   this.container.classList.remove('open')
                   settingPullModelName.value = m.value
                   settingPullModelBtn.click()
@@ -1621,7 +1625,8 @@ async function changeProviderAndModel(type, newProvider, newModel) {
     await checkAIStatus()
     showToast(`${type === 'trans' ? '번역' : '어시스턴트'} AI가 변경되었습니다.`, 'success')
     if (type === 'trans' && state.sessionId) {
-      if (confirm('번역 AI가 변경되었습니다. 기존 캐시를 삭제하고 처음부터 다시 번역하시겠습니까?')) {
+      const ok = await showCustomConfirm('번역 AI가 변경되었습니다. 기존 캐시를 삭제하고 처음부터 다시 번역하시겠습니까?', { title: 'AI 변경으로 인한 재번역', confirmText: '재번역', danger: true })
+      if (ok) {
         retranslateBtn.click()
       }
     }
@@ -1769,7 +1774,8 @@ generalSettingsForm.addEventListener('submit', async (e) => {
   
   // 현재 논문을 작업 중인 경우 번역 잡 재시작 제안
   if (state.sessionId) {
-    if (confirm('번역 설정을 즉시 변경하고 다시 번역하시겠습니까?\n(확인을 누르면 기존 번역이 초기화되고 새로 번역을 시작합니다.)')) {
+    const ok = await showCustomConfirm('번역 설정을 즉시 변경하고 다시 번역하시겠습니까?\n(확인을 누르면 기존 번역이 초기화되고 새로 번역을 시작합니다.)', { title: '설정 변경 및 재번역', confirmText: '재번역', danger: true })
+    if (ok) {
       // 로컬 번역 정보 전체 비우기
       state.translationCache = {}
       state.translationSentences = {}
@@ -1891,7 +1897,8 @@ const systemUpdateBtn = $('system-update-btn')
 const systemUpdateStatus = $('system-update-status')
 if (systemUpdateBtn) {
   systemUpdateBtn.addEventListener('click', async () => {
-    if (!confirm('정말 깃허브 최신 코드로 자동 업데이트를 실행하시겠습니까?\n업데이트가 완료되면 서비스 데몬이 자동으로 재기동되며 약 3~5초간 접속이 중단될 수 있습니다.')) {
+    const ok = await showCustomConfirm('정말 깃허브 최신 코드로 자동 업데이트를 실행하시겠습니까?\n업데이트가 완료되면 서비스 데몬이 자동으로 재기동되며 약 3~5초간 접속이 중단될 수 있습니다.', { title: '시스템 업데이트', confirmText: '업데이트', danger: true })
+    if (!ok) {
       return
     }
     
@@ -1934,8 +1941,9 @@ if (systemUpdateBtn) {
 }
 
 // 로컬 캐시 비우기
-clearCacheBtn.addEventListener('click', () => {
-  if (confirm('브라우저에 저장된 PDF 어노테이션(밑줄, 하이라이트) 정보 및 설정을 모두 초기화하시겠습니까?')) {
+clearCacheBtn.addEventListener('click', async () => {
+  const ok = await showCustomConfirm('브라우저에 저장된 PDF 어노테이션(밑줄, 하이라이트) 정보 및 설정을 모두 초기화하시겠습니까?', { title: '캐시 및 설정 초기화', confirmText: '초기화', danger: true })
+  if (ok) {
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('easypaper_')) {
         localStorage.removeItem(key)
@@ -2266,7 +2274,8 @@ function createDocCard(doc) {
   card.querySelector('.doc-delete-btn').addEventListener('click', async (e) => {
     e.stopPropagation()
     const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
-    if (!confirm(`"${displayTitle}"을 삭제할까요?`)) return
+    const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요?`, { title: '논문 삭제', confirmText: '삭제', danger: true })
+    if (!ok) return
     try { await deleteLibraryDoc(doc.id); showToast('삭제되었습니다', 'success'); await renderLibrary() }
     catch { showToast('삭제 실패', 'error') }
   })
@@ -2740,22 +2749,29 @@ function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
 }
 
 // 커스텀 다이얼로그 확인 모달 유틸리티
-function showCustomConfirm(message) {
+function showCustomConfirm(message, { title = '확인', confirmText = '확인', cancelText = '취소', danger = true } = {}) {
   return new Promise((resolve) => {
     const modal = document.createElement('div')
     modal.className = 'custom-confirm-modal-wrapper'
+    
+    const iconHtml = danger 
+      ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+      : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-mid)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`;
+      
+    const confirmBtnClass = danger ? 'custom-confirm-btn confirm-btn' : 'custom-confirm-btn confirm-btn primary-btn';
+
     modal.innerHTML = `
       <div class="custom-confirm-modal">
         <div class="custom-confirm-modal-header">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <span class="custom-confirm-modal-title">메모 삭제</span>
+          ${iconHtml}
+          <span class="custom-confirm-modal-title">${title}</span>
         </div>
         <div class="custom-confirm-modal-body">
           ${message.replace(/\n/g, '<br>')}
         </div>
         <div class="custom-confirm-modal-footer">
-          <button class="custom-confirm-btn cancel-btn">취소</button>
-          <button class="custom-confirm-btn confirm-btn">삭제</button>
+          <button class="custom-confirm-btn cancel-btn">${cancelText}</button>
+          <button class="${confirmBtnClass}">${confirmText}</button>
         </div>
       </div>
     `

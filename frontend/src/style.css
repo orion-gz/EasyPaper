@@ -3494,6 +3494,14 @@ body.light-theme .custom-confirm-modal {
   background: #dc2626;
   box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
 }
+.custom-confirm-btn.confirm-btn.primary-btn {
+  background: var(--accent-mid);
+  color: white;
+}
+.custom-confirm-btn.confirm-btn.primary-btn:hover {
+  background: var(--accent-strong);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
+}
 
 /* ── Color picker in memo header ── */
 .floating-memo-color-picker {
