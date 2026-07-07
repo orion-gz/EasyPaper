@@ -1,6 +1,6 @@
 import './style.css'
 import { marked } from 'marked'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI, fetchCliAvailability } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation } from './library.js'
 
@@ -52,6 +52,7 @@ const state = {
   isCropMode: false,           // 영역 캡처 모드 여부
   pdfPageSentences: {},        // pageNum → sentenceRanges 보관용
   pdfPageElements: {},         // pageNum → elRanges 보관용
+  cliAvailability: { antigravity: true, claude_code: true }
 }
 
 // ── DOM 참조 ──────────────────────────────────────
@@ -1200,7 +1201,11 @@ class ProviderModelPicker {
       return instClean === baseClean
     }
     
-    let config = PROVIDER_CONFIG.map(p => {
+    let config = PROVIDER_CONFIG.filter(p => {
+      if (p.id === 'antigravity') return state.cliAvailability?.antigravity !== false
+      if (p.id === 'claude_code') return state.cliAvailability?.claude_code !== false
+      return true
+    }).map(p => {
       if (p.id === 'ollama') {
         const baseModels = p.models
         if (this.compact) {
@@ -1562,8 +1567,14 @@ async function refreshSystemSettings() {
     if (promptTemplate) {
       promptTemplate.value = sys.translation_prompt_template || promptTemplate.value
     }
-    
     updateSettingsUIVisibility()
+    
+    try {
+      const avail = await fetchCliAvailability()
+      state.cliAvailability = avail
+    } catch (e) {
+      console.warn('CLI availability load error:', e)
+    }
     
   } catch (err) {
     console.warn('System settings load error:', err)

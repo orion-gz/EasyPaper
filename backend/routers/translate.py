@@ -185,6 +185,27 @@ async def health_check():
     return health
 
 
+@router.get("/availability")
+async def get_providers_availability():
+    """각 제공자(CLI)가 로컬에 설치되어 사용 가능한지 여부를 확인합니다."""
+    import os
+    import shutil
+    from config import get_agy_path, get_claude_code_path
+    
+    # 1. antigravity (agy)
+    agy_path = get_agy_path()
+    has_agy = bool(os.path.exists(agy_path) or shutil.which(agy_path))
+    
+    # 2. claude_code (claude)
+    claude_path = get_claude_code_path()
+    has_claude_code = bool(os.path.exists(claude_path) or shutil.which(claude_path))
+    
+    return {
+        "antigravity": has_agy,
+        "claude_code": has_claude_code
+    }
+
+
 @router.get("/translation-status/{session_id}")
 async def translation_status(session_id: str):
     """세션의 번역 완료 페이지 목록을 반환합니다."""
