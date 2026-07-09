@@ -4503,6 +4503,10 @@ window.addEventListener('resize', hideSelectionMenu);
 
 document.addEventListener('mousedown', (e) => {
   state.isSelectionDragging = true;
+  if (sentenceHoverTimer) {
+    clearTimeout(sentenceHoverTimer);
+    sentenceHoverTimer = null;
+  }
   if (e.target.closest('.pdf-figure-overlay')) return;
   if (selectionMenu && !selectionMenu.contains(e.target)) {
     setTimeout(() => {
