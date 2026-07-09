@@ -5015,6 +5015,7 @@ function segmentPdfElements(container, pageNum) {
 
       const fragment = document.createDocumentFragment();
       let lastIdx = 0;
+      let isEq = false;
       segments.sort((a, b) => a.startInNode - b.startInNode);
 
       for (const seg of segments) {
@@ -5031,6 +5032,10 @@ function segmentPdfElements(container, pageNum) {
         span.textContent = seg.text;
         span.style.cursor = 'inherit';
         
+        if (seg.sentenceIdx >= 10000) {
+          isEq = true;
+        }
+        
         fragment.appendChild(span);
         lastIdx = seg.endInNode;
       }
@@ -5042,6 +5047,9 @@ function segmentPdfElements(container, pageNum) {
       }
 
       parent.replaceChild(fragment, range.node);
+      if (isEq) {
+        parent.classList.add('display-equation-span');
+      }
     }
 
     // 3. DOM 순서를 정렬된 순서(sortedNodes)대로 재배치하여 브라우저 드래그 선택이 시각적 순서와 일치하도록 보장
@@ -5535,6 +5543,46 @@ if (viewerScrollContainer) {
       if (selection && !selection.isCollapsed) return;
 
       const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
+      if (target && target.classList.contains('pdf-sentence')) {
+        const sentenceIdx = parseInt(target.dataset.sentenceIdx || '0', 10);
+        if (sentenceIdx >= 10000) {
+          const pageWrapper = target.closest('.pdf-page-wrapper');
+          if (pageWrapper) {
+            const pageNum = parseInt(pageWrapper.dataset.page, 10);
+            const { pdfElements } = getMappedElementsAndIndices(target, pageNum, sentenceIdx);
+            
+            if (pdfElements && pdfElements.length > 0) {
+              const firstEl = pdfElements[0];
+              const lastEl = pdfElements[pdfElements.length - 1];
+              
+              const firstWalker = document.createTreeWalker(firstEl, NodeFilter.SHOW_TEXT);
+              const firstNodes = [];
+              while (firstWalker.nextNode()) firstNodes.push(firstWalker.currentNode);
+              
+              const lastWalker = document.createTreeWalker(lastEl, NodeFilter.SHOW_TEXT);
+              const lastNodes = [];
+              while (lastWalker.nextNode()) lastNodes.push(lastWalker.currentNode);
+              
+              if (firstNodes.length > 0 && lastNodes.length > 0) {
+                const range = document.createRange();
+                range.setStart(firstNodes[0], 0);
+                range.setEnd(lastNodes[lastNodes.length - 1], lastNodes[lastNodes.length - 1].length);
+                
+                const curSel = window.getSelection();
+                curSel.removeAllRanges();
+                curSel.addRange(range);
+                
+                const rect = target.getBoundingClientRect();
+                showSelectionMenu(rect, true);
+                
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+              }
+            }
+          }
+        }
+      }
       if (!target) {
         // 문장이 아닌 곳 클릭 시 기존 매칭 하이라이트 제거
         viewerScrollContainer.querySelectorAll('.active-mapped-sentence').forEach(el => {

@@ -2618,6 +2618,11 @@ body.light-theme .library-grid::-webkit-scrollbar-thumb:hover {
   display: inline;
 }
 
+/* 독립 수식 스팬 z-index 강제 승격 (위아래 본문 겹침 방지) */
+.display-equation-span {
+  z-index: 5 !important;
+}
+
 .pdf-sentence.sentence-highlight {
   background-color: rgba(124, 58, 237, 0.25) !important;
   border-radius: 3px;
