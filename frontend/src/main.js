@@ -4893,6 +4893,13 @@ function segmentPdfElements(container, pageNum) {
       parent.replaceChild(fragment, range.node);
     }
 
+    // 3. DOM 순서를 정렬된 순서(sortedNodes)대로 재배치하여 브라우저 드래그 선택이 시각적 순서와 일치하도록 보장
+    sortedNodes.forEach(node => {
+      if (node.el && node.el.parentNode === container) {
+        container.appendChild(node.el);
+      }
+    });
+
     if (!state.pdfPageSentences) state.pdfPageSentences = {};
     state.pdfPageSentences[pageNum] = sentenceRanges;
 
