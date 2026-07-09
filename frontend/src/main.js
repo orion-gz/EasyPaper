@@ -4573,6 +4573,22 @@ function convertRawTextToLatex(text) {
 }
 
 // PDF 텍스트 복사 시 LaTeX 기호 자동 치환 복사 기능
+// 텍스트 노드 범위 교차 감지 함수 (모든 브라우저 호환)
+function rangeIntersectsNode(range, node) {
+  if (range.intersectsNode) {
+    return range.intersectsNode(node);
+  }
+  const nodeRange = document.createRange();
+  try {
+    nodeRange.selectNode(node);
+    return range.compareBoundaryPoints(Range.END_TO_START, nodeRange) < 0 &&
+           range.compareBoundaryPoints(Range.START_TO_END, nodeRange) > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+// PDF 텍스트 복사 시 LaTeX 기호 자동 치환 복사 기능
 document.addEventListener('copy', (e) => {
   try {
     const selection = window.getSelection();
@@ -4583,40 +4599,48 @@ document.addEventListener('copy', (e) => {
     if (startNode.nodeType === 3) startNode = startNode.parentElement;
     if (!startNode || !startNode.closest('.textLayer')) return;
     
-    // 선택 영역이 걸쳐있는 모든 pdf-sentence 스팬들을 브라우저 내장 containsNode API로 정확하게 검출
     const pageWrapper = startNode.closest('.pdf-page-wrapper');
     if (!pageWrapper) return;
     
+    // 선택 영역과 교차하는 모든 pdf-sentence 요소들을 DOM 순서대로 수집
     const allSpans = Array.from(pageWrapper.querySelectorAll('.pdf-sentence'));
-    const selectedSpans = allSpans.filter(span => selection.containsNode(span, true));
+    const selectedSpans = allSpans.filter(span => rangeIntersectsNode(range, span));
     if (selectedSpans.length === 0) return;
     
-    // 1. 단일 수식 노드 내부 혹은 전체가 선택된 경우
-    if (selectedSpans.length === 1) {
-      const singleSpan = selectedSpans[0];
-      if (parseInt(singleSpan.dataset.sentenceIdx || '0', 10) >= 10000) {
-        const latex = singleSpan.dataset.latex;
-        let textToCopy = latex;
-        if (latex) {
-          const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
-          if (actualMath && actualMath.length > 0) {
-            textToCopy = actualMath.join(' ');
-          }
-        } else {
-          // 수식 폴백 치환기 작동
-          textToCopy = convertRawTextToLatex(singleSpan.textContent);
+    // 문장 인덱스(sentenceIdx)별로 선택된 스팬들을 그룹화 (분열된 수식 노드 묶음 처리)
+    const grouped = {};
+    selectedSpans.forEach(span => {
+      const idx = span.dataset.sentenceIdx || '0';
+      if (!grouped[idx]) grouped[idx] = [];
+      grouped[idx].push(span);
+    });
+    const groupKeys = Object.keys(grouped);
+    
+    // 1. 단일 수식 노드 또는 단일 수식의 파편들만 선택된 경우
+    if (groupKeys.length === 1 && parseInt(groupKeys[0], 10) >= 10000) {
+      const firstSpan = grouped[groupKeys[0]][0];
+      const latex = firstSpan.dataset.latex;
+      let textToCopy = latex;
+      if (latex) {
+        const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+        if (actualMath && actualMath.length > 0) {
+          textToCopy = actualMath.join(' ');
         }
-        e.clipboardData.setData('text/plain', textToCopy);
-        e.preventDefault();
-        return;
+      } else {
+        // 번역 로딩 전일 때 수식 문자열 결합 후 LaTeX 변환 적용
+        const fullRawText = grouped[groupKeys[0]].map(s => s.textContent).join('');
+        textToCopy = convertRawTextToLatex(fullRawText);
       }
+      e.clipboardData.setData('text/plain', textToCopy);
+      e.preventDefault();
+      return;
     }
     
     // 2. 여러 문장 혹은 다중 범위가 선택된 경우
     const hasEq = selectedSpans.some(span => parseInt(span.dataset.sentenceIdx || '0', 10) >= 10000);
     let targetRange = range;
     
-    // 선택된 범위 내에 수식이 있다면, 해당 수식의 태그가 복제본(cloneContents)에서 유실되지 않도록 선택 영역 경계를 수식 외곽으로 일시 확장
+    // 선택 영역 안에 수식이 포함된 경우 태그 누락 방지를 위해 외곽 스팬으로 범위 일시 확장
     if (hasEq) {
       targetRange = range.cloneRange();
       targetRange.setStartBefore(selectedSpans[0]);
@@ -4624,27 +4648,49 @@ document.addEventListener('copy', (e) => {
     }
     
     const clone = targetRange.cloneContents();
-    const spans = clone.querySelectorAll('.pdf-sentence');
-    if (spans.length > 0) {
-      spans.forEach(span => {
-        const latex = span.dataset.latex;
-        const sentenceIdx = parseInt(span.dataset.sentenceIdx || '0', 10);
+    const clonedSpans = Array.from(clone.querySelectorAll('.pdf-sentence'));
+    
+    // 복제된 조각들의 스팬을 인덱스별로 그룹화
+    const clonedGrouped = {};
+    clonedSpans.forEach(span => {
+      const idx = span.dataset.sentenceIdx || '0';
+      if (!clonedGrouped[idx]) clonedGrouped[idx] = [];
+      clonedGrouped[idx].push(span);
+    });
+    
+    // 각 그룹별 치환 처리 (분열된 다중 노드가 중복으로 LaTeX를 출력하는 현상 방지)
+    Object.entries(clonedGrouped).forEach(([idx, spansInGroup]) => {
+      const sentenceIdx = parseInt(idx, 10);
+      if (sentenceIdx >= 10000) {
+        const origGroupSpans = grouped[idx] || [];
+        const firstOrigSpan = origGroupSpans[0];
+        const latex = firstOrigSpan ? firstOrigSpan.dataset.latex : null;
+        
+        let textToReplace = latex;
         if (latex) {
           const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
           if (actualMath && actualMath.length > 0) {
-            span.textContent = actualMath.join(' ');
-          } else {
-            span.textContent = latex;
+            textToReplace = actualMath.join(' ');
           }
-        } else if (sentenceIdx >= 10000) {
-          // 다중 복사 영역 내 미번역 수식 치환
-          span.textContent = convertRawTextToLatex(span.textContent);
+        } else {
+          const fullRawText = origGroupSpans.map(s => s.textContent).join('');
+          textToReplace = convertRawTextToLatex(fullRawText);
         }
-      });
-      const cleanText = clone.textContent;
-      e.clipboardData.setData('text/plain', cleanText);
-      e.preventDefault();
-    }
+        
+        // 첫 번째 스팬에만 LaTeX 치환 문구를 넣고, 나머지 파편들은 공백 처리하여 중복 제거
+        spansInGroup.forEach((span, index) => {
+          if (index === 0) {
+            span.textContent = textToReplace;
+          } else {
+            span.textContent = '';
+          }
+        });
+      }
+    });
+    
+    const cleanText = clone.textContent;
+    e.clipboardData.setData('text/plain', cleanText);
+    e.preventDefault();
   } catch (err) {
     console.warn("Copy intercept failed:", err);
   }
