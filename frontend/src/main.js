@@ -2653,6 +2653,13 @@ function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
   const transSpans = Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${pageNum}"]`));
   const pdfSpans = Array.from(viewerScrollContainer.querySelectorAll(`.pdf-sentence[data-page="${pageNum}"]`));
 
+  if (sentenceIdx >= 10000) {
+    pdfIdx = sentenceIdx;
+    transIdx = -1;
+    pdfElements = pdfSpans.filter(el => parseInt(el.dataset.sentenceIdx || '0', 10) === sentenceIdx);
+    return { pdfIdx, transIdx, pdfElements };
+  }
+
   if (transSpans.length === 0 || pdfSpans.length === 0) {
     return { pdfIdx, transIdx, pdfElements };
   }
@@ -4886,6 +4893,84 @@ function segmentPdfElements(container, pageNum) {
     }
     if (sentenceRanges.length === 0) return;
 
+    // 독립 수식 및 수식 번호(예: (1), (2.3) 등) 검출 헬퍼
+    function findDisplayEquations(text) {
+      const eqs = [];
+      const paragraphs = text.split('\n\n');
+      let currentPos = 0;
+      for (const para of paragraphs) {
+        const start = currentPos;
+        const end = currentPos + para.length;
+        currentPos = end + 2; // \n\n
+        
+        const trimmed = para.trim();
+        if (!trimmed) continue;
+        
+        const hasEqNum = /[\(\[][\d\w\.]+[\]\)]\s*$/.test(trimmed);
+        const hasMathSymbol = /[\u003d\u003c\u003e\u002b\u2212\u22c5\u0370-\u03ff\u2200-\u22ff\u002d\u002a\u002f\u00d7\u00f7_\^\\]/.test(trimmed);
+        
+        const words = trimmed.split(/\s+/);
+        const englishWordCount = words.filter(w => {
+          const cleanW = w.replace(/[^a-zA-Z]/g, '');
+          return cleanW.length >= 3 && !w.startsWith('\\');
+        }).length;
+        
+        const isEquation = hasMathSymbol && (
+          (hasEqNum && englishWordCount <= 3) ||
+          (!hasEqNum && trimmed.length < 120 && englishWordCount <= 2)
+        );
+        if (isEquation) {
+          eqs.push({ start, end, text: para });
+        }
+      }
+      return eqs;
+    }
+
+    // 독립 수식 및 수식 번호 범위 분할 포스트 프로세싱
+    const displayEqs = findDisplayEquations(fullText);
+    sentenceRanges.forEach((r, idx) => {
+      r.sentenceIdx = idx;
+    });
+
+    let currentRanges = [...sentenceRanges];
+    for (const eq of displayEqs) {
+      const nextRanges = [];
+      for (const sent of currentRanges) {
+        if (sent.start < eq.start && sent.end > eq.end) {
+          // 수식 앞단
+          nextRanges.push({
+            text: fullText.substring(sent.start, eq.start),
+            start: sent.start,
+            end: eq.start,
+            sentenceIdx: sent.sentenceIdx
+          });
+          // 독립 수식 자체 (고유 인덱스 부여)
+          nextRanges.push({
+            text: fullText.substring(eq.start, eq.end),
+            start: eq.start,
+            end: eq.end,
+            sentenceIdx: 10000 + eq.start
+          });
+          // 수식 뒷단
+          nextRanges.push({
+            text: fullText.substring(eq.end, sent.end),
+            start: eq.end,
+            end: sent.end,
+            sentenceIdx: sent.sentenceIdx
+          });
+        } else if (sent.start >= eq.start && sent.end <= eq.end) {
+          nextRanges.push({
+            ...sent,
+            sentenceIdx: 10000 + eq.start
+          });
+        } else {
+          nextRanges.push(sent);
+        }
+      }
+      currentRanges = nextRanges;
+    }
+    sentenceRanges = currentRanges;
+
     // 물리적 DOM 쪼개기 수행
     for (const range of nodeRanges) {
       const parent = range.node.parentNode;
@@ -4898,7 +4983,7 @@ function segmentPdfElements(container, pageNum) {
         const end = Math.min(range.end, sent.end);
         if (start < end) {
           segments.push({
-            sentenceIdx: i,
+            sentenceIdx: sent.sentenceIdx !== undefined ? sent.sentenceIdx : i,
             startInNode: start - range.start,
             endInNode: end - range.start,
             text: range.node.nodeValue.substring(start - range.start, end - range.start),
