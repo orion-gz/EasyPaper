@@ -4525,6 +4525,53 @@ if (viewerScrollContainer) {
 
 window.addEventListener('resize', hideSelectionMenu);
 
+// 유니코드 수식 텍스트를 LaTeX 문법으로 변환하는 휴리스틱 헬퍼 함수
+function convertRawTextToLatex(text) {
+  let clean = text.trim();
+  
+  // 그리스 문자 및 수학 기호 매핑
+  const replacements = {
+    'α': '\\alpha', 'β': '\\beta', 'γ': '\\gamma', 'δ': '\\delta', 'ε': '\\epsilon',
+    'ζ': '\\zeta', 'η': '\\eta', 'θ': '\\theta', 'ι': '\\iota', 'κ': '\\kappa',
+    'λ': '\\lambda', 'μ': '\\mu', 'ν': '\\nu', 'ξ': '\\xi', 'ο': 'o', 'π': '\\pi',
+    'ρ': '\\rho', 'σ': '\\sigma', 'τ': '\\tau', 'υ': '\\upsilon', 'φ': '\\phi',
+    'χ': '\\chi', 'ψ': '\\psi', 'ω': '\\omega',
+    'Α': 'A', 'Β': 'B', 'Γ': '\\Gamma', 'Δ': '\\Delta', 'Ε': 'E', 'Ζ': 'Z',
+    'Η': 'H', 'Θ': '\\Theta', 'Ι': 'I', 'Κ': 'K', 'Λ': '\\Lambda', 'Μ': 'M',
+    'Ν': 'N', 'Ξ': '\\Xi', 'Ο': 'O', 'Π': '\\Pi', 'Ρ': 'P', 'Σ': '\\Sigma',
+    'Τ': 'T', 'Υ': '\\Upsilon', 'Φ': '\\Phi', 'Χ': 'X', 'Ψ': '\\Psi', 'Ω': '\\Omega',
+    '−': '-', '–': '-', '—': '-',
+    '×': '\\times', '÷': '\\div', '±': '\\pm', '∓': '\\mp',
+    '≤': '\\le', '≥': '\\ge', '≠': '\\ne', '≈': '\\approx',
+    '≡': '\\equiv', '∝': '\\propto', '∞': '\\infty',
+    '∈': '\\in', '∉': '\\notin', '⊂': '\\subset', '⊃': '\\supset',
+    '⊆': '\\subseteq', '⊇': '\\supseteq', '∩': '\\cap', '∪': '\\cup',
+    '∀': '\\forall', '∃': '\\exists', '∇': '\\nabla', '∂': '\\partial',
+    '||': '\\parallel', '‖': '\\parallel'
+  };
+  
+  for (const [key, value] of Object.entries(replacements)) {
+    clean = clean.split(key).join(value);
+  }
+  
+  // 다중 문자 수학 함수/상수 치환
+  clean = clean.replace(/\bDKL\b/g, 'D_{\\text{KL}}');
+  clean = clean.replace(/\bDKL\(/g, 'D_{\\text{KL}}(');
+  clean = clean.replace(/\bEq\b/g, '\\mathbb{E}_q');
+  clean = clean.replace(/\bEp\b/g, '\\mathbb{E}_p');
+  clean = clean.replace(/\bE_([a-zA-Z\\]+)/g, '\\mathbb{E}_{$1}');
+  clean = clean.replace(/\blog\b/g, '\\log');
+  clean = clean.replace(/\bsin\b/g, '\\sin');
+  clean = clean.replace(/\bcos\b/g, '\\cos');
+  clean = clean.replace(/\btan\b/g, '\\tan');
+  clean = clean.replace(/\bexp\b/g, '\\exp');
+  
+  // 아래첨자 자동 교정 (예: p\theta -> p_\theta)
+  clean = clean.replace(/([a-zA-Z])(\\theta|\\phi|\\mu|\\sigma|\\alpha|\\beta|\\lambda)/g, '$1_$2');
+  
+  return `$$ ${clean} $$`;
+}
+
 // PDF 텍스트 복사 시 LaTeX 기호 자동 치환 복사 기능
 document.addEventListener('copy', (e) => {
   try {
@@ -4536,35 +4583,63 @@ document.addEventListener('copy', (e) => {
     if (container.nodeType === 3) container = container.parentElement;
     if (!container || !container.closest('.textLayer')) return;
     
-    // 1. 단일 수식 노드 내부만 드래그 선택된 경우 (Range clone에 껍데기 span이 없는 케이스 대응)
-    const closestSpan = container.closest('.pdf-sentence[data-latex]');
-    if (closestSpan) {
-      const latex = closestSpan.dataset.latex;
+    // 수식 영역에 드래그 경계가 걸쳐있을 경우 범위를 수식 전체로 자동 확장하여 유실 방지
+    let startSpan = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
+    startSpan = startSpan ? startSpan.closest('.pdf-sentence') : null;
+    
+    let endSpan = range.endContainer.nodeType === 3 ? range.endContainer.parentElement : range.endContainer;
+    endSpan = endSpan ? endSpan.closest('.pdf-sentence') : null;
+    
+    const isStartEq = startSpan && parseInt(startSpan.dataset.sentenceIdx || '0', 10) >= 10000;
+    const isEndEq = endSpan && parseInt(endSpan.dataset.sentenceIdx || '0', 10) >= 10000;
+    
+    let targetRange = range;
+    if (isStartEq || isEndEq) {
+      targetRange = range.cloneRange();
+      if (isStartEq) targetRange.setStartBefore(startSpan);
+      if (isEndEq) targetRange.setEndAfter(endSpan);
+    }
+    
+    // 1. 단일 수식 노드 내부만 드래그 선택된 경우
+    let singleSpan = container.closest('.pdf-sentence');
+    if (!singleSpan && isStartEq && isEndEq && startSpan === endSpan) {
+      singleSpan = startSpan;
+    }
+    
+    if (singleSpan && parseInt(singleSpan.dataset.sentenceIdx || '0', 10) >= 10000) {
+      const latex = singleSpan.dataset.latex;
+      let textToCopy = latex;
       if (latex) {
-        let textToCopy = latex;
         const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
         if (actualMath && actualMath.length > 0) {
           textToCopy = actualMath.join(' ');
         }
-        e.clipboardData.setData('text/plain', textToCopy);
-        e.preventDefault();
-        return;
+      } else {
+        // 번역이 아직 로딩되지 않았을 때의 유니코드 수식 LaTeX 문법 치환 폴백
+        textToCopy = convertRawTextToLatex(singleSpan.textContent);
       }
+      e.clipboardData.setData('text/plain', textToCopy);
+      e.preventDefault();
+      return;
     }
     
     // 2. 여러 문장 혹은 다중 범위가 선택된 경우
-    const clone = range.cloneContents();
-    const spans = clone.querySelectorAll('.pdf-sentence[data-latex]');
+    const clone = targetRange.cloneContents();
+    const spans = clone.querySelectorAll('.pdf-sentence');
     if (spans.length > 0) {
       spans.forEach(span => {
         const latex = span.dataset.latex;
+        const sentenceIdx = parseInt(span.dataset.sentenceIdx || '0', 10);
         if (latex) {
-          const mathMatches = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
-          if (mathMatches && mathMatches.length > 0) {
-            span.textContent = mathMatches.join(' ');
+          const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+          if (actualMath && actualMath.length > 0) {
+            span.textContent = actualMath.join(' ');
           } else {
             span.textContent = latex;
           }
+        } else if (sentenceIdx >= 10000) {
+          // 다중 복사 범위에 포함된 개별 미번역 수식 치환 폴백
+          span.textContent = convertRawTextToLatex(span.textContent);
         }
       });
       const cleanText = clone.textContent;
