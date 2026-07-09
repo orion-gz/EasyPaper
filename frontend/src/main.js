@@ -4517,6 +4517,44 @@ if (viewerScrollContainer) {
 
 window.addEventListener('resize', hideSelectionMenu);
 
+// PDF 텍스트 복사 시 LaTeX 기호 자동 치환 복사 기능
+document.addEventListener('copy', (e) => {
+  try {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    
+    const range = selection.getRangeAt(0);
+    let container = range.commonAncestorContainer;
+    if (container.nodeType === 3) container = container.parentElement;
+    if (!container || !container.closest('.textLayer')) return;
+    
+    const clone = range.cloneContents();
+    const spans = clone.querySelectorAll('.pdf-sentence[data-latex]');
+    if (spans.length === 0) return;
+    
+    spans.forEach(span => {
+      const latex = span.dataset.latex;
+      if (latex) {
+        // 개별 수식이 문장 중간에 속했던 경우, 수식 부분만(e.g., $$...$$ 또는 $...$) 파싱하여 매핑
+        // 만약 문장 전체가 수식 형태로 감싸져 있다면 문장 전체를 그대로 반환
+        const mathMatches = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+        if (mathMatches && mathMatches.length > 0) {
+          // 선택된 텍스트가 수식의 텍스트 기호들과 일치하므로, 수식 코드로 치환
+          span.textContent = mathMatches.join(' ');
+        } else {
+          span.textContent = latex;
+        }
+      }
+    });
+    
+    const cleanText = clone.textContent;
+    e.clipboardData.setData('text/plain', cleanText);
+    e.preventDefault();
+  } catch (err) {
+    console.warn("Copy intercept failed:", err);
+  }
+});
+
 document.addEventListener('mousedown', (e) => {
   state.isSelectionDragging = true;
   state.hoverSelectedPdfElements = null;
@@ -4935,8 +4973,8 @@ function segmentPdfElements(container, pageNum) {
         }).length;
         
         const isEquation = hasMathSymbol && (
-          (hasEqNum && englishWordCount <= 3) ||
-          (!hasEqNum && lineText.length < 120 && englishWordCount <= 2)
+          (hasEqNum && englishWordCount <= 6) ||
+          (!hasEqNum && lineText.length < 150 && englishWordCount <= 4)
         );
         if (isEquation) {
           const lineStart = Math.min(...line.map(n => n.startInText));
@@ -4970,7 +5008,8 @@ function segmentPdfElements(container, pageNum) {
             text: fullText.substring(eq.start, eq.end),
             start: eq.start,
             end: eq.end,
-            sentenceIdx: 10000 + eq.start
+            sentenceIdx: 10000 + eq.start,
+            originalSentenceIdx: sent.sentenceIdx
           });
           // 수식 뒷단
           nextRanges.push({
@@ -4982,7 +5021,8 @@ function segmentPdfElements(container, pageNum) {
         } else if (sent.start >= eq.start && sent.end <= eq.end) {
           nextRanges.push({
             ...sent,
-            sentenceIdx: 10000 + eq.start
+            sentenceIdx: 10000 + eq.start,
+            originalSentenceIdx: sent.sentenceIdx
           });
         } else {
           nextRanges.push(sent);
@@ -5008,6 +5048,7 @@ function segmentPdfElements(container, pageNum) {
             startInNode: start - range.start,
             endInNode: end - range.start,
             text: range.node.nodeValue.substring(start - range.start, end - range.start),
+            originalSentenceIdx: sent.originalSentenceIdx
           });
         }
       }
@@ -5034,6 +5075,13 @@ function segmentPdfElements(container, pageNum) {
         
         if (seg.sentenceIdx >= 10000) {
           isEq = true;
+          if (seg.originalSentenceIdx !== undefined) {
+            const origIdx = seg.originalSentenceIdx;
+            const sentences = state.translationSentences && state.translationSentences[pageNum];
+            if (sentences && sentences[origIdx]) {
+              span.dataset.latex = sentences[origIdx].src;
+            }
+          }
         }
         
         fragment.appendChild(span);
