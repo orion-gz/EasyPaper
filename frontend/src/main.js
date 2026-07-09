@@ -3339,11 +3339,13 @@ function createSelectionMenu() {
     let sentenceEl = null
     let pageWrapper = null
 
-    if (state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
+    const selection = window.getSelection()
+    const hasActiveSelection = selection && !selection.isCollapsed && selection.rangeCount > 0
+
+    if (!hasActiveSelection && state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
       sentenceEl = state.hoverSelectedPdfElements[0]
       pageWrapper = sentenceEl.closest('.pdf-page-wrapper')
     } else {
-      const selection = window.getSelection()
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0)
         
@@ -3563,7 +3565,34 @@ function hideAnnHoverTooltipWithDelay() {
 }
 
 function handleAnnotate(type, color) {
-  // 1. 호버 지연 대기에 의한 문장 전체 선택 모드 대응
+  const selection = window.getSelection();
+  const hasActiveSelection = selection && !selection.isCollapsed && selection.rangeCount > 0;
+
+  // 1. 일반 마우스 드래그 선택 대응 (최우선)
+  if (hasActiveSelection) {
+    const range = selection.getRangeAt(0);
+    let textLayer = range.commonAncestorContainer;
+    if (textLayer && textLayer.nodeType === 3) {
+      textLayer = textLayer.parentElement || textLayer.parentNode;
+    }
+    const textLayerDiv = (textLayer && textLayer.nodeType === 1) ? textLayer.closest('.textLayer') : null;
+    if (!textLayerDiv) return;
+
+    const pageWrapper = textLayerDiv.closest('.pdf-page-wrapper');
+    if (!pageWrapper) return;
+    const pageNum = parseInt(pageWrapper.dataset.page, 10);
+
+    if (type === 'clear') {
+      clearAnnotationsInRange(range, textLayerDiv, pageNum);
+    } else {
+      applyAnnotationToRange(range, type, textLayerDiv, pageNum, color);
+    }
+
+    hideSelectionMenu();
+    return;
+  }
+
+  // 2. 호버 지연 대기에 의한 문장 전체 선택 모드 대응
   if (state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
     const pageNum = state.hoverSelectedPageNum;
     const textLayerDiv = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"] .textLayer`);
@@ -3592,30 +3621,6 @@ function handleAnnotate(type, color) {
       return;
     }
   }
-
-  // 2. 일반 마우스 드래그 선택 대응
-  const selection = window.getSelection()
-  if (!selection.rangeCount) return
-  const range = selection.getRangeAt(0)
-
-  let textLayer = range.commonAncestorContainer
-  if (textLayer && textLayer.nodeType === 3) {
-    textLayer = textLayer.parentElement || textLayer.parentNode
-  }
-  const textLayerDiv = (textLayer && textLayer.nodeType === 1) ? textLayer.closest('.textLayer') : null
-  if (!textLayerDiv) return
-
-  const pageWrapper = textLayerDiv.closest('.pdf-page-wrapper')
-  if (!pageWrapper) return
-  const pageNum = parseInt(pageWrapper.dataset.page)
-
-  if (type === 'clear') {
-    clearAnnotationsInRange(range, textLayerDiv, pageNum)
-  } else {
-    applyAnnotationToRange(range, type, textLayerDiv, pageNum, color)
-  }
-
-  hideSelectionMenu()
 }
 
 function clearAnnotationsInRange(range, textLayerDiv, pageNum) {
