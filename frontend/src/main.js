@@ -4609,9 +4609,26 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
   const sentenceRanges = [];
   let searchStart = 0;
   
-  // 모든 문장 미리 전처리 - null/undefined 방어 및 그리스 문자 대응
+  // 모든 문장 미리 전처리 - null/undefined 방어, LaTeX 명령어 제거 및 그리스 문자 대응
+  const GREEK_MAP = {
+    'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'delta': 'δ', 'epsilon': 'ε',
+    'zeta': 'ζ', 'eta': 'η', 'theta': 'θ', 'iota': 'ι', 'kappa': 'κ',
+    'lambda': 'λ', 'mu': 'μ', 'nu': 'ν', 'xi': 'ξ', 'pi': 'π',
+    'rho': 'ρ', 'sigma': 'σ', 'tau': 'τ', 'upsilon': 'υ', 'phi': 'φ',
+    'chi': 'χ', 'psi': 'ψ', 'omega': 'ω'
+  };
+
   const cleanSents = (sentencesList || []).map(s => {
-    const text = s || '';
+    let text = s || '';
+    
+    // LaTeX 그리스 문자 명령어를 유니코드 문자로 변환
+    for (const [name, unicode] of Object.entries(GREEK_MAP)) {
+      text = text.replace(new RegExp('\\\\' + name, 'g'), unicode);
+    }
+    
+    // 기타 백슬래시로 시작하는 LaTeX 명령어 제거 (예: \sum, \int 등)
+    text = text.replace(/\\[a-zA-Z]+/g, '');
+    
     let clean = '';
     for (let i = 0; i < text.length; i++) {
       const char = text[i];
@@ -4685,19 +4702,27 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
     }
   }
 
-  // 매칭 실패(길이 0)인 문장들의 범위를 주변 매칭 성공 문장들 사이의 간격으로 보간(Interpolation)
-  // 수식 등의 기호만 있는 문장들이 누락 없이 PDF 텍스트 레이어에 적절한 인덱스로 마킹되도록 지원
-  for (let k = 0; k < sentenceRanges.length; k++) {
-    if (sentenceRanges[k].start === sentenceRanges[k].end) {
+  // 매칭 실패(길이 0)인 문장들의 범위를 주변 매칭 성공 문장들 사이의 간격으로 분할 보간(Gap Partitioning)
+  // 수식 등의 기호만 있는 문장들이 누락 없이 서로 겹치지 않고 PDF 텍스트 레이어에 균등 분할 마킹되도록 지원
+  let walkIdx = 0;
+  while (walkIdx < sentenceRanges.length) {
+    if (sentenceRanges[walkIdx].start === sentenceRanges[walkIdx].end) {
+      let k_start = walkIdx;
+      let k_end = walkIdx;
+      while (k_end + 1 < sentenceRanges.length && sentenceRanges[k_end + 1].start === sentenceRanges[k_end + 1].end) {
+        k_end++;
+      }
+      
       let prevEnd = 0;
-      for (let i = k - 1; i >= 0; i--) {
+      for (let i = k_start - 1; i >= 0; i--) {
         if (sentenceRanges[i].end > sentenceRanges[i].start) {
           prevEnd = sentenceRanges[i].end;
           break;
         }
       }
+      
       let nextStart = fullText.length;
-      for (let i = k + 1; i < sentenceRanges.length; i++) {
+      for (let i = k_end + 1; i < sentenceRanges.length; i++) {
         if (sentenceRanges[i].end > sentenceRanges[i].start) {
           nextStart = sentenceRanges[i].start;
           break;
@@ -4705,9 +4730,17 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
       }
       
       if (prevEnd < nextStart) {
-        sentenceRanges[k].start = prevEnd;
-        sentenceRanges[k].end = nextStart;
+        const count = k_end - k_start + 1;
+        const chunkSize = (nextStart - prevEnd) / count;
+        for (let i = k_start; i <= k_end; i++) {
+          sentenceRanges[i].start = Math.round(prevEnd + (i - k_start) * chunkSize);
+          sentenceRanges[i].end = Math.round(prevEnd + (i - k_start + 1) * chunkSize);
+        }
       }
+      
+      walkIdx = k_end + 1;
+    } else {
+      walkIdx++;
     }
   }
   
