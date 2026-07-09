@@ -4862,6 +4862,7 @@ function segmentPdfElements(container, pageNum) {
         }
       }
 
+      sortedNodes[i].startInText = fullText.length;
       for (let j = 0; j < elNodes.length; j++) {
         const node = elNodes[j];
         if (j > 0) {
@@ -4875,6 +4876,7 @@ function segmentPdfElements(container, pageNum) {
         fullText += node.nodeValue;
         nodeRanges.push({ node, start, end: fullText.length });
       }
+      sortedNodes[i].endInText = fullText.length;
 
       prevTop = top;
       prevFontSize = fontSize;
@@ -4893,23 +4895,40 @@ function segmentPdfElements(container, pageNum) {
     }
     if (sentenceRanges.length === 0) return;
 
-    // 독립 수식 및 수식 번호(예: (1), (2.3) 등) 검출 헬퍼
-    function findDisplayEquations(text) {
+    // 독립 수식 및 수식 번호(예: (1), (2.3) 등) 검출 헬퍼 (좌표 라인 기반)
+    function findDisplayEquations() {
       const eqs = [];
-      const paragraphs = text.split('\n\n');
-      let currentPos = 0;
-      for (const para of paragraphs) {
-        const start = currentPos;
-        const end = currentPos + para.length;
-        currentPos = end + 2; // \n\n
+      const lines = [];
+      let currentLine = [];
+      
+      for (let i = 0; i < sortedNodes.length; i++) {
+        const node = sortedNodes[i];
+        if (node.startInText === undefined || node.endInText === undefined) continue;
         
-        const trimmed = para.trim();
-        if (!trimmed) continue;
+        if (currentLine.length === 0) {
+          currentLine.push(node);
+        } else {
+          const prevNode = currentLine[currentLine.length - 1];
+          if (Math.abs(node.top - prevNode.top) < 5) {
+            currentLine.push(node);
+          } else {
+            lines.push(currentLine);
+            currentLine = [node];
+          }
+        }
+      }
+      if (currentLine.length > 0) {
+        lines.push(currentLine);
+      }
+      
+      for (const line of lines) {
+        const lineText = line.map(node => fullText.substring(node.startInText, node.endInText)).join(' ').trim();
+        if (!lineText) continue;
         
-        const hasEqNum = /[\(\[][\d\w\.]+[\]\)]\s*$/.test(trimmed);
-        const hasMathSymbol = /[\u003d\u003c\u003e\u002b\u2212\u22c5\u0370-\u03ff\u2200-\u22ff\u002d\u002a\u002f\u00d7\u00f7_\^\\]/.test(trimmed);
+        const hasEqNum = /[\(\[][\d\w\.]+[\]\)]\s*$/.test(lineText);
+        const hasMathSymbol = /[\u003d\u003c\u003e\u002b\u2212\u22c5\u0370-\u03ff\u2200-\u22ff\u002d\u002a\u002f\u00d7\u00f7_\^\\]/.test(lineText);
         
-        const words = trimmed.split(/\s+/);
+        const words = lineText.split(/\s+/);
         const englishWordCount = words.filter(w => {
           const cleanW = w.replace(/[^a-zA-Z]/g, '');
           return cleanW.length >= 3 && !w.startsWith('\\');
@@ -4917,17 +4936,19 @@ function segmentPdfElements(container, pageNum) {
         
         const isEquation = hasMathSymbol && (
           (hasEqNum && englishWordCount <= 3) ||
-          (!hasEqNum && trimmed.length < 120 && englishWordCount <= 2)
+          (!hasEqNum && lineText.length < 120 && englishWordCount <= 2)
         );
         if (isEquation) {
-          eqs.push({ start, end, text: para });
+          const lineStart = Math.min(...line.map(n => n.startInText));
+          const lineEnd = Math.max(...line.map(n => n.endInText));
+          eqs.push({ start: lineStart, end: lineEnd, text: lineText });
         }
       }
       return eqs;
     }
 
     // 독립 수식 및 수식 번호 범위 분할 포스트 프로세싱
-    const displayEqs = findDisplayEquations(fullText);
+    const displayEqs = findDisplayEquations();
     sentenceRanges.forEach((r, idx) => {
       r.sentenceIdx = idx;
     });
