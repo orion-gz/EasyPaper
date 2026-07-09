@@ -5381,11 +5381,15 @@ function splitIntoSentences(fullText) {
 // 1대1 매칭 마우스 오버/아웃 및 클릭 이벤트 위임 등록
 if (viewerScrollContainer) {
   // PDF와 번역본의 문장 수 차이를 고려한 오프셋 기반 매핑 함수
-  viewerScrollContainer.addEventListener('mousemove', () => {
+  viewerScrollContainer.addEventListener('mousemove', (e) => {
+    if (e.buttons === 0) {
+      state.isSelectionDragging = false;
+    }
     state.hoverSelectionDisabled = false;
   });
 
   viewerScrollContainer.addEventListener('mouseover', (e) => {
+    if (state.isSelectionDragging) return;
     try {
       if (sentenceHoverTimer) {
         clearTimeout(sentenceHoverTimer);
@@ -5509,6 +5513,7 @@ if (viewerScrollContainer) {
   });
 
   viewerScrollContainer.addEventListener('mouseout', (e) => {
+    if (state.isSelectionDragging) return;
     try {
       if (sentenceHoverTimer) {
         clearTimeout(sentenceHoverTimer);

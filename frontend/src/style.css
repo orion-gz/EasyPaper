@@ -2609,8 +2609,6 @@ body.light-theme .library-grid::-webkit-scrollbar-thumb:hover {
   box-shadow: none !important;
   transition: background-color 0.12s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: auto !important;
-  user-select: text !important;
-  -webkit-user-select: text !important;
 }
 
 .trans-sentence {
