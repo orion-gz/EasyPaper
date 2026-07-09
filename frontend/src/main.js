@@ -4820,6 +4820,18 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
 // 세로 간격(vertical gap)과 글자 크기(font-size)를 기반으로 단락 경계를 감지하여 \n\n 삽입
 function segmentPdfElements(container, pageNum) {
   try {
+    // 0. 기존에 분할된 pdf-sentence 스팬 제거 및 텍스트 레이어 복원 (중합 및 중첩 버그 방지)
+    container.querySelectorAll('.pdf-sentence').forEach(span => {
+      const parent = span.parentNode;
+      if (parent) {
+        while (span.firstChild) {
+          parent.insertBefore(span.firstChild, span);
+        }
+        parent.removeChild(span);
+      }
+    });
+    container.normalize();
+
     const elements = Array.from(container.children).filter(el => el.nodeType === 1);
     if (elements.length === 0) return;
 
