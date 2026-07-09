@@ -4579,51 +4579,50 @@ document.addEventListener('copy', (e) => {
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
     
     const range = selection.getRangeAt(0);
-    let container = range.commonAncestorContainer;
-    if (container.nodeType === 3) container = container.parentElement;
-    if (!container || !container.closest('.textLayer')) return;
+    let startNode = range.startContainer;
+    if (startNode.nodeType === 3) startNode = startNode.parentElement;
+    if (!startNode || !startNode.closest('.textLayer')) return;
     
-    // 수식 영역에 드래그 경계가 걸쳐있을 경우 범위를 수식 전체로 자동 확장하여 유실 방지
-    let startSpan = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
-    startSpan = startSpan ? startSpan.closest('.pdf-sentence') : null;
+    // 선택 영역이 걸쳐있는 모든 pdf-sentence 스팬들을 브라우저 내장 containsNode API로 정확하게 검출
+    const pageWrapper = startNode.closest('.pdf-page-wrapper');
+    if (!pageWrapper) return;
     
-    let endSpan = range.endContainer.nodeType === 3 ? range.endContainer.parentElement : range.endContainer;
-    endSpan = endSpan ? endSpan.closest('.pdf-sentence') : null;
+    const allSpans = Array.from(pageWrapper.querySelectorAll('.pdf-sentence'));
+    const selectedSpans = allSpans.filter(span => selection.containsNode(span, true));
+    if (selectedSpans.length === 0) return;
     
-    const isStartEq = startSpan && parseInt(startSpan.dataset.sentenceIdx || '0', 10) >= 10000;
-    const isEndEq = endSpan && parseInt(endSpan.dataset.sentenceIdx || '0', 10) >= 10000;
-    
-    let targetRange = range;
-    if (isStartEq || isEndEq) {
-      targetRange = range.cloneRange();
-      if (isStartEq) targetRange.setStartBefore(startSpan);
-      if (isEndEq) targetRange.setEndAfter(endSpan);
-    }
-    
-    // 1. 단일 수식 노드 내부만 드래그 선택된 경우
-    let singleSpan = container.closest('.pdf-sentence');
-    if (!singleSpan && isStartEq && isEndEq && startSpan === endSpan) {
-      singleSpan = startSpan;
-    }
-    
-    if (singleSpan && parseInt(singleSpan.dataset.sentenceIdx || '0', 10) >= 10000) {
-      const latex = singleSpan.dataset.latex;
-      let textToCopy = latex;
-      if (latex) {
-        const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
-        if (actualMath && actualMath.length > 0) {
-          textToCopy = actualMath.join(' ');
+    // 1. 단일 수식 노드 내부 혹은 전체가 선택된 경우
+    if (selectedSpans.length === 1) {
+      const singleSpan = selectedSpans[0];
+      if (parseInt(singleSpan.dataset.sentenceIdx || '0', 10) >= 10000) {
+        const latex = singleSpan.dataset.latex;
+        let textToCopy = latex;
+        if (latex) {
+          const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+          if (actualMath && actualMath.length > 0) {
+            textToCopy = actualMath.join(' ');
+          }
+        } else {
+          // 수식 폴백 치환기 작동
+          textToCopy = convertRawTextToLatex(singleSpan.textContent);
         }
-      } else {
-        // 번역이 아직 로딩되지 않았을 때의 유니코드 수식 LaTeX 문법 치환 폴백
-        textToCopy = convertRawTextToLatex(singleSpan.textContent);
+        e.clipboardData.setData('text/plain', textToCopy);
+        e.preventDefault();
+        return;
       }
-      e.clipboardData.setData('text/plain', textToCopy);
-      e.preventDefault();
-      return;
     }
     
     // 2. 여러 문장 혹은 다중 범위가 선택된 경우
+    const hasEq = selectedSpans.some(span => parseInt(span.dataset.sentenceIdx || '0', 10) >= 10000);
+    let targetRange = range;
+    
+    // 선택된 범위 내에 수식이 있다면, 해당 수식의 태그가 복제본(cloneContents)에서 유실되지 않도록 선택 영역 경계를 수식 외곽으로 일시 확장
+    if (hasEq) {
+      targetRange = range.cloneRange();
+      targetRange.setStartBefore(selectedSpans[0]);
+      targetRange.setEndAfter(selectedSpans[selectedSpans.length - 1]);
+    }
+    
     const clone = targetRange.cloneContents();
     const spans = clone.querySelectorAll('.pdf-sentence');
     if (spans.length > 0) {
@@ -4638,7 +4637,7 @@ document.addEventListener('copy', (e) => {
             span.textContent = latex;
           }
         } else if (sentenceIdx >= 10000) {
-          // 다중 복사 범위에 포함된 개별 미번역 수식 치환 폴백
+          // 다중 복사 영역 내 미번역 수식 치환
           span.textContent = convertRawTextToLatex(span.textContent);
         }
       });
