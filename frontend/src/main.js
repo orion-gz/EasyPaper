@@ -2864,15 +2864,10 @@ function updateMemoConnectorLine(pageWrapper, memo, sentenceEl) {
   const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
   const startEl = (pdfElements && pdfElements.length > 0) ? pdfElements[0] : sentenceEl
 
-  let anchorX = startEl.offsetLeft
-  let anchorY = startEl.offsetTop + startEl.offsetHeight / 2
-
-  let curr = startEl.offsetParent
-  while (curr && curr !== pageWrapper) {
-    anchorX += curr.offsetLeft || 0
-    anchorY += curr.offsetTop || 0
-    curr = curr.offsetParent
-  }
+  const startRect = startEl.getBoundingClientRect()
+  const pageRect = pageWrapper.getBoundingClientRect()
+  const anchorX = startRect.left - pageRect.left
+  const anchorY = startRect.top - pageRect.top + startRect.height / 2
 
   const memoLeft = (memo.x / 100) * pageWrapper.offsetWidth
   const memoTop = (memo.y / 100) * pageWrapper.offsetHeight
@@ -3153,17 +3148,13 @@ function createFloatingMemoForSentence(pageNum, sentenceIdx) {
 
   const sentenceText = sentenceEl ? sentenceEl.textContent.trim() : ''
 
-  let sentenceX = sentenceEl.offsetLeft
-  let sentenceY = sentenceEl.offsetTop
-  let curr = sentenceEl.offsetParent
-  while (curr && curr !== pageWrapper) {
-    sentenceX += curr.offsetLeft || 0
-    sentenceY += curr.offsetTop || 0
-    curr = curr.offsetParent
-  }
+  const sentRect = sentenceEl.getBoundingClientRect()
+  const pageRect = pageWrapper.getBoundingClientRect()
+  const sentenceX = sentRect.left - pageRect.left
+  const sentenceY = sentRect.top - pageRect.top
 
-  const leftPct = Math.min(Math.max(10, ((sentenceX + sentenceEl.offsetWidth / 2) / pageWrapper.offsetWidth) * 100), 70)
-  const topPct = Math.min(Math.max(10, ((sentenceY + sentenceEl.offsetHeight) / pageWrapper.offsetHeight) * 100 + 4), 85)
+  const leftPct = Math.min(Math.max(10, ((sentenceX + sentRect.width / 2) / pageWrapper.offsetWidth) * 100), 70)
+  const topPct = Math.min(Math.max(10, ((sentenceY + sentRect.height) / pageWrapper.offsetHeight) * 100 + 4), 85)
 
   const allMemosObj = loadMemos(state.sessionId)
   if (!allMemosObj[`page_${pageNum}`]) {
@@ -3348,11 +3339,29 @@ function createSelectionMenu() {
       const selection = window.getSelection()
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0)
-        let startContainer = range.startContainer
-        if (startContainer) {
-          const parent = startContainer.nodeType === 3 ? startContainer.parentElement : startContainer
+        
+        // 1. Try startContainer
+        let node = range.startContainer
+        if (node) {
+          let parent = node.nodeType === 3 ? node.parentElement : node
           sentenceEl = parent.closest('.pdf-sentence')
           pageWrapper = parent.closest('.pdf-page-wrapper')
+        }
+        
+        // 2. Fallback to commonAncestorContainer
+        if (!sentenceEl && range.commonAncestorContainer) {
+          let common = range.commonAncestorContainer
+          let parent = common.nodeType === 3 ? common.parentElement : common
+          sentenceEl = parent.closest('.pdf-sentence')
+          if (!pageWrapper) pageWrapper = parent.closest('.pdf-page-wrapper')
+        }
+        
+        // 3. Fallback to endContainer
+        if (!sentenceEl && range.endContainer) {
+          let endNode = range.endContainer
+          let parent = endNode.nodeType === 3 ? endNode.parentElement : endNode
+          sentenceEl = parent.closest('.pdf-sentence')
+          if (!pageWrapper) pageWrapper = parent.closest('.pdf-page-wrapper')
         }
       }
     }
@@ -4503,6 +4512,9 @@ window.addEventListener('resize', hideSelectionMenu);
 
 document.addEventListener('mousedown', (e) => {
   state.isSelectionDragging = true;
+  state.hoverSelectedPdfElements = null;
+  state.hoverSelectedPageNum = null;
+  state.hoverSelectedSentenceIdx = null;
   if (sentenceHoverTimer) {
     clearTimeout(sentenceHoverTimer);
     sentenceHoverTimer = null;
