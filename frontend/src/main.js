@@ -4625,6 +4625,9 @@ document.addEventListener('copy', (e) => {
         const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
         if (actualMath && actualMath.length > 0) {
           textToCopy = actualMath.join(' ');
+        } else {
+          // latex 속성이 존재하나 수식 기호가 없는 경우(srcText 폴백 등)에도 수식 변환 적용
+          textToCopy = convertRawTextToLatex(latex);
         }
       } else {
         // 번역 로딩 전일 때 수식 문자열 결합 후 LaTeX 변환 적용
@@ -4671,6 +4674,8 @@ document.addEventListener('copy', (e) => {
           const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
           if (actualMath && actualMath.length > 0) {
             textToReplace = actualMath.join(' ');
+          } else {
+            textToReplace = convertRawTextToLatex(latex);
           }
         } else {
           const fullRawText = origGroupSpans.map(s => s.textContent).join('');
