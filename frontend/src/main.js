@@ -4528,28 +4528,41 @@ document.addEventListener('copy', (e) => {
     if (container.nodeType === 3) container = container.parentElement;
     if (!container || !container.closest('.textLayer')) return;
     
+    // 1. 단일 수식 노드 내부만 드래그 선택된 경우 (Range clone에 껍데기 span이 없는 케이스 대응)
+    const closestSpan = container.closest('.pdf-sentence[data-latex]');
+    if (closestSpan) {
+      const latex = closestSpan.dataset.latex;
+      if (latex) {
+        let textToCopy = latex;
+        const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+        if (actualMath && actualMath.length > 0) {
+          textToCopy = actualMath.join(' ');
+        }
+        e.clipboardData.setData('text/plain', textToCopy);
+        e.preventDefault();
+        return;
+      }
+    }
+    
+    // 2. 여러 문장 혹은 다중 범위가 선택된 경우
     const clone = range.cloneContents();
     const spans = clone.querySelectorAll('.pdf-sentence[data-latex]');
-    if (spans.length === 0) return;
-    
-    spans.forEach(span => {
-      const latex = span.dataset.latex;
-      if (latex) {
-        // 개별 수식이 문장 중간에 속했던 경우, 수식 부분만(e.g., $$...$$ 또는 $...$) 파싱하여 매핑
-        // 만약 문장 전체가 수식 형태로 감싸져 있다면 문장 전체를 그대로 반환
-        const mathMatches = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
-        if (mathMatches && mathMatches.length > 0) {
-          // 선택된 텍스트가 수식의 텍스트 기호들과 일치하므로, 수식 코드로 치환
-          span.textContent = mathMatches.join(' ');
-        } else {
-          span.textContent = latex;
+    if (spans.length > 0) {
+      spans.forEach(span => {
+        const latex = span.dataset.latex;
+        if (latex) {
+          const mathMatches = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+          if (mathMatches && mathMatches.length > 0) {
+            span.textContent = mathMatches.join(' ');
+          } else {
+            span.textContent = latex;
+          }
         }
-      }
-    });
-    
-    const cleanText = clone.textContent;
-    e.clipboardData.setData('text/plain', cleanText);
-    e.preventDefault();
+      });
+      const cleanText = clone.textContent;
+      e.clipboardData.setData('text/plain', cleanText);
+      e.preventDefault();
+    }
   } catch (err) {
     console.warn("Copy intercept failed:", err);
   }
