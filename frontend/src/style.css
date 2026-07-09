@@ -2611,6 +2611,10 @@ body.light-theme .library-grid::-webkit-scrollbar-thumb:hover {
   pointer-events: auto !important;
 }
 
+#viewer-scroll-container.selection-dragging .pdf-sentence {
+  pointer-events: none !important;
+}
+
 .trans-sentence {
   position: relative;
   display: inline;

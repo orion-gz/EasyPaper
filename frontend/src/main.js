@@ -3719,6 +3719,9 @@ function hideSelectionMenuWithDelay() {
 
 // 통합 텍스트 선택 종료 감지 리스너
 document.addEventListener('mouseup', (e) => {
+  if (viewerScrollContainer) {
+    viewerScrollContainer.classList.remove('selection-dragging');
+  }
   setTimeout(() => {
     try {
       if (state.isCropMode) return
@@ -4575,6 +4578,9 @@ document.addEventListener('copy', (e) => {
 
 document.addEventListener('mousedown', (e) => {
   state.isSelectionDragging = true;
+  if (viewerScrollContainer) {
+    viewerScrollContainer.classList.add('selection-dragging');
+  }
   state.hoverSelectedPdfElements = null;
   state.hoverSelectedPageNum = null;
   state.hoverSelectedSentenceIdx = null;
@@ -5097,7 +5103,14 @@ function segmentPdfElements(container, pageNum) {
             const origIdx = seg.originalSentenceIdx;
             const sentences = state.translationSentences && state.translationSentences[pageNum];
             if (sentences && sentences[origIdx]) {
-              span.dataset.latex = sentences[origIdx].src;
+              const transText = sentences[origIdx].trans || '';
+              const srcText = sentences[origIdx].src || '';
+              const mathMatches = transText.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g) || srcText.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+              if (mathMatches && mathMatches.length > 0) {
+                span.dataset.latex = mathMatches.join(' ');
+              } else {
+                span.dataset.latex = srcText;
+              }
             }
           }
         }
@@ -5450,6 +5463,7 @@ if (viewerScrollContainer) {
   viewerScrollContainer.addEventListener('mousemove', (e) => {
     if (e.buttons === 0) {
       state.isSelectionDragging = false;
+      viewerScrollContainer.classList.remove('selection-dragging');
     }
     state.hoverSelectionDisabled = false;
   });
