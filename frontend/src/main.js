@@ -2648,6 +2648,13 @@ function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
   const transSpans = Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${pageNum}"]`));
   const pdfSpans = Array.from(viewerScrollContainer.querySelectorAll(`.pdf-sentence[data-page="${pageNum}"]`));
 
+  if (sentenceIdx >= 10000) {
+    pdfIdx = sentenceIdx;
+    transIdx = -1;
+    pdfElements = pdfSpans.filter(el => parseInt(el.dataset.sentenceIdx || '0', 10) === sentenceIdx);
+    return { pdfIdx, transIdx, pdfElements };
+  }
+
   if (transSpans.length === 0 || pdfSpans.length === 0) {
     return { pdfIdx, transIdx, pdfElements };
   }
@@ -3327,11 +3334,13 @@ function createSelectionMenu() {
     let sentenceEl = null
     let pageWrapper = null
 
-    if (state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
+    const selection = window.getSelection()
+    const hasActiveSelection = selection && !selection.isCollapsed && selection.rangeCount > 0
+
+    if (!hasActiveSelection && state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
       sentenceEl = state.hoverSelectedPdfElements[0]
       pageWrapper = sentenceEl.closest('.pdf-page-wrapper')
     } else {
-      const selection = window.getSelection()
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0)
         
@@ -3551,7 +3560,34 @@ function hideAnnHoverTooltipWithDelay() {
 }
 
 function handleAnnotate(type, color) {
-  // 1. 호버 지연 대기에 의한 문장 전체 선택 모드 대응
+  const selection = window.getSelection();
+  const hasActiveSelection = selection && !selection.isCollapsed && selection.rangeCount > 0;
+
+  // 1. 일반 마우스 드래그 선택 대응 (최우선)
+  if (hasActiveSelection) {
+    const range = selection.getRangeAt(0);
+    let textLayer = range.commonAncestorContainer;
+    if (textLayer && textLayer.nodeType === 3) {
+      textLayer = textLayer.parentElement || textLayer.parentNode;
+    }
+    const textLayerDiv = (textLayer && textLayer.nodeType === 1) ? textLayer.closest('.textLayer') : null;
+    if (!textLayerDiv) return;
+
+    const pageWrapper = textLayerDiv.closest('.pdf-page-wrapper');
+    if (!pageWrapper) return;
+    const pageNum = parseInt(pageWrapper.dataset.page, 10);
+
+    if (type === 'clear') {
+      clearAnnotationsInRange(range, textLayerDiv, pageNum);
+    } else {
+      applyAnnotationToRange(range, type, textLayerDiv, pageNum, color);
+    }
+
+    hideSelectionMenu();
+    return;
+  }
+
+  // 2. 호버 지연 대기에 의한 문장 전체 선택 모드 대응
   if (state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
     const pageNum = state.hoverSelectedPageNum;
     const textLayerDiv = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"] .textLayer`);
@@ -3580,30 +3616,6 @@ function handleAnnotate(type, color) {
       return;
     }
   }
-
-  // 2. 일반 마우스 드래그 선택 대응
-  const selection = window.getSelection()
-  if (!selection.rangeCount) return
-  const range = selection.getRangeAt(0)
-
-  let textLayer = range.commonAncestorContainer
-  if (textLayer && textLayer.nodeType === 3) {
-    textLayer = textLayer.parentElement || textLayer.parentNode
-  }
-  const textLayerDiv = (textLayer && textLayer.nodeType === 1) ? textLayer.closest('.textLayer') : null
-  if (!textLayerDiv) return
-
-  const pageWrapper = textLayerDiv.closest('.pdf-page-wrapper')
-  if (!pageWrapper) return
-  const pageNum = parseInt(pageWrapper.dataset.page)
-
-  if (type === 'clear') {
-    clearAnnotationsInRange(range, textLayerDiv, pageNum)
-  } else {
-    applyAnnotationToRange(range, type, textLayerDiv, pageNum, color)
-  }
-
-  hideSelectionMenu()
 }
 
 function clearAnnotationsInRange(range, textLayerDiv, pageNum) {
@@ -3702,6 +3714,9 @@ function hideSelectionMenuWithDelay() {
 
 // 통합 텍스트 선택 종료 감지 리스너
 document.addEventListener('mouseup', (e) => {
+  if (viewerScrollContainer) {
+    viewerScrollContainer.classList.remove('selection-dragging');
+  }
   setTimeout(() => {
     try {
       if (state.isCropMode) return
@@ -4505,8 +4520,187 @@ if (viewerScrollContainer) {
 
 window.addEventListener('resize', hideSelectionMenu);
 
+// 유니코드 수식 텍스트를 LaTeX 문법으로 변환하는 휴리스틱 헬퍼 함수
+function convertRawTextToLatex(text) {
+  let clean = text.trim();
+  
+  // 그리스 문자 및 수학 기호 매핑
+  const replacements = {
+    'α': '\\alpha', 'β': '\\beta', 'γ': '\\gamma', 'δ': '\\delta', 'ε': '\\epsilon',
+    'ζ': '\\zeta', 'η': '\\eta', 'θ': '\\theta', 'ι': '\\iota', 'κ': '\\kappa',
+    'λ': '\\lambda', 'μ': '\\mu', 'ν': '\\nu', 'ξ': '\\xi', 'ο': 'o', 'π': '\\pi',
+    'ρ': '\\rho', 'σ': '\\sigma', 'τ': '\\tau', 'υ': '\\upsilon', 'φ': '\\phi',
+    'χ': '\\chi', 'ψ': '\\psi', 'ω': '\\omega',
+    'Α': 'A', 'Β': 'B', 'Γ': '\\Gamma', 'Δ': '\\Delta', 'Ε': 'E', 'Ζ': 'Z',
+    'Η': 'H', 'Θ': '\\Theta', 'Ι': 'I', 'Κ': 'K', 'Λ': '\\Lambda', 'Μ': 'M',
+    'Ν': 'N', 'Ξ': '\\Xi', 'Ο': 'O', 'Π': '\\Pi', 'Ρ': 'P', 'Σ': '\\Sigma',
+    'Τ': 'T', 'Υ': '\\Upsilon', 'Φ': '\\Phi', 'Χ': 'X', 'Ψ': '\\Psi', 'Ω': '\\Omega',
+    '−': '-', '–': '-', '—': '-',
+    '×': '\\times', '÷': '\\div', '±': '\\pm', '∓': '\\mp',
+    '≤': '\\le', '≥': '\\ge', '≠': '\\ne', '≈': '\\approx',
+    '≡': '\\equiv', '∝': '\\propto', '∞': '\\infty',
+    '∈': '\\in', '∉': '\\notin', '⊂': '\\subset', '⊃': '\\supset',
+    '⊆': '\\subseteq', '⊇': '\\supseteq', '∩': '\\cap', '∪': '\\cup',
+    '∀': '\\forall', '∃': '\\exists', '∇': '\\nabla', '∂': '\\partial',
+    '||': '\\parallel', '‖': '\\parallel'
+  };
+  
+  for (const [key, value] of Object.entries(replacements)) {
+    clean = clean.split(key).join(value);
+  }
+  
+  // 다중 문자 수학 함수/상수 치환
+  clean = clean.replace(/\bDKL\b/g, 'D_{\\text{KL}}');
+  clean = clean.replace(/\bDKL\(/g, 'D_{\\text{KL}}(');
+  clean = clean.replace(/\bEq\b/g, '\\mathbb{E}_q');
+  clean = clean.replace(/\bEp\b/g, '\\mathbb{E}_p');
+  clean = clean.replace(/\bE_([a-zA-Z\\]+)/g, '\\mathbb{E}_{$1}');
+  clean = clean.replace(/\blog\b/g, '\\log');
+  clean = clean.replace(/\bsin\b/g, '\\sin');
+  clean = clean.replace(/\bcos\b/g, '\\cos');
+  clean = clean.replace(/\btan\b/g, '\\tan');
+  clean = clean.replace(/\bexp\b/g, '\\exp');
+  
+  // 아래첨자 자동 교정 (예: p\theta -> p_\theta)
+  clean = clean.replace(/([a-zA-Z])(\\theta|\\phi|\\mu|\\sigma|\\alpha|\\beta|\\lambda)/g, '$1_$2');
+  
+  return `$$ ${clean} $$`;
+}
+
+// PDF 텍스트 복사 시 LaTeX 기호 자동 치환 복사 기능
+// 텍스트 노드 범위 교차 감지 함수 (모든 브라우저 호환)
+function rangeIntersectsNode(range, node) {
+  if (range.intersectsNode) {
+    return range.intersectsNode(node);
+  }
+  const nodeRange = document.createRange();
+  try {
+    nodeRange.selectNode(node);
+    return range.compareBoundaryPoints(Range.END_TO_START, nodeRange) < 0 &&
+           range.compareBoundaryPoints(Range.START_TO_END, nodeRange) > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+// PDF 텍스트 복사 시 LaTeX 기호 자동 치환 복사 기능
+document.addEventListener('copy', (e) => {
+  try {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    
+    const range = selection.getRangeAt(0);
+    let startNode = range.startContainer;
+    if (startNode.nodeType === 3) startNode = startNode.parentElement;
+    if (!startNode || !startNode.closest('.textLayer')) return;
+    
+    const pageWrapper = startNode.closest('.pdf-page-wrapper');
+    if (!pageWrapper) return;
+    
+    // 선택 영역과 교차하는 모든 pdf-sentence 요소들을 DOM 순서대로 수집
+    const allSpans = Array.from(pageWrapper.querySelectorAll('.pdf-sentence'));
+    const selectedSpans = allSpans.filter(span => rangeIntersectsNode(range, span));
+    if (selectedSpans.length === 0) return;
+    
+    // 문장 인덱스(sentenceIdx)별로 선택된 스팬들을 그룹화 (분열된 수식 노드 묶음 처리)
+    const grouped = {};
+    selectedSpans.forEach(span => {
+      const idx = span.dataset.sentenceIdx || '0';
+      if (!grouped[idx]) grouped[idx] = [];
+      grouped[idx].push(span);
+    });
+    const groupKeys = Object.keys(grouped);
+    
+    // 1. 단일 수식 노드 또는 단일 수식의 파편들만 선택된 경우
+    if (groupKeys.length === 1 && parseInt(groupKeys[0], 10) >= 10000) {
+      const firstSpan = grouped[groupKeys[0]][0];
+      const latex = firstSpan.dataset.latex;
+      let textToCopy = latex;
+      if (latex) {
+        const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+        if (actualMath && actualMath.length > 0) {
+          textToCopy = actualMath.join(' ');
+        } else {
+          // latex 속성이 존재하나 수식 기호가 없는 경우(srcText 폴백 등)에도 수식 변환 적용
+          textToCopy = convertRawTextToLatex(latex);
+        }
+      } else {
+        // 번역 로딩 전일 때 수식 문자열 결합 후 LaTeX 변환 적용
+        const fullRawText = grouped[groupKeys[0]].map(s => s.textContent).join('');
+        textToCopy = convertRawTextToLatex(fullRawText);
+      }
+      e.clipboardData.setData('text/plain', textToCopy);
+      e.preventDefault();
+      return;
+    }
+    
+    // 2. 여러 문장 혹은 다중 범위가 선택된 경우
+    const hasEq = selectedSpans.some(span => parseInt(span.dataset.sentenceIdx || '0', 10) >= 10000);
+    let targetRange = range;
+    
+    // 선택 영역 안에 수식이 포함된 경우 태그 누락 방지를 위해 외곽 스팬으로 범위 일시 확장
+    if (hasEq) {
+      targetRange = range.cloneRange();
+      targetRange.setStartBefore(selectedSpans[0]);
+      targetRange.setEndAfter(selectedSpans[selectedSpans.length - 1]);
+    }
+    
+    const clone = targetRange.cloneContents();
+    const clonedSpans = Array.from(clone.querySelectorAll('.pdf-sentence'));
+    
+    // 복제된 조각들의 스팬을 인덱스별로 그룹화
+    const clonedGrouped = {};
+    clonedSpans.forEach(span => {
+      const idx = span.dataset.sentenceIdx || '0';
+      if (!clonedGrouped[idx]) clonedGrouped[idx] = [];
+      clonedGrouped[idx].push(span);
+    });
+    
+    // 각 그룹별 치환 처리 (분열된 다중 노드가 중복으로 LaTeX를 출력하는 현상 방지)
+    Object.entries(clonedGrouped).forEach(([idx, spansInGroup]) => {
+      const sentenceIdx = parseInt(idx, 10);
+      if (sentenceIdx >= 10000) {
+        const origGroupSpans = grouped[idx] || [];
+        const firstOrigSpan = origGroupSpans[0];
+        const latex = firstOrigSpan ? firstOrigSpan.dataset.latex : null;
+        
+        let textToReplace = latex;
+        if (latex) {
+          const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+          if (actualMath && actualMath.length > 0) {
+            textToReplace = actualMath.join(' ');
+          } else {
+            textToReplace = convertRawTextToLatex(latex);
+          }
+        } else {
+          const fullRawText = origGroupSpans.map(s => s.textContent).join('');
+          textToReplace = convertRawTextToLatex(fullRawText);
+        }
+        
+        // 첫 번째 스팬에만 LaTeX 치환 문구를 넣고, 나머지 파편들은 공백 처리하여 중복 제거
+        spansInGroup.forEach((span, index) => {
+          if (index === 0) {
+            span.textContent = textToReplace;
+          } else {
+            span.textContent = '';
+          }
+        });
+      }
+    });
+    
+    const cleanText = clone.textContent;
+    e.clipboardData.setData('text/plain', cleanText);
+    e.preventDefault();
+  } catch (err) {
+    console.warn("Copy intercept failed:", err);
+  }
+});
+
 document.addEventListener('mousedown', (e) => {
   state.isSelectionDragging = true;
+  if (viewerScrollContainer) {
+    viewerScrollContainer.classList.add('selection-dragging');
+  }
   state.hoverSelectedPdfElements = null;
   state.hoverSelectedPageNum = null;
   state.hoverSelectedSentenceIdx = null;
@@ -4604,9 +4798,26 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
   const sentenceRanges = [];
   let searchStart = 0;
   
-  // 모든 문장 미리 전처리 - null/undefined 방어 및 그리스 문자 대응
+  // 모든 문장 미리 전처리 - null/undefined 방어, LaTeX 명령어 제거 및 그리스 문자 대응
+  const GREEK_MAP = {
+    'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'delta': 'δ', 'epsilon': 'ε',
+    'zeta': 'ζ', 'eta': 'η', 'theta': 'θ', 'iota': 'ι', 'kappa': 'κ',
+    'lambda': 'λ', 'mu': 'μ', 'nu': 'ν', 'xi': 'ξ', 'pi': 'π',
+    'rho': 'ρ', 'sigma': 'σ', 'tau': 'τ', 'upsilon': 'υ', 'phi': 'φ',
+    'chi': 'χ', 'psi': 'ψ', 'omega': 'ω'
+  };
+
   const cleanSents = (sentencesList || []).map(s => {
-    const text = s || '';
+    let text = s || '';
+    
+    // LaTeX 그리스 문자 명령어를 유니코드 문자로 변환
+    for (const [name, unicode] of Object.entries(GREEK_MAP)) {
+      text = text.replace(new RegExp('\\\\' + name, 'g'), unicode);
+    }
+    
+    // 기타 백슬래시로 시작하는 LaTeX 명령어 제거 (예: \sum, \int 등)
+    text = text.replace(/\\[a-zA-Z]+/g, '');
+    
     let clean = '';
     for (let i = 0; i < text.length; i++) {
       const char = text[i];
@@ -4680,19 +4891,27 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
     }
   }
 
-  // 매칭 실패(길이 0)인 문장들의 범위를 주변 매칭 성공 문장들 사이의 간격으로 보간(Interpolation)
-  // 수식 등의 기호만 있는 문장들이 누락 없이 PDF 텍스트 레이어에 적절한 인덱스로 마킹되도록 지원
-  for (let k = 0; k < sentenceRanges.length; k++) {
-    if (sentenceRanges[k].start === sentenceRanges[k].end) {
+  // 매칭 실패(길이 0)인 문장들의 범위를 주변 매칭 성공 문장들 사이의 간격으로 분할 보간(Gap Partitioning)
+  // 수식 등의 기호만 있는 문장들이 누락 없이 서로 겹치지 않고 PDF 텍스트 레이어에 균등 분할 마킹되도록 지원
+  let walkIdx = 0;
+  while (walkIdx < sentenceRanges.length) {
+    if (sentenceRanges[walkIdx].start === sentenceRanges[walkIdx].end) {
+      let k_start = walkIdx;
+      let k_end = walkIdx;
+      while (k_end + 1 < sentenceRanges.length && sentenceRanges[k_end + 1].start === sentenceRanges[k_end + 1].end) {
+        k_end++;
+      }
+      
       let prevEnd = 0;
-      for (let i = k - 1; i >= 0; i--) {
+      for (let i = k_start - 1; i >= 0; i--) {
         if (sentenceRanges[i].end > sentenceRanges[i].start) {
           prevEnd = sentenceRanges[i].end;
           break;
         }
       }
+      
       let nextStart = fullText.length;
-      for (let i = k + 1; i < sentenceRanges.length; i++) {
+      for (let i = k_end + 1; i < sentenceRanges.length; i++) {
         if (sentenceRanges[i].end > sentenceRanges[i].start) {
           nextStart = sentenceRanges[i].start;
           break;
@@ -4700,9 +4919,17 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
       }
       
       if (prevEnd < nextStart) {
-        sentenceRanges[k].start = prevEnd;
-        sentenceRanges[k].end = nextStart;
+        const count = k_end - k_start + 1;
+        const chunkSize = (nextStart - prevEnd) / count;
+        for (let i = k_start; i <= k_end; i++) {
+          sentenceRanges[i].start = Math.round(prevEnd + (i - k_start) * chunkSize);
+          sentenceRanges[i].end = Math.round(prevEnd + (i - k_start + 1) * chunkSize);
+        }
       }
+      
+      walkIdx = k_end + 1;
+    } else {
+      walkIdx++;
     }
   }
   
@@ -4713,6 +4940,18 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
 // 세로 간격(vertical gap)과 글자 크기(font-size)를 기반으로 단락 경계를 감지하여 \n\n 삽입
 function segmentPdfElements(container, pageNum) {
   try {
+    // 0. 기존에 분할된 pdf-sentence 스팬 제거 및 텍스트 레이어 복원 (중합 및 중첩 버그 방지)
+    container.querySelectorAll('.pdf-sentence').forEach(span => {
+      const parent = span.parentNode;
+      if (parent) {
+        while (span.firstChild) {
+          parent.insertBefore(span.firstChild, span);
+        }
+        parent.removeChild(span);
+      }
+    });
+    container.normalize();
+
     const elements = Array.from(container.children).filter(el => el.nodeType === 1);
     if (elements.length === 0) return;
 
@@ -4817,6 +5056,7 @@ function segmentPdfElements(container, pageNum) {
         }
       }
 
+      sortedNodes[i].startInText = fullText.length;
       for (let j = 0; j < elNodes.length; j++) {
         const node = elNodes[j];
         if (j > 0) {
@@ -4830,6 +5070,7 @@ function segmentPdfElements(container, pageNum) {
         fullText += node.nodeValue;
         nodeRanges.push({ node, start, end: fullText.length });
       }
+      sortedNodes[i].endInText = fullText.length;
 
       prevTop = top;
       prevFontSize = fontSize;
@@ -4848,6 +5089,105 @@ function segmentPdfElements(container, pageNum) {
     }
     if (sentenceRanges.length === 0) return;
 
+    // 독립 수식 및 수식 번호(예: (1), (2.3) 등) 검출 헬퍼 (좌표 라인 기반)
+    function findDisplayEquations() {
+      const eqs = [];
+      const lines = [];
+      let currentLine = [];
+      
+      for (let i = 0; i < sortedNodes.length; i++) {
+        const node = sortedNodes[i];
+        if (node.startInText === undefined || node.endInText === undefined) continue;
+        
+        if (currentLine.length === 0) {
+          currentLine.push(node);
+        } else {
+          const prevNode = currentLine[currentLine.length - 1];
+          if (Math.abs(node.top - prevNode.top) < 5) {
+            currentLine.push(node);
+          } else {
+            lines.push(currentLine);
+            currentLine = [node];
+          }
+        }
+      }
+      if (currentLine.length > 0) {
+        lines.push(currentLine);
+      }
+      
+      for (const line of lines) {
+        const lineText = line.map(node => fullText.substring(node.startInText, node.endInText)).join(' ').trim();
+        if (!lineText) continue;
+        
+        const hasEqNum = /[\(\[][\d\w\.]+[\]\)]\s*$/.test(lineText);
+        const hasMathSymbol = /[\u003d\u003c\u003e\u002b\u2212\u22c5\u0370-\u03ff\u2200-\u22ff\u002d\u002a\u002f\u00d7\u00f7_\^\\]/.test(lineText);
+        
+        const words = lineText.split(/\s+/);
+        const englishWordCount = words.filter(w => {
+          const cleanW = w.replace(/[^a-zA-Z]/g, '');
+          return cleanW.length >= 3 && !w.startsWith('\\');
+        }).length;
+        
+        const isEquation = hasMathSymbol && (
+          (hasEqNum && englishWordCount <= 6) ||
+          (!hasEqNum && lineText.length < 150 && englishWordCount <= 4)
+        );
+        if (isEquation) {
+          const lineStart = Math.min(...line.map(n => n.startInText));
+          const lineEnd = Math.max(...line.map(n => n.endInText));
+          eqs.push({ start: lineStart, end: lineEnd, text: lineText });
+        }
+      }
+      return eqs;
+    }
+
+    // 독립 수식 및 수식 번호 범위 분할 포스트 프로세싱
+    const displayEqs = findDisplayEquations();
+    sentenceRanges.forEach((r, idx) => {
+      r.sentenceIdx = idx;
+    });
+
+    let currentRanges = [...sentenceRanges];
+    for (const eq of displayEqs) {
+      const nextRanges = [];
+      for (const sent of currentRanges) {
+        if (sent.start < eq.start && sent.end > eq.end) {
+          // 수식 앞단
+          nextRanges.push({
+            text: fullText.substring(sent.start, eq.start),
+            start: sent.start,
+            end: eq.start,
+            sentenceIdx: sent.sentenceIdx
+          });
+          // 독립 수식 자체 (고유 인덱스 부여)
+          nextRanges.push({
+            text: fullText.substring(eq.start, eq.end),
+            start: eq.start,
+            end: eq.end,
+            sentenceIdx: 10000 + eq.start,
+            originalSentenceIdx: sent.sentenceIdx
+          });
+          // 수식 뒷단
+          nextRanges.push({
+            text: fullText.substring(eq.end, sent.end),
+            start: eq.end,
+            end: sent.end,
+            sentenceIdx: sent.sentenceIdx
+          });
+        } else if (sent.start >= eq.start && sent.end <= eq.end) {
+          nextRanges.push({
+            ...sent,
+            sentenceIdx: 10000 + eq.start,
+            originalSentenceIdx: sent.sentenceIdx
+          });
+        } else {
+          nextRanges.push(sent);
+        }
+      }
+      currentRanges = nextRanges;
+    }
+    sentenceRanges = currentRanges;
+
     // 물리적 DOM 쪼개기 수행
     for (const range of nodeRanges) {
       const parent = range.node.parentNode;
@@ -4860,10 +5200,11 @@ function segmentPdfElements(container, pageNum) {
         const end = Math.min(range.end, sent.end);
         if (start < end) {
           segments.push({
-            sentenceIdx: i,
+            sentenceIdx: sent.sentenceIdx !== undefined ? sent.sentenceIdx : i,
             startInNode: start - range.start,
             endInNode: end - range.start,
             text: range.node.nodeValue.substring(start - range.start, end - range.start),
+            originalSentenceIdx: sent.originalSentenceIdx
           });
         }
       }
@@ -4871,6 +5212,7 @@ function segmentPdfElements(container, pageNum) {
 
       const fragment = document.createDocumentFragment();
       let lastIdx = 0;
+      let isEq = false;
       segments.sort((a, b) => a.startInNode - b.startInNode);
 
       for (const seg of segments) {
@@ -4887,6 +5229,24 @@ function segmentPdfElements(container, pageNum) {
         span.textContent = seg.text;
         span.style.cursor = 'inherit';
         
+        if (seg.sentenceIdx >= 10000) {
+          isEq = true;
+          if (seg.originalSentenceIdx !== undefined) {
+            const origIdx = seg.originalSentenceIdx;
+            const sentences = state.translationSentences && state.translationSentences[pageNum];
+            if (sentences && sentences[origIdx]) {
+              const transText = sentences[origIdx].trans || '';
+              const srcText = sentences[origIdx].src || '';
+              const mathMatches = transText.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g) || srcText.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+              if (mathMatches && mathMatches.length > 0) {
+                span.dataset.latex = mathMatches.join(' ');
+              } else {
+                span.dataset.latex = srcText;
+              }
+            }
+          }
+        }
+        
         fragment.appendChild(span);
         lastIdx = seg.endInNode;
       }
@@ -4898,6 +5258,9 @@ function segmentPdfElements(container, pageNum) {
       }
 
       parent.replaceChild(fragment, range.node);
+      if (isEq) {
+        parent.classList.add('display-equation-span');
+      }
     }
 
     // 3. DOM 순서를 정렬된 순서(sortedNodes)대로 재배치하여 브라우저 드래그 선택이 시각적 순서와 일치하도록 보장
@@ -5229,11 +5592,16 @@ function splitIntoSentences(fullText) {
 // 1대1 매칭 마우스 오버/아웃 및 클릭 이벤트 위임 등록
 if (viewerScrollContainer) {
   // PDF와 번역본의 문장 수 차이를 고려한 오프셋 기반 매핑 함수
-  viewerScrollContainer.addEventListener('mousemove', () => {
+  viewerScrollContainer.addEventListener('mousemove', (e) => {
+    if (e.buttons === 0) {
+      state.isSelectionDragging = false;
+      viewerScrollContainer.classList.remove('selection-dragging');
+    }
     state.hoverSelectionDisabled = false;
   });
 
   viewerScrollContainer.addEventListener('mouseover', (e) => {
+    if (state.isSelectionDragging) return;
     try {
       if (sentenceHoverTimer) {
         clearTimeout(sentenceHoverTimer);
@@ -5357,6 +5725,7 @@ if (viewerScrollContainer) {
   });
 
   viewerScrollContainer.addEventListener('mouseout', (e) => {
+    if (state.isSelectionDragging) return;
     try {
       if (sentenceHoverTimer) {
         clearTimeout(sentenceHoverTimer);
@@ -5391,6 +5760,46 @@ if (viewerScrollContainer) {
       if (selection && !selection.isCollapsed) return;
 
       const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
+      if (target && target.classList.contains('pdf-sentence')) {
+        const sentenceIdx = parseInt(target.dataset.sentenceIdx || '0', 10);
+        if (sentenceIdx >= 10000) {
+          const pageWrapper = target.closest('.pdf-page-wrapper');
+          if (pageWrapper) {
+            const pageNum = parseInt(pageWrapper.dataset.page, 10);
+            const { pdfElements } = getMappedElementsAndIndices(target, pageNum, sentenceIdx);
+            
+            if (pdfElements && pdfElements.length > 0) {
+              const firstEl = pdfElements[0];
+              const lastEl = pdfElements[pdfElements.length - 1];
+              
+              const firstWalker = document.createTreeWalker(firstEl, NodeFilter.SHOW_TEXT);
+              const firstNodes = [];
+              while (firstWalker.nextNode()) firstNodes.push(firstWalker.currentNode);
+              
+              const lastWalker = document.createTreeWalker(lastEl, NodeFilter.SHOW_TEXT);
+              const lastNodes = [];
+              while (lastWalker.nextNode()) lastNodes.push(lastWalker.currentNode);
+              
+              if (firstNodes.length > 0 && lastNodes.length > 0) {
+                const range = document.createRange();
+                range.setStart(firstNodes[0], 0);
+                range.setEnd(lastNodes[lastNodes.length - 1], lastNodes[lastNodes.length - 1].length);
+                
+                const curSel = window.getSelection();
+                curSel.removeAllRanges();
+                curSel.addRange(range);
+                
+                const rect = target.getBoundingClientRect();
+                showSelectionMenu(rect, true);
+                
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+              }
+            }
+          }
+        }
+      }
       if (!target) {
         // 문장이 아닌 곳 클릭 시 기존 매칭 하이라이트 제거
         viewerScrollContainer.querySelectorAll('.active-mapped-sentence').forEach(el => {
