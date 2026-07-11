@@ -206,7 +206,8 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                     ignore_table=ignore_table,
                     ignore_refs=ignore_refs,
                     doc_title=doc_title,
-                    prev_context=prev_context
+                    prev_context=prev_context,
+                    session_id=session_id
                 )
                 # 태그 분석 및 매핑 생성
                 cleaned_translation, sentences = parse_tagged_translation(translation, src_sentences)
@@ -276,7 +277,8 @@ async def _translate_page(
     ignore_table: bool,
     ignore_refs: bool,
     doc_title: str = "",
-    prev_context: str = ""
+    prev_context: str = "",
+    session_id: str = None
 ) -> str:
     """단일 페이지 텍스트를 번역합니다."""
     if not text:
@@ -296,7 +298,8 @@ async def _translate_page(
             ignore_table=ignore_table,
             ignore_refs=ignore_refs,
             doc_title=doc_title,
-            prev_context=current_prev
+            prev_context=current_prev,
+            session_id=session_id
         ):
             tokens.append(token)
         results.append("".join(tokens))

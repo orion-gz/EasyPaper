@@ -1,6 +1,6 @@
 import './style.css'
 import { marked } from 'marked'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, getAgyUsageAPI, cancelJobAPI, fetchCliAvailability, triggerSystemUpdateAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation } from './library.js'
 
@@ -1588,12 +1588,7 @@ async function refreshSystemSettings() {
     }
     updateSettingsUIVisibility()
     
-    try {
-      const avail = await fetchCliAvailability()
-      state.cliAvailability = avail
-    } catch (e) {
-      console.warn('CLI availability load error:', e)
-    }
+
     
   } catch (err) {
     console.warn('System settings load error:', err)
