@@ -25,7 +25,8 @@ async def stream_translation(
     ignore_table: bool = True,
     ignore_refs: bool = False,
     doc_title: str = "",
-    prev_context: str = ""
+    prev_context: str = "",
+    session_id: str = None
 ) -> AsyncGenerator[str, None]:
     """
     Ollama /api/chat 엔드포인트를 사용해 번역 결과를 스트리밍합니다.
@@ -120,11 +121,11 @@ async def stream_translation(
             yield token
         return
     elif provider == "antigravity":
-        async for token in stream_antigravity(prompt, model=model):
+        async for token in stream_antigravity(prompt, model=model, session_id=session_id):
             yield token
         return
     elif provider == "claude_code":
-        async for token in stream_claude_code(prompt, model=model):
+        async for token in stream_claude_code(prompt, model=model, session_id=session_id):
             yield token
         return
 
@@ -412,7 +413,8 @@ async def stream_claude(messages: list, model: str, temperature: float = 0.5) ->
 
 async def stream_chat(
     system_prompt: str,
-    history_messages: list
+    history_messages: list,
+    session_id: str = None
 ) -> AsyncGenerator[str, None]:
     """
     논문 관련 질문 답변 결과를 스트리밍합니다. (선택된 AI Provider에 따름)
@@ -449,7 +451,7 @@ async def stream_chat(
             formatted_prompt.append(f"[{role_label}]: {content}")
         
         chat_prompt = "\n".join(formatted_prompt)
-        async for token in stream_antigravity(chat_prompt, model=model):
+        async for token in stream_antigravity(chat_prompt, model=model, session_id=session_id):
             yield token
         return
     elif provider == "claude_code":
@@ -468,7 +470,7 @@ async def stream_chat(
             formatted_prompt.append(f"[{role_label}]: {content}")
         
         chat_prompt = "\n".join(formatted_prompt)
-        async for token in stream_claude_code(chat_prompt, model=model):
+        async for token in stream_claude_code(chat_prompt, model=model, session_id=session_id):
             yield token
         return
 
@@ -549,7 +551,7 @@ async def check_ollama_health() -> dict:
         return {"status": "error", "detail": str(e), "model_available": False}
 
 
-async def stream_claude_code(prompt: str, model: str = None) -> AsyncGenerator[str, None]:
+async def stream_claude_code(prompt: str, model: str = None, session_id: str = None) -> AsyncGenerator[str, None]:
     import asyncio
     import os
     
@@ -559,6 +561,28 @@ async def stream_claude_code(prompt: str, model: str = None) -> AsyncGenerator[s
         
     # --print - : stdin으로 프롬프트를 받아 처리 (--print 인자로 넘기면 Claude가 수학 기호를 _MB_N 으로 치환하는 버그 발생)
     cmd = [claude_path, "--permission-mode", "dontAsk", "--output-format", "text", "--print", "-"]
+    
+    # Prepare custom HOME for Claude Code session isolation to prevent concurrent locks
+    env = get_agy_env()
+    if session_id:
+        import shutil
+        cache_dir = "/home/ubuntu/programming/projects/EasyPaper/cache"
+        home_dir = os.path.join(cache_dir, f"claude_home_{session_id}")
+        claude_dir = os.path.join(home_dir, ".claude")
+        os.makedirs(claude_dir, exist_ok=True)
+        
+        orig_credentials = os.path.expanduser("~/.claude/.credentials.json")
+        dest_credentials = os.path.join(claude_dir, ".credentials.json")
+        if os.path.exists(orig_credentials) and not os.path.exists(dest_credentials):
+            shutil.copy2(orig_credentials, dest_credentials)
+            
+        orig_settings = os.path.expanduser("~/.claude/settings.json")
+        dest_settings = os.path.join(claude_dir, "settings.json")
+        if os.path.exists(orig_settings) and not os.path.exists(dest_settings):
+            shutil.copy2(orig_settings, dest_settings)
+            
+        env["HOME"] = home_dir
+        cmd.extend(["--session-id", session_id])
 
     # model 값이 'sonnet|high' 처럼 파이프(|)로 모델과 effort를 구분할 수 있음
     model_name = None
@@ -599,7 +623,7 @@ async def stream_claude_code(prompt: str, model: str = None) -> AsyncGenerator[s
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=get_agy_env()
+            env=env
         )
         
         # 프롬프트를 stdin으로 전달 후 닫기
@@ -632,7 +656,7 @@ async def stream_claude_code(prompt: str, model: str = None) -> AsyncGenerator[s
         print(f"[Claude Code CLI Exec Error] {e}")
 
 
-async def stream_antigravity(prompt: str, model: str = None) -> AsyncGenerator[str, None]:
+async def stream_antigravity(prompt: str, model: str = None, session_id: str = None) -> AsyncGenerator[str, None]:
     import asyncio
     import os
     
@@ -643,6 +667,8 @@ async def stream_antigravity(prompt: str, model: str = None) -> AsyncGenerator[s
     cmd = [agy_path, "--dangerously-skip-permissions"]
     if model and model.strip() and model.strip().lower() != "custom":
         cmd.extend(["--model", model.strip()])
+    if session_id:
+        cmd.extend(["--conversation", session_id])
 
     # agy --print 는 단일 프롬프트를 받아 출력을 스트리밍함
     # 충분한 제약을 주어서 확실하게 완전한 출력을 유도
