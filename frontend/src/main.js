@@ -2836,7 +2836,7 @@ function saveMemos(sessionId, memos) {
   localStorage.setItem(key, JSON.stringify(memos))
 }
 
-function updateMemoConnectorLine(pageWrapper, memo, sentenceEl) {
+function updateMemoConnectorLine(pageWrapper, memo) {
   let svg = pageWrapper.querySelector('.memo-connector-svg')
   if (!svg) {
     svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
@@ -2866,33 +2866,50 @@ function updateMemoConnectorLine(pageWrapper, memo, sentenceEl) {
     path.setAttribute('stroke', strokeColor)
   }
 
-  if (!sentenceEl) {
-    path.setAttribute('d', '')
-    return
-  }
-
   const sentenceIdx = memo.sentenceIdx
   const pageNum = parseInt(pageWrapper.dataset.page, 10)
-  const { pdfElements, sentenceRange } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
   const pageRect = pageWrapper.getBoundingClientRect()
 
   // VTM 기반 앵커 좌표 계산 (비파괴 시스템 우선, 폴백은 .pdf-sentence 스팬)
   let anchorX = 0, anchorY = 0
+  let foundCoords = false
+
   const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+  const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
   const textLayerForConn = pageWrapper.querySelector('.textLayer')
-  if (vtm && sentenceRange && textLayerForConn) {
-    const rects = getSentenceRects(sentenceRange, vtm, textLayerForConn)
-    if (rects.length > 0) {
-      anchorX = rects[0].left
-      anchorY = rects[0].top + rects[0].height / 2
+
+  if (vtm && sentenceRanges && textLayerForConn) {
+    const sRange = sentenceRanges.find(r => {
+      const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx
+      return idx === sentenceIdx || r.sentenceIdx === sentenceIdx
+    })
+    if (sRange) {
+      const rects = getSentenceRects(sRange, vtm, textLayerForConn)
+      if (rects.length > 0) {
+        anchorX = rects[0].left
+        anchorY = rects[0].top + rects[0].height / 2
+        foundCoords = true
+      }
     }
-  } else {
-    const startEl = (pdfElements && pdfElements.length > 0) ? pdfElements[0] : sentenceEl
-    if (startEl) {
-      const startRect = startEl.getBoundingClientRect()
-      anchorX = startRect.left - pageRect.left
-      anchorY = startRect.top - pageRect.top + startRect.height / 2
+  }
+
+  if (!foundCoords) {
+    const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${sentenceIdx}"]`)
+    if (sentenceEl) {
+      const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
+      const startEl = (pdfElements && pdfElements.length > 0) ? pdfElements[0] : sentenceEl
+      if (startEl) {
+        const startRect = startEl.getBoundingClientRect()
+        anchorX = startRect.left - pageRect.left
+        anchorY = startRect.top - pageRect.top + startRect.height / 2
+        foundCoords = true
+      }
     }
+  }
+
+  if (!foundCoords) {
+    path.setAttribute('d', '')
+    return
   }
 
   const memoLeft = (memo.x / 100) * pageWrapper.offsetWidth
@@ -2953,12 +2970,15 @@ function renderPageMemos(pageNum) {
     // VTM 기반 메모 하이라이트 (비파괴 시스템)
     const vtmForMemo = state.virtualTextMaps && state.virtualTextMaps[pageNum]
     const memoSentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
+    let sentenceText = memo.sentenceText || ''
+
     if (vtmForMemo && memoSentenceRanges) {
       const memoSRange = memoSentenceRanges.find(r => {
         const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx
         return idx === memo.sentenceIdx
       })
       if (memoSRange) {
+        sentenceText = vtmForMemo.fullText.substring(memoSRange.charStart, memoSRange.charEnd).trim()
         const memoTextLayer = pageWrapper.querySelector('.textLayer')
         if (memoTextLayer) {
           const memoOverlay = getOrCreateOverlay(pageWrapper)
@@ -2970,6 +2990,7 @@ function renderPageMemos(pageNum) {
       // 폴백: .pdf-sentence 스팬 기반
       const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${memo.sentenceIdx}"]`)
       if (sentenceEl) {
+        sentenceText = sentenceEl.textContent.trim()
         const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, memo.sentenceIdx)
         if (pdfElements) {
           pdfElements.forEach(el => el.classList.add('pdf-sentence-has-memo'))
@@ -2999,7 +3020,7 @@ function renderPageMemos(pageNum) {
           const allMemosObj = loadMemos(state.sessionId)
           allMemosObj[`page_${pageNum}`] = pageMemos
           saveMemos(state.sessionId, allMemosObj)
-          updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+          updateMemoConnectorLine(pageWrapper, memo)
         })
 
         textarea.addEventListener('blur', () => {
@@ -3008,7 +3029,7 @@ function renderPageMemos(pageNum) {
             if (exists) {
               isEditing = false
               updateCardContent()
-              updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+              updateMemoConnectorLine(pageWrapper, memo)
             }
           }, 150)
         })
@@ -3080,7 +3101,6 @@ function renderPageMemos(pageNum) {
       }
     }
 
-    const sentenceText = (sentenceEl ? sentenceEl.textContent.trim() : '') || memo.sentenceText || ''
     const shortTitle = sentenceText
       ? (sentenceText.length > 20 ? sentenceText.substring(0, 20) + '...' : sentenceText)
       : 'Memo'
@@ -3129,7 +3149,7 @@ function renderPageMemos(pageNum) {
         allMemosObj[`page_${pageNum}`] = pageMemos
         saveMemos(state.sessionId, allMemosObj)
         
-        updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+        updateMemoConnectorLine(pageWrapper, memo)
       })
     })
 
@@ -3160,7 +3180,7 @@ function renderPageMemos(pageNum) {
         memoEl.style.left = `${newX}%`
         memoEl.style.top = `${newY}%`
 
-        updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+        updateMemoConnectorLine(pageWrapper, memo)
       }
 
       const onMouseUp = () => {
@@ -3177,7 +3197,7 @@ function renderPageMemos(pageNum) {
     })
 
     setTimeout(() => {
-      updateMemoConnectorLine(pageWrapper, memo, sentenceEl)
+      updateMemoConnectorLine(pageWrapper, memo)
     }, 50)
   })
 }
@@ -3188,18 +3208,30 @@ function createFloatingMemoForSentence(pageNum, sentenceIdx) {
   const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
   if (!pageWrapper) return
 
-  const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${sentenceIdx}"]`)
-  if (!sentenceEl) return
+  const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+  const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
+  if (!vtm || !sentenceRanges) return
 
-  const sentenceText = sentenceEl ? sentenceEl.textContent.trim() : ''
+  const sRange = sentenceRanges.find(r => {
+    const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx
+    return idx === sentenceIdx || r.sentenceIdx === sentenceIdx
+  })
+  if (!sRange) return
 
-  const sentRect = sentenceEl.getBoundingClientRect()
-  const pageRect = pageWrapper.getBoundingClientRect()
-  const sentenceX = sentRect.left - pageRect.left
-  const sentenceY = sentRect.top - pageRect.top
+  const sentenceText = vtm.fullText.substring(sRange.charStart, sRange.charEnd).trim()
 
-  const leftPct = Math.min(Math.max(10, ((sentenceX + sentRect.width / 2) / pageWrapper.offsetWidth) * 100), 70)
-  const topPct = Math.min(Math.max(10, ((sentenceY + sentRect.height) / pageWrapper.offsetHeight) * 100 + 4), 85)
+  const textLayer = pageWrapper.querySelector('.textLayer')
+  if (!textLayer) return
+
+  const rects = getSentenceRects(sRange, vtm, textLayer)
+  if (rects.length === 0) return
+
+  const firstRect = rects[0]
+  const sentenceX = firstRect.left
+  const sentenceY = firstRect.top
+
+  const leftPct = Math.min(Math.max(10, ((sentenceX + firstRect.width / 2) / pageWrapper.offsetWidth) * 100), 70)
+  const topPct = Math.min(Math.max(10, ((sentenceY + firstRect.height) / pageWrapper.offsetHeight) * 100 + 4), 85)
 
   const allMemosObj = loadMemos(state.sessionId)
   if (!allMemosObj[`page_${pageNum}`]) {
@@ -3788,6 +3820,9 @@ function reRenderPageAnnotations(textLayerDiv, pageNum) {
 
   const annotations = loadAnnotations(state.sessionId)
   applyAnnotationsFromOffsets(textLayerDiv, annotations[`page_${pageNum}`] || [])
+
+  // DOM 구조 변경 후 VirtualTextMap 및 문장 매핑 상태 재생성
+  segmentPdfElements(textLayerDiv, pageNum)
 
   // Restore floating memos for the page
   renderPageMemos(pageNum)
@@ -6312,10 +6347,7 @@ function triggerMemosRedraw() {
       const allMemos = loadMemos(state.sessionId)
       const pageMemos = allMemos[`page_${pageNum}`] || []
       pageMemos.forEach(memo => {
-        const sentenceEl = wrapper.querySelector(`.pdf-sentence[data-sentence-idx="${memo.sentenceIdx}"]`)
-        if (sentenceEl) {
-          updateMemoConnectorLine(wrapper, memo, sentenceEl)
-        }
+        updateMemoConnectorLine(wrapper, memo)
       })
     }
   })
