@@ -3374,49 +3374,54 @@ function createSelectionMenu() {
 
   menu.querySelector('.memo-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation()
-    let sentenceEl = null
-    let pageWrapper = null
 
     const selection = window.getSelection()
     const hasActiveSelection = selection && !selection.isCollapsed && selection.rangeCount > 0
 
-    if (!hasActiveSelection && state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
-      sentenceEl = state.hoverSelectedPdfElements[0]
-      pageWrapper = sentenceEl.closest('.pdf-page-wrapper')
-    } else {
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0)
-        
-        // 1. Try startContainer
-        let node = range.startContainer
-        if (node) {
-          let parent = node.nodeType === 3 ? node.parentElement : node
-          sentenceEl = parent.closest('.pdf-sentence')
-          pageWrapper = parent.closest('.pdf-page-wrapper')
-        }
-        
-        // 2. Fallback to commonAncestorContainer
-        if (!sentenceEl && range.commonAncestorContainer) {
-          let common = range.commonAncestorContainer
-          let parent = common.nodeType === 3 ? common.parentElement : common
-          sentenceEl = parent.closest('.pdf-sentence')
-          if (!pageWrapper) pageWrapper = parent.closest('.pdf-page-wrapper')
-        }
-        
-        // 3. Fallback to endContainer
-        if (!sentenceEl && range.endContainer) {
-          let endNode = range.endContainer
-          let parent = endNode.nodeType === 3 ? endNode.parentElement : endNode
-          sentenceEl = parent.closest('.pdf-sentence')
-          if (!pageWrapper) pageWrapper = parent.closest('.pdf-page-wrapper')
-        }
-      }
+    // ── 케이스 1: 드웰(700ms hover) 선택 상태 ──
+    if (!hasActiveSelection && state.hoverSelectedPageNum != null && state.hoverSelectedSentenceIdx != null) {
+      createFloatingMemoForSentence(state.hoverSelectedPageNum, state.hoverSelectedSentenceIdx)
+      hideSelectionMenu()
+      return
     }
 
-    if (sentenceEl && pageWrapper) {
+    // ── 케이스 2: 일반 드래그/텍스트 선택 상태 ──
+    if (hasActiveSelection) {
+      const range = selection.getRangeAt(0)
+      let startEl = range.startContainer
+      if (startEl.nodeType === 3) startEl = startEl.parentElement
+      if (!startEl) { hideSelectionMenu(); return }
+
+      const pageWrapper = startEl.closest('.pdf-page-wrapper')
+      if (!pageWrapper) { hideSelectionMenu(); return }
       const pageNum = parseInt(pageWrapper.dataset.page, 10)
-      const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
-      createFloatingMemoForSentence(pageNum, sentenceIdx)
+      if (isNaN(pageNum)) { hideSelectionMenu(); return }
+
+      // VTM 기반 sentenceIdx 감지
+      const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+      const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
+      if (vtm && sentenceRanges) {
+        const charIdx = estimateCharIdxFromPoint(range.getBoundingClientRect().left, range.getBoundingClientRect().top + range.getBoundingClientRect().height / 2, vtm)
+        const sRange = charIdx >= 0 ? findSentenceAtChar(charIdx, sentenceRanges) : sentenceRanges[0]
+        if (sRange) {
+          const sentenceIdx = sRange.sentenceIdx >= 10000 ? (sRange.originalSentenceIdx ?? 0) : sRange.sentenceIdx
+          createFloatingMemoForSentence(pageNum, sentenceIdx)
+          hideSelectionMenu()
+          return
+        }
+      }
+
+      // 폴백: .pdf-sentence 스팬 기반 (하위 호환)
+      let sentenceEl = startEl.closest('.pdf-sentence')
+      if (!sentenceEl) {
+        const common = range.commonAncestorContainer
+        const commonEl = common.nodeType === 3 ? common.parentElement : common
+        sentenceEl = commonEl && commonEl.closest('.pdf-sentence')
+      }
+      if (sentenceEl) {
+        const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
+        createFloatingMemoForSentence(pageNum, sentenceIdx)
+      }
     }
     hideSelectionMenu()
   })
@@ -3489,52 +3494,72 @@ function createAnnHoverTooltip() {
     e.preventDefault(); e.stopPropagation()
     if (!activeHoveredSpan) return
 
-    const sentenceEl = activeHoveredSpan.closest('.pdf-sentence')
-    if (!sentenceEl) return
-    const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
     const pageWrapper = activeHoveredSpan.closest('.pdf-page-wrapper')
     if (!pageWrapper) return
     const pageNum = parseInt(pageWrapper.dataset.page, 10)
     const textLayerDiv = pageWrapper.querySelector('.textLayer')
+    if (!textLayerDiv) return
 
-    // 문장에 속하는 모든 PDF 엘리먼트 가져오기
-    const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
+    // 어노테이션 스팬의 dataset에서 직접 오프셋 정보 추출
+    const annStartOffset = parseInt(activeHoveredSpan.dataset.startOffset, 10)
+    const annEndOffset   = parseInt(activeHoveredSpan.dataset.endOffset,   10)
 
-    if (pdfElements && pdfElements.length > 0) {
-      const firstEl = pdfElements[0]
-      const lastEl = pdfElements[pdfElements.length - 1]
+    if (!isNaN(annStartOffset) && !isNaN(annEndOffset)) {
+      // 직접 오프셋으로 삭제 (신뢰 경로)
+      const annotations = loadAnnotations(state.sessionId)
+      if (annotations[`page_${pageNum}`]) {
+        const originalCount = annotations[`page_${pageNum}`].length
+        // 해당 어노테이션과 범위가 겹치는 것들을 일괄 삭제
+        annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+          const isOverlapping = (ann.startOffset >= annStartOffset && ann.startOffset <= annEndOffset) ||
+                                (ann.endOffset   >= annStartOffset && ann.endOffset   <= annEndOffset)
+          return !isOverlapping
+        })
+        if (annotations[`page_${pageNum}`].length !== originalCount) {
+          saveAnnotations(state.sessionId, annotations)
+          showToast('어노테이션이 삭제되었습니다 ✓', 'success')
+          reRenderPageAnnotations(textLayerDiv, pageNum)
+        }
+      }
+    } else {
+      // 폴백: VTM 기반 선택 범위 계산
+      const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+      const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
+      const annRect = activeHoveredSpan.getBoundingClientRect()
+      const charIdx = vtm ? estimateCharIdxFromPoint(annRect.left + annRect.width / 2, annRect.top + annRect.height / 2, vtm) : -1
+      const sRange = (charIdx >= 0 && sentenceRanges) ? findSentenceAtChar(charIdx, sentenceRanges) : null
 
-      const firstWalker = document.createTreeWalker(firstEl, NodeFilter.SHOW_TEXT)
-      const firstNodes = []
-      while (firstWalker.nextNode()) firstNodes.push(firstWalker.currentNode)
-
-      const lastWalker = document.createTreeWalker(lastEl, NodeFilter.SHOW_TEXT)
-      const lastNodes = []
-      while (lastWalker.nextNode()) lastNodes.push(lastWalker.currentNode)
-
-      if (firstNodes.length > 0 && lastNodes.length > 0) {
-        const r = document.createRange()
-        r.setStart(firstNodes[0], 0)
-        r.setEnd(lastNodes[lastNodes.length - 1], lastNodes[lastNodes.length - 1].length)
-
-        const sentenceOffsets = getPageTextOffset(r, textLayerDiv)
-        if (sentenceOffsets.startOffset !== null && sentenceOffsets.endOffset !== null) {
-          const annotations = loadAnnotations(state.sessionId)
-          if (annotations[`page_${pageNum}`]) {
-            const originalCount = annotations[`page_${pageNum}`].length
-            annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
-              // 문장 오프셋 내에 시작점 또는 끝점이 겹치는 하이라이트/밑줄들을 모두 삭제 대상으로 식별
-              const isOverlapping = (ann.startOffset >= sentenceOffsets.startOffset && ann.startOffset <= sentenceOffsets.endOffset) ||
-                                    (ann.endOffset >= sentenceOffsets.startOffset && ann.endOffset <= sentenceOffsets.endOffset);
-              return !isOverlapping;
-            })
-
-            if (annotations[`page_${pageNum}`].length !== originalCount) {
-              saveAnnotations(state.sessionId, annotations)
-              showToast('문장 어노테이션이 일괄 삭제되었습니다 ✓', 'success')
-              reRenderPageAnnotations(textLayerDiv, pageNum)
+      if (sRange && vtm) {
+        // sentenceRange 전체 범위에 해당하는 textLayer offset 계산
+        const nodeRanges = vtm.nodeRanges
+        let startNode = null, startOff = 0, endNode = null, endOff = 0
+        for (const nr of nodeRanges) {
+          if (startNode === null && nr.end > sRange.charStart) { startNode = nr.node; startOff = Math.max(0, sRange.charStart - nr.start) }
+          if (nr.start < sRange.charEnd) { endNode = nr.node; endOff = Math.min(nr.node.length, sRange.charEnd - nr.start) }
+        }
+        if (startNode && endNode) {
+          try {
+            const r = document.createRange()
+            r.setStart(startNode, startOff)
+            r.setEnd(endNode, endOff)
+            const sentenceOffsets = getPageTextOffset(r, textLayerDiv)
+            if (sentenceOffsets.startOffset !== null && sentenceOffsets.endOffset !== null) {
+              const annotations = loadAnnotations(state.sessionId)
+              if (annotations[`page_${pageNum}`]) {
+                const originalCount = annotations[`page_${pageNum}`].length
+                annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+                  const isOverlapping = (ann.startOffset >= sentenceOffsets.startOffset && ann.startOffset <= sentenceOffsets.endOffset) ||
+                                        (ann.endOffset   >= sentenceOffsets.startOffset && ann.endOffset   <= sentenceOffsets.endOffset)
+                  return !isOverlapping
+                })
+                if (annotations[`page_${pageNum}`].length !== originalCount) {
+                  saveAnnotations(state.sessionId, annotations)
+                  showToast('어노테이션이 삭제되었습니다 ✓', 'success')
+                  reRenderPageAnnotations(textLayerDiv, pageNum)
+                }
+              }
             }
-          }
+          } catch(err) { console.warn('Delete annotation fallback failed:', err) }
         }
       }
     }
@@ -3544,12 +3569,28 @@ function createAnnHoverTooltip() {
   tooltip.querySelector('.memo-ann-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation()
     if (!activeHoveredSpan) return
-    const sentenceEl = activeHoveredSpan.closest('.pdf-sentence')
     const pageWrapper = activeHoveredSpan.closest('.pdf-page-wrapper')
-    if (sentenceEl && pageWrapper) {
-      const pageNum = parseInt(pageWrapper.dataset.page, 10)
-      const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
+    if (!pageWrapper) { hideAnnHoverTooltip(); return }
+    const pageNum = parseInt(pageWrapper.dataset.page, 10)
+    if (isNaN(pageNum)) { hideAnnHoverTooltip(); return }
+
+    // VTM 기반 sentenceIdx 감지 (어노테이션 스팬 위치 기반)
+    const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+    const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
+    const annRect = activeHoveredSpan.getBoundingClientRect()
+    const charIdx = vtm ? estimateCharIdxFromPoint(annRect.left + annRect.width / 2, annRect.top + annRect.height / 2, vtm) : -1
+    const sRange = (charIdx >= 0 && sentenceRanges) ? findSentenceAtChar(charIdx, sentenceRanges) : null
+
+    if (sRange) {
+      const sentenceIdx = sRange.sentenceIdx >= 10000 ? (sRange.originalSentenceIdx ?? 0) : sRange.sentenceIdx
       createFloatingMemoForSentence(pageNum, sentenceIdx)
+    } else {
+      // 폴백: .pdf-sentence 스팬 기반
+      const sentenceEl = activeHoveredSpan.closest('.pdf-sentence')
+      if (sentenceEl) {
+        const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
+        createFloatingMemoForSentence(pageNum, sentenceIdx)
+      }
     }
     hideAnnHoverTooltip()
   })
@@ -3630,7 +3671,8 @@ function handleAnnotate(type, color) {
     return;
   }
 
-  // 2. 호버 지연 대기에 의한 문장 전체 선택 모드 대응
+  // 2. 드웰(700ms hover) 선택 → native selection이 있으면 케이스 1이 처리
+  //    native selection 없이 hoverSelected* 상태로만 도달한 경우 (이전 시스템 호환)
   if (state.hoverSelectedPdfElements && state.hoverSelectedPdfElements.length > 0) {
     const pageNum = state.hoverSelectedPageNum;
     const textLayerDiv = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"] .textLayer`);
@@ -3659,7 +3701,57 @@ function handleAnnotate(type, color) {
       return;
     }
   }
+
+  // 3. 새 시스템: VTM 기반 hoverSelectedPageNum/SentenceIdx → native selection 사용
+  if (state.hoverSelectedPageNum != null && state.hoverSelectedSentenceIdx != null) {
+    const pageNum = state.hoverSelectedPageNum;
+    const sentenceIdx = state.hoverSelectedSentenceIdx;
+    const textLayerDiv = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"] .textLayer`);
+    if (!textLayerDiv) return;
+
+    const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
+    const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum];
+    if (!vtm || !sentenceRanges) return;
+
+    const sRange = sentenceRanges.find(r => {
+      const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx;
+      return idx === sentenceIdx || r.sentenceIdx === sentenceIdx;
+    });
+    if (!sRange) return;
+
+    const { nodeRanges } = vtm;
+    let startNode = null, startOff = 0, endNode = null, endOff = 0;
+    for (const nr of nodeRanges) {
+      if (startNode === null && nr.end > sRange.charStart) {
+        startNode = nr.node;
+        startOff  = Math.max(0, sRange.charStart - nr.start);
+      }
+      if (nr.start < sRange.charEnd) {
+        endNode = nr.node;
+        endOff  = Math.min(nr.node.length, sRange.charEnd - nr.start);
+      }
+    }
+    if (startNode && endNode) {
+      try {
+        const r = document.createRange();
+        r.setStart(startNode, startOff);
+        r.setEnd(endNode, endOff);
+        if (type === 'clear') {
+          clearAnnotationsInRange(r, textLayerDiv, pageNum);
+        } else {
+          applyAnnotationToRange(r, type, textLayerDiv, pageNum, color);
+        }
+        window.getSelection().removeAllRanges();
+        hideSelectionMenu();
+        state.hoverSelectedPageNum = null;
+        state.hoverSelectedSentenceIdx = null;
+      } catch(err) {
+        console.warn('handleAnnotate VTM path failed:', err);
+      }
+    }
+  }
 }
+
 
 function clearAnnotationsInRange(range, textLayerDiv, pageNum) {
   const offsets = getPageTextOffset(range, textLayerDiv)
