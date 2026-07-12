@@ -2951,7 +2951,11 @@ function renderPageMemos(pageNum) {
   const svg = pageWrapper.querySelector('.memo-connector-svg')
   if (svg) svg.innerHTML = ''
   
-  // Clear any existing sentence has-memo highlights
+  // Clear any existing sentence has-memo highlights (VTM 오버레이 및 폴백 스팬)
+  const overlay = pageWrapper.querySelector('.pdf-highlight-overlay')
+  if (overlay) {
+    clearOverlayBoxes(overlay, 'sentence-memo-box')
+  }
   pageWrapper.querySelectorAll('.pdf-sentence-has-memo').forEach(el => {
     el.classList.remove('pdf-sentence-has-memo')
   })
@@ -3042,6 +3046,11 @@ function renderPageMemos(pageNum) {
             const allMemosObj = loadMemos(state.sessionId)
             allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
             saveMemos(state.sessionId, allMemosObj)
+            
+            // 본문의 선택 영역 및 고정 하이라이트 지우기
+            applyActiveHighlight(null, null)
+            window.getSelection().removeAllRanges()
+            
             renderPageMemos(pageNum)
           }
         })
@@ -3095,6 +3104,11 @@ function renderPageMemos(pageNum) {
             const allMemosObj = loadMemos(state.sessionId)
             allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
             saveMemos(state.sessionId, allMemosObj)
+            
+            // 본문의 선택 영역 및 고정 하이라이트 지우기
+            applyActiveHighlight(null, null)
+            window.getSelection().removeAllRanges()
+            
             renderPageMemos(pageNum)
           }
         })
