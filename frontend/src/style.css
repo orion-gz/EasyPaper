@@ -2588,11 +2588,16 @@ body.light-theme .library-grid::-webkit-scrollbar-thumb:hover {
 }
 
 /* ── Sentence Highlight for PDF-Translation 1-to-1 Mapping ── */
-.pdf-sentence, .trans-sentence {
+/* trans-sentence는 기존 DOM 분할 방식 유지 (번역 패널용) */
+.trans-sentence {
   transition: background-color 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.12s ease;
   white-space: inherit;
+  position: relative;
+  display: inline;
 }
 
+/* pdf-sentence: 기존 DOM 분할 흔적 - 이제 비파괴 방식으로 교체되어 실제로는 생성되지 않음 */
+/* 하위 호환성을 위해 스타일 보존 */
 .pdf-sentence {
   display: inline !important;
   position: static !important;
@@ -2600,34 +2605,13 @@ body.light-theme .library-grid::-webkit-scrollbar-thumb:hover {
   padding: 0 !important;
   border: 0 !important;
   background: transparent;
-  color: transparent !important;
   font: inherit !important;
   text-transform: inherit !important;
   letter-spacing: inherit !important;
   word-spacing: inherit !important;
   white-space: inherit !important;
   box-shadow: none !important;
-  transition: background-color 0.12s cubic-bezier(0.4, 0, 0.2, 1);
-  pointer-events: auto !important;
-}
-
-#viewer-scroll-container.selection-dragging .pdf-sentence {
   pointer-events: none !important;
-}
-
-.trans-sentence {
-  position: relative;
-  display: inline;
-}
-
-/* 독립 수식 스팬 z-index 강제 승격 (위아래 본문 겹침 방지) */
-.display-equation-span {
-  z-index: 5 !important;
-}
-
-.pdf-sentence.sentence-highlight {
-  background-color: rgba(124, 58, 237, 0.25) !important;
-  border-radius: 3px;
 }
 
 .trans-sentence.sentence-highlight {
@@ -3804,4 +3788,79 @@ body.light-theme .chat-input-box .chat-quote-area {
 }
 
 
+/* ── Virtual Coordinate Overlay Highlight System ── */
+/* PDF 문장 하이라이트용 가상 오버레이 레이어 - textLayer 비파괴 방식 */
+.pdf-highlight-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none !important;
+  z-index: 5;
+  overflow: hidden;
+}
 
+/* 호버 하이라이트 상자 */
+.sentence-hover-box {
+  position: absolute;
+  pointer-events: none !important;
+  background-color: rgba(124, 58, 237, 0.22);
+  border-radius: 2px;
+}
+body.light-theme .sentence-hover-box {
+  background-color: rgba(124, 58, 237, 0.18);
+}
+
+/* 클릭 고정 하이라이트 상자 */
+.sentence-active-box {
+  position: absolute;
+  pointer-events: none !important;
+  background-color: rgba(124, 58, 237, 0.30);
+  border-radius: 2px;
+  outline: 1px solid rgba(124, 58, 237, 0.40);
+}
+body.light-theme .sentence-active-box {
+  background-color: rgba(124, 58, 237, 0.22);
+}
+
+/* 메모 표시 하이라이트 상자 */
+.sentence-memo-box {
+  position: absolute;
+  pointer-events: none !important;
+  background-color: rgba(245, 158, 11, 0.18);
+  border-radius: 2px;
+  border-bottom: 2px solid rgba(245, 158, 11, 0.6);
+}
+body.light-theme .sentence-memo-box {
+  background-color: rgba(245, 158, 11, 0.14);
+}
+
+/* 독립 수식 호버 상자 */
+.sentence-equation-box {
+  position: absolute;
+  pointer-events: none !important;
+  background-color: rgba(59, 130, 246, 0.15);
+  border-radius: 2px;
+  border: 1px dashed rgba(59, 130, 246, 0.40);
+}
+
+/* 클릭 펄스 애니메이션 (오버레이 상자용) */
+@keyframes overlayPulse {
+  0% { background-color: rgba(124, 58, 237, 0.50); }
+  100% { background-color: transparent; }
+}
+.sentence-pulse-box {
+  position: absolute;
+  pointer-events: none !important;
+  border-radius: 2px;
+  animation: overlayPulse 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+/* 좌측 마진 줄 번호 노이즈 스팬 (선택/포인터 이벤트 비활성) */
+.pdf-line-number-noise {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  pointer-events: none !important;
+  opacity: 0.35;
+}

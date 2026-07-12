@@ -2745,10 +2745,20 @@ function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
     }
   }
 
-  // pdfIdx에 매핑되는 모든 PDF span 엘리먼트 수집
+  // pdfIdx에 매핑되는 모든 PDF span 엘리먼트 수집 (비파괴 시스템에서는 빈 배열일 수 있음)
   pdfElements = pdfSpans.filter(el => parseInt(el.dataset.sentenceIdx || '0', 10) === pdfIdx);
 
-  return { pdfIdx, transIdx, pdfElements };
+  // VTM 브릿지: 가상 텍스트 맵에서 sentenceRange도 함께 반환하여 어노테이션 시스템 지원
+  let sentenceRange = null;
+  const vtmRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum];
+  if (vtmRanges) {
+    sentenceRange = vtmRanges.find(r => {
+      const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx;
+      return idx === pdfIdx;
+    }) || null;
+  }
+
+  return { pdfIdx, transIdx, pdfElements, sentenceRange };
 }
 
 // 커스텀 다이얼로그 확인 모달 유틸리티
@@ -2863,13 +2873,27 @@ function updateMemoConnectorLine(pageWrapper, memo, sentenceEl) {
 
   const sentenceIdx = memo.sentenceIdx
   const pageNum = parseInt(pageWrapper.dataset.page, 10)
-  const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
-  const startEl = (pdfElements && pdfElements.length > 0) ? pdfElements[0] : sentenceEl
-
-  const startRect = startEl.getBoundingClientRect()
+  const { pdfElements, sentenceRange } = getMappedElementsAndIndices(sentenceEl, pageNum, sentenceIdx)
   const pageRect = pageWrapper.getBoundingClientRect()
-  const anchorX = startRect.left - pageRect.left
-  const anchorY = startRect.top - pageRect.top + startRect.height / 2
+
+  // VTM 기반 앵커 좌표 계산 (비파괴 시스템 우선, 폴백은 .pdf-sentence 스팬)
+  let anchorX = 0, anchorY = 0
+  const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+  const textLayerForConn = pageWrapper.querySelector('.textLayer')
+  if (vtm && sentenceRange && textLayerForConn) {
+    const rects = getSentenceRects(sentenceRange, vtm, textLayerForConn)
+    if (rects.length > 0) {
+      anchorX = rects[0].left
+      anchorY = rects[0].top + rects[0].height / 2
+    }
+  } else {
+    const startEl = (pdfElements && pdfElements.length > 0) ? pdfElements[0] : sentenceEl
+    if (startEl) {
+      const startRect = startEl.getBoundingClientRect()
+      anchorX = startRect.left - pageRect.left
+      anchorY = startRect.top - pageRect.top + startRect.height / 2
+    }
+  }
 
   const memoLeft = (memo.x / 100) * pageWrapper.offsetWidth
   const memoTop = (memo.y / 100) * pageWrapper.offsetHeight
@@ -2926,11 +2950,30 @@ function renderPageMemos(pageNum) {
     memoEl.style.left = `${memo.x}%`
     memoEl.style.top = `${memo.y}%`
 
-    const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${memo.sentenceIdx}"]`)
-    if (sentenceEl) {
-      const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, memo.sentenceIdx)
-      if (pdfElements) {
-        pdfElements.forEach(el => el.classList.add('pdf-sentence-has-memo'))
+    // VTM 기반 메모 하이라이트 (비파괴 시스템)
+    const vtmForMemo = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+    const memoSentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
+    if (vtmForMemo && memoSentenceRanges) {
+      const memoSRange = memoSentenceRanges.find(r => {
+        const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx
+        return idx === memo.sentenceIdx
+      })
+      if (memoSRange) {
+        const memoTextLayer = pageWrapper.querySelector('.textLayer')
+        if (memoTextLayer) {
+          const memoOverlay = getOrCreateOverlay(pageWrapper)
+          const memoRects = getSentenceRects(memoSRange, vtmForMemo, memoTextLayer)
+          renderSentenceOverlay(memoOverlay, memoRects, 'sentence-memo-box')
+        }
+      }
+    } else {
+      // 폴백: .pdf-sentence 스팬 기반
+      const sentenceEl = pageWrapper.querySelector(`.pdf-sentence[data-sentence-idx="${memo.sentenceIdx}"]`)
+      if (sentenceEl) {
+        const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, memo.sentenceIdx)
+        if (pdfElements) {
+          pdfElements.forEach(el => el.classList.add('pdf-sentence-has-memo'))
+        }
       }
     }
 
@@ -4567,129 +4610,100 @@ function convertRawTextToLatex(text) {
   return `$$ ${clean} $$`;
 }
 
-// PDF 텍스트 복사 시 LaTeX 기호 자동 치환 복사 기능
-// 텍스트 노드 범위 교차 감지 함수 (모든 브라우저 호환)
+// ── LaTeX 스마트 클립보드 인터셉터 ────────────────────────────────────────
+// VirtualTextMap 기반으로 선택 영역을 문장 범위로 역산하고,
+// 수식 부분은 LaTeX($...$ / $$...$$)로 변환하여 클립보드에 쓰는 방식.
+// 기존 .pdf-sentence DOM 분할에 의존하지 않습니다.
+
+// 범위와 텍스트 노드 교차 감지 (하위 호환용 유틸리티)
 function rangeIntersectsNode(range, node) {
-  if (range.intersectsNode) {
-    return range.intersectsNode(node);
-  }
-  const nodeRange = document.createRange();
+  if (range.intersectsNode) return range.intersectsNode(node);
+  const nr = document.createRange();
   try {
-    nodeRange.selectNode(node);
-    return range.compareBoundaryPoints(Range.END_TO_START, nodeRange) < 0 &&
-           range.compareBoundaryPoints(Range.START_TO_END, nodeRange) > 0;
-  } catch (e) {
-    return false;
-  }
+    nr.selectNode(node);
+    return range.compareBoundaryPoints(Range.END_TO_START, nr) < 0 &&
+           range.compareBoundaryPoints(Range.START_TO_END, nr) > 0;
+  } catch (e) { return false; }
 }
 
-// PDF 텍스트 복사 시 LaTeX 기호 자동 치환 복사 기능
 document.addEventListener('copy', (e) => {
   try {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
-    
+
     const range = selection.getRangeAt(0);
-    let startNode = range.startContainer;
-    if (startNode.nodeType === 3) startNode = startNode.parentElement;
-    if (!startNode || !startNode.closest('.textLayer')) return;
-    
-    const pageWrapper = startNode.closest('.pdf-page-wrapper');
+    let startEl = range.startContainer;
+    if (startEl.nodeType === 3) startEl = startEl.parentElement;
+    if (!startEl) return;
+
+    // PDF textLayer 내 복사인지 확인
+    const textLayer = startEl.closest('.textLayer');
+    if (!textLayer) return;
+
+    const pageWrapper = startEl.closest('.pdf-page-wrapper');
     if (!pageWrapper) return;
-    
-    // 선택 영역과 교차하는 모든 pdf-sentence 요소들을 DOM 순서대로 수집
-    const allSpans = Array.from(pageWrapper.querySelectorAll('.pdf-sentence'));
-    const selectedSpans = allSpans.filter(span => rangeIntersectsNode(range, span));
-    if (selectedSpans.length === 0) return;
-    
-    // 문장 인덱스(sentenceIdx)별로 선택된 스팬들을 그룹화 (분열된 수식 노드 묶음 처리)
-    const grouped = {};
-    selectedSpans.forEach(span => {
-      const idx = span.dataset.sentenceIdx || '0';
-      if (!grouped[idx]) grouped[idx] = [];
-      grouped[idx].push(span);
-    });
-    const groupKeys = Object.keys(grouped);
-    
-    // 1. 단일 수식 노드 또는 단일 수식의 파편들만 선택된 경우
-    if (groupKeys.length === 1 && parseInt(groupKeys[0], 10) >= 10000) {
-      const firstSpan = grouped[groupKeys[0]][0];
-      const latex = firstSpan.dataset.latex;
-      let textToCopy = latex;
-      if (latex) {
-        const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
-        if (actualMath && actualMath.length > 0) {
-          textToCopy = actualMath.join(' ');
+    const pageNum = parseInt(pageWrapper.dataset.page, 10);
+    if (isNaN(pageNum)) return;
+
+    const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
+    const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum];
+
+    // VirtualTextMap 없이는 기본 텍스트 복사로 폴백 (브라우저 기본 동작 허용)
+    if (!vtm || !sentenceRanges) return;
+
+    // 1. 선택된 텍스트의 charStart/charEnd 계산 (nodeRanges 기반)
+    let selCharStart = Infinity, selCharEnd = 0;
+    for (const nr of vtm.nodeRanges) {
+      if (!rangeIntersectsNode(range, nr.node)) continue;
+      const nodeStart = nr.node === range.startContainer ? range.startOffset : 0;
+      const nodeEnd   = nr.node === range.endContainer   ? range.endOffset   : nr.node.length;
+      const absStart  = nr.start + nodeStart;
+      const absEnd    = nr.start + nodeEnd;
+      if (absStart < selCharStart) selCharStart = absStart;
+      if (absEnd   > selCharEnd)   selCharEnd   = absEnd;
+    }
+    if (selCharStart === Infinity || selCharEnd <= selCharStart) return;
+
+    // 2. 선택 범위에 걸치는 sentenceRanges 수집
+    const overlappingSentences = sentenceRanges.filter(r =>
+      r.charStart < selCharEnd && r.charEnd > selCharStart
+    );
+    if (overlappingSentences.length === 0) return;
+
+    // 3. 각 sentenceRange에 대해 선택된 텍스트 조각을 추출하고 수식 변환 적용
+    const parts = [];
+    for (const r of overlappingSentences) {
+      const partStart = Math.max(r.charStart, selCharStart);
+      const partEnd   = Math.min(r.charEnd,   selCharEnd);
+      if (partStart >= partEnd) continue;
+
+      let text = vtm.fullText.substring(partStart, partEnd);
+
+      if (r.isEquation) {
+        // 수식: latexData 사용 또는 convertRawTextToLatex 폴백
+        let latex = r.latexData || convertRawTextToLatex(text);
+
+        // 수식 전체가 선택되었는지 여부에 따라 인라인/블록 구분
+        const isFullEquation = (partStart <= r.charStart + 2 && partEnd >= r.charEnd - 2);
+        if (isFullEquation) {
+          // 전체 수식: 이미 $$...$$ 또는 $...$가 있으면 그대로, 없으면 $$ 감싸기
+          if (!latex.startsWith('$')) latex = `$$\n${latex.trim()}\n$$`;
+          parts.push('\n\n' + latex + '\n\n');
         } else {
-          // latex 속성이 존재하나 수식 기호가 없는 경우(srcText 폴백 등)에도 수식 변환 적용
-          textToCopy = convertRawTextToLatex(latex);
+          // 부분 수식: inline $...$ 포맷
+          if (!latex.startsWith('$')) latex = `$ ${latex.trim()} $`;
+          parts.push(' ' + latex + ' ');
         }
       } else {
-        // 번역 로딩 전일 때 수식 문자열 결합 후 LaTeX 변환 적용
-        const fullRawText = grouped[groupKeys[0]].map(s => s.textContent).join('');
-        textToCopy = convertRawTextToLatex(fullRawText);
+        // 일반 텍스트: 그대로 사용
+        parts.push(text);
       }
-      e.clipboardData.setData('text/plain', textToCopy);
-      e.preventDefault();
-      return;
     }
-    
-    // 2. 여러 문장 혹은 다중 범위가 선택된 경우
-    const hasEq = selectedSpans.some(span => parseInt(span.dataset.sentenceIdx || '0', 10) >= 10000);
-    let targetRange = range;
-    
-    // 선택 영역 안에 수식이 포함된 경우 태그 누락 방지를 위해 외곽 스팬으로 범위 일시 확장
-    if (hasEq) {
-      targetRange = range.cloneRange();
-      targetRange.setStartBefore(selectedSpans[0]);
-      targetRange.setEndAfter(selectedSpans[selectedSpans.length - 1]);
-    }
-    
-    const clone = targetRange.cloneContents();
-    const clonedSpans = Array.from(clone.querySelectorAll('.pdf-sentence'));
-    
-    // 복제된 조각들의 스팬을 인덱스별로 그룹화
-    const clonedGrouped = {};
-    clonedSpans.forEach(span => {
-      const idx = span.dataset.sentenceIdx || '0';
-      if (!clonedGrouped[idx]) clonedGrouped[idx] = [];
-      clonedGrouped[idx].push(span);
-    });
-    
-    // 각 그룹별 치환 처리 (분열된 다중 노드가 중복으로 LaTeX를 출력하는 현상 방지)
-    Object.entries(clonedGrouped).forEach(([idx, spansInGroup]) => {
-      const sentenceIdx = parseInt(idx, 10);
-      if (sentenceIdx >= 10000) {
-        const origGroupSpans = grouped[idx] || [];
-        const firstOrigSpan = origGroupSpans[0];
-        const latex = firstOrigSpan ? firstOrigSpan.dataset.latex : null;
-        
-        let textToReplace = latex;
-        if (latex) {
-          const actualMath = latex.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
-          if (actualMath && actualMath.length > 0) {
-            textToReplace = actualMath.join(' ');
-          } else {
-            textToReplace = convertRawTextToLatex(latex);
-          }
-        } else {
-          const fullRawText = origGroupSpans.map(s => s.textContent).join('');
-          textToReplace = convertRawTextToLatex(fullRawText);
-        }
-        
-        // 첫 번째 스팬에만 LaTeX 치환 문구를 넣고, 나머지 파편들은 공백 처리하여 중복 제거
-        spansInGroup.forEach((span, index) => {
-          if (index === 0) {
-            span.textContent = textToReplace;
-          } else {
-            span.textContent = '';
-          }
-        });
-      }
-    });
-    
-    const cleanText = clone.textContent;
-    e.clipboardData.setData('text/plain', cleanText);
+
+    const result = parts.join('').trim();
+    if (!result) return;
+
+    e.clipboardData.setData('text/plain', result);
     e.preventDefault();
   } catch (err) {
     console.warn("Copy intercept failed:", err);
@@ -4936,149 +4950,293 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
   return sentenceRanges;
 }
 
-// PDF 텍스트 레이어 물리적 문장 쪼개기 구현
-// 세로 간격(vertical gap)과 글자 크기(font-size)를 기반으로 단락 경계를 감지하여 \n\n 삽입
+// ── PDF 텍스트 레이어 비파괴 가상 오버레이 기반 문장 매핑 시스템 ───────────────
+//
+// 설계 원칙:
+//  1. Non-Invasive: PDF.js가 생성한 .textLayer 내의 <span>을 절대 쪼개거나 감싸지 않음
+//  2. Virtual Coordinate Overlay: 하이라이트는 별도 .pdf-highlight-overlay div에 드로잉
+//  3. Native Selection 보존: 브라우저 기본 텍스트 드래그/선택 완전 보존
+//
+// buildVirtualTextMap: textLayer 내부 스팬을 읽어 가상 텍스트 인덱스 맵 구성 (DOM 비수정)
+function buildVirtualTextMap(container, pageNum) {
+  const allElements = Array.from(container.children).filter(el => el.nodeType === 1);
+  if (allElements.length === 0) return null;
+
+  const pageWidth = parseFloat(container.style.width) || 600;
+
+  // 줄 번호 필터링 + 노드 메타데이터 수집
+  const spans = [];
+  allElements.forEach(el => {
+    const text = el.textContent.trim();
+    const leftMatch = el.style.left?.match(/([\d.-]+)px/);
+    const topMatch  = el.style.top?.match(/([\d.-]+)px/);
+    const fsMatch   = el.style.fontSize?.match(/([\d.]+)/);
+    const leftVal   = leftMatch ? parseFloat(leftMatch[1]) : 0;
+    const topVal    = topMatch  ? parseFloat(topMatch[1])  : 0;
+    const fsVal     = fsMatch   ? parseFloat(fsMatch[1])   : 10;
+    const ratio     = leftVal / pageWidth;
+
+    // 줄 번호: 3~4자리 숫자, 좌측 마진 8% 이내
+    if (ratio < 0.08 && /^\d{3,4}$/.test(text)) {
+      el.style.userSelect = 'none';
+      el.style.webkitUserSelect = 'none';
+      el.style.pointerEvents = 'none';
+      el.classList.add('pdf-line-number-noise');
+      return;
+    }
+
+    spans.push({ el, left: leftVal, top: topVal, fontSize: fsVal, isLineNumber: false });
+  });
+
+  if (spans.length === 0) return null;
+
+  // 2단 레이아웃 감지
+  const mid = pageWidth / 2;
+  const leftCount  = spans.filter(n => n.left < mid * 1.05).length;
+  const rightCount = spans.filter(n => n.left > mid * 0.95).length;
+  const isTwoColumn = spans.length > 5
+    && (leftCount  / spans.length > 0.3)
+    && (rightCount / spans.length > 0.3);
+
+  let sortedSpans;
+  if (isTwoColumn) {
+    const leftNs  = spans.filter(n => n.left < mid).sort((a, b) => a.top - b.top || a.left - b.left);
+    const rightNs = spans.filter(n => n.left >= mid).sort((a, b) => a.top - b.top || a.left - b.left);
+    sortedSpans = leftNs.concat(rightNs);
+  } else {
+    sortedSpans = [...spans].sort((a, b) =>
+      Math.abs(a.top - b.top) < 4 ? a.left - b.left : a.top - b.top
+    );
+  }
+
+  // 줄간격 중앙값 및 폰트 크기 중앙값 계산
+  const gaps = [];
+  for (let i = 1; i < sortedSpans.length; i++) {
+    const gap = sortedSpans[i].top - sortedSpans[i - 1].top;
+    if (gap > 0) gaps.push(gap);
+  }
+  gaps.sort((a, b) => a - b);
+  const medianGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 14;
+  const paraGapThreshold = medianGap * 1.8;
+
+  const fontSizes = sortedSpans.map(n => n.fontSize).sort((a, b) => a - b);
+  const medianFontSize = fontSizes[Math.floor(fontSizes.length / 2)] || 10;
+  const headerFsThreshold = medianFontSize * 1.15;
+
+  // 텍스트 노드 수집 (KaTeX 등 제외)
+  function collectTextNodes(el) {
+    const nodes = [];
+    function walk(node) {
+      if (node.nodeType === 3) {
+        if (node.nodeValue && node.nodeValue.trim()) nodes.push(node);
+      } else if (
+        node.nodeName !== 'SCRIPT' &&
+        node.nodeName !== 'STYLE' &&
+        !node.classList?.contains('katex') &&
+        !node.classList?.contains('katex-display-wrap')
+      ) {
+        for (const child of node.childNodes) walk(child);
+      }
+    }
+    walk(el);
+    return nodes;
+  }
+
+  // fullText 구성 (DOM 수정 없이 가상 인덱스만 구성)
+  let fullText = '';
+  const nodeRanges = []; // { node, spanInfo, start, end }
+  let prevTop = null;
+  let prevFontSize = medianFontSize;
+
+  for (let i = 0; i < sortedSpans.length; i++) {
+    const spanInfo = sortedSpans[i];
+    const { el, top, fontSize } = spanInfo;
+    const textNodes = collectTextNodes(el);
+    if (textNodes.length === 0) continue;
+
+    if (fullText.length > 0) {
+      const gap = prevTop !== null ? top - prevTop : 0;
+      const isPrevHeader = prevFontSize > headerFsThreshold;
+      const isCurrentHeader = fontSize > headerFsThreshold;
+      const isLargeGap = gap > paraGapThreshold;
+      const prevText = collectTextNodes(sortedSpans[i - 1].el).map(n => n.nodeValue).join('').trim();
+      const isPrevSectionNum = /^(?:[IVXLCDM\d]+(?:\.[IVXLCDM\d]+)*\.?|[A-Z]\.?)$/i.test(prevText);
+
+      if (!isPrevSectionNum && (isPrevHeader || isCurrentHeader || isLargeGap || gap < -50)) {
+        if (!fullText.endsWith('\n\n')) fullText += '\n\n';
+      } else {
+        const prevChar = fullText[fullText.length - 1];
+        const nextChar = textNodes[0].nodeValue[0];
+        if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n') fullText += ' ';
+      }
+    }
+
+    spanInfo.charStart = fullText.length;
+    for (let j = 0; j < textNodes.length; j++) {
+      const node = textNodes[j];
+      if (j > 0) {
+        const prevChar = fullText[fullText.length - 1];
+        const nextChar = node.nodeValue[0];
+        if (prevChar !== ' ' && nextChar !== ' ') fullText += ' ';
+      }
+      const start = fullText.length;
+      fullText += node.nodeValue;
+      nodeRanges.push({ node, spanInfo, start, end: fullText.length });
+    }
+    spanInfo.charEnd = fullText.length;
+
+    prevTop = top;
+    prevFontSize = fontSize;
+  }
+
+  return { fullText, spans: sortedSpans, nodeRanges, isTwoColumn, pageNum };
+}
+
+// 독립 수식 검출 (VirtualTextMap 기반)
+function findDisplayEquationsFromVTM(vtm) {
+  const { fullText, spans } = vtm;
+  const eqs = [];
+  const lines = [];
+  let currentLine = [];
+
+  for (const spanInfo of spans) {
+    if (spanInfo.charStart === undefined || spanInfo.charEnd === undefined) continue;
+    if (currentLine.length === 0) {
+      currentLine.push(spanInfo);
+    } else {
+      const prev = currentLine[currentLine.length - 1];
+      if (Math.abs(spanInfo.top - prev.top) < 5) {
+        currentLine.push(spanInfo);
+      } else {
+        lines.push(currentLine);
+        currentLine = [spanInfo];
+      }
+    }
+  }
+  if (currentLine.length > 0) lines.push(currentLine);
+
+  for (const line of lines) {
+    const lineText = line.map(s => fullText.substring(s.charStart, s.charEnd)).join(' ').trim();
+    if (!lineText) continue;
+
+    const hasEqNum = /[\(\[][\d\w\.]+[\]\)]\s*$/.test(lineText);
+    const hasMathSymbol = /[=<>+\u2212\u22c5\u0370-\u03ff\u2200-\u22ff\-*/\u00d7\u00f7_\^\\]/.test(lineText);
+    const words = lineText.split(/\s+/);
+    const engWordCount = words.filter(w => {
+      const c = w.replace(/[^a-zA-Z]/g, '');
+      return c.length >= 3 && !w.startsWith('\\');
+    }).length;
+
+    const isEquation = hasMathSymbol && (
+      (hasEqNum && engWordCount <= 6) ||
+      (!hasEqNum && lineText.length < 150 && engWordCount <= 4)
+    );
+    if (isEquation) {
+      const lineStart = Math.min(...line.map(s => s.charStart));
+      const lineEnd   = Math.max(...line.map(s => s.charEnd));
+      eqs.push({ start: lineStart, end: lineEnd, text: lineText });
+    }
+  }
+  return eqs;
+}
+
+// 문장 범위로부터 화면 좌표 Rects 계산 (getClientRects 기반, 라인별 개별 상자)
+function getSentenceRects(sentenceRange, vtm, containerEl) {
+  const { fullText, nodeRanges } = vtm;
+  const containerRect = containerEl.getBoundingClientRect();
+  const mergedRects = [];
+
+  for (const nr of nodeRanges) {
+    const overlapStart = Math.max(nr.start, sentenceRange.charStart);
+    const overlapEnd   = Math.min(nr.end,   sentenceRange.charEnd);
+    if (overlapStart >= overlapEnd) continue;
+
+    const nodeOffsetStart = overlapStart - nr.start;
+    const nodeOffsetEnd   = overlapEnd   - nr.start;
+
+    try {
+      const range = document.createRange();
+      range.setStart(nr.node, nodeOffsetStart);
+      range.setEnd(nr.node, nodeOffsetEnd);
+      const rects = Array.from(range.getClientRects());
+
+      for (const rect of rects) {
+        if (rect.width < 1 || rect.height < 1) continue;
+        const r = {
+          left:   rect.left   - containerRect.left,
+          top:    rect.top    - containerRect.top,
+          width:  rect.width,
+          height: rect.height,
+        };
+        // 같은 라인의 인접 상자 병합 (top ± 2px)
+        const last = mergedRects[mergedRects.length - 1];
+        if (last && Math.abs(last.top - r.top) < 3 && Math.abs((last.left + last.width) - r.left) < 4) {
+          last.width = r.left + r.width - last.left;
+          last.height = Math.max(last.height, r.height);
+        } else {
+          mergedRects.push({ ...r });
+        }
+      }
+    } catch (e) { /* 범위 생성 실패 시 무시 */ }
+  }
+
+  return mergedRects;
+}
+
+// 오버레이 레이어에 하이라이트 상자를 드로잉
+function renderSentenceOverlay(overlayEl, rects, boxClass) {
+  for (const r of rects) {
+    const box = document.createElement('div');
+    box.className = boxClass;
+    box.style.left   = `${r.left}px`;
+    box.style.top    = `${r.top}px`;
+    box.style.width  = `${r.width}px`;
+    box.style.height = `${r.height}px`;
+    overlayEl.appendChild(box);
+  }
+}
+
+// 오버레이 레이어에서 특정 클래스 상자들만 제거
+function clearOverlayBoxes(overlayEl, ...classes) {
+  if (!overlayEl) return;
+  classes.forEach(cls => {
+    overlayEl.querySelectorAll(`.${cls}`).forEach(b => b.remove());
+  });
+}
+
+// 오버레이 레이어를 반환 (없으면 생성)
+function getOrCreateOverlay(pageWrapper) {
+  let overlay = pageWrapper.querySelector('.pdf-highlight-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'pdf-highlight-overlay';
+    // .pdf-page-wrapper 내에서 canvas/textLayer와 동일한 절대 좌표계
+    const inner = pageWrapper.querySelector('.page') || pageWrapper;
+    inner.appendChild(overlay);
+  }
+  return overlay;
+}
+
+// 메인 진입점: buildVirtualTextMap → alignSentencesToText → state 저장 → 메모 오버레이 렌더링
 function segmentPdfElements(container, pageNum) {
   try {
-    // 0. 기존에 분할된 pdf-sentence 스팬 제거 및 텍스트 레이어 복원 (중합 및 중첩 버그 방지)
+    // 기존 DOM 분할 스팬 제거 (이전 버전 호환)
     container.querySelectorAll('.pdf-sentence').forEach(span => {
       const parent = span.parentNode;
       if (parent) {
-        while (span.firstChild) {
-          parent.insertBefore(span.firstChild, span);
-        }
+        while (span.firstChild) parent.insertBefore(span.firstChild, span);
         parent.removeChild(span);
       }
     });
     container.normalize();
 
-    const elements = Array.from(container.children).filter(el => el.nodeType === 1);
-    if (elements.length === 0) return;
+    // 1. 가상 텍스트 맵 구축 (DOM 비수정)
+    const vtm = buildVirtualTextMap(container, pageNum);
+    if (!vtm || vtm.nodeRanges.length === 0) return;
 
-    // 2단 레이아웃 감지 및 font-size 정보 수집
-    const nodes = elements.map(el => {
-      const leftMatch = el.style.left?.match(/([\d.-]+)px/);
-      const topMatch  = el.style.top?.match(/([\d.-]+)px/);
-      const fsMatch   = el.style.fontSize?.match(/([\d.]+)/);
-      return {
-        el,
-        left:     leftMatch ? parseFloat(leftMatch[1]) : 0,
-        top:      topMatch  ? parseFloat(topMatch[1])  : 0,
-        fontSize: fsMatch   ? parseFloat(fsMatch[1])   : 10,
-      };
-    });
+    const { fullText, nodeRanges } = vtm;
 
-    const pageWidth = parseFloat(container.style.width) || 600;
-    const mid = pageWidth / 2;
-    const leftCount  = nodes.filter(n => n.left < mid * 1.05).length;
-    const rightCount = nodes.filter(n => n.left > mid * 0.95).length;
-    const isTwoColumn = nodes.length > 5
-      && (leftCount  / nodes.length > 0.3)
-      && (rightCount / nodes.length > 0.3);
-
-    let sortedNodes;
-    if (isTwoColumn) {
-      const leftNs  = nodes.filter(n => n.left < mid).sort((a, b) => a.top - b.top || a.left - b.left);
-      const rightNs = nodes.filter(n => n.left >= mid).sort((a, b) => a.top - b.top || a.left - b.left);
-      sortedNodes = leftNs.concat(rightNs);
-    } else {
-      sortedNodes = [...nodes].sort((a, b) =>
-        Math.abs(a.top - b.top) < 4 ? a.left - b.left : a.top - b.top
-      );
-    }
-
-    // 줄간격 중앙값(median line gap)과 글자크기 중앙값 계산
-    const gaps = [];
-    for (let i = 1; i < sortedNodes.length; i++) {
-      const gap = sortedNodes[i].top - sortedNodes[i - 1].top;
-      if (gap > 0) gaps.push(gap);
-    }
-    gaps.sort((a, b) => a - b);
-    const medianGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 14;
-    const paraGapThreshold = medianGap * 1.8; // 기준 줄간격의 1.8배 이상 벌어지면 단락 구분
-
-    const fontSizes = sortedNodes.map(n => n.fontSize).sort((a, b) => a - b);
-    const medianFontSize = fontSizes[Math.floor(fontSizes.length / 2)] || 10;
-    const headerFsThreshold = medianFontSize * 1.15; // 중앙값보다 15% 이상 큰 폰트는 헤더/제목으로 판정
-
-    // 텍스트 노드 수집 헬퍼
-    function collectTextNodesFromEl(el) {
-      const textNodes = [];
-      function walk(node) {
-        if (node.nodeType === 3) {
-          if (node.nodeValue && node.nodeValue.trim()) textNodes.push(node);
-        } else if (
-          node.nodeName !== 'SCRIPT' &&
-          node.nodeName !== 'STYLE' &&
-          !node.classList?.contains('katex') &&
-          !node.classList?.contains('katex-display-wrap')
-        ) {
-          for (const child of node.childNodes) walk(child);
-        }
-      }
-      walk(el);
-      return textNodes;
-    }
-
-    // 순차적으로 fullText 구성, 단락 경계에 \n\n 삽입
-    let fullText = '';
-    const nodeRanges = [];
-    let prevTop = null;
-    let prevFontSize = medianFontSize;
-
-    for (let i = 0; i < sortedNodes.length; i++) {
-      const { el, top, fontSize } = sortedNodes[i];
-      const elNodes = collectTextNodesFromEl(el);
-      if (elNodes.length === 0) continue;
-
-      if (fullText.length > 0) {
-        const gap = prevTop !== null ? top - prevTop : 0;
-        const isPrevHeader = prevFontSize > headerFsThreshold;
-        const isCurrentHeader = fontSize > headerFsThreshold;
-        const isLargeGap = gap > paraGapThreshold;
-
-        // 이전 노드가 순수 섹션 번호(예: "1.", "A.")인 경우는 제목과 하나의 문장으로 묶이도록 단락 분할을 건너뜁니다.
-        const prevText = collectTextNodesFromEl(sortedNodes[i - 1].el).map(n => n.nodeValue).join('').trim();
-        const isPrevSectionNum = /^(?:[IVXLCDM\d]+(?:\.[IVXLCDM\d]+)*\.?|[A-Z]\.?)$/i.test(prevText);
-
-        // 이전/현재 폰트가 헤더 크기이거나, 줄간격이 기준치보다 크거나, 줄 흐름이 아예 바뀐 경우 단락 경계
-        if (!isPrevSectionNum && (isPrevHeader || isCurrentHeader || isLargeGap || gap < -50)) {
-          if (!fullText.endsWith('\n\n')) {
-            fullText += '\n\n';
-          }
-        } else {
-          // 일반 공백 삽입 조건
-          const prevChar = fullText[fullText.length - 1];
-          const nextChar = elNodes[0].nodeValue[0];
-          if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n') {
-            fullText += ' ';
-          }
-        }
-      }
-
-      sortedNodes[i].startInText = fullText.length;
-      for (let j = 0; j < elNodes.length; j++) {
-        const node = elNodes[j];
-        if (j > 0) {
-          const prevChar = fullText[fullText.length - 1];
-          const nextChar = node.nodeValue[0];
-          if (prevChar !== ' ' && nextChar !== ' ') {
-            fullText += ' ';
-          }
-        }
-        const start = fullText.length;
-        fullText += node.nodeValue;
-        nodeRanges.push({ node, start, end: fullText.length });
-      }
-      sortedNodes[i].endInText = fullText.length;
-
-      prevTop = top;
-      prevFontSize = fontSize;
-    }
-
-    if (nodeRanges.length === 0) return;
-
-    // 단락 단위 인지 문장 분할
+    // 2. 문장 정렬 매핑
     let sentenceRanges;
     const sentences = state.translationSentences && state.translationSentences[pageNum];
     if (sentences && sentences.length > 0) {
@@ -5089,194 +5247,85 @@ function segmentPdfElements(container, pageNum) {
     }
     if (sentenceRanges.length === 0) return;
 
-    // 독립 수식 및 수식 번호(예: (1), (2.3) 등) 검출 헬퍼 (좌표 라인 기반)
-    function findDisplayEquations() {
-      const eqs = [];
-      const lines = [];
-      let currentLine = [];
-      
-      for (let i = 0; i < sortedNodes.length; i++) {
-        const node = sortedNodes[i];
-        if (node.startInText === undefined || node.endInText === undefined) continue;
-        
-        if (currentLine.length === 0) {
-          currentLine.push(node);
-        } else {
-          const prevNode = currentLine[currentLine.length - 1];
-          if (Math.abs(node.top - prevNode.top) < 5) {
-            currentLine.push(node);
-          } else {
-            lines.push(currentLine);
-            currentLine = [node];
-          }
-        }
-      }
-      if (currentLine.length > 0) {
-        lines.push(currentLine);
-      }
-      
-      for (const line of lines) {
-        const lineText = line.map(node => fullText.substring(node.startInText, node.endInText)).join(' ').trim();
-        if (!lineText) continue;
-        
-        const hasEqNum = /[\(\[][\d\w\.]+[\]\)]\s*$/.test(lineText);
-        const hasMathSymbol = /[\u003d\u003c\u003e\u002b\u2212\u22c5\u0370-\u03ff\u2200-\u22ff\u002d\u002a\u002f\u00d7\u00f7_\^\\]/.test(lineText);
-        
-        const words = lineText.split(/\s+/);
-        const englishWordCount = words.filter(w => {
-          const cleanW = w.replace(/[^a-zA-Z]/g, '');
-          return cleanW.length >= 3 && !w.startsWith('\\');
-        }).length;
-        
-        const isEquation = hasMathSymbol && (
-          (hasEqNum && englishWordCount <= 6) ||
-          (!hasEqNum && lineText.length < 150 && englishWordCount <= 4)
-        );
-        if (isEquation) {
-          const lineStart = Math.min(...line.map(n => n.startInText));
-          const lineEnd = Math.max(...line.map(n => n.endInText));
-          eqs.push({ start: lineStart, end: lineEnd, text: lineText });
-        }
-      }
-      return eqs;
-    }
-
-    // 독립 수식 및 수식 번호 범위 분할 포스트 프로세싱
-    const displayEqs = findDisplayEquations();
-    sentenceRanges.forEach((r, idx) => {
-      r.sentenceIdx = idx;
-    });
+    // 3. 독립 수식 검출 및 sentenceIdx 부여
+    const displayEqs = findDisplayEquationsFromVTM(vtm);
+    sentenceRanges.forEach((r, idx) => { r.sentenceIdx = idx; r.charStart = r.start; r.charEnd = r.end; });
 
     let currentRanges = [...sentenceRanges];
     for (const eq of displayEqs) {
       const nextRanges = [];
       for (const sent of currentRanges) {
-        if (sent.start < eq.start && sent.end > eq.end) {
-          // 수식 앞단
-          nextRanges.push({
-            text: fullText.substring(sent.start, eq.start),
-            start: sent.start,
-            end: eq.start,
-            sentenceIdx: sent.sentenceIdx
-          });
-          // 독립 수식 자체 (고유 인덱스 부여)
-          nextRanges.push({
-            text: fullText.substring(eq.start, eq.end),
-            start: eq.start,
-            end: eq.end,
-            sentenceIdx: 10000 + eq.start,
-            originalSentenceIdx: sent.sentenceIdx
-          });
-          // 수식 뒷단
-          nextRanges.push({
-            text: fullText.substring(eq.end, sent.end),
-            start: eq.end,
-            end: sent.end,
-            sentenceIdx: sent.sentenceIdx
-          });
-        } else if (sent.start >= eq.start && sent.end <= eq.end) {
-          nextRanges.push({
-            ...sent,
-            sentenceIdx: 10000 + eq.start,
-            originalSentenceIdx: sent.sentenceIdx
-          });
+        if (sent.charStart < eq.start && sent.charEnd > eq.end) {
+          nextRanges.push({ ...sent, charEnd: eq.start, end: eq.start, text: fullText.substring(sent.charStart, eq.start) });
+          nextRanges.push({ start: eq.start, end: eq.end, charStart: eq.start, charEnd: eq.end, sentenceIdx: 10000 + eq.start, originalSentenceIdx: sent.sentenceIdx, text: eq.text, isEquation: true });
+          nextRanges.push({ ...sent, charStart: eq.end, start: eq.end, text: fullText.substring(eq.end, sent.charEnd) });
+        } else if (sent.charStart >= eq.start && sent.charEnd <= eq.end) {
+          nextRanges.push({ ...sent, sentenceIdx: 10000 + eq.start, originalSentenceIdx: sent.sentenceIdx, isEquation: true });
         } else {
           nextRanges.push(sent);
         }
       }
-      currentRanges = nextRanges;
+      currentRanges = nextRanges.filter(r => r.charStart < r.charEnd);
     }
     sentenceRanges = currentRanges;
 
-    // 물리적 DOM 쪼개기 수행
-    for (const range of nodeRanges) {
-      const parent = range.node.parentNode;
-      if (!parent) continue;
-
-      const segments = [];
-      for (let i = 0; i < sentenceRanges.length; i++) {
-        const sent = sentenceRanges[i];
-        const start = Math.max(range.start, sent.start);
-        const end = Math.min(range.end, sent.end);
-        if (start < end) {
-          segments.push({
-            sentenceIdx: sent.sentenceIdx !== undefined ? sent.sentenceIdx : i,
-            startInNode: start - range.start,
-            endInNode: end - range.start,
-            text: range.node.nodeValue.substring(start - range.start, end - range.start),
-            originalSentenceIdx: sent.originalSentenceIdx
-          });
+    // 4. 수식 LaTeX 데이터 설정 (클립보드 복사용)
+    sentenceRanges.forEach(r => {
+      if (r.isEquation && r.originalSentenceIdx !== undefined) {
+        const origIdx = r.originalSentenceIdx;
+        const sents = state.translationSentences && state.translationSentences[pageNum];
+        if (sents && sents[origIdx]) {
+          const transText = sents[origIdx].trans || '';
+          const srcText   = sents[origIdx].src   || '';
+          const mathMatches = transText.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g)
+                           || srcText.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
+          r.latexData = mathMatches ? mathMatches.join(' ') : srcText;
         }
-      }
-      if (segments.length === 0) continue;
-
-      const fragment = document.createDocumentFragment();
-      let lastIdx = 0;
-      let isEq = false;
-      segments.sort((a, b) => a.startInNode - b.startInNode);
-
-      for (const seg of segments) {
-        if (seg.startInNode > lastIdx) {
-          fragment.appendChild(document.createTextNode(
-            range.node.nodeValue.substring(lastIdx, seg.startInNode)
-          ));
-        }
-
-        const span = document.createElement('span');
-        span.className = 'pdf-sentence';
-        span.dataset.page = pageNum;
-        span.dataset.sentenceIdx = seg.sentenceIdx;
-        span.textContent = seg.text;
-        span.style.cursor = 'inherit';
-        
-        if (seg.sentenceIdx >= 10000) {
-          isEq = true;
-          if (seg.originalSentenceIdx !== undefined) {
-            const origIdx = seg.originalSentenceIdx;
-            const sentences = state.translationSentences && state.translationSentences[pageNum];
-            if (sentences && sentences[origIdx]) {
-              const transText = sentences[origIdx].trans || '';
-              const srcText = sentences[origIdx].src || '';
-              const mathMatches = transText.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g) || srcText.match(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g);
-              if (mathMatches && mathMatches.length > 0) {
-                span.dataset.latex = mathMatches.join(' ');
-              } else {
-                span.dataset.latex = srcText;
-              }
-            }
-          }
-        }
-        
-        fragment.appendChild(span);
-        lastIdx = seg.endInNode;
-      }
-
-      if (lastIdx < range.node.nodeValue.length) {
-        fragment.appendChild(document.createTextNode(
-          range.node.nodeValue.substring(lastIdx)
-        ));
-      }
-
-      parent.replaceChild(fragment, range.node);
-      if (isEq) {
-        parent.classList.add('display-equation-span');
-      }
-    }
-
-    // 3. DOM 순서를 정렬된 순서(sortedNodes)대로 재배치하여 브라우저 드래그 선택이 시각적 순서와 일치하도록 보장
-    sortedNodes.forEach(node => {
-      if (node.el && node.el.parentNode === container) {
-        container.appendChild(node.el);
       }
     });
 
-    if (!state.pdfPageSentences) state.pdfPageSentences = {};
+    // 5. state에 가상 텍스트 맵 및 문장 범위 저장
+    if (!state.virtualTextMaps)   state.virtualTextMaps   = {};
+    if (!state.pdfPageSentences)  state.pdfPageSentences  = {};
+    state.virtualTextMaps[pageNum]  = vtm;
     state.pdfPageSentences[pageNum] = sentenceRanges;
 
     container.dataset.segmented = 'true';
+
+    // 6. 오버레이 레이어 생성 (pageWrapper 기준)
+    const pageWrapper = container.closest('.pdf-page-wrapper');
+    if (pageWrapper) {
+      const overlay = getOrCreateOverlay(pageWrapper);
+      clearOverlayBoxes(overlay, 'sentence-hover-box', 'sentence-active-box', 'sentence-memo-box', 'sentence-equation-box', 'sentence-pulse-box');
+      // 메모 하이라이트 재렌더링
+      renderMemoOverlay(pageWrapper, pageNum, overlay);
+    }
   } catch (err) {
     console.warn(`segmentPdfElements failed for p.${pageNum}:`, err);
   }
+}
+
+// 메모가 있는 문장의 오버레이 하이라이트를 렌더링
+function renderMemoOverlay(pageWrapper, pageNum, overlay) {
+  try {
+    const annotations = loadAnnotations(state.sessionId);
+    const memos = (annotations && annotations.memos) ? annotations.memos.filter(m => m.pageNum === pageNum) : [];
+    if (memos.length === 0) return;
+
+    const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
+    const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum];
+    if (!vtm || !sentenceRanges) return;
+
+    const container = pageWrapper.querySelector('.textLayer');
+    if (!container) return;
+
+    memos.forEach(memo => {
+      const sRange = sentenceRanges.find(r => r.sentenceIdx === memo.sentenceIdx);
+      if (!sRange) return;
+      const rects = getSentenceRects(sRange, vtm, container);
+      renderSentenceOverlay(overlay, rects, 'sentence-memo-box');
+    });
+  } catch (e) { /* no-op */ }
 }
 
 // 번역본용 문장 쪼개기
@@ -5589,279 +5638,402 @@ function splitIntoSentences(fullText) {
   return sentenceRanges;
 }
 
-// 1대1 매칭 마우스 오버/아웃 및 클릭 이벤트 위임 등록
+// ── 오버레이 기반 문장 호버/클릭 이벤트 시스템 ──────────────────────────────
+// 설계: pdf-sentence DOM 클래스 조작 대신, 좌표 기반 hit-test로 문장 감지 후
+//       .pdf-highlight-overlay 에 하이라이트 상자를 드로잉합니다.
+
+// 현재 호버 중인 페이지/문장 인덱스
+let currentHoverPage = null;
+let currentHoverSentenceIdx = null;
+// 현재 클릭 고정 중인 active 하이라이트
+let activeHighlightPage = null;
+let activeHighlightSentenceIdx = null;
+
+// VirtualTextMap에서 특정 문자 위치에 해당하는 sentenceRange를 이진 탐색
+function findSentenceAtChar(charIdx, sentenceRanges) {
+  if (!sentenceRanges || sentenceRanges.length === 0) return null;
+  for (const r of sentenceRanges) {
+    if (charIdx >= r.charStart && charIdx < r.charEnd) return r;
+  }
+  return null;
+}
+
+// 마우스 위치로부터 대략적인 charIdx를 추정 (caretRangeFromPoint 또는 비율 계산 폴백)
+function estimateCharIdxFromPoint(x, y, vtm) {
+  // 방법 1: caretRangeFromPoint (Chrome/Edge)
+  let node = null, offset = 0;
+  if (document.caretRangeFromPoint) {
+    const cr = document.caretRangeFromPoint(x, y);
+    if (cr) { node = cr.startContainer; offset = cr.startOffset; }
+  } else if (document.caretPositionFromPoint) {
+    const cp = document.caretPositionFromPoint(x, y);
+    if (cp) { node = cp.offsetNode; offset = cp.offset; }
+  }
+
+  if (node && node.nodeType === 3) {
+    const nr = vtm.nodeRanges.find(r => r.node === node);
+    if (nr) return nr.start + offset;
+  }
+
+  // 방법 2: 마우스 근처 nodeRange에서 비율로 추정
+  for (const nr of vtm.nodeRanges) {
+    try {
+      const range = document.createRange();
+      range.selectNode(nr.node);
+      const rect = range.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        const ratio = rect.width > 0 ? (x - rect.left) / rect.width : 0;
+        const charLen = nr.end - nr.start;
+        return nr.start + Math.round(ratio * charLen);
+      }
+    } catch(e) { /* no-op */ }
+  }
+  return -1;
+}
+
+// 오버레이에 호버 하이라이트를 그리고 번역 문장에 클래스를 적용
+function applyHoverHighlight(pageNum, sentenceRange) {
+  const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
+  if (!vtm) return;
+
+  const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`);
+  if (!pageWrapper) return;
+
+  const textLayer = pageWrapper.querySelector('.textLayer');
+  if (!textLayer) return;
+
+  const overlay = getOrCreateOverlay(pageWrapper);
+  clearOverlayBoxes(overlay, 'sentence-hover-box');
+
+  const rects = getSentenceRects(sentenceRange, vtm, textLayer);
+  const boxClass = sentenceRange.isEquation ? 'sentence-equation-box' : 'sentence-hover-box';
+  renderSentenceOverlay(overlay, rects, boxClass);
+
+  // 번역 패널 하이라이트 (trans-sentence DOM 방식은 유지)
+  viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => el.classList.remove('sentence-highlight'));
+  const sentenceIdx = sentenceRange.sentenceIdx >= 10000 ? (sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) : sentenceRange.sentenceIdx;
+  viewerScrollContainer.querySelectorAll(
+    `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"]`
+  ).forEach(el => el.classList.add('sentence-highlight'));
+}
+
+// 오버레이에 active 하이라이트를 그리고 번역 문장에 active 클래스를 적용
+function applyActiveHighlight(pageNum, sentenceRange) {
+  // 기존 active 하이라이트 클리어
+  viewerScrollContainer.querySelectorAll('.pdf-page-wrapper').forEach(pw => {
+    const ov = pw.querySelector('.pdf-highlight-overlay');
+    if (ov) clearOverlayBoxes(ov, 'sentence-active-box', 'sentence-pulse-box');
+  });
+  viewerScrollContainer.querySelectorAll('.active-mapped-sentence').forEach(el => el.classList.remove('active-mapped-sentence'));
+
+  if (!sentenceRange || !pageNum) return;
+
+  const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
+  const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`);
+  if (!vtm || !pageWrapper) return;
+
+  const textLayer = pageWrapper.querySelector('.textLayer');
+  if (!textLayer) return;
+
+  const overlay = getOrCreateOverlay(pageWrapper);
+  const rects = getSentenceRects(sentenceRange, vtm, textLayer);
+  renderSentenceOverlay(overlay, rects, 'sentence-active-box');
+
+  const sentenceIdx = sentenceRange.sentenceIdx >= 10000 ? (sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) : sentenceRange.sentenceIdx;
+  viewerScrollContainer.querySelectorAll(
+    `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"]`
+  ).forEach(el => el.classList.add('active-mapped-sentence'));
+}
+
+// PDF textLayer 위에서 마우스 위치로 sentenceRange 감지
+function detectSentenceAtMouse(e) {
+  const el = e.target;
+  const pageWrapper = el.closest('.pdf-page-wrapper');
+  if (!pageWrapper) return null;
+
+  const textLayer = el.closest('.textLayer');
+  if (!textLayer) return null;
+
+  const pageNum = parseInt(pageWrapper.dataset.page, 10);
+  if (isNaN(pageNum)) return null;
+
+  const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
+  const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum];
+  if (!vtm || !sentenceRanges) return null;
+
+  const charIdx = estimateCharIdxFromPoint(e.clientX, e.clientY, vtm);
+  if (charIdx < 0) return null;
+
+  const sRange = findSentenceAtChar(charIdx, sentenceRanges);
+  return sRange ? { pageNum, sentenceRange: sRange } : null;
+}
+
+// 700ms 드웰 후 문장 전체를 자동 선택하고 선택 메뉴 표시하는 헬퍼
+function startDwellSelection(pageNum, sentenceRange) {
+  if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null; }
+
+  sentenceHoverTimer = setTimeout(() => {
+    if (state.isSelectionDragging) return;
+    const curSel = window.getSelection();
+    if (curSel && !curSel.isCollapsed) return;
+
+    const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
+    if (!vtm) return;
+
+    const { nodeRanges } = vtm;
+    const srStart = sentenceRange.charStart;
+    const srEnd   = sentenceRange.charEnd;
+
+    // 시작 노드 찾기
+    let startNode = null, startOff = 0;
+    let endNode = null, endOff = 0;
+    for (const nr of nodeRanges) {
+      if (startNode === null && nr.end > srStart) {
+        startNode = nr.node;
+        startOff  = Math.max(0, srStart - nr.start);
+      }
+      if (nr.start < srEnd) {
+        endNode = nr.node;
+        endOff  = Math.min(nr.node.length, srEnd - nr.start);
+      }
+    }
+
+    if (startNode && endNode) {
+      try {
+        const range = document.createRange();
+        range.setStart(startNode, startOff);
+        range.setEnd(endNode, endOff);
+        curSel.removeAllRanges();
+        curSel.addRange(range);
+
+        state.hoverSelectedPageNum = pageNum;
+        state.hoverSelectedSentenceIdx = sentenceRange.sentenceIdx;
+
+        const selRect = range.getBoundingClientRect();
+        showSelectionMenu(selRect, true);
+      } catch(e) { /* no-op */ }
+    }
+  }, 700);
+}
+
 if (viewerScrollContainer) {
-  // PDF와 번역본의 문장 수 차이를 고려한 오프셋 기반 매핑 함수
+  // mousemove: 드래그 상태 추적 + PDF textLayer 위에서 hover 감지
   viewerScrollContainer.addEventListener('mousemove', (e) => {
+    // 드래그 상태 추적
     if (e.buttons === 0) {
       state.isSelectionDragging = false;
       viewerScrollContainer.classList.remove('selection-dragging');
     }
     state.hoverSelectionDisabled = false;
-  });
 
-  viewerScrollContainer.addEventListener('mouseover', (e) => {
     if (state.isSelectionDragging) return;
-    try {
-      if (sentenceHoverTimer) {
-        clearTimeout(sentenceHoverTimer);
-        sentenceHoverTimer = null;
-      }
 
-      const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
-      if (annSpan) {
-        showAnnotationHoverTooltip(annSpan);
-      }
+    // 어노테이션 스팬 툴팁
+    const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
+    if (annSpan) showAnnotationHoverTooltip(annSpan);
 
-      const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
+    // 번역 패널 호버는 mouseover로 처리됨 (기존 trans-sentence 방식 유지)
+    if (e.target.closest('.trans-page-block')) return;
 
-      const selection = window.getSelection();
-      if (selection && !selection.isCollapsed && !annSpan) {
-        if (e.buttons === 1) {
-          return;
+    // PDF textLayer 위 문장 감지
+    const detected = detectSentenceAtMouse(e);
+    if (!detected) {
+      // textLayer 밖으로 나가면 호버 클리어
+      if (currentHoverPage !== null) {
+        const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${currentHoverPage}"]`);
+        if (pw) {
+          const ov = pw.querySelector('.pdf-highlight-overlay');
+          if (ov) clearOverlayBoxes(ov, 'sentence-hover-box', 'sentence-equation-box');
         }
-        if (target) {
-          const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
-          const hoveredPageNum = pageWrapper ? parseInt(pageWrapper.dataset.page, 10) : -1;
-          const hoveredSentenceIdx = parseInt(target.dataset.sentenceIdx, 10);
-
-          const isSameAsSelected = (hoveredPageNum === state.hoverSelectedPageNum && hoveredSentenceIdx === state.hoverSelectedSentenceIdx);
-
-          if (!isSameAsSelected) {
-            hideSelectionMenuWithDelay();
-          } else {
-            if (selectionMenuHideTimer) {
-              clearTimeout(selectionMenuHideTimer);
-              selectionMenuHideTimer = null;
-            }
-            return;
-          }
-        } else {
-          return;
-        }
+        viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => el.classList.remove('sentence-highlight'));
+        currentHoverPage = null;
+        currentHoverSentenceIdx = null;
+        if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null; }
       }
+      return;
+    }
 
-      if (!target) return;
+    const { pageNum, sentenceRange } = detected;
+    const isSame = (currentHoverPage === pageNum && currentHoverSentenceIdx === sentenceRange.sentenceIdx);
+    if (isSame) return;
 
-      // PDF 텍스트 문장에 마우스가 700ms 동안 머물러 있으면 문장 단위 자동 드래그 선택 및 툴팁 띄우기
-      // 단, 이미 어노테이션이 입혀진 span 위에 올라온 경우나 호버 자동 선택이 비활성화된 경우는 작동 제외
-      const pdfTarget = e.target.closest('.pdf-sentence');
-      if (pdfTarget && !annSpan && !state.hoverSelectionDisabled && !state.isSelectionDragging) {
-        sentenceHoverTimer = setTimeout(() => {
-          const curSel = window.getSelection();
-          if (curSel && !curSel.isCollapsed) return;
-
-          const sentenceIdx = parseInt(pdfTarget.dataset.sentenceIdx, 10);
-          if (isNaN(sentenceIdx)) return;
-
-          const pageWrapper = pdfTarget.closest('.pdf-page-wrapper');
-          if (!pageWrapper) return;
-          const pageNum = parseInt(pageWrapper.dataset.page, 10);
-
-          const { pdfIdx, transIdx, pdfElements } = getMappedElementsAndIndices(pdfTarget, pageNum, sentenceIdx);
-
-          if (pdfElements && pdfElements.length > 0) {
-            state.hoverSelectedPdfElements = pdfElements;
-            state.hoverSelectedPageNum = pageNum;
-            state.hoverSelectedSentenceIdx = pdfIdx;
-
-            const firstEl = pdfElements[0];
-            const lastEl = pdfElements[pdfElements.length - 1];
-
-            const firstWalker = document.createTreeWalker(firstEl, NodeFilter.SHOW_TEXT);
-            const firstNodes = [];
-            while (firstWalker.nextNode()) firstNodes.push(firstWalker.currentNode);
-
-            const lastWalker = document.createTreeWalker(lastEl, NodeFilter.SHOW_TEXT);
-            const lastNodes = [];
-            while (lastWalker.nextNode()) lastNodes.push(lastWalker.currentNode);
-
-            if (firstNodes.length > 0 && lastNodes.length > 0) {
-              const range = document.createRange();
-              range.setStart(firstNodes[0], 0);
-              range.setEnd(lastNodes[lastNodes.length - 1], lastNodes[lastNodes.length - 1].length);
-
-              curSel.removeAllRanges();
-              curSel.addRange(range);
-
-              const rect = pdfTarget.getBoundingClientRect();
-              showSelectionMenu(rect, true);
-            }
-          }
-        }, 700);
+    // 이전 페이지 호버 클리어
+    if (currentHoverPage !== null && currentHoverPage !== pageNum) {
+      const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${currentHoverPage}"]`);
+      if (pw) {
+        const ov = pw.querySelector('.pdf-highlight-overlay');
+        if (ov) clearOverlayBoxes(ov, 'sentence-hover-box', 'sentence-equation-box');
       }
+    }
 
-      const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
-      if (!pageWrapper) return;
-      const pageNum = pageWrapper.dataset.page;
-      if (!pageNum) return;
+    currentHoverPage = pageNum;
+    currentHoverSentenceIdx = sentenceRange.sentenceIdx;
 
-      const sentenceIdx = parseInt(target.dataset.sentenceIdx, 10);
-      if (isNaN(sentenceIdx)) return;
+    applyHoverHighlight(pageNum, sentenceRange);
 
-      const { pdfIdx, transIdx, pdfElements } = getMappedElementsAndIndices(target, pageNum, sentenceIdx);
-
-      // 기존의 모든 하이라이트 제거
-      viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => {
-        el.classList.remove('sentence-highlight');
-      });
-
-      // 1. PDF 엘리먼트들 하이라이트
-      pdfElements.forEach(el => {
-        el.classList.add('sentence-highlight');
-      });
-
-      // 2. 번역본 문장 하이라이트
-      if (transIdx !== -1) {
-        viewerScrollContainer.querySelectorAll(
-          `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${transIdx}"]`
-        ).forEach(el => {
-          el.classList.add('sentence-highlight');
-        });
+    // 700ms 드웰 선택 (수식 제외)
+    if (!annSpan && !state.hoverSelectionDisabled) {
+      if (!sentenceRange.isEquation) {
+        startDwellSelection(pageNum, sentenceRange);
       }
-    } catch (err) {
-      console.warn("mouseover highlight mapping failed:", err);
     }
   });
 
+  // mouseover: trans-sentence 호버 처리 (기존 방식 유지)
+  viewerScrollContainer.addEventListener('mouseover', (e) => {
+    if (state.isSelectionDragging) return;
+    try {
+      const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
+      if (annSpan) showAnnotationHoverTooltip(annSpan);
+
+      const transSent = e.target.closest('.trans-sentence');
+      if (!transSent) return;
+
+      const pageWrapper = transSent.closest('.trans-page-block');
+      if (!pageWrapper) return;
+      const pageNum = parseInt(pageWrapper.dataset.page, 10);
+      if (isNaN(pageNum)) return;
+      const sentenceIdx = parseInt(transSent.dataset.sentenceIdx, 10);
+      if (isNaN(sentenceIdx)) return;
+
+      // 번역 패널 호버 → PDF 오버레이 하이라이트
+      viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => el.classList.remove('sentence-highlight'));
+      transSent.classList.add('sentence-highlight');
+
+      const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum];
+      if (sentenceRanges) {
+        const sRange = sentenceRanges.find(r => {
+          const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx;
+          return idx === sentenceIdx;
+        });
+        if (sRange) {
+          const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`);
+          if (pw) {
+            const ov = getOrCreateOverlay(pw);
+            clearOverlayBoxes(ov, 'sentence-hover-box', 'sentence-equation-box');
+            const textLayer = pw.querySelector('.textLayer');
+            if (textLayer) {
+              const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
+              if (vtm) {
+                const rects = getSentenceRects(sRange, vtm, textLayer);
+                renderSentenceOverlay(ov, rects, 'sentence-hover-box');
+              }
+            }
+          }
+        }
+      }
+    } catch(err) { /* no-op */ }
+  });
+
+  // mouseout: 호버 클리어
   viewerScrollContainer.addEventListener('mouseout', (e) => {
     if (state.isSelectionDragging) return;
     try {
-      if (sentenceHoverTimer) {
-        clearTimeout(sentenceHoverTimer);
-        sentenceHoverTimer = null;
-      }
-
       const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
       if (annSpan) {
         if (!e.relatedTarget || !e.relatedTarget.closest('#ann-hover-tooltip')) {
           hideAnnHoverTooltipWithDelay();
         }
       }
-
-      viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => {
-        el.classList.remove('sentence-highlight');
-      });
-    } catch (err) {
-      // no-op
-    }
+      // trans-sentence mouseout 처리
+      const transSent = e.target.closest('.trans-sentence');
+      if (transSent && !e.relatedTarget?.closest('.trans-sentence')) {
+        viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => el.classList.remove('sentence-highlight'));
+        if (currentHoverPage !== null) {
+          const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${currentHoverPage}"]`);
+          if (pw) {
+            const ov = pw.querySelector('.pdf-highlight-overlay');
+            if (ov) clearOverlayBoxes(ov, 'sentence-hover-box', 'sentence-equation-box');
+          }
+        }
+      }
+    } catch (err) { /* no-op */ }
   });
 
-  // 클릭 시 해당 매칭 문장으로 스크롤 이동 및 양방향 고정 하이라이트 매칭 적용
+  // 클릭: PDF textLayer 클릭 → active 하이라이트 + 번역 스크롤
+  //        trans-sentence 클릭 → PDF 스크롤
   viewerScrollContainer.addEventListener('click', (e) => {
     try {
       state.hoverSelectionDisabled = true;
-      if (sentenceHoverTimer) {
-        clearTimeout(sentenceHoverTimer);
-        sentenceHoverTimer = null;
-      }
+      if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null; }
 
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed) return;
 
-      const target = e.target.closest('.trans-sentence') || e.target.closest('.pdf-sentence');
-      if (target && target.classList.contains('pdf-sentence')) {
-        const sentenceIdx = parseInt(target.dataset.sentenceIdx || '0', 10);
-        if (sentenceIdx >= 10000) {
-          const pageWrapper = target.closest('.pdf-page-wrapper');
-          if (pageWrapper) {
-            const pageNum = parseInt(pageWrapper.dataset.page, 10);
-            const { pdfElements } = getMappedElementsAndIndices(target, pageNum, sentenceIdx);
-            
-            if (pdfElements && pdfElements.length > 0) {
-              const firstEl = pdfElements[0];
-              const lastEl = pdfElements[pdfElements.length - 1];
-              
-              const firstWalker = document.createTreeWalker(firstEl, NodeFilter.SHOW_TEXT);
-              const firstNodes = [];
-              while (firstWalker.nextNode()) firstNodes.push(firstWalker.currentNode);
-              
-              const lastWalker = document.createTreeWalker(lastEl, NodeFilter.SHOW_TEXT);
-              const lastNodes = [];
-              while (lastWalker.nextNode()) lastNodes.push(lastWalker.currentNode);
-              
-              if (firstNodes.length > 0 && lastNodes.length > 0) {
-                const range = document.createRange();
-                range.setStart(firstNodes[0], 0);
-                range.setEnd(lastNodes[lastNodes.length - 1], lastNodes[lastNodes.length - 1].length);
-                
-                const curSel = window.getSelection();
-                curSel.removeAllRanges();
-                curSel.addRange(range);
-                
-                const rect = target.getBoundingClientRect();
-                showSelectionMenu(rect, true);
-                
-                e.preventDefault();
-                e.stopPropagation();
-                return;
-              }
+      // ── trans-sentence 클릭 ──
+      const transSent = e.target.closest('.trans-sentence');
+      if (transSent) {
+        const pageWrapper = transSent.closest('.trans-page-block');
+        if (!pageWrapper) return;
+        const pageNum = parseInt(pageWrapper.dataset.page, 10);
+        if (isNaN(pageNum)) return;
+        const sentenceIdx = parseInt(transSent.dataset.sentenceIdx, 10);
+        if (isNaN(sentenceIdx)) return;
+
+        const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum];
+        if (!sentenceRanges) return;
+
+        const sRange = sentenceRanges.find(r => {
+          const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx;
+          return idx === sentenceIdx;
+        });
+        if (!sRange) return;
+
+        applyActiveHighlight(pageNum, sRange);
+
+        // PDF 영역으로 스크롤
+        const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
+        const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`);
+        if (vtm && pw) {
+          const textLayer = pw.querySelector('.textLayer');
+          if (textLayer) {
+            const rects = getSentenceRects(sRange, vtm, textLayer);
+            if (rects.length > 0) {
+              // 해당 pageWrapper가 뷰포트에 없으면 스크롤
+              pw.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+              // pulse 애니메이션
+              const overlay = getOrCreateOverlay(pw);
+              renderSentenceOverlay(overlay, rects, 'sentence-pulse-box');
+              setTimeout(() => clearOverlayBoxes(overlay, 'sentence-pulse-box'), 900);
             }
           }
         }
-      }
-      if (!target) {
-        // 문장이 아닌 곳 클릭 시 기존 매칭 하이라이트 제거
-        viewerScrollContainer.querySelectorAll('.active-mapped-sentence').forEach(el => {
-          el.classList.remove('active-mapped-sentence');
-        });
         return;
       }
 
-      const pageWrapper = target.closest('.pdf-page-wrapper') || target.closest('.trans-page-block');
-      if (!pageWrapper) return;
-      const pageNum = pageWrapper.dataset.page;
-      if (!pageNum) return;
-
-      const sentenceIdx = parseInt(target.dataset.sentenceIdx, 10);
-      if (isNaN(sentenceIdx)) return;
-
-      const { pdfIdx, transIdx, pdfElements } = getMappedElementsAndIndices(target, pageNum, sentenceIdx);
-      if (pdfIdx === -1 || transIdx === -1) return;
-
-      // 1. 기존 매칭 하이라이트 제거
-      viewerScrollContainer.querySelectorAll('.active-mapped-sentence').forEach(el => {
-        el.classList.remove('active-mapped-sentence');
-      });
-
-      // 2. 신규 고정 매칭 하이라이트 지정
-      pdfElements.forEach(el => {
-        el.classList.add('active-mapped-sentence');
-      });
-      if (transIdx !== -1) {
-        viewerScrollContainer.querySelectorAll(
-          `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${transIdx}"]`
-        ).forEach(el => {
-          el.classList.add('active-mapped-sentence');
-        });
+      // ── PDF textLayer 클릭 ──
+      if (!e.target.closest('.textLayer')) {
+        // 비어있는 곳 클릭 → active 클리어
+        applyActiveHighlight(null, null);
+        return;
       }
 
-      // 번역본 클릭 -> PDF로 스크롤
-      if (target.classList.contains('trans-sentence')) {
-        if (pdfElements.length > 0) {
-          const firstEl = pdfElements[0];
-          firstEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-          pdfElements.forEach(el => {
-            el.classList.add('sentence-pulse');
-            setTimeout(() => el.classList.remove('sentence-pulse'), 1000);
-          });
-        }
-      } 
-      // PDF 클릭 -> 번역본으로 스크롤
-      else {
-        if (transIdx !== -1) {
-          const match = viewerScrollContainer.querySelector(
-            `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${transIdx}"]`
-          );
-          if (match) {
-            match.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-            match.classList.add('sentence-pulse');
-            setTimeout(() => match.classList.remove('sentence-pulse'), 1000);
-          }
+      const detected = detectSentenceAtMouse(e);
+      if (!detected) {
+        applyActiveHighlight(null, null);
+        return;
+      }
+
+      const { pageNum, sentenceRange } = detected;
+      applyActiveHighlight(pageNum, sentenceRange);
+      activeHighlightPage = pageNum;
+      activeHighlightSentenceIdx = sentenceRange.sentenceIdx;
+
+      // 번역 패널로 스크롤
+      const transIdx = sentenceRange.sentenceIdx >= 10000 ? (sentenceRange.originalSentenceIdx ?? -1) : sentenceRange.sentenceIdx;
+      if (transIdx >= 0) {
+        const match = viewerScrollContainer.querySelector(
+          `.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${transIdx}"]`
+        );
+        if (match) {
+          match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          match.classList.add('sentence-pulse');
+          setTimeout(() => match.classList.remove('sentence-pulse'), 1000);
         }
       }
     } catch (err) {
-      console.warn("click scroll mapping failed:", err);
+      console.warn("click handler failed:", err);
     }
   });
 }
