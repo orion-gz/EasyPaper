@@ -13,6 +13,10 @@ node_modules/
 dist-ssr/
 *.local
 
+# AI
+ask/
+AGENTS.md
+
 # EasyPaper Local Databases & Storage
 backend/easypaper.db
 backend/easypaper.db-journal
