@@ -545,57 +545,130 @@ def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
     return captions
 
 
-def _match_caption_for_rect(rect: list, captions: List[Dict[str, Any]]) -> Dict[str, Optional[str]]:
+def _match_caption_for_rect(rect: list, captions: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     주어진 이미지/테이블 사각형과 가장 가까운 캡션을 찾아 라벨+전문을 반환합니다.
     캡션은 보통 그림 바로 아래, 표는 바로 위에 위치하므로 상하 인접 캡션을 모두
     후보로 보되, 가로 범위가 겹치고 세로 거리가 가장 짧은 것을 채택합니다.
+
+    벡터 그래픽으로 그려진 다이어그램은 (숨겨진 배경 사각형 등으로 인해) 감지된
+    bbox가 실제 그림 내용보다 아래/위로 더 뻗어 있어 캡션 줄과 겹쳐버리는
+    경우가 있다. 이 경우 캡션을 후보에서 완전히 제외하면 매칭 자체가 실패하므로,
+    사각형의 가장자리(상/하단 일정 비율 이내)에 걸친 겹침은 "사실상 인접"으로
+    보고 인정하되, 이후 크롭 시 캡션 줄을 침범하지 않도록 clip_y0/clip_y1로
+    잘라낼 경계를 함께 반환한다.
     """
     x0, y0, x1, y1 = rect
-    best_label = None
-    best_text = None
-    best_dist = None
+    edge_margin = min(30.0, (y1 - y0) * 0.35)
+    best = None
     for cap in captions:
         cx0, cy0, cx1, cy1 = cap["bbox"]
         # 가로 방향 겹침 여부 확인 (캡션이 그림/표 폭 범위와 어느 정도 겹쳐야 함)
         overlap = min(x1, cx1) - max(x0, cx0)
         if overlap <= 0:
             continue
+        clip_y0 = None
+        clip_y1 = None
         if cy0 >= y1:
             dist = cy0 - y1  # 캡션이 아래에 있는 경우 (Figure)
         elif cy1 <= y0:
             dist = y0 - cy1  # 캡션이 위에 있는 경우 (Table)
+        elif cy0 >= y1 - edge_margin:
+            # 사각형 하단 가장자리 부근까지 캡션이 파고든 경우 - 사실상 바로
+            # 아래에 있는 캡션으로 보고 인정하되, 캡션 시작 지점에서 잘라낸다
+            dist = 0.0
+            clip_y1 = cy0
+        elif cy1 <= y0 + edge_margin:
+            dist = 0.0
+            clip_y0 = cy1
         else:
-            continue  # 겹치는 영역에 있는 캡션은 대상에서 제외
+            continue  # 사각형 중심부까지 깊이 겹치는 캡션은 대상에서 제외
         if dist > 40.0:
             continue
-        if best_dist is None or dist < best_dist:
-            best_dist = dist
-            best_label = cap["label"]
-            best_text = cap["text"]
-    return {"label": best_label, "text": best_text}
+        if best is None or dist < best["dist"]:
+            best = {
+                "label": cap["label"],
+                "text": cap["text"],
+                "dist": dist,
+                "clip_y0": clip_y0,
+                "clip_y1": clip_y1,
+            }
+    if best is None:
+        return {"label": None, "text": None, "clip_y0": None, "clip_y1": None}
+    return best
 
 
 def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
     """
-    번호가 매겨진 수식(예: "... = mc^2   (3)")을 찾아 그 줄 전체를 오버레이 대상으로
-    반환합니다. 그림/표와 달리 수식은 이미 본문 텍스트 레이어에 문자로 존재하므로
-    별도 이미지 인식 없이, 줄 끝의 "(N)" 패턴만으로 위치를 특정한다.
+    번호가 매겨진 수식(예: "... = mc^2   (3)")을 찾아 오버레이 대상 bbox를 반환합니다.
+
+    수식 번호 "(N)"는 텍스트로 존재하지만, 그 앞의 실제 수식 본문(분수/합/적분
+    기호 등)은 번호 자체보다 훨씬 크고 - 특히 세로로 - 수식 번호 한 글자 줄의
+    bbox만 그대로 쓰면 번호만 딱 잘려 보이는 문제가 있었다. 이를 보정하기 위해:
+    - 세로: 위/아래로 가장 가까운 다른 텍스트 줄까지의 중간 지점까지 확장해,
+      본문 문단과 수식 사이의 여백(display equation 특유의 공백)을 최대한 포함한다.
+    - 가로: 페이지에서 같은 쪽(2단 레이아웃이면 좌/우 중 같은 쪽)에 속한 주변
+      줄들의 최소 x0을 찾아, 수식 번호만이 아니라 수식 본문이 시작되는 좌측
+      여백까지 폭을 넓힌다.
     """
-    equations = []
+    page_width = page.rect.width
     blocks = page.get_text("dict")["blocks"]
+
+    all_lines = []  # (x0, y0, x1, y1) - 페이지 내 모든 텍스트 줄
+    candidates = []  # (line_bbox, number)
     for b in blocks:
         for ln in b.get("lines", []):
+            bbox = ln.get("bbox")
+            if not bbox:
+                continue
+            all_lines.append(bbox)
             line_text = "".join(span.get("text", "") for span in ln.get("spans", [])).strip()
             if not line_text:
                 continue
             m = _EQUATION_LINE_RE.search(line_text)
-            if not m:
-                continue
-            equations.append({
-                "label": f"Equation {m.group(1)}",
-                "bbox": ln["bbox"],
-            })
+            if m:
+                candidates.append((bbox, m.group(1)))
+
+    equations = []
+    for (lx0, ly0, lx1, ly1), number in candidates:
+        eq_center_x = (lx0 + lx1) / 2
+        on_left_half = eq_center_x < page_width / 2
+
+        # 같은 쪽(컬럼)에 속하면서 수식 자신의 줄은 아닌 다른 텍스트 줄들
+        same_side_lines = [
+            (ox0, oy0, ox1, oy1) for (ox0, oy0, ox1, oy1) in all_lines
+            if ((ox0 + ox1) / 2 < page_width / 2) == on_left_half
+            and not (abs(oy0 - ly0) < 0.5 and abs(oy1 - ly1) < 0.5)
+        ]
+
+        above = [ln for ln in same_side_lines if ln[3] <= ly0 + 1]
+        below = [ln for ln in same_side_lines if ln[1] >= ly1 - 1]
+        nearest_above_bottom = max((ln[3] for ln in above), default=None)
+        nearest_below_top = min((ln[1] for ln in below), default=None)
+
+        # 위/아래 인접 줄까지의 중간 지점으로 확장 (너무 멀면 - 즉 그 사이에 다른
+        # 여백/그림이 있을 수 있으므로 - 최대 40pt까지만 확장)
+        if nearest_above_bottom is not None and ly0 - nearest_above_bottom < 80:
+            y0 = (nearest_above_bottom + ly0) / 2
+        else:
+            y0 = max(0.0, ly0 - 40.0)
+        if nearest_below_top is not None and nearest_below_top - ly1 < 80:
+            y1 = (ly1 + nearest_below_top) / 2
+        else:
+            y1 = ly1 + 40.0
+
+        # 세로로 40pt 이내에 있는 같은 쪽 줄들 중 가장 왼쪽 x0을 수식 본문의
+        # 좌측 여백으로 채택 (수식 번호 자신의 x0보다 훨씬 왼쪽일 가능성이 높음)
+        nearby_left_edges = [
+            ox0 for (ox0, oy0, ox1, oy1) in same_side_lines
+            if not (oy1 < ly0 - 40 or oy0 > ly1 + 40)
+        ]
+        x0 = min(nearby_left_edges) if nearby_left_edges else lx0
+
+        equations.append({
+            "label": f"Equation {number}",
+            "bbox": [x0, y0, lx1, y1],
+        })
     return equations
 
 
@@ -645,6 +718,7 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
             pass
 
         # 2-2. 가로 테이블 구분선(booktabs 등) 감지 Heuristic
+        drawings = []
         try:
             drawings = page.get_drawings()
             horizontal_lines = []
@@ -707,7 +781,47 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
                             raw_rects.append([gx0, gy0, gx1, gy1])
         except Exception:
             pass
-        
+
+        # 2-3. 벡터 그래픽으로 그려진 다이어그램/차트 감지. 아키텍처 다이어그램처럼
+        # 래스터 이미지가 아니라 선/도형(벡터 패스)만으로 그려진 그림은
+        # get_image_info()로 잡히지 않아 이전 단계들을 모두 건너뛴다. 페이지
+        # 전체를 덮는 배경/테두리 장식 요소를 그림으로 오인하지 않도록 개별
+        # drawing이 페이지의 90%를 넘는 경우는 제외하고, 서로 인접한 벡터 조각들
+        # (화살표, 박스, 선 등)을 넉넉한 임계값으로 하나의 다이어그램으로 묶는다.
+        try:
+            vector_rects = []
+            for d in drawings:
+                r = d.get("rect")
+                if not r:
+                    continue
+                w = r.x1 - r.x0
+                h = r.y1 - r.y0
+                if w <= 0 or h <= 0:
+                    continue
+                if w > page_width * 0.9 and h > page_height * 0.9:
+                    continue
+                # 테두리(stroke) 없이 흰색(또는 거의 흰색)만 채운 사각형은 배경/그룹핑용
+                # 투명 요소일 뿐 실제로 보이는 그림 내용이 아니므로 제외한다 (그대로
+                # 두면 다이어그램 앞에 깔린 흰 배경판 크기만큼 bbox가 과도하게
+                # 커져서, 예를 들어 바로 아래의 캡션 줄까지 침범하는 문제가 있었다).
+                fill = d.get("fill")
+                stroke = d.get("color")
+                if stroke is None and fill is not None and all(c is not None and c > 0.92 for c in fill):
+                    continue
+                vector_rects.append([r.x0, r.y0, r.x1, r.y1])
+
+            if vector_rects:
+                merged_vector = merge_bboxes(vector_rects, threshold=10.0)
+                for r in merged_vector:
+                    w = r[2] - r[0]
+                    h = r[3] - r[1]
+                    # 구분선/불릿 등 작은 장식 요소는 제외하고, 의미 있는 크기의
+                    # 다이어그램/차트로 보이는 클러스터만 그림 후보로 채택
+                    if w >= 60 and h >= 60:
+                        raw_rects.append(r)
+        except Exception:
+            pass
+
         # 3. 바운딩 박스 그룹화 (인접 임계값을 4.0포인트로 대폭 좁혀서 과도하게 커지는 현상 방지)
         merged_rects = merge_bboxes(raw_rects, threshold=4.0)
         
@@ -716,11 +830,20 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
             # 캡션 매칭은 패딩을 적용하기 전 원본 사각형 기준으로 수행 (더 정확한 인접도 판단)
             match = _match_caption_for_rect(r, page_captions)
 
+            # 벡터 다이어그램 등에서 감지된 사각형이 실제 그림 내용보다 아래/위로
+            # 더 뻗어 있어 캡션 줄과 겹쳤던 경우, 캡션 경계에서 잘라내 크롭이
+            # 캡션 텍스트까지 침범하지 않도록 한다.
+            rect_y0, rect_y1 = r[1], r[3]
+            if match.get("clip_y1") is not None:
+                rect_y1 = min(rect_y1, match["clip_y1"])
+            if match.get("clip_y0") is not None:
+                rect_y0 = max(rect_y0, match["clip_y0"])
+
             # 여백(Padding) 8포인트 적용하여 차트 라벨이나 테이블 테두리가 잘리지 않도록 안전 확보
             x0 = max(0.0, r[0] - 8.0)
-            y0 = max(0.0, r[1] - 8.0)
+            y0 = max(0.0, rect_y0 - 8.0)
             x1 = min(page_width, r[2] + 8.0)
-            y1 = min(page_height, r[3] + 8.0)
+            y1 = min(page_height, rect_y1 + 8.0)
 
             w = x1 - x0
             h = y1 - y0
