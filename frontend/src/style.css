@@ -4481,6 +4481,68 @@ body.light-theme .citation-tooltip {
   cursor: wait;
 }
 
+/* ── 본문 "Figure N"/"Table N" 참조 호버 미리보기 ── */
+.figure-ref-marker-box {
+  position: absolute;
+  pointer-events: auto !important;
+  cursor: pointer;
+  border-radius: 1px;
+  border-bottom: 1px dotted rgba(217, 158, 47, 0.7);
+}
+.figure-ref-marker-box:hover {
+  background-color: rgba(217, 158, 47, 0.20);
+}
+body.light-theme .figure-ref-marker-box:hover {
+  background-color: rgba(217, 158, 47, 0.15);
+}
+.figure-preview-tooltip {
+  position: fixed;
+  z-index: 200;
+  max-width: min(420px, calc(100vw - 16px));
+  background: rgba(23, 20, 38, 0.97);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fadeInTooltip 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+body.light-theme .figure-preview-tooltip {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: var(--border-strong);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+.figure-preview-tooltip.hidden {
+  display: none;
+}
+.figure-preview-tooltip-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.figure-preview-tooltip-loading {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 20px 4px;
+  text-align: center;
+}
+.figure-preview-tooltip-img {
+  display: block;
+  max-width: 100%;
+  max-height: min(60vh, 480px);
+  width: auto;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: #fff;
+}
+.figure-preview-tooltip-img.hidden {
+  display: none;
+}
+
 /* ── 여러 논문 비교 채팅 ── */
 .file-btn-outline {
   display: inline-flex;

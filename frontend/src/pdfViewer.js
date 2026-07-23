@@ -35,7 +35,51 @@ async function loadPDFJS() {
 export async function loadPDF(url) {
   await loadPDFJS()
   pdfDoc = await pdfjsLib.getDocument(url).promise
+  figureCropCache.clear()
   return pdfDoc.numPages
+}
+
+// pageNum이 현재 화면에 렌더링되어 있지 않아도(가상 스크롤로 아직 마운트 전이거나
+// 이미 스크롤을 벗어나 언마운트됐어도) 크롭할 수 있도록, DOM의 canvas에 의존하지
+// 않고 pdfDoc에서 직접 해당 페이지를 오프스크린 캔버스로 렌더링해 크롭한다.
+// 문서 어디서든 본문이 "Figure 1"을 언급하면 그 그림이 실제로는 다른 페이지에
+// 있을 수 있기 때문에 필요하다. 같은 좌표를 반복 호버할 때 매번 다시 렌더링하지
+// 않도록 결과를 캐싱한다(문서를 새로 열면 loadPDF에서 캐시를 비운다).
+const figureCropCache = new Map()
+
+export async function renderFigureCrop(pageNum, imgPercent) {
+  if (!pdfDoc) return null
+  const cacheKey = `${pageNum}:${imgPercent.left}:${imgPercent.top}:${imgPercent.width}:${imgPercent.height}`
+  if (figureCropCache.has(cacheKey)) return figureCropCache.get(cacheKey)
+
+  try {
+    const page = await pdfDoc.getPage(pageNum)
+    const viewport = page.getViewport({ scale: 2.5 })
+
+    const pageCanvas = document.createElement('canvas')
+    pageCanvas.width = Math.floor(viewport.width)
+    pageCanvas.height = Math.floor(viewport.height)
+    await page.render({ canvasContext: pageCanvas.getContext('2d'), viewport }).promise
+
+    const leftPx   = (imgPercent.left   / 100) * pageCanvas.width
+    const topPx    = (imgPercent.top    / 100) * pageCanvas.height
+    const widthPx  = (imgPercent.width  / 100) * pageCanvas.width
+    const heightPx = (imgPercent.height / 100) * pageCanvas.height
+
+    const cropCanvas = document.createElement('canvas')
+    cropCanvas.width = widthPx
+    cropCanvas.height = heightPx
+    cropCanvas.getContext('2d').drawImage(
+      pageCanvas, leftPx, topPx, widthPx, heightPx, 0, 0, widthPx, heightPx
+    )
+
+    const dataUrl = cropCanvas.toDataURL('image/png')
+    figureCropCache.set(cacheKey, dataUrl)
+    return dataUrl
+  } catch (e) {
+    console.error(`Figure crop render failed p.${pageNum}:`, e)
+    return null
+  }
 }
 
 /**

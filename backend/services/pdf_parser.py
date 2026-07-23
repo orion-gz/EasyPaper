@@ -1,6 +1,6 @@
 import fitz  # PyMuPDF
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 def extract_pages(pdf_path: str) -> List[Dict[str, Any]]:
@@ -500,10 +500,72 @@ def render_cover_image(pdf_path: str, output_path: str, top_fraction: float = 0.
         doc.close()
 
 
+_CAPTION_RE = re.compile(r"^\s*(Fig(?:ure)?|Table)\.?\s*(\d+)\b", re.IGNORECASE)
+
+
+def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
+    """
+    페이지에서 "Figure 1", "Table 2" 처럼 캡션으로 시작하는 텍스트 블록을 찾아
+    (라벨, bbox) 목록으로 반환합니다. 본문 중간에 이런 단어가 우연히 나오는 경우를
+    배제하기 위해 블록의 "첫 줄"이 캡션 패턴으로 시작하는 경우만 인정합니다.
+    """
+    captions = []
+    blocks = page.get_text("dict")["blocks"]
+    for b in blocks:
+        lines = b.get("lines")
+        if not lines:
+            continue
+        first_line_text = "".join(
+            span.get("text", "") for span in lines[0].get("spans", [])
+        ).strip()
+        if not first_line_text:
+            continue
+        m = _CAPTION_RE.match(first_line_text)
+        if not m:
+            continue
+        kind = "Figure" if m.group(1).lower().startswith("fig") else "Table"
+        number = m.group(2)
+        captions.append({
+            "label": f"{kind} {number}",
+            "bbox": b["bbox"],
+        })
+    return captions
+
+
+def _match_caption_for_rect(rect: list, captions: List[Dict[str, Any]]) -> Optional[str]:
+    """
+    주어진 이미지/테이블 사각형과 가장 가까운 캡션을 찾아 라벨을 반환합니다.
+    캡션은 보통 그림 바로 아래, 표는 바로 위에 위치하므로 상하 인접 캡션을 모두
+    후보로 보되, 가로 범위가 겹치고 세로 거리가 가장 짧은 것을 채택합니다.
+    """
+    x0, y0, x1, y1 = rect
+    best_label = None
+    best_dist = None
+    for cap in captions:
+        cx0, cy0, cx1, cy1 = cap["bbox"]
+        # 가로 방향 겹침 여부 확인 (캡션이 그림/표 폭 범위와 어느 정도 겹쳐야 함)
+        overlap = min(x1, cx1) - max(x0, cx0)
+        if overlap <= 0:
+            continue
+        if cy0 >= y1:
+            dist = cy0 - y1  # 캡션이 아래에 있는 경우 (Figure)
+        elif cy1 <= y0:
+            dist = y0 - cy1  # 캡션이 위에 있는 경우 (Table)
+        else:
+            continue  # 겹치는 영역에 있는 캡션은 대상에서 제외
+        if dist > 40.0:
+            continue
+        if best_dist is None or dist < best_dist:
+            best_dist = dist
+            best_label = cap["label"]
+    return best_label
+
+
 def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
     """
     PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 테이블(Table)의 영역 정보를 추출합니다.
     인접한 이미지/테이블 요소를 그룹화(Merge)하고 마진(Padding)을 주어 크롭 시 잘림 현상을 방지합니다.
+    가능한 경우 근처 캡션("Figure 1", "Table 2" 등)을 찾아 label로 함께 반환합니다.
     """
     doc = fitz.open(pdf_path)
     images_data = []
@@ -514,7 +576,8 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
         page_height = page.rect.height
         if page_width == 0 or page_height == 0:
             continue
-            
+
+        page_captions = _find_page_captions(page)
         raw_rects = []
         
         # 1. 래스터 이미지(Raster Images) 좌표 수집
@@ -612,30 +675,34 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
         
         # 4. 여백 보정 및 최소 규격 필터링
         for r in merged_rects:
+            # 캡션 매칭은 패딩을 적용하기 전 원본 사각형 기준으로 수행 (더 정확한 인접도 판단)
+            label = _match_caption_for_rect(r, page_captions)
+
             # 여백(Padding) 8포인트 적용하여 차트 라벨이나 테이블 테두리가 잘리지 않도록 안전 확보
             x0 = max(0.0, r[0] - 8.0)
             y0 = max(0.0, r[1] - 8.0)
             x1 = min(page_width, r[2] + 8.0)
             y1 = min(page_height, r[3] + 8.0)
-            
+
             w = x1 - x0
             h = y1 - y0
             # 최종 크기가 가로/세로 40포인트 이상인 진짜 그림/테이블만 선별
             if w < 40 or h < 40:
                 continue
-                
+
             # 백분율 좌표 계산
             left = (x0 / page_width) * 100
             top = (y0 / page_height) * 100
             width = (w / page_width) * 100
             height = (h / page_height) * 100
-            
+
             images_data.append({
                 "page": page_num + 1,
                 "left": left,
                 "top": top,
                 "width": width,
-                "height": height
+                "height": height,
+                "label": label
             })
             
     doc.close()

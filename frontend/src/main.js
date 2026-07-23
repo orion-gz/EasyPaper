@@ -1,7 +1,7 @@
 import './style.css'
 import { marked } from 'marked'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI } from './api.js'
-import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline } from './pdfViewer.js'
+import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference } from './library.js'
 import { icon } from './icons.js'
 
@@ -4033,6 +4033,9 @@ async function loadDocumentImages(docId) {
       if (pageWrapper) {
         const pageNum = parseInt(pageWrapper.dataset.page)
         renderImageOverlayLayer(textLayerDiv, pageNum)
+        // Figure/Table 라벨은 documentImages가 로드되어야 알 수 있으므로,
+        // 이미 렌더링된 페이지들의 본문 참조 오버레이도 여기서 함께 다시 그린다.
+        renderFigureRefOverlayLayer(textLayerDiv, pageNum)
       }
     })
   } catch (e) {
@@ -5950,6 +5953,7 @@ window.onTextLayerRendered = (textLayerDiv, pageNum) => {
 
   renderImageOverlayLayer(textLayerDiv, pageNum)
   renderCitationOverlayLayer(textLayerDiv, pageNum)
+  renderFigureRefOverlayLayer(textLayerDiv, pageNum)
 
   // Render floating memos
   renderPageMemos(pageNum)
@@ -6154,6 +6158,141 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
     addCitationBox(match.index, match.index + match[0].length, keys[0])
   }
 }
+
+// 본문 중 "Figure 1", "Fig. 2", "Table 3" 같은 표기를 감지해, 호버 시 실제
+// 해당 그림/표를 오버레이로 미리 보여준다(멀리 떨어진 페이지로 매번 스크롤해서
+// 찾아보러 가야 하는 불편을 줄이기 위함). 인용 표기 오버레이와 동일한 원칙으로,
+// 백엔드가 좌표+라벨을 뽑아낸(=documentImages에 실제로 존재하는) 그림/표를
+// 가리키는 표기만 호버 가능한 박스로 그린다.
+const FIGURE_TABLE_REF_RE = /\b(Fig(?:ure)?|Table)\.?\s*(\d+)\b/gi
+
+function normalizeFigureTableLabel(keyword, number) {
+  const kind = keyword.toLowerCase().startsWith('fig') ? 'Figure' : 'Table'
+  return `${kind} ${number}`
+}
+
+function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
+  const pageWrapper = textLayerDiv.closest('.pdf-page-wrapper')
+  if (!pageWrapper) return
+
+  const overlay = getOrCreateOverlay(pageWrapper)
+  overlay.querySelectorAll('.figure-ref-marker-box').forEach(el => el.remove())
+
+  const images = state.documentImages || []
+  if (images.length === 0) return
+
+  const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+  if (!vtm || !vtm.fullText) return
+
+  FIGURE_TABLE_REF_RE.lastIndex = 0
+  let match
+  while ((match = FIGURE_TABLE_REF_RE.exec(vtm.fullText)) !== null) {
+    const label = normalizeFigureTableLabel(match[1], match[2])
+    const targetImg = images.find(img => img.label === label)
+    if (!targetImg) continue
+
+    const rects = getSentenceRects({ charStart: match.index, charEnd: match.index + match[0].length }, vtm, textLayerDiv)
+    rects.forEach(r => {
+      const box = document.createElement('div')
+      box.className = 'figure-ref-marker-box'
+      box.style.left   = `${r.left}px`
+      box.style.top    = `${r.top}px`
+      box.style.width  = `${r.width}px`
+      box.style.height = `${r.height}px`
+      box.addEventListener('mouseenter', () => showFigurePreviewTooltip(targetImg, box))
+      box.addEventListener('mouseleave', scheduleFigurePreviewTooltipHide)
+      overlay.appendChild(box)
+    })
+  }
+}
+
+// ── Figure/Table 참조 호버 미리보기 툴팁 ──────────
+let figurePreviewTooltipEl = null
+let figurePreviewHideTimer = null
+let figurePreviewBoxEl = null
+let figurePreviewRequestId = 0
+
+function getOrCreateFigurePreviewTooltip() {
+  if (figurePreviewTooltipEl) return figurePreviewTooltipEl
+  const el = document.createElement('div')
+  el.className = 'figure-preview-tooltip hidden'
+  el.innerHTML = `
+    <div class="figure-preview-tooltip-label"></div>
+    <div class="figure-preview-tooltip-loading">${icon('refreshCw', 14, 'style="vertical-align:-2px;margin-right:4px"')}불러오는 중...</div>
+    <img class="figure-preview-tooltip-img hidden" alt="" />
+  `
+  document.body.appendChild(el)
+
+  el.addEventListener('mouseenter', () => {
+    if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+  })
+  el.addEventListener('mouseleave', scheduleFigurePreviewTooltipHide)
+
+  figurePreviewTooltipEl = el
+  return el
+}
+
+function positionFigurePreviewTooltip() {
+  if (!figurePreviewTooltipEl || !figurePreviewBoxEl) return
+  const rect = figurePreviewBoxEl.getBoundingClientRect()
+  const tw = figurePreviewTooltipEl.offsetWidth || 280
+  const th = figurePreviewTooltipEl.offsetHeight || 160
+  let left = rect.left + rect.width / 2 - tw / 2
+  left = Math.max(8, Math.min(left, window.innerWidth - tw - 8))
+  let top = rect.top - th - 10
+  if (top < 8) top = rect.bottom + 10
+  figurePreviewTooltipEl.style.left = `${left}px`
+  figurePreviewTooltipEl.style.top = `${top}px`
+}
+
+async function showFigurePreviewTooltip(imgEntry, boxEl) {
+  if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+  figurePreviewBoxEl = boxEl
+  const requestId = ++figurePreviewRequestId
+
+  const tooltip = getOrCreateFigurePreviewTooltip()
+  tooltip.querySelector('.figure-preview-tooltip-label').textContent = `${imgEntry.label} · p.${imgEntry.page}`
+  const loadingEl = tooltip.querySelector('.figure-preview-tooltip-loading')
+  const imgEl = tooltip.querySelector('.figure-preview-tooltip-img')
+  loadingEl.classList.remove('hidden')
+  loadingEl.textContent = ''
+  loadingEl.innerHTML = `${icon('refreshCw', 14, 'style="vertical-align:-2px;margin-right:4px"')}불러오는 중...`
+  imgEl.classList.add('hidden')
+  imgEl.removeAttribute('src')
+
+  tooltip.classList.remove('hidden')
+  positionFigurePreviewTooltip()
+
+  try {
+    const dataUrl = await renderFigureCrop(imgEntry.page, imgEntry)
+    // 그 사이 다른 표기로 호버가 옮겨갔거나 툴팁이 닫혔으면 결과를 버린다
+    if (requestId !== figurePreviewRequestId || figurePreviewTooltipEl.classList.contains('hidden')) return
+    if (!dataUrl) throw new Error('empty crop')
+    imgEl.onload = () => positionFigurePreviewTooltip()
+    imgEl.src = dataUrl
+    loadingEl.classList.add('hidden')
+    imgEl.classList.remove('hidden')
+  } catch (e) {
+    console.warn('그림/표 미리보기 렌더 실패:', e)
+    if (requestId !== figurePreviewRequestId) return
+    loadingEl.innerHTML = '미리보기를 불러올 수 없습니다.'
+  }
+}
+
+function hideFigurePreviewTooltip() {
+  if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+  if (figurePreviewTooltipEl) figurePreviewTooltipEl.classList.add('hidden')
+  figurePreviewBoxEl = null
+}
+
+function scheduleFigurePreviewTooltipHide() {
+  if (figurePreviewHideTimer) clearTimeout(figurePreviewHideTimer)
+  figurePreviewHideTimer = setTimeout(hideFigurePreviewTooltip, 220)
+}
+
+document.addEventListener('scroll', () => {
+  if (figurePreviewTooltipEl && !figurePreviewTooltipEl.classList.contains('hidden')) hideFigurePreviewTooltip()
+}, true)
 
 // ── 인용 표기 호버 툴팁: 참고문헌 원문 + 외부 링크 찾기 + Google Scholar 검색 ──
 let citationTooltipEl = null
