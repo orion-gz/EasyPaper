@@ -77,24 +77,14 @@ def _apply_annotations_to_page(page: fitz.Page, annotations: list) -> None:
             continue
 
 
-def _run_story_pages(html: str, page_width: Optional[float] = None, page_height: Optional[float] = None) -> fitz.Document:
+def _run_story_pages(html: str) -> fitz.Document:
     """HTML을 fitz.Story로 흘려보내 필요한 만큼 자동으로 페이지를 나눈
-    새 PDF 문서를 만들어 반환한다 (한글 포함 텍스트도 자연스럽게 렌더링됨).
-
-    page_width/page_height를 지정하면 그 크기로 페이지를 생성한다 - 원본 PDF
-    페이지와 나란히 배치(pair)할 번역 페이지를 원본과 동일한 크기로 맞추기
-    위해 사용한다. 지정하지 않으면 기존처럼 A4 고정 크기를 쓴다.
-    """
+    새 PDF 문서를 만들어 반환한다 (한글 포함 텍스트도 자연스럽게 렌더링됨)."""
     buf = io.BytesIO()
     story = fitz.Story(html=html)
     writer = fitz.DocumentWriter(buf)
-    if page_width and page_height:
-        mediabox = fitz.Rect(0, 0, page_width, page_height)
-        margin = min(48.0, page_width * 0.08, page_height * 0.08)
-    else:
-        mediabox = fitz.paper_rect("a4")
-        margin = 48.0
-    where = mediabox + (margin, margin, -margin, -margin)
+    mediabox = fitz.paper_rect("a4")
+    where = mediabox + (48, 48, -48, -48)
 
     more = 1
     while more:
@@ -155,9 +145,10 @@ def _add_translation_pair_pages(out_doc: fitz.Document, src_doc: fitz.Document, 
     벡터 그대로 삽입 - 래스터화하지 않으므로 텍스트 선택/검색 그대로 유지),
     오른쪽엔 그 페이지의 번역 전문을 배치한다.
 
-    번역 텍스트가 원본 페이지 한 장 분량보다 길어 한 페이지에 다 들어가지
-    않으면(_run_story_pages가 여러 페이지로 나눠 반환), 첫 페이지만 오른쪽
-    절반에 배치하고 나머지는 "번역 계속" 전용 페이지로 바로 뒤에 이어붙인다.
+    원문과의 1:1 페어링(같은 페이지 번호 = 같은 출력 페이지)을 항상 유지하기
+    위해, 번역이 원본 페이지 한 장 분량보다 길어도 별도 페이지로 넘기지
+    않는다. 대신 insert_htmlbox(scale_low=0)로 필요한 만큼 글자 크기를
+    무제한 축소해서라도 반드시 한 페이지 오른쪽 절반 안에 다 들어가게 한다.
     """
     for page_idx in range(src_doc.page_count):
         src_page = src_doc[page_idx]
@@ -168,26 +159,16 @@ def _add_translation_pair_pages(out_doc: fitz.Document, src_doc: fitz.Document, 
         left_rect = fitz.Rect(0, 0, sr.width, sr.height)
         pair_page.show_pdf_page(left_rect, src_doc, page_idx)
 
-        right_rect = fitz.Rect(sr.width, 0, sr.width * 2, sr.height)
+        right_rect = fitz.Rect(sr.width, 0, sr.width * 2, sr.height) + (16, 16, -16, -16)
         if not translation_text:
             pair_page.insert_textbox(
-                right_rect + (16, 16, -16, -16),
+                right_rect,
                 "(번역 없음)",
                 fontsize=10.5, color=(0.6, 0.6, 0.6), fontname=_KOREAN_TEXTBOX_FONT,
             )
             continue
 
-        trans_doc = _run_story_pages(
-            _build_page_translation_html(translation_text),
-            page_width=sr.width, page_height=sr.height,
-        )
-        try:
-            if trans_doc.page_count > 0:
-                pair_page.show_pdf_page(right_rect, trans_doc, 0)
-                if trans_doc.page_count > 1:
-                    out_doc.insert_pdf(trans_doc, from_page=1)
-        finally:
-            trans_doc.close()
+        pair_page.insert_htmlbox(right_rect, _build_page_translation_html(translation_text), scale_low=0)
 
 
 def generate_annotated_pdf(

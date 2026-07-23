@@ -73,8 +73,7 @@ def test_generate_pdf_pairs_original_and_translation_per_page(sample_pdf):
     }
     result = generate_annotated_pdf(sample_pdf, {}, translations, {})
     doc = fitz.open("pdf", result)
-    # 각 번역이 원본 페이지 절반 폭에 다 들어가는 짧은 텍스트이므로, 페이지
-    # 수는 원본과 동일하게 유지되고(번역용 페이지가 뒤에 추가되지 않음)
+    # 페이지 수는 항상 원본과 1:1로 유지된다(번역용 페이지가 뒤에 추가되지 않음)
     assert doc.page_count == 2
 
     src = fitz.open(sample_pdf)
@@ -86,6 +85,22 @@ def test_generate_pdf_pairs_original_and_translation_per_page(sample_pdf):
     page1_text = doc[0].get_text()
     assert "self-attention mechanisms" in page1_text  # 왼쪽: 원문 그대로(벡터 삽입, 텍스트 추출 가능)
     assert "셀프 어텐션" in page1_text  # 오른쪽: 같은 페이지에 번역이 나란히
+    doc.close()
+
+
+def test_generate_pdf_shrinks_long_translation_to_fit_single_page(sample_pdf):
+    """번역이 원본 페이지 한 장에 다 들어가지 않을 만큼 길어도, 페어링(원문
+    페이지 수 = 출력 페이지 수)을 깨는 별도 페이지를 추가하는 대신 글자
+    크기를 줄여서라도 반드시 한 페이지 안에 담아야 한다."""
+    long_translation = "이 문장은 페이지를 넘칠 정도로 아주 길게 반복되는 번역 텍스트입니다. " * 400
+    translations = {"1": long_translation}
+    result = generate_annotated_pdf(sample_pdf, {}, translations, {})
+    doc = fitz.open("pdf", result)
+    assert doc.page_count == 2  # 번역이 아무리 길어도 원본 페이지 수 그대로
+
+    page1_text = doc[0].get_text()
+    assert "self-attention mechanisms" in page1_text
+    assert "아주 길게 반복되는" in page1_text  # 축소되어도 텍스트 자체는 온전히 들어가 있어야 함
     doc.close()
 
 
