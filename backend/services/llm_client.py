@@ -142,6 +142,21 @@ async def stream_translation(
             truncated_prev = prev_context[-1000:] if len(prev_context) > 1000 else prev_context
             context_part = f"\n[참고 문맥 정보]\n- 이전 페이지/단락의 번역 결과 (참고용):\n\"\"\"\n{truncated_prev}\n\"\"\"\n"
 
+        # 제외 옵션(수식/표/참고문헌)은 "앞서 안내한 규칙을 유지하라"는 말만으로는
+        # 세션이 길어질수록 모델이 잊어버리는 경우가 있었다(특히 표 제외 규칙 -
+        # 표는 시각적으로 두드러진 콘텐츠라 지시를 무시하고 그대로 재현하려는
+        # 경향이 강함). 5페이지마다만 리마인드하는 전체 규칙과 별개로, 이 세
+        # 가지 제외 옵션만큼은 매 페이지 짧은 프롬프트에도 항상 명시적으로
+        # 다시 못박아 드리프트를 방지한다.
+        exclusion_reminders = []
+        if ignore_math:
+            exclusion_reminders.append("수식은 번역하지 말고 생략하거나 단순 기호 처리하세요.")
+        if ignore_table:
+            exclusion_reminders.append("Markdown 표(Table) 형식의 출력은 절대 하지 말고, 표 데이터는 번역 결과에서 완전히 제외하세요.")
+        if ignore_refs:
+            exclusion_reminders.append("참고문헌(References) 목록이나 각주 정보는 번역하지 말고 결과에서 제외하세요.")
+        exclusion_part = ("\n" + "\n".join(exclusion_reminders) + "\n") if exclusion_reminders else ""
+
         prompt = (
             "앞서 안내한 문체·용어·수식·표·참고문헌 처리 규칙을 동일하게 유지하며 이어지는 다음 원문을 번역하세요.\n"
             "서론이나 설명 없이 번역 결과만 즉시 출력하세요. 입력 텍스트의 각 문장 앞에 있는 [S0], [S1] 등 문장 식별자 "
@@ -151,6 +166,7 @@ async def stream_translation(
             "임의로 더 쪼개어 추가 태그를 붙이지도 마세요. 일부 태그는 [S3:I]처럼 콜론 뒤에 알파벳이 붙어 있을 수 "
             "있는데, 이것도 지우거나 숫자만 남기지 말고 태그 전체를 그대로 유지하세요. 원문에서 **별표 두 개로 감싸인 "
             "부분**은 볼드 처리였으니 번역 결과에서도 그 부분을 동일하게 **볼드**로 감싸서 출력하세요.\n"
+            f"{exclusion_part}"
             f"{context_part}\n"
             f"원문:\n{text}\n\n"
             f"{target_lang} 번역:"
