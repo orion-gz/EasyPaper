@@ -4517,6 +4517,15 @@ body.light-theme .figure-preview-tooltip {
 .figure-preview-tooltip.hidden {
   display: none;
 }
+.figure-preview-tooltip-items {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.figure-preview-tooltip-item + .figure-preview-tooltip-item {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
 .figure-preview-tooltip-label {
   font-size: 12px;
   font-weight: 600;
@@ -4532,7 +4541,7 @@ body.light-theme .figure-preview-tooltip {
 .figure-preview-tooltip-img {
   display: block;
   max-width: 100%;
-  max-height: min(60vh, 480px);
+  max-height: min(50vh, 420px);
   width: auto;
   height: auto;
   border-radius: 4px;
@@ -4541,6 +4550,12 @@ body.light-theme .figure-preview-tooltip {
 }
 .figure-preview-tooltip-img.hidden {
   display: none;
+}
+.figure-preview-tooltip-caption {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-top: 8px;
 }
 
 /* ── 여러 논문 비교 채팅 ── */

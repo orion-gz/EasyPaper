@@ -500,14 +500,22 @@ def render_cover_image(pdf_path: str, output_path: str, top_fraction: float = 0.
         doc.close()
 
 
-_CAPTION_RE = re.compile(r"^\s*(Fig(?:ure)?|Table)\.?\s*(\d+)\b", re.IGNORECASE)
+_CAPTION_RE = re.compile(r"^\s*(Fig(?:ure)?|Table)\.?\s*(\d+)\b\.?\s*[:.\-]?\s*", re.IGNORECASE)
+# 수식 번호: 줄 끝에 "(3)"처럼 소괄호 숫자만 단독으로 오는 경우만 인정한다. 인용
+# 연도("...(2020)")와 헷갈리지 않도록 자릿수를 1~3자리로 제한한다(수식 번호가
+# 999개를 넘는 논문은 사실상 없음. 반면 연도는 항상 4자리라 자동으로 배제됨).
+_EQUATION_LINE_RE = re.compile(r"\((\d{1,3})\)\s*$")
 
 
 def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
     """
-    페이지에서 "Figure 1", "Table 2" 처럼 캡션으로 시작하는 텍스트 블록을 찾아
-    (라벨, bbox) 목록으로 반환합니다. 본문 중간에 이런 단어가 우연히 나오는 경우를
-    배제하기 위해 블록의 "첫 줄"이 캡션 패턴으로 시작하는 경우만 인정합니다.
+    페이지에서 "Figure 1", "Table 2" 처럼 캡션으로 시작하는 줄을 찾아
+    (라벨, bbox, 캡션 전문) 목록으로 반환합니다. 두 단 레이아웃 등에서 캡션이
+    문단 블록의 "첫 줄"이 아니라 블록 중간에 낄 수도 있어(예: 이전 문단과
+    캡션이 한 블록으로 묶인 경우) 블록의 모든 줄을 훑되, 각 줄의 시작이
+    캡션 패턴인 경우만 인정해 본문 중간에 우연히 나오는 경우를 배제한다.
+    캡션 전문은 매칭된 줄부터 블록 끝까지의 텍스트를 이어붙여 구성한다
+    (캡션이 보통 그 블록에서 끝까지 이어지는 독립된 문단이기 때문).
     """
     captions = []
     blocks = page.get_text("dict")["blocks"]
@@ -515,31 +523,37 @@ def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
         lines = b.get("lines")
         if not lines:
             continue
-        first_line_text = "".join(
-            span.get("text", "") for span in lines[0].get("spans", [])
-        ).strip()
-        if not first_line_text:
-            continue
-        m = _CAPTION_RE.match(first_line_text)
-        if not m:
-            continue
-        kind = "Figure" if m.group(1).lower().startswith("fig") else "Table"
-        number = m.group(2)
-        captions.append({
-            "label": f"{kind} {number}",
-            "bbox": b["bbox"],
-        })
+        line_texts = [
+            "".join(span.get("text", "") for span in ln.get("spans", [])).strip()
+            for ln in lines
+        ]
+        for i, line_text in enumerate(line_texts):
+            if not line_text:
+                continue
+            m = _CAPTION_RE.match(line_text)
+            if not m:
+                continue
+            kind = "Figure" if m.group(1).lower().startswith("fig") else "Table"
+            number = m.group(2)
+            caption_text = " ".join(t for t in line_texts[i:] if t).strip()
+            captions.append({
+                "label": f"{kind} {number}",
+                "bbox": lines[i]["bbox"],
+                "text": caption_text[:600],
+            })
+            break  # 한 블록에서 캡션은 한 번만 인정 (이후 줄은 caption_text에 이미 포함됨)
     return captions
 
 
-def _match_caption_for_rect(rect: list, captions: List[Dict[str, Any]]) -> Optional[str]:
+def _match_caption_for_rect(rect: list, captions: List[Dict[str, Any]]) -> Dict[str, Optional[str]]:
     """
-    주어진 이미지/테이블 사각형과 가장 가까운 캡션을 찾아 라벨을 반환합니다.
+    주어진 이미지/테이블 사각형과 가장 가까운 캡션을 찾아 라벨+전문을 반환합니다.
     캡션은 보통 그림 바로 아래, 표는 바로 위에 위치하므로 상하 인접 캡션을 모두
     후보로 보되, 가로 범위가 겹치고 세로 거리가 가장 짧은 것을 채택합니다.
     """
     x0, y0, x1, y1 = rect
     best_label = None
+    best_text = None
     best_dist = None
     for cap in captions:
         cx0, cy0, cx1, cy1 = cap["bbox"]
@@ -558,7 +572,31 @@ def _match_caption_for_rect(rect: list, captions: List[Dict[str, Any]]) -> Optio
         if best_dist is None or dist < best_dist:
             best_dist = dist
             best_label = cap["label"]
-    return best_label
+            best_text = cap["text"]
+    return {"label": best_label, "text": best_text}
+
+
+def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
+    """
+    번호가 매겨진 수식(예: "... = mc^2   (3)")을 찾아 그 줄 전체를 오버레이 대상으로
+    반환합니다. 그림/표와 달리 수식은 이미 본문 텍스트 레이어에 문자로 존재하므로
+    별도 이미지 인식 없이, 줄 끝의 "(N)" 패턴만으로 위치를 특정한다.
+    """
+    equations = []
+    blocks = page.get_text("dict")["blocks"]
+    for b in blocks:
+        for ln in b.get("lines", []):
+            line_text = "".join(span.get("text", "") for span in ln.get("spans", [])).strip()
+            if not line_text:
+                continue
+            m = _EQUATION_LINE_RE.search(line_text)
+            if not m:
+                continue
+            equations.append({
+                "label": f"Equation {m.group(1)}",
+                "bbox": ln["bbox"],
+            })
+    return equations
 
 
 def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
@@ -676,7 +714,7 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
         # 4. 여백 보정 및 최소 규격 필터링
         for r in merged_rects:
             # 캡션 매칭은 패딩을 적용하기 전 원본 사각형 기준으로 수행 (더 정확한 인접도 판단)
-            label = _match_caption_for_rect(r, page_captions)
+            match = _match_caption_for_rect(r, page_captions)
 
             # 여백(Padding) 8포인트 적용하여 차트 라벨이나 테이블 테두리가 잘리지 않도록 안전 확보
             x0 = max(0.0, r[0] - 8.0)
@@ -702,9 +740,34 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
                 "top": top,
                 "width": width,
                 "height": height,
-                "label": label
+                "label": match["label"],
+                "caption": match["text"],
             })
-            
+
+        # 5. 번호 매겨진 수식 - 그림/표와 달리 별도 그래픽 영역이 아니라 텍스트 한
+        # 줄이므로, 위의 40pt 최소 크기 필터를 거치지 않고 그 줄의 bbox에 작은
+        # 패딩만 적용해 바로 추가한다.
+        for eq in _find_page_equations(page):
+            ex0, ey0, ex1, ey1 = eq["bbox"]
+            x0 = max(0.0, ex0 - 4.0)
+            y0 = max(0.0, ey0 - 4.0)
+            x1 = min(page_width, ex1 + 4.0)
+            y1 = min(page_height, ey1 + 4.0)
+            w = x1 - x0
+            h = y1 - y0
+            if w <= 0 or h <= 0:
+                continue
+
+            images_data.append({
+                "page": page_num + 1,
+                "left": (x0 / page_width) * 100,
+                "top": (y0 / page_height) * 100,
+                "width": (w / page_width) * 100,
+                "height": (h / page_height) * 100,
+                "label": eq["label"],
+                "caption": None,
+            })
+
     doc.close()
     return images_data
 

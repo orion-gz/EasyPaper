@@ -6159,16 +6159,45 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
   }
 }
 
-// 본문 중 "Figure 1", "Fig. 2", "Table 3" 같은 표기를 감지해, 호버 시 실제
-// 해당 그림/표를 오버레이로 미리 보여준다(멀리 떨어진 페이지로 매번 스크롤해서
-// 찾아보러 가야 하는 불편을 줄이기 위함). 인용 표기 오버레이와 동일한 원칙으로,
-// 백엔드가 좌표+라벨을 뽑아낸(=documentImages에 실제로 존재하는) 그림/표를
-// 가리키는 표기만 호버 가능한 박스로 그린다.
-const FIGURE_TABLE_REF_RE = /\b(Fig(?:ure)?|Table)\.?\s*(\d+)\b/gi
+// 본문 중 "Figure 1", "Figs. 3-5", "Table 2", "Eq. (3)" 같은 표기를 감지해,
+// 호버 시 실제 해당 그림/표/수식을 오버레이로 미리 보여준다(멀리 떨어진
+// 페이지로 매번 스크롤해서 찾아보러 가야 하는 불편을 줄이기 위함). 인용 표기
+// 오버레이와 동일한 원칙으로, 백엔드가 좌표+라벨을 뽑아낸(=documentImages에
+// 실제로 존재하는) 대상을 가리키는 표기만 호버 가능한 박스로 그린다.
+//
+// 복수형(Figures/Figs/Tables)과 "Figs. 3-5", "Figures 1 and 2", "Table 1, 2"
+// 처럼 여러 개를 한 번에 가리키는 표기도 지원하기 위해, 키워드 뒤에 오는
+// 숫자 나열 전체를 그룹으로 캡처한 뒤 parseFigureTableNumberList로 펼친다.
+const FIGURE_TABLE_REF_RE = /\b(Figures?|Figs?|Tables?|Equations?|Eqns?|Eqs?)\.?\s*\(?\s*((?:\d+\s*(?:(?:[-–,]|and|&)\s*)+)*\d+)\b\)?/gi
 
-function normalizeFigureTableLabel(keyword, number) {
-  const kind = keyword.toLowerCase().startsWith('fig') ? 'Figure' : 'Table'
-  return `${kind} ${number}`
+function normalizeFigureTableKind(keyword) {
+  const kw = keyword.toLowerCase()
+  if (kw.startsWith('fig')) return 'Figure'
+  if (kw.startsWith('tab')) return 'Table'
+  return 'Equation'
+}
+
+// "1", "1, 2", "3-5", "1 and 2", "1, 2 and 3" 같은 숫자 나열을 개별 번호
+// 목록으로 펼친다 (본문 인용 파싱의 parseCitationNumbers와 동일한 원칙).
+function parseFigureTableNumberList(text) {
+  const nums = []
+  const normalized = text.replace(/&/g, ',').replace(/\band\b/gi, ',')
+  normalized.split(',').forEach(part => {
+    const trimmed = part.trim()
+    if (!trimmed) return
+    const range = trimmed.match(/^(\d+)\s*[-–]\s*(\d+)$/)
+    if (range) {
+      const start = parseInt(range[1], 10)
+      const end = parseInt(range[2], 10)
+      if (end >= start && end - start <= 50) {
+        for (let n = start; n <= end; n++) nums.push(String(n))
+      }
+    } else {
+      const single = trimmed.match(/^\d+$/)
+      if (single) nums.push(single[0])
+    }
+  })
+  return nums
 }
 
 function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
@@ -6187,9 +6216,12 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
   FIGURE_TABLE_REF_RE.lastIndex = 0
   let match
   while ((match = FIGURE_TABLE_REF_RE.exec(vtm.fullText)) !== null) {
-    const label = normalizeFigureTableLabel(match[1], match[2])
-    const targetImg = images.find(img => img.label === label)
-    if (!targetImg) continue
+    const kind = normalizeFigureTableKind(match[1])
+    const numbers = parseFigureTableNumberList(match[2])
+    const targets = numbers
+      .map(n => images.find(img => img.label === `${kind} ${n}`))
+      .filter(Boolean)
+    if (targets.length === 0) continue
 
     const rects = getSentenceRects({ charStart: match.index, charEnd: match.index + match[0].length }, vtm, textLayerDiv)
     rects.forEach(r => {
@@ -6199,14 +6231,14 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
       box.style.top    = `${r.top}px`
       box.style.width  = `${r.width}px`
       box.style.height = `${r.height}px`
-      box.addEventListener('mouseenter', () => showFigurePreviewTooltip(targetImg, box))
+      box.addEventListener('mouseenter', () => showFigurePreviewTooltip(targets, box))
       box.addEventListener('mouseleave', scheduleFigurePreviewTooltipHide)
       overlay.appendChild(box)
     })
   }
 }
 
-// ── Figure/Table 참조 호버 미리보기 툴팁 ──────────
+// ── Figure/Table/Equation 참조 호버 미리보기 툴팁 ──────────
 let figurePreviewTooltipEl = null
 let figurePreviewHideTimer = null
 let figurePreviewBoxEl = null
@@ -6216,11 +6248,7 @@ function getOrCreateFigurePreviewTooltip() {
   if (figurePreviewTooltipEl) return figurePreviewTooltipEl
   const el = document.createElement('div')
   el.className = 'figure-preview-tooltip hidden'
-  el.innerHTML = `
-    <div class="figure-preview-tooltip-label"></div>
-    <div class="figure-preview-tooltip-loading">${icon('refreshCw', 14, 'style="vertical-align:-2px;margin-right:4px"')}불러오는 중...</div>
-    <img class="figure-preview-tooltip-img hidden" alt="" />
-  `
+  el.innerHTML = `<div class="figure-preview-tooltip-items"></div>`
   document.body.appendChild(el)
 
   el.addEventListener('mouseenter', () => {
@@ -6245,38 +6273,47 @@ function positionFigurePreviewTooltip() {
   figurePreviewTooltipEl.style.top = `${top}px`
 }
 
-async function showFigurePreviewTooltip(imgEntry, boxEl) {
+// targets: documentImages 항목 배열(1개 이상 - "Figures 1 and 2"처럼 여러 개를
+// 한 번에 가리키는 표기는 각각을 세로로 쌓아 보여준다)
+async function showFigurePreviewTooltip(targets, boxEl) {
   if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
   figurePreviewBoxEl = boxEl
   const requestId = ++figurePreviewRequestId
 
   const tooltip = getOrCreateFigurePreviewTooltip()
-  tooltip.querySelector('.figure-preview-tooltip-label').textContent = `${imgEntry.label} · p.${imgEntry.page}`
-  const loadingEl = tooltip.querySelector('.figure-preview-tooltip-loading')
-  const imgEl = tooltip.querySelector('.figure-preview-tooltip-img')
-  loadingEl.classList.remove('hidden')
-  loadingEl.textContent = ''
-  loadingEl.innerHTML = `${icon('refreshCw', 14, 'style="vertical-align:-2px;margin-right:4px"')}불러오는 중...`
-  imgEl.classList.add('hidden')
-  imgEl.removeAttribute('src')
+  const itemsEl = tooltip.querySelector('.figure-preview-tooltip-items')
+  itemsEl.innerHTML = targets.map((t, idx) => `
+    <div class="figure-preview-tooltip-item" data-idx="${idx}">
+      <div class="figure-preview-tooltip-label">${escapeHtml(t.label)} · p.${t.page}</div>
+      <div class="figure-preview-tooltip-loading">${icon('refreshCw', 14, 'style="vertical-align:-2px;margin-right:4px"')}불러오는 중...</div>
+      <img class="figure-preview-tooltip-img hidden" alt="" />
+      ${t.caption ? `<div class="figure-preview-tooltip-caption">${escapeHtml(t.caption)}</div>` : ''}
+    </div>
+  `).join('')
 
   tooltip.classList.remove('hidden')
   positionFigurePreviewTooltip()
 
-  try {
-    const dataUrl = await renderFigureCrop(imgEntry.page, imgEntry)
-    // 그 사이 다른 표기로 호버가 옮겨갔거나 툴팁이 닫혔으면 결과를 버린다
-    if (requestId !== figurePreviewRequestId || figurePreviewTooltipEl.classList.contains('hidden')) return
-    if (!dataUrl) throw new Error('empty crop')
-    imgEl.onload = () => positionFigurePreviewTooltip()
-    imgEl.src = dataUrl
-    loadingEl.classList.add('hidden')
-    imgEl.classList.remove('hidden')
-  } catch (e) {
-    console.warn('그림/표 미리보기 렌더 실패:', e)
-    if (requestId !== figurePreviewRequestId) return
-    loadingEl.innerHTML = '미리보기를 불러올 수 없습니다.'
-  }
+  targets.forEach(async (t, idx) => {
+    const itemEl = itemsEl.querySelector(`.figure-preview-tooltip-item[data-idx="${idx}"]`)
+    if (!itemEl) return
+    const loadingEl = itemEl.querySelector('.figure-preview-tooltip-loading')
+    const imgEl = itemEl.querySelector('.figure-preview-tooltip-img')
+    try {
+      const dataUrl = await renderFigureCrop(t.page, t)
+      // 그 사이 다른 표기로 호버가 옮겨갔거나 툴팁이 닫혔으면 결과를 버린다
+      if (requestId !== figurePreviewRequestId || figurePreviewTooltipEl.classList.contains('hidden')) return
+      if (!dataUrl) throw new Error('empty crop')
+      imgEl.onload = () => positionFigurePreviewTooltip()
+      imgEl.src = dataUrl
+      loadingEl.classList.add('hidden')
+      imgEl.classList.remove('hidden')
+    } catch (e) {
+      console.warn('그림/표/수식 미리보기 렌더 실패:', e)
+      if (requestId !== figurePreviewRequestId) return
+      loadingEl.innerHTML = '미리보기를 불러올 수 없습니다.'
+    }
+  })
 }
 
 function hideFigurePreviewTooltip() {
