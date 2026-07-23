@@ -208,12 +208,10 @@ async def export_annotated_pdf(
         if text:
             translations[str(page_num)] = text
 
-    doc_title = (doc.get("metadata") or {}).get("title") or doc.get("filename", "EasyPaper")
-
     try:
         from services.pdf_export import generate_annotated_pdf
         pdf_bytes = generate_annotated_pdf(
-            pdf_path, doc_title, payload.annotations, translations, payload.memos
+            pdf_path, payload.annotations, translations, payload.memos
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF 생성 실패: {str(e)}")
