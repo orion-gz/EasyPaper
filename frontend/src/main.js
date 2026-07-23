@@ -66,6 +66,10 @@ const state = {
   // 번역 패널의 "키워드/단어", "요약" 탭을 끌지 여부(기본값 켜짐 - 다른 편의
   // 설정과 달리 토큰을 추가로 소모하는 기능이라 설정에서 끌 수 있게 함).
   disableInsights: localStorage.getItem('easypaper_disable_insights') === 'true',
+  // 본문 인용([1], (Smith, 2020) 등) 표기 호버 미리보기를 끌지 여부.
+  disableCitationOverlay: localStorage.getItem('easypaper_disable_citation_overlay') === 'true',
+  // Figure/Table/수식 참조 표기 호버 미리보기를 끌지 여부.
+  disableFigureOverlay: localStorage.getItem('easypaper_disable_figure_overlay') === 'true',
   // pageNum_kind(예: "3_keywords") → 생성된 텍스트. 탭 재방문 시 재요청 방지용 캐시.
   pageInsightCache: {}
 }
@@ -132,6 +136,8 @@ const settingDefaultZoom  = $('setting-default-zoom')
 const settingDisableHoverTooltip = $('setting-disable-hover-tooltip')
 const settingDisableBookmark = $('setting-disable-bookmark')
 const settingDisableInsights = $('setting-disable-insights')
+const settingDisableCitationOverlay = $('setting-disable-citation-overlay')
+const settingDisableFigureOverlay = $('setting-disable-figure-overlay')
 const clearCacheBtn       = $('clear-cache-btn')
 const settingAccentSwatches = $('setting-accent-swatches')
 const settingAccentPicker   = $('setting-accent-picker')
@@ -2212,6 +2218,8 @@ globalSettingsBtn.addEventListener('click', async () => {
   settingDisableHoverTooltip.checked = state.disableHoverTooltip
   settingDisableBookmark.checked = state.disableBookmark
   settingDisableInsights.checked = state.disableInsights
+  settingDisableCitationOverlay.checked = state.disableCitationOverlay
+  settingDisableFigureOverlay.checked = state.disableFigureOverlay
   updateAccentSettingsUI(currentAccentColor)
 
   // 3. 시스템 설정값 로드 (백엔드 통신)
@@ -2447,6 +2455,31 @@ settingDisableInsights.addEventListener('change', () => {
   state.disableInsights = settingDisableInsights.checked
   localStorage.setItem('easypaper_disable_insights', state.disableInsights)
   applyInsightsTabVisibility()
+})
+
+// 이미 렌더링되어 있는 페이지들의 오버레이 레이어를 다시 그려 설정 변경을
+// 즉시 반영한다 (renderXOverlayLayer는 항상 기존 박스를 지우고 나서 다시
+// 그리므로, 꺼진 상태면 지우기만 하고 끝난다).
+function refreshAllPageOverlays() {
+  document.querySelectorAll('.textLayer').forEach(textLayerDiv => {
+    const pageWrapper = textLayerDiv.closest('.pdf-page-wrapper')
+    if (!pageWrapper) return
+    const pageNum = parseInt(pageWrapper.dataset.page)
+    renderCitationOverlayLayer(textLayerDiv, pageNum)
+    renderFigureRefOverlayLayer(textLayerDiv, pageNum)
+  })
+}
+
+settingDisableCitationOverlay.addEventListener('change', () => {
+  state.disableCitationOverlay = settingDisableCitationOverlay.checked
+  localStorage.setItem('easypaper_disable_citation_overlay', state.disableCitationOverlay)
+  refreshAllPageOverlays()
+})
+
+settingDisableFigureOverlay.addEventListener('change', () => {
+  state.disableFigureOverlay = settingDisableFigureOverlay.checked
+  localStorage.setItem('easypaper_disable_figure_overlay', state.disableFigureOverlay)
+  refreshAllPageOverlays()
 })
 
 // 시스템 설정 폼 제출
@@ -6105,6 +6138,7 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
 
   const overlay = getOrCreateOverlay(pageWrapper)
   overlay.querySelectorAll('.citation-marker-box').forEach(el => el.remove())
+  if (state.disableCitationOverlay) return
 
   const refMap = state.referenceMap || {}
   if (Object.keys(refMap).length === 0) return
@@ -6206,6 +6240,7 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
 
   const overlay = getOrCreateOverlay(pageWrapper)
   overlay.querySelectorAll('.figure-ref-marker-box').forEach(el => el.remove())
+  if (state.disableFigureOverlay) return
 
   const images = state.documentImages || []
   if (images.length === 0) return
