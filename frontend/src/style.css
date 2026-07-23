@@ -4526,6 +4526,14 @@ body.light-theme .figure-preview-tooltip {
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
+.figure-preview-tooltip-item {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s ease;
+}
+.figure-preview-tooltip-item:hover {
+  background-color: rgba(217, 158, 47, 0.10);
+}
 .figure-preview-tooltip-label {
   font-size: 12px;
   font-weight: 600;

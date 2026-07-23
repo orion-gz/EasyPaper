@@ -6268,6 +6268,16 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
       box.style.height = `${r.height}px`
       box.addEventListener('mouseenter', () => showFigurePreviewTooltip(targets, box))
       box.addEventListener('mouseleave', scheduleFigurePreviewTooltipHide)
+      // 클릭하면 해당 그림/표/수식이 실제로 있는 페이지로 이동한다. 여러 개를
+      // 한 번에 가리키는 표기("Figures 1 and 2")는 첫 번째 대상 기준으로
+      // 이동하고, 나머지는 미리보기 툴팁 안의 각 항목을 클릭해 개별 이동한다.
+      box.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        window.getSelection().removeAllRanges()
+        hideFigurePreviewTooltip()
+        scrollToPage(viewerScrollContainer, targets[0].page)
+      })
       overlay.appendChild(box)
     })
   }
@@ -6278,6 +6288,10 @@ let figurePreviewTooltipEl = null
 let figurePreviewHideTimer = null
 let figurePreviewBoxEl = null
 let figurePreviewRequestId = 0
+
+// showFigurePreviewTooltip이 마지막으로 그린 targets 배열 - 툴팁 안 개별
+// 항목을 클릭했을 때 어느 페이지로 이동할지 idx로 되찾기 위해 보관한다.
+let figurePreviewCurrentTargets = []
 
 function getOrCreateFigurePreviewTooltip() {
   if (figurePreviewTooltipEl) return figurePreviewTooltipEl
@@ -6290,6 +6304,17 @@ function getOrCreateFigurePreviewTooltip() {
     if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
   })
   el.addEventListener('mouseleave', scheduleFigurePreviewTooltipHide)
+  // 여러 대상이 한 툴팁에 쌓여 있을 때, 특정 항목을 클릭하면 그 항목의
+  // 페이지로 이동한다 (내용은 매번 innerHTML로 다시 그려지므로 이벤트
+  // 위임으로 한 번만 등록해둔다).
+  el.querySelector('.figure-preview-tooltip-items').addEventListener('click', (e) => {
+    const itemEl = e.target.closest('.figure-preview-tooltip-item')
+    if (!itemEl) return
+    const target = figurePreviewCurrentTargets[parseInt(itemEl.dataset.idx, 10)]
+    if (!target) return
+    hideFigurePreviewTooltip()
+    scrollToPage(viewerScrollContainer, target.page)
+  })
 
   figurePreviewTooltipEl = el
   return el
@@ -6313,6 +6338,7 @@ function positionFigurePreviewTooltip() {
 async function showFigurePreviewTooltip(targets, boxEl) {
   if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
   figurePreviewBoxEl = boxEl
+  figurePreviewCurrentTargets = targets
   const requestId = ++figurePreviewRequestId
 
   const tooltip = getOrCreateFigurePreviewTooltip()
