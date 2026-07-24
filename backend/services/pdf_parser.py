@@ -24,6 +24,13 @@ def _extract_page(page: fitz.Page, page_num: int) -> Dict[str, Any]:
     """단일 페이지에서 텍스트를 추출합니다."""
     page_width = page.rect.width
 
+    # matplotlib 등으로 그려 PDF에 벡터 그래픽(선/도형)으로 삽입된 차트/다이어그램은
+    # 축 라벨, 범례, 막대그래프 수치 등이 래스터 이미지가 아니라 실제 텍스트 객체로
+    # 존재해서 get_text()에 본문 블록과 구분 없이 그대로 섞여 나온다. 이를 걸러내기
+    # 위해 벡터 그림 영역을 먼저 찾아두고, 아래에서 이 영역과 대부분 겹치는 텍스트
+    # 블록은 본문에서 제외한다.
+    figure_rects = _find_vector_figure_rects(page)
+
     # "dict" 모드로 추출해야 줄/글자 단위 상세 정보(볼드 여부, 줄별 x좌표)에
     # 접근할 수 있다 - "blocks" 모드는 블록의 좌표+텍스트만 주고 스타일 정보를
     # 전부 버린다. 블록 분할/정렬 결과는 "blocks" 모드와 동일함을 확인했으므로
@@ -38,6 +45,8 @@ def _extract_page(page: fitz.Page, page_num: int) -> Dict[str, Any]:
         if not text.strip():
             continue
         x0, y0, x1, y1 = b["bbox"]
+        if figure_rects and _rect_mostly_inside_any(x0, y0, x1, y1, figure_rects):
+            continue
         blocks.append((x0, y0, x1, y1, text, is_indented))
 
     # 2단 레이아웃 감지
@@ -478,6 +487,85 @@ def merge_bboxes(rects: list, threshold: float = 15.0) -> list:
     return rects
 
 
+# 벡터 그림 영역으로 인정할 최소 폭/높이(포인트). extract_pdf_images()의 최종
+# 그림 판별 기준(w>=60, h>=60)과 동일하게 맞춰, 이 값 미만인 작은 도형(불릿,
+# 구분선 등)은 실제 그림이 아니라 장식 요소로 보고 텍스트 필터링 대상에서 제외한다.
+_VECTOR_FIGURE_MIN_SIZE = 60.0
+
+# 텍스트 블록이 그림 영역에 "속한다"고 판단하는 최소 겹침 비율. 그림 바로 옆/아래에
+# 붙어 시작하는 본문 문단이 가장자리만 살짝 겹치는 경우까지 오탐하지 않도록 과반
+# 이상 겹칠 때만 그림 내부 텍스트로 간주한다.
+_FIGURE_OVERLAP_RATIO = 0.6
+
+
+def _find_vector_figure_rects(page: "fitz.Page", drawings: Optional[list] = None) -> List[List[float]]:
+    """
+    페이지에서 벡터 그래픽(선/도형)만으로 그려진 다이어그램/차트 영역을 찾습니다.
+
+    matplotlib 등으로 그려 PDF에 삽입된 그림은 래스터 이미지가 아니라 벡터
+    패스(선/도형)로 구성되는 경우가 많은데, 이때 축 라벨/범례/수치 등은 실제
+    PDF 텍스트 객체로 함께 삽입되어 get_text()로 그대로 추출되어 버린다.
+    이 함수가 반환하는 영역은 그런 텍스트를 번역 대상 본문에서 제외하는 데
+    쓰이고(extract_pages 경로), 그림 오버레이용 bbox 후보 수집(extract_pdf_images
+    경로)에도 재사용된다.
+
+    drawings를 미리 계산해 둔 경우(호출부가 이미 page.get_drawings()를 호출했다면)
+    인자로 넘겨 중복 호출을 피할 수 있다.
+    """
+    page_width = page.rect.width
+    page_height = page.rect.height
+
+    if drawings is None:
+        try:
+            drawings = page.get_drawings()
+        except Exception:
+            return []
+
+    vector_rects = []
+    for d in drawings:
+        r = d.get("rect")
+        if not r:
+            continue
+        w = r.x1 - r.x0
+        h = r.y1 - r.y0
+        if w <= 0 or h <= 0:
+            continue
+        if w > page_width * 0.9 and h > page_height * 0.9:
+            continue
+        # 테두리(stroke) 없이 흰색(또는 거의 흰색)만 채운 사각형은 배경/그룹핑용
+        # 투명 요소일 뿐 실제로 보이는 그림 내용이 아니므로 제외한다.
+        fill = d.get("fill")
+        stroke = d.get("color")
+        if stroke is None and fill is not None and all(c is not None and c > 0.92 for c in fill):
+            continue
+        vector_rects.append([r.x0, r.y0, r.x1, r.y1])
+
+    if not vector_rects:
+        return []
+
+    merged = merge_bboxes(vector_rects, threshold=10.0)
+    return [
+        r for r in merged
+        if (r[2] - r[0]) >= _VECTOR_FIGURE_MIN_SIZE and (r[3] - r[1]) >= _VECTOR_FIGURE_MIN_SIZE
+    ]
+
+
+def _rect_mostly_inside_any(x0: float, y0: float, x1: float, y1: float, rects: List[List[float]]) -> bool:
+    """(x0, y0, x1, y1) 사각형의 면적 대부분이 rects 중 하나와 겹치는지 확인합니다."""
+    area = max(0.0, x1 - x0) * max(0.0, y1 - y0)
+    if area <= 0:
+        return False
+    for rx0, ry0, rx1, ry1 in rects:
+        ix0, iy0 = max(x0, rx0), max(y0, ry0)
+        ix1, iy1 = min(x1, rx1), min(y1, ry1)
+        if ix1 <= ix0 or iy1 <= iy0:
+            continue
+        inter_area = (ix1 - ix0) * (iy1 - iy0)
+        if inter_area / area >= _FIGURE_OVERLAP_RATIO:
+            return True
+    return False
+
+
 def render_cover_image(pdf_path: str, output_path: str, top_fraction: float = 0.45, zoom: float = 2.0) -> bool:
     """
     라이브러리 카드 미리보기용으로, 1페이지 상단(제목+저자+abstract가 보통 위치하는
@@ -811,43 +899,8 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
 
         # 2-3. 벡터 그래픽으로 그려진 다이어그램/차트 감지. 아키텍처 다이어그램처럼
         # 래스터 이미지가 아니라 선/도형(벡터 패스)만으로 그려진 그림은
-        # get_image_info()로 잡히지 않아 이전 단계들을 모두 건너뛴다. 페이지
-        # 전체를 덮는 배경/테두리 장식 요소를 그림으로 오인하지 않도록 개별
-        # drawing이 페이지의 90%를 넘는 경우는 제외하고, 서로 인접한 벡터 조각들
-        # (화살표, 박스, 선 등)을 넉넉한 임계값으로 하나의 다이어그램으로 묶는다.
-        try:
-            vector_rects = []
-            for d in drawings:
-                r = d.get("rect")
-                if not r:
-                    continue
-                w = r.x1 - r.x0
-                h = r.y1 - r.y0
-                if w <= 0 or h <= 0:
-                    continue
-                if w > page_width * 0.9 and h > page_height * 0.9:
-                    continue
-                # 테두리(stroke) 없이 흰색(또는 거의 흰색)만 채운 사각형은 배경/그룹핑용
-                # 투명 요소일 뿐 실제로 보이는 그림 내용이 아니므로 제외한다 (그대로
-                # 두면 다이어그램 앞에 깔린 흰 배경판 크기만큼 bbox가 과도하게
-                # 커져서, 예를 들어 바로 아래의 캡션 줄까지 침범하는 문제가 있었다).
-                fill = d.get("fill")
-                stroke = d.get("color")
-                if stroke is None and fill is not None and all(c is not None and c > 0.92 for c in fill):
-                    continue
-                vector_rects.append([r.x0, r.y0, r.x1, r.y1])
-
-            if vector_rects:
-                merged_vector = merge_bboxes(vector_rects, threshold=10.0)
-                for r in merged_vector:
-                    w = r[2] - r[0]
-                    h = r[3] - r[1]
-                    # 구분선/불릿 등 작은 장식 요소는 제외하고, 의미 있는 크기의
-                    # 다이어그램/차트로 보이는 클러스터만 그림 후보로 채택
-                    if w >= 60 and h >= 60:
-                        raw_rects.append(r)
-        except Exception:
-            pass
+        # get_image_info()로 잡히지 않아 이전 단계들을 모두 건너뛴다.
+        raw_rects.extend(_find_vector_figure_rects(page, drawings=drawings))
 
         # 3. 바운딩 박스 그룹화 (인접 임계값을 4.0포인트로 대폭 좁혀서 과도하게 커지는 현상 방지)
         merged_rects = merge_bboxes(raw_rects, threshold=4.0)
