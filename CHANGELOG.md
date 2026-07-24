@@ -3,8 +3,45 @@
 EasyPaper의 변경 이력입니다. 이 프로젝트는 커밋 해시 기반 롤링 업데이트를 사용하며,
 별도의 버전 번호 대신 병합된 날짜 기준으로 정리합니다.
 
+## 2026-07-24
+
+- feat: main 브랜치 자동 배포 GitHub Actions 워크플로우 추가 (#142)
+- fix: 상하로 쌓인 서브패널 그림의 호버 오버레이 잘림 수정 (#141)
+- fix: 서브플롯 여러 개로 나뉜 그림의 호버 오버레이가 절반만 보이던 문제 수정 (#140)
+- fix: PDF 내보내기에서 markdown 볼드/LaTeX 수식 렌더링 수정 (#139)
+
+## 2026-07-23
+
+- fix: 세션 유지형 번역 프롬프트에서 표 제외 규칙 드리프트 수정 (#138)
+- fix: PDF 내보내기에서 긴 번역을 축소해 한 페이지에 강제로 맞춤 (#137)
+- feat: 번역 포함 PDF 내보내기를 뷰어처럼 원문·번역 페이지 페어링 (#136)
+- feat: Figure/Table/수식 참조 클릭 시 해당 페이지로 이동 (#135)
+- feat: 인용/Figure/Table/수식 오버레이 끄기 설정 추가 (#134)
+- fix: 수식/벡터 다이어그램 그림 오버레이 정확도 개선 (#133)
+- feat: Figure/Table/수식 참조 호버 미리보기 개선 (#132)
+- feat: Figure/Table 참조 호버 미리보기 추가 (#131)
+- fix: 로그인 생략 설정 섹션 여백 통일 (#130)
+- feat: 로그인 상태 유지 및 로그인 생략 기능 추가 (#129)
+- feat: 전체 앱 아이콘을 새 디자인(style1)으로 교체 (#128)
+- feat: Tauri 데스크탑 앱화 (Windows/macOS/Linux) (#127)
+- ci: Tauri 릴리스 워크플로우를 main에 추가 (#126)
+- feat: 온보딩 Ollama 모델 다운로드 추천 목록에 Gemma 등 최신 모델 추가 (#124)
+- fix: Windows에서 콘솔 코드페이지 인코딩 문제로 백엔드 기동 실패 수정 (#125)
+- ci: Tauri 데스크탑 스파이크 워크플로우를 main에 추가 (#123)
+- fix: macOS 뷰어 번역 진행 스피너가 타원형으로 찌그러지는 문제 수정 (#122)
+- fix: 온보딩 번역 엔진 선택 후 뷰어에 ollama로 표시되는 문제 수정 (#121)
+- fix: macOS CLI 미탐지 및 npm 전역 설치 EACCES 문제 해결 (#120)
+- fix: 드롭캡/줄내 이어붙음으로 References 헤더를 못 찾던 문제 수정 (#119)
+- feat: 본문 인용 오버레이에 (Author, Year) 스타일 지원 추가 (#118)
+- fix: Windows에서 Antigravity CLI 설치 스크립트 실패 문제 수정 (#117)
+
 ## 2026-07-22
 
+- fix: KaTeX 인용 텍스트 중복/줄바꿈 및 인용 이미지 새로고침 소실 수정 (#116)
+- feat: refresh app icon, remove bloated fake-SVG favicon, harden static file serving (#115)
+- feat: add app favicon and icon set (#114)
+- docs: refresh README with badges, table of contents, and lighter screenshots (#113)
+- feat: add CHANGELOG.md and full-history changelog popup (#112)
 - fix: system update restart failure and stale frontend build after update (#111)
 - feat: add hover tooltip and Google Scholar fallback for citation references (#110)
 - refactor: unify changelog UI across settings and update popups (#109)
