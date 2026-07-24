@@ -15,12 +15,16 @@
 그 항목만 조용히 건너뛴다(전체 내보내기가 실패하지 않음).
 """
 
+import base64
 import io
 import re
 from html import escape as html_escape
 from typing import Optional
 
 import fitz
+from matplotlib import mathtext
+from matplotlib.font_manager import FontProperties
+from PIL import Image
 
 _HIGHLIGHT_DEFAULT_COLOR = (1, 0.92, 0.23)  # 노랑
 _UNDERLINE_DEFAULT_COLOR = (0.93, 0.26, 0.26)  # 빨강
@@ -28,6 +32,18 @@ _UNDERLINE_DEFAULT_COLOR = (0.93, 0.26, 0.26)  # 빨강
 # PyMuPDF 내장 CJK 폰트 - 기본 14종 폰트(helv 등)는 한글 글리프가 없어
 # "??"로만 표시되므로, 한글이 섞인 텍스트는 반드시 이 폰트를 써야 한다.
 _KOREAN_TEXTBOX_FONT = "korea"
+
+# 번역 텍스트 안의 "**볼드**" 및 "$인라인 수식$"/"$$블록 수식$$" 를 찾기 위한
+# 패턴. $$...$$를 $...$보다 먼저 시도해야 블록 수식이 인라인으로 잘못
+# 쪼개지지 않는다.
+_FORMULA_SPLIT_RE = re.compile(r"(\$\$.+?\$\$|\$[^$\n]+?\$)", re.DOTALL)
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
+# matplotlib mathtext에 내장된 수식용 폰트는 한글 글리프가 없어(뷰어의 KaTeX와
+# 달리 시스템 폰트로 대체되지 않음) 한글이 섞인 "수식"을 렌더링하면 네모 박스
+# (tofu)로 깨진다. 번역 모델이 `\text{여기서 ...}`처럼 수식 안에 한글 설명을
+# 끼워 넣는 경우가 실제로 있어, 이런 세그먼트는 이미지 렌더링을 시도하지 않고
+# 일반 텍스트로 안전하게 대체한다.
+_HANGUL_RE = re.compile(r"[가-힣]")
 
 
 def _hex_to_rgb01(hex_color: Optional[str], fallback: tuple) -> tuple:
@@ -98,15 +114,95 @@ def _run_story_pages(html: str) -> fitz.Document:
     return fitz.open("pdf", buf.read())
 
 
+def _render_formula_img_tag(formula: str, fontsize: float) -> Optional[str]:
+    """LaTeX 수식 문자열을 matplotlib의 mathtext로 렌더링해 <img> 태그로
+    반환한다. PyMuPDF의 Story/insert_htmlbox HTML 엔진은 MathML/LaTeX를 전혀
+    해석하지 못해(렌더링해보면 태그와 수식 구조가 통째로 사라지고 글자만
+    나열됨) 수식을 이렇게 별도 이미지로 만들어 끼워 넣지 않으면 뷰어에서
+    보던 수식이 원문 그대로의 "$", "\\frac" 같은 깨진 텍스트로 노출된다.
+
+    렌더링에 실패하면(mathtext가 지원하지 않는 LaTeX 명령 등) None을 반환해
+    호출부가 원문 텍스트로라도 대체할 수 있게 한다 - 전체 내보내기가
+    실패하면 안 되므로.
+    """
+    formula = formula.strip()
+    if not formula:
+        return None
+    try:
+        dpi = 200
+        buf = io.BytesIO()
+        mathtext.math_to_image(f"${formula}$", buf, dpi=dpi, prop=FontProperties(size=fontsize), format="png")
+        png_bytes = buf.getvalue()
+        with Image.open(io.BytesIO(png_bytes)) as im:
+            px_w, px_h = im.size
+        pt_w, pt_h = px_w / dpi * 72, px_h / dpi * 72
+        b64 = base64.b64encode(png_bytes).decode("ascii")
+        # PyMuPDF의 HTML 엔진은 <img>에 vertical-align을 적용하지 않아(테스트로
+        # 확인) 이미지 하단이 텍스트 기준선에 맞춰진다 - 수식이 줄 높이보다
+        # 커서 살짝 위로 떠 보일 수 있지만, 원문 그대로의 깨진 LaTeX 텍스트보다는
+        # 훨씬 낫다.
+        return f'<img src="data:image/png;base64,{b64}" width="{pt_w:.1f}" height="{pt_h:.1f}">'
+    except Exception:
+        return None
+
+
+def _plain_text_with_bold_to_html(text: str) -> str:
+    """"**볼드**" 마크다운만 처리하는 일반 텍스트 -> HTML 변환 (수식이 아닌
+    구간, 그리고 한글이 섞여 렌더링할 수 없는 "가짜 수식" 구간에 공통으로 쓴다)."""
+    parts = []
+    pos = 0
+    for m in _BOLD_RE.finditer(text):
+        parts.append(html_escape(text[pos:m.start()]))
+        parts.append(f"<b>{html_escape(m.group(1))}</b>")
+        pos = m.end()
+    parts.append(html_escape(text[pos:]))
+    return "".join(parts)
+
+
+def _inline_content_to_html(text: str, fontsize: float) -> str:
+    """"**볼드**"와 "$인라인 수식$"/"$$블록 수식$$"이 섞인 한 문단 텍스트를,
+    HTML 이스케이프된 일반 텍스트 + <b> + 수식 이미지가 섞인 HTML로 변환한다."""
+    html_parts = []
+    for chunk in _FORMULA_SPLIT_RE.split(text):
+        if not chunk:
+            continue
+        is_block = chunk.startswith("$$") and chunk.endswith("$$")
+        is_inline = not is_block and chunk.startswith("$") and chunk.endswith("$")
+        if is_block or is_inline:
+            formula = chunk.strip("$")
+            # 한글이 섞인 "수식"(예: \text{여기서 ...})은 mathtext 폰트에 한글
+            # 글리프가 없어 렌더링해도 네모 박스로 깨지므로 애초에 이미지로
+            # 만들지 않는다.
+            img_tag = None if _HANGUL_RE.search(formula) else _render_formula_img_tag(
+                formula, fontsize=fontsize * (1.25 if is_block else 1.0)
+            )
+            if img_tag:
+                html_parts.append(
+                    f'<div style="text-align:center; margin:4pt 0;">{img_tag}</div>' if is_block else img_tag
+                )
+            else:
+                # 렌더링을 시도하지 않았거나 실패한 경우, 전체 내보내기를 막지
+                # 않도록 "$" 구분자만 뗀 원문을 일반 텍스트로 대체 표시한다.
+                html_parts.append(_plain_text_with_bold_to_html(formula))
+            continue
+
+        html_parts.append(_plain_text_with_bold_to_html(chunk))
+    return "".join(html_parts)
+
+
 def _build_page_translation_html(text: str) -> str:
     """한 페이지 분량의 번역 전문을 문단 단위 HTML로 변환한다 (뷰어의 번역
     패널과 나란히 놓일 페이지이므로 문서 제목/페이지 번호 같은 반복 헤더는
     넣지 않는다 - 원본 페이지 쪽에 이미 그 정보가 그대로 보이기 때문)."""
+    fontsize = 10.5
     parts = ['<div style="font-family: sans-serif;">']
     for para in re.split(r"\n\s*\n", text):
         para = para.strip()
         if para:
-            parts.append(f'<p style="font-size: 10.5pt; line-height: 1.6; text-align: justify;">{html_escape(para)}</p>')
+            parts.append(
+                f'<p style="font-size: {fontsize}pt; line-height: 1.6; text-align: justify;">'
+                f'{_inline_content_to_html(para, fontsize)}</p>'
+            )
     parts.append("</div>")
     return "".join(parts)
 

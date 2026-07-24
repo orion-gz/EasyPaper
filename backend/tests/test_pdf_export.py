@@ -104,6 +104,44 @@ def test_generate_pdf_shrinks_long_translation_to_fit_single_page(sample_pdf):
     doc.close()
 
 
+def test_generate_pdf_renders_markdown_bold_without_literal_asterisks(sample_pdf):
+    """번역 텍스트의 "**볼드**" 마크다운이 <b> 태그로 변환되어야 하며, 원문
+    그대로의 "**" 기호가 출력 텍스트에 남아있으면 안 된다."""
+    translations = {"1": "이것은 **매우 중요한** 결과입니다."}
+    result = generate_annotated_pdf(sample_pdf, {}, translations, {})
+    doc = fitz.open("pdf", result)
+    page1_text = doc[0].get_text()
+    assert "**" not in page1_text
+    assert "매우 중요한" in page1_text
+    doc.close()
+
+
+def test_generate_pdf_renders_latex_formula_as_image_not_raw_text(sample_pdf):
+    """번역 텍스트의 LaTeX 수식($...$/$$...$$)은 원문 그대로의 "$", "\\sum"
+    같은 기호로 노출되지 말고, 실제 렌더링된 이미지로 삽입되어야 한다."""
+    translations = {"1": "손실 함수는 $f(x) = \\sum_{i=1}^n x_i$ 로 정의됩니다."}
+    result = generate_annotated_pdf(sample_pdf, {}, translations, {})
+    doc = fitz.open("pdf", result)
+    page1_text = doc[0].get_text()
+    assert "$" not in page1_text
+    assert "\\sum" not in page1_text
+    assert len(doc[0].get_images()) >= 1  # 수식이 이미지로 삽입됨
+    doc.close()
+
+
+def test_generate_pdf_falls_back_to_plain_text_for_korean_inside_formula(sample_pdf):
+    """수식 렌더링용 폰트(matplotlib mathtext)에는 한글 글리프가 없어, 번역
+    모델이 실수로 수식 안에 한글을 넣은 경우(예: \\text{여기서 ...}) 그대로
+    이미지화하면 네모 박스(tofu)로 깨진다 - 이 경우는 이미지 대신 일반
+    텍스트로 안전하게 대체되어야 하며, 예외 없이 내보내기가 끝나야 한다."""
+    translations = {"1": "다음이 성립합니다: $\\int f(z) dz \\quad \\left(\\text{여기서 } z \\sim p(z)\\right)$"}
+    result = generate_annotated_pdf(sample_pdf, {}, translations, {})
+    doc = fitz.open("pdf", result)
+    page1_text = doc[0].get_text()
+    assert "여기서" in page1_text  # 렌더링 대신 텍스트로라도 내용은 보존되어야 함
+    doc.close()
+
+
 def test_generate_pdf_shows_placeholder_for_page_without_translation(sample_pdf):
     """일부 페이지만 번역이 있는 경우, 번역이 없는 페이지는 페어링이 깨지지
     않도록 안내 문구만 표시하고 페이지 자체는 그대로 유지해야 한다."""
