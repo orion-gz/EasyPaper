@@ -825,7 +825,16 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
         # 3. 바운딩 박스 그룹화 (인접 임계값을 4.0포인트로 대폭 좁혀서 과도하게 커지는 현상 방지)
         merged_rects = merge_bboxes(raw_rects, threshold=4.0)
         
-        # 4. 여백 보정 및 최소 규격 필터링
+        # 4. 캡션 매칭 - 그림이 여러 서브플롯(sub-panel)으로 나뉘어 그려진
+        # 경우(예: "왼쪽/오른쪽" 두 그래프로 구성된 Figure), 각 서브플롯이
+        # 독립된 사각형으로 감지되어 같은 캡션 하나에 개별적으로 매칭될 수
+        # 있다. 이걸 그대로 각각 별도 항목으로 내보내면 프론트엔드가 그중
+        # 하나만 골라 써서(예: 왼쪽 패널만 보이고 오른쪽이 통째로 잘려나감)
+        # 오버레이가 실제 그림 전체를 담지 못하는 문제가 있었다. 따라서 같은
+        # 라벨로 매칭된 사각형들은 최종적으로 하나의 bbox로 합친다.
+        label_groups: Dict[str, Dict[str, Any]] = {}
+        unlabeled_rects = []
+
         for r in merged_rects:
             # 캡션 매칭은 패딩을 적용하기 전 원본 사각형 기준으로 수행 (더 정확한 인접도 판단)
             match = _match_caption_for_rect(r, page_captions)
@@ -838,34 +847,48 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
                 rect_y1 = min(rect_y1, match["clip_y1"])
             if match.get("clip_y0") is not None:
                 rect_y0 = max(rect_y0, match["clip_y0"])
+            clipped = [r[0], rect_y0, r[2], rect_y1]
 
+            label = match["label"]
+            if not label:
+                unlabeled_rects.append(clipped)
+                continue
+            if label in label_groups:
+                g = label_groups[label]["rect"]
+                g[0] = min(g[0], clipped[0])
+                g[1] = min(g[1], clipped[1])
+                g[2] = max(g[2], clipped[2])
+                g[3] = max(g[3], clipped[3])
+            else:
+                label_groups[label] = {"rect": clipped, "text": match["text"]}
+
+        def _emit(rect: list, label: Optional[str], caption_text: Optional[str]) -> None:
             # 여백(Padding) 8포인트 적용하여 차트 라벨이나 테이블 테두리가 잘리지 않도록 안전 확보
-            x0 = max(0.0, r[0] - 8.0)
-            y0 = max(0.0, rect_y0 - 8.0)
-            x1 = min(page_width, r[2] + 8.0)
-            y1 = min(page_height, rect_y1 + 8.0)
+            x0 = max(0.0, rect[0] - 8.0)
+            y0 = max(0.0, rect[1] - 8.0)
+            x1 = min(page_width, rect[2] + 8.0)
+            y1 = min(page_height, rect[3] + 8.0)
 
             w = x1 - x0
             h = y1 - y0
             # 최종 크기가 가로/세로 40포인트 이상인 진짜 그림/테이블만 선별
             if w < 40 or h < 40:
-                continue
-
-            # 백분율 좌표 계산
-            left = (x0 / page_width) * 100
-            top = (y0 / page_height) * 100
-            width = (w / page_width) * 100
-            height = (h / page_height) * 100
+                return
 
             images_data.append({
                 "page": page_num + 1,
-                "left": left,
-                "top": top,
-                "width": width,
-                "height": height,
-                "label": match["label"],
-                "caption": match["text"],
+                "left": (x0 / page_width) * 100,
+                "top": (y0 / page_height) * 100,
+                "width": (w / page_width) * 100,
+                "height": (h / page_height) * 100,
+                "label": label,
+                "caption": caption_text,
             })
+
+        for label, g in label_groups.items():
+            _emit(g["rect"], label, g["text"])
+        for rect in unlabeled_rects:
+            _emit(rect, None, None)
 
         # 5. 번호 매겨진 수식 - 그림/표와 달리 별도 그래픽 영역이 아니라 텍스트 한
         # 줄이므로, 위의 40pt 최소 크기 필터를 거치지 않고 그 줄의 bbox에 작은
