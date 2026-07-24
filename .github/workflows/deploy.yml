@@ -1,0 +1,56 @@
+name: Deploy to Server
+
+# main에 push(=PR 병합 포함)될 때마다 이 서버(orion-gz-network)에 등록된
+# self-hosted runner가 배포 전용 클론(/home/ubuntu/deploy/EasyPaper)을
+# origin/main으로 동기화하고 easypaper.service를 재기동한다.
+#
+# 이 디렉터리는 개발자가 로컬에서 편집하는 작업 디렉토리와는 완전히
+# 분리되어 있어(별도 클론), 로컬 작업 중인 커밋되지 않은 변경과 절대
+# 충돌하지 않는다. 문서 DB/업로드/라이브러리 등 영속 데이터도
+# /home/ubuntu/data/easypaper/(배포 디렉토리와도 별개)에 있어 이 배포
+# 클론을 아무리 초기화해도 데이터 유실이 없다.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, easypaper]
+    steps:
+      - name: Sync deploy clone to origin/main
+        working-directory: /home/ubuntu/deploy/EasyPaper
+        run: |
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+      - name: Install backend dependencies
+        working-directory: /home/ubuntu/deploy/EasyPaper/backend
+        run: .venv/bin/pip install -r requirements.txt
+
+      - name: Build frontend
+        working-directory: /home/ubuntu/deploy/EasyPaper/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Restart easypaper.service
+        run: sudo systemctl restart easypaper
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/ >/dev/null; then
+              echo "healthcheck OK"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "healthcheck FAILED after 30s"
+          sudo journalctl -u easypaper.service --no-pager -n 50
+          exit 1
