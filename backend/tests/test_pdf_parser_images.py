@@ -54,6 +54,47 @@ def test_multi_panel_figure_merges_into_single_labeled_region(tmp_path):
     assert entry_right_pct >= (right_rect.x1 / page_width) * 100 - 1
 
 
+def test_stacked_panel_figure_absorbs_distant_unlabeled_panel(tmp_path):
+    """"(a) DeiT.", "(b) TimeSformer."처럼 여러 행(row)의 서브패널이 위아래로
+    쌓인 큰 그림은, 맨 아래 패널만 캡션과 가까워(40pt 이내) 매칭되고 맨 위
+    패널은 캡션까지의 총 거리가 멀어 매칭에 실패할 수 있다. 이 경우에도
+    아래 패널(라벨 있음)과 위 패널(라벨 없음) 사이 간격 자체는 좁으므로,
+    위 패널이 흡수되어 최종적으로 그림 전체를 포함하는 하나의 bbox가
+    나와야 한다."""
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+
+    # 위쪽 패널(라벨 없음이 될 것) - 캡션과는 멀리 떨어져 있음
+    top_rect = fitz.Rect(50, 50, 500, 200)
+    page.draw_rect(top_rect, color=(0, 0, 0), width=1.5)
+    page.draw_line(fitz.Point(60, 100), fitz.Point(480, 150), color=(0, 0, 0), width=1)
+    page.insert_text((260, 215), "(a) Panel A.", fontsize=8)
+
+    # 아래쪽 패널(캡션과 가까워 라벨이 매칭될 것) - 위쪽 패널과는 20pt 간격
+    bottom_rect = fitz.Rect(50, 220, 500, 400)
+    page.draw_rect(bottom_rect, color=(0, 0, 0), width=1.5)
+    page.draw_line(fitz.Point(60, 300), fitz.Point(480, 350), color=(0, 0, 0), width=1)
+    page.insert_text((260, 415), "(b) Panel B.", fontsize=8)
+
+    page.insert_text((50, 435), "Figure 3: Stacked panels showing two related results.", fontsize=9)
+
+    path = tmp_path / "stacked_panel.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    result = extract_pdf_images(str(path))
+    fig3_entries = [r for r in result if r.get("label") == "Figure 3"]
+    assert len(fig3_entries) == 1, f"Figure 3이 하나로 합쳐져야 하는데: {fig3_entries}"
+
+    entry = fig3_entries[0]
+    page_height = 842
+    entry_top_pct = entry["top"]
+    entry_bottom_pct = entry["top"] + entry["height"]
+    # 합쳐진 bbox가 위쪽 패널의 위 끝부터 아래쪽 패널의 아래 끝까지 모두 포함해야 함
+    assert entry_top_pct <= (top_rect.y0 / page_height) * 100 + 1
+    assert entry_bottom_pct >= (bottom_rect.y1 / page_height) * 100 - 1
+
+
 def test_unrelated_unlabeled_regions_are_not_merged(tmp_path):
     """캡션에 매칭되지 않는(라벨이 없는) 영역들은 서로 다른 그림/표의 잔여
     조각일 수 있으므로 하나로 합쳐지면 안 되고, 감지된 개수만큼 개별

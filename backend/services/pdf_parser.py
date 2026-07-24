@@ -672,6 +672,33 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
     return equations
 
 
+def _vertical_gap(a: list, b: list) -> float:
+    """두 사각형의 세로 간격을 반환한다. 겹치면 -1."""
+    if a[3] <= b[1]:
+        return b[1] - a[3]
+    if b[3] <= a[1]:
+        return a[1] - b[3]
+    return -1.0
+
+
+def _horizontal_overlap_ratio(a: list, b: list) -> float:
+    """더 좁은 쪽 폭을 기준으로 한 가로 겹침 비율(0~1)."""
+    inter = min(a[2], b[2]) - max(a[0], b[0])
+    if inter <= 0:
+        return 0.0
+    narrower_width = min(a[2] - a[0], b[2] - b[0])
+    return inter / narrower_width if narrower_width > 0 else 0.0
+
+
+# 라벨(캡션)에 매칭되지 못한 인접 사각형을 흡수할 때 허용하는 최대 세로 간격.
+# "(a) DeiT.", "(b) TimeSformer." 처럼 여러 행(row)의 서브패널로 구성된 큰
+# 그림은 캡션과 맨 아래 패널까지의 거리는 멀어도(캡션 매칭용 40pt를 훌쩍
+# 넘음), 패널들 자기들끼리는 촘촘히 붙어 있으므로 이 값은 캡션 매칭
+# 임계값(40pt)과 동일하게 맞춘다.
+_PANEL_ABSORB_MAX_GAP = 40.0
+_PANEL_ABSORB_MIN_OVERLAP = 0.5
+
+
 def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
     """
     PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 테이블(Table)의 영역 정보를 추출합니다.
@@ -861,6 +888,36 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
                 g[3] = max(g[3], clipped[3])
             else:
                 label_groups[label] = {"rect": clipped, "text": match["text"]}
+
+        # 4-1. 캡션과 멀리 떨어져 있어(예: 여러 행(row)의 서브패널로 구성된 큰
+        # 그림에서 맨 윗 패널) 라벨 매칭에는 실패했지만, 이미 라벨이 붙은
+        # 사각형과 촘촘히 붙어 있는(세로 간격이 작고 가로로 많이 겹치는)
+        # 미매칭 사각형은 같은 그림의 일부로 보고 흡수한다. 한 번 흡수하면
+        # 그룹의 bbox가 커져 다음 패널과도 새로 인접할 수 있으므로 더 이상
+        # 흡수할 것이 없을 때까지 반복한다.
+        changed = True
+        while changed and unlabeled_rects:
+            changed = False
+            still_unlabeled = []
+            for u in unlabeled_rects:
+                absorbed = False
+                for g in label_groups.values():
+                    rect = g["rect"]
+                    gap = _vertical_gap(rect, u)
+                    if gap < 0 or gap > _PANEL_ABSORB_MAX_GAP:
+                        continue
+                    if _horizontal_overlap_ratio(rect, u) < _PANEL_ABSORB_MIN_OVERLAP:
+                        continue
+                    rect[0] = min(rect[0], u[0])
+                    rect[1] = min(rect[1], u[1])
+                    rect[2] = max(rect[2], u[2])
+                    rect[3] = max(rect[3], u[3])
+                    absorbed = True
+                    changed = True
+                    break
+                if not absorbed:
+                    still_unlabeled.append(u)
+            unlabeled_rects = still_unlabeled
 
         def _emit(rect: list, label: Optional[str], caption_text: Optional[str]) -> None:
             # 여백(Padding) 8포인트 적용하여 차트 라벨이나 테이블 테두리가 잘리지 않도록 안전 확보
