@@ -6378,6 +6378,9 @@ function positionFigurePreviewTooltip() {
 // targets: documentImages 항목 배열(1개 이상 - "Figures 1 and 2"처럼 여러 개를
 // 한 번에 가리키는 표기는 각각을 세로로 쌓아 보여준다)
 async function showFigurePreviewTooltip(targets, boxEl) {
+  // 텍스트 드래그 선택 중에 마우스가 마커 박스 위를 스쳐 지나가도(mouseenter)
+  // 미리보기가 뜨지 않도록 막는다 - 다른 호버 오버레이들과 동일한 가드.
+  if (state.isSelectionDragging) return
   if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
   figurePreviewBoxEl = boxEl
   figurePreviewCurrentTargets = targets
@@ -6520,6 +6523,9 @@ function positionCitationTooltip() {
 }
 
 function showCitationTooltip(docId, refNum, refText, boxEl) {
+  // 텍스트 드래그 선택 중에 마우스가 마커 박스 위를 스쳐 지나가도(mouseenter)
+  // 미리보기가 뜨지 않도록 막는다 - 다른 호버 오버레이들과 동일한 가드.
+  if (state.isSelectionDragging) return
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   citationTooltipDocId = docId
   citationTooltipRefNum = refNum
