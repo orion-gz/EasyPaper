@@ -107,7 +107,14 @@ Tauri 기반 네이티브 앱으로, Python/Node.js 설치 없이 바로 실행�
 2. 설치 후 앱을 실행하면 첫 화면에서 AI 엔진(Ollama/Gemini/Claude/OpenAI/CLI) 온보딩 마법사가 안내합니다.
 3. 이후 새 버전이 배포되면 앱이 자동으로 감지하여, 설정 화면의 버튼 한 번으로 업데이트를 내려받고 설치할 수 있습니다.
 
-> ⚠️ 아직 macOS 공증(Notarization)·Windows Authenticode 코드사이닝을 적용하지 않아, 설치 시 운영체제 보안 경고가 뜰 수 있습니다. macOS는 앱 아이콘을 우클릭 → **열기**, Windows는 "Windows의 PC 보호" 화면에서 **추가 정보 → 실행**을 선택하면 정상적으로 설치됩니다.
+> ⚠️ 아직 macOS 공증(Notarization)·Windows Authenticode 코드사이닝을 적용하지 않아, 설치 시 운영체제 보안 경고가 뜹니다. 아래 안내를 따라주세요.
+>
+> **macOS**: 앱이 완전히 서명되지 않은 상태라 최신 macOS(Ventura 이후)에서는 우클릭 → 열기로 우회되지 않고 **"앱이 손상되었기 때문에 열 수 없습니다"** 라는 오해의 소지가 있는 메시지가 뜹니다. 실제로 파일이 손상된 게 아니라 다운로드 시 붙는 quarantine 속성 때문이니, 터미널에서 아래 명령으로 지운 뒤 다시 실행하세요.
+> ```bash
+> xattr -cr /Applications/EasyPaper.app
+> ```
+>
+> **Windows**: "Windows의 PC 보호" 화면에서 **추가 정보 → 실행**을 선택하면 정상적으로 설치됩니다.
 
 ### 2. 소스에서 웹 앱으로 직접 실행하기
 

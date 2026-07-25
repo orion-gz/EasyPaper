@@ -1550,7 +1550,7 @@ async function checkAuthentication() {
       })
     } else {
       loadTauriAppVersion()
-      checkTauriUpdate({ silent: true })
+      maybeCheckTauriUpdateIfDue()
       startTauriUpdatePolling()
     }
   } else {
@@ -2679,21 +2679,57 @@ const tauriUpdateStatus = $('tauri-update-status')
 const tauriUpdateNotesBox = $('tauri-update-notes-box')
 const tauriUpdateVersionLine = $('tauri-update-version-line')
 const tauriUpdateNotes = $('tauri-update-notes')
+const settingTauriUpdateCheckInterval = $('setting-tauri-update-check-interval')
 
 let pendingTauriUpdate = null
 // 같은 버전으로는 팝업을 한 세션에 한 번만 띄운다 - "나중에"를 눌러도
 // 주기적 재확인 때마다 같은 안내가 반복해서 뜨는 것을 막기 위함.
 let lastNotifiedTauriUpdateVersion = null
 
+// 데스크탑판 자동 업데이트 확인 주기 설정. 웹(git 기반) 배포판은 서버 쪽
+// DB에 last_checked_at을 저장하지만(getUpdateCheckConfigAPI), 데스크탑은
+// 사용자별 로컬 앱 설정이라 서버에 저장할 이유가 없어 localStorage를 쓴다.
+const TAURI_UPDATE_CHECK_STORAGE_KEY = 'easypaper_tauri_update_check_interval'
+const TAURI_UPDATE_LAST_CHECKED_STORAGE_KEY = 'easypaper_tauri_update_last_checked_at'
+
+function getTauriUpdateCheckInterval() {
+  return localStorage.getItem(TAURI_UPDATE_CHECK_STORAGE_KEY) || 'weekly'
+}
+
+if (settingTauriUpdateCheckInterval) {
+  settingTauriUpdateCheckInterval.value = getTauriUpdateCheckInterval()
+  settingTauriUpdateCheckInterval.addEventListener('change', () => {
+    localStorage.setItem(TAURI_UPDATE_CHECK_STORAGE_KEY, settingTauriUpdateCheckInterval.value)
+  })
+  globalSettingsBtn.addEventListener('click', () => {
+    settingTauriUpdateCheckInterval.value = getTauriUpdateCheckInterval()
+  })
+}
+
 // 로그인 시 1회 체크로는 앱을 오래 켜둔 사용자가 새 버전을 놓칠 수 있어,
-// 앱이 열려 있는 동안 주기적으로도 백그라운드 재확인을 한다.
+// 앱이 열려 있는 동안에도 재확인이 필요하다. 그렇다고 설정된 간격(매일/매주)
+// 그대로 setInterval을 걸면 앱을 그 간격보다 짧게 켰다 껐다 하는 사용자는
+// 영영 체크가 안 도는 문제가 생기므로, 웹의 maybeAutoCheckForUpdate와 동일한
+// 방식을 쓴다 - 짧은 주기(1시간)로 깨어나 "마지막 확인 이후 설정된 간격이
+// 지났는지"만 가볍게 확인하고, 지났을 때만 실제 업데이트 체크를 수행한다.
 // checkAuthentication()이 (재로그인 등으로) 여러 번 실행될 수 있으므로
 // 타이머가 중복 생성되지 않도록 항상 기존 것을 먼저 정리한다.
-const TAURI_UPDATE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6시간
+const TAURI_UPDATE_DUE_CHECK_TICK_MS = 60 * 60 * 1000 // 1시간
 let tauriUpdatePollingTimer = null
+
+async function maybeCheckTauriUpdateIfDue() {
+  const interval = getTauriUpdateCheckInterval()
+  if (interval === 'never') return
+  const intervalMs = UPDATE_CHECK_INTERVAL_MS[interval] || UPDATE_CHECK_INTERVAL_MS.weekly
+  const lastCheckedAt = Number(localStorage.getItem(TAURI_UPDATE_LAST_CHECKED_STORAGE_KEY) || 0)
+  const dueNow = !lastCheckedAt || (Date.now() - lastCheckedAt) >= intervalMs
+  if (!dueNow) return
+  await checkTauriUpdate({ silent: true })
+}
+
 function startTauriUpdatePolling() {
   if (tauriUpdatePollingTimer) clearInterval(tauriUpdatePollingTimer)
-  tauriUpdatePollingTimer = setInterval(() => checkTauriUpdate({ silent: true }), TAURI_UPDATE_POLL_INTERVAL_MS)
+  tauriUpdatePollingTimer = setInterval(maybeCheckTauriUpdateIfDue, TAURI_UPDATE_DUE_CHECK_TICK_MS)
 }
 
 if (isTauriDesktop && tauriUpdateSection) {
@@ -2719,6 +2755,7 @@ function resetTauriUpdateState() {
 
 async function checkTauriUpdate({ silent = false } = {}) {
   if (!isTauriDesktop) return
+  localStorage.setItem(TAURI_UPDATE_LAST_CHECKED_STORAGE_KEY, String(Date.now()))
   resetTauriUpdateState()
   if (!silent && tauriUpdateCheckBtn) {
     tauriUpdateCheckBtn.disabled = true
