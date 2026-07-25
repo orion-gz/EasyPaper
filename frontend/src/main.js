@@ -285,6 +285,7 @@ async function checkAIStatus() {
 
 // ── 화면 전환 ─────────────────────────────────────
 function showLogin() {
+  stopLibraryPolling()
   viewerScreen.classList.remove('active')
   libraryScreen.classList.remove('active')
   loginScreen.classList.add('active')
@@ -295,6 +296,7 @@ function showLogin() {
   globalSettingsBtn.classList.add('hidden')
 }
 function showViewer() {
+  stopLibraryPolling()
   loginScreen.classList.remove('active')
   libraryScreen.classList.remove('active')
   viewerScreen.classList.add('active')
@@ -304,6 +306,7 @@ function showViewer() {
 }
 
 function showCompareScreen() {
+  stopLibraryPolling()
   loginScreen.classList.remove('active')
   libraryScreen.classList.remove('active')
   viewerScreen.classList.remove('active')
@@ -3315,6 +3318,7 @@ async function showLibraryScreen(shouldPushState = true) {
   globalSettingsBtn.classList.remove('hidden')
   resetState()
   await renderLibrary()
+  startLibraryPolling()
 }
 
 
@@ -3756,6 +3760,66 @@ async function renderLibrary() {
 
 let currentLibraryDocs = []
 
+// ── 라이브러리 화면에서 번역 중인 문서의 진행률을 실시간으로 갱신 ──────────
+// 뷰어 화면은 startJobPolling으로 진행률을 폴링하지만, 라이브러리 화면은
+// renderLibrary()가 화면 진입/탭 전환 시 한 번만 스냅샷을 불러오기 때문에
+// 별도로 라이브러리 화면이 활성 상태인 동안에만 도는 가벼운 폴링이 필요하다.
+let libraryPollingTimer = null
+
+function stopLibraryPolling() {
+  if (libraryPollingTimer) { clearInterval(libraryPollingTimer); libraryPollingTimer = null }
+}
+
+function startLibraryPolling() {
+  stopLibraryPolling()
+  libraryPollingTimer = setInterval(refreshLibraryProgress, 4000)
+}
+
+async function refreshLibraryProgress() {
+  if (!libraryScreen.classList.contains('active') || isLibrarySearchActive) return
+  const inProgress = currentLibraryDocs.some(doc => (doc.translated_pages?.length || 0) < (doc.total_pages || 1))
+  if (!inProgress) return
+
+  try {
+    const data = state.currentLibraryTab === 'trash'
+      ? await fetchLibraryTrash(getTranslationOptions())
+      : await fetchLibrary(getTranslationOptions())
+    const freshDocsById = new Map((data.documents || []).map(doc => [doc.id, doc]))
+
+    currentLibraryDocs.forEach((doc, idx) => {
+      const freshDoc = freshDocsById.get(doc.id)
+      if (!freshDoc) return
+      const oldTranslated = doc.translated_pages?.length || 0
+      const newTranslated = freshDoc.translated_pages?.length || 0
+      if (oldTranslated === newTranslated) return
+      currentLibraryDocs[idx] = freshDoc
+      const container = libraryGrid.querySelector(`:scope > [data-id="${freshDoc.id}"]`)
+      if (container) updateDocItemProgress(container, freshDoc)
+    })
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+// 카드 전체를 다시 그리지 않고 진행률 바/텍스트만 갱신 (카드/리스트 뷰 공용)
+function updateDocItemProgress(container, doc) {
+  const translated = doc.translated_pages?.length || 0
+  const total = doc.total_pages || 1
+  const pct = Math.round((translated / total) * 100)
+  const isDone = translated >= total
+  const progressRow = container.querySelector('.doc-card-progress-row')
+  if (!progressRow) return
+  if (isDone) {
+    const slot = progressRow.closest('.doc-list-progress-slot')
+    ;(slot || progressRow).remove()
+    return
+  }
+  const bar = progressRow.querySelector('.doc-progress-bar')
+  const text = progressRow.querySelector('span')
+  if (bar) bar.style.width = `${pct}%`
+  if (text) text.textContent = `${translated}/${total} · ${pct}%`
+}
+
 function filterLibraryCards(docs) {
   currentLibraryDocs = docs
   libraryGrid.innerHTML = ''
@@ -4135,6 +4199,7 @@ function createDocCard(doc) {
   const d = prepareDocItemHtml(doc)
   const card = document.createElement('div')
   card.className = 'doc-card'
+  card.dataset.id = doc.id
   card.innerHTML = `
     ${d.compareCheckHtml}
     <div class="doc-card-zone">
@@ -4181,6 +4246,7 @@ function createDocListRow(doc) {
 
   const row = document.createElement('div')
   row.className = 'doc-list-row'
+  row.dataset.id = doc.id
   row.innerHTML = `
     ${d.compareCheckHtml}
     ${d.checkBtnHtml}
