@@ -1549,6 +1549,7 @@ async function checkAuthentication() {
     } else {
       loadTauriAppVersion()
       checkTauriUpdate({ silent: true })
+      startTauriUpdatePolling()
     }
   } else {
     showLogin()
@@ -2678,6 +2679,20 @@ const tauriUpdateVersionLine = $('tauri-update-version-line')
 const tauriUpdateNotes = $('tauri-update-notes')
 
 let pendingTauriUpdate = null
+// 같은 버전으로는 팝업을 한 세션에 한 번만 띄운다 - "나중에"를 눌러도
+// 주기적 재확인 때마다 같은 안내가 반복해서 뜨는 것을 막기 위함.
+let lastNotifiedTauriUpdateVersion = null
+
+// 로그인 시 1회 체크로는 앱을 오래 켜둔 사용자가 새 버전을 놓칠 수 있어,
+// 앱이 열려 있는 동안 주기적으로도 백그라운드 재확인을 한다.
+// checkAuthentication()이 (재로그인 등으로) 여러 번 실행될 수 있으므로
+// 타이머가 중복 생성되지 않도록 항상 기존 것을 먼저 정리한다.
+const TAURI_UPDATE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6시간
+let tauriUpdatePollingTimer = null
+function startTauriUpdatePolling() {
+  if (tauriUpdatePollingTimer) clearInterval(tauriUpdatePollingTimer)
+  tauriUpdatePollingTimer = setInterval(() => checkTauriUpdate({ silent: true }), TAURI_UPDATE_POLL_INTERVAL_MS)
+}
 
 if (isTauriDesktop && tauriUpdateSection) {
   tauriUpdateSection.classList.remove('hidden')
@@ -2729,6 +2744,13 @@ async function checkTauriUpdate({ silent = false } = {}) {
         tauriUpdateStatus.style.color = '#10b981'
         tauriUpdateStatus.textContent = '새 업데이트가 있습니다.'
       }
+      // 백그라운드(로그인 직후/주기적 재확인) 체크일 때만 팝업으로 알림 -
+      // 사용자가 설정 화면에서 직접 확인 버튼을 눌렀을 때는 이미 결과가
+      // 그 자리에 보이므로 팝업까지 겹쳐 띄우지 않는다.
+      if (silent && update.version !== lastNotifiedTauriUpdateVersion) {
+        lastNotifiedTauriUpdateVersion = update.version
+        showTauriUpdateAvailableModal(update)
+      }
     } else if (tauriUpdateStatus) {
       tauriUpdateStatus.style.color = 'var(--text-secondary)'
       tauriUpdateStatus.textContent = '이미 최신 버전입니다.'
@@ -2746,6 +2768,16 @@ async function checkTauriUpdate({ silent = false } = {}) {
   }
 }
 
+// 설정 화면과 "업데이트 발견" 팝업 양쪽에서 이 함수를 호출할 수 있으므로,
+// 진행 상태를 두 위치의 상태 텍스트에 동시에 반영한다 (없는 쪽은 무시).
+function setTauriUpdateStatusText(text, color = 'var(--text-secondary)') {
+  ;[tauriUpdateStatus, updateAvailableStatus].forEach(el => {
+    if (!el) return
+    el.style.color = color
+    el.textContent = text
+  })
+}
+
 async function installTauriUpdate() {
   if (!pendingTauriUpdate) return
   const ok = await showCustomConfirm(
@@ -2756,6 +2788,10 @@ async function installTauriUpdate() {
 
   if (tauriUpdateInstallBtn) tauriUpdateInstallBtn.disabled = true
   if (tauriUpdateCheckBtn) tauriUpdateCheckBtn.disabled = true
+  if (updateAvailableNowBtn) updateAvailableNowBtn.disabled = true
+  if (updateAvailableLaterBtn) updateAvailableLaterBtn.disabled = true
+  if (updateAvailableProgressArea) updateAvailableProgressArea.classList.remove('hidden')
+  if (updateAvailableActions) updateAvailableActions.style.display = 'none'
 
   try {
     // Windows 설치 프로그램이 파일을 덮어쓰기 전에 백엔드 sidecar를 먼저
@@ -2775,21 +2811,19 @@ async function installTauriUpdate() {
     let downloadedBytes = 0
     let totalBytes = 0
     await pendingTauriUpdate.downloadAndInstall((event) => {
-      if (!tauriUpdateStatus) return
-      tauriUpdateStatus.style.color = 'var(--text-secondary)'
       switch (event.event) {
         case 'Started':
           totalBytes = event.data.contentLength || 0
-          tauriUpdateStatus.textContent = '다운로드 시작...'
+          setTauriUpdateStatusText('다운로드 시작...')
           break
         case 'Progress':
           downloadedBytes += event.data.chunkLength
-          tauriUpdateStatus.textContent = totalBytes
+          setTauriUpdateStatusText(totalBytes
             ? `다운로드 중... ${Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))}%`
-            : '다운로드 중...'
+            : '다운로드 중...')
           break
         case 'Finished':
-          tauriUpdateStatus.textContent = '설치 중... 곧 앱이 재시작됩니다.'
+          setTauriUpdateStatusText('설치 중... 곧 앱이 재시작됩니다.')
           break
       }
     })
@@ -2797,13 +2831,35 @@ async function installTauriUpdate() {
     const { relaunch } = await import('@tauri-apps/plugin-process')
     await relaunch()
   } catch (err) {
-    if (tauriUpdateStatus) {
-      tauriUpdateStatus.style.color = '#ef4444'
-      tauriUpdateStatus.textContent = '설치 실패: ' + (err.message || err)
-    }
+    setTauriUpdateStatusText('설치 실패: ' + (err.message || err), '#ef4444')
     if (tauriUpdateInstallBtn) tauriUpdateInstallBtn.disabled = false
     if (tauriUpdateCheckBtn) tauriUpdateCheckBtn.disabled = false
+    if (updateAvailableNowBtn) updateAvailableNowBtn.disabled = false
+    if (updateAvailableLaterBtn) updateAvailableLaterBtn.disabled = false
+    if (updateAvailableActions) updateAvailableActions.style.display = 'flex'
   }
+}
+
+// 로그인 직후/주기적 백그라운드 체크에서 새 버전을 찾았을 때, 설정 화면까지
+// 들어가지 않아도 알 수 있도록 "업데이트 발견" 팝업(update-available-modal)을
+// 띄운다. 이 팝업은 원래 웹(git 기반) 배포판 전용이었는데, "지금 업데이트"
+// 버튼 핸들러를 데스크탑 분기로 나눠 재사용한다.
+function showTauriUpdateAvailableModal(update) {
+  if (!updateAvailableModal) return
+  pendingTauriUpdate = update
+  if (updateAvailableVersionLine) {
+    updateAvailableVersionLine.textContent = `v${update.currentVersion} → v${update.version}`
+  }
+  if (updateAvailableChangelog) {
+    updateAvailableChangelog.innerHTML = update.body
+      ? `<li style="font-size: 12.5px; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap;">${escapeHtml(update.body)}</li>`
+      : `<li style="font-size: 12.5px; color: var(--text-muted);">세부 변경 내역이 제공되지 않았습니다.</li>`
+  }
+  if (updateAvailableProgressArea) updateAvailableProgressArea.classList.add('hidden')
+  if (updateAvailableActions) updateAvailableActions.style.display = 'flex'
+  if (updateAvailableNowBtn) updateAvailableNowBtn.disabled = false
+  if (updateAvailableLaterBtn) updateAvailableLaterBtn.disabled = false
+  updateAvailableModal.classList.remove('hidden')
 }
 
 if (tauriUpdateCheckBtn) {
@@ -3041,6 +3097,13 @@ async function waitForServerRestartAndReload() {
 
 if (updateAvailableNowBtn) {
   updateAvailableNowBtn.addEventListener('click', async () => {
+    // 데스크탑에서는 git pull이 아니라 tauri-plugin-updater 다운로드/설치/
+    // 재시작 플로우를 그대로 재사용한다 (installTauriUpdate가 이 팝업의
+    // 상태 표시도 함께 갱신함 - setTauriUpdateStatusText 참고).
+    if (isTauriDesktop) {
+      await installTauriUpdate()
+      return
+    }
     updateAvailableNowBtn.disabled = true
     if (updateAvailableLaterBtn) updateAvailableLaterBtn.disabled = true
     if (updateAvailableProgressArea) updateAvailableProgressArea.classList.remove('hidden')
