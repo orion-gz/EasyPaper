@@ -6391,10 +6391,80 @@ function createSelectionMenu() {
   return menu
 }
 
-// ── 어노테이션(하이라이트/밑줄) 마우스 호버 툴팁 관리 ──
+// ── 어노테이션(하이라이트/밑줄/메모) 마우스 호버 툴팁 관리 ──
 let annHoverTooltip = null
 let annHoverHideTimer = null
-let activeHoveredSpan = null
+let activeHoveredSpan = null       // 하이라이트/밑줄 span (있을 때만) - 삭제 버튼의 대상
+let activeHoveredPageNum = null
+let activeHoveredSentenceIdx = null
+let activeHoveredMemo = null       // 현재 호버 중인 위치에 이미 존재하는 메모 (있으면)
+let activeHoveredText = ''
+
+// 해당 페이지/문장에 이미 저장된 메모가 있는지 조회
+function lookupMemoForSentence(pageNum, sentenceIdx) {
+  if (pageNum == null || sentenceIdx == null || isNaN(sentenceIdx)) return null
+  const allMemos = loadMemos(state.sessionId)
+  const pageMemos = allMemos[`page_${pageNum}`] || []
+  return pageMemos.find(m => m.sentenceIdx === sentenceIdx) || null
+}
+
+// 하이라이트/밑줄 span의 화면 위치로부터 소속 문장의 sentenceIdx를 역추적
+function resolveSentenceIdxFromSpan(span, pageNum) {
+  const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+  const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
+  const rect = span.getBoundingClientRect()
+  const charIdx = vtm ? estimateCharIdxFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2, vtm) : -1
+  const sRange = (charIdx >= 0 && sentenceRanges) ? findSentenceAtChar(charIdx, sentenceRanges) : null
+  if (sRange) return sRange.sentenceIdx >= 10000 ? (sRange.originalSentenceIdx ?? 0) : sRange.sentenceIdx
+
+  // 폴백: .pdf-sentence 스팬 기반
+  const sentenceEl = span.closest('.pdf-sentence')
+  if (sentenceEl) {
+    const idx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
+    if (!isNaN(idx)) return idx
+  }
+  return null
+}
+
+// VTM 기반 sentenceRange의 뷰포트 상 경계 사각형 (메모 전용 호버 - 실제 span이 없을 때 툴팁 위치 계산용)
+function getSentenceViewportRect(sentenceRange, vtm) {
+  const nodeRanges = vtm.nodeRanges
+  let startNode = null, startOff = 0, endNode = null, endOff = 0
+  for (const nr of nodeRanges) {
+    if (startNode === null && nr.end > sentenceRange.charStart) { startNode = nr.node; startOff = Math.max(0, sentenceRange.charStart - nr.start) }
+    if (nr.start < sentenceRange.charEnd) { endNode = nr.node; endOff = Math.min(nr.node.length, sentenceRange.charEnd - nr.start) }
+  }
+  if (!startNode || !endNode) return null
+  try {
+    const r = document.createRange()
+    r.setStart(startNode, startOff)
+    r.setEnd(endNode, endOff)
+    return r.getBoundingClientRect()
+  } catch (e) { return null }
+}
+
+// 현재 컨텍스트(activeHoveredSpan/activeHoveredMemo)에 맞춰 버튼 표시 상태 갱신
+function updateAnnHoverTooltipButtons(tooltip) {
+  const deleteBtn = tooltip.querySelector('.delete-ann-btn')
+  const dividers = tooltip.querySelectorAll('.menu-divider')
+
+  // 삭제(하이라이트/밑줄) 버튼은 실제로 지울 대상이 있을 때만 노출
+  if (deleteBtn) {
+    deleteBtn.style.display = activeHoveredSpan ? '' : 'none'
+  }
+  if (dividers[0]) {
+    dividers[0].style.display = activeHoveredSpan ? '' : 'none'
+  }
+
+  const memoBtn = tooltip.querySelector('.memo-ann-btn')
+  if (memoBtn) {
+    const hasMemo = !!activeHoveredMemo
+    memoBtn.title = hasMemo ? '메모 삭제' : '메모 추가'
+    memoBtn.innerHTML = hasMemo
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>'
+  }
+}
 
 function createAnnHoverTooltip() {
   if (annHoverTooltip) return annHoverTooltip
@@ -6446,6 +6516,10 @@ function createAnnHoverTooltip() {
     const textLayerDiv = pageWrapper.querySelector('.textLayer')
     if (!textLayerDiv) return
 
+    // 마우스가 실제로 올라가 있던 span의 타입(하이라이트/밑줄)만 지운다 - 같은 범위에
+    // 하이라이트와 밑줄이 중첩 적용된 경우, 겹치는 다른 타입까지 함께 지워지면 안 된다.
+    const annType = activeHoveredSpan.classList.contains('pdf-annotation-highlight') ? 'highlight' : 'underline'
+
     // 어노테이션 스팬의 dataset에서 직접 오프셋 정보 추출
     const annStartOffset = parseInt(activeHoveredSpan.dataset.startOffset, 10)
     const annEndOffset   = parseInt(activeHoveredSpan.dataset.endOffset,   10)
@@ -6455,8 +6529,9 @@ function createAnnHoverTooltip() {
       const annotations = loadAnnotations(state.sessionId)
       if (annotations[`page_${pageNum}`]) {
         const originalCount = annotations[`page_${pageNum}`].length
-        // 해당 어노테이션과 범위가 겹치는 것들을 일괄 삭제
+        // 같은 타입이면서 범위가 겹치는 것들만 삭제
         annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+          if (ann.type !== annType) return true
           const isOverlapping = (ann.startOffset >= annStartOffset && ann.startOffset <= annEndOffset) ||
                                 (ann.endOffset   >= annStartOffset && ann.endOffset   <= annEndOffset)
           return !isOverlapping
@@ -6494,6 +6569,7 @@ function createAnnHoverTooltip() {
               if (annotations[`page_${pageNum}`]) {
                 const originalCount = annotations[`page_${pageNum}`].length
                 annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+                  if (ann.type !== annType) return true
                   const isOverlapping = (ann.startOffset >= sentenceOffsets.startOffset && ann.startOffset <= sentenceOffsets.endOffset) ||
                                         (ann.endOffset   >= sentenceOffsets.startOffset && ann.endOffset   <= sentenceOffsets.endOffset)
                   return !isOverlapping
@@ -6514,37 +6590,25 @@ function createAnnHoverTooltip() {
 
   tooltip.querySelector('.memo-ann-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation()
-    if (!activeHoveredSpan) return
-    const pageWrapper = activeHoveredSpan.closest('.pdf-page-wrapper')
-    if (!pageWrapper) { hideAnnHoverTooltip(); return }
-    const pageNum = parseInt(pageWrapper.dataset.page, 10)
-    if (isNaN(pageNum)) { hideAnnHoverTooltip(); return }
+    if (activeHoveredPageNum == null) { hideAnnHoverTooltip(); return }
 
-    // VTM 기반 sentenceIdx 감지 (어노테이션 스팬 위치 기반)
-    const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
-    const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
-    const annRect = activeHoveredSpan.getBoundingClientRect()
-    const charIdx = vtm ? estimateCharIdxFromPoint(annRect.left + annRect.width / 2, annRect.top + annRect.height / 2, vtm) : -1
-    const sRange = (charIdx >= 0 && sentenceRanges) ? findSentenceAtChar(charIdx, sentenceRanges) : null
-
-    if (sRange) {
-      const sentenceIdx = sRange.sentenceIdx >= 10000 ? (sRange.originalSentenceIdx ?? 0) : sRange.sentenceIdx
-      createFloatingMemoForSentence(pageNum, sentenceIdx)
-    } else {
-      // 폴백: .pdf-sentence 스팬 기반
-      const sentenceEl = activeHoveredSpan.closest('.pdf-sentence')
-      if (sentenceEl) {
-        const sentenceIdx = parseInt(sentenceEl.dataset.sentenceIdx, 10)
-        createFloatingMemoForSentence(pageNum, sentenceIdx)
-      }
+    if (activeHoveredMemo) {
+      // 이미 존재하는 메모 삭제
+      const allMemosObj = loadMemos(state.sessionId)
+      const pageMemos = allMemosObj[`page_${activeHoveredPageNum}`] || []
+      allMemosObj[`page_${activeHoveredPageNum}`] = pageMemos.filter(m => m.id !== activeHoveredMemo.id)
+      saveMemos(state.sessionId, allMemosObj)
+      showToast('메모가 삭제되었습니다 ✓', 'success')
+      renderPageMemos(activeHoveredPageNum)
+    } else if (activeHoveredSentenceIdx != null && !isNaN(activeHoveredSentenceIdx)) {
+      createFloatingMemoForSentence(activeHoveredPageNum, activeHoveredSentenceIdx)
     }
     hideAnnHoverTooltip()
   })
 
   tooltip.querySelector('.ask-ai-ann-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation()
-    if (!activeHoveredSpan) return
-    const text = activeHoveredSpan.textContent.trim()
+    const text = activeHoveredSpan ? activeHoveredSpan.textContent.trim() : activeHoveredText
     if (text) {
       askAIAssistant(text)
     }
@@ -6554,17 +6618,13 @@ function createAnnHoverTooltip() {
   return tooltip
 }
 
-function showAnnotationHoverTooltip(annSpan) {
-  if (annHoverHideTimer) {
-    clearTimeout(annHoverHideTimer)
-    annHoverHideTimer = null
-  }
-
-  activeHoveredSpan = annSpan
+// 공통 위치 계산/노출 로직 - span 기반(하이라이트/밑줄)과 메모 전용(문장 범위) 양쪽에서 사용
+function positionAndShowAnnHoverTooltip(rect) {
+  if (!rect) return
   const tooltip = createAnnHoverTooltip()
+  updateAnnHoverTooltipButtons(tooltip)
   tooltip.classList.remove('hidden')
 
-  const rect = annSpan.getBoundingClientRect()
   const tooltipWidth = tooltip.offsetWidth || 110
   const tooltipHeight = tooltip.offsetHeight || 32
 
@@ -6575,11 +6635,61 @@ function showAnnotationHoverTooltip(annSpan) {
   tooltip.style.top = `${Math.max(8, top)}px`
 }
 
+// 하이라이트/밑줄 span 위에서 호버할 때 - 삭제 대상은 정확히 이 span의 타입으로 한정된다
+function showAnnHoverTooltipForSpan(annSpan) {
+  if (annHoverHideTimer) {
+    clearTimeout(annHoverHideTimer)
+    annHoverHideTimer = null
+  }
+
+  // 같은 span에 계속 머무는 동안엔 mousemove마다 재계산하지 않고 위치만 갱신
+  if (activeHoveredSpan === annSpan) {
+    positionAndShowAnnHoverTooltip(annSpan.getBoundingClientRect())
+    return
+  }
+
+  const pageWrapper = annSpan.closest('.pdf-page-wrapper')
+  const pageNum = pageWrapper ? parseInt(pageWrapper.dataset.page, 10) : null
+  const sentenceIdx = (pageNum != null && !isNaN(pageNum)) ? resolveSentenceIdxFromSpan(annSpan, pageNum) : null
+
+  activeHoveredSpan = annSpan
+  activeHoveredPageNum = (pageNum != null && !isNaN(pageNum)) ? pageNum : null
+  activeHoveredSentenceIdx = sentenceIdx
+  activeHoveredMemo = lookupMemoForSentence(activeHoveredPageNum, sentenceIdx)
+  activeHoveredText = annSpan.textContent.trim()
+
+  positionAndShowAnnHoverTooltip(annSpan.getBoundingClientRect())
+}
+
+// 하이라이트/밑줄 없이 메모만 존재하는 문장 위에서 호버할 때
+function showAnnHoverTooltipForMemoSentence(pageNum, sentenceRange, sentenceIdx, memo) {
+  if (annHoverHideTimer) {
+    clearTimeout(annHoverHideTimer)
+    annHoverHideTimer = null
+  }
+
+  const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+  const rect = vtm ? getSentenceViewportRect(sentenceRange, vtm) : null
+  if (!rect) return
+
+  activeHoveredSpan = null
+  activeHoveredPageNum = pageNum
+  activeHoveredSentenceIdx = sentenceIdx
+  activeHoveredMemo = memo
+  activeHoveredText = vtm ? vtm.fullText.substring(sentenceRange.charStart, sentenceRange.charEnd).trim() : ''
+
+  positionAndShowAnnHoverTooltip(rect)
+}
+
 function hideAnnHoverTooltip() {
   if (annHoverTooltip) {
     annHoverTooltip.classList.add('hidden')
   }
   activeHoveredSpan = null
+  activeHoveredPageNum = null
+  activeHoveredSentenceIdx = null
+  activeHoveredMemo = null
+  activeHoveredText = ''
 }
 
 function hideAnnHoverTooltipWithDelay() {
@@ -9780,7 +9890,7 @@ if (viewerScrollContainer) {
 
     // 어노테이션 스팬 툴팁
     const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
-    if (annSpan) showAnnotationHoverTooltip(annSpan);
+    if (annSpan) showAnnHoverTooltipForSpan(annSpan);
 
     // 번역 패널 호버는 mouseover로 처리됨 (기존 trans-sentence 방식 유지)
     if (e.target.closest('.trans-page-block')) return;
@@ -9800,11 +9910,26 @@ if (viewerScrollContainer) {
         currentHoverSentenceIdx = null;
         if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null; }
       }
+      if (!annSpan) hideAnnHoverTooltipWithDelay();
       return;
     }
 
     const { pageNum, sentenceRange } = detected;
     const isSame = (currentHoverPage === pageNum && currentHoverSentenceIdx === sentenceRange.sentenceIdx);
+
+    // 하이라이트/밑줄 span 위가 아니면서 해당 문장에 메모가 있는 경우 - 메모 전용 호버 툴팁 노출
+    // (메모는 pointer-events:none 오버레이로 그려지므로 span hover로는 감지할 수 없어 문장 단위로 감지)
+    // isSame일 때는 이미 같은 문장에 대해 처리했으므로 매 mousemove마다 다시 조회하지 않는다.
+    if (!annSpan && !isSame) {
+      const sentenceIdx = sentenceRange.sentenceIdx >= 10000 ? (sentenceRange.originalSentenceIdx ?? 0) : sentenceRange.sentenceIdx;
+      const memo = lookupMemoForSentence(pageNum, sentenceIdx);
+      if (memo) {
+        showAnnHoverTooltipForMemoSentence(pageNum, sentenceRange, sentenceIdx, memo);
+      } else {
+        hideAnnHoverTooltipWithDelay();
+      }
+    }
+
     if (isSame) return;
 
     // 이전 페이지 호버 클리어
@@ -9834,7 +9959,7 @@ if (viewerScrollContainer) {
     if (state.isSelectionDragging) return;
     try {
       const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
-      if (annSpan) showAnnotationHoverTooltip(annSpan);
+      if (annSpan) showAnnHoverTooltipForSpan(annSpan);
 
       const transSent = e.target.closest('.trans-sentence');
       if (!transSent) return;
