@@ -5559,6 +5559,86 @@ function saveMemos(sessionId, memos) {
   localStorage.setItem(key, JSON.stringify(memos))
 }
 
+// ── 하이라이트/밑줄/메모 삭제 실행취소(Ctrl+Z) ──────────────────────
+// 삭제 직후 일정 시간 안에는 Ctrl+Z로 되살릴 수 있도록 최근 삭제 내역을 스택으로 보관한다.
+const ANNOTATION_UNDO_WINDOW_MS = 8000
+let annotationUndoStack = []
+
+function pushAnnotationUndo(action) {
+  annotationUndoStack.push({ ...action, expiresAt: Date.now() + ANNOTATION_UNDO_WINDOW_MS })
+  if (annotationUndoStack.length > 20) annotationUndoStack.shift()
+}
+
+// 만료되지 않은 가장 최근 삭제 내역을 꺼낸다 (만료된 항목은 버리고 계속 탐색)
+function popValidAnnotationUndo() {
+  const now = Date.now()
+  while (annotationUndoStack.length) {
+    const action = annotationUndoStack.pop()
+    if (action.expiresAt >= now) return action
+  }
+  return null
+}
+
+// 삭제됐던 어노테이션(하이라이트/밑줄) 배열을 스토리지에 되돌려 넣는다
+function restoreAnnotationItems(pageNum, items) {
+  if (!items || items.length === 0) return
+  const annotations = loadAnnotations(state.sessionId)
+  if (!annotations[`page_${pageNum}`]) annotations[`page_${pageNum}`] = []
+  annotations[`page_${pageNum}`].push(...items)
+  saveAnnotations(state.sessionId, annotations)
+}
+
+// 삭제됐던 메모 배열을 스토리지에 되돌려 넣는다 (연타 등으로 이미 복원된 항목은 건너뜀)
+function restoreMemoItems(pageNum, memos) {
+  if (!memos || memos.length === 0) return
+  const allMemosObj = loadMemos(state.sessionId)
+  const pageMemos = allMemosObj[`page_${pageNum}`] || []
+  memos.forEach(m => {
+    if (!pageMemos.some(pm => pm.id === m.id)) pageMemos.push(m)
+  })
+  allMemosObj[`page_${pageNum}`] = pageMemos
+  saveMemos(state.sessionId, allMemosObj)
+}
+
+function undoLastAnnotationAction() {
+  const action = popValidAnnotationUndo()
+  if (!action) return false
+
+  const pageWrapper = viewerScrollContainer && viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${action.pageNum}"]`)
+  const textLayerDiv = pageWrapper && pageWrapper.querySelector('.textLayer')
+
+  if (action.kind === 'annotation') {
+    restoreAnnotationItems(action.pageNum, action.items)
+    if (textLayerDiv) reRenderPageAnnotations(textLayerDiv, action.pageNum)
+    const label = action.items.length > 1 ? '어노테이션' : (action.items[0].type === 'highlight' ? '하이라이트' : '밑줄')
+    showToast(`${label}가 복원되었습니다 ✓`, 'success')
+  } else if (action.kind === 'memo') {
+    restoreMemoItems(action.pageNum, [action.memo])
+    renderPageMemos(action.pageNum)
+    showToast('메모가 복원되었습니다 ✓', 'success')
+  } else if (action.kind === 'clear') {
+    restoreAnnotationItems(action.pageNum, action.items)
+    restoreMemoItems(action.pageNum, action.memos)
+    if (textLayerDiv) reRenderPageAnnotations(textLayerDiv, action.pageNum)
+    else renderPageMemos(action.pageNum)
+    showToast('삭제한 표시가 복원되었습니다 ✓', 'success')
+  }
+  return true
+}
+
+document.addEventListener('keydown', (e) => {
+  const isUndoCombo = (e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey
+  if (!isUndoCombo || annotationUndoStack.length === 0) return
+
+  // 텍스트 입력 중(메모 편집 등)에는 브라우저 기본 실행취소를 방해하지 않는다
+  const active = document.activeElement
+  const isEditableTarget = active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT' || active.isContentEditable)
+  if (isEditableTarget) return
+
+  e.preventDefault()
+  undoLastAnnotationAction()
+})
+
 // 툴바의 "전체 숨기기" 토글 - 개별 memo.hidden 필드와는 별개로, 문서를 보는 동안만
 // 켜고 끄는 순수 화면 표시 상태(번역창 접기의 isTransPaneCollapsed와 동일한 패턴).
 // 문서(세션)별로 마지막 상태를 기억해두되, 각 메모의 저장된 내용에는 손대지 않는다.
@@ -5879,11 +5959,12 @@ function renderPageMemos(pageNum) {
             const allMemosObj = loadMemos(state.sessionId)
             allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
             saveMemos(state.sessionId, allMemosObj)
-            
+            pushAnnotationUndo({ kind: 'memo', pageNum, memo })
+
             // 본문의 선택 영역 및 고정 하이라이트 지우기
             applyActiveHighlight(null, null)
             window.getSelection().removeAllRanges()
-            
+
             renderPageMemos(pageNum)
           }
         })
@@ -5949,11 +6030,12 @@ function renderPageMemos(pageNum) {
             const allMemosObj = loadMemos(state.sessionId)
             allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => m.id !== memo.id)
             saveMemos(state.sessionId, allMemosObj)
-            
+            pushAnnotationUndo({ kind: 'memo', pageNum, memo })
+
             // 본문의 선택 영역 및 고정 하이라이트 지우기
             applyActiveHighlight(null, null)
             window.getSelection().removeAllRanges()
-            
+
             renderPageMemos(pageNum)
           }
         })
@@ -6528,16 +6610,18 @@ function createAnnHoverTooltip() {
       // 직접 오프셋으로 삭제 (신뢰 경로)
       const annotations = loadAnnotations(state.sessionId)
       if (annotations[`page_${pageNum}`]) {
-        const originalCount = annotations[`page_${pageNum}`].length
+        const removed = []
         // 같은 타입이면서 범위가 겹치는 것들만 삭제
         annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
           if (ann.type !== annType) return true
           const isOverlapping = (ann.startOffset >= annStartOffset && ann.startOffset <= annEndOffset) ||
                                 (ann.endOffset   >= annStartOffset && ann.endOffset   <= annEndOffset)
+          if (isOverlapping) removed.push(ann)
           return !isOverlapping
         })
-        if (annotations[`page_${pageNum}`].length !== originalCount) {
+        if (removed.length > 0) {
           saveAnnotations(state.sessionId, annotations)
+          pushAnnotationUndo({ kind: 'annotation', pageNum, items: removed })
           showToast('어노테이션이 삭제되었습니다 ✓', 'success')
           reRenderPageAnnotations(textLayerDiv, pageNum)
         }
@@ -6567,15 +6651,17 @@ function createAnnHoverTooltip() {
             if (sentenceOffsets.startOffset !== null && sentenceOffsets.endOffset !== null) {
               const annotations = loadAnnotations(state.sessionId)
               if (annotations[`page_${pageNum}`]) {
-                const originalCount = annotations[`page_${pageNum}`].length
+                const removed = []
                 annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
                   if (ann.type !== annType) return true
                   const isOverlapping = (ann.startOffset >= sentenceOffsets.startOffset && ann.startOffset <= sentenceOffsets.endOffset) ||
                                         (ann.endOffset   >= sentenceOffsets.startOffset && ann.endOffset   <= sentenceOffsets.endOffset)
+                  if (isOverlapping) removed.push(ann)
                   return !isOverlapping
                 })
-                if (annotations[`page_${pageNum}`].length !== originalCount) {
+                if (removed.length > 0) {
                   saveAnnotations(state.sessionId, annotations)
+                  pushAnnotationUndo({ kind: 'annotation', pageNum, items: removed })
                   showToast('어노테이션이 삭제되었습니다 ✓', 'success')
                   reRenderPageAnnotations(textLayerDiv, pageNum)
                 }
@@ -6598,6 +6684,7 @@ function createAnnHoverTooltip() {
       const pageMemos = allMemosObj[`page_${activeHoveredPageNum}`] || []
       allMemosObj[`page_${activeHoveredPageNum}`] = pageMemos.filter(m => m.id !== activeHoveredMemo.id)
       saveMemos(state.sessionId, allMemosObj)
+      pushAnnotationUndo({ kind: 'memo', pageNum: activeHoveredPageNum, memo: activeHoveredMemo })
       showToast('메모가 삭제되었습니다 ✓', 'success')
       renderPageMemos(activeHoveredPageNum)
     } else if (activeHoveredSentenceIdx != null && !isNaN(activeHoveredSentenceIdx)) {
@@ -6809,24 +6896,78 @@ function handleAnnotate(type, color) {
 }
 
 
+// 선택된 range가 이미 존재하는 하이라이트/밑줄/메모와 겹치는지 확인 - 겹치는 게 없으면
+// 지울 대상 자체가 없으므로 선택 메뉴의 "지우기" 버튼을 보여줄 필요가 없다.
+function selectionOverlapsExistingAnnotation(range, textLayerDiv, pageNum) {
+  const offsets = getPageTextOffset(range, textLayerDiv)
+  if (offsets.startOffset === null || offsets.endOffset === null) return false
+
+  const annotations = loadAnnotations(state.sessionId)
+  const pageAnns = annotations[`page_${pageNum}`] || []
+  const hasAnnotation = pageAnns.some(ann =>
+    ann.startOffset < offsets.endOffset && ann.endOffset > offsets.startOffset
+  )
+  if (hasAnnotation) return true
+
+  const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
+  const allMemos = loadMemos(state.sessionId)
+  const pageMemos = allMemos[`page_${pageNum}`] || []
+  if (sentenceRanges && pageMemos.length > 0) {
+    return sentenceRanges.some(sr => {
+      if (!(sr.charStart < offsets.endOffset && sr.charEnd > offsets.startOffset)) return false
+      const idx = sr.sentenceIdx >= 10000 ? (sr.originalSentenceIdx ?? sr.sentenceIdx) : sr.sentenceIdx
+      return pageMemos.some(m => m.sentenceIdx === idx)
+    })
+  }
+  return false
+}
+
 function clearAnnotationsInRange(range, textLayerDiv, pageNum) {
   const offsets = getPageTextOffset(range, textLayerDiv)
   if (offsets.startOffset === null || offsets.endOffset === null) return
 
+  // 하이라이트/밑줄 제거
   const annotations = loadAnnotations(state.sessionId)
-  if (!annotations[`page_${pageNum}`]) return
-
-  const originalCount = annotations[`page_${pageNum}`].length
-  annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
-    const hasOverlap = !(ann.endOffset <= offsets.startOffset || ann.startOffset >= offsets.endOffset)
-    return !hasOverlap
-  })
-
-  if (annotations[`page_${pageNum}`].length !== originalCount) {
-    saveAnnotations(state.sessionId, annotations)
-    showToast('선택 영역의 하이라이트/밑줄이 삭제되었습니다 ✓', 'success')
-    reRenderPageAnnotations(textLayerDiv, pageNum)
+  const removedAnnotations = []
+  if (annotations[`page_${pageNum}`]) {
+    annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+      const hasOverlap = !(ann.endOffset <= offsets.startOffset || ann.startOffset >= offsets.endOffset)
+      if (hasOverlap) removedAnnotations.push(ann)
+      return !hasOverlap
+    })
   }
+
+  // 선택 범위에 걸치는 문장의 메모도 함께 제거 ("지우기" 버튼은 지울 대상이 있을 때만
+  // 노출되므로, 메모만 있던 선택이었다면 여기서도 실제로 지워져야 한다)
+  const removedMemos = []
+  const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
+  const allMemosObj = loadMemos(state.sessionId)
+  const pageMemos = allMemosObj[`page_${pageNum}`] || []
+  if (sentenceRanges && pageMemos.length > 0) {
+    const overlappingSentenceIdxs = new Set(
+      sentenceRanges
+        .filter(sr => sr.charStart < offsets.endOffset && sr.charEnd > offsets.startOffset)
+        .map(sr => sr.sentenceIdx >= 10000 ? (sr.originalSentenceIdx ?? sr.sentenceIdx) : sr.sentenceIdx)
+    )
+    if (overlappingSentenceIdxs.size > 0) {
+      allMemosObj[`page_${pageNum}`] = pageMemos.filter(m => {
+        if (overlappingSentenceIdxs.has(m.sentenceIdx)) { removedMemos.push(m); return false }
+        return true
+      })
+    }
+  }
+
+  if (removedAnnotations.length === 0 && removedMemos.length === 0) {
+    window.getSelection().removeAllRanges()
+    return
+  }
+
+  if (removedAnnotations.length > 0) saveAnnotations(state.sessionId, annotations)
+  if (removedMemos.length > 0) saveMemos(state.sessionId, allMemosObj)
+  pushAnnotationUndo({ kind: 'clear', pageNum, items: removedAnnotations, memos: removedMemos })
+  showToast('선택 영역의 표시가 삭제되었습니다 ✓', 'success')
+  // 메모 재렌더링까지 포함한다
+  reRenderPageAnnotations(textLayerDiv, pageNum)
   window.getSelection().removeAllRanges()
 }
 
@@ -6852,10 +6993,10 @@ function reRenderPageAnnotations(textLayerDiv, pageNum) {
   renderPageMemos(pageNum)
 }
 
-function showSelectionMenu(rect, showAnnotateGroup) {
+function showSelectionMenu(rect, showAnnotateGroup, hasExistingAnnotation = true) {
   const menu = createSelectionMenu()
   menu.classList.remove('hidden')
-  
+
   const annotateGroup = menu.querySelector('.menu-annotate-group')
   if (annotateGroup) {
     if (showAnnotateGroup) {
@@ -6864,7 +7005,13 @@ function showSelectionMenu(rect, showAnnotateGroup) {
       annotateGroup.style.display = 'none'
     }
   }
-  
+
+  // 선택 영역에 이미 하이라이트/밑줄/메모가 없으면 지울 대상이 없으므로 "지우기" 버튼을 숨긴다
+  const clearBtn = menu.querySelector('.clear-btn')
+  if (clearBtn) {
+    clearBtn.style.display = hasExistingAnnotation ? '' : 'none'
+  }
+
   const menuWidth = menu.offsetWidth || 120
   const menuHeight = menu.offsetHeight || 36
   
@@ -6959,7 +7106,16 @@ document.addEventListener('mouseup', (e) => {
 
       const rect = range.getBoundingClientRect()
       if (rect.width > 0 && rect.height > 0) {
-        showSelectionMenu(rect, !!isTextLayer)
+        let hasExistingAnnotation = true
+        if (isTextLayer) {
+          const textLayerDiv = container.closest('.textLayer')
+          const pageWrapper = textLayerDiv && textLayerDiv.closest('.pdf-page-wrapper')
+          const pageNum = pageWrapper ? parseInt(pageWrapper.dataset.page, 10) : null
+          if (textLayerDiv && pageNum != null && !isNaN(pageNum)) {
+            hasExistingAnnotation = selectionOverlapsExistingAnnotation(range, textLayerDiv, pageNum)
+          }
+        }
+        showSelectionMenu(rect, !!isTextLayer, hasExistingAnnotation)
       }
     } catch (err) {
       console.warn("Selection handler error:", err)
@@ -9880,7 +10036,12 @@ function startDwellSelection(pageNum, sentenceRange) {
         state.hoverSelectedSentenceIdx = sentenceRange.sentenceIdx;
 
         const selRect = range.getBoundingClientRect();
-        showSelectionMenu(selRect, true);
+        const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`);
+        const textLayerDiv = pw && pw.querySelector('.textLayer');
+        const hasExistingAnnotation = textLayerDiv
+          ? selectionOverlapsExistingAnnotation(range, textLayerDiv, pageNum)
+          : true;
+        showSelectionMenu(selRect, true, hasExistingAnnotation);
       } catch(e) { /* no-op */ }
     }
   }, 700);
