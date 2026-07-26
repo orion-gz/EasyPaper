@@ -3739,6 +3739,48 @@ body.light-theme .pdf-sentence.pdf-sentence-has-memo:hover {
   background-color: rgba(99, 102, 241, 0.16) !important;
 }
 
+/* 메모 색상별 원문 문장 하이라이트 - 플로팅 메모 카드/커넥터 라인과 동일한 팔레트 */
+.pdf-sentence.pdf-sentence-has-memo.color-yellow {
+  background-color: rgba(234, 179, 8, 0.18) !important;
+  border-bottom-color: rgba(234, 179, 8, 0.6) !important;
+}
+.pdf-sentence.pdf-sentence-has-memo.color-yellow:hover {
+  background-color: rgba(234, 179, 8, 0.28) !important;
+}
+body.light-theme .pdf-sentence.pdf-sentence-has-memo.color-yellow {
+  background-color: rgba(234, 179, 8, 0.1) !important;
+}
+.pdf-sentence.pdf-sentence-has-memo.color-green {
+  background-color: rgba(16, 185, 129, 0.18) !important;
+  border-bottom-color: rgba(16, 185, 129, 0.6) !important;
+}
+.pdf-sentence.pdf-sentence-has-memo.color-green:hover {
+  background-color: rgba(16, 185, 129, 0.28) !important;
+}
+body.light-theme .pdf-sentence.pdf-sentence-has-memo.color-green {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+}
+.pdf-sentence.pdf-sentence-has-memo.color-blue {
+  background-color: rgba(59, 130, 246, 0.18) !important;
+  border-bottom-color: rgba(59, 130, 246, 0.6) !important;
+}
+.pdf-sentence.pdf-sentence-has-memo.color-blue:hover {
+  background-color: rgba(59, 130, 246, 0.28) !important;
+}
+body.light-theme .pdf-sentence.pdf-sentence-has-memo.color-blue {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+}
+.pdf-sentence.pdf-sentence-has-memo.color-red {
+  background-color: rgba(244, 63, 94, 0.18) !important;
+  border-bottom-color: rgba(244, 63, 94, 0.6) !important;
+}
+.pdf-sentence.pdf-sentence-has-memo.color-red:hover {
+  background-color: rgba(244, 63, 94, 0.28) !important;
+}
+body.light-theme .pdf-sentence.pdf-sentence-has-memo.color-red {
+  background-color: rgba(244, 63, 94, 0.1) !important;
+}
+
 /* ── Floating Markdown Memo Styles ── */
 .floating-memo {
   position: absolute;
@@ -4381,6 +4423,48 @@ body.light-theme .sentence-memo-box {
 }
 .sentence-memo-box.hidden-memo:hover {
   background-color: rgba(245, 158, 11, 0.32);
+}
+
+/* 메모 색상별 하이라이트 상자 - 플로팅 메모 카드/커넥터 라인과 동일한 팔레트 */
+.sentence-memo-box.color-yellow {
+  background-color: rgba(234, 179, 8, 0.18);
+  border-bottom-color: rgba(234, 179, 8, 0.6);
+}
+.sentence-memo-box.color-yellow.hidden-memo:hover {
+  background-color: rgba(234, 179, 8, 0.32);
+}
+body.light-theme .sentence-memo-box.color-yellow {
+  background-color: rgba(234, 179, 8, 0.14);
+}
+.sentence-memo-box.color-green {
+  background-color: rgba(16, 185, 129, 0.18);
+  border-bottom-color: rgba(16, 185, 129, 0.6);
+}
+.sentence-memo-box.color-green.hidden-memo:hover {
+  background-color: rgba(16, 185, 129, 0.32);
+}
+body.light-theme .sentence-memo-box.color-green {
+  background-color: rgba(16, 185, 129, 0.14);
+}
+.sentence-memo-box.color-blue {
+  background-color: rgba(59, 130, 246, 0.18);
+  border-bottom-color: rgba(59, 130, 246, 0.6);
+}
+.sentence-memo-box.color-blue.hidden-memo:hover {
+  background-color: rgba(59, 130, 246, 0.32);
+}
+body.light-theme .sentence-memo-box.color-blue {
+  background-color: rgba(59, 130, 246, 0.14);
+}
+.sentence-memo-box.color-red {
+  background-color: rgba(244, 63, 94, 0.18);
+  border-bottom-color: rgba(244, 63, 94, 0.6);
+}
+.sentence-memo-box.color-red.hidden-memo:hover {
+  background-color: rgba(244, 63, 94, 0.32);
+}
+body.light-theme .sentence-memo-box.color-red {
+  background-color: rgba(244, 63, 94, 0.14);
 }
 
 /* 독립 수식 호버 상자 */

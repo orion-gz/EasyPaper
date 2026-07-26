@@ -535,6 +535,9 @@ async function initScrollViewer() {
         } catch (err) {
           console.warn(`Failed to lazy load translation for page ${pageNum}:`, err)
           delete state.translationCache[pageNum]
+          // 번역 로딩 실패 시 폴백 세그멘테이션 상태로 메모가 계속 숨겨져 있지
+          // 않도록, 이미 그려진 문장 분할 기준으로 메모를 다시 그려준다.
+          renderPageMemos(pageNum)
         }
       }
 
@@ -553,6 +556,7 @@ async function initScrollViewer() {
         }).catch(err => {
           if (state.sessionId === currentSessionId) {
             delete state.translationCache[nextPage]
+            renderPageMemos(nextPage)
           }
         })
       }
@@ -5718,6 +5722,9 @@ function renderPageMemos(pageNum) {
   }
   pageWrapper.querySelectorAll('.pdf-sentence-has-memo').forEach(el => {
     el.classList.remove('pdf-sentence-has-memo', 'pdf-sentence-has-memo-hidden')
+    Array.from(el.classList).forEach(cls => {
+      if (cls.startsWith('color-')) el.classList.remove(cls)
+    })
     delete el.dataset.memoId
   })
 
@@ -5782,7 +5789,10 @@ function renderPageMemos(pageNum) {
           const memoRects = getSentenceRects(memoSRange, vtmForMemo, memoTextLayer)
           memoRects.forEach(r => {
             const box = document.createElement('div')
-            box.className = isHiddenIndividually ? 'sentence-memo-box hidden-memo' : 'sentence-memo-box'
+            const colorClass = `color-${memo.color || 'default'}`
+            box.className = isHiddenIndividually
+              ? `sentence-memo-box hidden-memo ${colorClass}`
+              : `sentence-memo-box ${colorClass}`
             box.style.left = `${r.left}px`
             box.style.top = `${r.top}px`
             box.style.width = `${r.width}px`
@@ -5803,7 +5813,7 @@ function renderPageMemos(pageNum) {
         const { pdfElements } = getMappedElementsAndIndices(sentenceEl, pageNum, memo.sentenceIdx)
         if (pdfElements) {
           pdfElements.forEach(el => {
-            el.classList.add('pdf-sentence-has-memo')
+            el.classList.add('pdf-sentence-has-memo', `color-${memo.color || 'default'}`)
             if (isHiddenIndividually) {
               // 클릭 시 되살리기는 pageWrapper에 위임된 리스너(위 참고)가 처리한다 -
               // 이 요소는 재렌더링 때마다 파괴되지 않고 남아있어 직접 리스너를
@@ -6870,6 +6880,17 @@ window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   renderImageOverlayLayer(textLayerDiv, pageNum)
   renderCitationOverlayLayer(textLayerDiv, pageNum)
   renderFigureRefOverlayLayer(textLayerDiv, pageNum)
+
+  // 이미 번역된 적이 있는 페이지인데 아직 번역 문장 데이터(state.translationSentences)가
+  // 로드되지 않았다면, 방금 위에서 실행한 세그멘테이션은 정규식 기반 폴백
+  // (splitIntoSentences) 결과다. 번역 캐시가 로드되면 alignSentencesToText로 다시
+  // 세그멘테이션되며 문장 인덱스가 달라질 수 있어, 지금 메모를 그리면 잘못된 위치에
+  // 표시됐다가 번역 로딩 완료 시 원래 위치로 튀어 보인다. 이 경우엔 그리지 않고
+  // renderTransContent → reRenderPageAnnotations에서 최종 위치로 한 번만 그리게 한다.
+  const pendingRetranslationSegmentation =
+    state.translatedPages.has(pageNum) &&
+    !(state.translationSentences[pageNum] && state.translationSentences[pageNum].length)
+  if (pendingRetranslationSegmentation) return
 
   // Render floating memos
   renderPageMemos(pageNum)
