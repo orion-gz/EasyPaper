@@ -9260,7 +9260,17 @@ function segmentPdfElements(container, pageNum) {
       // 잘못 참조하는 죽은 코드(renderMemoOverlay)가 대신 호출되고 있어서,
       // 이 함수를 호출하는 경로 중 memo 재호출을 별도로 챙기지 않는 곳에서는
       // 메모 하이라이트가 그대로 사라진 채 복구되지 않는 버그가 있었다.
-      renderPageMemos(pageNum);
+      //
+      // 다만 이미 번역된 적 있는 페이지인데 아직 번역 문장 데이터가 로드되지
+      // 않아 위 2단계에서 정규식 기반 폴백(splitIntoSentences)으로 분할한
+      // 상태라면, 여기서 그리는 위치는 번역이 로드된 뒤 alignSentencesToText로
+      // 재분할되면서 곧 달라진다. 이 상태로 지금 그리면 메모가 잘못된 위치에
+      // 표시됐다가 번역 로딩 완료 시 원래 위치로 튀어 보이므로, 이 경우엔
+      // 건너뛰고 최종(정렬된) 세그멘테이션이 나온 뒤에만 그린다.
+      const usedFallbackSegmentation = !(sentences && sentences.length > 0)
+      if (!(usedFallbackSegmentation && state.translatedPages.has(pageNum))) {
+        renderPageMemos(pageNum);
+      }
     }
   } catch (err) {
     console.warn(`segmentPdfElements failed for p.${pageNum}:`, err);
