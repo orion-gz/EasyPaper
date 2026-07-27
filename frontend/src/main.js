@@ -2852,6 +2852,15 @@ async function installTauriUpdate() {
   if (updateAvailableActions) updateAvailableActions.style.display = 'none'
 
   try {
+    // 이 페이지 자체가 로컬 백엔드 sidecar(127.0.0.1:*)가 서빙하는 정적
+    // 파일이라, 아래에서 sidecar를 죽이고 나면 그 시점까지 한 번도 로드된
+    // 적 없는 청크(dynamic import)는 더 이상 네트워크로 가져올 수 없다.
+    // relaunch()에 필요한 plugin-process는 지금까지 쓰인 적이 없으므로
+    // sidecar를 죽이기 전에 미리 import해 브라우저가 청크를 확보해 두게
+    // 한다 - 순서를 바꾸지 않으면 "Importing a module script failed" 오류로
+    // 설치가 실패한다.
+    const { relaunch } = await import('@tauri-apps/plugin-process')
+
     // Windows 설치 프로그램이 파일을 덮어쓰기 전에 백엔드 sidecar를 먼저
     // 종료해야 한다 - 계속 떠 있으면 PyInstaller 런타임이 로드한 DLL(예:
     // MSVCP140.dll)을 OS가 잠그고 있어서 "Error opening file for writing"
@@ -2886,7 +2895,6 @@ async function installTauriUpdate() {
       }
     })
 
-    const { relaunch } = await import('@tauri-apps/plugin-process')
     await relaunch()
   } catch (err) {
     setTauriUpdateStatusText('설치 실패: ' + (err.message || err), '#ef4444')
