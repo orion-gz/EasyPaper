@@ -278,6 +278,7 @@ const chatSidebar        = $('chat-sidebar')
 const chatResizer        = $('chat-resizer')
 const chatCloseBtn       = $('chat-close-btn')
 const chatMessages       = $('chat-messages')
+const floatingScrollNav  = $('floating-scroll-nav')
 const outlineToggleBtn   = $('outline-toggle-btn')
 const outlineSidebar     = $('outline-sidebar')
 const outlineCloseBtn    = $('outline-close-btn')
@@ -9260,6 +9261,17 @@ async function sendChatMessage() {
 }
 
 function initChatListeners() {
+  // 어시스턴트 패널의 실측 폭을 --chat-sidebar-offset으로 반영해, 우측 하단
+  // floating-scroll-nav가 패널과 겹치지 않고 뷰어 쪽으로 비켜서게 한다.
+  // 열림/닫힘(width: 0 ↔ 390px)과 리사이저 드래그 모두 이 하나의 관찰로 처리된다.
+  if (chatSidebar) {
+    const chatSidebarWidthObserver = new ResizeObserver((entries) => {
+      const width = entries[0].contentRect.width
+      document.documentElement.style.setProperty('--chat-sidebar-offset', `${width}px`)
+    })
+    chatSidebarWidthObserver.observe(chatSidebar)
+  }
+
   if (chatToggleBtn) {
     chatToggleBtn.addEventListener('click', toggleChatSidebar)
   }
@@ -9320,6 +9332,7 @@ function initChatListeners() {
       isDragging = true
       chatResizer.classList.add('dragging')
       chatSidebar.classList.add('resizing')
+      if (floatingScrollNav) floatingScrollNav.classList.add('resizing')
       document.body.style.cursor = 'col-resize'
       document.body.style.userSelect = 'none'
     })
@@ -9339,6 +9352,7 @@ function initChatListeners() {
       isDragging = false
       chatResizer.classList.remove('dragging')
       chatSidebar.classList.remove('resizing')
+      if (floatingScrollNav) floatingScrollNav.classList.remove('resizing')
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
       if (chatSidebar.style.width) {

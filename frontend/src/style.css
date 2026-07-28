@@ -609,14 +609,20 @@ html, body {
 }
 
 /* ── 우측 하단 floating 스크롤 내비게이션 ── */
+/* AI 어시스턴트 패널이 열리면 --chat-sidebar-offset(패널 실측 폭)만큼 왼쪽으로 밀어
+   패널과 겹치지 않도록 한다. main.js의 ResizeObserver가 이 변수를 갱신한다. */
 .floating-scroll-nav {
   position: fixed;
-  right: 24px;
+  right: calc(24px + var(--chat-sidebar-offset, 0px));
   bottom: 24px;
   z-index: 60;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.floating-scroll-nav.resizing {
+  transition: none !important;
 }
 .floating-nav-btn {
   width: 38px;
