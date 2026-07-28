@@ -7892,15 +7892,42 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
 // 표준 로마 숫자(1~3999) 검증 패턴 - "IVX" 같은 무효한 조합은 배제한다. 맨 앞의
 // lookahead는 그룹이 전부 빈 문자열로 매칭되어 공백이 "로마 숫자"로 인정되는 것을 막는다.
 const ROMAN_NUMERAL_SRC = '(?=[MDCLXVI])M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})'
-const ROMAN_NUMERAL_TOKEN_RE = new RegExp(`^${ROMAN_NUMERAL_SRC}$`, 'i')
 
-// 복수형(Figures/Figs/Tables)과 "Figs. 3-5", "Figures 1 and 2", "Table 1, 2"
-// 처럼 여러 개를 한 번에 가리키는 표기도 지원하기 위해, 키워드 뒤에 오는
-// 숫자(또는 로마 숫자) 나열 전체를 그룹으로 캡처한 뒤 parseFigureTableNumberList로 펼친다.
 const FIGURE_TABLE_NUM_SRC = `(?:\\d+|${ROMAN_NUMERAL_SRC})`
+// 숫자 본체 하나: "(1)"처럼 괄호로 감싼 형태(Equation 표기에 흔함) 또는 맨 숫자.
+const FIGURE_TABLE_NUM_CORE_SRC = `(?:\\(\\s*${FIGURE_TABLE_NUM_SRC}\\s*\\)|${FIGURE_TABLE_NUM_SRC})`
+// Subfigure 접미사: 숫자 바로 뒤에 공백 없이 붙는 글자 하나("Fig. 2f", "Figure 5B")
+// 또는 괄호로 묶인 글자 목록("Fig. 4(a,b,c)", "Fig. 2(a)"). 뒤에 글자/숫자가 더
+// 이어지면("Fig. 2nd"의 "nd") 서수 등 참조와 무관한 단어의 일부일 수 있으므로
+// 매칭하지 않는다(다음 문자가 알파벳/숫자가 아닐 때만 인정).
+const FIGURE_TABLE_SUBFIG_SUFFIX_SRC =
+  `(?:[a-zA-Z](?![a-zA-Z0-9])|\\(\\s*[a-zA-Z](?:\\s*[-–,]\\s*[a-zA-Z])*\\s*\\))`
+// 숫자 하나 + (있다면) subfigure 접미사. 접미사가 없다면 바로 뒤에 글자/숫자가
+// 이어지면 안 된다("Fig 2nd"처럼 서수나 다른 단어의 일부인 경우를 배제).
+const FIGURE_TABLE_NUM_ITEM_SRC =
+  `${FIGURE_TABLE_NUM_CORE_SRC}(?:${FIGURE_TABLE_SUBFIG_SUFFIX_SRC}|(?![a-zA-Z0-9]))`
+// 새 숫자를 잇는 느슨한 연결어(공백 허용): "Figs. 1 and 2", "Tables 1, 2", "Figs. 3-5".
+const FIGURE_TABLE_LOOSE_CONNECTOR_SRC = `\\s*(?:[-–—,]|and|&)\\s*`
+// subfigure 글자만 이어붙이는 빡빡한 연결어(공백 없음): "Fig. 6a,c"의 ",c",
+// "Fig. 2a-d"의 "-d". 공백이 있으면("Fig. 3, a detailed...") 일반 문장의 일부일
+// 가능성이 높으므로, subfigure 이어붙이기는 반드시 공백이 없는 경우만 인정한다.
+// 이렇게 tight/loose를 구분해두면, subfigure 글자가 로마 숫자 알파벳(I/V/X/L/C/D/M)과
+// 겹치는 경우("Fig. 3b,d,e"의 "d") 새 로마 숫자 대상이 아니라 subfigure로
+// 해석하는 쪽을 우선할 수 있다 - 실제 로마 숫자 다중 나열(예: "Tables I and V")은
+// 항상 공백이 있는 연결어를 쓰기 때문에 이 우선순위가 서로 충돌하지 않는다.
+const FIGURE_TABLE_TIGHT_CONNECTOR_SRC = `[,\\-–—]`
+const FIGURE_TABLE_BARE_LETTER_ITEM_SRC = `[a-zA-Z](?![a-zA-Z0-9])`
+const FIGURE_TABLE_CONT_ITEM_SRC =
+  `(?:${FIGURE_TABLE_TIGHT_CONNECTOR_SRC}${FIGURE_TABLE_BARE_LETTER_ITEM_SRC}` +
+  `|${FIGURE_TABLE_LOOSE_CONNECTOR_SRC}${FIGURE_TABLE_NUM_ITEM_SRC})`
+// 키워드 뒤에 \b를 둔 이유: "Tab"이 실제로는 "Table"/"Tablet" 같은 더 긴 단어의
+// 일부인데, 뒤에 남은 글자(예: "Table tennis"의 "le")가 우연히 로마 숫자+subfigure
+// 접미사로 파싱되어 "Tab"만 키워드로 잘못 채택되는 경우가 있다(Tables?가 실패하면
+// 엔진이 Tabs? 같은 더 짧은 대안으로 백트래킹하기 때문). \b를 두면 "Tab"과 그
+// 다음 글자 사이에 실제 단어 경계가 없는 이상 이 대안 자체가 거부된다.
 const FIGURE_TABLE_REF_RE = new RegExp(
-  `\\b(Figures?|Figs?|Tables?|Equations?|Eqns?|Eqs?)\\.?\\s*\\(?\\s*` +
-  `((?:${FIGURE_TABLE_NUM_SRC}\\s*(?:(?:[-–,]|and|&)\\s*)+)*${FIGURE_TABLE_NUM_SRC})\\b\\)?`,
+  `\\b(Figures?|Figs?|Tables?|Tabs?|Equations?|Eqns?|Eqs?)\\b\\.?\\s*` +
+  `(${FIGURE_TABLE_NUM_ITEM_SRC}(?:${FIGURE_TABLE_CONT_ITEM_SRC})*)`,
   'gi'
 )
 
@@ -7911,30 +7938,87 @@ function normalizeFigureTableKind(keyword) {
   return 'Equation'
 }
 
-// "1", "1, 2", "3-5", "1 and 2", "1, 2 and 3", "I", "I and II" 같은 숫자(아라비아
-// 또는 로마) 나열을 개별 번호 목록으로 펼친다 (본문 인용 파싱의 extractBracketCitationItems와
-// 동일한 원칙). 로마 숫자는 범위("I-III") 표기는 흔치 않아 지원하지 않고, backend가
-// 라벨을 항상 대문자로 저장하므로(_find_page_captions) 매칭을 위해 대문자로 맞춘다.
-function parseFigureTableNumberList(text) {
-  const nums = []
-  const normalized = text.replace(/&/g, ',').replace(/\band\b/gi, ',')
-  normalized.split(',').forEach(part => {
-    const trimmed = part.trim()
-    if (!trimmed) return
-    const range = trimmed.match(/^(\d+)\s*[-–]\s*(\d+)$/)
-    if (range) {
-      const start = parseInt(range[1], 10)
-      const end = parseInt(range[2], 10)
-      if (end >= start && end - start <= 50) {
-        for (let n = start; n <= end; n++) nums.push(String(n))
-      }
-      return
+// FIGURE_TABLE_REF_RE가 캡처한 payload(예: "6a,c", "3-5", "(4) and (5)")를
+// 개별 Figure/Table/Equation 번호 목록으로 펼친다.
+// - 숫자 뒤에 공백 없이 붙는 subfigure 접미사(글자, "(a,b,c)")는 무시한다
+//   (backend가 여러 subfigure 패널을 하나의 bbox로 병합해 저장하므로
+//   documentImages 매칭에는 상위 Figure 번호만 있으면 된다).
+// - 빡빡한 연결어(공백 없는 ','/'-') 뒤에 오는 글자 하나는 새 숫자가 아니라
+//   직전 숫자의 subfigure 이어붙이기로 보고 무시한다.
+// - 공백이 있는 연결어(", "/" and "/" & ") 뒤에 오는 숫자는 새로운 대상이다.
+// - 대시로 이어진 순수 아라비아 숫자 두 개("3-5")는 그 사이 숫자를 모두 포함하는
+//   범위로 펼친다(로마 숫자 범위는 흔치 않아 지원하지 않음).
+function parseFigureTableNumberList(payload) {
+  const numbers = []
+  let i = 0
+  const s = payload
+
+  function matchHere(re) {
+    re.lastIndex = i
+    const m = re.exec(s)
+    return (m && m.index === i) ? m : null
+  }
+
+  const numCoreRe = new RegExp(`\\(?\\s*(\\d+|${ROMAN_NUMERAL_SRC})\\s*\\)?`, 'iy')
+  const subfigSkipRe = new RegExp(FIGURE_TABLE_SUBFIG_SUFFIX_SRC, 'iy')
+  const tightConnRe = new RegExp(FIGURE_TABLE_TIGHT_CONNECTOR_SRC, 'y')
+  const looseConnRe = new RegExp(`\\s*(?:([-–—])|,|and|&)\\s*`, 'iy')
+  const bareLetterRe = new RegExp(FIGURE_TABLE_BARE_LETTER_ITEM_SRC, 'y')
+
+  function readNumber() {
+    const m = matchHere(numCoreRe)
+    if (!m) return null
+    i += m[0].length
+    const raw = m[1]
+    const isRoman = !/^\d+$/.test(raw)
+    const value = isRoman ? raw.toUpperCase() : raw
+    const sm = matchHere(subfigSkipRe) // subfigure 접미사는 건너뛰기만 함
+    if (sm) i += sm[0].length
+    return { value, isRoman }
+  }
+
+  const first = readNumber()
+  if (!first) return []
+  numbers.push(first.value)
+  let lastWasPlainDecimal = !first.isRoman
+
+  while (i < s.length) {
+    const save = i
+    // 1) 빡빡한 연결어 + subfigure 글자 (새 숫자로 추가하지 않고 건너뛴다)
+    const tm = matchHere(tightConnRe)
+    if (tm) {
+      i += tm[0].length
+      const bm = matchHere(bareLetterRe)
+      if (bm) { i += bm[0].length; continue }
+      i = save // 글자가 아니면 되돌리고 느슨한 연결어 시도로 넘어감
     }
-    const single = trimmed.match(/^\d+$/)
-    if (single) { nums.push(single[0]); return }
-    if (ROMAN_NUMERAL_TOKEN_RE.test(trimmed)) nums.push(trimmed.toUpperCase())
-  })
-  return nums
+    // 2) 느슨한 연결어 + 새 숫자
+    const lm = matchHere(looseConnRe)
+    if (lm) {
+      const isDash = !!lm[1]
+      i += lm[0].length
+      const next = readNumber()
+      if (next) {
+        if (isDash && lastWasPlainDecimal && !next.isRoman) {
+          const start = parseInt(numbers[numbers.length - 1], 10)
+          const end = parseInt(next.value, 10)
+          if (end >= start && end - start <= 50) {
+            for (let n = start + 1; n <= end; n++) numbers.push(String(n))
+          } else {
+            numbers.push(next.value)
+          }
+        } else {
+          numbers.push(next.value)
+        }
+        lastWasPlainDecimal = !next.isRoman
+        continue
+      }
+      i = save
+    }
+    break
+  }
+
+  return numbers
 }
 
 function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
