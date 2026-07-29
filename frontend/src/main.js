@@ -8462,10 +8462,13 @@ function getOrCreateFigurePreviewTooltip() {
   document.body.appendChild(el)
 
   try {
+    // 너비만 기억해둔다 - 높이까지 고정해서 복원하면, 이전에 열었던 그림/표와
+    // 비율이 다른 대상을 열었을 때 옛 높이가 그대로 남아 이미지+캡션 아래로
+    // 빈 여백이 생긴다. 높이는 항상 CSS(height: auto)에 맡겨 그 순간의
+    // 콘텐츠 크기에 맞게 정해지도록 둔다.
     const saved = JSON.parse(localStorage.getItem(_FIGURE_PREVIEW_SIZE_KEY) || 'null')
-    if (saved && saved.w >= _FIGURE_PREVIEW_MIN_WIDTH && saved.h >= _FIGURE_PREVIEW_MIN_HEIGHT) {
+    if (saved && saved.w >= _FIGURE_PREVIEW_MIN_WIDTH) {
       el.style.width = `${saved.w}px`
-      el.style.height = `${saved.h}px`
     }
   } catch {}
 
@@ -8522,7 +8525,12 @@ function getOrCreateFigurePreviewTooltip() {
       document.removeEventListener('mouseup', onUp)
       el.classList.remove('resizing')
       figurePreviewIsResizing = false
-      localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: el.offsetWidth, h: el.offsetHeight }))
+      // 드래그 중엔 실시간 피드백을 위해 높이를 직접 계산해 인라인으로 고정했지만,
+      // 드래그가 끝나면 그 고정값을 지워 다시 CSS의 height: auto로 돌려놓는다 -
+      // 그래야 이후 다른 비율의 그림/표로 내용이 바뀌어도 높이가 자동으로
+      // 맞춰지고, 지금 안 맞는 빈 여백이 남지 않는다. 너비만 기억해둔다.
+      el.style.height = ''
+      localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: el.offsetWidth }))
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
