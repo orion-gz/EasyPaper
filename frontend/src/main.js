@@ -5236,6 +5236,12 @@ function _loadPrimerInto(doc, mode, dataPromise) {
       renderPrimerContent(doc, data, mode)
       primerLoading.classList.add('hidden')
       primerBody.classList.remove('hidden')
+      // 모달이 열리는 투명도/스케일 트랜지션과 동시에 개요 탭의 탭 바(overflow-x:
+      // auto)가 처음 노출되면, 브라우저가 이 스크롤 컨테이너를 제대로 페인트하지
+      // 않아 탭 버튼들이 안 보이는 경우가 실측됐다(다른 탭으로 전환하면 강제
+      // 리페인트되어 정상화됨). offsetHeight를 읽어 강제로 리플로우를 유도해
+      // 처음 노출 시에도 바로 정상 표시되게 한다.
+      if (primerTabsBar) void primerTabsBar.offsetHeight
     })
     .catch(err => {
       console.error('브리핑 로드 실패:', err)
