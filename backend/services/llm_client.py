@@ -1005,16 +1005,22 @@ async def generate_reading_primer(
     provider = get_chat_provider()
     model = get_chat_model()
 
+    # 브리핑은 계보/파인만/실험 흐름/용어집까지 한 번에 뽑아내느라 항목이 많아,
+    # 사용자가 채팅용으로 설정해둔 effort를 그대로 쓰면 CLI가 오래 침묵하다 stall
+    # 타임아웃(120초)에 걸리는 경우가 실측됐다. 브리핑 생성만은 항상 낮은 effort로
+    # 강제해 완결된 응답을 더 빨리 받는 쪽을 택한다.
+    PRIMER_EFFORT = "low"
+
     async def _call_once() -> str:
         tokens = []
         if provider == "antigravity":
-            async for token in stream_antigravity(prompt, model=model, session_id=session_id, usage_label="primer"):
+            async for token in stream_antigravity(prompt, model=model, session_id=session_id, usage_label="primer", effort_override=PRIMER_EFFORT):
                 tokens.append(token)
         elif provider == "claude_code":
-            async for token in stream_claude_code(prompt, model=model, session_id=session_id, usage_label="primer"):
+            async for token in stream_claude_code(prompt, model=model, session_id=session_id, usage_label="primer", effort_override=PRIMER_EFFORT):
                 tokens.append(token)
         elif provider == "codex":
-            async for token in stream_codex(prompt, model=model, session_id=session_id, usage_label="primer"):
+            async for token in stream_codex(prompt, model=model, session_id=session_id, usage_label="primer", effort_override=PRIMER_EFFORT):
                 tokens.append(token)
         elif provider in ("openai", "gemini", "claude"):
             messages = [{"role": "user", "content": prompt}]
@@ -1237,7 +1243,7 @@ def _get_claude_code_session_lock(session_id: str):
     return _claude_code_session_locks[session_id]
 
 
-async def stream_claude_code(prompt: str, model: str = None, session_id: str = None, is_chat: bool = False, usage_label: str = None) -> AsyncGenerator[str, None]:
+async def stream_claude_code(prompt: str, model: str = None, session_id: str = None, is_chat: bool = False, usage_label: str = None, effort_override: str = None) -> AsyncGenerator[str, None]:
     import asyncio
     import os
     import codecs
@@ -1300,6 +1306,12 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
             effort_level = parts[1].strip() or None
         else:
             model_name = raw
+
+    # 호출부가 명시적으로 요청한 effort는 모델 문자열에 파이프로 박아둔 값보다
+    # 우선한다(예: primer 생성은 사용자가 설정한 채팅 모델/effort와 무관하게
+    # 항상 낮은 effort로 빠르게 생성하고 싶을 때 사용).
+    if effort_override:
+        effort_level = effort_override
 
     if model_name:
         base_cmd.extend(["--model", model_name])
@@ -1424,7 +1436,7 @@ def _get_codex_session_lock(session_id: str) -> asyncio.Lock:
     return _codex_session_locks[session_id]
 
 
-async def stream_codex(prompt: str, model: str = None, session_id: str = None, is_chat: bool = False, usage_label: str = None) -> AsyncGenerator[str, None]:
+async def stream_codex(prompt: str, model: str = None, session_id: str = None, is_chat: bool = False, usage_label: str = None, effort_override: str = None) -> AsyncGenerator[str, None]:
     """Codex CLI(`codex exec`)로 번역/채팅/인사이트를 생성합니다.
 
     codex exec --json은 claude/antigravity와 달리 토큰 단위 스트리밍을 제공하지
@@ -1452,6 +1464,10 @@ async def stream_codex(prompt: str, model: str = None, session_id: str = None, i
             effort_level = parts[1].strip() or None
         else:
             model_name = raw
+
+    # 호출부가 명시적으로 요청한 effort는 모델 문자열에 파이프로 박아둔 값보다 우선한다.
+    if effort_override:
+        effort_level = effort_override
 
     # 이 문서를 마지막으로 쓴 provider가 codex가 아니면(예: antigravity/claude_code로
     # 갔다가 다시 돌아온 경우) 그 세션은 이 provider에서 재사용할 수 없으므로 새로
@@ -1735,7 +1751,8 @@ async def stream_antigravity(
     model: str = None,
     session_id: str = None,
     is_chat: bool = False,
-    usage_label: str = None
+    usage_label: str = None,
+    effort_override: str = None
 ) -> AsyncGenerator[str, None]:
     import asyncio
     import os
@@ -1796,6 +1813,8 @@ async def stream_antigravity(
                 init_cmd = [agy_path, "--dangerously-skip-permissions", "--sandbox"]
                 if model and model.strip() and model.strip().lower() != "custom":
                     init_cmd.extend(["--model", model.strip()])
+                if effort_override:
+                    init_cmd.extend(["--effort", effort_override])
                 init_cmd.extend(["--log-file", temp_log_path])
                 init_prompt = (
                     "You are a direct-output assistant. Output ONLY 'OK'.\n\n"
@@ -1851,6 +1870,8 @@ async def stream_antigravity(
     cmd = [agy_path, "--dangerously-skip-permissions", "--sandbox"]
     if model and model.strip() and model.strip().lower() != "custom":
         cmd.extend(["--model", model.strip()])
+    if effort_override:
+        cmd.extend(["--effort", effort_override])
     if target_conv_id:
         cmd.extend(["--conversation", target_conv_id])
 

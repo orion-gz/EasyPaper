@@ -163,25 +163,22 @@ async def generate_primer(
     session_id: str = None,
 ) -> dict:
     """primer 콘텐츠를 생성하고 캐시에 저장한 뒤 결과 dict를 반환한다.
-    실패해도 예외를 던지지 않고 부분 결과를 반환한다 - 업로드 직후 번역 착수를
-    막아서는 안 되는 백그라운드 부가 기능이기 때문이다.
+
+    LLM 생성이 실패(타임아웃 등)하면 예외를 그대로 전파한다 - 예전에는 여기서
+    빈 값(hook="", lineage="" 등)으로 대체해 반환했는데, 그 빈 결과가 "정상
+    완료된 브리핑"으로 캐시에 영구 저장되어 이후 재생성을 눌러도 계속 개요
+    탭만 있는 빈 브리핑이 반복되는 문제가 있었다. 호출부(routers/primer.py의
+    백그라운드 태스크)가 예외를 캐치해 캐시 저장을 건너뛰므로, 다음 조회/재생성
+    시 처음부터 다시 시도하게 된다.
     """
     title = metadata.get("title") or ""
     sections = detect_sections(pages)
     candidate_terms = extract_candidate_terms(pages)
 
     async def _run_llm() -> dict:
-        try:
-            return await generate_reading_primer(
-                title, sections, candidate_terms, target_lang=target_lang, session_id=session_id
-            )
-        except Exception as e:
-            print(f"[primer] LLM 생성 실패 ({doc_id}): {e}")
-            return {
-                "hook": "", "lineage": "", "feynman": "",
-                "questions": [], "checklist": [],
-                "experiment_flow": [], "glossary": [], "recommended_titles": [],
-            }
+        return await generate_reading_primer(
+            title, sections, candidate_terms, target_lang=target_lang, session_id=session_id
+        )
 
     async def _run_figure() -> Optional[dict]:
         try:

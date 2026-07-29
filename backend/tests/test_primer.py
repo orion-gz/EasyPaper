@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import services.primer as primer_module
 from services.primer import _is_plausible_match, _normalize_words, _resolve_recommended_titles
 
 
@@ -109,3 +110,31 @@ async def test_resolve_recommended_titles_respects_limit():
 
     assert call_count == 5
     assert len(results) == 5
+
+
+@pytest.mark.asyncio
+async def test_generate_primer_propagates_llm_failure_without_caching():
+    """LLM 생성이 실패하면 예외가 그대로 전파되어야 하고, 빈 값으로 대체한
+    결과가 "정상 완료"인 것처럼 캐시에 저장되어서는 안 된다 - 예전에는 실패를
+    삼켜 빈 브리핑을 캐시에 영구 저장해버려, 재생성을 눌러도 계속 개요 탭만
+    남는 문제가 있었다."""
+
+    async def fake_generate_reading_primer(*args, **kwargs):
+        raise RuntimeError("Antigravity CLI 실행 실패 (code=1): timeout waiting for response")
+
+    with patch.object(primer_module, "detect_sections", return_value={}), \
+         patch.object(primer_module, "extract_candidate_terms", return_value=[]), \
+         patch.object(primer_module, "generate_reading_primer", fake_generate_reading_primer), \
+         patch.object(primer_module, "save_page_insight") as mock_save:
+        with pytest.raises(RuntimeError):
+            await primer_module.generate_primer(
+                doc_id="doc1",
+                pages=[],
+                metadata={"title": "Test Paper"},
+                username="tester",
+                pdf_path="/nonexistent.pdf",
+                target_lang="한국어",
+                session_id="doc1",
+            )
+
+    mock_save.assert_not_called()

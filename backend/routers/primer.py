@@ -41,6 +41,11 @@ def _ensure_generation_started(doc_id: str, target_lang: str, session: dict, cur
                 target_lang=target_lang,
                 session_id=doc_id,
             )
+        except Exception as e:
+            # generate_primer()가 실패하면 캐시에 아무것도 저장하지 않은 채 여기서
+            # 끝난다. 태스크가 pop되므로 다음 GET/재생성 요청이 처음부터 다시
+            # 시도한다(pending 폴링이 이미 그 재시도를 감당하도록 되어 있다).
+            print(f"[primer] 브리핑 생성 실패 ({doc_id}): {e}")
         finally:
             _pending_generations.pop(task_key, None)
 
