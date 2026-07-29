@@ -7762,6 +7762,59 @@ function cropFigureFromCanvas(canvas, imgPercent) {
 // 참조 오버레이 미리보기(renderFigureCrop)에도 그대로 반영된다.
 const _FIGURE_OVERLAY_MIN_SIZE_PCT = 3
 
+// 드래그로 만들어진 면적 증가율(growthFactor)을 문서 내 다른 모든 그림/표/수식
+// 오버레이에도 똑같이 적용한다. 서로 원본 비율(가로:세로)이 다른 박스들을 전부
+// 같은 모양으로 맞추는 게 아니라, 각자 자기 비율은 그대로 유지한 채 "면적"만
+// 같은 비율로 커지거나 작아지게 한다 - 여러 그림/표를 한꺼번에 대충 훑어봐야
+// 하는 상황에서, 하나를 보기 편한 크기로 키우면 나머지도 비슷한 체감 크기로
+// 같이 커지는 게 자연스럽기 때문.
+function _propagateOverlayAreaGrowth(sourceImgPercent, growthFactor) {
+  if (!Number.isFinite(growthFactor) || growthFactor <= 0 || growthFactor === 1) return
+
+  const others = (state.documentImages || []).filter(img => img !== sourceImgPercent)
+  others.forEach(img => {
+    const ratio = img.height > 0 ? img.width / img.height : 1
+    const newArea = img.width * img.height * growthFactor
+    let newWidth = Math.sqrt(newArea * ratio)
+    let newHeight = ratio > 0 ? newWidth / ratio : newWidth
+
+    if (newWidth < _FIGURE_OVERLAY_MIN_SIZE_PCT || newHeight < _FIGURE_OVERLAY_MIN_SIZE_PCT) {
+      const scaleUp = Math.max(_FIGURE_OVERLAY_MIN_SIZE_PCT / newWidth, _FIGURE_OVERLAY_MIN_SIZE_PCT / newHeight)
+      newWidth *= scaleUp
+      newHeight *= scaleUp
+    }
+    if (newWidth > 100 || newHeight > 100) {
+      const scaleDown = Math.min(100 / newWidth, 100 / newHeight)
+      newWidth *= scaleDown
+      newHeight *= scaleDown
+    }
+
+    // 중심점을 고정한 채로 커지거나 작아지게 한다 (박스의 어느 한쪽 모서리가
+    // 아니라 중앙을 기준으로 삼는 게, 드래그한 모서리가 없는 다른 박스들에는
+    // 더 자연스럽다).
+    const centerX = img.left + img.width / 2
+    const centerY = img.top + img.height / 2
+    let newLeft = centerX - newWidth / 2
+    let newTop = centerY - newHeight / 2
+    newLeft = Math.max(0, Math.min(newLeft, 100 - newWidth))
+    newTop = Math.max(0, Math.min(newTop, 100 - newHeight))
+
+    img.left = newLeft
+    img.top = newTop
+    img.width = newWidth
+    img.height = newHeight
+  })
+
+  // 이미 화면에 렌더링되어 있는 페이지들의 오버레이를 갱신된 percentage로
+  // 다시 그린다 (loadDocumentImages에서 쓰는 것과 동일한 패턴).
+  document.querySelectorAll('.textLayer').forEach(otherTextLayerDiv => {
+    const pageWrapper = otherTextLayerDiv.closest('.pdf-page-wrapper')
+    if (pageWrapper) {
+      renderImageOverlayLayer(otherTextLayerDiv, parseInt(pageWrapper.dataset.page))
+    }
+  })
+}
+
 function _attachFigureOverlayResizeHandles(overlay, imgPercent, inner) {
   const corners = ['nw', 'ne', 'sw', 'se']
 
@@ -7789,15 +7842,20 @@ function _attachFigureOverlayResizeHandles(overlay, imgPercent, inner) {
       const fixedYPx = (fixedY / 100) * containerRect.height
 
       // width%/height%는 페이지의 가로/세로 길이가 서로 다르면 같은 1%라도
-      // 실제 픽셀 크기가 다르다. 드래그 시작 시점 박스의 픽셀 비율을 고정해
-      // 두고, 이후 마우스 이동에 상관없이 그 비율을 유지한 채로만 커지거나
-      // 작아지게 한다 - 그림/표/수식마다 원본 비율이 다른데 가로/세로를
-      // 마우스 이동량으로 각각 독립적으로 정하면 비율이 틀어지는 문제가 있었다.
-      const startWidthPx = (imgPercent.width / 100) * containerRect.width
-      const startHeightPx = (imgPercent.height / 100) * containerRect.height
-      const aspectRatio = startHeightPx > 0 ? startWidthPx / startHeightPx : 1
-      const minSizePxX = (_FIGURE_OVERLAY_MIN_SIZE_PCT / 100) * containerRect.width
-      const minSizePxY = (_FIGURE_OVERLAY_MIN_SIZE_PCT / 100) * containerRect.height
+      // 실제 픽셀 크기가 다르다. 드래그 시작 시점 박스의 픽셀 비율을 고정해두고,
+      // 고정 코너(fixedX/Y)와 마우스 사이의 "대각선 거리" 비율만큼 가로/세로를
+      // 동시에 스케일한다 - 두 축을 마우스 이동량으로 각각 독립적으로 정하면
+      // 이미지 원본 비율과 무관하게 박스 모양이 틀어지는 문제가 있었다.
+      const startWidthPct = imgPercent.width
+      const startHeightPct = imgPercent.height
+      const startWidthPx = (startWidthPct / 100) * containerRect.width
+      const startHeightPx = (startHeightPct / 100) * containerRect.height
+      const startDiagonalPx = Math.hypot(startWidthPx, startHeightPx) || 1
+      const minScale = Math.max(
+        containerRect.width > 0 ? (_FIGURE_OVERLAY_MIN_SIZE_PCT / 100 * containerRect.width) / startWidthPx : 0,
+        containerRect.height > 0 ? (_FIGURE_OVERLAY_MIN_SIZE_PCT / 100 * containerRect.height) / startHeightPx : 0
+      )
+      const maxScale = Math.min(containerRect.width / startWidthPx, containerRect.height / startHeightPx)
 
       overlay.classList.add('resizing')
       document.body.style.userSelect = 'none'
@@ -7805,27 +7863,13 @@ function _attachFigureOverlayResizeHandles(overlay, imgPercent, inner) {
       const onMove = (moveEvent) => {
         const mxPx = Math.max(0, Math.min(containerRect.width, moveEvent.clientX - containerRect.left))
         const myPx = Math.max(0, Math.min(containerRect.height, moveEvent.clientY - containerRect.top))
+        const dragDiagonalPx = Math.hypot(mxPx - fixedXPx, myPx - fixedYPx)
 
-        const dxPx = Math.abs(mxPx - fixedXPx)
-        const dyPx = Math.abs(myPx - fixedYPx)
+        let scale = dragDiagonalPx / startDiagonalPx
+        scale = Math.max(minScale, Math.min(maxScale, scale))
 
-        // 두 축 중 마우스가 비율에 맞춰 "덜 튀어나오는" 쪽을 기준으로 삼아,
-        // 커서 위치를 벗어나지 않는 선에서 비율을 유지한 채 최대한 커지게 한다.
-        let widthPx, heightPx
-        const heightIfWidthDriven = dxPx / aspectRatio
-        if (heightIfWidthDriven <= dyPx) {
-          widthPx = dxPx
-          heightPx = heightIfWidthDriven
-        } else {
-          heightPx = dyPx
-          widthPx = dyPx * aspectRatio
-        }
-
-        if (widthPx < minSizePxX || heightPx < minSizePxY) {
-          const scaleUp = Math.max(minSizePxX / (widthPx || 1), minSizePxY / (heightPx || 1))
-          widthPx *= scaleUp
-          heightPx *= scaleUp
-        }
+        const widthPx = startWidthPx * scale
+        const heightPx = startHeightPx * scale
 
         let width = (widthPx / containerRect.width) * 100
         let height = (heightPx / containerRect.height) * 100
@@ -7851,6 +7895,9 @@ function _attachFigureOverlayResizeHandles(overlay, imgPercent, inner) {
         document.removeEventListener('mouseup', onUp)
         overlay.classList.remove('resizing')
         document.body.style.userSelect = ''
+
+        const growthFactor = (imgPercent.width * imgPercent.height) / (startWidthPct * startHeightPct)
+        _propagateOverlayAreaGrowth(imgPercent, growthFactor)
       }
 
       document.addEventListener('mousemove', onMove)
