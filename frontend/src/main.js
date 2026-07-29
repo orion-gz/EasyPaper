@@ -7838,43 +7838,27 @@ function _attachFigureOverlayResizeHandles(overlay, imgPercent, inner) {
       // 드래그하는 동안 고정되어야 할 반대쪽 모서리 (예: nw를 끌면 se가 고정점)
       const fixedX = pos.includes('w') ? imgPercent.left + imgPercent.width : imgPercent.left
       const fixedY = pos.includes('n') ? imgPercent.top + imgPercent.height : imgPercent.top
-      const fixedXPx = (fixedX / 100) * containerRect.width
-      const fixedYPx = (fixedY / 100) * containerRect.height
 
-      // width%/height%는 페이지의 가로/세로 길이가 서로 다르면 같은 1%라도
-      // 실제 픽셀 크기가 다르다. 드래그 시작 시점 박스의 픽셀 비율을 고정해두고,
-      // 고정 코너(fixedX/Y)와 마우스 사이의 "대각선 거리" 비율만큼 가로/세로를
-      // 동시에 스케일한다 - 두 축을 마우스 이동량으로 각각 독립적으로 정하면
-      // 이미지 원본 비율과 무관하게 박스 모양이 틀어지는 문제가 있었다.
+      // 드래그 중인 이 박스는 자동 감지된 bbox를 실제 그림/표 모양에 맞게 사용자가
+      // 직접 보정하는 용도이므로, 가로/세로를 마우스 이동량 그대로 독립적으로
+      // 반영해 자유롭게(비율 고정 없이) 모양을 바꿀 수 있어야 한다. 대신 이 드래그로
+      // 달라진 "면적 증가율"만 별도로 계산해 다른 오버레이들에 전파한다(아래 onUp).
       const startWidthPct = imgPercent.width
       const startHeightPct = imgPercent.height
-      const startWidthPx = (startWidthPct / 100) * containerRect.width
-      const startHeightPx = (startHeightPct / 100) * containerRect.height
-      const startDiagonalPx = Math.hypot(startWidthPx, startHeightPx) || 1
-      const minScale = Math.max(
-        containerRect.width > 0 ? (_FIGURE_OVERLAY_MIN_SIZE_PCT / 100 * containerRect.width) / startWidthPx : 0,
-        containerRect.height > 0 ? (_FIGURE_OVERLAY_MIN_SIZE_PCT / 100 * containerRect.height) / startHeightPx : 0
-      )
-      const maxScale = Math.min(containerRect.width / startWidthPx, containerRect.height / startHeightPx)
 
       overlay.classList.add('resizing')
       document.body.style.userSelect = 'none'
 
       const onMove = (moveEvent) => {
-        const mxPx = Math.max(0, Math.min(containerRect.width, moveEvent.clientX - containerRect.left))
-        const myPx = Math.max(0, Math.min(containerRect.height, moveEvent.clientY - containerRect.top))
-        const dragDiagonalPx = Math.hypot(mxPx - fixedXPx, myPx - fixedYPx)
+        let mx = ((moveEvent.clientX - containerRect.left) / containerRect.width) * 100
+        let my = ((moveEvent.clientY - containerRect.top) / containerRect.height) * 100
+        mx = Math.max(0, Math.min(100, mx))
+        my = Math.max(0, Math.min(100, my))
 
-        let scale = dragDiagonalPx / startDiagonalPx
-        scale = Math.max(minScale, Math.min(maxScale, scale))
-
-        const widthPx = startWidthPx * scale
-        const heightPx = startHeightPx * scale
-
-        let width = (widthPx / containerRect.width) * 100
-        let height = (heightPx / containerRect.height) * 100
-        let left = mxPx < fixedXPx ? fixedX - width : fixedX
-        let top = myPx < fixedYPx ? fixedY - height : fixedY
+        let width = Math.max(_FIGURE_OVERLAY_MIN_SIZE_PCT, Math.abs(mx - fixedX))
+        let height = Math.max(_FIGURE_OVERLAY_MIN_SIZE_PCT, Math.abs(my - fixedY))
+        let left = mx < fixedX ? fixedX - width : fixedX
+        let top = my < fixedY ? fixedY - height : fixedY
 
         left = Math.max(0, Math.min(left, 100 - width))
         top = Math.max(0, Math.min(top, 100 - height))
