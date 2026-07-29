@@ -5236,12 +5236,24 @@ function _loadPrimerInto(doc, mode, dataPromise) {
       renderPrimerContent(doc, data, mode)
       primerLoading.classList.add('hidden')
       primerBody.classList.remove('hidden')
-      // 모달이 열리는 투명도/스케일 트랜지션과 동시에 개요 탭의 탭 바(overflow-x:
-      // auto)가 처음 노출되면, 브라우저가 이 스크롤 컨테이너를 제대로 페인트하지
-      // 않아 탭 버튼들이 안 보이는 경우가 실측됐다(다른 탭으로 전환하면 강제
-      // 리페인트되어 정상화됨). offsetHeight를 읽어 강제로 리플로우를 유도해
-      // 처음 노출 시에도 바로 정상 표시되게 한다.
-      if (primerTabsBar) void primerTabsBar.offsetHeight
+      // 모달이 열리는 투명도/스케일 트랜지션(.modal-overlay opacity, .primer-content
+      // transform: scale)과 동시에 브리핑 본문(탭 바 또는 개요 탭 패널)이 처음
+      // 노출되면, DOM/클래스는 전부 정상인데도 브라우저가 그 영역을 페인트하지
+      // 않아 탭 버튼이나 개요 내용이 안 보이는 경우가 실측됐다(다른 탭으로 전환
+      // 하면 강제 리페인트되어 정상화됨 - 매번 탭 바/개요 패널 중 안 보이는 쪽이
+      // 달라 특정 요소 하나만 짚어 고치는 걸로는 부족했다). primerBody 전체를
+      // 대상으로 display를 잠깐 껐다 켜서 강제로 다시 페인트하게 만드는데, 트랜지션
+      // 도중(0ms)과 트랜지션이 완전히 끝난 뒤(350ms, .primer-content의 0.3s
+      // transition보다 약간 여유를 둠) 두 시점 모두에 적용해 어느 타이밍에 문제가
+      // 생기든 커버한다.
+      const forceRepaint = () => {
+        const prevDisplay = primerBody.style.display
+        primerBody.style.display = 'none'
+        void primerBody.offsetHeight
+        primerBody.style.display = prevDisplay
+      }
+      forceRepaint()
+      setTimeout(forceRepaint, 350)
     })
     .catch(err => {
       console.error('브리핑 로드 실패:', err)
