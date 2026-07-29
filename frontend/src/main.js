@@ -7785,20 +7785,52 @@ function _attachFigureOverlayResizeHandles(overlay, imgPercent, inner) {
       // 드래그하는 동안 고정되어야 할 반대쪽 모서리 (예: nw를 끌면 se가 고정점)
       const fixedX = pos.includes('w') ? imgPercent.left + imgPercent.width : imgPercent.left
       const fixedY = pos.includes('n') ? imgPercent.top + imgPercent.height : imgPercent.top
+      const fixedXPx = (fixedX / 100) * containerRect.width
+      const fixedYPx = (fixedY / 100) * containerRect.height
+
+      // width%/height%는 페이지의 가로/세로 길이가 서로 다르면 같은 1%라도
+      // 실제 픽셀 크기가 다르다. 드래그 시작 시점 박스의 픽셀 비율을 고정해
+      // 두고, 이후 마우스 이동에 상관없이 그 비율을 유지한 채로만 커지거나
+      // 작아지게 한다 - 그림/표/수식마다 원본 비율이 다른데 가로/세로를
+      // 마우스 이동량으로 각각 독립적으로 정하면 비율이 틀어지는 문제가 있었다.
+      const startWidthPx = (imgPercent.width / 100) * containerRect.width
+      const startHeightPx = (imgPercent.height / 100) * containerRect.height
+      const aspectRatio = startHeightPx > 0 ? startWidthPx / startHeightPx : 1
+      const minSizePxX = (_FIGURE_OVERLAY_MIN_SIZE_PCT / 100) * containerRect.width
+      const minSizePxY = (_FIGURE_OVERLAY_MIN_SIZE_PCT / 100) * containerRect.height
 
       overlay.classList.add('resizing')
       document.body.style.userSelect = 'none'
 
       const onMove = (moveEvent) => {
-        let mx = ((moveEvent.clientX - containerRect.left) / containerRect.width) * 100
-        let my = ((moveEvent.clientY - containerRect.top) / containerRect.height) * 100
-        mx = Math.max(0, Math.min(100, mx))
-        my = Math.max(0, Math.min(100, my))
+        const mxPx = Math.max(0, Math.min(containerRect.width, moveEvent.clientX - containerRect.left))
+        const myPx = Math.max(0, Math.min(containerRect.height, moveEvent.clientY - containerRect.top))
 
-        let width = Math.max(_FIGURE_OVERLAY_MIN_SIZE_PCT, Math.abs(mx - fixedX))
-        let height = Math.max(_FIGURE_OVERLAY_MIN_SIZE_PCT, Math.abs(my - fixedY))
-        let left = mx < fixedX ? fixedX - width : fixedX
-        let top = my < fixedY ? fixedY - height : fixedY
+        const dxPx = Math.abs(mxPx - fixedXPx)
+        const dyPx = Math.abs(myPx - fixedYPx)
+
+        // 두 축 중 마우스가 비율에 맞춰 "덜 튀어나오는" 쪽을 기준으로 삼아,
+        // 커서 위치를 벗어나지 않는 선에서 비율을 유지한 채 최대한 커지게 한다.
+        let widthPx, heightPx
+        const heightIfWidthDriven = dxPx / aspectRatio
+        if (heightIfWidthDriven <= dyPx) {
+          widthPx = dxPx
+          heightPx = heightIfWidthDriven
+        } else {
+          heightPx = dyPx
+          widthPx = dyPx * aspectRatio
+        }
+
+        if (widthPx < minSizePxX || heightPx < minSizePxY) {
+          const scaleUp = Math.max(minSizePxX / (widthPx || 1), minSizePxY / (heightPx || 1))
+          widthPx *= scaleUp
+          heightPx *= scaleUp
+        }
+
+        let width = (widthPx / containerRect.width) * 100
+        let height = (heightPx / containerRect.height) * 100
+        let left = mxPx < fixedXPx ? fixedX - width : fixedX
+        let top = myPx < fixedYPx ? fixedY - height : fixedY
 
         left = Math.max(0, Math.min(left, 100 - width))
         top = Math.max(0, Math.min(top, 100 - height))
