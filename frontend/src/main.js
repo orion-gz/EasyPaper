@@ -134,7 +134,6 @@ const tabBtns           = document.querySelectorAll('.tab-btn')
 const tabPanes          = document.querySelectorAll('.tab-pane')
 
 // 설정 폼 및 엘리먼트
-const generalSettingsForm = $('general-settings-form')
 const settingTargetLang   = $('setting-target-lang')
 const settingTransStyle   = $('setting-trans-style')
 const settingTranslationMode = $('setting-translation-mode')
@@ -158,7 +157,6 @@ const settingAccentPicker   = $('setting-accent-picker')
 const settingAccentHex      = $('setting-accent-hex')
 const settingAccentResetBtn = $('setting-accent-reset-btn')
 
-const systemSettingsForm  = $('system-settings-form')
 const settingOllamaHost    = $('setting-ollama-host')
 const settingOpenAIKey     = $('setting-openai-key')
 const settingGeminiKey     = $('setting-gemini-key')
@@ -2226,12 +2224,12 @@ const chatSidebarPicker = new ProviderModelPicker($('chat-sidebar-provider'), {
 
 const settingTransPicker = new ProviderModelPicker($('setting-trans-provider'), {
   compact: false,
-  onChange: () => applyChatSameAsTransUI()
+  onChange: () => { applyChatSameAsTransUI(); autoSaveSystemSettings() }
 })
 
 const settingChatPicker = new ProviderModelPicker($('setting-chat-provider'), {
   compact: false,
-  onChange: () => updateSettingsUIVisibility()
+  onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
 })
 
 // "번역 모델과 동일한 모델 사용" 체크박스: 켜져 있으면 어시스턴트 선택기를
@@ -2643,10 +2641,10 @@ document.querySelectorAll('.recommend-model-btn').forEach(btn => {
   })
 })
 
-// 일반 설정 폼 제출
-generalSettingsForm.addEventListener('submit', async (e) => {
-  e.preventDefault()
-  
+// 일반 설정: 저장 버튼 없이 필드 변경 즉시 저장한다. 번역 결과에 영향을 주는
+// 필드(대상 언어/문체/모드/제외 요소)가 바뀌면 기존과 동일하게 재번역을 제안하고,
+// 줌/툴바 위치처럼 뷰어 표시에만 영향을 주는 필드는 저장 후 바로 적용만 한다.
+function persistGeneralSettingsToStorage() {
   localStorage.setItem('easypaper_target_lang', settingTargetLang.value)
   localStorage.setItem('easypaper_style', settingTransStyle.value)
   localStorage.setItem('easypaper_translation_mode', settingTranslationMode.value)
@@ -2655,18 +2653,12 @@ generalSettingsForm.addEventListener('submit', async (e) => {
   localStorage.setItem('easypaper_ignore_refs', settingIgnoreRefs.checked)
   localStorage.setItem('easypaper_default_zoom', settingDefaultZoom.value)
   localStorage.setItem('easypaper_toolbar_position', settingToolbarPosition.value)
-  applyToolbarPosition(settingToolbarPosition.value)
+}
 
+async function handleTranslationAffectingSettingChange() {
+  persistGeneralSettingsToStorage()
   showToast('일반 설정이 저장되었습니다.', 'success')
 
-  // 기본 줌 비율 즉시 업데이트 적용
-  const newZoom = parseFloat(settingDefaultZoom.value) || 1.5
-  if (state.sessionId) {
-    setZoom(newZoom)
-  }
-  
-  settingsModal.classList.add('hidden')
-  
   // 현재 논문을 작업 중인 경우 번역 잡 재시작 제안
   if (state.sessionId) {
     const ok = await showCustomConfirm('번역 설정을 즉시 변경하고 다시 번역하시겠습니까?\n(확인을 누르면 기존 번역이 초기화되고 새로 번역을 시작합니다.)', { title: '설정 변경 및 재번역', confirmText: '재번역', danger: true })
@@ -2676,7 +2668,7 @@ generalSettingsForm.addEventListener('submit', async (e) => {
       state.translationSentences = {}
       state.translatingPages.clear()
       state.translatedPages.clear()
-      
+
       // UI 상의 모든 번역창 초기화
       for (let i = 1; i <= state.totalPages; i++) {
         const contentEl = $(`trans-content-${i}`)
@@ -2689,7 +2681,7 @@ generalSettingsForm.addEventListener('submit', async (e) => {
           statusEl.classList.remove('done')
         }
       }
-      
+
       try {
         showToast('번역 작업을 재시작하는 중...', 'info')
         await restartJobAPI(state.sessionId, getTranslationOptions())
@@ -2700,6 +2692,25 @@ generalSettingsForm.addEventListener('submit', async (e) => {
       }
     }
   }
+}
+
+;[settingTargetLang, settingTransStyle, settingTranslationMode, settingIgnoreMath, settingIgnoreTable, settingIgnoreRefs].forEach(el => {
+  el.addEventListener('change', handleTranslationAffectingSettingChange)
+})
+
+settingDefaultZoom.addEventListener('change', () => {
+  persistGeneralSettingsToStorage()
+  showToast('일반 설정이 저장되었습니다.', 'success')
+  const newZoom = parseFloat(settingDefaultZoom.value) || 1.5
+  if (state.sessionId) {
+    setZoom(newZoom)
+  }
+})
+
+settingToolbarPosition.addEventListener('change', () => {
+  persistGeneralSettingsToStorage()
+  applyToolbarPosition(settingToolbarPosition.value)
+  showToast('일반 설정이 저장되었습니다.', 'success')
 })
 
 // 뷰어 편의 설정: 번역 관련 설정이 아니므로 폼 제출(및 재번역 제안)과 무관하게
@@ -2758,10 +2769,11 @@ settingToolbarAutoHide.addEventListener('change', () => {
   if (!state.toolbarAutoHide) setToolbarHidden(false)
 })
 
-// 시스템 설정 폼 제출
-systemSettingsForm.addEventListener('submit', async (e) => {
-  e.preventDefault()
-  
+// 모델 설정(시스템 설정) + 고급 설정(번역 프롬프트)은 백엔드에 하나의 설정
+// 객체로 저장되므로, 저장 버튼 없이 두 탭의 어느 필드든 값이 바뀌면 즉시 이
+// 통합 함수로 전체 설정을 다시 저장한다. 모델이 아직 선택되지 않은 초기
+// 로딩 상태에서는 조용히 건너뛴다(에러 토스트 없이).
+async function autoSaveSystemSettings({ silent = false } = {}) {
   const { provider: transProvider, model: transModel } = settingTransPicker.getValue()
   let { provider: chatProvider, model: chatModel } = settingChatPicker.getValue()
   if (settingChatSameAsTrans && settingChatSameAsTrans.checked) {
@@ -2769,15 +2781,8 @@ systemSettingsForm.addEventListener('submit', async (e) => {
     chatModel = transModel
   }
 
-  if (!transModel) {
-    showToast('번역 모델을 선택해주세요.', 'error')
-    return
-  }
-  if (!chatModel) {
-    showToast('어시스턴트 모델을 선택해주세요.', 'error')
-    return
-  }
-  
+  if (!transModel || !chatModel) return
+
   const settings = {
     ollama_host: settingOllamaHost.value.trim(),
     trans_provider: transProvider,
@@ -2790,67 +2795,30 @@ systemSettingsForm.addEventListener('submit', async (e) => {
     openalex_mailto: settingOpenAlexMailto.value.trim(),
     translation_prompt_template: $('setting-prompt-template').value
   }
-  
+
   try {
     await saveSystemSettingsAPI(settings)
     // sync compact pickers
     viewerTransPicker.setValue(transProvider, transModel)
     chatSidebarPicker.setValue(chatProvider, chatModel)
-    showToast('시스템 설정이 저장되었습니다.', 'success')
-    settingsModal.classList.add('hidden')
+    if (!silent) showToast('설정이 저장되었습니다.', 'success')
     checkAIStatus()
   } catch (err) {
     showToast(err.message, 'error')
   }
+}
+
+;[settingOllamaHost, settingOpenAIKey, settingGeminiKey, settingClaudeKey, settingOpenAlexMailto].forEach(el => {
+  el.addEventListener('change', () => autoSaveSystemSettings())
 })
 
-// 고급 설정 폼 제출
-const advancedSettingsForm = $('advanced-settings-form')
-if (advancedSettingsForm) {
-  advancedSettingsForm.addEventListener('submit', async (e) => {
-    e.preventDefault()
-    
-    const { provider: transProvider, model: transModel } = settingTransPicker.getValue()
-    let { provider: chatProvider, model: chatModel } = settingChatPicker.getValue()
-    if (settingChatSameAsTrans && settingChatSameAsTrans.checked) {
-      chatProvider = transProvider
-      chatModel = transModel
-    }
+if (settingChatSameAsTrans) {
+  settingChatSameAsTrans.addEventListener('change', () => autoSaveSystemSettings())
+}
 
-    if (!transModel) {
-      showToast('번역 모델을 선택해주세요.', 'error')
-      return
-    }
-    if (!chatModel) {
-      showToast('어시스턴트 모델을 선택해주세요.', 'error')
-      return
-    }
-    
-    const settings = {
-      ollama_host: settingOllamaHost.value.trim(),
-      trans_provider: transProvider,
-      trans_model: transModel,
-      chat_provider: chatProvider,
-      chat_model: chatModel,
-      openai_api_key: settingOpenAIKey.value.trim(),
-      gemini_api_key: settingGeminiKey.value.trim(),
-      claude_api_key: settingClaudeKey.value.trim(),
-      openalex_mailto: settingOpenAlexMailto.value.trim(),
-      translation_prompt_template: $('setting-prompt-template').value
-    }
-    
-    try {
-      await saveSystemSettingsAPI(settings)
-      // sync compact pickers
-      viewerTransPicker.setValue(transProvider, transModel)
-      chatSidebarPicker.setValue(chatProvider, chatModel)
-      showToast('고급 설정(번역 프롬프트)이 저장되었습니다.', 'success')
-      settingsModal.classList.add('hidden')
-      checkAIStatus()
-    } catch (err) {
-      showToast(err.message, 'error')
-    }
-  })
+const settingPromptTemplate = $('setting-prompt-template')
+if (settingPromptTemplate) {
+  settingPromptTemplate.addEventListener('change', () => autoSaveSystemSettings())
 }
 
 // 시스템 자동 업데이트: 확인(check)과 실행(run)을 분리한다 - 확인해서 새

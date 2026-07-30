@@ -733,12 +733,9 @@
             <p style="font-size: 11px; color: var(--text-secondary); margin: 6px 0 0; line-height: 1.5;">서버(또는 앱) 재시작 후 문서를 처음 열 때 빠르게 뜨도록 저장해두는 캐시입니다. 비워도 데이터가 사라지지 않고, 다음에 열람할 때 자동으로 다시 채워집니다.</p>
           </div>
           
-          <div class="form-actions" style="margin-top: 15px;">
-            <button type="submit" class="btn btn-primary" style="width: 100%;">일반 설정 저장</button>
-          </div>
         </form>
       </div>
-      
+
       <!-- 모델 설정 탭 -->
       <div id="tab-model" class="tab-pane">
         <!-- 시스템 설정 폼 (Ollama, OpenAI, Gemini, Claude 통합 및 번역/대화 분리) -->
@@ -803,9 +800,6 @@
             </div>
           </div>
 
-          <div class="form-actions" style="margin-top: 20px;">
-            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">시스템 설정 저장</button>
-          </div>
         </form>
 
         <!-- Ollama 미설치 안내 및 설치 섹션 -->
@@ -915,7 +909,7 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><strong>직관적인 번역 어투 및 스타일 수정 방법:</strong><br>
               아래 프롬프트 입력창 내부의 원하는 위치(예: <strong>번역 규칙</strong> 목록 밑에 직접 줄을 추가)에<br>
               <code style="background: rgba(255,255,255,0.08); padding: 2px 4px; border-radius: 3px; font-weight: bold; color: var(--accent-mid);">- 번역 시 어미는 무조건 경어체(~합니다, ~입니다)로 일관되게 끝맺으세요.</code><br>
-              또는 특정 전문 용어 번역 강제 등 <strong>원하는 번역 지시사항을 직접 입력한 후 하단의 저장 버튼</strong>을 누르시면 됩니다.<br>
+              또는 특정 전문 용어 번역 강제 등 <strong>원하는 번역 지시사항을 직접 입력</strong>하면 됩니다. 입력창에서 벗어나면(포커스 아웃) 자동으로 저장됩니다.<br>
               <span style="font-size: 11px; color: var(--text-secondary); display: block; margin-top: 6px;">※ <code>{{ ... }}</code> 형식의 중괄호 태그들은 시스템 치환용 매개변수이므로 형태를 그대로 유지해 주세요.</span>
             </div>
             <textarea id="setting-prompt-template" rows="12" style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text-primary); outline: none; font-size: 13px; font-family: var(--font-mono); resize: vertical; line-height: 1.6;">당신은 학술 논문 번역 전문가입니다. {{LANG_INSTRUCTION}}
@@ -938,9 +932,6 @@
 {{TARGET_LANG}} 번역:</textarea>
           </div>
           
-          <div class="form-actions" style="margin-top: 15px;">
-            <button type="submit" class="btn btn-primary" style="width: 100%;">고급 설정 저장</button>
-          </div>
         </form>
       </div>
 
