@@ -4208,7 +4208,6 @@ body.toolbar-pos-right .topbar {
   align-items: stretch;
   padding: 16px 10px;
   gap: 18px;
-  overflow-y: auto;
   border-bottom: none;
 }
 body.toolbar-pos-left .topbar {
@@ -4278,6 +4277,12 @@ body.toolbar-pos-left .outline-sidebar {
   top: 0;
   left: 72px;
 }
+/* left 위치에서는 사이드바의 평소 위치가 72px 밀려나 있으므로, 숨김 상태의
+   translateX(-100%)(자기 폭만큼만 이동)로는 왼쪽 툴바 영역(0~72px)을 완전히
+   벗어나지 못해 그 위에 그대로 겹쳐 클릭을 가로챈다 - 툴바 폭만큼 더 이동시킨다. */
+body.toolbar-pos-left .outline-sidebar.hidden {
+  transform: translateX(calc(-100% - 72px));
+}
 body.toolbar-pos-right .outline-sidebar {
   top: 0;
 }
@@ -4303,6 +4308,12 @@ body.toolbar-pos-right .kebab-menu {
   top: 0;
   right: calc(100% + 8px);
   left: auto;
+}
+/* bottom 위치에서는 버튼이 화면 맨 아래에 붙어있으므로 기본값(top:100%)대로
+   아래로 열면 뷰포트 밖으로 밀려나 보이지 않는다 - 위로 열리게 뒤집는다. */
+body.toolbar-pos-bottom .kebab-menu {
+  top: auto;
+  bottom: calc(100% + 8px);
 }
 
 /* ── 툴바 추가 메뉴(케밥) ─────────────────────────── */
