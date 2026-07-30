@@ -6,7 +6,7 @@
 # 이 파일과 tauri.conf.json/../package.json의 version을 항상 동일하게 유지할 것.
 [package]
 name = "app"
-version = "0.1.12"
+version = "0.1.13"
 description = "A Tauri App"
 authors = ["you"]
 license = ""
