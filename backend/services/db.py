@@ -120,6 +120,71 @@ def init_db():
         )
         """)
 
+        # 8. concepts / paper_concepts 테이블 (지식 그래프의 개념 노드, 다대다).
+        #    LLM이 뽑는 개념명 표기가 들쭉날쭉하므로 normalized_name(소문자+trim)
+        #    으로만 얕게 중복 제거한다.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS concepts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL UNIQUE,
+            kind TEXT,
+            created_at TEXT NOT NULL
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS paper_concepts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id TEXT NOT NULL,
+            concept_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE,
+            FOREIGN KEY (concept_id) REFERENCES concepts (id) ON DELETE CASCADE,
+            UNIQUE(doc_id, concept_id)
+        )
+        """)
+
+        # 9. paper_edges 테이블 (논문 간 인용 관계 영속화). 카테고리 공유 엣지는
+        #    영속화하지 않는다 - documents.metadata.categories로 조회 시마다
+        #    즉석 그룹핑하면 되고(LLM 재호출 없이 저비용), 영속화하면 재분류 시
+        #    무효화 로직이 별도로 필요해져 정합성 리스크만 늘어난다. 인용 관계는
+        #    자카드 매칭 계산이 상대적으로 무거워 캐시 가치가 있다.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS paper_edges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id_a TEXT NOT NULL,
+            doc_id_b TEXT NOT NULL,
+            edge_type TEXT NOT NULL,
+            detail TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (doc_id_a) REFERENCES documents (id) ON DELETE CASCADE,
+            FOREIGN KEY (doc_id_b) REFERENCES documents (id) ON DELETE CASCADE,
+            UNIQUE(doc_id_a, doc_id_b, edge_type)
+        )
+        """)
+
+        # 10. annotations / memos 테이블 (하이라이트/메모의 서버 미러). 프론트의
+        #     loadAnnotations/saveAnnotations, loadMemos/saveMemos는 항상 "문서
+        #     전체" 단위로 통째로 읽고 쓰며, 하이라이트는 안정적인 id 필드조차
+        #     없어 관계형 키 설계가 오히려 복잡해진다. documents.metadata와
+        #     동일한 "1 row = 1 blob, 통째로 덮어쓰기" 방식을 쓴다.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS annotations (
+            doc_id TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS memos (
+            doc_id TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE
+        )
+        """)
+
         # 라이브러리 목록/문서 조회가 doc_id(+suffix)로 translations를,
         # doc_id로 documents/page_insights/chats를 매번 훑는데(문서 수 x
         # 페이지 수만큼 뻥튀기됨) 인덱스가 없어 전부 풀스캔이었다. 목록
@@ -129,6 +194,10 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_insights_doc ON page_insights(doc_id, kind, suffix)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_username_deleted ON documents(username, is_deleted, created_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chats_doc ON chats(doc_id, id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_paper_concepts_doc ON paper_concepts(doc_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_paper_concepts_concept ON paper_concepts(concept_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_paper_edges_a ON paper_edges(doc_id_a)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_paper_edges_b ON paper_edges(doc_id_b)")
 
         conn.commit()
 
@@ -620,5 +689,148 @@ def db_set_meta(key: str, value: str) -> None:
             "INSERT INTO app_meta (key, value) VALUES (?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value)
+        )
+        conn.commit()
+
+
+# ── 지식 그래프 (개념 / 논문 간 인용 엣지) ───────────────────────────────────────
+
+def db_upsert_concept(name: str, normalized_name: str, kind: Optional[str] = None) -> int:
+    """개념을 normalized_name 기준으로 upsert하고 concept id를 반환한다."""
+    created_at = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO concepts (name, normalized_name, kind, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(normalized_name) DO UPDATE SET kind = COALESCE(excluded.kind, concepts.kind)
+            """,
+            (name, normalized_name, kind, created_at)
+        )
+        cursor.execute("SELECT id FROM concepts WHERE normalized_name = ?", (normalized_name,))
+        conn.commit()
+        return cursor.fetchone()["id"]
+
+
+def db_link_paper_concept(doc_id: str, concept_id: int) -> None:
+    created_at = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR IGNORE INTO paper_concepts (doc_id, concept_id, created_at) VALUES (?, ?, ?)",
+            (doc_id, concept_id, created_at)
+        )
+        conn.commit()
+
+
+def db_get_concepts_for_docs(doc_ids: List[str]) -> List[Dict[str, Any]]:
+    """주어진 문서들에 연결된 (doc_id, concept) 쌍을 모두 반환한다."""
+    if not doc_ids:
+        return []
+    with get_db() as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in doc_ids)
+        cursor.execute(
+            f"""
+            SELECT pc.doc_id, c.id AS concept_id, c.name, c.kind
+            FROM paper_concepts pc
+            JOIN concepts c ON c.id = pc.concept_id
+            WHERE pc.doc_id IN ({placeholders})
+            """,
+            doc_ids
+        )
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def db_upsert_paper_edge(doc_id_a: str, doc_id_b: str, edge_type: str, detail: Optional[dict] = None) -> None:
+    created_at = datetime.now(timezone.utc).isoformat()
+    detail_str = json.dumps(detail, ensure_ascii=False) if detail else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO paper_edges (doc_id_a, doc_id_b, edge_type, detail, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(doc_id_a, doc_id_b, edge_type) DO UPDATE SET detail = excluded.detail
+            """,
+            (doc_id_a, doc_id_b, edge_type, detail_str, created_at)
+        )
+        conn.commit()
+
+
+def db_get_paper_edges_for_docs(doc_ids: List[str]) -> List[Dict[str, Any]]:
+    """양쪽 doc_id가 모두 주어진 집합에 속하는 엣지만 반환한다(다른 사용자
+    소유 문서로 향하는 엣지가 섞여 나오지 않도록 호출부에서 doc_ids를
+    "이 사용자가 소유한 문서 id 목록"으로 제한해서 넘겨야 한다)."""
+    if not doc_ids:
+        return []
+    with get_db() as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in doc_ids)
+        cursor.execute(
+            f"""
+            SELECT doc_id_a, doc_id_b, edge_type, detail
+            FROM paper_edges
+            WHERE doc_id_a IN ({placeholders}) AND doc_id_b IN ({placeholders})
+            """,
+            doc_ids + doc_ids
+        )
+        edges = []
+        for r in cursor.fetchall():
+            row = dict(r)
+            row["detail"] = json.loads(row["detail"]) if row["detail"] else None
+            edges.append(row)
+        return edges
+
+
+# ── 메모 / 하이라이트 서버 미러 ───────────────────────────────────────────────
+
+def db_get_annotations(doc_id: str) -> Optional[Dict[str, Any]]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT data, updated_at FROM annotations WHERE doc_id = ?", (doc_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {"data": json.loads(row["data"]), "updated_at": row["updated_at"]}
+
+
+def db_put_annotations(doc_id: str, data: dict) -> None:
+    updated_at = datetime.now(timezone.utc).isoformat()
+    data_str = json.dumps(data, ensure_ascii=False)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO annotations (doc_id, data, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT(doc_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
+            """,
+            (doc_id, data_str, updated_at)
+        )
+        conn.commit()
+
+
+def db_get_memos(doc_id: str) -> Optional[Dict[str, Any]]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT data, updated_at FROM memos WHERE doc_id = ?", (doc_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {"data": json.loads(row["data"]), "updated_at": row["updated_at"]}
+
+
+def db_put_memos(doc_id: str, data: dict) -> None:
+    updated_at = datetime.now(timezone.utc).isoformat()
+    data_str = json.dumps(data, ensure_ascii=False)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO memos (doc_id, data, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT(doc_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
+            """,
+            (doc_id, data_str, updated_at)
         )
         conn.commit()
