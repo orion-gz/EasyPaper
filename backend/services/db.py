@@ -95,6 +95,16 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
+        # chats 테이블 동적 스키마 마이그레이션 (graph_synced_at 컬럼 추가).
+        # 질문이 어떤 Concept과도 매칭되지 않는 것은 정상 케이스라
+        # question_concepts에 행이 없다는 사실만으로는 "아직 처리 안 됨"과
+        # "처리했지만 매칭 결과 없음"을 구분할 수 없다 - documents.metadata의
+        # graph_synced_at과 동일한 목적의 처리 완료 마커.
+        try:
+            cursor.execute("ALTER TABLE chats ADD COLUMN graph_synced_at TEXT")
+        except sqlite3.OperationalError:
+            pass
+
         # 6. app_meta 테이블 (자동 업데이트 확인 주기/마지막 확인 시각/마지막으로
         #    "업데이트 완료" 알림을 보여준 버전 등, 자주 바뀌는 앱 내부 상태를
         #    저장하는 범용 key-value 테이블)
@@ -185,6 +195,55 @@ def init_db():
         )
         """)
 
+        # 11. question_papers / question_concepts 테이블 (지식 그래프 2차: 질문
+        #     노드). 질문(chats.role='user' 행) 하나가 어떤 논문(들)에 대한
+        #     것인지는 다대다다 - 단일 논문 채팅은 1행이지만, 비교(compare)
+        #     채팅은 doc_id가 "cmp_"+hash 가상 id라 compare_sessions.doc_ids로
+        #     역매핑한 실제 문서마다 1행씩 생긴다. nullable FK 두 개를 두는
+        #     대신 다대다 정규화로 단일/비교 케이스를 동일한 구조로 다룬다.
+        #     question_concepts는 질문이 어떤 기존 Concept과 관련 있는지를
+        #     나타내며, 새 개념을 여기서 만들지 않고 이미 sync_document_for_graph가
+        #     추출해둔 개념 중에서만 고르는 폐쇄형 매칭이다.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS question_papers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            doc_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE,
+            FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE,
+            UNIQUE(chat_id, doc_id)
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS question_concepts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            concept_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE,
+            FOREIGN KEY (concept_id) REFERENCES concepts (id) ON DELETE CASCADE,
+            UNIQUE(chat_id, concept_id)
+        )
+        """)
+
+        # 12. concept_edges 테이블 (지식 그래프 2차: AI Graph Linking). 의미가
+        #     유사한 Concept끼리의 비파괴적 연결(병합이 아니다 - LLM 판단만으로
+        #     결정하므로 오판이 나도 데이터 손실이 없도록 엣지만 추가한다).
+        #     대칭 관계라 (a,b)/(b,a) 중복이 생기지 않도록 삽입 시 항상
+        #     concept_id_a < concept_id_b로 정렬해서 저장한다(db_upsert_concept_edge).
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS concept_edges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            concept_id_a INTEGER NOT NULL,
+            concept_id_b INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (concept_id_a) REFERENCES concepts (id) ON DELETE CASCADE,
+            FOREIGN KEY (concept_id_b) REFERENCES concepts (id) ON DELETE CASCADE,
+            UNIQUE(concept_id_a, concept_id_b)
+        )
+        """)
+
         # 라이브러리 목록/문서 조회가 doc_id(+suffix)로 translations를,
         # doc_id로 documents/page_insights/chats를 매번 훑는데(문서 수 x
         # 페이지 수만큼 뻥튀기됨) 인덱스가 없어 전부 풀스캔이었다. 목록
@@ -198,6 +257,12 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_paper_concepts_concept ON paper_concepts(concept_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_paper_edges_a ON paper_edges(doc_id_a)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_paper_edges_b ON paper_edges(doc_id_b)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_question_papers_doc ON question_papers(doc_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_question_papers_chat ON question_papers(chat_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_question_concepts_concept ON question_concepts(concept_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_question_concepts_chat ON question_concepts(chat_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_concept_edges_a ON concept_edges(concept_id_a)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_concept_edges_b ON concept_edges(concept_id_b)")
 
         conn.commit()
 
@@ -490,7 +555,11 @@ def db_bulk_translation_rows(doc_ids: List[str]) -> Dict[str, List[tuple]]:
 
 # ── 채팅 (Chats) ──────────────────────────────────────────────────────────────
 
-def db_save_chat_message(doc_id: str, role: str, content: str) -> None:
+def db_save_chat_message(doc_id: str, role: str, content: str) -> Optional[int]:
+    """저장된 chats 행의 id를 반환한다(지식 그래프 2차: Question 노드 연결에
+    필요한 chat_id를 얻기 위함). 직전 메시지와 완전히 동일해 저장을 건너뛰거나
+    이미 존재하는 경우 None을 반환하며, 이 반환값을 쓰지 않는 기존 호출부는
+    영향받지 않는다."""
     created_at = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         cursor = conn.cursor()
@@ -501,13 +570,14 @@ def db_save_chat_message(doc_id: str, role: str, content: str) -> None:
         )
         last_msg = cursor.fetchone()
         if last_msg and last_msg["role"] == role and last_msg["content"] == content:
-            return
-            
+            return None
+
         cursor.execute(
             "INSERT INTO chats (doc_id, role, content, created_at) VALUES (?, ?, ?, ?)",
             (doc_id, role, content, created_at)
         )
         conn.commit()
+        return cursor.lastrowid
 
 def db_get_chat_history(doc_id: str) -> List[Dict[str, str]]:
     with get_db() as conn:
@@ -570,6 +640,18 @@ def db_upsert_compare_session(compare_id: str, username: str, doc_ids: List[str]
             (compare_id, username, doc_ids_json, now, now)
         )
         conn.commit()
+
+
+def db_get_compare_doc_ids(compare_id: str) -> List[str]:
+    """비교 세션 가상 id(cmp_+hash)를 실제 문서 id 목록으로 역매핑한다.
+    이 해시는 단방향이라 compare_sessions 테이블 조회 없이는 복원할 수 없다."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT doc_ids FROM compare_sessions WHERE id = ?", (compare_id,))
+        row = cursor.fetchone()
+        if not row:
+            return []
+        return json.loads(row["doc_ids"])
 
 
 def db_list_compare_chat_sessions(username: str) -> List[Dict[str, Any]]:
@@ -782,6 +864,257 @@ def db_get_paper_edges_for_docs(doc_ids: List[str]) -> List[Dict[str, Any]]:
             row["detail"] = json.loads(row["detail"]) if row["detail"] else None
             edges.append(row)
         return edges
+
+
+def db_upsert_concept_edge(concept_id_x: int, concept_id_y: int) -> None:
+    """의미가 유사한 두 Concept을 비파괴적으로 연결한다(병합 아님). 대칭
+    관계이므로 (a,b)/(b,a) 중복이 생기지 않도록 항상 작은 id를 concept_id_a로
+    정렬해서 저장한다."""
+    if concept_id_x == concept_id_y:
+        return
+    concept_id_a, concept_id_b = sorted([concept_id_x, concept_id_y])
+    created_at = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR IGNORE INTO concept_edges (concept_id_a, concept_id_b, created_at) VALUES (?, ?, ?)",
+            (concept_id_a, concept_id_b, created_at)
+        )
+        conn.commit()
+
+
+def db_get_concept_edges_for_concepts(concept_ids: List[int]) -> List[Dict[str, Any]]:
+    """양쪽 concept_id가 모두 주어진 집합에 속하는 유사 개념 엣지만 반환한다
+    (다른 사용자 소유 문서에서만 등장하는 개념으로 향하는 엣지가 섞이지
+    않도록, 호출부에서 concept_ids를 "이 사용자의 그래프에 실제로 등장하는
+    concept id 목록"으로 제한해서 넘겨야 한다)."""
+    if not concept_ids:
+        return []
+    with get_db() as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in concept_ids)
+        cursor.execute(
+            f"""
+            SELECT concept_id_a, concept_id_b
+            FROM concept_edges
+            WHERE concept_id_a IN ({placeholders}) AND concept_id_b IN ({placeholders})
+            """,
+            concept_ids + concept_ids
+        )
+        return [dict(r) for r in cursor.fetchall()]
+
+
+# ── 지식 그래프 (질문 노드) ──────────────────────────────────────────────────
+
+def db_link_question_paper(chat_id: int, doc_id: str) -> None:
+    created_at = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR IGNORE INTO question_papers (chat_id, doc_id, created_at) VALUES (?, ?, ?)",
+            (chat_id, doc_id, created_at)
+        )
+        conn.commit()
+
+
+def db_link_question_concept(chat_id: int, concept_id: int) -> None:
+    created_at = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR IGNORE INTO question_concepts (chat_id, concept_id, created_at) VALUES (?, ?, ?)",
+            (chat_id, concept_id, created_at)
+        )
+        conn.commit()
+
+
+def db_mark_question_synced(chat_id: int) -> None:
+    synced_at = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE chats SET graph_synced_at = ? WHERE id = ?", (synced_at, chat_id))
+        conn.commit()
+
+
+def db_get_unsynced_questions(doc_ids: List[str], limit: int = 20) -> List[Dict[str, Any]]:
+    """주어진 문서들에 속한 질문(role='user') 중 아직 개념 매칭이 안 된
+    것을 오래된 순으로 최대 limit개 반환한다. 비교 세션 채팅은 doc_id가
+    documents 테이블에 없는 가상 id(cmp_...)라 이 함수의 doc_ids 스캔에는
+    잡히지 않는다 - 비교 채팅의 backfill은 compare_sessions를 별도로
+    순회해야 하며, 지식 그래프 조회 시점 backfill(get_graph_data)은
+    사용자 소유 문서 기준으로만 동작하므로 범위 밖이다."""
+    if not doc_ids:
+        return []
+    with get_db() as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in doc_ids)
+        cursor.execute(
+            f"""
+            SELECT id, doc_id, content
+            FROM chats
+            WHERE doc_id IN ({placeholders}) AND role = 'user' AND graph_synced_at IS NULL
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            doc_ids + [limit]
+        )
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def db_get_question_count_for_concepts(concept_ids: List[int]) -> Dict[int, int]:
+    if not concept_ids:
+        return {}
+    with get_db() as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in concept_ids)
+        cursor.execute(
+            f"""
+            SELECT concept_id, COUNT(*) AS cnt
+            FROM question_concepts
+            WHERE concept_id IN ({placeholders})
+            GROUP BY concept_id
+            """,
+            concept_ids
+        )
+        return {r["concept_id"]: r["cnt"] for r in cursor.fetchall()}
+
+
+def db_get_related_questions_for_concept(concept_id: int, limit: int = 50) -> List[Dict[str, Any]]:
+    """이 Concept과 연결된 질문들을 최신순으로 반환한다(소속 논문 제목 포함)."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT c.content, c.created_at, d.id AS doc_id, d.filename, d.metadata
+            FROM question_concepts qc
+            JOIN chats c ON c.id = qc.chat_id
+            LEFT JOIN question_papers qp ON qp.chat_id = c.id
+            LEFT JOIN documents d ON d.id = qp.doc_id
+            WHERE qc.concept_id = ?
+            ORDER BY c.id DESC
+            LIMIT ?
+            """,
+            (concept_id, limit)
+        )
+        results = []
+        for r in cursor.fetchall():
+            row = dict(r)
+            metadata = json.loads(row["metadata"]) if row.get("metadata") else {}
+            results.append({
+                "content": row["content"],
+                "created_at": row["created_at"],
+                "doc_id": row.get("doc_id"),
+                "doc_title": metadata.get("title") or row.get("filename"),
+            })
+        return results
+
+
+def db_get_related_questions_for_doc(doc_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """이 논문에 대해 오간 질문들을 최신순으로 반환한다."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT c.content, c.created_at
+            FROM question_papers qp
+            JOIN chats c ON c.id = qp.chat_id
+            WHERE qp.doc_id = ?
+            ORDER BY c.id DESC
+            LIMIT ?
+            """,
+            (doc_id, limit)
+        )
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def db_get_all_concepts() -> List[Dict[str, Any]]:
+    """전체 개념 목록을 반환한다. concepts 테이블은 normalized_name으로만
+    전역 중복 제거되며(사용자별로 분리되지 않음, paper_concepts를 통해 어떤
+    문서에 연결됐는지로만 사용자 범위가 결정된다), AI Graph Linking(새 개념과
+    기존 개념의 유사도 비교)에 필요한 "기존 개념 전체 이름 목록"을 얻기 위해
+    쓰인다."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, normalized_name FROM concepts")
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def db_search_graph_nodes(doc_ids: List[str], query: str) -> Dict[str, List[str]]:
+    """이 사용자가 소유한 doc_ids 범위 안에서 논문/개념/메모(Note)/질문을
+    검색해 매칭된 그래프 노드 id를 타입별로 반환한다. 질문은 그래프 노드가
+    아니므로, 매칭되면 그 질문이 연결된 concept/paper 노드로 대체 매핑한다."""
+    if not doc_ids or not (query or "").strip():
+        return {"paper": [], "concept": [], "note": []}
+
+    like_query = f"%{_escape_like(query)}%"
+    needle = query.strip().lower()
+    paper_ids: set = set()
+    concept_ids: set = set()
+    note_ids: set = set()
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in doc_ids)
+
+        cursor.execute(
+            f"""
+            SELECT id FROM documents
+            WHERE id IN ({placeholders})
+              AND (filename LIKE ? ESCAPE '\\' OR metadata LIKE ? ESCAPE '\\')
+            """,
+            doc_ids + [like_query, like_query]
+        )
+        paper_ids.update(r["id"] for r in cursor.fetchall())
+
+        cursor.execute(
+            f"""
+            SELECT DISTINCT c.id FROM concepts c
+            JOIN paper_concepts pc ON pc.concept_id = c.id
+            WHERE pc.doc_id IN ({placeholders}) AND c.name LIKE ? ESCAPE '\\'
+            """,
+            doc_ids + [like_query]
+        )
+        concept_ids.update(r["id"] for r in cursor.fetchall())
+
+        cursor.execute(
+            f"SELECT doc_id, data FROM memos WHERE doc_id IN ({placeholders}) AND data LIKE ? ESCAPE '\\'",
+            doc_ids + [like_query]
+        )
+        for r in cursor.fetchall():
+            try:
+                blob = json.loads(r["data"])
+            except (TypeError, ValueError):
+                continue
+            for items in (blob or {}).values():
+                for item in items or []:
+                    if not isinstance(item, dict):
+                        continue
+                    if needle in (item.get("text") or "").lower() and item.get("id"):
+                        note_ids.add(f"{r['doc_id']}:{item['id']}")
+
+        cursor.execute(
+            f"SELECT id FROM chats WHERE doc_id IN ({placeholders}) AND role = 'user' AND content LIKE ? ESCAPE '\\'",
+            doc_ids + [like_query]
+        )
+        chat_ids = [r["id"] for r in cursor.fetchall()]
+        if chat_ids:
+            chat_placeholders = ",".join("?" for _ in chat_ids)
+            cursor.execute(
+                f"SELECT DISTINCT doc_id FROM question_papers WHERE chat_id IN ({chat_placeholders})",
+                chat_ids
+            )
+            paper_ids.update(r["doc_id"] for r in cursor.fetchall())
+            cursor.execute(
+                f"SELECT DISTINCT concept_id FROM question_concepts WHERE chat_id IN ({chat_placeholders})",
+                chat_ids
+            )
+            concept_ids.update(r["concept_id"] for r in cursor.fetchall())
+
+    return {
+        "paper": [f"paper:{d}" for d in paper_ids],
+        "concept": [f"concept:{c}" for c in concept_ids],
+        "note": [f"note:{n}" for n in note_ids],
+    }
 
 
 # ── 메모 / 하이라이트 서버 미러 ───────────────────────────────────────────────

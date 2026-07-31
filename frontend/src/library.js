@@ -175,6 +175,18 @@ export async function fetchLibraryGraph() {
   return res.json()
 }
 
+export async function fetchGraphNodeQuestions(nodeId) {
+  const res = await fetch(`${API_BASE}/library/graph/questions?node_id=${encodeURIComponent(nodeId)}`)
+  if (!res.ok) throw new Error('관련 질문 조회 실패')
+  return res.json()
+}
+
+export async function searchGraphNodes(query) {
+  const res = await fetch(`${API_BASE}/library/graph/search?q=${encodeURIComponent(query)}`)
+  if (!res.ok) throw new Error('지식 그래프 검색 실패')
+  return res.json()
+}
+
 export async function fetchLibraryTrash(options = {}) {
   const res = await fetch(`${API_BASE}/library/trash${buildQuery(options)}`)
   if (!res.ok) throw new Error('휴지통 조회 실패')
