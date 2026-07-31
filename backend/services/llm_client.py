@@ -2170,12 +2170,14 @@ Category Tags:"""
     return tags
 
 
-def _parse_json_array_response(raw: str) -> list:
+def _parse_json_array_response(raw: str, required_key: str = "concept") -> list:
     """LLM 응답에서 JSON 배열을 뽑아낸다. 마크다운 코드펜스(```json ... ```)로
     감싸져 오는 경우가 흔하고, 프롬프트로 순수 JSON만 요구해도 모델이 종종
     설명 문구를 앞뒤에 붙이거나 펜스를 씌우므로, 우선 펜스를 제거한 뒤
     json.loads를 시도한다. 파싱된 결과가 dict 리스트가 아니거나 각 항목에
-    "concept" 키가 없으면 호출부가 재시도할 수 있도록 ValueError를 던진다."""
+    required_key 키가 없으면 호출부가 재시도할 수 있도록 ValueError를 던진다.
+    기본값 "concept"은 extract_paper_concepts 계열이 쓰던 것 그대로이며,
+    다른 배열 형태(예: 추천 논문의 "title")를 검증할 때는 이 값을 바꿔 넣는다."""
     text = (raw or "").strip()
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
@@ -2185,12 +2187,12 @@ def _parse_json_array_response(raw: str) -> list:
     if not isinstance(parsed, list):
         raise ValueError("JSON 응답이 배열이 아닙니다.")
     for item in parsed:
-        if not isinstance(item, dict) or "concept" not in item:
-            raise ValueError("배열 항목이 dict가 아니거나 'concept' 키가 없습니다.")
+        if not isinstance(item, dict) or required_key not in item:
+            raise ValueError(f"배열 항목이 dict가 아니거나 '{required_key}' 키가 없습니다.")
     return parsed
 
 
-async def _llm_json_array_with_retry(prompt: str, session_id: str = None, attempts: int = 3, log_label: str = "LLM JSON 배열 응답") -> list:
+async def _llm_json_array_with_retry(prompt: str, session_id: str = None, attempts: int = 3, log_label: str = "LLM JSON 배열 응답", required_key: str = "concept") -> list:
     """공용: 프롬프트를 보내 JSON 배열 응답을 받아 파싱까지 재시도한다
     (extract_paper_concepts/match_question_to_concepts/find_similar_concepts가
     공유하는 멀티 프로바이더 분기 + 재시도 로직). LLM이 마크다운 펜스를
@@ -2237,7 +2239,7 @@ async def _llm_json_array_with_retry(prompt: str, session_id: str = None, attemp
                         tokens.append(data.get("message", {}).get("content", ""))
 
             raw = "".join(tokens).strip()
-            return _parse_json_array_response(raw)
+            return _parse_json_array_response(raw, required_key=required_key)
         except Exception as e:
             logger.warning(f"{log_label} 파싱 실패 (시도 {attempt + 1}/{attempts}): {e}")
             continue
@@ -2303,4 +2305,23 @@ Existing Concepts:
 
 JSON Array:"""
     return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="유사 개념 탐색")
+
+
+async def generate_reading_recommendations(titles: List[str], categories: List[str], session_id: str = None) -> List[dict]:
+    """읽은 논문 제목/카테고리를 근거로 다음에 읽으면 좋을 논문 3~5개와 그
+    이유를 추천한다. 반환값: [{"title": str, "reason": str}, ...]. 여기서
+    추천된 제목은 LLM의 환각(존재하지 않는 논문을 지어내는 것)이 섞여 있을
+    수 있으므로, 호출부(knowledge_graph.get_reading_recommendations)가
+    OpenAlex로 실존 여부를 검증한 뒤에만 채택해야 한다."""
+    titles_list = "\n".join(f"- {t}" for t in titles)
+    categories_line = ", ".join(categories) if categories else "(알 수 없음)"
+    prompt = f"""You are an expert research advisor. A researcher has read the following papers (research areas: {categories_line}). Recommend 3 to 5 OTHER real, existing academic papers they should read next to deepen or extend this line of research, with a short reason for each.
+
+Output ONLY a pure JSON array, with no markdown code fences, no explanations, and no extra prose. Each element must be an object with a "title" key (the paper's real title) and a "reason" key (one short sentence, in Korean, explaining why it's a good next read).
+
+Already Read:
+{titles_list}
+
+JSON Array:"""
+    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="읽을 논문 추천", required_key="title")
 

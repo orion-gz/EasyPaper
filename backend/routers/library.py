@@ -103,6 +103,30 @@ async def search_library_graph(q: str = "", current_user: str = Depends(get_curr
     return await search_graph_nodes(current_user, q)
 
 
+@router.get("/library/graph/recommendations")
+async def get_library_reading_recommendations(current_user: str = Depends(get_current_user)):
+    """읽은 논문들을 근거로 다음에 읽으면 좋을 논문을 추천합니다. LLM+OpenAlex
+    호출이 여러 번 들어가는 무거운 작업이라 프론트에서 사용자가 명시적으로
+    요청했을 때만 호출해야 합니다(그래프 조회 시 자동 호출 안 함).
+
+    /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
+    이유로, 그렇지 않으면 "graph"가 doc_id 경로 파라미터로 잘못 매칭된다.
+    """
+    from services.knowledge_graph import get_reading_recommendations
+    return {"recommendations": await get_reading_recommendations(current_user)}
+
+
+@router.get("/library/timeline")
+async def get_library_timeline(current_user: str = Depends(get_current_user)):
+    """업로드/읽음/질문/메모를 시간순으로 병합한 개인 활동 타임라인을 반환합니다.
+
+    /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
+    이유로, 그렇지 않으면 "timeline"이 doc_id 경로 파라미터로 잘못 매칭된다.
+    """
+    from services.knowledge_graph import get_activity_timeline
+    return {"events": await get_activity_timeline(current_user)}
+
+
 @router.get("/library/{doc_id}")
 async def get_library_document(
     doc_id: str,
