@@ -6448,10 +6448,15 @@ function renderPageMemos(pageNum) {
     let sentenceText = memo.sentenceText || ''
 
     if (vtmForMemo && memoSentenceRanges) {
-      const memoSRange = memoSentenceRanges.find(r => {
-        const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx
-        return idx === memo.sentenceIdx
-      })
+      // 사용자가 실제로 드래그해서 선택한 범위(charStart/charEnd)가 저장돼 있으면
+      // 그 범위를 그대로 쓰고, 없으면(드웰 호버 등 과거 방식) 문장 전체로 대체한다.
+      const hasExplicitRange = memo.charStart != null && memo.charEnd != null
+      const memoSRange = hasExplicitRange
+        ? { charStart: memo.charStart, charEnd: memo.charEnd }
+        : memoSentenceRanges.find(r => {
+            const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx
+            return idx === memo.sentenceIdx
+          })
       if (memoSRange) {
         sentenceText = vtmForMemo.fullText.substring(memoSRange.charStart, memoSRange.charEnd).trim()
         const memoTextLayer = pageWrapper.querySelector('.textLayer')
@@ -6763,7 +6768,9 @@ function renderPageMemos(pageNum) {
   })
 }
 
-function createFloatingMemoForSentence(pageNum, sentenceIdx) {
+// explicitRange({charStart, charEnd})가 주어지면 사용자가 실제로 드래그해서 고른
+// 정확한 범위로 메모를 만들고, 없으면(드웰 호버 등) 문장 전체 범위를 사용한다.
+function createFloatingMemoForSentence(pageNum, sentenceIdx, explicitRange) {
   if (!state.sessionId) return
 
   const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
@@ -6779,12 +6786,14 @@ function createFloatingMemoForSentence(pageNum, sentenceIdx) {
   })
   if (!sRange) return
 
-  const sentenceText = vtm.fullText.substring(sRange.charStart, sRange.charEnd).trim()
+  const memoRange = explicitRange || { charStart: sRange.charStart, charEnd: sRange.charEnd }
+
+  const sentenceText = vtm.fullText.substring(memoRange.charStart, memoRange.charEnd).trim()
 
   const textLayer = pageWrapper.querySelector('.textLayer')
   if (!textLayer) return
 
-  const rects = getSentenceRects(sRange, vtm, textLayer)
+  const rects = getSentenceRects(memoRange, vtm, textLayer)
   if (rects.length === 0) return
 
   const firstRect = rects[0]
@@ -6804,6 +6813,8 @@ function createFloatingMemoForSentence(pageNum, sentenceIdx) {
     pageNum: pageNum,
     sentenceIdx: sentenceIdx,
     sentenceText: sentenceText,
+    charStart: memoRange.charStart,
+    charEnd: memoRange.charEnd,
     content: '',
     x: leftPct,
     y: topPct
@@ -7013,15 +7024,19 @@ function createSelectionMenu() {
       const pageNum = parseInt(pageWrapper.dataset.page, 10)
       if (isNaN(pageNum)) { hideSelectionMenu(); return }
 
-      // VTM 기반 sentenceIdx 감지
+      // VTM 기반: 실제로 드래그해서 선택한 범위 그대로 메모 하이라이트를 만든다.
+      // (sentenceIdx는 기존 메모 조회/삭제 등 하위 로직 호환을 위한 소속 문장
+      // 앵커일 뿐, 하이라이트 범위 자체는 selRange를 그대로 사용한다)
       const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
       const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
       if (vtm && sentenceRanges) {
-        const charIdx = estimateCharIdxFromPoint(range.getBoundingClientRect().left, range.getBoundingClientRect().top + range.getBoundingClientRect().height / 2, vtm)
-        const sRange = charIdx >= 0 ? findSentenceAtChar(charIdx, sentenceRanges) : sentenceRanges[0]
-        if (sRange) {
-          const sentenceIdx = sRange.sentenceIdx >= 10000 ? (sRange.originalSentenceIdx ?? 0) : sRange.sentenceIdx
-          createFloatingMemoForSentence(pageNum, sentenceIdx)
+        const selRange = getVtmCharRangeFromSelection(range, vtm)
+        if (selRange) {
+          const anchorSRange = findSentenceAtChar(selRange.charStart, sentenceRanges)
+            || findSentenceAtChar(Math.max(selRange.charStart, selRange.charEnd - 1), sentenceRanges)
+            || sentenceRanges[0]
+          const sentenceIdx = anchorSRange.sentenceIdx >= 10000 ? (anchorSRange.originalSentenceIdx ?? 0) : anchorSRange.sentenceIdx
+          createFloatingMemoForSentence(pageNum, sentenceIdx, selRange)
           hideSelectionMenu()
           return
         }
@@ -11023,6 +11038,36 @@ function estimateCharIdxFromPoint(x, y, vtm) {
     } catch(e) { /* no-op */ }
   }
   return -1;
+}
+
+// DOM Range(사용자가 실제로 드래그해서 선택한 범위)의 시작/끝 지점을 VTM
+// 문자 인덱스로 변환한다. 문장 전체가 아니라 사용자가 고른 정확한 부분 범위를
+// 그대로 보존하기 위한 용도 - estimateCharIdxFromPoint는 한 지점만 다루므로
+// range의 시작과 끝 각각에 대해 호출한다.
+function getVtmCharRangeFromSelection(range, vtm) {
+  function resolveOffset(node, offset, isEnd) {
+    if (node.nodeType === 3) {
+      const nr = vtm.nodeRanges.find(r => r.node === node);
+      if (nr) return nr.start + Math.min(offset, nr.node.length);
+    }
+    // 폴백: 텍스트 노드에 직접 매핑되지 않는 경계(예: 필터링된 노드, 요소 경계) -
+    // 해당 지점의 화면 좌표로 근사한다.
+    const boundary = range.cloneRange();
+    boundary.collapse(!isEnd);
+    let rect = boundary.getClientRects()[0];
+    if (!rect) {
+      const el = node.nodeType === 3 ? node.parentElement : node;
+      rect = el ? el.getBoundingClientRect() : null;
+    }
+    if (!rect) return -1;
+    return estimateCharIdxFromPoint(rect.left, rect.top + rect.height / 2, vtm);
+  }
+
+  const startIdx = resolveOffset(range.startContainer, range.startOffset, false);
+  const endIdx = resolveOffset(range.endContainer, range.endOffset, true);
+  if (startIdx < 0 || endIdx < 0 || startIdx === endIdx) return null;
+
+  return { charStart: Math.min(startIdx, endIdx), charEnd: Math.max(startIdx, endIdx) };
 }
 
 // 오버레이에 호버 하이라이트를 그리고 번역 문장에 클래스를 적용
