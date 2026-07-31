@@ -2169,3 +2169,101 @@ Category Tags:"""
     tags = [t.strip() for t in result.split(",") if t.strip()]
     return tags
 
+
+def _parse_json_array_response(raw: str) -> list:
+    """LLM 응답에서 JSON 배열을 뽑아낸다. 마크다운 코드펜스(```json ... ```)로
+    감싸져 오는 경우가 흔하고, 프롬프트로 순수 JSON만 요구해도 모델이 종종
+    설명 문구를 앞뒤에 붙이거나 펜스를 씌우므로, 우선 펜스를 제거한 뒤
+    json.loads를 시도한다. 파싱된 결과가 dict 리스트가 아니거나 각 항목에
+    "concept" 키가 없으면 호출부가 재시도할 수 있도록 ValueError를 던진다."""
+    text = (raw or "").strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    text = text.strip()
+
+    parsed = json.loads(text)
+    if not isinstance(parsed, list):
+        raise ValueError("JSON 응답이 배열이 아닙니다.")
+    for item in parsed:
+        if not isinstance(item, dict) or "concept" not in item:
+            raise ValueError("배열 항목이 dict가 아니거나 'concept' 키가 없습니다.")
+    return parsed
+
+
+async def extract_paper_concepts(title: str, text: str, session_id: str = None) -> List[dict]:
+    """논문 제목과 서두 텍스트에서 핵심 개념 3~7개를 추출한다.
+    반환값: [{"concept": str, "kind": str|None}, ...]
+
+    classify_paper_category와 달리 결과를 JSON으로 파싱해야 하는데, LLM이
+    마크다운 펜스를 씌우거나 출력이 중간에 잘리면 파싱이 깨지기 쉬워서 최대
+    3회까지 재시도한다. 3회 모두 실패해도 예외를 던지지 않고 빈 리스트를
+    반환한다 - classify_paper_category와 동일하게 이 기능은 부가 정보일 뿐
+    번역 파이프라인 자체를 실패시켜서는 안 된다."""
+    prompt = f"""You are an academic paper analyst. Analyze the following paper title and beginning text (abstract/introduction) and extract 3 to 7 core concepts (methods, tasks, datasets, metrics, or theories) discussed in the paper.
+
+Output ONLY a pure JSON array, with no markdown code fences, no explanations, and no extra prose. Each element must be an object with a "concept" key (the concept name, in a few words) and a "kind" key (one of: "method", "task", "dataset", "metric", "theory", or null if unclear).
+
+Example output:
+[{{"concept": "Attention Mechanism", "kind": "method"}}, {{"concept": "Machine Translation", "kind": "task"}}]
+
+Title: {title}
+Beginning Text:
+{text[:2000]}
+
+JSON Array:"""
+
+    messages = [
+        {"role": "user", "content": prompt}
+    ]
+
+    provider = get_trans_provider()
+    model = get_trans_model()
+
+    try:
+        for attempt in range(3):
+            tokens = []
+            try:
+                if provider == "openai":
+                    async for token in stream_openai(messages, model=model, temperature=0.1):
+                        tokens.append(token)
+                elif provider == "gemini":
+                    async for token in stream_gemini(messages, model=model, temperature=0.1):
+                        tokens.append(token)
+                elif provider == "claude":
+                    async for token in stream_claude(messages, model=model, temperature=0.1):
+                        tokens.append(token)
+                elif provider == "antigravity":
+                    async for token in stream_antigravity(prompt, model=model, session_id=session_id):
+                        tokens.append(token)
+                elif provider == "claude_code":
+                    async for token in stream_claude_code(prompt, model=model, session_id=session_id):
+                        tokens.append(token)
+                elif provider == "codex":
+                    async for token in stream_codex(prompt, model=model, session_id=session_id):
+                        tokens.append(token)
+                else:
+                    # Fallback to Ollama chat api
+                    payload = {
+                        "model": model,
+                        "messages": messages,
+                        "stream": False,
+                        "options": {"temperature": 0.1}
+                    }
+                    async with httpx.AsyncClient(timeout=30.0) as client:
+                        response = await client.post(f"{get_ollama_host()}/api/chat", json=payload)
+                        if response.status_code == 200:
+                            data = response.json()
+                            tokens.append(data.get("message", {}).get("content", ""))
+
+                raw = "".join(tokens).strip()
+                parsed = _parse_json_array_response(raw)
+                return parsed
+            except Exception as e:
+                logger.warning(f"논문 개념 추출 파싱 실패 (시도 {attempt + 1}/3): {e}")
+                continue
+    except Exception as e:
+        logger.warning(f"논문 개념 추출 실패: {e}")
+        return []
+
+    return []
+

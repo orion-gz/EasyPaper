@@ -92,6 +92,7 @@
         <button id="lib-tab-history" class="library-tab-btn" data-tab="history"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>히스토리</button>
         <button id="lib-tab-chat" class="library-tab-btn" data-tab="chat"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></svg>채팅</button>
         <button id="lib-tab-annotations" class="library-tab-btn" data-tab="annotations"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>주석</button>
+        <button id="lib-tab-graph" class="library-tab-btn" data-tab="graph"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><circle cx="5" cy="6" r="3"/><circle cx="19" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M7.5 7.5 10.5 16"/><path d="M16.5 7.5 13.5 16"/></svg>지식 그래프</button>
       </div>
 
       <!-- 독서 통계 위젯 영역 -->
@@ -141,6 +142,19 @@
           <button id="annotation-subtab-underline" class="chat-session-subtab-btn" data-subtab="underline">언더라인</button>
         </div>
         <div id="annotation-list" class="chat-session-list"></div>
+      </div>
+
+      <!-- 지식 그래프 (논문 + LLM 추출 개념 노드, 인용/카테고리 엣지) -->
+      <div id="library-graph-section" class="hidden">
+        <div id="library-graph-pending-banner" class="hidden" style="margin-bottom: 12px; padding: 10px 14px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 10px; font-size: 13px; color: var(--text-secondary);">
+          일부 논문의 그래프 데이터를 준비 중입니다. 잠시 후 자동으로 갱신됩니다...
+        </div>
+        <div style="display: flex; gap: 16px; align-items: stretch;">
+          <div id="library-graph-canvas" style="flex: 1 1 auto; min-width: 0; height: 600px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px;"></div>
+          <div id="library-graph-detail-panel" style="flex: 0 0 260px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; padding: 16px; font-size: 13px; color: var(--text-secondary);">
+            <p>노드를 클릭하면 상세 정보가 여기에 표시됩니다.</p>
+          </div>
+        </div>
       </div>
     </div>
     <!-- 우하단 휴지통 비우기 플로팅 버튼 -->

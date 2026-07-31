@@ -78,6 +78,76 @@ export async function exportAnnotatedPdf(docId, payload) {
   return res.blob()
 }
 
+// 하이라이트/주석·메모의 서버 미러. localStorage가 원본(source of truth)이며
+// 이 함수들은 다중 기기 동기화를 위한 best-effort 백업 용도로만 쓰인다.
+export async function fetchLibraryAnnotations(docId) {
+  const res = await fetch(`${API_BASE}/library/${docId}/annotations`)
+  if (!res.ok) {
+    let message = '주석 조회 실패'
+    try {
+      const err = await res.json()
+      message = err.detail || message
+    } catch {
+      // JSON이 아닌 경우 기본 메시지 사용
+    }
+    throw new Error(message)
+  }
+  return res.json()
+}
+
+export async function putLibraryAnnotations(docId, data) {
+  const res = await fetch(`${API_BASE}/library/${docId}/annotations`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data })
+  })
+  if (!res.ok) {
+    let message = '주석 저장 실패'
+    try {
+      const err = await res.json()
+      message = err.detail || message
+    } catch {
+      // JSON이 아닌 경우 기본 메시지 사용
+    }
+    throw new Error(message)
+  }
+  return res.json()
+}
+
+export async function fetchLibraryMemos(docId) {
+  const res = await fetch(`${API_BASE}/library/${docId}/memos`)
+  if (!res.ok) {
+    let message = '메모 조회 실패'
+    try {
+      const err = await res.json()
+      message = err.detail || message
+    } catch {
+      // JSON이 아닌 경우 기본 메시지 사용
+    }
+    throw new Error(message)
+  }
+  return res.json()
+}
+
+export async function putLibraryMemos(docId, data) {
+  const res = await fetch(`${API_BASE}/library/${docId}/memos`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data })
+  })
+  if (!res.ok) {
+    let message = '메모 저장 실패'
+    try {
+      const err = await res.json()
+      message = err.detail || message
+    } catch {
+      // JSON이 아닌 경우 기본 메시지 사용
+    }
+    throw new Error(message)
+  }
+  return res.json()
+}
+
 export async function searchLibrary(query) {
   const res = await fetch(`${API_BASE}/library/search?q=${encodeURIComponent(query)}`)
   if (!res.ok) throw new Error('검색 실패')
@@ -96,6 +166,12 @@ export async function resolveLibraryReference(docId, refNum) {
     if (res.status === 404) return null
     throw new Error('참고문헌 링크 조회 실패')
   }
+  return res.json()
+}
+
+export async function fetchLibraryGraph() {
+  const res = await fetch(`${API_BASE}/library/graph`)
+  if (!res.ok) throw new Error('지식 그래프 조회 실패')
   return res.json()
 }
 

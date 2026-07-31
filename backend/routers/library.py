@@ -75,6 +75,17 @@ async def search_library(q: str = "", current_user: str = Depends(get_current_us
     return {"documents": docs, "total": len(docs)}
 
 
+@router.get("/library/graph")
+async def get_library_graph(current_user: str = Depends(get_current_user)):
+    """개인 지식 그래프(논문/개념 노드 + 인용/카테고리 엣지)를 반환합니다.
+
+    /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
+    이유로, 그렇지 않으면 "graph"가 doc_id 경로 파라미터로 잘못 매칭된다.
+    """
+    from services.knowledge_graph import get_graph_data
+    return await get_graph_data(current_user)
+
+
 @router.get("/library/{doc_id}")
 async def get_library_document(
     doc_id: str,
@@ -384,6 +395,46 @@ async def resolve_library_reference(doc_id: str, ref_num: str, current_user: str
     if not result:
         raise HTTPException(status_code=404, detail="외부에서 일치하는 논문을 찾지 못했습니다.")
     return result
+
+
+@router.get("/library/{doc_id}/annotations")
+async def get_library_annotations(doc_id: str, current_user: str = Depends(get_current_user)):
+    """문서의 하이라이트/주석 서버 미러 데이터를 반환합니다.
+
+    localStorage가 원본(source of truth)이며 이 데이터는 다중 기기 동기화를
+    위한 best-effort 백업일 뿐이다. 저장된 적이 없으면 빈 데이터를 반환한다.
+    """
+    _require_owned_document(doc_id, current_user)
+    from services.db import db_get_annotations
+    result = db_get_annotations(doc_id)
+    return result or {"data": {}, "updated_at": None}
+
+
+@router.put("/library/{doc_id}/annotations")
+async def put_library_annotations(doc_id: str, payload: dict, current_user: str = Depends(get_current_user)):
+    """하이라이트/주석 서버 미러를 통째로 덮어씁니다(전체 블롭 upsert)."""
+    _require_owned_document(doc_id, current_user)
+    from services.db import db_put_annotations
+    db_put_annotations(doc_id, payload.get("data", {}))
+    return {"status": "ok"}
+
+
+@router.get("/library/{doc_id}/memos")
+async def get_library_memos(doc_id: str, current_user: str = Depends(get_current_user)):
+    """문서의 메모 서버 미러 데이터를 반환합니다. (annotations와 동일한 성격)"""
+    _require_owned_document(doc_id, current_user)
+    from services.db import db_get_memos
+    result = db_get_memos(doc_id)
+    return result or {"data": {}, "updated_at": None}
+
+
+@router.put("/library/{doc_id}/memos")
+async def put_library_memos(doc_id: str, payload: dict, current_user: str = Depends(get_current_user)):
+    """메모 서버 미러를 통째로 덮어씁니다(전체 블롭 upsert)."""
+    _require_owned_document(doc_id, current_user)
+    from services.db import db_put_memos
+    db_put_memos(doc_id, payload.get("data", {}))
+    return {"status": "ok"}
 
 
 @router.put("/library/{doc_id}/metadata")
