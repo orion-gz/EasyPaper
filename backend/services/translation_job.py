@@ -277,6 +277,13 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
         except Exception as ex:
             print(f"[Job {session_id}] Category classification failed: {ex}")
 
+        # 지식 그래프 동기화 (개념 추출 + 인용 엣지 매칭, 번역 완료 후)
+        try:
+            from services.knowledge_graph import sync_document_for_graph
+            await sync_document_for_graph(session_id, pages, doc_title)
+        except Exception as ex:
+            print(f"[Job {session_id}] Knowledge graph sync failed: {ex}")
+
     except asyncio.CancelledError:
         job["status"] = "cancelled"
         _save_job(session_id, job)

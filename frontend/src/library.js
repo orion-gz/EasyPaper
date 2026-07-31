@@ -169,6 +169,12 @@ export async function resolveLibraryReference(docId, refNum) {
   return res.json()
 }
 
+export async function fetchLibraryGraph() {
+  const res = await fetch(`${API_BASE}/library/graph`)
+  if (!res.ok) throw new Error('지식 그래프 조회 실패')
+  return res.json()
+}
+
 export async function fetchLibraryTrash(options = {}) {
   const res = await fetch(`${API_BASE}/library/trash${buildQuery(options)}`)
   if (!res.ok) throw new Error('휴지통 조회 실패')

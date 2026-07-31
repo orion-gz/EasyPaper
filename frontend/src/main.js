@@ -3,8 +3,9 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph } from './library.js'
 import { icon } from './icons.js'
+import { renderKnowledgeGraph } from './knowledgeGraph.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -215,6 +216,7 @@ const libTabHistory     = $('lib-tab-history')
 const libTabTrash       = $('lib-tab-trash')
 const libTabChat        = $('lib-tab-chat')
 const libTabAnnotations = $('lib-tab-annotations')
+const libTabGraph       = $('lib-tab-graph')
 const libEmptyTrashBtn  = $('lib-empty-trash-btn')
 const libraryStatsContainer = $('library-stats-container')
 const librarySearchBox  = $('library-search-box')
@@ -227,6 +229,10 @@ const annotationSubtabMemo      = $('annotation-subtab-memo')
 const annotationSubtabHighlight = $('annotation-subtab-highlight')
 const annotationSubtabUnderline = $('annotation-subtab-underline')
 const annotationList            = $('annotation-list')
+const libraryGraphSection       = $('library-graph-section')
+const libraryGraphCanvas        = $('library-graph-canvas')
+const libraryGraphDetailPanel   = $('library-graph-detail-panel')
+const libraryGraphPendingBanner = $('library-graph-pending-banner')
 
 const libCompareToggleBtn   = $('lib-compare-toggle-btn')
 const compareSelectBar      = $('compare-select-bar')
@@ -3593,6 +3599,7 @@ function updateTabUI(activeTab) {
   if (libTabTrash) libTabTrash.classList.toggle('active', activeTab === 'trash')
   if (libTabChat) libTabChat.classList.toggle('active', activeTab === 'chat')
   if (libTabAnnotations) libTabAnnotations.classList.toggle('active', activeTab === 'annotations')
+  if (libTabGraph) libTabGraph.classList.toggle('active', activeTab === 'graph')
 
   if (libEmptyTrashBtn) {
     if (activeTab === 'trash') {
@@ -3602,8 +3609,8 @@ function updateTabUI(activeTab) {
     }
   }
 
-  // 휴지통/채팅/주석 탭인 경우 새 논문 추가/비교하기 플로팅 버튼을 숨깁니다.
-  const isListOnlyTab = activeTab === 'trash' || activeTab === 'chat' || activeTab === 'annotations'
+  // 휴지통/채팅/주석/그래프 탭인 경우 새 논문 추가/비교하기 플로팅 버튼을 숨깁니다.
+  const isListOnlyTab = activeTab === 'trash' || activeTab === 'chat' || activeTab === 'annotations' || activeTab === 'graph'
   if (libUploadBtn) {
     if (isListOnlyTab) {
       libUploadBtn.classList.add('hidden')
@@ -3616,14 +3623,16 @@ function updateTabUI(activeTab) {
   }
   setCompareSelectMode(false)
 
-  // 채팅/주석 탭은 문서 그리드 대신 목록을 보여주므로, 검색/필터 등 논문 목록
-  // 전용 UI는 숨긴다.
+  // 채팅/주석/그래프 탭은 문서 그리드 대신 목록(또는 그래프)을 보여주므로,
+  // 검색/필터 등 논문 목록 전용 UI는 숨긴다.
   const isChatTab = activeTab === 'chat'
   const isAnnotationsTab = activeTab === 'annotations'
-  const hidesGrid = isChatTab || isAnnotationsTab
+  const isGraphTab = activeTab === 'graph'
+  const hidesGrid = isChatTab || isAnnotationsTab || isGraphTab
   if (libraryGrid) libraryGrid.classList.toggle('hidden', hidesGrid)
   if (libraryChatSection) libraryChatSection.classList.toggle('hidden', !isChatTab)
   if (libraryAnnotationsSection) libraryAnnotationsSection.classList.toggle('hidden', !isAnnotationsTab)
+  if (libraryGraphSection) libraryGraphSection.classList.toggle('hidden', !isGraphTab)
   if (librarySearchBox) librarySearchBox.classList.toggle('hidden', hidesGrid)
   if (librarySearchStatus && hidesGrid) librarySearchStatus.classList.add('hidden')
   if (libraryFilterRow) libraryFilterRow.classList.toggle('hidden', hidesGrid)
@@ -3664,6 +3673,12 @@ if (libTabAnnotations) {
   libTabAnnotations.addEventListener('click', () => {
     if (state.currentLibraryTab === 'annotations') return
     updateTabUI('annotations')
+  })
+}
+if (libTabGraph) {
+  libTabGraph.addEventListener('click', () => {
+    if (state.currentLibraryTab === 'graph') return
+    updateTabUI('graph')
   })
 }
 
@@ -4031,6 +4046,10 @@ async function renderLibrary() {
     await renderAnnotationsBrowser()
     return
   }
+  if (state.currentLibraryTab === 'graph') {
+    await renderLibraryGraphTab()
+    return
+  }
 
   // 탭 전환 등으로 목록을 새로 불러올 때는 검색 상태를 초기화한다 - 검색
   // 결과가 다른 탭의 목록과 뒤섞여 보이는 것을 방지
@@ -4286,6 +4305,70 @@ function truncateForList(text, maxLen) {
   if (!text) return ''
   const trimmed = text.trim()
   return trimmed.length > maxLen ? trimmed.substring(0, maxLen) + '...' : trimmed
+}
+
+// 지식 그래프 탭: Cytoscape 인스턴스는 탭을 재방문할 때마다 새로 만들면
+// 이전 인스턴스가 DOM/이벤트 리스너를 계속 붙들고 있으므로 반드시 destroy 후 재생성한다.
+let libraryGraphCyInstance = null
+let libraryGraphPollTimeout = null
+
+async function renderLibraryGraphTab() {
+  if (libraryGraphPollTimeout) {
+    clearTimeout(libraryGraphPollTimeout)
+    libraryGraphPollTimeout = null
+  }
+  if (!libraryGraphCanvas) return
+  if (libraryGraphDetailPanel) {
+    libraryGraphDetailPanel.innerHTML = '<p>노드를 클릭하면 상세 정보가 여기에 표시됩니다.</p>'
+  }
+
+  try {
+    const data = await fetchLibraryGraph()
+    // 응답을 기다리는 사이 사용자가 다른 탭으로 이동했다면 그리지 않는다.
+    if (state.currentLibraryTab !== 'graph') return
+
+    if (libraryGraphCyInstance) {
+      libraryGraphCyInstance.destroy()
+      libraryGraphCyInstance = null
+    }
+    libraryGraphCanvas.innerHTML = ''
+    libraryGraphCyInstance = renderKnowledgeGraph(libraryGraphCanvas, data, { onNodeClick: showGraphDetailPanel })
+
+    const pending = data.pending_docs || []
+    if (libraryGraphPendingBanner) {
+      libraryGraphPendingBanner.classList.toggle('hidden', pending.length === 0)
+    }
+    // 아직 개념/인용 동기화가 안 된 문서가 있으면 5초 뒤 다시 조회해
+    // 백그라운드 백필 결과가 반영되는지 확인한다(비어질 때까지 반복).
+    if (pending.length > 0) {
+      libraryGraphPollTimeout = setTimeout(() => {
+        if (state.currentLibraryTab === 'graph') renderLibraryGraphTab()
+      }, 5000)
+    }
+  } catch (err) {
+    console.error('지식 그래프 로드 실패:', err)
+    libraryGraphCanvas.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">지식 그래프를 불러오지 못했습니다</p></div>'
+  }
+}
+
+function showGraphDetailPanel(nodeData) {
+  if (!libraryGraphDetailPanel) return
+  if (nodeData.type === 'paper') {
+    const categories = (nodeData.categories && nodeData.categories.length) ? nodeData.categories.join(', ') : '없음'
+    libraryGraphDetailPanel.innerHTML = `
+      <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
+      <p style="margin:0 0 6px"><strong>유형:</strong> 논문</p>
+      <p style="margin:0"><strong>카테고리:</strong> ${escapeHtml(categories)}</p>
+    `
+  } else if (nodeData.type === 'concept') {
+    libraryGraphDetailPanel.innerHTML = `
+      <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
+      <p style="margin:0 0 6px"><strong>유형:</strong> 개념</p>
+      <p style="margin:0"><strong>분류:</strong> ${escapeHtml(nodeData.kind || '미상')}</p>
+    `
+  } else {
+    libraryGraphDetailPanel.innerHTML = '<p>알 수 없는 노드입니다.</p>'
+  }
 }
 
 async function renderAnnotationsBrowser() {
