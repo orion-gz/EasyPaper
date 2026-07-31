@@ -75,6 +75,17 @@ async def search_library(q: str = "", current_user: str = Depends(get_current_us
     return {"documents": docs, "total": len(docs)}
 
 
+@router.get("/library/graph")
+async def get_library_graph(current_user: str = Depends(get_current_user)):
+    """개인 지식 그래프(논문/개념 노드 + 인용/카테고리 엣지)를 반환합니다.
+
+    /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
+    이유로, 그렇지 않으면 "graph"가 doc_id 경로 파라미터로 잘못 매칭된다.
+    """
+    from services.knowledge_graph import get_graph_data
+    return await get_graph_data(current_user)
+
+
 @router.get("/library/{doc_id}")
 async def get_library_document(
     doc_id: str,
