@@ -355,7 +355,7 @@ body.toolbar-pos-right .topbar.toolbar-hidden {
 .topbar-center {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
@@ -4265,20 +4265,6 @@ body.toolbar-pos-right .topbar-right {
   flex: none;
   gap: 8px;
   width: 100%;
-}
-/* index.html에는 가로(행) 배치를 전제로 일부 버튼에 인라인
-   style="margin-left: 6~8px"가 박혀있다(독서완료/목차/브리핑 버튼). 세로
-   컬럼에서는 이 좌측 여백이 그대로 남아 가운데 정렬을 깨고 버튼이 오른쪽으로
-   치우쳐 보인다 - 인라인 스타일은 !important 없이는 이길 수 없으므로
-   !important로 모든 자식의 가로 마진을 0으로 되돌린다. */
-body.toolbar-pos-left .topbar-left > *,
-body.toolbar-pos-left .topbar-center > *,
-body.toolbar-pos-left .topbar-right > *,
-body.toolbar-pos-right .topbar-left > *,
-body.toolbar-pos-right .topbar-center > *,
-body.toolbar-pos-right .topbar-right > * {
-  margin-left: 0 !important;
-  margin-right: 0 !important;
 }
 
 /* 단독 아이콘 버튼: 테두리/배경 박스를 없애 순수 아이콘처럼 보이게 하고,
