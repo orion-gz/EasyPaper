@@ -6314,10 +6314,15 @@ function updateMemoConnectorLine(pageWrapper, memo) {
   const textLayerForConn = pageWrapper.querySelector('.textLayer')
 
   if (vtm && sentenceRanges && textLayerForConn) {
-    const sRange = sentenceRanges.find(r => {
-      const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx
-      return idx === sentenceIdx || r.sentenceIdx === sentenceIdx
-    })
+    // 사용자가 실제로 드래그해서 선택한 범위(charStart/charEnd)가 저장돼 있으면
+    // 그 범위의 시작점을 앵커로 쓰고, 없으면(드웰 호버 등) 문장 전체로 대체한다.
+    const hasExplicitRange = memo.charStart != null && memo.charEnd != null
+    const sRange = hasExplicitRange
+      ? { charStart: memo.charStart, charEnd: memo.charEnd }
+      : sentenceRanges.find(r => {
+          const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx
+          return idx === sentenceIdx || r.sentenceIdx === sentenceIdx
+        })
     if (sRange) {
       const rects = getSentenceRects(sRange, vtm, textLayerForConn)
       if (rects.length > 0) {
