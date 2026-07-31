@@ -3,9 +3,9 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes } from './library.js'
 import { icon } from './icons.js'
-import { renderKnowledgeGraph } from './knowledgeGraph.js'
+import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -233,6 +233,7 @@ const libraryGraphSection       = $('library-graph-section')
 const libraryGraphCanvas        = $('library-graph-canvas')
 const libraryGraphDetailPanel   = $('library-graph-detail-panel')
 const libraryGraphPendingBanner = $('library-graph-pending-banner')
+const libraryGraphSearchInput   = $('library-graph-search-input')
 
 const libCompareToggleBtn   = $('lib-compare-toggle-btn')
 const compareSelectBar      = $('compare-select-bar')
@@ -4321,6 +4322,7 @@ async function renderLibraryGraphTab() {
   if (libraryGraphDetailPanel) {
     libraryGraphDetailPanel.innerHTML = '<p>노드를 클릭하면 상세 정보가 여기에 표시됩니다.</p>'
   }
+  if (libraryGraphSearchInput) libraryGraphSearchInput.value = ''
 
   try {
     const data = await fetchLibraryGraph()
@@ -4351,6 +4353,22 @@ async function renderLibraryGraphTab() {
   }
 }
 
+function renderRelatedQuestionsList(questions) {
+  if (!questions || questions.length === 0) {
+    return '<p style="margin:8px 0 0;color:var(--text-tertiary)">관련 질문이 없습니다.</p>'
+  }
+  return `
+    <ul style="margin:8px 0 0;padding-left:16px;max-height:220px;overflow-y:auto">
+      ${questions.map(q => `
+        <li style="margin-bottom:10px">
+          <div>${escapeHtml(q.content || '')}</div>
+          ${q.doc_title ? `<div style="color:var(--text-tertiary);font-size:11px">${escapeHtml(q.doc_title)}</div>` : ''}
+        </li>
+      `).join('')}
+    </ul>
+  `
+}
+
 function showGraphDetailPanel(nodeData) {
   if (!libraryGraphDetailPanel) return
   if (nodeData.type === 'paper') {
@@ -4359,16 +4377,66 @@ function showGraphDetailPanel(nodeData) {
       <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
       <p style="margin:0 0 6px"><strong>유형:</strong> 논문</p>
       <p style="margin:0"><strong>카테고리:</strong> ${escapeHtml(categories)}</p>
+      <button id="kg-related-questions-btn" style="margin-top:10px;padding:6px 10px;border-radius:6px;border:1px solid var(--border-strong);background:var(--bg-elevated);color:var(--text-primary);font-size:12px;cursor:pointer">관련 질문 보기</button>
+      <div id="kg-related-questions-list"></div>
     `
   } else if (nodeData.type === 'concept') {
+    const questionCount = nodeData.question_count || 0
     libraryGraphDetailPanel.innerHTML = `
       <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
       <p style="margin:0 0 6px"><strong>유형:</strong> 개념</p>
       <p style="margin:0"><strong>분류:</strong> ${escapeHtml(nodeData.kind || '미상')}</p>
+      <button id="kg-related-questions-btn" style="margin-top:10px;padding:6px 10px;border-radius:6px;border:1px solid var(--border-strong);background:var(--bg-elevated);color:var(--text-primary);font-size:12px;cursor:pointer">관련 질문 ${questionCount}개 보기</button>
+      <div id="kg-related-questions-list"></div>
+    `
+  } else if (nodeData.type === 'note') {
+    libraryGraphDetailPanel.innerHTML = `
+      <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">메모</h4>
+      <p style="margin:0">${escapeHtml(nodeData.label || '')}</p>
     `
   } else {
     libraryGraphDetailPanel.innerHTML = '<p>알 수 없는 노드입니다.</p>'
   }
+
+  const questionsBtn = $('kg-related-questions-btn')
+  if (questionsBtn) {
+    questionsBtn.addEventListener('click', async () => {
+      const listEl = $('kg-related-questions-list')
+      if (!listEl) return
+      listEl.innerHTML = '<p style="margin:8px 0 0;color:var(--text-tertiary)">불러오는 중...</p>'
+      try {
+        const { questions } = await fetchGraphNodeQuestions(nodeData.id)
+        listEl.innerHTML = renderRelatedQuestionsList(questions)
+      } catch (err) {
+        listEl.innerHTML = '<p style="margin:8px 0 0;color:var(--error)">질문을 불러오지 못했습니다.</p>'
+      }
+    })
+  }
+}
+
+// 지식 그래프 Node Search - 기존 라이브러리 검색창(librarySearchInput)과
+// 동일한 디바운스 패턴을 그대로 따른다. 매칭된 노드는 highlightSearchMatches로
+// 강조하고 화면에 맞춘다(knowledgeGraph.js).
+let libraryGraphSearchTimer = null
+if (libraryGraphSearchInput) {
+  libraryGraphSearchInput.addEventListener('input', () => {
+    clearTimeout(libraryGraphSearchTimer)
+    const query = libraryGraphSearchInput.value.trim()
+    libraryGraphSearchTimer = setTimeout(async () => {
+      if (!libraryGraphCyInstance) return
+      if (!query) {
+        highlightSearchMatches(libraryGraphCyInstance, [])
+        return
+      }
+      try {
+        const result = await searchGraphNodes(query)
+        const nodeIds = [...(result.paper || []), ...(result.concept || []), ...(result.note || [])]
+        highlightSearchMatches(libraryGraphCyInstance, nodeIds)
+      } catch (err) {
+        console.error('지식 그래프 검색 실패:', err)
+      }
+    }, 300)
+  })
 }
 
 async function renderAnnotationsBrowser() {
