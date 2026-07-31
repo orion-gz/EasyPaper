@@ -9187,7 +9187,12 @@ function renderSuggestedQuestionChips(msgEl, questions) {
     const chip = document.createElement('button')
     chip.type = 'button'
     chip.className = 'suggested-question-chip'
-    chip.textContent = q
+    // 추천 질문에 LaTeX 수식($...$ 등)이 섞여 나오는 경우가 있어, 일반
+    // 채팅 메시지와 동일하게 마크다운/KaTeX 파이프라인을 태운다. marked가
+    // 단일 문장을 <p>로 감싸는데 <button> 안에 블록 요소가 들어가면 접근성
+    // 트리가 깨지므로 감싸는 <p> 태그는 제거한다.
+    chip.innerHTML = formatChatHtml(q).replace(/^<p>([\s\S]*)<\/p>\s*$/, '$1')
+    applyKatexToElement(chip)
     chip.addEventListener('click', () => {
       if (state.chatActiveStream) return
       chatInput.value = q
