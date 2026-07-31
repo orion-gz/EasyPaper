@@ -346,7 +346,7 @@ def _extract_paper_title(doc: fitz.Document) -> str:
             
         # 1. y좌표 기준으로 1차 정렬한 뒤, 동적으로 같은 행(Line)에 있는 스팬들을 묶어서 그룹화합니다.
         #    이렇게 하면 PDF 렌더링 시 y좌표가 소수점 단위로 미세하게 다른 스팬들이 엉뚱하게 정렬되는 문제를 방지합니다.
-        def sort_spans_by_reading_order(spans_list):
+        def group_spans_into_lines(spans_list):
             if not spans_list:
                 return []
             sorted_by_y = sorted(spans_list, key=lambda s: s["bbox"][1])
@@ -372,13 +372,47 @@ def _extract_paper_title(doc: fitz.Document) -> str:
             if current_line:
                 current_line.sort(key=lambda x: x["bbox"][0])
                 lines_list.append(current_line)
-            
-            flat = []
-            for line_item in lines_list:
-                flat.extend(line_item)
-            return flat
+            return lines_list
 
-        sorted_spans = sort_spans_by_reading_order(title_spans)
+        line_groups = group_spans_into_lines(title_spans)
+
+        # 1-1. 제목 폰트 크기가 우연히 저자명/소속 또는 "1. Introduction" 같은 번호 매겨진
+        #      섹션 헤더와 비슷한 경우, 이런 줄들이 제목 후보에 섞여 들어올 수 있습니다.
+        #      제목은 항상 페이지 최상단의 "하나의 연속된 블록"이므로, 아래 패턴에 걸리는 줄이나
+        #      비정상적으로 큰 줄 간격(제목-저자 블록 사이의 여백)이 나타나면 그 지점에서 수집을 중단합니다.
+        SECTION_HEADER_RE = re.compile(
+            r'^\(?[ivxlc\d]{1,4}\)?[\.\:\)]?\s+(introduction|abstract|related\s+work|background|'
+            r'method(ology)?|conclusion|references|experiments?|results?|discussion|acknowledg|'
+            r'appendix|approach|overview|preliminaries|evaluation|analysis|motivation)\b',
+            re.IGNORECASE,
+        )
+        AUTHOR_HINT_RE = re.compile(
+            r'(@|university|institute|department|school of|college of|laborator|corporation|\bltd\.?\b|\binc\.?\b)',
+            re.IGNORECASE,
+        )
+
+        kept_lines = []
+        prev_line_bottom = None
+        prev_line_height = None
+        for line_spans in line_groups:
+            line_text_norm = re.sub(r'\s+', ' ', "".join(s["text"] for s in line_spans)).strip()
+
+            if SECTION_HEADER_RE.match(line_text_norm) or AUTHOR_HINT_RE.search(line_text_norm):
+                break
+
+            line_top = min(s["bbox"][1] for s in line_spans)
+            line_bottom = max(s["bbox"][3] for s in line_spans)
+            line_height = line_bottom - line_top
+
+            # 이전 줄과의 간격이 줄 높이의 2배를 넘으면 제목 블록과 분리된 다른 블록(저자/소속 등)으로 간주
+            if prev_line_bottom is not None and prev_line_height and (line_top - prev_line_bottom) > prev_line_height * 2.0:
+                break
+
+            kept_lines.append(line_spans)
+            prev_line_bottom = line_bottom
+            prev_line_height = line_height
+
+        sorted_spans = [s for line_spans in kept_lines for s in line_spans]
         
         # 2. 정렬된 스팬들을 결합할 때, 단어 중간에 폰트 크기 변경으로 쪼개진 스팬(gap < 2.5px)은 공백 없이 결합하고,
         #    일반적인 띄어쓰기는 공백을 유지하여 자연스러운 문장으로 결합합니다.
