@@ -4261,6 +4261,20 @@ body.toolbar-pos-right .topbar-right {
   gap: 6px;
   width: 100%;
 }
+/* index.html에는 가로(행) 배치를 전제로 일부 버튼에 인라인
+   style="margin-left: 6~8px"가 박혀있다(독서완료/목차/브리핑 버튼). 세로
+   컬럼에서는 이 좌측 여백이 그대로 남아 가운데 정렬을 깨고 버튼이 오른쪽으로
+   치우쳐 보인다 - 인라인 스타일은 !important 없이는 이길 수 없으므로
+   !important로 모든 자식의 가로 마진을 0으로 되돌린다. */
+body.toolbar-pos-left .topbar-left > *,
+body.toolbar-pos-left .topbar-center > *,
+body.toolbar-pos-left .topbar-right > *,
+body.toolbar-pos-right .topbar-left > *,
+body.toolbar-pos-right .topbar-center > *,
+body.toolbar-pos-right .topbar-right > * {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
 
 /* 단독 아이콘 버튼: 테두리/배경 박스를 없애 순수 아이콘처럼 보이게 하고,
    그룹 안 아이콘과 동일한 크기로 통일해 세로 정렬을 맞춘다. */
@@ -4313,6 +4327,24 @@ body.toolbar-pos-right .view-group .zoom-label {
   width: 100%;
   padding: 2px 0;
   font-size: 10px;
+}
+/* 세로 컬럼에서는 위로 갈수록 확대되는 카메라 줌 레버 관례에 맞춰 확대(+)를
+   맨 위, 줌 %를 가운데, 축소(−)를 맨 아래에 배치한다(마크업 순서는 가로
+   배치 −/%/+ 와 공유하므로 DOM은 그대로 두고 order로만 시각적 순서를
+   바꾼다). 세 요소 모두에 순서를 명시해야 한다 - zoom-in-btn에만 order를
+   주면 나머지 둘은 기본값(0)으로 묶여 DOM 순서(−, %)대로 나오므로
+   의도한 (+, %, −) 순서가 아니라 (+, −, %) 순서가 된다. */
+body.toolbar-pos-left .view-group #zoom-in-btn,
+body.toolbar-pos-right .view-group #zoom-in-btn {
+  order: 1;
+}
+body.toolbar-pos-left .view-group .zoom-label,
+body.toolbar-pos-right .view-group .zoom-label {
+  order: 2;
+}
+body.toolbar-pos-left .view-group #zoom-out-btn,
+body.toolbar-pos-right .view-group #zoom-out-btn {
+  order: 3;
 }
 /* "독서 완료" 버튼은 가로 배치 기준 좌우로 넓은 알약형(padding:0 12px)에
    테두리/배경이 있는데, 세로 컬럼에서는 텍스트가 숨겨져 아이콘만 남으므로
@@ -4374,22 +4406,32 @@ body.toolbar-pos-right .logo-small-btn {
   font-size: 0;
 }
 /* 기본 .page-display는 가로 배치 기준 height:32px 고정 알약형(border-radius:
-   20px)인데, 세로 컬럼에서는 입력창과 "/N" 텍스트가 위아래로 쌓이고 폭도
-   좁아지므로 height를 내용에 맞게 풀고 좁은 컬럼에 어울리는 모양으로
-   축소한다. width는 고정하지 않고 내용에 맞춰 다른 버튼들처럼 컬럼 중앙에
-   자연스럽게 정렬되게 한다. */
+   20px)인데, 세로 컬럼에서는 입력창과 "/N" 텍스트가 위아래로 쌓인다. 폭을
+   다른 32px 아이콘 버튼과 동일한 var(--toolbar-v-btn)로 고정해 툭 튀어나와
+   보이지 않게 한다. */
 body.toolbar-pos-left .page-display,
 body.toolbar-pos-right .page-display {
   flex-direction: column;
   height: auto;
-  width: auto;
-  padding: 6px 8px;
-  gap: 2px;
+  width: var(--toolbar-v-btn);
+  box-sizing: border-box;
+  padding: 4px 3px;
+  gap: 3px;
   border-radius: var(--radius-sm);
 }
-body.toolbar-pos-left .page-display input[type=number],
-body.toolbar-pos-right .page-display input[type=number] {
-  width: 28px;
+/* #page-input은 id 선택자라 .page-display 안쪽에서 쓰던 48px 폭짜리 칩
+   스타일(width:48px, padding:5px)이 그대로 이겨서(id가 class 조합보다
+   우선) 32px 컬럼 밖으로 넘쳐 흘렀다 - id를 포함한 선택자로 명시해 같은
+   우선순위 다툼에서 이기고, 좁은 컬럼에 맞게 칩 크기를 줄인다. */
+body.toolbar-pos-left .page-display #page-input,
+body.toolbar-pos-right .page-display #page-input {
+  width: 100%;
+  padding: 3px 0;
+  font-size: 11px;
+}
+body.toolbar-pos-left .page-display #page-total,
+body.toolbar-pos-right .page-display #page-total {
+  font-size: 9.5px;
 }
 body.toolbar-pos-left .panels {
   padding-top: 0;
