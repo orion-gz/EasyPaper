@@ -187,6 +187,18 @@ export async function searchGraphNodes(query) {
   return res.json()
 }
 
+export async function fetchLibraryTimeline() {
+  const res = await fetch(`${API_BASE}/library/timeline`)
+  if (!res.ok) throw new Error('타임라인 조회 실패')
+  return res.json()
+}
+
+export async function fetchReadingRecommendations() {
+  const res = await fetch(`${API_BASE}/library/graph/recommendations`)
+  if (!res.ok) throw new Error('추천 논문 조회 실패')
+  return res.json()
+}
+
 export async function fetchLibraryTrash(options = {}) {
   const res = await fetch(`${API_BASE}/library/trash${buildQuery(options)}`)
   if (!res.ok) throw new Error('휴지통 조회 실패')
