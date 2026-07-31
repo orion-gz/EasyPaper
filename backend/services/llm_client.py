@@ -2190,15 +2190,64 @@ def _parse_json_array_response(raw: str) -> list:
     return parsed
 
 
+async def _llm_json_array_with_retry(prompt: str, session_id: str = None, attempts: int = 3, log_label: str = "LLM JSON 배열 응답") -> list:
+    """공용: 프롬프트를 보내 JSON 배열 응답을 받아 파싱까지 재시도한다
+    (extract_paper_concepts/match_question_to_concepts/find_similar_concepts가
+    공유하는 멀티 프로바이더 분기 + 재시도 로직). LLM이 마크다운 펜스를
+    씌우거나 출력이 중간에 잘리면 파싱이 깨지기 쉬워서 최대 `attempts`회
+    재시도하고, 모두 실패해도 예외를 던지지 않고 빈 리스트를 반환한다 -
+    이 계열 기능은 전부 부가 정보일 뿐이라 파이프라인 자체를 막아서는 안 된다."""
+    messages = [{"role": "user", "content": prompt}]
+    provider = get_trans_provider()
+    model = get_trans_model()
+
+    for attempt in range(attempts):
+        tokens = []
+        try:
+            if provider == "openai":
+                async for token in stream_openai(messages, model=model, temperature=0.1):
+                    tokens.append(token)
+            elif provider == "gemini":
+                async for token in stream_gemini(messages, model=model, temperature=0.1):
+                    tokens.append(token)
+            elif provider == "claude":
+                async for token in stream_claude(messages, model=model, temperature=0.1):
+                    tokens.append(token)
+            elif provider == "antigravity":
+                async for token in stream_antigravity(prompt, model=model, session_id=session_id):
+                    tokens.append(token)
+            elif provider == "claude_code":
+                async for token in stream_claude_code(prompt, model=model, session_id=session_id):
+                    tokens.append(token)
+            elif provider == "codex":
+                async for token in stream_codex(prompt, model=model, session_id=session_id):
+                    tokens.append(token)
+            else:
+                # Fallback to Ollama chat api
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "stream": False,
+                    "options": {"temperature": 0.1}
+                }
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(f"{get_ollama_host()}/api/chat", json=payload)
+                    if response.status_code == 200:
+                        data = response.json()
+                        tokens.append(data.get("message", {}).get("content", ""))
+
+            raw = "".join(tokens).strip()
+            return _parse_json_array_response(raw)
+        except Exception as e:
+            logger.warning(f"{log_label} 파싱 실패 (시도 {attempt + 1}/{attempts}): {e}")
+            continue
+
+    return []
+
+
 async def extract_paper_concepts(title: str, text: str, session_id: str = None) -> List[dict]:
     """논문 제목과 서두 텍스트에서 핵심 개념 3~7개를 추출한다.
-    반환값: [{"concept": str, "kind": str|None}, ...]
-
-    classify_paper_category와 달리 결과를 JSON으로 파싱해야 하는데, LLM이
-    마크다운 펜스를 씌우거나 출력이 중간에 잘리면 파싱이 깨지기 쉬워서 최대
-    3회까지 재시도한다. 3회 모두 실패해도 예외를 던지지 않고 빈 리스트를
-    반환한다 - classify_paper_category와 동일하게 이 기능은 부가 정보일 뿐
-    번역 파이프라인 자체를 실패시켜서는 안 된다."""
+    반환값: [{"concept": str, "kind": str|None}, ...]"""
     prompt = f"""You are an academic paper analyst. Analyze the following paper title and beginning text (abstract/introduction) and extract 3 to 7 core concepts (methods, tasks, datasets, metrics, or theories) discussed in the paper.
 
 Output ONLY a pure JSON array, with no markdown code fences, no explanations, and no extra prose. Each element must be an object with a "concept" key (the concept name, in a few words) and a "kind" key (one of: "method", "task", "dataset", "metric", "theory", or null if unclear).
@@ -2211,59 +2260,47 @@ Beginning Text:
 {text[:2000]}
 
 JSON Array:"""
+    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="논문 개념 추출")
 
-    messages = [
-        {"role": "user", "content": prompt}
-    ]
 
-    provider = get_trans_provider()
-    model = get_trans_model()
-
-    try:
-        for attempt in range(3):
-            tokens = []
-            try:
-                if provider == "openai":
-                    async for token in stream_openai(messages, model=model, temperature=0.1):
-                        tokens.append(token)
-                elif provider == "gemini":
-                    async for token in stream_gemini(messages, model=model, temperature=0.1):
-                        tokens.append(token)
-                elif provider == "claude":
-                    async for token in stream_claude(messages, model=model, temperature=0.1):
-                        tokens.append(token)
-                elif provider == "antigravity":
-                    async for token in stream_antigravity(prompt, model=model, session_id=session_id):
-                        tokens.append(token)
-                elif provider == "claude_code":
-                    async for token in stream_claude_code(prompt, model=model, session_id=session_id):
-                        tokens.append(token)
-                elif provider == "codex":
-                    async for token in stream_codex(prompt, model=model, session_id=session_id):
-                        tokens.append(token)
-                else:
-                    # Fallback to Ollama chat api
-                    payload = {
-                        "model": model,
-                        "messages": messages,
-                        "stream": False,
-                        "options": {"temperature": 0.1}
-                    }
-                    async with httpx.AsyncClient(timeout=30.0) as client:
-                        response = await client.post(f"{get_ollama_host()}/api/chat", json=payload)
-                        if response.status_code == 200:
-                            data = response.json()
-                            tokens.append(data.get("message", {}).get("content", ""))
-
-                raw = "".join(tokens).strip()
-                parsed = _parse_json_array_response(raw)
-                return parsed
-            except Exception as e:
-                logger.warning(f"논문 개념 추출 파싱 실패 (시도 {attempt + 1}/3): {e}")
-                continue
-    except Exception as e:
-        logger.warning(f"논문 개념 추출 실패: {e}")
+async def match_question_to_concepts(question: str, concept_names: List[str], session_id: str = None) -> List[dict]:
+    """질문이 주어진 기존 개념 목록 중 어떤 것과 관련 있는지 고른다(폐쇄형
+    분류 - 새 개념을 만들지 않는다. concept_names에 없는 이름을 만들어내면
+    안 된다는 것을 프롬프트로 명시한다). 반환값: [{"concept": str}, ...]
+    (concept_names의 부분집합)."""
+    if not concept_names:
         return []
+    names_list = "\n".join(f"- {n}" for n in concept_names)
+    prompt = f"""You are an academic assistant. A user asked the following question about a paper. From the list of concepts already identified for this paper, pick ONLY the ones this question is actually about. Do not invent new concepts - only choose from the given list, and if none apply, return an empty array.
 
-    return []
+Output ONLY a pure JSON array, with no markdown code fences, no explanations, and no extra prose. Each element must be an object with a "concept" key whose value is copied EXACTLY (verbatim) from the list below.
+
+Concept List:
+{names_list}
+
+Question: {question}
+
+JSON Array:"""
+    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="질문-개념 매칭")
+
+
+async def find_similar_concepts(new_name: str, existing_names: List[str], session_id: str = None) -> List[dict]:
+    """new_name과 의미상 사실상 같은 개념(동의어/약어 관계 등, 예: "LLM"과
+    "Large Language Model")을 existing_names 중에서 고른다. 느슨하게 관련된
+    정도로는 고르지 않고, 정말 같은 개념을 가리키는 경우만 선택하도록
+    프롬프트에 명시한다. 반환값: [{"concept": str}, ...] (existing_names의 부분집합)."""
+    if not existing_names:
+        return []
+    names_list = "\n".join(f"- {n}" for n in existing_names)
+    prompt = f"""You are an academic terminology expert. Given a new concept name and a list of existing concept names, identify ONLY the existing names that refer to the EXACT SAME concept as the new one (synonyms, abbreviations, or equivalent phrasing - e.g. "LLM" and "Large Language Model"). Do not include merely related-but-distinct concepts. If none match, return an empty array.
+
+Output ONLY a pure JSON array, with no markdown code fences, no explanations, and no extra prose. Each element must be an object with a "concept" key whose value is copied EXACTLY (verbatim) from the existing list below.
+
+New Concept: {new_name}
+
+Existing Concepts:
+{names_list}
+
+JSON Array:"""
+    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="유사 개념 탐색")
 
