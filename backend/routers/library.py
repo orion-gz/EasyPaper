@@ -386,6 +386,46 @@ async def resolve_library_reference(doc_id: str, ref_num: str, current_user: str
     return result
 
 
+@router.get("/library/{doc_id}/annotations")
+async def get_library_annotations(doc_id: str, current_user: str = Depends(get_current_user)):
+    """문서의 하이라이트/주석 서버 미러 데이터를 반환합니다.
+
+    localStorage가 원본(source of truth)이며 이 데이터는 다중 기기 동기화를
+    위한 best-effort 백업일 뿐이다. 저장된 적이 없으면 빈 데이터를 반환한다.
+    """
+    _require_owned_document(doc_id, current_user)
+    from services.db import db_get_annotations
+    result = db_get_annotations(doc_id)
+    return result or {"data": {}, "updated_at": None}
+
+
+@router.put("/library/{doc_id}/annotations")
+async def put_library_annotations(doc_id: str, payload: dict, current_user: str = Depends(get_current_user)):
+    """하이라이트/주석 서버 미러를 통째로 덮어씁니다(전체 블롭 upsert)."""
+    _require_owned_document(doc_id, current_user)
+    from services.db import db_put_annotations
+    db_put_annotations(doc_id, payload.get("data", {}))
+    return {"status": "ok"}
+
+
+@router.get("/library/{doc_id}/memos")
+async def get_library_memos(doc_id: str, current_user: str = Depends(get_current_user)):
+    """문서의 메모 서버 미러 데이터를 반환합니다. (annotations와 동일한 성격)"""
+    _require_owned_document(doc_id, current_user)
+    from services.db import db_get_memos
+    result = db_get_memos(doc_id)
+    return result or {"data": {}, "updated_at": None}
+
+
+@router.put("/library/{doc_id}/memos")
+async def put_library_memos(doc_id: str, payload: dict, current_user: str = Depends(get_current_user)):
+    """메모 서버 미러를 통째로 덮어씁니다(전체 블롭 upsert)."""
+    _require_owned_document(doc_id, current_user)
+    from services.db import db_put_memos
+    db_put_memos(doc_id, payload.get("data", {}))
+    return {"status": "ok"}
+
+
 @router.put("/library/{doc_id}/metadata")
 async def update_doc_metadata(
     doc_id: str,
