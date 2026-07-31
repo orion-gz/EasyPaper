@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
@@ -106,9 +107,10 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
     history_messages = [{"role": msg.role, "content": msg.content} for msg in data.messages]
 
     # Save user message to database
+    question_chat_id = None
     if data.messages:
         latest_msg = data.messages[-1]
-        db_save_chat_message(session_id, latest_msg.role, latest_msg.content)
+        question_chat_id = db_save_chat_message(session_id, latest_msg.role, latest_msg.content)
 
     async def event_generator():
         yield " "
@@ -125,6 +127,13 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
             assistant_content = "".join(full_response).strip()
             if assistant_content:
                 db_save_chat_message(session_id, "assistant", assistant_content)
+                # 지식 그래프: 이 질문을 논문의 기존 개념과 연결한다(fire-and-forget -
+                # 실패해도 채팅 응답 자체에는 영향 없음).
+                if question_chat_id is not None:
+                    from services.knowledge_graph import sync_question_for_graph
+                    asyncio.create_task(
+                        sync_question_for_graph(question_chat_id, session_id, latest_msg.content)
+                    )
         except Exception as e:
             yield f"\n[오류 발생: {str(e)}]"
 
@@ -230,9 +239,10 @@ async def chat_compare_stream(data: CompareChatRequest, current_user: str = Depe
 
     history_messages = [{"role": msg.role, "content": msg.content} for msg in data.messages]
 
+    question_chat_id = None
     if data.messages:
         latest_msg = data.messages[-1]
-        db_save_chat_message(compare_id, latest_msg.role, latest_msg.content)
+        question_chat_id = db_save_chat_message(compare_id, latest_msg.role, latest_msg.content)
 
     async def event_generator():
         yield " "
@@ -245,6 +255,11 @@ async def chat_compare_stream(data: CompareChatRequest, current_user: str = Depe
             assistant_content = "".join(full_response).strip()
             if assistant_content:
                 db_save_chat_message(compare_id, "assistant", assistant_content)
+                if question_chat_id is not None:
+                    from services.knowledge_graph import sync_question_for_graph
+                    asyncio.create_task(
+                        sync_question_for_graph(question_chat_id, compare_id, latest_msg.content)
+                    )
         except Exception as e:
             yield f"\n[오류 발생: {str(e)}]"
 

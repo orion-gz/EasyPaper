@@ -77,13 +77,30 @@ async def search_library(q: str = "", current_user: str = Depends(get_current_us
 
 @router.get("/library/graph")
 async def get_library_graph(current_user: str = Depends(get_current_user)):
-    """개인 지식 그래프(논문/개념 노드 + 인용/카테고리 엣지)를 반환합니다.
+    """개인 지식 그래프(논문/개념/메모 노드 + 인용/카테고리/개념보유/유사개념 엣지)를 반환합니다.
 
     /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
     이유로, 그렇지 않으면 "graph"가 doc_id 경로 파라미터로 잘못 매칭된다.
     """
     from services.knowledge_graph import get_graph_data
     return await get_graph_data(current_user)
+
+
+@router.get("/library/graph/questions")
+async def get_library_graph_questions(node_id: str, current_user: str = Depends(get_current_user)):
+    """지식 그래프의 Concept/Paper 노드 클릭 시 상세 패널에 보여줄 관련 질문
+    목록을 반환합니다. node_id는 "concept:{id}" 또는 "paper:{doc_id}" 형태."""
+    from services.knowledge_graph import get_related_questions
+    return {"questions": await get_related_questions(current_user, node_id)}
+
+
+@router.get("/library/graph/search")
+async def search_library_graph(q: str = "", current_user: str = Depends(get_current_user)):
+    """지식 그래프 탭 전용 통합 검색(논문/개념/메모/질문)입니다. 질문은
+    그래프 노드가 아니므로 매칭되면 그 질문이 연결된 concept/paper 노드로
+    대체 매핑됩니다."""
+    from services.knowledge_graph import search_graph_nodes
+    return await search_graph_nodes(current_user, q)
 
 
 @router.get("/library/{doc_id}")
