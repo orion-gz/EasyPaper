@@ -4250,6 +4250,11 @@ body.toolbar-pos-right .topbar {
   left: auto;
   border-left: 1px solid var(--border);
 }
+/* topbar-left/center/right는 가로 배치에서 왼쪽/가운데/오른쪽 정렬 그룹을
+   나누는 용도였을 뿐 세로 컬럼에서는 의미가 없어져, 버튼들이 사실상 하나로
+   이어진 목록처럼 보인다. 그런데 이 세 컨테이너 내부 간격(gap)과 컨테이너
+   사이 간격(.topbar 자체의 gap, 아래 4242행)이 각각 6px/8px로 달라 버튼마다
+   마진이 들쭉날쭉해 보였다 - .topbar의 gap과 동일한 8px로 맞춘다. */
 body.toolbar-pos-left .topbar-left,
 body.toolbar-pos-left .topbar-center,
 body.toolbar-pos-left .topbar-right,
@@ -4258,7 +4263,7 @@ body.toolbar-pos-right .topbar-center,
 body.toolbar-pos-right .topbar-right {
   flex-direction: column;
   flex: none;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
 }
 /* index.html에는 가로(행) 배치를 전제로 일부 버튼에 인라인
@@ -4384,6 +4389,14 @@ body.toolbar-pos-right .logo-small-btn {
 body.toolbar-pos-left .logo-small-btn:hover,
 body.toolbar-pos-right .logo-small-btn:hover {
   background: var(--bg-hover);
+}
+/* 로고 svg에는 index.html에 인라인 style="margin-right:4px"가 박혀있다
+   ("EasyPaper" 글자와의 가로 간격용). 세로 컬럼에서는 글자를 font-size:0으로
+   숨길 뿐 텍스트 노드 자체는 남아있어, 오른쪽 여백만 계속 차지하며 아이콘을
+   버튼 중심에서 왼쪽으로 밀어낸다 - 세로 모드에서는 이 여백을 없앤다. */
+body.toolbar-pos-left .logo-small-btn svg,
+body.toolbar-pos-right .logo-small-btn svg {
+  margin-right: 0 !important;
 }
 /* 세로 컬럼에서는 폭이 넓게 필요한 문서 제목/페이지 표시를 숨겨 공간을
    확보한다 - 각 버튼의 title 툴팁으로 기능은 그대로 확인 가능하다.
