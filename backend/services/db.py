@@ -1167,3 +1167,19 @@ def db_put_memos(doc_id: str, data: dict) -> None:
             (doc_id, data_str, updated_at)
         )
         conn.commit()
+
+
+def db_get_memo_counts_for_docs(doc_ids: List[str]) -> Dict[str, int]:
+    """문서별 메모 개수를 반환한다. 메모는 문서당 1개의 JSON blob으로
+    저장되어 있어(_queue_note_nodes와 동일한 이유) SQL COUNT로 셀 수 없고
+    각 blob을 순회해 항목 수를 더해야 한다. 메모가 0개인 문서는 결과에
+    포함하지 않는다(호출부가 .get(doc_id, 0)으로 기본값을 다루도록)."""
+    if not doc_ids:
+        return {}
+    counts = {}
+    for doc_id in doc_ids:
+        mirrored = db_get_memos(doc_id)
+        total = sum(len(items or []) for items in (mirrored or {}).get("data", {}).values())
+        if total:
+            counts[doc_id] = total
+    return counts

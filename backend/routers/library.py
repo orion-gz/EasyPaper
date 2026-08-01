@@ -127,6 +127,40 @@ async def get_library_timeline(current_user: str = Depends(get_current_user)):
     return {"events": await get_activity_timeline(current_user)}
 
 
+@router.get("/library/graph/heatmap")
+async def get_library_concept_heatmap(current_user: str = Depends(get_current_user)):
+    """개념별 논문 수/질문 수를 활동량 순으로 반환합니다(Concept Heatmap).
+
+    /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
+    이유로, 그렇지 않으면 "graph"가 doc_id 경로 파라미터로 잘못 매칭된다.
+    """
+    from services.knowledge_graph import get_concept_heatmap
+    return {"heatmap": await get_concept_heatmap(current_user)}
+
+
+@router.get("/library/graph/gaps")
+async def get_library_knowledge_gaps(current_user: str = Depends(get_current_user)):
+    """질문이 거의 없는 개념, 메모 없이 읽음 표시된 논문 등 격차를 감지합니다
+    (Knowledge Gap Detection, 순수 규칙 기반 - LLM 호출 없음).
+
+    /library/{doc_id}보다 먼저 등록해야 한다.
+    """
+    from services.knowledge_graph import get_knowledge_gaps
+    return {"gaps": await get_knowledge_gaps(current_user)}
+
+
+@router.get("/library/dashboard")
+async def get_library_dashboard(current_user: str = Depends(get_current_user)):
+    """지식 그래프 탭의 "대시보드" 뷰에 필요한 통계/히트맵/격차/최근 활동을
+    한 번에 반환합니다.
+
+    /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
+    이유로, 그렇지 않으면 "dashboard"가 doc_id 경로 파라미터로 잘못 매칭된다.
+    """
+    from services.knowledge_graph import get_dashboard_summary
+    return await get_dashboard_summary(current_user)
+
+
 @router.get("/library/{doc_id}")
 async def get_library_document(
     doc_id: str,
