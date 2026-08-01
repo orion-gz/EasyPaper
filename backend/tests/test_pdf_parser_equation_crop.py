@@ -17,6 +17,13 @@ _find_page_equations()의 진화 과정에서 실제로 관찰된 네 가지 오
 7. Figure/Table 캡션처럼 페이지 폭 대부분을 차지하는 줄이 "문단 줄 폭
    추정치"를 부풀려, 정상 크기의 문단 줄까지 "수식만큼 좁다"고 잘못
    판단해 흡수해버리는 문제.
+8. 억양 부호·합/적분 기호 렌더링 등으로 세로로 유난히 큰 bbox를 가진
+   줄이 흡수되면서 growing rect가 급격히 커지고, 그 순간 위/아래 문단
+   줄과도 겹침 비율 임계값을 넘겨 연쇄적으로 흡수되는 도미노 문제
+   (실제 논문 PDF 전수 조사로 재발견, 3차 수정 이후에도 남아있었음).
+9. 수식 직전/직후의 짧은 도입·설명 문장이 폭이 좁아 기존 폭 비율
+   가드를 통과해 gap 조건만으로 거의 항상 흡수되는 문제(위와 같은
+   조사로 재발견).
 """
 
 import fitz
@@ -200,6 +207,60 @@ def test_tall_shared_line_is_not_double_claimed_by_two_equations(tmp_path):
     # 하고, 위로 번져서 Equation 1의 내용까지 포함하면 안 된다.
     assert eq1_x0 < 160
     assert eq2_x0 > 240
+
+
+def test_equation_does_not_cascade_via_tall_glyph_line(tmp_path):
+    """억양 부호·합/적분 기호 렌더링 등으로 세로로 유난히 큰 bbox를 가진
+    줄 하나가 1단계에서 먼저 흡수되면, growing rect의 세로 범위가 급격히
+    커지면서 그 순간 위/아래 문단 줄과도 새로 겹침 비율 임계값을 넘겨
+    다음 반복에서 또 흡수되는 도미노가 실제 논문 PDF(Kingma & Welling
+    VAE 논문)에서 재현되었다 - 섹션 제목+문단 두 개가 통째로 캡처됨.
+    여기서는 위/아래 문단 줄과 세로로 겹치는 큰 폰트 기호("BIGSYM")를
+    수식 옆에 배치해 같은 조건을 재현한다."""
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((50, 200), "This paragraph line sits above the equation naturally.", fontsize=9)
+    page.insert_text((220, 225), "x = y", fontsize=11)
+    page.insert_text((260, 220), "BIGSYM", fontsize=24)
+    page.insert_text((400, 225), "(1)", fontsize=11)
+    page.insert_text((50, 270), "This paragraph line sits below the equation naturally.", fontsize=9)
+    path = tmp_path / "tall_glyph_domino.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    result = extract_pdf_images(str(path))
+    entries = [r for r in result if r.get("label") == "Equation 1"]
+    assert len(entries) == 1
+    x0, _, _, _ = _pt(entries[0])
+    # 문단 왼쪽 여백(x=50)까지 흡수되면 안 된다 - 흡수 전이라면 수식 자신의
+    # 시작 위치(x=220 부근)에서 크게 벗어나지 않아야 한다.
+    assert x0 > 150, f"위쪽 문단 줄이 도미노로 흡수되어 좌측 경계가 넓어짐: {entries[0]}"
+
+
+def test_equation_does_not_absorb_short_lead_in_sentence(tmp_path):
+    """수식 바로 위의 짧은 도입 문장("The process can be expressed as")은
+    폭이 좁아 기존 폭 비율 가드(_EQ_ABSORB_MAX_WIDTH_RATIO)만으로는
+    걸러지지 않고 gap 조건까지 통과해 거의 항상 흡수되는 문제가 실제
+    논문 PDF(EEG Conformer 논문 등) 다수에서 재현되었다."""
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    # 정상적인 컬럼 폭 추정치를 위한 참조 문단 줄 (수식과는 멀리 떨어짐)
+    page.insert_text((49, 100), "This is body paragraph line filling most of the column width here now please.", fontsize=10)
+    page.insert_text((49, 200), "The process can be expressed as", fontsize=10)
+    page.insert_text((90, 220), "f(x) = a x + b", fontsize=11)
+    page.insert_text((300, 220), "(1)", fontsize=11)
+    path = tmp_path / "lead_in_sentence.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    result = extract_pdf_images(str(path))
+    entries = [r for r in result if r.get("label") == "Equation 1"]
+    assert len(entries) == 1
+    x0, y0, _, _ = _pt(entries[0])
+    # 도입 문장의 좌측 여백(x=49)이나 그 줄 자체(y=189~203)까지 확장되면
+    # 안 된다 - 수식 자신의 시작 위치(x=90, y=208) 근처에 머물러야 한다.
+    assert x0 > 70, f"도입 문장의 좌측 여백까지 확장됨: {entries[0]}"
+    assert y0 > 195, f"도입 문장 줄까지 흡수됨: {entries[0]}"
 
 
 def test_wide_caption_line_does_not_inflate_paragraph_width_estimate(tmp_path):
