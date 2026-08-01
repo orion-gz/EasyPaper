@@ -1015,6 +1015,14 @@ _EQ_PROSE_MIN_WORDS = 3
 _EQ_PROSE_MIN_ALPHA_RATIO = 0.6
 _EQ_PROSE_MIN_LONG_WORD_RATIO = 0.5
 
+# 페이지 상/하단 여백에 있는 페이지 쪽수(running header/footer)는 짧고
+# 고립된 토큰이라 폭 비율 가드(_EQ_ABSORB_MAX_WIDTH_RATIO)를 쉽게
+# 통과하고, 수식이 페이지 하단 가까이에 있으면 간격(gap)도 작아 그대로
+# 흡수되는 문제가 실제 논문 PDF에서 재현되었다(페이지 하단 쪽수 "7"이
+# 수식 바로 아래에 함께 캡처됨). 표 구분선 탐지에 이미 쓰이고 있는 동일
+# 관례(페이지 상/하단 65pt 이내 = 헤더/푸터 영역)를 그대로 재사용한다.
+_EQ_PAGE_MARGIN_EXCLUDE = 65.0
+
 
 def _looks_like_prose(text: str) -> bool:
     words = text.split()
@@ -1061,6 +1069,7 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
     로직(_PANEL_ABSORB_*)과 같은 반복 흡수 패턴을 재사용한다.
     """
     page_width = page.rect.width
+    page_height = page.rect.height
     blocks = page.get_text("dict")["blocks"]
 
     all_lines = []  # (x0, y0, x1, y1) - 페이지 내 모든 텍스트 줄
@@ -1164,6 +1173,13 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
                     continue
                 if _looks_like_prose(line_texts.get(tuple(ln), "")):
                     continue
+                # 페이지 여백(_EQ_PAGE_MARGIN_EXCLUDE) 배제는 여기서는 필요
+                # 없다 - 1단계는 세로 겹침 비율로만 판단하는데, 페이지
+                # 쪽수(footer)는 수식 본문과 같은 행에 있을 수 없어(항상
+                # 아래쪽에 별도로 떨어져 있음) 애초에 겹침 조건을 만족하지
+                # 않는다. 여기서 필터를 걸면 수식 자신이 페이지 하단
+                # 여백 가까이 있을 때 진짜 같은 행 조각까지 함께 배제되는
+                # 회귀가 생긴다 - 아래 2단계에서만 적용한다.
                 if _vertical_overlap_ratio(rect, ln) >= _EQ_ABSORB_MIN_VOVERLAP:
                     group.add(ln)
                     rect[0] = min(rect[0], ln[0])
@@ -1249,6 +1265,14 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
                 # 수식 직전/직후의 짧은 문장이 gap·width 조건을 모두
                 # 통과해 거의 항상 흡수되는 문제를 막는다.
                 if _looks_like_prose(line_texts.get(tuple(ln), "")):
+                    still_remaining.append(ln)
+                    continue
+                # 페이지 상/하단 여백(running header/footer 영역)에 걸친
+                # 줄은 폭이 좁아 width 가드를 쉽게 통과하고, 수식이 페이지
+                # 가장자리 가까이 있으면 gap도 작아 그대로 흡수되기 쉽다
+                # (페이지 하단 쪽수가 수식 바로 아래에 함께 캡처되는 문제가
+                # 실제 논문 PDF에서 재현됨).
+                if ln[1] < _EQ_PAGE_MARGIN_EXCLUDE or ln[3] > page_height - _EQ_PAGE_MARGIN_EXCLUDE:
                     still_remaining.append(ln)
                     continue
                 merged_x0 = min(rect[0], ln[0])
