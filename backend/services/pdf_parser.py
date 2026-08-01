@@ -960,13 +960,18 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
     번호가 매겨진 수식(예: "... = mc^2   (3)")을 찾아 오버레이 대상 bbox를 반환합니다.
 
     수식 번호 "(N)"는 텍스트로 존재하지만, 그 앞의 실제 수식 본문(분수/합/적분
-    기호 등)은 번호 자체보다 훨씬 크고 - 특히 세로로 - 수식 번호 한 글자 줄의
-    bbox만 그대로 쓰면 번호만 딱 잘려 보이는 문제가 있었다. 이를 보정하기 위해:
-    - 세로: 위/아래로 가장 가까운 다른 텍스트 줄까지의 중간 지점까지 확장해,
-      본문 문단과 수식 사이의 여백(display equation 특유의 공백)을 최대한 포함한다.
-    - 가로: 페이지에서 같은 쪽(2단 레이아웃이면 좌/우 중 같은 쪽)에 속한 주변
-      줄들의 최소 x0을 찾아, 수식 번호만이 아니라 수식 본문이 시작되는 좌측
-      여백까지 폭을 넓힌다.
+    기호 등)은 번호 자체보다 훨씬 클 수 있다 - 특히 세로로, 분자/분모처럼 같은
+    수식이 여러 줄(베이스라인)에 걸쳐 있으면 번호가 매겨진 줄의 bbox만 그대로
+    쓸 때 번호만 딱 잘려 보이는 문제가 있었다. 이를 보정하기 위해 위/아래로
+    가장 가까운 다른 텍스트 줄까지의 중간 지점까지 세로로만 확장해, 본문
+    문단과 수식 사이의 여백(display equation 특유의 공백)을 포함한다.
+
+    가로는 확장하지 않는다 - 번호가 매겨진 줄의 bbox(lx0~lx1)는 PyMuPDF가 같은
+    베이스라인의 글리프를 전부 하나의 line으로 묶어 반환하므로 수식 본문+번호
+    전체를 이미 정확히 감싼다. 예전엔 주변 문단 줄들 중 가장 왼쪽 x0을 찾아
+    좌측으로 더 넓히려 했지만, 수식이 컬럼 왼쪽 여백보다 안쪽에서 시작하는
+    흔한 경우(들여쓰기/중앙 정렬된 수식)에 그 문단 줄들의 여백까지 통째로
+    캡처되어 실제 수식보다 훨씬 넓은 영역이 잘리는 문제가 있었다.
     """
     page_width = page.rect.width
     blocks = page.get_text("dict")["blocks"]
@@ -1014,17 +1019,9 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
         else:
             y1 = ly1 + 40.0
 
-        # 세로로 40pt 이내에 있는 같은 쪽 줄들 중 가장 왼쪽 x0을 수식 본문의
-        # 좌측 여백으로 채택 (수식 번호 자신의 x0보다 훨씬 왼쪽일 가능성이 높음)
-        nearby_left_edges = [
-            ox0 for (ox0, oy0, ox1, oy1) in same_side_lines
-            if not (oy1 < ly0 - 40 or oy0 > ly1 + 40)
-        ]
-        x0 = min(nearby_left_edges) if nearby_left_edges else lx0
-
         equations.append({
             "label": f"Equation {number}",
-            "bbox": [x0, y0, lx1, y1],
+            "bbox": [lx0, y0, lx1, y1],
         })
     return equations
 
