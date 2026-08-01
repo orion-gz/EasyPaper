@@ -955,73 +955,227 @@ def _resolve_table_caption_direction(pages_data: "List[tuple[List[Dict[str, Any]
     return below_dist < above_dist
 
 
+# 수식 번호가 매겨진 텍스트 줄을 중심으로 같은 수식에 속할 만한 이웃 줄을
+# 흡수(absorb)할 때 쓰는 임계값. 두 종류의 실제 관찰된 오탐지를 겨냥한다:
+# 1) 같은 시각적 한 줄("u_n = ... (-2b ... + I_n)   (22)")이 PyMuPDF의 line
+#    재구성 과정에서 여러 line 객체로 쪼개져, 번호가 붙은 조각만 잡히고
+#    앞부분이 통째로 잘리는 경우 - 세로로 겹치는(같은 행) 줄은 폭 제한 없이
+#    전부 흡수한다(_EQ_ABSORB_MIN_VOVERLAP). 번호가 페이지 오른쪽 끝에
+#    붙고 수식 본문은 왼쪽/가운데에서 시작하는 한 칸(single-column) 논문의
+#    흔한 레이아웃에서는, 같은 한 줄의 조각들이 페이지 중앙을 넘나들며
+#    걸쳐 있을 수 있어 컬럼(좌/우 절반) 구분 없이 흡수해야 한다.
+# 2) 분수/피스와이즈(case) 처럼 수식이 여러 행에 걸쳐 있고, 번호가 그 중간에
+#    작게 떠 있어 번호 자신의 bbox만 쓰면 숫자 하나만 확대되어 잘리는 경우 -
+#    세로로 아주 가깝게 붙어 있으면서(_EQ_ABSORB_MAX_GAP) 가로로도 가깝고
+#    (_EQ_ABSORB_MAX_HGAP, 컬럼 구분이 없어진 대신 이걸로 아예 다른 단(2단
+#    레이아웃의 반대쪽 컬럼)의 무관한 텍스트를 붙잡지 않도록 막는다) 문단
+#    본문 줄만큼 넓지는 않은(_EQ_ABSORB_MAX_WIDTH_RATIO, 페이지에서 관찰된
+#    가장 넓은 줄 기준 상대값) 줄을 흡수한다. 세로 간격 임계값을 좁게 잡은
+#    이유는, 문단과 수식 사이의 display-equation 여백(LaTeX 기본값 기준
+#    보통 15~20pt 이상)보다는 확실히 좁고 같은 수식 내부 행간(분수
+#    분자/분모, 피스와이즈 행 등 - 보통 10~14pt로 압축되어 있음)은 포함할
+#    만큼만 잡아야, 문단 쪽으로는 절대 번지지 않으면서 같은 수식의 다른
+#    행은 붙잡을 수 있기 때문이다.
+#    다른 번호 매겨진 수식 줄 자신은 이 흡수 대상에서 항상 제외된다(아래
+#    candidate_bboxes 필터) - 안 그러면 (22)/(23)/(24)처럼 촘촘히 쌓인
+#    별개의 수식들이 서로 합쳐져 버린다.
+_EQ_ABSORB_MIN_VOVERLAP = 0.3
+_EQ_ABSORB_MAX_GAP = 12.0
+_EQ_ABSORB_MAX_HGAP = 60.0
+_EQ_ABSORB_MAX_WIDTH_RATIO = 0.55
+_EQ_ABSORB_MAX_ITERATIONS = 8
+# 컬럼 구분을 없앤 안전판: 흡수 결과가 페이지 폭의 이 비율을 넘어서면(=서로
+# 무관한 두 영역을 다리처럼 이어붙였을 가능성이 큼) 그 흡수는 하지 않는다.
+_EQ_ABSORB_MAX_TOTAL_WIDTH_RATIO = 0.95
+# 세로 안전판(절대값, pt). 2단계 흡수는 반복될수록 매번 새로 커진 rect를
+# 기준으로 다시 이웃을 찾기 때문에, 문단 줄들이 우연히 조건(폭 비율/간격)을
+# 계속 만족하면 도미노처럼 한 페이지 전체를 삼킬 수 있다(실제로 로마 숫자
+# 오탐지 "(MI)" 같은 의사 수식 번호에서 관찰됨). 진짜 여러 행짜리 수식은
+# 아무리 커도 이 값보다 훨씬 작으므로, 이 상한은 정상적인 수식은 절대 자르지
+# 않으면서 폭주만 막는다.
+_EQ_ABSORB_MAX_TOTAL_HEIGHT = 120.0
+
+
+def _vertical_overlap_ratio(a: list, b: list) -> float:
+    """_horizontal_overlap_ratio와 대칭인 세로 버전 - 더 좁은 쪽 높이를
+    기준으로 한 세로 겹침 비율(0~1)."""
+    inter = min(a[3], b[3]) - max(a[1], b[1])
+    if inter <= 0:
+        return 0.0
+    narrower_height = min(a[3] - a[1], b[3] - b[1])
+    return inter / narrower_height if narrower_height > 0 else 0.0
+
+
+def _horizontal_gap(a: list, b: list) -> float:
+    """_vertical_gap과 대칭인 가로 버전 - 두 사각형의 가로 간격을 반환한다.
+    겹치면 -1."""
+    if a[2] <= b[0]:
+        return b[0] - a[2]
+    if b[2] <= a[0]:
+        return a[0] - b[2]
+    return -1.0
+
+
 def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
     """
     번호가 매겨진 수식(예: "... = mc^2   (3)")을 찾아 오버레이 대상 bbox를 반환합니다.
 
-    수식 번호 "(N)"는 텍스트로 존재하지만, 그 앞의 실제 수식 본문(분수/합/적분
-    기호 등)은 번호 자체보다 훨씬 클 수 있다 - 특히 세로로, 분자/분모처럼 같은
-    수식이 여러 줄(베이스라인)에 걸쳐 있으면 번호가 매겨진 줄의 bbox만 그대로
-    쓸 때 번호만 딱 잘려 보이는 문제가 있었다. 이를 보정하기 위해 위/아래로
-    가장 가까운 다른 텍스트 줄까지의 중간 지점까지 세로로만 확장해, 본문
-    문단과 수식 사이의 여백(display equation 특유의 공백)을 포함한다.
-
-    가로는 확장하지 않는다 - 번호가 매겨진 줄의 bbox(lx0~lx1)는 PyMuPDF가 같은
-    베이스라인의 글리프를 전부 하나의 line으로 묶어 반환하므로 수식 본문+번호
-    전체를 이미 정확히 감싼다. 예전엔 주변 문단 줄들 중 가장 왼쪽 x0을 찾아
-    좌측으로 더 넓히려 했지만, 수식이 컬럼 왼쪽 여백보다 안쪽에서 시작하는
-    흔한 경우(들여쓰기/중앙 정렬된 수식)에 그 문단 줄들의 여백까지 통째로
-    캡처되어 실제 수식보다 훨씬 넓은 영역이 잘리는 문제가 있었다.
+    수식 번호가 붙은 텍스트 줄 하나의 bbox만 그대로 쓰면 두 가지 방식으로
+    틀어질 수 있다: (1) PyMuPDF가 같은 시각적 한 줄을 여러 line 객체로 쪼개
+    번호가 포함된 조각만 잡히거나(수식 앞부분이 잘림), (2) 분수/피스와이즈처럼
+    수식이 여러 행에 걸쳐 있는데 번호 자신의 작은 bbox만 잡혀 숫자만 확대되어
+    보인다. 두 경우 모두 "번호 붙은 줄과 같은 수식에 속할 만한 이웃 줄"을
+    찾아 흡수(absorb)하는 문제로 통일해서 푼다 - 그림/표 서브패널을 묶는
+    로직(_PANEL_ABSORB_*)과 같은 반복 흡수 패턴을 재사용한다.
     """
     page_width = page.rect.width
     blocks = page.get_text("dict")["blocks"]
 
     all_lines = []  # (x0, y0, x1, y1) - 페이지 내 모든 텍스트 줄
     candidates = []  # (line_bbox, number)
+    column_blocks = []  # _detect_two_column이 기대하는 (x0,y0,x1,y1,text) 블록 목록
     for b in blocks:
+        block_text_parts = []
         for ln in b.get("lines", []):
             bbox = ln.get("bbox")
             if not bbox:
                 continue
             all_lines.append(bbox)
             line_text = "".join(span.get("text", "") for span in ln.get("spans", [])).strip()
+            block_text_parts.append(line_text)
             if not line_text:
                 continue
             m = _EQUATION_LINE_RE.search(line_text)
             if m and m.group(1):
                 candidates.append((bbox, m.group(1)))
+        if "bbox" in b:
+            bx0, by0, bx1, by1 = b["bbox"]
+            column_blocks.append((bx0, by0, bx1, by1, "".join(block_text_parts)))
 
-    equations = []
-    for (lx0, ly0, lx1, ly1), number in candidates:
+    # 2단 레이아웃인 페이지에서만 좌/우 컬럼을 구분해 흡수를 제한한다(아래
+    # same_column 헬퍼). 1단 레이아웃 논문은 수식 본문이 왼쪽에서 시작해
+    # 오른쪽 끝 번호까지 페이지 중앙(page_width/2)을 자연스럽게 넘나들 수
+    # 있어 컬럼 구분 자체가 무의미하다 - Equation 22 케이스(원본 버그) 참고.
+    # 반대로 진짜 2단 논문에서는 좌/우 컬럼이 같은 줄 그리드를 공유해 같은
+    # y좌표에 서로 무관한 텍스트가 놓이는 일이 흔하므로, 컬럼 구분 없이
+    # 흡수하면 "(MI)"처럼 수식이 아닌 괄호 약어(로마 숫자 오탐지)가 양쪽
+    # 컬럼의 문단 텍스트를 통째로 삼켜버리는 문제가 있었다.
+    is_two_column = _detect_two_column(column_blocks, page_width)
+
+    def _same_column(a_center_x: float, ln: tuple) -> bool:
+        if not is_two_column:
+            return True
+        return ((ln[0] + ln[2]) / 2 < page_width / 2) == (a_center_x < page_width / 2)
+
+    # 다른 번호 매겨진 수식 줄 자신은 절대 흡수 대상이 되면 안 된다 - 안 그러면
+    # (22)/(23)/(24)처럼 촘촘히 쌓인 서로 다른 수식들이 gap 임계값 안에 들어와
+    # 하나로 합쳐져버린다. bbox 좌표값 자체로 동일 줄을 식별해 제외한다(같은
+    # get_text("dict") 호출 결과에서 그대로 가져온 값이라 부동소수점 오차
+    # 없이 정확히 일치한다).
+    candidate_bboxes = {bbox for bbox, _ in candidates}
+
+
+    # ── 1단계: 같은 행(row) 재구성 ──────────────────────────────────────
+    # PyMuPDF가 한 시각적 줄을 여러 line 객체로 쪼갠 경우를 먼저 확정적으로
+    # 묶는다. 이 단계를 먼저 끝내야, (22) 자신의 행에 속한 조각들
+    # ("u_n = ...", "-2b ...")이 2단계(아래)에서 (23)의 근접-흡수에 잘못
+    # 딸려가지 않는다 - 어느 수식의 "행"에 속하는지가 애매하지 않은
+    # 유일한 축(세로 겹침)을 먼저 소진시켜, 각 조각이 정확히 한 수식에만
+    # 배타적으로 귀속되게 한다.
+    row_groups: List[set] = []
+    row_rects: List[list] = []
+    for cbbox, _ in candidates:
+        lx0, ly0, lx1, ly1 = cbbox
         eq_center_x = (lx0 + lx1) / 2
-        on_left_half = eq_center_x < page_width / 2
+        rect = [lx0, ly0, lx1, ly1]
+        group = {cbbox}
+        for _ in range(_EQ_ABSORB_MAX_ITERATIONS):
+            absorbed_any = False
+            for ln in all_lines:
+                if ln in group or ln in candidate_bboxes:
+                    continue
+                if not _same_column(eq_center_x, ln):
+                    continue
+                if _vertical_overlap_ratio(rect, ln) >= _EQ_ABSORB_MIN_VOVERLAP:
+                    group.add(ln)
+                    rect[0] = min(rect[0], ln[0])
+                    rect[1] = min(rect[1], ln[1])
+                    rect[2] = max(rect[2], ln[2])
+                    rect[3] = max(rect[3], ln[3])
+                    absorbed_any = True
+            if not absorbed_any:
+                break
+        row_groups.append(group)
+        row_rects.append(rect)
 
-        # 같은 쪽(컬럼)에 속하면서 수식 자신의 줄은 아닌 다른 텍스트 줄들
-        same_side_lines = [
-            (ox0, oy0, ox1, oy1) for (ox0, oy0, ox1, oy1) in all_lines
-            if ((ox0 + ox1) / 2 < page_width / 2) == on_left_half
-            and not (abs(oy0 - ly0) < 0.5 and abs(oy1 - ly1) < 0.5)
+    # ── 2단계: 여러 행에 걸친 수식(분수/피스와이즈 등) 흡수 ───────────────
+    # 세로로 아주 가깝고 문단 줄만큼 넓지 않은 이웃 줄을 추가로 흡수하되,
+    # 다른 수식의 행(1단계에서 이미 확정된 row_groups)에 속한 줄은 절대
+    # 건드리지 않는다 - 안 그러면 촘촘히 쌓인 서로 다른 수식끼리 다리처럼
+    # 이어붙는 문제가 생긴다.
+    equations = []
+    for idx, (cbbox, number) in enumerate(candidates):
+        eq_center_x = (cbbox[0] + cbbox[2]) / 2
+        own_group = row_groups[idx]
+        other_groups_union = set().union(*(g for i, g in enumerate(row_groups) if i != idx)) if len(row_groups) > 1 else set()
+        rect = list(row_rects[idx])
+        remaining = [
+            list(ln) for ln in all_lines
+            if ln not in own_group and ln not in other_groups_union and ln not in candidate_bboxes
+            and _same_column(eq_center_x, ln)
         ]
+        # 문단 본문 줄의 전형적인 폭 추정치 - 반드시 이 수식과 같은 컬럼(2단
+        # 레이아웃이면 좌/우 중 한쪽, 1단이면 페이지 전체)에서 관찰된 줄들
+        # 중 가장 넓은 것을 기준으로 삼아야 한다. 페이지 전체에서 가장 넓은
+        # 줄(예: 제목처럼 두 컬럼을 가로지르는 wide 블록)을 기준으로 삼으면
+        # 임계값이 너무 커져, 같은 문단의 온전한 줄까지 "수식만큼 좁다"고
+        # 잘못 판단해 흡수해버린다(실제 관찰된 회귀).
+        column_widths = [ln[2] - ln[0] for ln in remaining]
+        column_width_estimate = max(column_widths) if column_widths else page_width
 
-        above = [ln for ln in same_side_lines if ln[3] <= ly0 + 1]
-        below = [ln for ln in same_side_lines if ln[1] >= ly1 - 1]
-        nearest_above_bottom = max((ln[3] for ln in above), default=None)
-        nearest_below_top = min((ln[1] for ln in below), default=None)
+        for _ in range(_EQ_ABSORB_MAX_ITERATIONS):
+            if not remaining:
+                break
+            absorbed_any = False
+            still_remaining = []
+            for ln in remaining:
+                merged_x0 = min(rect[0], ln[0])
+                merged_x1 = max(rect[2], ln[2])
+                merged_y0 = min(rect[1], ln[1])
+                merged_y1 = max(rect[3], ln[3])
+                if (
+                    merged_x1 - merged_x0 > page_width * _EQ_ABSORB_MAX_TOTAL_WIDTH_RATIO
+                    or merged_y1 - merged_y0 > _EQ_ABSORB_MAX_TOTAL_HEIGHT
+                ):
+                    still_remaining.append(ln)
+                    continue
 
-        # 위/아래 인접 줄까지의 중간 지점으로 확장 (너무 멀면 - 즉 그 사이에 다른
-        # 여백/그림이 있을 수 있으므로 - 최대 40pt까지만 확장)
-        if nearest_above_bottom is not None and ly0 - nearest_above_bottom < 80:
-            y0 = (nearest_above_bottom + ly0) / 2
-        else:
-            y0 = max(0.0, ly0 - 40.0)
-        if nearest_below_top is not None and nearest_below_top - ly1 < 80:
-            y1 = (ly1 + nearest_below_top) / 2
-        else:
-            y1 = ly1 + 40.0
+                v_gap = _vertical_gap(rect, ln)
+                h_gap = _horizontal_gap(rect, ln)
+                width = ln[2] - ln[0]
+                # v_gap < 0은 이미 겹친다는 뜻(1단계 겹침 비율 임계값에는 못
+                # 미쳤지만 어느 정도 겹치는 경우 포함) - "붙어 있다"는 점에서
+                # 작은 양(+) 간격보다 오히려 더 가까우므로 그대로 통과시킨다.
+                same_construct = (
+                    v_gap <= _EQ_ABSORB_MAX_GAP
+                    and h_gap <= _EQ_ABSORB_MAX_HGAP
+                    and width <= column_width_estimate * _EQ_ABSORB_MAX_WIDTH_RATIO
+                )
+                if same_construct:
+                    rect[0] = merged_x0
+                    rect[1] = merged_y0
+                    rect[2] = merged_x1
+                    rect[3] = merged_y1
+                    absorbed_any = True
+                else:
+                    still_remaining.append(ln)
+            remaining = still_remaining
+            if not absorbed_any:
+                break
 
         equations.append({
             "label": f"Equation {number}",
-            "bbox": [lx0, y0, lx1, y1],
+            "bbox": rect,
         })
     return equations
 
