@@ -4435,21 +4435,27 @@ async function renderLibraryTimelineView() {
   }
 }
 
-// 히트맵 막대 하나. 크기(활동량)는 막대 "길이"로만 인코딩하고(색으로는
-// 인코딩하지 않음 - 단일 시리즈라 앱의 기존 accent 색 하나로 충분), 정확한
-// 수치는 옆 텍스트 라벨과 title(hover 시 네이티브 툴팁)로 함께 노출한다.
-function renderHeatmapBar(item, maxScore) {
-  const pct = maxScore > 0 ? Math.max(4, Math.round((item.score / maxScore) * 100)) : 0
+// 히트맵 타일 하나. 크기(활동량)는 정사각형 타일의 "색 진하기"로 인코딩한다
+// (accent 색 1종의 sequential 램프 - color-mix가 --accent-mid를 기준으로
+// 계산하므로 사용자가 고른 테마 색과 라이트/다크 모드에 자동으로 맞춰진다).
+// 정확한 수치는 title(hover 시 네이티브 툴팁)로 노출한다.
+function renderHeatCell(item, maxScore) {
+  const pct = maxScore > 0 ? Math.max(6, Math.round((item.score / maxScore) * 100)) : 6
   const kindLabel = item.kind ? escapeHtml(item.kind) : ''
   return `
-    <div style="margin-bottom:10px" title="${escapeHtml(item.name)} · 논문 ${item.paper_count}편 · 질문 ${item.question_count}개">
-      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
-        <span style="color:var(--text-primary)">${escapeHtml(item.name)}${kindLabel ? ` <span style="color:var(--text-tertiary)">(${kindLabel})</span>` : ''}</span>
-        <span style="color:var(--text-tertiary)">논문 ${item.paper_count} · 질문 ${item.question_count}</span>
-      </div>
-      <div style="height:10px;border-radius:5px;background:var(--border-strong);overflow:hidden">
-        <div style="height:100%;width:${pct}%;border-radius:5px;background:var(--accent-mid)"></div>
-      </div>
+    <div class="kg-heat-cell" style="--heat-pct:${pct}%" title="${escapeHtml(item.name)}${kindLabel ? ` (${kindLabel})` : ''} · 논문 ${item.paper_count}편 · 질문 ${item.question_count}개">
+      <div class="kg-heat-swatch"></div>
+      <div class="kg-heat-label">${escapeHtml(item.name)}</div>
+    </div>
+  `
+}
+
+function renderHeatmapLegend() {
+  return `
+    <div class="kg-heatmap-legend">
+      <span>적음</span>
+      <span class="kg-heatmap-legend-bar"></span>
+      <span>많음</span>
     </div>
   `
 }
@@ -4465,7 +4471,10 @@ async function renderLibraryHeatmapView() {
       return
     }
     const maxScore = Math.max(...heatmap.map(h => h.score))
-    libraryHeatmapList.innerHTML = heatmap.map(item => renderHeatmapBar(item, maxScore)).join('')
+    libraryHeatmapList.innerHTML = `
+      ${renderHeatmapLegend()}
+      <div class="kg-heatmap-grid">${heatmap.map(item => renderHeatCell(item, maxScore)).join('')}</div>
+    `
   } catch (err) {
     console.error('개념 히트맵 로드 실패:', err)
     libraryHeatmapList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">히트맵을 불러오지 못했습니다</p></div>'
@@ -4526,7 +4535,8 @@ async function renderLibraryDashboardView() {
       ${renderDashboardGaps(data.gaps)}
       <div style="margin-bottom:16px">
         <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-primary)">자주 다룬 개념</h4>
-        ${data.heatmap.map(item => renderHeatmapBar(item, maxScore)).join('')}
+        ${renderHeatmapLegend()}
+        <div class="kg-heatmap-grid">${data.heatmap.map(item => renderHeatCell(item, maxScore)).join('')}</div>
       </div>
       ${renderDashboardRecentSection('최근 질문', data.recent_questions, e => `
         <li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(e.summary || '')} <span style="color:var(--text-tertiary)">— ${escapeHtml(e.doc_title || '')}</span></li>
