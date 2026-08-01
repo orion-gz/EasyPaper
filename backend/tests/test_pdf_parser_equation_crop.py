@@ -24,6 +24,9 @@ _find_page_equations()의 진화 과정에서 실제로 관찰된 네 가지 오
 9. 수식 직전/직후의 짧은 도입·설명 문장이 폭이 좁아 기존 폭 비율
    가드를 통과해 gap 조건만으로 거의 항상 흡수되는 문제(위와 같은
    조사로 재발견).
+10. 수식이 페이지 하단 가까이 있으면, 그 아래 페이지 쪽수(running
+    footer)가 좁고 gap도 작아 2단계 흡수 조건을 통과해 함께 캡처되는
+    문제(실사용 스크린샷으로 재발견).
 """
 
 import fitz
@@ -261,6 +264,39 @@ def test_equation_does_not_absorb_short_lead_in_sentence(tmp_path):
     # 안 된다 - 수식 자신의 시작 위치(x=90, y=208) 근처에 머물러야 한다.
     assert x0 > 70, f"도입 문장의 좌측 여백까지 확장됨: {entries[0]}"
     assert y0 > 195, f"도입 문장 줄까지 흡수됨: {entries[0]}"
+
+
+def test_equation_does_not_absorb_page_footer_number(tmp_path):
+    """수식이 페이지 하단 여백(running footer 영역) 가까이 있으면, 그
+    아래 고립된 페이지 쪽수가 폭이 좁고 gap도 작아 2단계 흡수 조건을
+    통과해 함께 캡처되는 문제가 실사용 스크린샷(원 논문의 Equation 3,
+    Equation 7)에서 재현되었다. 페이지 상/하단 65pt 이내 = 헤더/푸터
+    영역이라는 기존 관례(표 구분선 탐지에 이미 쓰임)를 재사용해 막는다."""
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    # 정상적인 컬럼 폭 추정치를 위한 참조 문단 줄 (수식과는 멀리 떨어짐) -
+    # 없으면 페이지에 남는 줄이 쪽수 하나뿐이라 폭 비율 추정치가 그
+    # 쪽수 자신의 폭으로 수렴해버려(자기 참조), 흡수 여부와 무관하게
+    # 항상 배제되는 것처럼 보이는 착시가 생긴다.
+    page.insert_text((49, 100), "This is body paragraph line filling most of the column width here now please.", fontsize=10)
+    # 수식을 페이지 하단 65pt 여백(842-65=777) 안쪽에 배치해 실제 사례와
+    # 같은 조건(수식과 쪽수 사이 간격이 좁음)을 재현한다.
+    page.insert_text((220, 800), "f(x) = a x + b", fontsize=11)
+    page.insert_text((450, 800), "(1)", fontsize=11)
+    page.insert_text((295, 818), "5", fontsize=10)
+    path = tmp_path / "page_footer.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    result = extract_pdf_images(str(path))
+    entries = [r for r in result if r.get("label") == "Equation 1"]
+    assert len(entries) == 1
+    x0, _, _, y1 = _pt(entries[0])
+    # 수식 본문("f(x) = a x + b", x=220 부근)은 여전히 온전히 포함돼야
+    # 하고(페이지 여백 배제가 같은 행 재구성까지 막으면 안 됨), 쪽수
+    # 줄(y=807~821)까지 아래로 번지면 안 된다.
+    assert x0 < 230, f"수식 본문 조각이 잘못 배제됨: {entries[0]}"
+    assert y1 < 815, f"페이지 쪽수가 함께 캡처됨: {entries[0]}"
 
 
 def test_wide_caption_line_does_not_inflate_paragraph_width_estimate(tmp_path):
