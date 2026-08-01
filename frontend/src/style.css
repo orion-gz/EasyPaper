@@ -3575,6 +3575,61 @@ body.light-theme .provider-picker-panel {
   line-height: 1.5;
 }
 
+/* ── 지식 그래프 · 개념 히트맵 (grid형) ── 개념마다 정사각형 타일을 두고
+   활동량을 "색 진하기"로만 인코딩한다(단일 시리즈라 sequential 램프 하나로
+   충분). 램프는 accent 색 기준 color-mix라 사용자가 고른 테마 색과
+   라이트/다크 모드에 자동으로 맞춰진다. */
+.kg-heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.kg-heatmap-legend-bar {
+  width: 88px;
+  height: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent-mid) 6%, var(--bg-elevated)),
+    var(--accent-mid));
+}
+
+.kg-heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 12px;
+}
+
+.kg-heat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kg-heat-swatch {
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--accent-mid) var(--heat-pct, 6%), var(--bg-elevated));
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.kg-heat-cell:hover .kg-heat-swatch {
+  transform: scale(1.05);
+  box-shadow: var(--shadow-sm);
+}
+
+.kg-heat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
 /* ── Google Drive Style Upload Popup ── */
 .upload-popup {
   position: fixed;
