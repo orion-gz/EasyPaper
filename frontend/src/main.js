@@ -4399,7 +4399,7 @@ function renderTimelineDayGroup(date, events) {
       </div>
       <div class="kg-timeline-track">
         ${events.map(e => `
-          <div class="kg-timeline-entry">
+          <div class="kg-timeline-entry" data-doc-id="${escapeHtml(e.doc_id || '')}" title="클릭하면 이 논문의 대화 세션으로 이동합니다">
             <div class="kg-timeline-dot">${icon(TIMELINE_TYPE_ICON[e.type] || 'clock', 13)}</div>
             <div class="kg-timeline-card">
               <div class="kg-timeline-card-top">
@@ -4433,6 +4433,26 @@ async function renderLibraryTimelineView() {
     console.error('타임라인 로드 실패:', err)
     libraryTimelineList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">타임라인을 불러오지 못했습니다</p></div>'
   }
+}
+
+// 타임라인 카드 클릭 시 해당 논문을 열고 대화 세션(채팅 사이드바)으로 바로
+// 이동한다. 카드가 renderLibraryTimelineView에서 매번 innerHTML로 새로
+// 그려지므로, 채팅 세션 목록(renderAssistantChatSessions)처럼 항목마다
+// 리스너를 다는 대신 컨테이너에 한 번만 위임 리스너를 건다.
+if (libraryTimelineList) {
+  libraryTimelineList.addEventListener('click', async (event) => {
+    const entry = event.target.closest('.kg-timeline-entry')
+    const docId = entry?.dataset.docId
+    if (!docId) return
+    try {
+      const doc = await fetchLibraryDoc(docId)
+      await openFromLibrary(doc)
+      openChatSidebar()
+    } catch (err) {
+      console.error('타임라인에서 논문 열기 실패:', err)
+      showToast('논문을 불러오지 못했습니다.', 'error')
+    }
+  })
 }
 
 // 히트맵 막대 하나. 크기(활동량)는 막대 "길이"로만 인코딩하고(색으로는
