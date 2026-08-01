@@ -406,7 +406,9 @@ async def get_library_figure_image(doc_id: str, index: int, current_user: str = 
         raise HTTPException(status_code=404, detail="Figure 정보를 찾을 수 없습니다.")
 
     img = images[index]
-    png_bytes = render_image_crop_bytes(pdf_path, img["page"], img)
+    # min_output_width: 상세 패널이 이미지를 패널 폭에 맞춰 확대 표시하므로,
+    # 수식처럼 원본 영역이 작은 크롭도 최소 해상도를 보장해 흐려 보이지 않게 한다.
+    png_bytes = render_image_crop_bytes(pdf_path, img["page"], img, min_output_width=900)
     if png_bytes is None:
         raise HTTPException(status_code=404, detail="Figure 이미지를 생성할 수 없습니다.")
     return Response(content=png_bytes, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})

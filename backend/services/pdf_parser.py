@@ -642,13 +642,34 @@ def render_image_crop(pdf_path: str, page_num: int, bbox_percent: Dict[str, floa
         doc.close()
 
 
-def render_image_crop_bytes(pdf_path: str, page_num: int, bbox_percent: Dict[str, float], zoom: float = 2.0) -> Optional[bytes]:
+def render_image_crop_bytes(
+    pdf_path: str,
+    page_num: int,
+    bbox_percent: Dict[str, float],
+    zoom: float = 2.0,
+    min_output_width: Optional[int] = None,
+    max_zoom: float = 6.0,
+) -> Optional[bytes]:
     """render_image_crop과 동일한 크롭 결과를 디스크에 저장하지 않고 PNG 바이트로
     반환합니다. 지식 그래프의 Figure/Table 노드 상세보기처럼, 캐시 파일 없이
-    요청 시점에 바로 이미지를 서빙하면 되는 경우에 사용합니다."""
+    요청 시점에 바로 이미지를 서빙하면 되는 경우에 사용합니다.
+
+    min_output_width가 주어지면, 번호 매겨진 수식처럼 원본 영역이 아주 작은
+    경우에도 최소 출력 픽셀 폭을 보장하도록 zoom을 자동으로 키운다(상한은
+    max_zoom). 상세 패널에서 이미지를 패널 폭(width:100%)에 맞춰 확대
+    표시하는데 원본 해상도가 낮으면 작은 영역일수록 더 심하게 흐려 보이기
+    때문 - 큰 그림/표는 애초에 zoom=2.0로도 충분히 선명해 영향이 없다.
+    """
     doc = fitz.open(pdf_path)
     try:
-        pix = _crop_page_pixmap(doc, page_num, bbox_percent, zoom)
+        if page_num < 1 or page_num > doc.page_count:
+            return None
+        effective_zoom = zoom
+        if min_output_width:
+            crop_width_pt = doc[page_num - 1].rect.width * (bbox_percent["width"] / 100)
+            if crop_width_pt > 0:
+                effective_zoom = max(zoom, min(max_zoom, min_output_width / crop_width_pt))
+        pix = _crop_page_pixmap(doc, page_num, bbox_percent, effective_zoom)
         if pix is None:
             return None
         return pix.tobytes("png")

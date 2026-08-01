@@ -161,9 +161,10 @@
             <div id="library-recommendations-list" style="margin-top:10px"></div>
           </div>
           <input id="library-graph-search-input" type="text" placeholder="논문/개념/메모/질문 검색" style="width: 100%; margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--bg-elevated); color: var(--text-primary); font-size: 13px;" />
-          <div style="display: flex; gap: 16px; align-items: stretch;">
+          <div id="library-graph-row" style="display: flex; align-items: stretch;">
             <div id="library-graph-canvas" style="flex: 1 1 auto; min-width: 0; height: 600px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px;"></div>
-            <div id="library-graph-detail-panel" style="flex: 0 0 260px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; padding: 16px; font-size: 13px; color: var(--text-secondary);">
+            <div id="library-graph-resizer" class="chat-resizer" style="border-radius: 3px;"></div>
+            <div id="library-graph-detail-panel" style="flex: 0 0 auto; width: 260px; max-width: 70%; overflow-y: auto; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; padding: 16px; font-size: 13px; color: var(--text-secondary);">
               <p>노드를 클릭하면 상세 정보가 여기에 표시됩니다.</p>
             </div>
           </div>

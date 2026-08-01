@@ -230,7 +230,9 @@ const annotationSubtabHighlight = $('annotation-subtab-highlight')
 const annotationSubtabUnderline = $('annotation-subtab-underline')
 const annotationList            = $('annotation-list')
 const libraryGraphSection       = $('library-graph-section')
+const libraryGraphRow           = $('library-graph-row')
 const libraryGraphCanvas        = $('library-graph-canvas')
+const libraryGraphResizer       = $('library-graph-resizer')
 const libraryGraphDetailPanel   = $('library-graph-detail-panel')
 const libraryGraphPendingBanner = $('library-graph-pending-banner')
 const libraryGraphSearchInput   = $('library-graph-search-input')
@@ -4613,14 +4615,17 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
       <p style="margin:0">${escapeHtml(nodeData.label || '')}</p>
     `
   } else if (nodeData.type === 'figure') {
+    // 캡션은 backend(_spans_to_bold_markdown)가 **볼드**만 마크다운으로 감싸
+    // 넘겨준다 - Figure/Table 오버레이 툴팁(renderBoldText 최초 도입 지점)과
+    // 동일한 방식으로 렌더링해야 캡션 안의 볼드 서식이 살아난다.
     const captionHtml = nodeData.caption
-      ? `<p style="margin:0 0 10px;color:var(--text-secondary);font-size:12px">${escapeHtml(nodeData.caption)}</p>`
+      ? `<p style="margin:0 0 10px;color:var(--text-secondary);font-size:12px">${renderBoldText(nodeData.caption)}</p>`
       : ''
     const hasCrop = nodeData.doc_id != null && nodeData.index != null
     libraryGraphDetailPanel.innerHTML = `
       <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
       <p style="margin:0 0 10px"><strong>유형:</strong> Figure/Table</p>
-      ${hasCrop ? `<img id="kg-figure-img" class="primer-figure-img" style="margin-bottom:10px" alt="${escapeHtml(nodeData.label || '')}">` : ''}
+      ${hasCrop ? `<img id="kg-figure-img" class="primer-figure-img" style="margin-bottom:10px;width:100%;cursor:pointer" alt="${escapeHtml(nodeData.label || '')}" title="클릭하면 논문의 해당 페이지로 이동합니다">` : ''}
       ${captionHtml}
     `
     const figureImg = $('kg-figure-img')
@@ -4632,6 +4637,13 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
         }))
       })
       figureImg.src = `/api/library/${encodeURIComponent(nodeData.doc_id)}/figure-image/${encodeURIComponent(nodeData.index)}`
+      // 이미지(그림/표/수식 캡처 전부 포함)를 클릭하면 실제 논문의 해당 페이지로
+      // 이동한다 - annotation 목록 항목 클릭과 동일한 경로(openAnnotationTarget).
+      if (nodeData.page != null) {
+        figureImg.addEventListener('click', () => {
+          openAnnotationTarget({ id: nodeData.doc_id }, nodeData.page)
+        })
+      }
     }
   } else {
     libraryGraphDetailPanel.innerHTML = '<p>알 수 없는 노드입니다.</p>'
@@ -9982,6 +9994,48 @@ function initChatListeners() {
       document.body.style.userSelect = ''
       if (chatSidebar.style.width) {
         localStorage.setItem('easypaper_chat_sidebar_width', parseInt(chatSidebar.style.width))
+      }
+    })
+  }
+
+  // 지식 그래프 상세 패널 리사이저 - 채팅 사이드바 리사이저와 동일한 드래그
+  // 패턴이되, 패널이 창 오른쪽 끝이 아니라 그래프 영역(libraryGraphRow) 안에
+  // 있으므로 window.innerWidth가 아니라 그 행(row)의 오른쪽 끝을 기준으로
+  // 폭을 계산한다.
+  const savedGraphPanelWidth = localStorage.getItem('easypaper_graph_detail_panel_width')
+  if (savedGraphPanelWidth && libraryGraphDetailPanel) {
+    libraryGraphDetailPanel.style.width = `${savedGraphPanelWidth}px`
+  }
+
+  let isDraggingGraphPanel = false
+  if (libraryGraphResizer && libraryGraphDetailPanel && libraryGraphRow) {
+    libraryGraphResizer.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      isDraggingGraphPanel = true
+      libraryGraphResizer.classList.add('dragging')
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+    })
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDraggingGraphPanel) return
+      const rowRect = libraryGraphRow.getBoundingClientRect()
+      const newWidth = rowRect.right - e.clientX
+      const minWidth = 220
+      const maxWidth = Math.min(720, rowRect.width * 0.7)
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        libraryGraphDetailPanel.style.width = `${newWidth}px`
+      }
+    })
+
+    document.addEventListener('mouseup', () => {
+      if (!isDraggingGraphPanel) return
+      isDraggingGraphPanel = false
+      libraryGraphResizer.classList.remove('dragging')
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      if (libraryGraphDetailPanel.style.width) {
+        localStorage.setItem('easypaper_graph_detail_panel_width', parseInt(libraryGraphDetailPanel.style.width, 10))
       }
     })
   }

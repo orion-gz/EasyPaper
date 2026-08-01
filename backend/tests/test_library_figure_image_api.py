@@ -30,7 +30,7 @@ def test_get_figure_image_returns_png(test_client, isolated_dirs, tmp_path):
     assert res.status_code == 200
     assert res.headers["content-type"] == "image/png"
     assert res.content == fake_png
-    mock_render.assert_called_once_with(str(pdf_path), 1, cached_images[0])
+    mock_render.assert_called_once_with(str(pdf_path), 1, cached_images[0], min_output_width=900)
 
 
 def test_get_figure_image_out_of_range_index_returns_404(test_client, isolated_dirs, tmp_path):
