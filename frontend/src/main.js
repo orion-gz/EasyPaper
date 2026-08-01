@@ -4357,6 +4357,7 @@ for (const [view, cfg] of Object.entries(GRAPH_SUBVIEWS)) {
 }
 
 const TIMELINE_TYPE_LABEL = { uploaded: '업로드', read: '읽음', question: '질문', note: '메모' }
+const TIMELINE_TYPE_ICON  = { uploaded: 'archive', read: 'bookOpen', question: 'messageCircle', note: 'edit3' }
 
 function groupTimelineEventsByDate(events) {
   const groups = {}
@@ -4366,6 +4367,53 @@ function groupTimelineEventsByDate(events) {
     groups[date].push(e)
   }
   return groups
+}
+
+// 날짜 그룹 헤더에 쓸 라벨. "오늘/어제"는 상대적으로, 그 밖에는 "8월 1일" +
+// 요일로 표기해 리스트를 죽 훑을 때 날짜 감각을 유지하기 쉽게 한다.
+function formatTimelineDayLabel(dateKey) {
+  const day = new Date(`${dateKey}T00:00:00`)
+  if (isNaN(day.getTime())) return { primary: dateKey, secondary: '' }
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diffDays = Math.round((today - day) / 86400000)
+  const primary = diffDays === 0 ? '오늘' : diffDays === 1 ? '어제' : day.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+  return { primary, secondary: day.toLocaleDateString('ko-KR', { weekday: 'long' }) }
+}
+
+function formatTimelineTime(timestamp) {
+  const d = new Date(timestamp)
+  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+}
+
+// 하루 안의 이벤트들을 세로선으로 잇는 카드 타임라인. 이벤트 종류는 색이
+// 아니라 아이콘+라벨로만 구분한다 - 문서 카드(.doc-card-tag)와 동일하게
+// "카테고리마다 색을 바꾸지 않고 브랜드 색 하나만 쓴다"는 원칙을 따른다.
+function renderTimelineDayGroup(date, events) {
+  const { primary, secondary } = formatTimelineDayLabel(date)
+  return `
+    <div class="kg-timeline-day">
+      <div class="kg-timeline-day-header">
+        <span class="kg-timeline-day-date">${escapeHtml(primary)}</span>
+        ${secondary ? `<span class="kg-timeline-day-weekday">${escapeHtml(secondary)}</span>` : ''}
+      </div>
+      <div class="kg-timeline-track">
+        ${events.map(e => `
+          <div class="kg-timeline-entry">
+            <div class="kg-timeline-dot">${icon(TIMELINE_TYPE_ICON[e.type] || 'clock', 13)}</div>
+            <div class="kg-timeline-card">
+              <div class="kg-timeline-card-top">
+                <span class="kg-timeline-type">${escapeHtml(TIMELINE_TYPE_LABEL[e.type] || e.type)}</span>
+                <span class="kg-timeline-time">${escapeHtml(formatTimelineTime(e.timestamp))}</span>
+              </div>
+              <div class="kg-timeline-card-title">${escapeHtml(e.doc_title || '')}</div>
+              ${e.summary ? `<p class="kg-timeline-card-summary">${escapeHtml(e.summary)}</p>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `
 }
 
 async function renderLibraryTimelineView() {
@@ -4380,20 +4428,7 @@ async function renderLibraryTimelineView() {
     }
     const groups = groupTimelineEventsByDate(events)
     const dates = Object.keys(groups).sort((a, b) => b.localeCompare(a))
-    libraryTimelineList.innerHTML = dates.map(date => `
-      <div style="margin-bottom:16px">
-        <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-secondary)">${escapeHtml(date)}</h4>
-        <ul style="margin:0;padding-left:16px">
-          ${groups[date].map(e => `
-            <li style="margin-bottom:8px">
-              <span style="color:var(--text-tertiary);font-size:11px">[${escapeHtml(TIMELINE_TYPE_LABEL[e.type] || e.type)}]</span>
-              <strong>${escapeHtml(e.doc_title || '')}</strong>
-              ${e.summary ? `<div style="color:var(--text-secondary);font-size:12px">${escapeHtml(e.summary)}</div>` : ''}
-            </li>
-          `).join('')}
-        </ul>
-      </div>
-    `).join('')
+    libraryTimelineList.innerHTML = `<div class="kg-timeline">${dates.map(date => renderTimelineDayGroup(date, groups[date])).join('')}</div>`
   } catch (err) {
     console.error('타임라인 로드 실패:', err)
     libraryTimelineList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">타임라인을 불러오지 못했습니다</p></div>'
