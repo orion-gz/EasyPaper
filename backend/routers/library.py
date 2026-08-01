@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from services.auth import get_current_user
 from services.library import (
     list_documents, search_documents, get_document, permanently_delete_document,
@@ -385,6 +385,31 @@ async def get_library_document_images(doc_id: str, current_user: str = Depends(g
         return {"images": images}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"이미지 좌표 추출 실패: {str(e)}")
+
+
+@router.get("/library/{doc_id}/figure-image/{index}")
+async def get_library_figure_image(doc_id: str, index: int, current_user: str = Depends(get_current_user)):
+    """지식 그래프의 Figure/Table 노드 상세보기에서 실제 그림/표 영역을 PNG로
+    크롭해 서빙합니다. 좌표는 클라이언트가 아니라 서버에 캐시된 좌표
+    (get_cached_images)에서만 가져와, 신뢰할 수 없는 클라이언트 입력으로
+    임의 좌표를 렌더링하지 않습니다."""
+    from services.cache import get_cached_images
+    from services.pdf_parser import render_image_crop_bytes
+
+    _require_owned_document(doc_id, current_user)
+    pdf_path = get_pdf_path(doc_id)
+    if not pdf_path:
+        raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
+
+    images = get_cached_images(doc_id, pdf_path)
+    if images is None or index < 0 or index >= len(images):
+        raise HTTPException(status_code=404, detail="Figure 정보를 찾을 수 없습니다.")
+
+    img = images[index]
+    png_bytes = render_image_crop_bytes(pdf_path, img["page"], img)
+    if png_bytes is None:
+        raise HTTPException(status_code=404, detail="Figure 이미지를 생성할 수 없습니다.")
+    return Response(content=png_bytes, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/library/{doc_id}/references")

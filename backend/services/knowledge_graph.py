@@ -251,6 +251,9 @@ def _queue_figure_nodes(doc_ids: List[str], nodes: list, edges: list) -> None:
                 "type": "figure",
                 "label": img["label"],
                 "doc_id": doc_id,
+                "index": idx,
+                "page": img.get("page"),
+                "caption": img.get("caption"),
             })
             edges.append({
                 "source": figure_id,

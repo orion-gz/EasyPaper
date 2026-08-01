@@ -4564,7 +4564,22 @@ function renderRelatedQuestionsList(questions) {
   `
 }
 
-function showGraphDetailPanel(nodeData) {
+// 개념의 "관련 논문"/"유사 개념"처럼, 상세 패널에서 보여줄 1촌 이웃 노드
+// 목록을 렌더링한다. neighborNodes는 knowledgeGraph.js의 tap 핸들러가
+// closedNeighborhood()로 이미 계산해 넘겨준 것이라 별도 API 조회가 필요 없다.
+function renderRelatedNodesList(neighborNodes, type, emptyText) {
+  const matches = (neighborNodes || []).filter(n => n.type === type)
+  if (matches.length === 0) {
+    return `<p style="margin:6px 0 0;color:var(--text-tertiary)">${escapeHtml(emptyText)}</p>`
+  }
+  return `
+    <ul style="margin:6px 0 0;padding-left:16px">
+      ${matches.map(n => `<li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(n.label || '')}</li>`).join('')}
+    </ul>
+  `
+}
+
+function showGraphDetailPanel(nodeData, neighborNodes = []) {
   if (!libraryGraphDetailPanel) return
   if (nodeData.type === 'paper') {
     const categories = (nodeData.categories && nodeData.categories.length) ? nodeData.categories.join(', ') : '없음'
@@ -4580,8 +4595,16 @@ function showGraphDetailPanel(nodeData) {
     libraryGraphDetailPanel.innerHTML = `
       <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
       <p style="margin:0 0 6px"><strong>유형:</strong> 개념</p>
-      <p style="margin:0"><strong>분류:</strong> ${escapeHtml(nodeData.kind || '미상')}</p>
-      <button id="kg-related-questions-btn" style="margin-top:10px;padding:6px 10px;border-radius:6px;border:1px solid var(--border-strong);background:var(--bg-elevated);color:var(--text-primary);font-size:12px;cursor:pointer">관련 질문 ${questionCount}개 보기</button>
+      <p style="margin:0 0 10px"><strong>분류:</strong> ${escapeHtml(nodeData.kind || '미상')}</p>
+      <div style="margin-bottom:10px">
+        <h5 style="margin:0 0 4px;font-size:12px;color:var(--text-primary)">이 개념을 다루는 논문</h5>
+        ${renderRelatedNodesList(neighborNodes, 'paper', '연결된 논문이 없습니다.')}
+      </div>
+      <div style="margin-bottom:10px">
+        <h5 style="margin:0 0 4px;font-size:12px;color:var(--text-primary)">유사 개념</h5>
+        ${renderRelatedNodesList(neighborNodes, 'concept', '유사한 개념이 없습니다.')}
+      </div>
+      <button id="kg-related-questions-btn" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border-strong);background:var(--bg-elevated);color:var(--text-primary);font-size:12px;cursor:pointer">관련 질문 ${questionCount}개 보기</button>
       <div id="kg-related-questions-list"></div>
     `
   } else if (nodeData.type === 'note') {
@@ -4590,10 +4613,26 @@ function showGraphDetailPanel(nodeData) {
       <p style="margin:0">${escapeHtml(nodeData.label || '')}</p>
     `
   } else if (nodeData.type === 'figure') {
+    const captionHtml = nodeData.caption
+      ? `<p style="margin:0 0 10px;color:var(--text-secondary);font-size:12px">${escapeHtml(nodeData.caption)}</p>`
+      : ''
+    const hasCrop = nodeData.doc_id != null && nodeData.index != null
     libraryGraphDetailPanel.innerHTML = `
       <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
-      <p style="margin:0"><strong>유형:</strong> Figure/Table</p>
+      <p style="margin:0 0 10px"><strong>유형:</strong> Figure/Table</p>
+      ${hasCrop ? `<img id="kg-figure-img" class="primer-figure-img" style="margin-bottom:10px" alt="${escapeHtml(nodeData.label || '')}">` : ''}
+      ${captionHtml}
     `
+    const figureImg = $('kg-figure-img')
+    if (figureImg) {
+      figureImg.addEventListener('error', () => {
+        figureImg.replaceWith(Object.assign(document.createElement('p'), {
+          textContent: '이미지를 불러올 수 없습니다.',
+          style: 'margin:0 0 10px;color:var(--text-tertiary);font-size:12px',
+        }))
+      })
+      figureImg.src = `/api/library/${encodeURIComponent(nodeData.doc_id)}/figure-image/${encodeURIComponent(nodeData.index)}`
+    }
   } else {
     libraryGraphDetailPanel.innerHTML = '<p>알 수 없는 노드입니다.</p>'
   }

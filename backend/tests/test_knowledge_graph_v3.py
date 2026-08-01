@@ -35,6 +35,11 @@ def test_graph_endpoint_includes_labeled_figure_nodes(test_client, isolated_dirs
     assert len(figure_nodes) == 1
     assert figure_nodes[0]["id"] == "figure:doc-fig-1:0"
     assert figure_nodes[0]["label"] == "Figure 1"
+    # 상세 패널에서 실제 이미지를 크롭 서빙(figure-image 엔드포인트)하고 캡션을
+    # 보여주려면 index/page/caption이 노드 데이터에 그대로 실려 있어야 한다.
+    assert figure_nodes[0]["index"] == 0
+    assert figure_nodes[0]["page"] == 1
+    assert figure_nodes[0]["caption"] == "설명"
 
     shows_figure_edges = [e for e in data["edges"] if e["type"] == "shows_figure"]
     assert any(e["source"] == "figure:doc-fig-1:0" and e["target"] == "paper:doc-fig-1" for e in shows_figure_edges)

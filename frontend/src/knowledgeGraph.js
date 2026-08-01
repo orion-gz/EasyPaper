@@ -66,7 +66,10 @@ export function renderKnowledgeGraph(container, graphData, { onNodeClick } = {})
     neighborhood.removeClass('kg-dimmed')
     cy.nodes().removeClass('kg-selected')
     node.addClass('kg-selected')
-    onNodeClick && onNodeClick(node.data())
+    // 상세 패널에서 "관련 논문"/"유사 개념" 같은 1촌 이웃 목록을 다시 조회하지
+    // 않고 바로 보여줄 수 있도록, 이미 계산해둔 이웃 노드 데이터를 함께 넘긴다.
+    const neighborNodes = neighborhood.nodes().filter(n => n.id() !== node.id()).map(n => n.data())
+    onNodeClick && onNodeClick(node.data(), neighborNodes)
   })
   // 빈 캔버스(배경)를 탭하면 하이라이트를 초기화한다.
   cy.on('tap', evt => {

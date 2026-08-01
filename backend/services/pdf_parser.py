@@ -609,6 +609,22 @@ def _rect_mostly_inside_any(x0: float, y0: float, x1: float, y1: float, rects: L
     return False
 
 
+def _crop_page_pixmap(doc: "fitz.Document", page_num: int, bbox_percent: Dict[str, float], zoom: float):
+    """render_image_crop/render_image_crop_bytes가 공유하는 크롭 좌표 계산 및
+    렌더링 로직입니다. 페이지 범위를 벗어나면 None을 반환합니다."""
+    if page_num < 1 or page_num > doc.page_count:
+        return None
+    page = doc[page_num - 1]
+    rect = page.rect
+    x0 = rect.x0 + rect.width * (bbox_percent["left"] / 100)
+    y0 = rect.y0 + rect.height * (bbox_percent["top"] / 100)
+    x1 = x0 + rect.width * (bbox_percent["width"] / 100)
+    y1 = y0 + rect.height * (bbox_percent["height"] / 100)
+    clip = fitz.Rect(x0, y0, x1, y1)
+    matrix = fitz.Matrix(zoom, zoom)
+    return page.get_pixmap(matrix=matrix, clip=clip)
+
+
 def render_image_crop(pdf_path: str, page_num: int, bbox_percent: Dict[str, float], output_path: str, zoom: float = 2.0) -> bool:
     """
     지정한 페이지에서 백분율 좌표(bbox_percent: left, top, width, height, extract_pdf_images와
@@ -617,19 +633,25 @@ def render_image_crop(pdf_path: str, page_num: int, bbox_percent: Dict[str, floa
     """
     doc = fitz.open(pdf_path)
     try:
-        if page_num < 1 or page_num > doc.page_count:
+        pix = _crop_page_pixmap(doc, page_num, bbox_percent, zoom)
+        if pix is None:
             return False
-        page = doc[page_num - 1]
-        rect = page.rect
-        x0 = rect.x0 + rect.width * (bbox_percent["left"] / 100)
-        y0 = rect.y0 + rect.height * (bbox_percent["top"] / 100)
-        x1 = x0 + rect.width * (bbox_percent["width"] / 100)
-        y1 = y0 + rect.height * (bbox_percent["height"] / 100)
-        clip = fitz.Rect(x0, y0, x1, y1)
-        matrix = fitz.Matrix(zoom, zoom)
-        pix = page.get_pixmap(matrix=matrix, clip=clip)
         pix.save(output_path)
         return True
+    finally:
+        doc.close()
+
+
+def render_image_crop_bytes(pdf_path: str, page_num: int, bbox_percent: Dict[str, float], zoom: float = 2.0) -> Optional[bytes]:
+    """render_image_crop과 동일한 크롭 결과를 디스크에 저장하지 않고 PNG 바이트로
+    반환합니다. 지식 그래프의 Figure/Table 노드 상세보기처럼, 캐시 파일 없이
+    요청 시점에 바로 이미지를 서빙하면 되는 경우에 사용합니다."""
+    doc = fitz.open(pdf_path)
+    try:
+        pix = _crop_page_pixmap(doc, page_num, bbox_percent, zoom)
+        if pix is None:
+            return None
+        return pix.tobytes("png")
     finally:
         doc.close()
 
