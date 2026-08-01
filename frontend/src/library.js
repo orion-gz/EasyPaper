@@ -193,6 +193,24 @@ export async function fetchLibraryTimeline() {
   return res.json()
 }
 
+export async function fetchLibraryHeatmap() {
+  const res = await fetch(`${API_BASE}/library/graph/heatmap`)
+  if (!res.ok) throw new Error('개념 히트맵 조회 실패')
+  return res.json()
+}
+
+export async function fetchLibraryGaps() {
+  const res = await fetch(`${API_BASE}/library/graph/gaps`)
+  if (!res.ok) throw new Error('지식 격차 조회 실패')
+  return res.json()
+}
+
+export async function fetchLibraryDashboard() {
+  const res = await fetch(`${API_BASE}/library/dashboard`)
+  if (!res.ok) throw new Error('대시보드 조회 실패')
+  return res.json()
+}
+
 export async function fetchReadingRecommendations() {
   const res = await fetch(`${API_BASE}/library/graph/recommendations`)
   if (!res.ok) throw new Error('추천 논문 조회 실패')
