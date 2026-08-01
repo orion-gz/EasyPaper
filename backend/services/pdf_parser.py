@@ -995,6 +995,38 @@ _EQ_ABSORB_MAX_TOTAL_WIDTH_RATIO = 0.95
 # 않으면서 폭주만 막는다.
 _EQ_ABSORB_MAX_TOTAL_HEIGHT = 120.0
 
+# 흡수 후보 줄의 텍스트가 "일반 산문 문장"처럼 보이면(도입/설명 문장 등)
+# 흡수 대상에서 제외한다. 공백으로 나눈 토큰이 일정 개수 이상이고 그중
+# 다수가 순수 알파벳 단어면서, 그 알파벳 단어들 중 다수가 3글자 이상이면
+# 산문으로 판정한다. 두 번째 조건(단어 길이)이 필요한 이유: "x = y (
+# TALLBIT"처럼 한 글자짜리 수식 변수명(x, y)과 기호 이름이 섞인 줄도
+# 토큰의 알파벳 비율만 보면 우연히 높게 나올 수 있는데("x", "y",
+# "TALLBIT" 셋 다 순수 알파벳), 진짜 영어 문장은 "the", "with", "where"
+# 같은 3글자 이상 단어가 다수를 차지하는 반면 수식 변수 나열은 1~2글자
+# 토큰이 대부분이라 이 기준으로 구분된다. 첫 번째 조건만으로는 진짜
+# 수식 구성 요소(밑줄 첨자·연산자·그리스 문자가 섞인 토큰)는 알파벳
+# 비율이 낮아 이미 걸러지고, "Z t"/"x = y" 같은 아주 짧은 변수 나열은
+# 토큰 수 자체가 적어 걸러진다. 실제 논문 PDF에서 "The process can be
+# expressed as", "where MHA stands for..." 같은 수식 직전/직후 짧은
+# 문장이 폭 비율 가드(아래 _EQ_ABSORB_MAX_WIDTH_RATIO)만으로는 걸러지지
+# 않고 거의 항상 흡수되는 문제를 이 판별로 막는다.
+_PROSE_WORD_RE = re.compile(r"^[A-Za-z]+$")
+_EQ_PROSE_MIN_WORDS = 3
+_EQ_PROSE_MIN_ALPHA_RATIO = 0.6
+_EQ_PROSE_MIN_LONG_WORD_RATIO = 0.5
+
+
+def _looks_like_prose(text: str) -> bool:
+    words = text.split()
+    if len(words) < _EQ_PROSE_MIN_WORDS:
+        return False
+    alpha_words = [w.strip(",.;:") for w in words]
+    alpha_words = [w for w in alpha_words if _PROSE_WORD_RE.match(w)]
+    if len(alpha_words) < len(words) * _EQ_PROSE_MIN_ALPHA_RATIO:
+        return False
+    long_words = [w for w in alpha_words if len(w) >= 3]
+    return len(long_words) >= len(alpha_words) * _EQ_PROSE_MIN_LONG_WORD_RATIO
+
 
 def _vertical_overlap_ratio(a: list, b: list) -> float:
     """_horizontal_overlap_ratio와 대칭인 세로 버전 - 더 좁은 쪽 높이를
@@ -1032,6 +1064,7 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
     blocks = page.get_text("dict")["blocks"]
 
     all_lines = []  # (x0, y0, x1, y1) - 페이지 내 모든 텍스트 줄
+    line_texts: Dict[tuple, str] = {}  # bbox -> 그 줄의 텍스트 (산문 판별용)
     candidates = []  # (line_bbox, number)
     column_blocks = []  # _detect_two_column이 기대하는 (x0,y0,x1,y1,text) 블록 목록
     for b in blocks:
@@ -1043,6 +1076,7 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
                 continue
             all_lines.append(bbox)
             line_text = "".join(span.get("text", "") for span in ln.get("spans", [])).strip()
+            line_texts[tuple(bbox)] = line_text
             block_text_parts.append(line_text)
             if not line_text:
                 continue
@@ -1117,6 +1151,18 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
                 if ln in group or ln in candidate_bboxes:
                     continue
                 if not _same_column(eq_center_x, ln):
+                    continue
+                # 전체 폭(컬럼 마진-투-마진)에 가까운 줄은 justified 문단
+                # 특유의 폭이지 같은 행에서 쪼개진 수식 조각일 수 없다. 이
+                # 가드가 없으면, 세로로 유난히 큰 줄(억양 부호·합/적분 기호
+                # 렌더링 등) 하나가 먼저 흡수되며 rect 세로 범위가 급격히
+                # 커지고, 그 순간 위/아래 문단 줄과도 새로 겹침 비율
+                # 임계값을 넘겨버려 다음 반복에서 또 흡수되는 도미노가
+                # 실제 논문 PDF에서 재현되었다(문단+섹션 제목까지 통째로
+                # 캡처됨).
+                if ln[2] - ln[0] >= page_width * _WIDE_BLOCK_RATIO:
+                    continue
+                if _looks_like_prose(line_texts.get(tuple(ln), "")):
                     continue
                 if _vertical_overlap_ratio(rect, ln) >= _EQ_ABSORB_MIN_VOVERLAP:
                     group.add(ln)
@@ -1197,6 +1243,14 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
             absorbed_any = False
             still_remaining = []
             for ln in remaining:
+                # 폭이 좁아 아래 width 가드는 통과하지만("The process can be
+                # expressed as" 같은 짧은 도입/설명 문장) 명백히 산문인 줄은
+                # 수식 구성 요소가 아니므로 제외한다. 실제 논문 PDF에서
+                # 수식 직전/직후의 짧은 문장이 gap·width 조건을 모두
+                # 통과해 거의 항상 흡수되는 문제를 막는다.
+                if _looks_like_prose(line_texts.get(tuple(ln), "")):
+                    still_remaining.append(ln)
+                    continue
                 merged_x0 = min(rect[0], ln[0])
                 merged_x1 = max(rect[2], ln[2])
                 merged_y0 = min(rect[1], ln[1])
