@@ -11,6 +11,12 @@ _find_page_equations()의 진화 과정에서 실제로 관찰된 네 가지 오
    bbox만 잡혀 숫자만 확대되어 잘리는 문제.
 5. 2단 레이아웃에서 번호처럼 보이는 오탐지(예: "(MI)")가 좌/우 컬럼을
    가리지 않고 양쪽 문단을 통째로 삼키는 문제.
+6. 유난히 위/아래로 큰 bbox를 가진 줄(억양 부호 등)이 자기 수식뿐 아니라
+   바로 아래/위 다른 수식의 번호와도 겹쳐, 두 수식 모두에 중복으로
+   흡수되는 문제(실제 관찰 - (22)의 본문 줄이 (23)에도 잘못 흡수됨).
+7. Figure/Table 캡션처럼 페이지 폭 대부분을 차지하는 줄이 "문단 줄 폭
+   추정치"를 부풀려, 정상 크기의 문단 줄까지 "수식만큼 좁다"고 잘못
+   판단해 흡수해버리는 문제.
 """
 
 import fitz
@@ -129,27 +135,30 @@ def test_piecewise_equation_captures_all_case_lines(tmp_path):
 def test_false_positive_equation_number_does_not_bridge_columns(tmp_path):
     """2단 레이아웃에서 로마 숫자로 오인식될 수 있는 괄호 약어(예: "(MI)")가
     실제 수식이 아니더라도, 좌/우 컬럼을 가로질러 양쪽 문단을 통째로
-    삼키면 안 된다."""
+    삼키면 안 된다.
+
+    insert_textbox()로 각 컬럼을 한 문단(하나의 PyMuPDF 블록에 여러 줄이
+    자동 줄바꿈되어 들어감)으로 만든다 - insert_text()를 줄마다 따로
+    호출하면 줄마다 별도 블록이 생겨 실제 PDF의 문단 블록 구조(여러 줄이
+    한 블록으로 묶임)와 달라지고, "(MI)"로 끝나는 줄이 속한 문단의 나머지
+    줄들이 2단 감지에 기여하지 못해 테스트가 실제 동작을 반영하지 못한다."""
     doc = fitz.open()
     page = doc.new_page(width=612, height=792)
-    # 왼쪽 컬럼 - 여러 줄의 본문 문단(2단 레이아웃 감지를 위해 충분한 글자 수 필요)
-    left_lines = [
-        "Subsequently the simple classifier module based on fully connected",
-        "layers is followed to predict the categories for EEG signals here we",
-        "also devise a visualization strategy to project the class activation",
-        "mapping onto the brain topography finally we have conducted many",
-    ]
-    for i, text in enumerate(left_lines):
-        page.insert_text((50, 100 + i * 14), text, fontsize=9)
-    # 오른쪽 컬럼 - "(MI)"로 끝나는 줄을 포함
-    right_lines = [
-        "these methods extract features and perform classification for",
-        "different tasks for example common spatial pattern csp is used",
-        "to enhance spatial features for motor imagery tasks called (MI)",
-        "the filter bank is further embedded for frequency rhythms here",
-    ]
-    for i, text in enumerate(right_lines):
-        page.insert_text((320, 100 + i * 14), text, fontsize=9)
+    left_text = (
+        "Subsequently the simple classifier module based on fully connected "
+        "layers is followed to predict the categories for EEG signals here we "
+        "also devise a visualization strategy to project the class activation "
+        "mapping onto the brain topography finally we have conducted many experiments."
+    )
+    # "(MI)"로 끝나는 줄바꿈이 자연스럽게 생기도록 자동 줄바꿈에 맡긴다.
+    right_text = (
+        "these methods extract features and perform classification for "
+        "different tasks for example common spatial pattern csp is used "
+        "to enhance spatial features for motor imagery tasks called (MI) "
+        "the filter bank is further embedded for frequency rhythms here."
+    )
+    page.insert_textbox(fitz.Rect(50, 90, 300, 200), left_text, fontsize=9)
+    page.insert_textbox(fitz.Rect(320, 90, 570, 200), right_text, fontsize=9)
     path = tmp_path / "two_column.pdf"
     doc.save(str(path))
     doc.close()
@@ -160,3 +169,60 @@ def test_false_positive_equation_number_does_not_bridge_columns(tmp_path):
     x0, _, x1, _ = _pt(entries[0], page_width=612, page_height=792)
     # 왼쪽 컬럼(약 50~300pt)까지 번져서는 안 된다 - 오른쪽 컬럼(약 320pt~) 안에만 있어야 한다.
     assert x0 > 300
+
+
+def test_tall_shared_line_is_not_double_claimed_by_two_equations(tmp_path):
+    """억양 부호 등으로 인해 유난히 위/아래로 큰 bbox를 가진 줄은, 자기
+    수식뿐 아니라 바로 아래 다른 수식의 번호와도 겹칠 수 있다. 이런 줄은
+    "자기 자신의 원래 후보 줄"과 겹침이 더 강한 쪽에만 귀속돼야 하고, 두
+    수식 모두에 중복으로 흡수되면 안 된다."""
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((150, 200), "x = y (", fontsize=11)
+    # 큰 폰트로 그린 조각 - PyMuPDF가 "x = y (" 옆줄과 합쳐 유난히 키가 큰
+    # line을 만든다(억양 부호가 있는 실제 글리프의 bbox 오버슈트를 흉내).
+    page.insert_text((200, 205), "TALLBIT", fontsize=26)
+    page.insert_text((520, 200), "(1)", fontsize=11)
+    # 바로 아래, 촘촘히 쌓인 별개의 수식
+    page.insert_text((250, 218), "p = q", fontsize=11)
+    page.insert_text((520, 218), "(2)", fontsize=11)
+    path = tmp_path / "tall_shared_line.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    result = extract_pdf_images(str(path))
+    eq1 = [r for r in result if r.get("label") == "Equation 1"][0]
+    eq2 = [r for r in result if r.get("label") == "Equation 2"][0]
+    eq1_x0, _, _, _ = _pt(eq1)
+    eq2_x0, _, _, _ = _pt(eq2)
+    # 키 큰 조각("x = y (TALLBIT", x=150 부근)은 Equation 1에만 속해야 한다.
+    # Equation 2는 자기 자신의 본문("p = q", x=250 부근)에서만 시작해야
+    # 하고, 위로 번져서 Equation 1의 내용까지 포함하면 안 된다.
+    assert eq1_x0 < 160
+    assert eq2_x0 > 240
+
+
+def test_wide_caption_line_does_not_inflate_paragraph_width_estimate(tmp_path):
+    """Figure/Table 캡션처럼 페이지 폭 대부분을 차지하는 줄이 있으면,
+    "정상 크기 문단 줄" 판단 기준(문단 줄 폭 추정치)이 그 캡션 폭까지
+    부풀려져서 진짜 온전한 문단 줄까지 수식에 흡수돼버리는 회귀가 있었다."""
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    # 페이지 폭 대부분을 차지하는 캡션 줄(약 500pt, 페이지 폭의 82%)
+    page.insert_text((55, 300), "Figure 1. A very long caption that spans almost the entire page width here.", fontsize=9)
+    # 문단 줄 - 페이지 폭의 약 55%(수식과 무관한 온전한 문장)
+    page.insert_text((55, 340), "This paragraph line describes the context around the equation below fully.", fontsize=9)
+    page.insert_text((55, 400), "This paragraph line comes right after the equation and continues the text.", fontsize=9)
+    page.insert_text((220, 370), "a = b + c", fontsize=11)
+    page.insert_text((520, 370), "(1)", fontsize=11)
+    path = tmp_path / "wide_caption.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    result = extract_pdf_images(str(path))
+    entries = [r for r in result if r.get("label") == "Equation 1"]
+    assert len(entries) == 1
+    _, y0, _, y1 = _pt(entries[0], page_width=612, page_height=792)
+    # 위/아래 문단 줄(각각 y~300-450 부근)까지 통째로 흡수되면 안 된다 -
+    # 수식 자신의 좁은 높이(수십 pt 이내)만 캡처해야 한다.
+    assert y1 - y0 < 60
