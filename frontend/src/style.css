@@ -3503,6 +3503,7 @@ body.light-theme .provider-picker-panel {
 
 .kg-timeline-entry {
   position: relative;
+  cursor: pointer;
 }
 .kg-timeline-entry + .kg-timeline-entry {
   margin-top: 12px;
