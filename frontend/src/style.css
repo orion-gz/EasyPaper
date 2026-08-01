@@ -1233,6 +1233,17 @@ body.light-theme .toast.error { color: #dc2626; }
 .library-grid::-webkit-scrollbar-track { background: transparent; }
 .library-grid::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 100px; }
 
+/* 지식 그래프 탭 - .library-grid와 마찬가지로 .library-container(overflow:hidden
+   flex column)의 직계 자식이라 자체 overflow-y:auto가 없으면 타임라인/히트맵/
+   대시보드처럼 내용이 늘어나는 서브뷰가 스크롤 없이 그냥 잘려 보인다. */
+#library-graph-section {
+  overflow-y: auto;
+  padding-bottom: 30px;
+}
+#library-graph-section::-webkit-scrollbar { width: 6px; }
+#library-graph-section::-webkit-scrollbar-track { background: transparent; }
+#library-graph-section::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 100px; }
+
 /* 빈 상태 */
 .lib-empty {
   grid-column: 1 / -1;
