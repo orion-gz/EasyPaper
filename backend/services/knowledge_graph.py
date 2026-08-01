@@ -505,3 +505,112 @@ async def get_reading_recommendations(username: str) -> List[dict]:
             continue  # 이미 읽은 논문과 같은 논문이면 제외
         results.append({**resolved, "reason": r.get("reason", "")})
     return results
+
+
+async def get_concept_heatmap(username: str) -> List[dict]:
+    """개념별로 몇 편의 논문에 등장했고 몇 개의 질문과 연결됐는지 집계해
+    활동량(paper_count + question_count) 순으로 정렬한다. 1차의
+    db_get_concepts_for_docs와 2차의 db_get_question_count_for_concepts를
+    그대로 조합할 뿐 새 SQL이 필요 없다."""
+    from services.library import list_documents
+    from services.db import db_get_concepts_for_docs, db_get_question_count_for_concepts
+    doc_ids = [d["id"] for d in list_documents(username=username)]
+    concept_links = db_get_concepts_for_docs(doc_ids)
+
+    by_concept = {}
+    for link in concept_links:
+        cid = link["concept_id"]
+        entry = by_concept.setdefault(
+            cid, {"concept_id": cid, "name": link["name"], "kind": link.get("kind"), "doc_ids": set()}
+        )
+        entry["doc_ids"].add(link["doc_id"])
+
+    question_counts = db_get_question_count_for_concepts(list(by_concept.keys()))
+    result = []
+    for cid, entry in by_concept.items():
+        paper_count = len(entry["doc_ids"])
+        question_count = question_counts.get(cid, 0)
+        result.append({
+            "concept_id": cid,
+            "name": entry["name"],
+            "kind": entry["kind"],
+            "paper_count": paper_count,
+            "question_count": question_count,
+            "score": paper_count + question_count,
+        })
+    result.sort(key=lambda r: r["score"], reverse=True)
+    return result
+
+
+async def get_knowledge_gaps(username: str) -> List[dict]:
+    """두 종류의 격차를 순수 규칙 기반(LLM 불필요)으로 감지한다:
+    1. 논문 여러 편에 등장하는 개념인데 관련 질문이 하나도 없음
+    2. 읽음 표시된 논문인데 메모가 하나도 없음
+    각각 상위 5개까지만 반환해 너무 많은 항목으로 압도하지 않는다."""
+    from services.library import list_documents
+    from services.db import db_get_memo_counts_for_docs
+
+    docs = list_documents(username=username)
+    doc_ids = [d["id"] for d in docs]
+
+    heatmap = await get_concept_heatmap(username)
+    concept_gaps = [
+        {
+            "type": "low_question_concept",
+            "concept_id": c["concept_id"],
+            "message": f"'{c['name']}' 관련 질문이 거의 없습니다.",
+        }
+        for c in heatmap if c["paper_count"] >= 2 and c["question_count"] == 0
+    ][:5]
+
+    memo_counts = db_get_memo_counts_for_docs(doc_ids)
+    paper_gaps = []
+    for doc in docs:
+        meta = doc.get("metadata") or {}
+        if not meta.get("read"):
+            continue
+        if memo_counts.get(doc["id"], 0) == 0:
+            title = meta.get("title") or doc["filename"]
+            paper_gaps.append({
+                "type": "no_notes_paper",
+                "doc_id": doc["id"],
+                "message": f"'{title}' 논문을 읽었지만 메모가 없습니다.",
+            })
+    return concept_gaps + paper_gaps[:5]
+
+
+async def get_dashboard_summary(username: str) -> dict:
+    """지식 그래프 탭의 "대시보드" 뷰에 필요한 데이터를 한 번에 모은다.
+    새 집계 로직 없이 get_concept_heatmap/get_knowledge_gaps/
+    get_activity_timeline을 조합할 뿐이다."""
+    from services.library import list_documents
+    docs = list_documents(username=username)  # 이미 created_at DESC 정렬됨
+
+    heatmap = await get_concept_heatmap(username)
+    gaps = await get_knowledge_gaps(username)
+    timeline = await get_activity_timeline(username)
+
+    recent_questions = [e for e in timeline if e["type"] == "question"][:10]
+    recent_notes = [e for e in timeline if e["type"] == "note"][:10]
+    recent_papers = [
+        {"doc_id": d["id"], "title": (d.get("metadata") or {}).get("title") or d["filename"], "created_at": d["created_at"]}
+        for d in docs[:10]
+    ]
+
+    stats = {
+        "total_papers": len(docs),
+        "total_pages": sum(d.get("total_pages") or 0 for d in docs),
+        "read_papers": sum(1 for d in docs if (d.get("metadata") or {}).get("read")),
+        "total_concepts": len(heatmap),
+        "total_questions": len([e for e in timeline if e["type"] == "question"]),
+        "total_notes": len([e for e in timeline if e["type"] == "note"]),
+    }
+
+    return {
+        "stats": stats,
+        "heatmap": heatmap[:10],
+        "gaps": gaps,
+        "recent_questions": recent_questions,
+        "recent_notes": recent_notes,
+        "recent_papers": recent_papers,
+    }

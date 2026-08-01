@@ -3,7 +3,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchLibraryTimeline, fetchReadingRecommendations } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchLibraryTimeline, fetchReadingRecommendations, fetchLibraryHeatmap, fetchLibraryDashboard } from './library.js'
 import { icon } from './icons.js'
 import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
 
@@ -234,11 +234,17 @@ const libraryGraphCanvas        = $('library-graph-canvas')
 const libraryGraphDetailPanel   = $('library-graph-detail-panel')
 const libraryGraphPendingBanner = $('library-graph-pending-banner')
 const libraryGraphSearchInput   = $('library-graph-search-input')
-const libraryGraphViewToggleGraph    = $('library-graph-view-toggle-graph')
-const libraryGraphViewToggleTimeline = $('library-graph-view-toggle-timeline')
+const libraryGraphViewToggleGraph     = $('library-graph-view-toggle-graph')
+const libraryGraphViewToggleTimeline  = $('library-graph-view-toggle-timeline')
+const libraryGraphViewToggleHeatmap   = $('library-graph-view-toggle-heatmap')
+const libraryGraphViewToggleDashboard = $('library-graph-view-toggle-dashboard')
 const libraryGraphView         = $('library-graph-view')
 const libraryTimelineView      = $('library-timeline-view')
 const libraryTimelineList      = $('library-timeline-list')
+const libraryHeatmapView       = $('library-heatmap-view')
+const libraryHeatmapList       = $('library-heatmap-list')
+const libraryDashboardView     = $('library-dashboard-view')
+const libraryDashboardContent  = $('library-dashboard-content')
 const libraryRecommendationsBtn  = $('library-recommendations-btn')
 const libraryRecommendationsList = $('library-recommendations-list')
 
@@ -4320,24 +4326,32 @@ function truncateForList(text, maxLen) {
 let libraryGraphCyInstance = null
 let libraryGraphPollTimeout = null
 
-// 그래프 탭 안의 "그래프/타임라인" 서브뷰 전환. 완전히 새 최상위 탭을 만드는
-// 대신 같은 섹션 안에서 뷰만 바꾼다(기획서의 "Research Dashboard"가 Graph
-// View/Timeline View를 한 화면의 다른 뷰로 묶어 다루는 것과 일치).
-function switchGraphSubView(view) {
-  const isTimeline = view === 'timeline'
-  if (libraryGraphViewToggleGraph) libraryGraphViewToggleGraph.classList.toggle('active', !isTimeline)
-  if (libraryGraphViewToggleTimeline) libraryGraphViewToggleTimeline.classList.toggle('active', isTimeline)
-  if (libraryGraphView) libraryGraphView.classList.toggle('hidden', isTimeline)
-  if (libraryTimelineView) libraryTimelineView.classList.toggle('hidden', !isTimeline)
-  if (libraryGraphPendingBanner && isTimeline) libraryGraphPendingBanner.classList.add('hidden')
-  if (isTimeline) renderLibraryTimelineView()
+// 그래프 탭 안의 "그래프/타임라인/히트맵/대시보드" 서브뷰 전환. 완전히 새
+// 최상위 탭을 만드는 대신 같은 섹션 안에서 뷰만 바꾼다(기획서의 "Research
+// Dashboard"가 이 뷰들을 한 화면의 다른 뷰로 묶어 다루는 것과 일치). 표
+// 기반으로 짜서 서브뷰가 늘어나도 분기를 추가하지 않고 항목만 추가하면 된다.
+const GRAPH_SUBVIEWS = {
+  graph:     { btn: () => libraryGraphViewToggleGraph,     el: () => libraryGraphView },
+  timeline:  { btn: () => libraryGraphViewToggleTimeline,  el: () => libraryTimelineView,  onShow: () => renderLibraryTimelineView() },
+  heatmap:   { btn: () => libraryGraphViewToggleHeatmap,   el: () => libraryHeatmapView,   onShow: () => renderLibraryHeatmapView() },
+  dashboard: { btn: () => libraryGraphViewToggleDashboard, el: () => libraryDashboardView, onShow: () => renderLibraryDashboardView() },
 }
 
-if (libraryGraphViewToggleGraph) {
-  libraryGraphViewToggleGraph.addEventListener('click', () => switchGraphSubView('graph'))
+function switchGraphSubView(view) {
+  for (const [key, cfg] of Object.entries(GRAPH_SUBVIEWS)) {
+    const btn = cfg.btn()
+    const el = cfg.el()
+    if (btn) btn.classList.toggle('active', key === view)
+    if (el) el.classList.toggle('hidden', key !== view)
+  }
+  if (libraryGraphPendingBanner && view !== 'graph') libraryGraphPendingBanner.classList.add('hidden')
+  const cfg = GRAPH_SUBVIEWS[view]
+  if (cfg && cfg.onShow) cfg.onShow()
 }
-if (libraryGraphViewToggleTimeline) {
-  libraryGraphViewToggleTimeline.addEventListener('click', () => switchGraphSubView('timeline'))
+
+for (const [view, cfg] of Object.entries(GRAPH_SUBVIEWS)) {
+  const btn = cfg.btn()
+  if (btn) btn.addEventListener('click', () => switchGraphSubView(view))
 }
 
 const TIMELINE_TYPE_LABEL = { uploaded: '업로드', read: '읽음', question: '질문', note: '메모' }
@@ -4381,6 +4395,115 @@ async function renderLibraryTimelineView() {
   } catch (err) {
     console.error('타임라인 로드 실패:', err)
     libraryTimelineList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">타임라인을 불러오지 못했습니다</p></div>'
+  }
+}
+
+// 히트맵 막대 하나. 크기(활동량)는 막대 "길이"로만 인코딩하고(색으로는
+// 인코딩하지 않음 - 단일 시리즈라 앱의 기존 accent 색 하나로 충분), 정확한
+// 수치는 옆 텍스트 라벨과 title(hover 시 네이티브 툴팁)로 함께 노출한다.
+function renderHeatmapBar(item, maxScore) {
+  const pct = maxScore > 0 ? Math.max(4, Math.round((item.score / maxScore) * 100)) : 0
+  const kindLabel = item.kind ? escapeHtml(item.kind) : ''
+  return `
+    <div style="margin-bottom:10px" title="${escapeHtml(item.name)} · 논문 ${item.paper_count}편 · 질문 ${item.question_count}개">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+        <span style="color:var(--text-primary)">${escapeHtml(item.name)}${kindLabel ? ` <span style="color:var(--text-tertiary)">(${kindLabel})</span>` : ''}</span>
+        <span style="color:var(--text-tertiary)">논문 ${item.paper_count} · 질문 ${item.question_count}</span>
+      </div>
+      <div style="height:10px;border-radius:5px;background:var(--border-strong);overflow:hidden">
+        <div style="height:100%;width:${pct}%;border-radius:5px;background:var(--accent-mid)"></div>
+      </div>
+    </div>
+  `
+}
+
+async function renderLibraryHeatmapView() {
+  if (!libraryHeatmapList) return
+  libraryHeatmapList.innerHTML = '<div class="lib-empty"><p>불러오는 중...</p></div>'
+  try {
+    const { heatmap } = await fetchLibraryHeatmap()
+    if (state.currentLibraryTab !== 'graph') return
+    if (!heatmap || heatmap.length === 0) {
+      libraryHeatmapList.innerHTML = '<div class="lib-empty"><p>아직 추출된 개념이 없습니다.</p></div>'
+      return
+    }
+    const maxScore = Math.max(...heatmap.map(h => h.score))
+    libraryHeatmapList.innerHTML = heatmap.map(item => renderHeatmapBar(item, maxScore)).join('')
+  } catch (err) {
+    console.error('개념 히트맵 로드 실패:', err)
+    libraryHeatmapList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">히트맵을 불러오지 못했습니다</p></div>'
+  }
+}
+
+function renderDashboardStats(stats) {
+  const items = [
+    ['논문', stats.total_papers], ['읽음', stats.read_papers], ['페이지', stats.total_pages],
+    ['개념', stats.total_concepts], ['질문', stats.total_questions], ['메모', stats.total_notes],
+  ]
+  return `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px;margin-bottom:16px">
+      ${items.map(([label, value]) => `
+        <div style="padding:10px;background:var(--bg-elevated);border:1px solid var(--border-strong);border-radius:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--text-primary)">${value}</div>
+          <div style="font-size:11px;color:var(--text-tertiary)">${label}</div>
+        </div>
+      `).join('')}
+    </div>
+  `
+}
+
+function renderDashboardGaps(gaps) {
+  if (!gaps || gaps.length === 0) return ''
+  return `
+    <div style="margin-bottom:16px;padding:12px 14px;background:var(--bg-elevated);border:1px solid var(--border-strong);border-radius:10px">
+      <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-primary)">인사이트</h4>
+      <ul style="margin:0;padding-left:16px">
+        ${gaps.map(g => `<li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(g.message)}</li>`).join('')}
+      </ul>
+    </div>
+  `
+}
+
+function renderDashboardRecentSection(title, items, renderItem) {
+  if (!items || items.length === 0) return ''
+  return `
+    <div style="margin-bottom:16px">
+      <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-primary)">${escapeHtml(title)}</h4>
+      <ul style="margin:0;padding-left:16px">
+        ${items.map(renderItem).join('')}
+      </ul>
+    </div>
+  `
+}
+
+async function renderLibraryDashboardView() {
+  if (!libraryDashboardContent) return
+  libraryDashboardContent.innerHTML = '<div class="lib-empty"><p>불러오는 중...</p></div>'
+  try {
+    const data = await fetchLibraryDashboard()
+    if (state.currentLibraryTab !== 'graph') return
+
+    const maxScore = data.heatmap.length ? Math.max(...data.heatmap.map(h => h.score)) : 0
+    libraryDashboardContent.innerHTML = `
+      ${renderDashboardStats(data.stats)}
+      ${renderDashboardGaps(data.gaps)}
+      <div style="margin-bottom:16px">
+        <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-primary)">자주 다룬 개념</h4>
+        ${data.heatmap.map(item => renderHeatmapBar(item, maxScore)).join('')}
+      </div>
+      ${renderDashboardRecentSection('최근 질문', data.recent_questions, e => `
+        <li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(e.summary || '')} <span style="color:var(--text-tertiary)">— ${escapeHtml(e.doc_title || '')}</span></li>
+      `)}
+      ${renderDashboardRecentSection('최근 메모', data.recent_notes, e => `
+        <li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(e.summary || '')} <span style="color:var(--text-tertiary)">— ${escapeHtml(e.doc_title || '')}</span></li>
+      `)}
+      ${renderDashboardRecentSection('최근 논문', data.recent_papers, p => `
+        <li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(p.title || '')}</li>
+      `)}
+    `
+  } catch (err) {
+    console.error('대시보드 로드 실패:', err)
+    libraryDashboardContent.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">대시보드를 불러오지 못했습니다</p></div>'
   }
 }
 
