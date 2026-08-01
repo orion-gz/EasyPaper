@@ -1036,6 +1036,7 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
     column_blocks = []  # _detect_two_column이 기대하는 (x0,y0,x1,y1,text) 블록 목록
     for b in blocks:
         block_text_parts = []
+        body_bbox = None  # 번호가 붙은 줄을 제외한 "본문" 줄들의 합집합 bbox
         for ln in b.get("lines", []):
             bbox = ln.get("bbox")
             if not bbox:
@@ -1048,9 +1049,30 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
             m = _EQUATION_LINE_RE.search(line_text)
             if m and m.group(1):
                 candidates.append((bbox, m.group(1)))
-        if "bbox" in b:
-            bx0, by0, bx1, by1 = b["bbox"]
-            column_blocks.append((bx0, by0, bx1, by1, "".join(block_text_parts)))
+                continue  # 번호 붙은 줄 자신은 아래 본문 bbox 계산에서 제외
+            if body_bbox is None:
+                body_bbox = list(bbox)
+            else:
+                body_bbox[0] = min(body_bbox[0], bbox[0])
+                body_bbox[1] = min(body_bbox[1], bbox[1])
+                body_bbox[2] = max(body_bbox[2], bbox[2])
+                body_bbox[3] = max(body_bbox[3], bbox[3])
+        # 2단 레이아웃 판정용 블록 bbox는 번호가 붙은 줄을 제외한 "본문"
+        # 부분만으로 계산한다. PyMuPDF 블록 단위에서는 수식 본문+번호가 한
+        # 블록으로 합쳐지는데, 번호가 페이지 오른쪽 끝 여백까지 멀리 붙어
+        # 있어 블록 bbox 전체를 쓰면 폭이 넓어지고 중심이 오른쪽으로 쏠린다
+        # - 페이지 폭의 55~60% 정도면 "wide" 블록 판정(_WIDE_BLOCK_RATIO=0.6)
+        # 문턱을 살짝 못 넘어 "right" 컬럼 블록으로 잘못 집계되고, 수식이
+        # 많은 페이지에서는 이런 블록만으로 2단 레이아웃 문턱(각 200자)을
+        # 넘기면서 실제로는 1단인 논문이 2단으로 오판되는 문제가 실제로
+        # 있었다. 번호가 붙은 줄만 있고 본문 줄이 아예 없는 블록(body_bbox
+        # 없음)은 열 판정에 기여할 정보가 없으므로 건너뛴다 - 통째로
+        # 제외하면 실제 2단 논문에서 그 블록이 속한 컬럼의 글자 수 집계가
+        # 너무 줄어 2단 감지 자체가 실패하는 회귀가 있었다(문단 안에서
+        # 우연히 줄바꿈이 "(MI)"처럼 괄호로 끝나 오탐지되는 경우, 그 문단의
+        # 나머지 줄들은 여전히 진짜 컬럼 신호이기 때문).
+        if body_bbox is not None:
+            column_blocks.append((body_bbox[0], body_bbox[1], body_bbox[2], body_bbox[3], "".join(block_text_parts)))
 
     # 2단 레이아웃인 페이지에서만 좌/우 컬럼을 구분해 흡수를 제한한다(아래
     # same_column 헬퍼). 1단 레이아웃 논문은 수식 본문이 왼쪽에서 시작해
@@ -1108,6 +1130,35 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
         row_groups.append(group)
         row_rects.append(rect)
 
+    # 각 후보의 행 재구성은 서로 독립적으로 계산되기 때문에, 억양 부호(¯ 등)가
+    # 붙은 글자처럼 줄의 bbox가 유난히 위/아래로 큰 경우 그 줄 하나가 "자기
+    # 수식의 번호"와도 겹치고 "바로 아래 다른 수식의 번호"와도 겹쳐 두 수식
+    # 모두에 중복으로 흡수될 수 있다(실제 관찰됨 - (22)의 본문 줄이 (23)에도
+    # 잘못 흡수됨). 겹치는 줄은 "자기 자신의 원래 후보 줄"과 겹침 비율이 가장
+    # 높은 쪽에만 남기고 나머지에서는 제거한 뒤, 줄어든 그룹의 rect를 남은
+    # 구성원만으로 다시 계산한다.
+    line_owner_indices: Dict[tuple, List[int]] = {}
+    for idx, group in enumerate(row_groups):
+        for ln in group:
+            line_owner_indices.setdefault(ln, []).append(idx)
+
+    shrunk_indices = set()
+    for ln, owner_indices in line_owner_indices.items():
+        if len(owner_indices) <= 1:
+            continue
+        best_idx = max(owner_indices, key=lambda i: _vertical_overlap_ratio(candidates[i][0], ln))
+        for i in owner_indices:
+            if i != best_idx:
+                row_groups[i].discard(ln)
+                shrunk_indices.add(i)
+
+    for idx in shrunk_indices:
+        group = row_groups[idx]
+        row_rects[idx] = [
+            min(g[0] for g in group), min(g[1] for g in group),
+            max(g[2] for g in group), max(g[3] for g in group),
+        ]
+
     # ── 2단계: 여러 행에 걸친 수식(분수/피스와이즈 등) 흡수 ───────────────
     # 세로로 아주 가깝고 문단 줄만큼 넓지 않은 이웃 줄을 추가로 흡수하되,
     # 다른 수식의 행(1단계에서 이미 확정된 row_groups)에 속한 줄은 절대
@@ -1125,12 +1176,19 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
             and _same_column(eq_center_x, ln)
         ]
         # 문단 본문 줄의 전형적인 폭 추정치 - 반드시 이 수식과 같은 컬럼(2단
-        # 레이아웃이면 좌/우 중 한쪽, 1단이면 페이지 전체)에서 관찰된 줄들
-        # 중 가장 넓은 것을 기준으로 삼아야 한다. 페이지 전체에서 가장 넓은
-        # 줄(예: 제목처럼 두 컬럼을 가로지르는 wide 블록)을 기준으로 삼으면
-        # 임계값이 너무 커져, 같은 문단의 온전한 줄까지 "수식만큼 좁다"고
-        # 잘못 판단해 흡수해버린다(실제 관찰된 회귀).
-        column_widths = [ln[2] - ln[0] for ln in remaining]
+        # 레이아웃이면 좌/우 중 한쪽, 1단이면 페이지 전체)에서 관찰된 "진짜
+        # 한 컬럼 안에 들어가는" 줄들 중 가장 넓은 것을 기준으로 삼아야 한다.
+        # Figure/Table 캡션처럼 두 컬럼을 가로질러 페이지 폭 대부분을 차지하는
+        # 줄(_WIDE_BLOCK_RATIO 이상)은 _same_column 판정이 중심점 하나로만
+        # 좌/우를 가르다 보니 우연히 "같은 컬럼"으로 분류될 수 있는데, 이런
+        # wide 줄을 기준으로 삼으면 임계값이 페이지 폭 절반 가까이까지
+        # 커져버려 문단의 온전한 줄까지 전부 "수식만큼 좁다"고 잘못 판단해
+        # 흡수해버린다(실제 관찰된 회귀 - Figure 캡션 때문에 문단 전체가
+        # 수식 크롭에 딸려 들어감).
+        column_widths = [
+            ln[2] - ln[0] for ln in remaining
+            if ln[2] - ln[0] < page_width * _WIDE_BLOCK_RATIO
+        ]
         column_width_estimate = max(column_widths) if column_widths else page_width
 
         for _ in range(_EQ_ABSORB_MAX_ITERATIONS):
