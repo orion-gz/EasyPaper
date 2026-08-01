@@ -224,6 +224,41 @@ def _queue_note_nodes(doc_ids: List[str], nodes: list, edges: list) -> None:
                 })
 
 
+def _queue_figure_nodes(doc_ids: List[str], nodes: list, edges: list) -> None:
+    """이미 캐시된 Figure/Table 데이터(extract_pdf_images, 뷰어에서 문서를
+    한 번이라도 열면 생성됨)를 그래프에 노출한다. 캐시가 없는 문서를 위해
+    PDF 파싱(비용 큼)을 여기서 강제로 트리거하지 않는다 - Note 노드와 동일한
+    "이미 있는 데이터만 노출" 철학. extract_pdf_images 응답에는 안정적인 id가
+    없어 캐시가 살아있는 동안의 리스트 인덱스를 합성 id로 쓴다(캐시가
+    재생성되면 바뀔 수 있음 - 인용 매칭처럼 완벽하지 않아도 되는 수준으로
+    받아들인다). 라벨이 없는(캡션 매칭 실패) 사각형은 사용자에게 의미가
+    없으므로 노드로 만들지 않는다."""
+    from services.library import get_pdf_path
+    from services.cache import get_cached_images
+    for doc_id in doc_ids:
+        pdf_path = get_pdf_path(doc_id)
+        if not pdf_path:
+            continue
+        images = get_cached_images(doc_id, pdf_path)
+        if not images:
+            continue
+        for idx, img in enumerate(images):
+            if not img.get("label"):
+                continue
+            figure_id = f"figure:{doc_id}:{idx}"
+            nodes.append({
+                "id": figure_id,
+                "type": "figure",
+                "label": img["label"],
+                "doc_id": doc_id,
+            })
+            edges.append({
+                "source": figure_id,
+                "target": f"paper:{doc_id}",
+                "type": "shows_figure",
+            })
+
+
 async def get_graph_data(username: str) -> dict:
     """현재 로그인한 사용자가 소유한 문서만으로 그래프를 구성한다.
     list_documents(username=username)로 소유 문서만 가져오는 것 자체가
@@ -316,6 +351,9 @@ async def get_graph_data(username: str) -> dict:
     # Note 노드: LLM 호출 불필요, memos 서버 미러를 그대로 노출.
     _queue_note_nodes(doc_ids, nodes, edges)
 
+    # Figure 노드: LLM 호출 불필요, 이미 캐시된 것만 노출(강제 파싱 트리거 안 함).
+    _queue_figure_nodes(doc_ids, nodes, edges)
+
     # 아직 개념/인용 동기화가 안 된(graph_synced_at 없는) 문서는 pending으로
     # 표시하고, 백그라운드로 백필을 걸어둔다(fire-and-forget - 이번 응답에는
     # 반영되지 않고, 클라이언트가 잠시 뒤 다시 조회하면 반영된다).
@@ -375,3 +413,95 @@ async def search_graph_nodes(username: str, query: str) -> dict:
     from services.db import db_search_graph_nodes
     doc_ids = [d["id"] for d in list_documents(username=username)]
     return db_search_graph_nodes(doc_ids, query)
+
+
+async def get_activity_timeline(username: str) -> List[dict]:
+    """업로드/읽음/질문/메모를 시간순(최신순)으로 병합한 활동 타임라인을
+    반환한다. 전부 이미 존재하는 타임스탬프를 재구성한 것이라 신규 저장소가
+    필요 없다 - 메모는 id가 "memo_{ms}" 형식(frontend의 createFloatingMemoForSentence)
+    이라는 점을 이용해 별도 스키마 변경 없이 생성 시각을 그대로 복원한다."""
+    from services.library import list_documents
+    from services.db import db_get_memos, db_get_related_questions_for_doc
+
+    docs = list_documents(username=username)
+    titles_by_doc = {d["id"]: (d.get("metadata") or {}).get("title") or d["filename"] for d in docs}
+
+    events = []
+    for doc in docs:
+        doc_id = doc["id"]
+        title = titles_by_doc[doc_id]
+        events.append({
+            "type": "uploaded", "doc_id": doc_id, "doc_title": title,
+            "timestamp": doc["created_at"],
+        })
+
+        meta = doc.get("metadata") or {}
+        if meta.get("read") and meta.get("read_at"):
+            events.append({
+                "type": "read", "doc_id": doc_id, "doc_title": title,
+                "timestamp": meta["read_at"],
+            })
+
+        mirrored = db_get_memos(doc_id)
+        for items in (mirrored or {}).get("data", {}).values():
+            for item in items or []:
+                item_id = (item or {}).get("id", "") if isinstance(item, dict) else ""
+                if not item_id.startswith("memo_"):
+                    continue
+                try:
+                    ts_ms = int(item_id[len("memo_"):])
+                except ValueError:
+                    continue
+                events.append({
+                    "type": "note", "doc_id": doc_id, "doc_title": title,
+                    "timestamp": datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat(),
+                    "summary": (item.get("content") or "")[:80],
+                })
+
+        for q in db_get_related_questions_for_doc(doc_id, limit=200):
+            events.append({
+                "type": "question", "doc_id": doc_id, "doc_title": title,
+                "timestamp": q["created_at"], "summary": (q["content"] or "")[:80],
+            })
+
+    events.sort(key=lambda e: e["timestamp"], reverse=True)
+    return events
+
+
+async def get_reading_recommendations(username: str) -> List[dict]:
+    """읽은 논문들을 근거로 다음에 읽으면 좋을 논문을 추천한다. Primer 기능의
+    기존 OpenAlex 검증 로직(_is_plausible_match, resolve_reference)을 그대로
+    재사용해 LLM 환각(존재하지 않는 논문을 추천)을 걸러낸다 - 1차의
+    _match_library_references 재사용과 동일한 패턴. LLM+OpenAlex 호출이
+    여러 번 들어가는 무거운 작업이라 그래프 조회 시 자동 실행하지 않고,
+    프론트에서 사용자가 명시적으로 요청했을 때만 호출한다."""
+    from services.library import list_documents
+    docs = list_documents(username=username)
+    if len(docs) < 2:
+        return []  # 근거가 너무 적으면 추천하지 않는다
+
+    titles = [(d.get("metadata") or {}).get("title") or d["filename"] for d in docs]
+    categories = sorted({c for d in docs for c in (d.get("metadata") or {}).get("categories", []) or []})
+
+    from services.llm_client import generate_reading_recommendations
+    from services.primer import _normalize_words, _is_plausible_match
+    from services.reference_linker import resolve_reference
+
+    raw = await generate_reading_recommendations(titles, categories, session_id=username)
+    exclude_word_sets = [w for w in (_normalize_words(t) for t in titles) if w]
+
+    results = []
+    for r in raw:
+        title = (r.get("title") or "").strip()
+        if not title:
+            continue
+        resolved = await resolve_reference(title)
+        if not resolved or not _is_plausible_match(title, resolved):
+            continue
+        result_words = _normalize_words(resolved.get("title", ""))
+        if not result_words:
+            continue
+        if any(len(result_words & seen) / len(result_words) >= 0.6 for seen in exclude_word_sets):
+            continue  # 이미 읽은 논문과 같은 논문이면 제외
+        results.append({**resolved, "reason": r.get("reason", "")})
+    return results

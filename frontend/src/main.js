@@ -3,7 +3,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchLibraryTimeline, fetchReadingRecommendations } from './library.js'
 import { icon } from './icons.js'
 import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
 
@@ -234,6 +234,13 @@ const libraryGraphCanvas        = $('library-graph-canvas')
 const libraryGraphDetailPanel   = $('library-graph-detail-panel')
 const libraryGraphPendingBanner = $('library-graph-pending-banner')
 const libraryGraphSearchInput   = $('library-graph-search-input')
+const libraryGraphViewToggleGraph    = $('library-graph-view-toggle-graph')
+const libraryGraphViewToggleTimeline = $('library-graph-view-toggle-timeline')
+const libraryGraphView         = $('library-graph-view')
+const libraryTimelineView      = $('library-timeline-view')
+const libraryTimelineList      = $('library-timeline-list')
+const libraryRecommendationsBtn  = $('library-recommendations-btn')
+const libraryRecommendationsList = $('library-recommendations-list')
 
 const libCompareToggleBtn   = $('lib-compare-toggle-btn')
 const compareSelectBar      = $('compare-select-bar')
@@ -4313,6 +4320,70 @@ function truncateForList(text, maxLen) {
 let libraryGraphCyInstance = null
 let libraryGraphPollTimeout = null
 
+// 그래프 탭 안의 "그래프/타임라인" 서브뷰 전환. 완전히 새 최상위 탭을 만드는
+// 대신 같은 섹션 안에서 뷰만 바꾼다(기획서의 "Research Dashboard"가 Graph
+// View/Timeline View를 한 화면의 다른 뷰로 묶어 다루는 것과 일치).
+function switchGraphSubView(view) {
+  const isTimeline = view === 'timeline'
+  if (libraryGraphViewToggleGraph) libraryGraphViewToggleGraph.classList.toggle('active', !isTimeline)
+  if (libraryGraphViewToggleTimeline) libraryGraphViewToggleTimeline.classList.toggle('active', isTimeline)
+  if (libraryGraphView) libraryGraphView.classList.toggle('hidden', isTimeline)
+  if (libraryTimelineView) libraryTimelineView.classList.toggle('hidden', !isTimeline)
+  if (libraryGraphPendingBanner && isTimeline) libraryGraphPendingBanner.classList.add('hidden')
+  if (isTimeline) renderLibraryTimelineView()
+}
+
+if (libraryGraphViewToggleGraph) {
+  libraryGraphViewToggleGraph.addEventListener('click', () => switchGraphSubView('graph'))
+}
+if (libraryGraphViewToggleTimeline) {
+  libraryGraphViewToggleTimeline.addEventListener('click', () => switchGraphSubView('timeline'))
+}
+
+const TIMELINE_TYPE_LABEL = { uploaded: '업로드', read: '읽음', question: '질문', note: '메모' }
+
+function groupTimelineEventsByDate(events) {
+  const groups = {}
+  for (const e of events) {
+    const date = (e.timestamp || '').slice(0, 10) || '날짜 미상'
+    if (!groups[date]) groups[date] = []
+    groups[date].push(e)
+  }
+  return groups
+}
+
+async function renderLibraryTimelineView() {
+  if (!libraryTimelineList) return
+  libraryTimelineList.innerHTML = '<div class="lib-empty"><p>불러오는 중...</p></div>'
+  try {
+    const { events } = await fetchLibraryTimeline()
+    if (state.currentLibraryTab !== 'graph') return
+    if (!events || events.length === 0) {
+      libraryTimelineList.innerHTML = '<div class="lib-empty"><p>아직 활동 기록이 없습니다.</p></div>'
+      return
+    }
+    const groups = groupTimelineEventsByDate(events)
+    const dates = Object.keys(groups).sort((a, b) => b.localeCompare(a))
+    libraryTimelineList.innerHTML = dates.map(date => `
+      <div style="margin-bottom:16px">
+        <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-secondary)">${escapeHtml(date)}</h4>
+        <ul style="margin:0;padding-left:16px">
+          ${groups[date].map(e => `
+            <li style="margin-bottom:8px">
+              <span style="color:var(--text-tertiary);font-size:11px">[${escapeHtml(TIMELINE_TYPE_LABEL[e.type] || e.type)}]</span>
+              <strong>${escapeHtml(e.doc_title || '')}</strong>
+              ${e.summary ? `<div style="color:var(--text-secondary);font-size:12px">${escapeHtml(e.summary)}</div>` : ''}
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    `).join('')
+  } catch (err) {
+    console.error('타임라인 로드 실패:', err)
+    libraryTimelineList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">타임라인을 불러오지 못했습니다</p></div>'
+  }
+}
+
 async function renderLibraryGraphTab() {
   if (libraryGraphPollTimeout) {
     clearTimeout(libraryGraphPollTimeout)
@@ -4323,6 +4394,7 @@ async function renderLibraryGraphTab() {
     libraryGraphDetailPanel.innerHTML = '<p>노드를 클릭하면 상세 정보가 여기에 표시됩니다.</p>'
   }
   if (libraryGraphSearchInput) libraryGraphSearchInput.value = ''
+  switchGraphSubView('graph')
 
   try {
     const data = await fetchLibraryGraph()
@@ -4394,6 +4466,11 @@ function showGraphDetailPanel(nodeData) {
       <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">메모</h4>
       <p style="margin:0">${escapeHtml(nodeData.label || '')}</p>
     `
+  } else if (nodeData.type === 'figure') {
+    libraryGraphDetailPanel.innerHTML = `
+      <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
+      <p style="margin:0"><strong>유형:</strong> Figure/Table</p>
+    `
   } else {
     libraryGraphDetailPanel.innerHTML = '<p>알 수 없는 노드입니다.</p>'
   }
@@ -4436,6 +4513,35 @@ if (libraryGraphSearchInput) {
         console.error('지식 그래프 검색 실패:', err)
       }
     }, 300)
+  })
+}
+
+// 추천은 LLM+OpenAlex 호출이 여러 번 들어가는 무거운 작업이라 그래프 탭
+// 진입 시 자동 실행하지 않고, 사용자가 버튼을 눌렀을 때만 요청한다(2차의
+// "관련 질문 보기" 지연 로드와 동일한 절제 원칙).
+if (libraryRecommendationsBtn) {
+  libraryRecommendationsBtn.addEventListener('click', async () => {
+    if (!libraryRecommendationsList) return
+    libraryRecommendationsBtn.disabled = true
+    libraryRecommendationsList.innerHTML = '<p style="margin:0;color:var(--text-tertiary);font-size:12px">추천 논문을 찾는 중... (시간이 걸릴 수 있습니다)</p>'
+    try {
+      const { recommendations } = await fetchReadingRecommendations()
+      if (!recommendations || recommendations.length === 0) {
+        libraryRecommendationsList.innerHTML = '<p style="margin:0;color:var(--text-tertiary);font-size:12px">추천할 만한 논문을 찾지 못했습니다.</p>'
+      } else {
+        libraryRecommendationsList.innerHTML = recommendations.map(r => `
+          <div style="padding:8px 0;border-top:1px solid var(--border-strong)">
+            <a href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener noreferrer" style="font-size:13px;font-weight:600;color:var(--text-primary)">${escapeHtml(r.title || '')}</a>
+            ${r.reason ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${escapeHtml(r.reason)}</div>` : ''}
+          </div>
+        `).join('')
+      }
+    } catch (err) {
+      console.error('추천 논문 조회 실패:', err)
+      libraryRecommendationsList.innerHTML = '<p style="margin:0;color:var(--error);font-size:12px">추천 논문을 불러오지 못했습니다.</p>'
+    } finally {
+      libraryRecommendationsBtn.disabled = false
+    }
   })
 }
 
