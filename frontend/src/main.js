@@ -4463,19 +4463,10 @@ function renderHeatCell(item, maxScore) {
   const pct = maxScore > 0 ? Math.max(6, Math.round((item.score / maxScore) * 100)) : 6
   const kindLabel = item.kind ? escapeHtml(item.kind) : ''
   return `
-    <div class="kg-heat-cell" style="--heat-pct:${pct}%" title="${escapeHtml(item.name)}${kindLabel ? ` (${kindLabel})` : ''} · 논문 ${item.paper_count}편 · 질문 ${item.question_count}개">
-      <div class="kg-heat-swatch"></div>
-      <div class="kg-heat-label">${escapeHtml(item.name)}</div>
-    </div>
-  `
-}
-
-function renderHeatmapLegend() {
-  return `
-    <div class="kg-heatmap-legend">
-      <span>적음</span>
-      <span class="kg-heatmap-legend-bar"></span>
-      <span>많음</span>
+    <div class="kg-heatmap-row" title="${escapeHtml(item.name)} · 논문 ${item.paper_count}편 · 질문 ${item.question_count}개">
+      <span class="kg-heatmap-label">${escapeHtml(item.name)}${kindLabel ? ` <span class="kg-heatmap-kind">(${kindLabel})</span>` : ''}</span>
+      <div class="kg-heatmap-track"><div class="kg-heatmap-fill" style="width:${pct}%"></div></div>
+      <span class="kg-heatmap-meta">논문 ${item.paper_count} · 질문 ${item.question_count}</span>
     </div>
   `
 }
@@ -4491,27 +4482,36 @@ async function renderLibraryHeatmapView() {
       return
     }
     const maxScore = Math.max(...heatmap.map(h => h.score))
-    libraryHeatmapList.innerHTML = `
-      ${renderHeatmapLegend()}
-      <div class="kg-heatmap-grid">${heatmap.map(item => renderHeatCell(item, maxScore)).join('')}</div>
-    `
+    libraryHeatmapList.innerHTML = `<div class="kg-heatmap-list">${heatmap.map(item => renderHeatmapBar(item, maxScore)).join('')}</div>`
   } catch (err) {
     console.error('개념 히트맵 로드 실패:', err)
     libraryHeatmapList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">히트맵을 불러오지 못했습니다</p></div>'
   }
 }
 
+const KG_STAT_ICONS = {
+  papers:   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>',
+  read:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
+  pages:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"/><path d="M10 12h4"/><path d="M10 16h4"/></svg>',
+  concepts: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/></svg>',
+  questions:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  notes:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>',
+  insight:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/></svg>',
+  tag:      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42Z"/><circle cx="7.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/></svg>',
+}
+
 function renderDashboardStats(stats) {
   const items = [
-    ['논문', stats.total_papers], ['읽음', stats.read_papers], ['페이지', stats.total_pages],
-    ['개념', stats.total_concepts], ['질문', stats.total_questions], ['메모', stats.total_notes],
+    ['papers', '논문', stats.total_papers], ['read', '읽음', stats.read_papers], ['pages', '페이지', stats.total_pages],
+    ['concepts', '개념', stats.total_concepts], ['questions', '질문', stats.total_questions], ['notes', '메모', stats.total_notes],
   ]
   return `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px;margin-bottom:16px">
-      ${items.map(([label, value]) => `
-        <div style="padding:10px;background:var(--bg-elevated);border:1px solid var(--border-strong);border-radius:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:var(--text-primary)">${value}</div>
-          <div style="font-size:11px;color:var(--text-tertiary)">${label}</div>
+    <div class="kg-stat-grid">
+      ${items.map(([icon, label, value]) => `
+        <div class="kg-stat-card">
+          <div class="kg-stat-icon">${KG_STAT_ICONS[icon]}</div>
+          <div class="kg-stat-value">${value}</div>
+          <div class="kg-stat-label">${label}</div>
         </div>
       `).join('')}
     </div>
@@ -4521,10 +4521,10 @@ function renderDashboardStats(stats) {
 function renderDashboardGaps(gaps) {
   if (!gaps || gaps.length === 0) return ''
   return `
-    <div style="margin-bottom:16px;padding:12px 14px;background:var(--bg-elevated);border:1px solid var(--border-strong);border-radius:10px">
-      <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-primary)">인사이트</h4>
-      <ul style="margin:0;padding-left:16px">
-        ${gaps.map(g => `<li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(g.message)}</li>`).join('')}
+    <div class="kg-section">
+      <h4 class="kg-section-title">${KG_STAT_ICONS.insight}인사이트</h4>
+      <ul class="kg-insight-list">
+        ${gaps.map(g => `<li class="kg-insight-item">${KG_STAT_ICONS.insight}<span>${escapeHtml(g.message)}</span></li>`).join('')}
       </ul>
     </div>
   `
@@ -4533,9 +4533,9 @@ function renderDashboardGaps(gaps) {
 function renderDashboardRecentSection(title, items, renderItem) {
   if (!items || items.length === 0) return ''
   return `
-    <div style="margin-bottom:16px">
-      <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-primary)">${escapeHtml(title)}</h4>
-      <ul style="margin:0;padding-left:16px">
+    <div class="kg-section">
+      <h4 class="kg-section-title">${title}</h4>
+      <ul class="kg-recent-list">
         ${items.map(renderItem).join('')}
       </ul>
     </div>
@@ -4550,23 +4550,31 @@ async function renderLibraryDashboardView() {
     if (state.currentLibraryTab !== 'graph') return
 
     const maxScore = data.heatmap.length ? Math.max(...data.heatmap.map(h => h.score)) : 0
+    const hasRecent = data.recent_questions?.length || data.recent_notes?.length || data.recent_papers?.length
     libraryDashboardContent.innerHTML = `
-      ${renderDashboardStats(data.stats)}
-      ${renderDashboardGaps(data.gaps)}
-      <div style="margin-bottom:16px">
-        <h4 style="margin:0 0 8px;font-size:13px;color:var(--text-primary)">자주 다룬 개념</h4>
-        ${renderHeatmapLegend()}
-        <div class="kg-heatmap-grid">${data.heatmap.map(item => renderHeatCell(item, maxScore)).join('')}</div>
+      <div class="kg-dashboard">
+        ${renderDashboardStats(data.stats)}
+        ${renderDashboardGaps(data.gaps)}
+        ${data.heatmap.length ? `
+          <div class="kg-section">
+            <h4 class="kg-section-title">${KG_STAT_ICONS.tag}자주 다룬 개념</h4>
+            <div class="kg-heatmap-list">${data.heatmap.map(item => renderHeatmapBar(item, maxScore)).join('')}</div>
+          </div>
+        ` : ''}
+        ${hasRecent ? `
+          <div class="kg-recent-grid">
+            ${renderDashboardRecentSection(`${KG_STAT_ICONS.questions}최근 질문`, data.recent_questions, e => `
+              <li class="kg-recent-item">${escapeHtml(e.summary || '')}<span class="kg-recent-item-doc">${escapeHtml(e.doc_title || '')}</span></li>
+            `)}
+            ${renderDashboardRecentSection(`${KG_STAT_ICONS.notes}최근 메모`, data.recent_notes, e => `
+              <li class="kg-recent-item">${escapeHtml(e.summary || '')}<span class="kg-recent-item-doc">${escapeHtml(e.doc_title || '')}</span></li>
+            `)}
+            ${renderDashboardRecentSection(`${KG_STAT_ICONS.papers}최근 논문`, data.recent_papers, p => `
+              <li class="kg-recent-item">${escapeHtml(p.title || '')}</li>
+            `)}
+          </div>
+        ` : ''}
       </div>
-      ${renderDashboardRecentSection('최근 질문', data.recent_questions, e => `
-        <li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(e.summary || '')} <span style="color:var(--text-tertiary)">— ${escapeHtml(e.doc_title || '')}</span></li>
-      `)}
-      ${renderDashboardRecentSection('최근 메모', data.recent_notes, e => `
-        <li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(e.summary || '')} <span style="color:var(--text-tertiary)">— ${escapeHtml(e.doc_title || '')}</span></li>
-      `)}
-      ${renderDashboardRecentSection('최근 논문', data.recent_papers, p => `
-        <li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(p.title || '')}</li>
-      `)}
     `
   } catch (err) {
     console.error('대시보드 로드 실패:', err)

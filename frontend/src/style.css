@@ -30,6 +30,7 @@
 
   --text-primary:   #f3f4f6;
   --text-secondary: #a1a1aa;
+  --text-tertiary:  #86868f;
   --text-muted:     #6b7280;
 
   --success:        #10b981;
@@ -80,6 +81,7 @@ body.light-theme {
 
   --text-primary:   #0f172a;
   --text-secondary: #475569;
+  --text-tertiary:  #64748b;
   --text-muted:     #94a3b8;
 
   --control-accent-text: #1e40af;
@@ -5407,6 +5409,161 @@ body.light-theme .floating-memo.color-red .floating-memo-render {
 }
 body.light-theme .library-tab-btn.active {
   color: #fff !important;
+}
+
+/* ── 지식 그래프 대시보드 (Knowledge Graph Dashboard) ── */
+.kg-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.kg-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: 10px;
+}
+
+.kg-stat-card {
+  position: relative;
+  padding: 16px 12px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+.kg-stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
+  opacity: 0.65;
+}
+.kg-stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-glow);
+}
+.kg-stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
+}
+.kg-stat-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.kg-stat-label {
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.kg-section {
+  padding: 15px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+}
+.kg-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.kg-section-title svg { color: var(--control-accent-text); flex-shrink: 0; }
+
+.kg-insight-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.kg-insight-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--control-accent-soft);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.kg-insight-item svg { flex-shrink: 0; margin-top: 2px; color: var(--control-accent-text); }
+
+.kg-heatmap-list { display: flex; flex-direction: column; gap: 11px; }
+.kg-heatmap-row { display: flex; align-items: center; gap: 10px; }
+.kg-heatmap-label {
+  flex: 0 0 auto;
+  max-width: 42%;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kg-heatmap-kind { color: var(--text-tertiary); font-weight: 400; }
+.kg-heatmap-track {
+  flex: 1 1 auto;
+  height: 8px;
+  border-radius: 5px;
+  background: var(--border-strong);
+  overflow: hidden;
+}
+.kg-heatmap-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.kg-heatmap-meta {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.kg-recent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.kg-recent-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.kg-recent-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.kg-recent-item:last-child { border-bottom: none; padding-bottom: 0; }
+.kg-recent-item-doc {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.kg-empty-hint {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  padding: 10px 2px;
 }
 
 /* ── Custom Checked Badge on Document Card ── */
