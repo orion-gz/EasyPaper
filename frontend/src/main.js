@@ -4455,11 +4455,12 @@ if (libraryTimelineList) {
   })
 }
 
-// 히트맵 막대 하나. 크기(활동량)는 막대 "길이"로만 인코딩하고(색으로는
-// 인코딩하지 않음 - 단일 시리즈라 앱의 기존 accent 색 하나로 충분), 정확한
-// 수치는 옆 텍스트 라벨과 title(hover 시 네이티브 툴팁)로 함께 노출한다.
-function renderHeatmapBar(item, maxScore) {
-  const pct = maxScore > 0 ? Math.max(4, Math.round((item.score / maxScore) * 100)) : 0
+// 히트맵 타일 하나. 크기(활동량)는 정사각형 타일의 "색 진하기"로 인코딩한다
+// (accent 색 1종의 sequential 램프 - color-mix가 --accent-mid를 기준으로
+// 계산하므로 사용자가 고른 테마 색과 라이트/다크 모드에 자동으로 맞춰진다).
+// 정확한 수치는 title(hover 시 네이티브 툴팁)로 노출한다.
+function renderHeatCell(item, maxScore) {
+  const pct = maxScore > 0 ? Math.max(6, Math.round((item.score / maxScore) * 100)) : 6
   const kindLabel = item.kind ? escapeHtml(item.kind) : ''
   return `
     <div class="kg-heatmap-row" title="${escapeHtml(item.name)} · 논문 ${item.paper_count}편 · 질문 ${item.question_count}개">
