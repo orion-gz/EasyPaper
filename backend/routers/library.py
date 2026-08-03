@@ -105,16 +105,18 @@ async def search_library_graph(q: str = "", current_user: str = Depends(get_curr
 
 
 @router.get("/library/graph/recommendations")
-async def get_library_reading_recommendations(current_user: str = Depends(get_current_user)):
+async def get_library_reading_recommendations(force: bool = False, current_user: str = Depends(get_current_user)):
     """읽은 논문들을 근거로 다음에 읽으면 좋을 논문을 추천합니다. LLM+OpenAlex
     호출이 여러 번 들어가는 무거운 작업이라 프론트에서 사용자가 명시적으로
     요청했을 때만 호출해야 합니다(그래프 조회 시 자동 호출 안 함).
+    force=true면 유효한 캐시가 있어도 무시하고 새로 생성합니다(대시보드의
+    "다시 받기" 버튼용).
 
     /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
     이유로, 그렇지 않으면 "graph"가 doc_id 경로 파라미터로 잘못 매칭된다.
     """
     from services.knowledge_graph import get_reading_recommendations
-    return {"recommendations": await get_reading_recommendations(current_user)}
+    return {"recommendations": await get_reading_recommendations(current_user, force=force)}
 
 
 @router.get("/library/graph/recommendations/cached")
