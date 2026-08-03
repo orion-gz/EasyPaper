@@ -514,7 +514,7 @@ async def get_cached_reading_recommendations(username: str) -> Optional[List[dic
     return _read_reading_recommendations_cache(username)
 
 
-async def get_reading_recommendations(username: str) -> List[dict]:
+async def get_reading_recommendations(username: str, force: bool = False) -> List[dict]:
     """읽은 논문들을 근거로 다음에 읽으면 좋을 논문을 추천한다. Primer 기능의
     기존 OpenAlex 검증 로직(_is_plausible_match, resolve_reference)을 그대로
     재사용해 LLM 환각(존재하지 않는 논문을 추천)을 걸러낸다 - 1차의
@@ -525,11 +525,13 @@ async def get_reading_recommendations(username: str) -> List[dict]:
     결과는 app_meta에 사용자별로 캐싱해 READING_RECOMMENDATIONS_CACHE_DAYS(7일)
     동안 재사용하고, 그 기간이 지나면 다음 조회 시 자동으로 새로 생성한다 -
     호출할 때마다 같은 무거운 계산을 반복하지 않으면서도, 추천 목록이 매주
-    한 번씩은 새로 갱신되게 한다.
+    한 번씩은 새로 갱신되게 한다. force=True면 유효한 캐시가 있어도 무시하고
+    새로 생성한다(대시보드의 "다시 받기" 버튼이 사용하는 경로).
     """
-    cached = _read_reading_recommendations_cache(username)
-    if cached is not None:
-        return cached
+    if not force:
+        cached = _read_reading_recommendations_cache(username)
+        if cached is not None:
+            return cached
 
     from services.db import db_set_meta
     from services.library import list_documents

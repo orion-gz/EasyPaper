@@ -191,3 +191,64 @@ def test_reading_recommendations_endpoint(test_client, isolated_dirs, monkeypatc
     assert res.status_code == 200
     recs = res.json()["recommendations"]
     assert any(r["title"] == "DINO Self-Supervised Vision Transformers" and r["reason"] == "다음 단계" for r in recs)
+
+
+@pytest.mark.asyncio
+async def test_reading_recommendations_force_bypasses_cache(isolated_dirs, monkeypatch):
+    """대시보드 "다시 받기" 버튼이 쓰는 force=True는 유효한 캐시가 있어도
+    무시하고 새로 생성해야 한다."""
+    import services.llm_client as llm_client
+    import services.reference_linker as reference_linker
+    import services.knowledge_graph as knowledge_graph
+
+    _create_doc_owned_by(isolated_dirs, "doc-rec-force-1", "testuser", {"title": "Vision Transformer"})
+    _create_doc_owned_by(isolated_dirs, "doc-rec-force-2", "testuser", {"title": "Masked Autoencoders"})
+
+    call_count = {"n": 0}
+
+    async def fake_generate(titles, categories, session_id=None):
+        call_count["n"] += 1
+        return [{"title": f"Paper Round {call_count['n']}", "reason": "이유"}]
+
+    async def fake_resolve(query_text):
+        return {"title": query_text, "url": "https://example.com/x", "year": 2024}
+
+    monkeypatch.setattr(llm_client, "generate_reading_recommendations", fake_generate)
+    monkeypatch.setattr(reference_linker, "resolve_reference", fake_resolve)
+
+    first = await knowledge_graph.get_reading_recommendations("testuser")
+    assert call_count["n"] == 1
+    cached_again = await knowledge_graph.get_reading_recommendations("testuser")
+    assert call_count["n"] == 1  # 캐시가 있으면 재호출하지 않는다
+    assert cached_again == first
+
+    forced = await knowledge_graph.get_reading_recommendations("testuser", force=True)
+    assert call_count["n"] == 2  # force=True는 캐시를 무시하고 재생성한다
+    assert forced != first
+
+
+def test_reading_recommendations_endpoint_force_query_param(test_client, isolated_dirs, monkeypatch):
+    import services.llm_client as llm_client
+    import services.reference_linker as reference_linker
+    import services.knowledge_graph as knowledge_graph
+
+    _create_doc_owned_by(isolated_dirs, "doc-rec-force-api-1", "testuser", {"title": "Vision Transformer"})
+    _create_doc_owned_by(isolated_dirs, "doc-rec-force-api-2", "testuser", {"title": "Masked Autoencoders"})
+
+    call_count = {"n": 0}
+
+    async def fake_generate(titles, categories, session_id=None):
+        call_count["n"] += 1
+        return [{"title": f"Paper Round {call_count['n']}", "reason": "이유"}]
+
+    async def fake_resolve(query_text):
+        return {"title": query_text, "url": "https://example.com/x", "year": 2024}
+
+    monkeypatch.setattr(llm_client, "generate_reading_recommendations", fake_generate)
+    monkeypatch.setattr(reference_linker, "resolve_reference", fake_resolve)
+
+    test_client.get("/api/library/graph/recommendations")
+    assert call_count["n"] == 1
+    res = test_client.get("/api/library/graph/recommendations?force=true")
+    assert res.status_code == 200
+    assert call_count["n"] == 2

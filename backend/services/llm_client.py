@@ -2308,14 +2308,15 @@ JSON Array:"""
 
 
 async def generate_reading_recommendations(titles: List[str], categories: List[str], session_id: str = None) -> List[dict]:
-    """읽은 논문 제목/카테고리를 근거로 다음에 읽으면 좋을 논문 3~5개와 그
+    """읽은 논문 제목/카테고리를 근거로 다음에 읽으면 좋을 논문 후보와 그
     이유를 추천한다. 반환값: [{"title": str, "reason": str}, ...]. 여기서
     추천된 제목은 LLM의 환각(존재하지 않는 논문을 지어내는 것)이 섞여 있을
-    수 있으므로, 호출부(knowledge_graph.get_reading_recommendations)가
-    OpenAlex로 실존 여부를 검증한 뒤에만 채택해야 한다."""
+    수 있고, 호출부(knowledge_graph.get_reading_recommendations)의 OpenAlex
+    검증에서 일부가 걸러지므로, 최종 노출 목표(5개 이상)보다 넉넉하게
+    8~12개를 요청해 필터링 후에도 충분한 개수가 남게 한다."""
     titles_list = "\n".join(f"- {t}" for t in titles)
     categories_line = ", ".join(categories) if categories else "(알 수 없음)"
-    prompt = f"""You are an expert research advisor. A researcher has read the following papers (research areas: {categories_line}). Recommend 3 to 5 OTHER real, existing academic papers they should read next to deepen or extend this line of research, with a short reason for each.
+    prompt = f"""You are an expert research advisor. A researcher has read the following papers (research areas: {categories_line}). Recommend 8 to 12 OTHER real, existing academic papers they should read next to deepen or extend this line of research, with a short reason for each.
 
 Output ONLY a pure JSON array, with no markdown code fences, no explanations, and no extra prose. Each element must be an object with a "title" key (the paper's real title) and a "reason" key (one short sentence, in Korean, explaining why it's a good next read).
 

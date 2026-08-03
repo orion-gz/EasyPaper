@@ -236,8 +236,9 @@ export async function fetchReadingTimeStats(sinceDays) {
   return res.json()
 }
 
-export async function fetchReadingRecommendations() {
-  const res = await fetch(`${API_BASE}/library/graph/recommendations`)
+// force: true면 유효한 캐시가 있어도 무시하고 새로 생성한다("다시 받기" 버튼용).
+export async function fetchReadingRecommendations({ force = false } = {}) {
+  const res = await fetch(`${API_BASE}/library/graph/recommendations${force ? '?force=true' : ''}`)
   if (!res.ok) throw new Error('추천 논문 조회 실패')
   return res.json()
 }

@@ -362,10 +362,12 @@ function scholarSearchUrl(title) {
   return `https://scholar.google.com/scholar?q=${encodeURIComponent(title || '')}`
 }
 
+const REC_DISPLAY_LIMIT = 10
+
 function renderRecItemsHtml(recommendations) {
   return `
     <ul class="dash-rec-list">
-      ${recommendations.slice(0, 5).map(r => `
+      ${recommendations.slice(0, REC_DISPLAY_LIMIT).map(r => `
         <li class="dash-rec-item">
           <a href="${escapeHtml(scholarSearchUrl(r.title))}" target="_blank" rel="noopener noreferrer" class="dash-rec-title">${escapeHtml(r.title || '')}</a>
           ${r.year ? `<span class="dash-rec-year">${escapeHtml(String(r.year))}</span>` : ''}
@@ -373,6 +375,13 @@ function renderRecItemsHtml(recommendations) {
         </li>
       `).join('')}
     </ul>
+  `
+}
+
+function renderRecsListWithRefreshButton(recommendations) {
+  return `
+    ${renderRecItemsHtml(recommendations)}
+    <button type="button" class="dash-recs-btn dash-recs-btn-refresh" data-recs-refresh-btn title="새로운 추천을 다시 받아옵니다">${icon('refreshCw', 13)}다시 받기</button>
   `
 }
 
@@ -384,7 +393,7 @@ function renderRecommendationsCard(cachedRecommendations) {
         <h3>${icon('star', 15)}AI 추천 논문</h3>
       </div>
       <div class="dash-recs-body" data-recs-body>
-        ${hasCached ? renderRecItemsHtml(cachedRecommendations) : `
+        ${hasCached ? renderRecsListWithRefreshButton(cachedRecommendations) : `
           ${emptyNote('읽은 논문들을 바탕으로 다음에 읽으면 좋을 논문을 추천받아 보세요.')}
           <button type="button" class="dash-recs-btn" data-recs-btn>${icon('zap', 13)}추천 받기</button>
         `}
@@ -596,27 +605,35 @@ function attachHandlers(root) {
     elm.addEventListener('click', () => goToGraphNode(elm.dataset.nodeId))
   })
 
-  const recsBtn = root.querySelector('[data-recs-btn]')
-  if (recsBtn) {
-    recsBtn.addEventListener('click', async () => {
-      const body = root.querySelector('[data-recs-body]')
-      if (!body) return
-      recsBtn.disabled = true
-      body.innerHTML = emptyNote('추천 논문을 찾는 중입니다... (다소 시간이 걸릴 수 있어요)')
+  const recsBody = root.querySelector('[data-recs-body]')
+  if (recsBody) {
+    // "추천 받기"(최초 생성)와 "다시 받기"(캐시 무시하고 재생성) 모두 이
+    // 로직을 공유한다 - 성공하면 목록 아래에 "다시 받기" 버튼을 다시 붙여
+    // 계속 재요청할 수 있게 한다.
+    const bindRefreshBtn = () => {
+      const btn = recsBody.querySelector('[data-recs-refresh-btn]')
+      if (btn) btn.addEventListener('click', () => runRecsFetch(btn, true))
+    }
+    const runRecsFetch = async (triggerBtn, force) => {
+      triggerBtn.disabled = true
+      recsBody.innerHTML = emptyNote('추천 논문을 찾는 중입니다... (다소 시간이 걸릴 수 있어요)')
       try {
-        const { recommendations } = await fetchReadingRecommendations()
+        const { recommendations } = await fetchReadingRecommendations({ force })
         if (!recommendations || recommendations.length === 0) {
-          body.innerHTML = emptyNote('추천할 만한 논문을 찾지 못했습니다.')
+          recsBody.innerHTML = emptyNote('추천할 만한 논문을 찾지 못했습니다.')
           return
         }
-        body.innerHTML = renderRecItemsHtml(recommendations)
+        recsBody.innerHTML = renderRecsListWithRefreshButton(recommendations)
+        bindRefreshBtn()
       } catch (err) {
         console.error('추천 논문 조회 실패:', err)
-        body.innerHTML = `<p class="dash-empty-note dash-error-note">추천 논문을 불러오지 못했습니다.</p>`
-      } finally {
-        if (root.contains(recsBtn)) recsBtn.disabled = false
+        recsBody.innerHTML = `<p class="dash-empty-note dash-error-note">추천 논문을 불러오지 못했습니다.</p>`
       }
-    })
+    }
+
+    const recsBtn = recsBody.querySelector('[data-recs-btn]')
+    if (recsBtn) recsBtn.addEventListener('click', () => runRecsFetch(recsBtn, false))
+    bindRefreshBtn()
   }
 }
 
