@@ -27,6 +27,11 @@ _find_page_equations()의 진화 과정에서 실제로 관찰된 네 가지 오
 10. 수식이 페이지 하단 가까이 있으면, 그 아래 페이지 쪽수(running
     footer)가 좁고 gap도 작아 2단계 흡수 조건을 통과해 함께 캡처되는
     문제(실사용 스크린샷으로 재발견).
+11. 언더스코어가 빠진 채 추출된 첨자 변수명("rcode", "rformat" 등)이
+    길이 3자 이상의 순수 알파벳 단어 조건을 우연히 만족해 수식 본문
+    줄 자체가 산문으로 오판되고, 정작 번호("(9)")만 따로 떨어져 나가
+    번호 하나만 확대된 아주 작은 오버레이가 되던 문제(실제 The
+    Flexibility Trap 논문에서 재현).
 """
 
 import fitz
@@ -323,3 +328,30 @@ def test_wide_caption_line_does_not_inflate_paragraph_width_estimate(tmp_path):
     # 위/아래 문단 줄(각각 y~300-450 부근)까지 통째로 흡수되면 안 된다 -
     # 수식 자신의 좁은 높이(수십 pt 이내)만 캡처해야 한다.
     assert y1 - y0 < 60
+
+
+def test_equation_body_with_subscript_like_variable_names_is_absorbed(tmp_path):
+    """수식 본문에 언더스코어 없이 추출된 첨자 변수명("rcode", "rformat" 등,
+    실제로는 LaTeX에서 r_code/r_format처럼 첨자로 렌더링됨)이 섞여 있으면,
+    산문 판별 휴리스틱(길이 3자 이상의 순수 알파벳 단어 비율)이 우연히
+    "산문처럼 보임"으로 오판할 수 있다. 그러면 번호("(1)")와 같은 행에
+    있는데도 흡수되지 않아, 번호 자신의 아주 작은 bbox만 오버레이가 되고
+    실제 수식 본문("r = rcode + rformat.")은 통째로 빠지던 문제가 있었다.
+    "=" 같은 수식 연산자가 있으면 산문 판별보다 우선해 흡수 대상으로
+    인정해야 한다."""
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((200, 400), "r = rcode + rformat.", fontsize=10)
+    page.insert_text((520, 400), "(1)", fontsize=10)
+    path = tmp_path / "subscript_vars.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    result = extract_pdf_images(str(path))
+    entries = [r for r in result if r.get("label") == "Equation 1"]
+    assert len(entries) == 1
+    x0, _, x1, _ = _pt(entries[0])
+    # 수식 본문("r = rcode...", x=200 부근)까지 왼쪽 경계가 확장돼야 한다 -
+    # 번호("(1)", x=520)만 잡히면 안 된다.
+    assert x0 < 210, f"수식 본문이 산문으로 오판되어 흡수되지 않음: {entries[0]}"
+    assert x1 > 530

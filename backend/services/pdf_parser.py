@@ -785,10 +785,23 @@ def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
             # 본문 참조 매칭과 항상 같은 대문자 표기로 라벨을 맞춰야 한다(대문자
             # 로마 숫자가 관례이므로 digit은 그대로 두고 로마 숫자만 사실상 영향받음).
             number = m.group(2).upper()
+            caption_lines = lines[i:]
             caption_text = " ".join(t for t in line_texts[i:] if t).strip()
+            # bbox는 매칭된 첫 줄이 아니라, caption_text와 마찬가지로 블록 끝까지
+            # 이어지는 캡션 전체 줄들의 합집합으로 잡는다 - 캡션이 여러 줄에 걸쳐
+            # 길게 줄바꿈되는 경우(실제 관찰됨: 설명이 긴 Table 캡션이 6~7줄까지
+            # 이어짐) 첫 줄 bbox만 쓰면 실제로는 캡션이 끝나지 않은 지점을 "캡션
+            # 끝"으로 오인해, 그 아래 실제 표/그림까지의 거리가 실제보다 훨씬
+            # 크게 계산된다. 이 거리는 _match_caption_for_rect의 40pt 임계값
+            # 판정에 쓰이는데, 부풀려진 거리 때문에 진짜 인접한 표/그림조차
+            # 캡션과 매칭되지 못하고 라벨 없이 남아버리는 문제가 실측으로 확인됨.
+            bx0 = min(ln["bbox"][0] for ln in caption_lines)
+            by0 = min(ln["bbox"][1] for ln in caption_lines)
+            bx1 = max(ln["bbox"][2] for ln in caption_lines)
+            by1 = max(ln["bbox"][3] for ln in caption_lines)
             captions.append({
                 "label": f"{kind} {number}",
-                "bbox": lines[i]["bbox"],
+                "bbox": (bx0, by0, bx1, by1),
                 "text": caption_text[:600],
             })
             break  # 한 블록에서 캡션은 한 번만 인정 (이후 줄은 caption_text에 이미 포함됨)
@@ -1024,7 +1037,19 @@ _EQ_PROSE_MIN_LONG_WORD_RATIO = 0.5
 _EQ_PAGE_MARGIN_EXCLUDE = 65.0
 
 
+_MATH_OPERATOR_RE = re.compile(r"[=≈≠≤≥±∑∫∏√∇∂∈∉⊂⊆∪∩→⇒↦]")
+
+
 def _looks_like_prose(text: str) -> bool:
+    # "=" 같은 수식 연산자가 한 글자라도 있으면 산문일 수 없다(진짜 문장에는
+    # 거의 등장하지 않음) - 무조건 흡수 후보로 남긴다. 이 가드가 없으면
+    # "r = rcode + rformat."처럼 언더스코어가 빠진 채 추출된 첨자 변수명
+    # (rcode, rformat)이 우연히 길이 3자 이상의 순수 알파벳 단어 조건을
+    # 만족해 산문으로 오판되고, 정작 그 줄에 붙어야 할 수식 번호 "(9)"만
+    # 따로 떨어져 나가 번호 하나만 확대된 아주 작은 오버레이가 되던 문제가
+    # 실제 논문 PDF에서 재현됨.
+    if _MATH_OPERATOR_RE.search(text):
+        return False
     words = text.split()
     if len(words) < _EQ_PROSE_MIN_WORDS:
         return False
@@ -1472,8 +1497,32 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
                             table_groups.append(current_group)
                             current_group = [line]
                     table_groups.append(current_group)
-                    
+
+                    # booktabs 스타일 표는 상단 규칙(top rule)-헤더 구분선(header rule)은
+                    # 서로 가까이 붙어 있지만, 데이터 행이 많으면 맨 아래 규칙(bottom
+                    # rule)까지의 거리가 100pt를 훌쩍 넘는 경우가 실제로 있다(실측:
+                    # 데이터 행 없이 top+header rule만 17pt 간격, bottom rule까지는
+                    # 173pt). 이런 경우 위 100pt 임계값 때문에 bottom rule 혼자만의
+                    # group으로 떨어져 나가고, 아래 len(group)>=2 필터에 걸려 완전히
+                    # 버려진다 - 그러면 표의 세로 범위가 top/header rule 사이의
+                    # 얇은 띠 하나로만 잡혀, 실제 표 본문(데이터 행 전체)이 오버레이
+                    # 범위에서 통째로 빠지는 문제가 있었다. 캡션이 사이에 끼지 않은
+                    # (=서로 다른 표의 경계가 아닌) 단독 선 group은 직전 group에
+                    # 이어붙여, 이 단독 선을 "먼 아래쪽 bottom rule"로 인정한다.
+                    merged_groups: list = []
                     for group in table_groups:
+                        if (
+                            len(group) == 1
+                            and merged_groups
+                            and not _has_caption_between(
+                                merged_groups[-1][-1][3], group[0][1], page_captions
+                            )
+                        ):
+                            merged_groups[-1].append(group[0])
+                        else:
+                            merged_groups.append(group)
+
+                    for group in merged_groups:
                         if len(group) >= 2:
                             gx0 = min(l[0] for l in group)
                             gy0 = min(l[1] for l in group)
