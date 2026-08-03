@@ -1,6 +1,8 @@
 import os
+import re
 import shutil
 import json
+import base64
 from typing import Optional, List
 from config import LIBRARY_DIR, UPLOAD_DIR
 from services.cache import clear_session_cache
@@ -48,6 +50,15 @@ def _cover_path(doc_id: str) -> str:
 
 def _primer_figure_path(doc_id: str) -> str:
     return os.path.join(LIBRARY_DIR, doc_id, "primer_figure.png")
+
+# 프론트에서 생성하는 quoteId(예: qimg_1700000000000_ab12cd) 형식만 허용해
+# 파일 경로로 그대로 써도 경로 순회(path traversal)가 불가능하게 한다.
+_CHAT_QUOTE_IMAGE_ID_RE = re.compile(r'^[A-Za-z0-9_]+$')
+
+def _chat_quote_image_path(doc_id: str, quote_id: str) -> Optional[str]:
+    if not _CHAT_QUOTE_IMAGE_ID_RE.match(quote_id):
+        return None
+    return os.path.join(LIBRARY_DIR, doc_id, "chat_images", f"{quote_id}.png")
 
 
 # ── 문서 저장 ─────────────────────────────────────────────────────────────────
@@ -316,6 +327,26 @@ def get_primer_figure_path(doc_id: str) -> Optional[str]:
     파이프라인(save_primer_figure)에서만 생성되므로, 아직 생성되지 않았다면 None."""
     path = _primer_figure_path(doc_id)
     return path if os.path.exists(path) else None
+
+
+def save_chat_quote_image(doc_id: str, quote_id: str, image_base64: str) -> None:
+    """채팅에서 인용한 이미지를 문서별 디렉터리에 PNG로 저장한다. 기존에는
+    브라우저 localStorage에만 저장돼 다른 기기/브라우저로 접속하면 이미지가
+    사라지고 텍스트 placeholder만 남았는데, 여기(document.pdf/cover.jpg와
+    같은 문서별 디렉터리)에도 남겨 어디서든 복원할 수 있게 한다."""
+    path = _chat_quote_image_path(doc_id, quote_id)
+    if not path:
+        raise ValueError("잘못된 quote_id입니다.")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(base64.b64decode(image_base64))
+
+
+def get_chat_quote_image_path(doc_id: str, quote_id: str) -> Optional[str]:
+    """서버에 저장된 인용 이미지 경로를 반환한다. 저장된 적이 없다면(이번 기능
+    추가 이전 메시지이거나 저장에 실패했던 경우) None."""
+    path = _chat_quote_image_path(doc_id, quote_id)
+    return path if path and os.path.exists(path) else None
 
 
 def save_primer_figure(doc_id: str, pdf_path: str, page_num: int, bbox_percent: dict) -> bool:

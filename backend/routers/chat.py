@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import re
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -14,8 +15,12 @@ from services.db import (
     db_upsert_compare_session,
     db_list_compare_chat_sessions,
 )
-from services.library import get_document as lib_get_document
+from services.library import get_document as lib_get_document, save_chat_quote_image
 from services.auth import get_current_user
+
+# 프론트가 이미지 인용 메시지에 붙이는 "[인용된 이미지 (Page N)|quoteId]" 마커에서
+# quoteId만 뽑아낸다 - main.js의 sendChatMessage()가 만드는 placeholder 형식과 맞춰야 한다.
+_QUOTE_IMAGE_MARKER_RE = re.compile(r'^\[인용된 이미지[^\]|]*\|([A-Za-z0-9_]+)\]')
 
 router = APIRouter()
 
@@ -111,6 +116,18 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
     if data.messages:
         latest_msg = data.messages[-1]
         question_chat_id = db_save_chat_message(session_id, latest_msg.role, latest_msg.content)
+
+        # 이미지 인용 메시지라면, 이번 요청에 실려온 이미지를 문서별 디렉터리에도
+        # 저장한다(브라우저 localStorage에만 있으면 다른 기기/브라우저에서 이
+        # 히스토리를 다시 열었을 때 이미지가 사라지고 텍스트 placeholder만
+        # 남는 문제가 있었음). 저장에 실패해도 채팅 자체는 그대로 진행된다.
+        if data.image_base64:
+            marker_match = _QUOTE_IMAGE_MARKER_RE.match(latest_msg.content)
+            if marker_match:
+                try:
+                    save_chat_quote_image(session_id, marker_match.group(1), data.image_base64)
+                except Exception as e:
+                    print(f"[chat_stream] 인용 이미지 서버 저장 실패 ({session_id}): {e}")
 
     async def event_generator():
         yield " "

@@ -4,7 +4,8 @@ from services.auth import get_current_user
 from services.library import (
     list_documents, search_documents, get_document, permanently_delete_document,
     soft_delete_document, restore_document, empty_trash,
-    get_translation, get_pdf_path, get_cover_path, update_document_metadata
+    get_translation, get_pdf_path, get_cover_path, update_document_metadata,
+    get_chat_quote_image_path
 )
 from pydantic import BaseModel
 import json
@@ -362,6 +363,18 @@ async def get_library_cover(doc_id: str, current_user: str = Depends(get_current
     if not cover_path:
         raise HTTPException(status_code=404, detail="미리보기 이미지를 생성할 수 없습니다.")
     return FileResponse(cover_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@router.get("/library/{doc_id}/chat-image/{quote_id}")
+async def get_library_chat_quote_image(doc_id: str, quote_id: str, current_user: str = Depends(get_current_user)):
+    """채팅에서 인용한 이미지를 서빙합니다. 채팅을 보낸 브라우저의 localStorage에
+    이미지가 있으면 프론트는 이 엔드포인트를 거치지 않고 그걸 우선 쓰고, 없을
+    때(다른 기기/브라우저에서 히스토리를 열었을 때)만 여기서 복원합니다."""
+    _require_owned_document(doc_id, current_user)
+    image_path = get_chat_quote_image_path(doc_id, quote_id)
+    if not image_path:
+        raise HTTPException(status_code=404, detail="인용 이미지를 찾을 수 없습니다.")
+    return FileResponse(image_path, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.delete("/library/{doc_id}")
