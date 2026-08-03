@@ -10554,6 +10554,17 @@ function formatChatHtml(text) {
   return html
 }
 
+// 인용 이미지를 로컬/서버 어디서도 복원하지 못했을 때(<img onerror>에서 호출)
+// 기존과 동일한 텍스트 placeholder로 자연스럽게 대체한다.
+window.__quoteImgFallback = function(imgEl, pageInfoText) {
+  const span = document.createElement('span')
+  span.className = 'quote-body'
+  span.style.fontSize = '11px'
+  span.style.opacity = '0.85'
+  span.innerHTML = `${icon('image', 12, 'style="vertical-align:-2px;margin-right:2px"')}${escapeHtml(pageInfoText)}`
+  imgEl.replaceWith(span)
+}
+
 function formatUserChatHtml(content, sessionId = state.sessionId) {
   if (!content) return ''
   
@@ -10581,19 +10592,24 @@ function formatUserChatHtml(content, sessionId = state.sessionId) {
       let pageInfo = content.substring(1, markerIdx)
       const questionText = content.substring(markerIdx + marker.length)
 
-      // "(Page N)|quoteId" 형태면 quoteId로 로컬에 저장해둔 실제 이미지를
-      // 복원한다 - 옛 형식(quoteId 없음)이거나 이 브라우저에 저장된 게
-      // 없으면 기존과 동일한 텍스트 placeholder로 자연스럽게 대체된다.
+      // "(Page N)|quoteId" 형태면 quoteId로 먼저 로컬(같은 브라우저)에 저장해둔
+      // 실제 이미지를 복원하고, 없으면(다른 기기/브라우저에서 열람 중) 서버
+      // (문서별 디렉터리)에 저장된 이미지를 대신 요청한다 - 그마저도 없으면
+      // (옛 형식이거나 저장에 실패했던 경우) onerror가 기존과 동일한 텍스트
+      // placeholder로 자연스럽게 대체한다.
       let imgSrc = null
       const sepIdx = pageInfo.lastIndexOf('|')
       if (sepIdx !== -1) {
         const quoteId = pageInfo.substring(sepIdx + 1)
         pageInfo = pageInfo.substring(0, sepIdx)
         imgSrc = getChatQuoteImage(sessionId, quoteId)
+        if (!imgSrc && sessionId) {
+          imgSrc = `/api/library/${encodeURIComponent(sessionId)}/chat-image/${encodeURIComponent(quoteId)}`
+        }
       }
 
       const quoteBodyHtml = imgSrc
-        ? `<img class="message-quote-img" src="${imgSrc}" alt="Quoted Figure" />`
+        ? `<img class="message-quote-img" src="${imgSrc}" alt="Quoted Figure" onerror="${escapeHtml(`window.__quoteImgFallback(this, ${JSON.stringify(pageInfo)})`)}" />`
         : `<span class="quote-body" style="font-size: 11px; opacity: 0.85;">${icon('image', 12, 'style="vertical-align:-2px;margin-right:2px"')}${escapeHtml(pageInfo)}</span>`
       return `<div class="message-quote"><span class="quote-symbol">❝</span>${quoteBodyHtml}</div><div class="message-text">${escapeHtml(questionText)}</div>`
     }
