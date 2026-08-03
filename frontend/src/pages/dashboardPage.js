@@ -249,15 +249,14 @@ function renderProgressSummaryCard(events, heatmap, readingStats) {
   `
 }
 
-// ── 최근 읽은 논문 ── dashboard.recent_papers는 실제로는 "최근 업로드"라
-// 라벨과 맞지 않는다. 대신 fetchLibrary()의 문서 목록에서 metadata.read가
-// true인 것만 read_at 내림차순으로 골라 쓴다. 진행률(%)은 페이지별
-// "읽음" 추적이 없어, translated_pages/total_pages(실제 번역된 페이지
-// 비율)로 근사했다 - 읽으면서 페이지가 번역되는 흐름이라 합리적인 대리
-// 지표지만 엄밀히는 "읽은 비율"이 아니라 "번역 진행률"이다.
+// ── 최근 읽은 논문 ── 완독 표시(metadata.read)된 논문뿐 아니라 읽던 중인
+// 논문(metadata.last_page - 뷰어의 책갈피 기능이 저장하는 마지막 읽은 페이지)도
+// 함께 보여준다("최근 읽은" = 최근에 펼쳐본 논문). 퍼센트는 번역 진행률이 아니라
+// last_page/total_pages로 계산한 실제 읽은 진행률이고, 완독 표시된 논문은
+// 퍼센트 대신 "완료" 칩을 보여준다.
 function renderRecentPapersCard(docs) {
   const read = docs
-    .filter(d => d.metadata && d.metadata.read)
+    .filter(d => (d.metadata && d.metadata.read) || Number.isInteger(d.metadata?.last_page))
     .sort((a, b) => new Date(b.metadata.read_at || b.created_at).getTime() - new Date(a.metadata.read_at || a.created_at).getTime())
     .slice(0, 5)
 
@@ -271,10 +270,17 @@ function renderRecentPapersCard(docs) {
       <ul class="dash-paper-list">
         ${read.map(d => {
           const title = (d.metadata && d.metadata.title) || d.filename
-          const total = d.total_pages || 0
-          const translated = (d.translated_pages && d.translated_pages.length) || 0
-          const pct = total > 0 ? Math.min(100, Math.round((translated / total) * 100)) : 0
+          const isDone = d.metadata?.read === true
+          const total = d.total_pages || 1
+          const lastPage = d.metadata?.last_page
+          const pct = isDone ? 100 : (Number.isInteger(lastPage) ? Math.min(100, Math.round((lastPage / total) * 100)) : 0)
           const cats = ((d.metadata && d.metadata.categories) || []).slice(0, 2)
+          const progressHtml = isDone
+            ? `<span class="dash-paper-done-chip">${icon('checkCircle', 12)}완료</span>`
+            : `
+              <div class="dash-activity-track small"><div class="dash-activity-fill" style="width:${pct}%"></div></div>
+              <span class="dash-paper-pct">${pct}%</span>
+            `
           return `
             <li class="dash-paper-item" data-doc-id="${escapeHtml(d.id)}">
               <img class="dash-paper-cover" src="/api/library/${encodeURIComponent(d.id)}/cover" alt="" loading="lazy" onerror="this.style.visibility='hidden'" />
@@ -285,8 +291,7 @@ function renderRecentPapersCard(docs) {
                   <span class="dash-paper-time">${relativeTimeKo(d.metadata.read_at || d.created_at)}</span>
                 </div>
                 <div class="dash-paper-progress-row">
-                  <div class="dash-activity-track small"><div class="dash-activity-fill" style="width:${pct}%"></div></div>
-                  <span class="dash-paper-pct">${pct}%</span>
+                  ${progressHtml}
                 </div>
               </div>
             </li>

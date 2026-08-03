@@ -243,6 +243,14 @@
 .dash-paper-time { flex-shrink: 0; }
 .dash-paper-progress-row { display: flex; align-items: center; gap: 8px; }
 .dash-paper-pct { flex-shrink: 0; font-size: 10.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.dash-paper-done-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--success);
+}
 
 /* ── 최근 질문 ── */
 .dash-question-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }

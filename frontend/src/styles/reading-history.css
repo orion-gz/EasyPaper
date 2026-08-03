@@ -363,6 +363,17 @@ body.light-theme {
   color: var(--control-accent-text);
   white-space: nowrap;
 }
+/* 활동 타입(읽음/질문/메모/업로드)별로 서로 다른 색을 준다 - Reading Time
+   Distribution 등 다른 위젯에서 이미 쓰는 --rh-c1..c4 dataviz 팔레트와 동일한
+   타입→색 매핑(TYPE_COLOR_VAR)을 그대로 재사용해 페이지 안에서 일관되게 한다. */
+.rh-timeline-entry[data-type="read"] .rh-timeline-type { background: color-mix(in srgb, var(--rh-c1) 18%, transparent); color: var(--rh-c1); }
+.rh-timeline-entry[data-type="question"] .rh-timeline-type { background: color-mix(in srgb, var(--rh-c2) 18%, transparent); color: var(--rh-c2); }
+.rh-timeline-entry[data-type="note"] .rh-timeline-type { background: color-mix(in srgb, var(--rh-c3) 18%, transparent); color: var(--rh-c3); }
+.rh-timeline-entry[data-type="uploaded"] .rh-timeline-type { background: color-mix(in srgb, var(--rh-c4) 18%, transparent); color: var(--rh-c4); }
+.rh-timeline-entry[data-type="read"] .rh-timeline-dot { color: var(--rh-c1); border-color: color-mix(in srgb, var(--rh-c1) 40%, var(--border-strong)); }
+.rh-timeline-entry[data-type="question"] .rh-timeline-dot { color: var(--rh-c2); border-color: color-mix(in srgb, var(--rh-c2) 40%, var(--border-strong)); }
+.rh-timeline-entry[data-type="note"] .rh-timeline-dot { color: var(--rh-c3); border-color: color-mix(in srgb, var(--rh-c3) 40%, var(--border-strong)); }
+.rh-timeline-entry[data-type="uploaded"] .rh-timeline-dot { color: var(--rh-c4); border-color: color-mix(in srgb, var(--rh-c4) 40%, var(--border-strong)); }
 .rh-timeline-main { flex: 1; min-width: 0; }
 .rh-timeline-title {
   font-size: 13px;
