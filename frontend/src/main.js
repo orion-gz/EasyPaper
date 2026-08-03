@@ -1028,12 +1028,35 @@ function updatePageDisplay(pageNum) {
 // ── 마지막으로 읽던 위치(책갈피) 자동 저장 ─────────
 // 스크롤 중 페이지가 바뀔 때마다 API를 호출하지 않도록 디바운스한다.
 let saveLastReadPageTimer = null
+let pendingLastReadPage = null
 function scheduleSaveLastReadPage(pageNum) {
   if (!state.currentDocId || state.disableBookmark) return
   if (saveLastReadPageTimer) clearTimeout(saveLastReadPageTimer)
+  pendingLastReadPage = pageNum
   saveLastReadPageTimer = setTimeout(() => {
-    updateLibraryDocMetadata(state.currentDocId, { last_page: pageNum }).catch(() => {})
+    saveLastReadPageTimer = null
+    const p = pendingLastReadPage
+    pendingLastReadPage = null
+    updateLibraryDocMetadata(state.currentDocId, { last_page: p }).catch(() => {})
   }, 1500)
+}
+
+// 뷰어를 나갈 때(뒤로가기 등) 위 디바운스가 아직 안 끝났으면 그대로 잊혀지진
+// 않지만(setTimeout 자체는 계속 살아있음) 그 사이에 Dashboard/Library가 먼저
+// 옛날 last_page로 렌더링을 끝내버린다 - "논문을 읽고 나오면 최근 읽은
+// 논문이 업데이트 안 된다"는 원인이 이것이었다. 화면을 벗어나기 직전 대기
+// 중인 저장을 즉시(await로) 끝내, 다음 화면이 최신 값을 읽어가게 한다.
+async function flushSaveLastReadPage() {
+  if (saveLastReadPageTimer === null) return
+  clearTimeout(saveLastReadPageTimer)
+  saveLastReadPageTimer = null
+  const docId = state.currentDocId
+  const pageNum = pendingLastReadPage
+  pendingLastReadPage = null
+  if (!docId || pageNum == null) return
+  try {
+    await updateLibraryDocMetadata(docId, { last_page: pageNum })
+  } catch {}
 }
 
 function updateProgressMini() {
@@ -3605,6 +3628,11 @@ document.querySelectorAll('.view-toggle-btn').forEach(btn => {
 updateViewToggleUI()
 
 async function showLibraryScreen(shouldPushState = true, targetPage) {
+  // 뷰어에서 나가는 시점이므로, 아직 디바운스 대기 중인 "마지막으로 읽은
+  // 페이지" 저장이 있으면 Dashboard/Library가 새 데이터를 가져오기 전에
+  // 먼저 끝마친다 (스크롤 직후 바로 뒤로가기를 눌렀을 때 최근 읽은 논문
+  // 카드가 갱신되지 않던 문제 수정).
+  await flushSaveLastReadPage()
   hasLibraryStateInHistory = true
   loginScreen.classList.remove('active')
   viewerScreen.classList.remove('active')
