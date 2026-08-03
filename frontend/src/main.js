@@ -1799,11 +1799,11 @@ const PROVIDER_CONFIG = [
       { value: 'fable|xhigh',  label: 'Fable · xHigh',  group: 'Fable 5' },
       { value: 'fable|max',    label: 'Fable · Max',    group: 'Fable 5' },
       // Opus
-      { value: 'opus|low',    label: 'Opus · Low',    group: 'Opus 4.8' },
-      { value: 'opus|medium', label: 'Opus · Medium', group: 'Opus 4.8' },
-      { value: 'opus|high',   label: 'Opus · High',   group: 'Opus 4.8' },
-      { value: 'opus|xhigh',  label: 'Opus · xHigh',  group: 'Opus 4.8' },
-      { value: 'opus|max',    label: 'Opus · Max',    group: 'Opus 4.8' },
+      { value: 'opus|low',    label: 'Opus · Low',    group: 'Opus 5' },
+      { value: 'opus|medium', label: 'Opus · Medium', group: 'Opus 5' },
+      { value: 'opus|high',   label: 'Opus · High',   group: 'Opus 5' },
+      { value: 'opus|xhigh',  label: 'Opus · xHigh',  group: 'Opus 5' },
+      { value: 'opus|max',    label: 'Opus · Max',    group: 'Opus 5' },
       // Haiku
       { value: 'haiku|low',    label: 'Haiku · Low',    group: 'Haiku 4.5' },
       { value: 'haiku|medium', label: 'Haiku · Medium', group: 'Haiku 4.5' },
@@ -1850,6 +1850,9 @@ const PROVIDER_CONFIG = [
   {
     id: 'openai', label: 'OpenAI', icon: '✦',
     models: [
+      { value: 'gpt-5.6-sol',   label: 'GPT-5.6 Sol' },
+      { value: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
+      { value: 'gpt-5.6-luna',  label: 'GPT-5.6 Luna' },
       { value: 'gpt-5.5-pro', label: 'GPT-5.5 Pro' },
       { value: 'gpt-5.5', label: 'GPT-5.5' },
       { value: 'gpt-5.4', label: 'GPT-5.4' },
@@ -1863,16 +1866,19 @@ const PROVIDER_CONFIG = [
   {
     id: 'claude', label: 'Anthropic Claude', icon: icon('cpu', 13),
     models: [
-      { value: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
+      { value: 'claude-fable-5', label: 'Claude Fable 5' },
+      { value: 'claude-opus-5', label: 'Claude Opus 5' },
       { value: 'claude-opus-4.7', label: 'Claude Opus 4.7' },
-      { value: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
+      { value: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
       { value: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' }
     ]
   },
   {
     id: 'gemini', label: 'Google Gemini', icon: icon('star', 13),
     models: [
+      { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
       { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+      { value: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
       { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' }
     ]
   }
@@ -3707,6 +3713,9 @@ const SIDEBAR_COLLAPSED_KEY = 'easypaper_sidebar_collapsed'
 function setSidebarCollapsed(collapsed) {
   if (!appSidebar) return
   appSidebar.classList.toggle('collapsed', collapsed)
+  // chat-drawer는 DOM상 사이드바 밖(body 레벨)에 있어 폭을 알 수 없으므로
+  // body에도 미러링해 드로어의 좌측 오프셋(style.css)이 따라오게 한다.
+  document.body.classList.toggle('sidebar-collapsed', collapsed)
   localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? 'true' : 'false')
 }
 if (appSidebar) {
