@@ -199,7 +199,7 @@ export async function renderAiChatsPage() {
     root.querySelectorAll('[data-action="chat"]').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.dataset.doc
-        location.hash = 'viewer?id=' + encodeURIComponent(id) + '&chat=1'
+        location.hash = 'chat?id=' + encodeURIComponent(id)
       })
     })
     root.querySelectorAll('[data-action="viewer"]').forEach(btn => {

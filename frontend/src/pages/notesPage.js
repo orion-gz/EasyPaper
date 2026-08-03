@@ -15,6 +15,7 @@
 import '../styles/notes.css'
 import { fetchLibrary, fetchLibraryAnnotations, fetchLibraryMemos, fetchPrimer } from '../library.js'
 import { icon } from '../icons.js'
+import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
 
 // 즐겨찾기는 서버에 저장되는 필드가 아니라 Library 페이지가 이미 쓰고 있는
 // 로컬 전용 상태다(백엔드에 star/favorite 필드가 없음 - Library 리스킨 때 같은
@@ -50,9 +51,9 @@ let searchQuery = ''
 let selectedDocId = null
 let activeSubtab = 'summary' // 'summary' | 'memo' | 'highlight' | 'underline' | 'all'
 
-// 요약(primer.hook)은 문서당 LLM 호출 비용이 있으므로 탭을 실제로 열었을 때만
+// 요약(primer)은 문서당 LLM 호출 비용이 있으므로 탭을 실제로 열었을 때만
 // 가져오고, 한 번 가져오면 페이지 재방문 동안 재사용한다.
-// docId -> { status: 'loading'|'ready'|'error', text?: string }
+// docId -> { status: 'loading'|'ready'|'error', data?: object(primer 전체) }
 const summaryCache = new Map()
 
 // ── localStorage 읽기 (main.js loadAnnotations/loadMemos와 동일한 키/형태) ──
@@ -256,23 +257,116 @@ const EMPTY_MESSAGES = {
   all: '아직 저장된 주석이 없습니다.',
 }
 
-// 요약 탭: primer(읽기 전 브리핑)의 hook을 재사용한다 - Library 상세 패널의
-// AI 요약과 동일한 데이터 소스/우선순위(hook → feynman → lineage, main.js
-// showGraphDetailPanel/openLibraryDetailPanel과 동일한 관례)라 새 백엔드가
-// 필요 없다. LLM 호출 비용이 있어 탭을 열 때만 fetchPrimer()를 호출하고
-// summaryCache에 담아 재방문 시 재사용한다.
+// 요약 탭: primer(읽기 전 브리핑)를 그대로 가져와 뷰어의 브리핑 모달과 같은
+// 내용(핵심 한 줄, 스스로 답해볼 질문, 대표 Figure, 체크리스트, 연구 계보,
+// 파인만 설명, 실험 흐름, 용어집)을 한 화면에 쭉 이어서 보여준다(Notes는
+// 탭 하나짜리 읽기 전용 뷰라 모달처럼 소탭으로 나누지 않고 전부 스택한다).
+// 관련 논문 그래프(citation_graph)는 클릭 시 다른 논문 뷰어로 이동하는
+// 상호작용용 기능이라 "읽기 전용 열람"이라는 이 페이지 성격과 맞지 않아
+// 제외한다. LLM 호출 비용이 있어 탭을 열 때만 fetchPrimer()를 호출하고
+// summaryCache에 원본 데이터를 담아 재방문 시 재사용한다.
+function primerHasAnyContent(data) {
+  return !!(
+    data.hook || data.lineage || data.feynman || data.figure ||
+    (data.questions && data.questions.length) ||
+    (data.checklist && data.checklist.length) ||
+    (data.experiment_flow && data.experiment_flow.length) ||
+    (data.glossary && data.glossary.length)
+  )
+}
+
+function renderPrimerSection(labelIcon, labelText, innerHtml) {
+  return `
+    <div class="notes-primer-section">
+      <div class="primer-label">
+        <span class="primer-label-icon">${icon(labelIcon, 13)}</span>
+        <span>${labelText}</span>
+      </div>
+      ${innerHtml}
+    </div>
+  `
+}
+
 function renderSummaryTabContent(docId) {
   const cached = summaryCache.get(docId)
   if (!cached || cached.status === 'loading') {
-    return `<div class="notes-summary-loading">${icon('refreshCw', 15)}<span>AI 요약을 불러오는 중...</span></div>`
+    return `<div class="notes-summary-loading">${icon('refreshCw', 15)}<span>읽기 전 브리핑을 불러오는 중...</span></div>`
   }
   if (cached.status === 'error') {
-    return `<div class="notes-empty"><p style="color:var(--error)">요약을 불러오지 못했습니다.</p></div>`
+    return `<div class="notes-empty"><p style="color:var(--error)">브리핑을 불러오지 못했습니다.</p></div>`
   }
-  if (!cached.text) {
-    return `<div class="notes-empty"><p>이 논문에는 아직 생성된 요약이 없습니다.</p></div>`
+  const data = cached.data || {}
+  if (!primerHasAnyContent(data)) {
+    return `<div class="notes-empty"><p>이 논문에는 아직 생성된 브리핑이 없습니다.<br/>뷰어에서 논문을 열면 자동으로 생성됩니다.</p></div>`
   }
-  return `<div class="notes-summary-text">${escapeHtml(cached.text)}</div>`
+
+  const parts = []
+
+  if (data.hook) {
+    parts.push(`
+      <div class="primer-hook-section">
+        <span class="primer-hook-quote">&ldquo;</span>
+        <p class="primer-hook-text">${formatTranslationHtml(data.hook)}</p>
+      </div>
+    `)
+  }
+
+  const questions = data.questions || []
+  if (questions.length) {
+    parts.push(renderPrimerSection('helpCircle', '읽기 전에 스스로 답해보기',
+      `<ol class="primer-list">${questions.map(q => `<li>${formatTranslationHtml(q)}</li>`).join('')}</ol>`))
+  }
+
+  if (data.figure) {
+    parts.push(renderPrimerSection('image', '핵심 그림 먼저 보기',
+      `<img class="primer-figure-img" src="/api/library/${encodeURIComponent(docId)}/primer-figure?ts=${Date.now()}" alt="대표 Figure" />`))
+  }
+
+  const checklist = data.checklist || []
+  if (checklist.length) {
+    parts.push(renderPrimerSection('listChecks', '읽으면서 확인할 것',
+      `<ul class="primer-checklist">${checklist.map(c => `<li>${formatTranslationHtml(c)}</li>`).join('')}</ul>`))
+  }
+
+  if (data.lineage) {
+    parts.push(renderPrimerSection('activity', '이 논문의 연구 계보',
+      `<p class="primer-lineage-text">${formatTranslationHtml(data.lineage)}</p>`))
+  }
+
+  if (data.feynman) {
+    parts.push(renderPrimerSection('smile', '파인만 기법으로 쉽게 이해하기',
+      `<p class="primer-feynman-text">${formatTranslationHtml(data.feynman)}</p>`))
+  }
+
+  const flow = data.experiment_flow || []
+  if (flow.length) {
+    const stepsHtml = flow.map((step, i) => `
+      <li class="primer-experiment-step">
+        <div class="primer-experiment-step-num">${i + 1}</div>
+        <div class="primer-experiment-step-body">
+          <div class="primer-experiment-row"><span class="primer-experiment-tag">가설</span><span>${formatTranslationHtml(step.hypothesis)}</span></div>
+          <div class="primer-experiment-row"><span class="primer-experiment-tag">방법</span><span>${formatTranslationHtml(step.method)}</span></div>
+          <div class="primer-experiment-row"><span class="primer-experiment-tag">결과</span><span>${formatTranslationHtml(step.result)}</span></div>
+        </div>
+      </li>
+    `).join('')
+    parts.push(renderPrimerSection('flaskConical', '가설 → 실험 → 결과 흐름',
+      `<ol class="primer-experiment-flow">${stepsHtml}</ol>`))
+  }
+
+  const glossary = data.glossary || []
+  if (glossary.length) {
+    const itemsHtml = glossary.map(g => `
+      <details class="primer-glossary-item">
+        <summary class="primer-glossary-term">${formatTranslationHtml(g.term)}</summary>
+        <p class="primer-glossary-def">${formatTranslationHtml(g.definition)}</p>
+      </details>
+    `).join('')
+    parts.push(renderPrimerSection('book', '이 논문이 새로 정의한 용어',
+      `<div class="primer-glossary">${itemsHtml}</div>`))
+  }
+
+  return `<div class="notes-primer-content">${parts.join('')}</div>`
 }
 
 function ensureSummaryLoaded(root, docId) {
@@ -281,8 +375,7 @@ function ensureSummaryLoaded(root, docId) {
   if (cached && cached.status === 'loading') return
   summaryCache.set(docId, { status: 'loading' })
   fetchPrimer(docId).then(data => {
-    const text = data.hook || data.feynman || data.lineage || ''
-    summaryCache.set(docId, { status: 'ready', text })
+    summaryCache.set(docId, { status: 'ready', data })
   }).catch(err => {
     console.error('Notes 요약 로드 실패:', err)
     summaryCache.set(docId, { status: 'error' })
@@ -291,7 +384,10 @@ function ensureSummaryLoaded(root, docId) {
     // 같은 문서의 요약 탭을 보고 있을 때만 다시 그린다.
     if (selectedDocId === docId && activeSubtab === 'summary') {
       const contentEl = root.querySelector('.notes-tab-content')
-      if (contentEl) contentEl.innerHTML = renderSummaryTabContent(docId)
+      if (contentEl) {
+        contentEl.innerHTML = renderSummaryTabContent(docId)
+        applyKatexToElement(contentEl)
+      }
     }
   })
 }
