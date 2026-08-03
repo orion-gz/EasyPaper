@@ -273,14 +273,15 @@ const compareChatMessages  = $('compare-chat-messages')
 const compareChatInput     = $('compare-chat-input')
 const compareChatSendBtn   = $('compare-chat-send-btn')
 
-// ── 단일 논문 대화 화면 (뷰어 없이 채팅만) ──
-const chatScreenEl         = $('chat-screen')
-const chatScreenBackBtn    = $('chat-screen-back-btn')
-const chatScreenTitle      = $('chat-screen-title')
-const chatScreenViewerBtn  = $('chat-screen-viewer-btn')
-const chatScreenMessages   = $('chat-screen-messages')
-const chatScreenInput      = $('chat-screen-input')
-const chatScreenSendBtn    = $('chat-screen-send-btn')
+// ── 단일 논문 대화 드로어 (AI Chats 목록에서 뷰어 없이 여는 우측 슬라이드 패널) ──
+const chatDrawerOverlayEl  = $('chat-drawer-overlay')
+const chatDrawerEl         = $('chat-drawer')
+const chatDrawerCloseBtn   = $('chat-drawer-close-btn')
+const chatDrawerTitle      = $('chat-drawer-title')
+const chatDrawerViewerBtn  = $('chat-drawer-viewer-btn')
+const chatDrawerMessages   = $('chat-drawer-messages')
+const chatDrawerInput      = $('chat-drawer-input')
+const chatDrawerSendBtn    = $('chat-drawer-send-btn')
 
 const docPreviewOverlay  = $('doc-preview-overlay')
 const docPreviewClose    = $('doc-preview-close')
@@ -428,7 +429,7 @@ function showLogin() {
   viewerScreen.classList.remove('active')
   libraryScreen.classList.remove('active')
   if (compareScreen) compareScreen.classList.remove('active')
-  if (chatScreenEl) chatScreenEl.classList.remove('active')
+  closeChatDrawer()
   loginScreen.classList.add('active')
   // 글로벌 테마 토글 표시, 로그아웃 및 설정 버튼 숨김
   const globalToggle = $('global-theme-toggle')
@@ -441,7 +442,7 @@ function showViewer() {
   loginScreen.classList.remove('active')
   libraryScreen.classList.remove('active')
   if (compareScreen) compareScreen.classList.remove('active')
-  if (chatScreenEl) chatScreenEl.classList.remove('active')
+  closeChatDrawer()
   viewerScreen.classList.add('active')
   // 글로벌 테마 토글 숨김 (뷰어 상단바 테마 버튼 사용)
   const globalToggle = $('global-theme-toggle')
@@ -453,24 +454,10 @@ function showCompareScreen() {
   loginScreen.classList.remove('active')
   libraryScreen.classList.remove('active')
   viewerScreen.classList.remove('active')
-  if (chatScreenEl) chatScreenEl.classList.remove('active')
+  closeChatDrawer()
   if (compareScreen) compareScreen.classList.add('active')
   // 라이브러리 화면과 동일하게 글로벌 테마/로그아웃/설정 버튼을 표시한다
   // (비교 화면 자체에는 별도의 테마 버튼이 없음)
-  const globalToggle = $('global-theme-toggle')
-  if (globalToggle) globalToggle.classList.remove('hidden')
-  globalLogoutBtn.classList.remove('hidden')
-  globalSettingsBtn.classList.remove('hidden')
-}
-
-function showChatScreen() {
-  stopLibraryPolling()
-  loginScreen.classList.remove('active')
-  libraryScreen.classList.remove('active')
-  viewerScreen.classList.remove('active')
-  if (compareScreen) compareScreen.classList.remove('active')
-  chatScreenEl.classList.add('active')
-  // compare 화면과 동일하게 글로벌 테마/로그아웃/설정 버튼을 표시한다
   const globalToggle = $('global-theme-toggle')
   if (globalToggle) globalToggle.classList.remove('hidden')
   globalLogoutBtn.classList.remove('hidden')
@@ -3622,7 +3609,6 @@ async function showLibraryScreen(shouldPushState = true, targetPage) {
   loginScreen.classList.remove('active')
   viewerScreen.classList.remove('active')
   if (compareScreen) compareScreen.classList.remove('active')
-  if (chatScreenEl) chatScreenEl.classList.remove('active')
   libraryScreen.classList.add('active')
   // 워크스페이스 화면(사이드바+탑네비)에서는 테마 토글/Settings/로그아웃이 전부
   // 사이드바 푸터에 있으므로, 로그인/비교 화면 전용인 플로팅 버튼 묶음은 통째로 숨긴다
@@ -3651,6 +3637,10 @@ const WORKSPACE_PAGE_TITLES = {
 
 async function showWorkspacePage(pageId, { pushState = true } = {}) {
   if (!WORKSPACE_PAGES.includes(pageId)) pageId = 'dashboard'
+  // 채팅 드로어가 열린 채로 다른 워크스페이스 페이지로 이동하면(사이드바 클릭 등)
+  // 드로어를 닫아준다. '#chat?id=' 라우팅 분기가 이 함수 호출 직후 다시
+  // openChatDrawer()를 부르는 경우엔 그냥 무해한 no-op이다.
+  if (pageId !== 'chats' || state.currentWorkspacePage !== 'chats') closeChatDrawer()
   state.currentWorkspacePage = pageId
 
   if (sidebarNav) {
@@ -4058,11 +4048,17 @@ if (compareBackBtn) {
 // 요청에 따라 이 화면으로 대신 연다. 백엔드는 그대로 재사용한다 - streamChatAPI/
 // getChatHistoryAPI는 이미 뷰어를 실제로 "연" 적이 없어도 동작한다
 // (require_session_owner → ensure_session이 세션이 메모리에 없으면 DB 문서로부터
-// 알아서 복구한다, backend/routers/upload.py). 화면 구조/상태 관리는 바로 위
+// 알아서 복구한다, backend/routers/upload.py). 채팅 렌더링/전송 로직은 바로 위
 // compareChatState/openCompareScreen 패턴을 논문 1편짜리로 그대로 옮긴 것이다.
-let soloChatState = { docId: null, doc: null, history: [], activeStream: null, currentText: '' }
+//
+// 화면 자체는 처음에 뷰어 없는 전체화면(#chat-screen)으로 만들었었는데,
+// 목록에서 다른 페이지로 완전히 이동해버려 사이드바/탑바가 사라지는 게
+// 어색하다는 피드백을 받아 Library 상세 패널(openLibraryDetailPanel)과 동일한
+// "우측 슬라이드 드로어" 패턴으로 바꿨다 - AI Chats 페이지는 그 자리에 계속
+// 떠 있고, 드로어만 그 위에 열고 닫는다.
+let chatDrawerState = { docId: null, doc: null, history: [], activeStream: null, currentText: '' }
 
-function renderSoloChatMessage(role, content, isHtml = false) {
+function renderChatDrawerMessage(role, content, isHtml = false) {
   const msgEl = document.createElement('div')
   msgEl.className = `chat-message ${role}`
 
@@ -4072,14 +4068,14 @@ function renderSoloChatMessage(role, content, isHtml = false) {
   else bubbleEl.textContent = content
   msgEl.appendChild(bubbleEl)
 
-  if (content) appendSoloActionButtons(msgEl, role, content)
+  if (content) appendChatDrawerActionButtons(msgEl, role, content)
 
-  chatScreenMessages.appendChild(msgEl)
-  chatScreenMessages.scrollTop = chatScreenMessages.scrollHeight
+  chatDrawerMessages.appendChild(msgEl)
+  chatDrawerMessages.scrollTop = chatDrawerMessages.scrollHeight
   return msgEl
 }
 
-function appendSoloActionButtons(msgEl, role, content) {
+function appendChatDrawerActionButtons(msgEl, role, content) {
   if (!content || content.includes('chat-error-text')) return
   const actionsEl = document.createElement('div')
   actionsEl.className = 'message-actions'
@@ -4109,36 +4105,36 @@ function appendSoloActionButtons(msgEl, role, content) {
   msgEl.appendChild(actionsEl)
 }
 
-function appendSoloTypingIndicator() {
+function appendChatDrawerTypingIndicator() {
   const msgEl = document.createElement('div')
   msgEl.className = 'chat-message assistant temp-typing'
   const bubbleEl = document.createElement('div')
   bubbleEl.className = 'message-bubble'
   bubbleEl.innerHTML = `<div class="typing-container" style="display: flex; align-items: center; gap: 8px;"><span class="typing-text" style="font-size: 12px; color: var(--text-secondary);">AI가 답변을 준비하고 있습니다</span><div class="typing-indicator" style="display: flex; gap: 3px; align-items: center;"><span></span><span></span><span></span></div></div>`
   msgEl.appendChild(bubbleEl)
-  chatScreenMessages.appendChild(msgEl)
-  chatScreenMessages.scrollTop = chatScreenMessages.scrollHeight
+  chatDrawerMessages.appendChild(msgEl)
+  chatDrawerMessages.scrollTop = chatDrawerMessages.scrollHeight
   return msgEl
 }
 
-function removeSoloTypingIndicator() {
-  chatScreenMessages.querySelectorAll('.temp-typing').forEach(el => el.remove())
+function removeChatDrawerTypingIndicator() {
+  chatDrawerMessages.querySelectorAll('.temp-typing').forEach(el => el.remove())
 }
 
-function updateSoloChatSendBtnIcon(isGenerating) {
-  if (!chatScreenSendBtn) return
+function updateChatDrawerSendBtnIcon(isGenerating) {
+  if (!chatDrawerSendBtn) return
   if (isGenerating) {
-    chatScreenSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /></svg>`
-    chatScreenSendBtn.title = '답변 생성 중단'
+    chatDrawerSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /></svg>`
+    chatDrawerSendBtn.title = '답변 생성 중단'
   } else {
-    chatScreenSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`
-    chatScreenSendBtn.title = '전송'
+    chatDrawerSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`
+    chatDrawerSendBtn.title = '전송'
   }
 }
 
-function renderSoloGreeting(doc) {
+function renderChatDrawerGreeting(doc) {
   const title = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
-  renderSoloChatMessage('assistant',
+  renderChatDrawerMessage('assistant',
     `<strong>${escapeHtml(title)}</strong>에 대해 무엇이든 물어보세요.<br><br>` +
     `<strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong>` +
     `<ul><li>이 논문의 핵심 기여는 무엇인가요?</li><li>실험 설정을 요약해줄 수 있나요?</li><li>이 방법론의 한계점은 뭔가요?</li></ul>`,
@@ -4147,155 +4143,180 @@ function renderSoloGreeting(doc) {
 
 // location.hash 대입은 popstate/hashchange를 둘 다 발생시킬 수 있어(openCompareScreen과
 // 동일한 이유), 같은 문서에 대한 재진입 호출을 걸러낸다.
-let soloChatOpeningDocId = null
+let chatDrawerOpeningDocId = null
 
-async function openSoloChatScreen(doc, shouldPushState = true) {
-  if (soloChatOpeningDocId === doc.id) return
-  if (chatScreenEl.classList.contains('active') && soloChatState.docId === doc.id) return
-  soloChatOpeningDocId = doc.id
+// 드로어를 여는 유일한 경로는 handleRouting()의 '#chat?id=' 분기다(AI Chats
+// 목록의 "대화" 버튼은 location.hash를 그 형태로 바꿀 뿐이라 hash 갱신은
+// 호출부에서 이미 끝난 상태) - 그래서 여기서는 URL을 직접 건드리지 않는다.
+async function openChatDrawer(doc) {
+  if (chatDrawerOpeningDocId === doc.id) return
+  if (chatDrawerEl.classList.contains('open') && chatDrawerState.docId === doc.id) return
+  chatDrawerOpeningDocId = doc.id
 
-  if (soloChatState.activeStream) { soloChatState.activeStream(); soloChatState.activeStream = null }
-  soloChatState = { docId: doc.id, doc, history: [], activeStream: null, currentText: '' }
-
-  if (shouldPushState) {
-    history.pushState({ screen: 'chat', id: doc.id }, '', `#chat?id=${encodeURIComponent(doc.id)}`)
-  }
+  if (chatDrawerState.activeStream) { chatDrawerState.activeStream(); chatDrawerState.activeStream = null }
+  chatDrawerState = { docId: doc.id, doc, history: [], activeStream: null, currentText: '' }
 
   const title = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
-  if (chatScreenTitle) chatScreenTitle.textContent = title
+  if (chatDrawerTitle) chatDrawerTitle.textContent = title
 
-  if (chatScreenMessages) chatScreenMessages.innerHTML = ''
-  showChatScreen()
+  if (chatDrawerMessages) chatDrawerMessages.innerHTML = ''
+  chatDrawerOverlayEl.classList.add('open')
+  chatDrawerEl.classList.add('open')
+  chatDrawerEl.setAttribute('aria-hidden', 'false')
 
   try {
     const res = await getChatHistoryAPI(doc.id)
     const savedHistory = res.history || []
     if (savedHistory.length === 0) {
-      renderSoloGreeting(doc)
+      renderChatDrawerGreeting(doc)
     } else {
       savedHistory.forEach(msg => {
-        renderSoloChatMessage(msg.role, msg.role === 'assistant' ? formatChatHtml(msg.content) : msg.content, msg.role === 'assistant')
-        soloChatState.history.push({ role: msg.role, content: msg.content })
+        renderChatDrawerMessage(msg.role, msg.role === 'assistant' ? formatChatHtml(msg.content) : msg.content, msg.role === 'assistant')
+        chatDrawerState.history.push({ role: msg.role, content: msg.content })
       })
     }
   } catch (err) {
     console.warn('논문 채팅 기록 로드 실패:', err)
-    renderSoloGreeting(doc)
+    renderChatDrawerGreeting(doc)
   } finally {
-    if (soloChatOpeningDocId === doc.id) soloChatOpeningDocId = null
+    if (chatDrawerOpeningDocId === doc.id) chatDrawerOpeningDocId = null
   }
 }
 
-async function sendSoloChatMessage() {
-  if (!soloChatState.docId) return
-  if (soloChatState.activeStream) return
+// UI만 닫는다(URL 정리는 호출부 책임) - showWorkspacePage()에서 다른 페이지로
+// 넘어갈 때도 방어적으로 호출하므로, 여기서 훅 자체를 hash에 대입하면
+// hashchange가 다시 발생해 라우팅이 두 번 도는 문제가 생긴다.
+function closeChatDrawer() {
+  if (!chatDrawerState.docId) return
+  if (chatDrawerState.activeStream) { chatDrawerState.activeStream(); chatDrawerState.activeStream = null }
+  chatDrawerState = { docId: null, doc: null, history: [], activeStream: null, currentText: '' }
+  chatDrawerOverlayEl.classList.remove('open')
+  chatDrawerEl.classList.remove('open')
+  chatDrawerEl.setAttribute('aria-hidden', 'true')
+}
 
-  const text = chatScreenInput.value.trim()
+// 닫기 버튼/오버레이 클릭/Esc처럼 "사용자가 직접 닫은" 경우에만 URL도
+// 같이 정리한다(뒤로가기로 닫힌 경우는 popstate가 이미 hash를 바꿔놨음).
+function requestCloseChatDrawer() {
+  closeChatDrawer()
+  if (location.hash.startsWith('#chat?id=')) {
+    history.pushState(null, '', '#chats')
+  }
+}
+
+async function sendChatDrawerMessage() {
+  if (!chatDrawerState.docId) return
+  if (chatDrawerState.activeStream) return
+
+  const text = chatDrawerInput.value.trim()
   if (!text) return
 
-  chatScreenInput.value = ''
-  chatScreenInput.style.height = 'auto'
+  chatDrawerInput.value = ''
+  chatDrawerInput.style.height = 'auto'
 
-  renderSoloChatMessage('user', text)
-  soloChatState.history.push({ role: 'user', content: text })
+  renderChatDrawerMessage('user', text)
+  chatDrawerState.history.push({ role: 'user', content: text })
 
-  appendSoloTypingIndicator()
-  chatScreenInput.disabled = true
-  updateSoloChatSendBtnIcon(true)
+  appendChatDrawerTypingIndicator()
+  chatDrawerInput.disabled = true
+  updateChatDrawerSendBtnIcon(true)
 
   let accumulatedText = ''
   let replyBubble = null
   let firstToken = true
-  soloChatState.currentText = ''
+  chatDrawerState.currentText = ''
 
-  soloChatState.activeStream = streamChatAPI(
-    soloChatState.docId,
-    soloChatState.history,
+  chatDrawerState.activeStream = streamChatAPI(
+    chatDrawerState.docId,
+    chatDrawerState.history,
     // onToken
     (token) => {
       if (firstToken) {
         if (!token.trim()) return
-        removeSoloTypingIndicator()
-        replyBubble = renderSoloChatMessage('assistant', '', true).querySelector('.message-bubble')
+        removeChatDrawerTypingIndicator()
+        replyBubble = renderChatDrawerMessage('assistant', '', true).querySelector('.message-bubble')
         firstToken = false
       }
       accumulatedText += token
-      soloChatState.currentText = accumulatedText
+      chatDrawerState.currentText = accumulatedText
       replyBubble.innerHTML = formatChatHtml(accumulatedText)
-      chatScreenMessages.scrollTop = chatScreenMessages.scrollHeight
+      chatDrawerMessages.scrollTop = chatDrawerMessages.scrollHeight
     },
     // onDone
     () => {
-      soloChatState.activeStream = null
-      soloChatState.history.push({ role: 'assistant', content: accumulatedText })
+      chatDrawerState.activeStream = null
+      chatDrawerState.history.push({ role: 'assistant', content: accumulatedText })
       if (replyBubble) {
         replyBubble.innerHTML = formatChatHtml(accumulatedText)
-        if (replyBubble.parentElement) appendSoloActionButtons(replyBubble.parentElement, 'assistant', accumulatedText)
+        if (replyBubble.parentElement) appendChatDrawerActionButtons(replyBubble.parentElement, 'assistant', accumulatedText)
       }
-      chatScreenInput.disabled = false
-      updateSoloChatSendBtnIcon(false)
-      chatScreenInput.focus()
+      chatDrawerInput.disabled = false
+      updateChatDrawerSendBtnIcon(false)
+      chatDrawerInput.focus()
     },
     // onError
     (err) => {
-      removeSoloTypingIndicator()
-      soloChatState.activeStream = null
+      removeChatDrawerTypingIndicator()
+      chatDrawerState.activeStream = null
       if (firstToken) {
-        renderSoloChatMessage('assistant', `<span class="chat-error-text">${icon('alertTriangle', 13, 'style="vertical-align:-2px;margin-right:3px"')}답변 중 오류가 발생했습니다: ${escapeHtml(err.message)}</span>`, true)
+        renderChatDrawerMessage('assistant', `<span class="chat-error-text">${icon('alertTriangle', 13, 'style="vertical-align:-2px;margin-right:3px"')}답변 중 오류가 발생했습니다: ${escapeHtml(err.message)}</span>`, true)
       } else if (replyBubble) {
         replyBubble.innerHTML += `<br><br><span style="color: var(--error);">[오류: ${err.message}]</span>`
       }
-      chatScreenInput.disabled = false
-      updateSoloChatSendBtnIcon(false)
-      chatScreenInput.focus()
+      chatDrawerInput.disabled = false
+      updateChatDrawerSendBtnIcon(false)
+      chatDrawerInput.focus()
     }
   )
 }
 
-if (chatScreenSendBtn) {
-  chatScreenSendBtn.addEventListener('click', () => {
-    if (soloChatState.activeStream) {
-      soloChatState.activeStream()
-      soloChatState.activeStream = null
-      removeSoloTypingIndicator()
-      if (soloChatState.currentText) {
-        soloChatState.history.push({ role: 'assistant', content: soloChatState.currentText })
+if (chatDrawerSendBtn) {
+  chatDrawerSendBtn.addEventListener('click', () => {
+    if (chatDrawerState.activeStream) {
+      chatDrawerState.activeStream()
+      chatDrawerState.activeStream = null
+      removeChatDrawerTypingIndicator()
+      if (chatDrawerState.currentText) {
+        chatDrawerState.history.push({ role: 'assistant', content: chatDrawerState.currentText })
       } else {
-        soloChatState.history.pop()
+        chatDrawerState.history.pop()
       }
       showToast('답변 생성이 중단되었습니다.', 'info')
-      chatScreenInput.disabled = false
-      updateSoloChatSendBtnIcon(false)
-      chatScreenInput.focus()
+      chatDrawerInput.disabled = false
+      updateChatDrawerSendBtnIcon(false)
+      chatDrawerInput.focus()
     } else {
-      sendSoloChatMessage()
+      sendChatDrawerMessage()
     }
   })
 }
 
-if (chatScreenInput) {
-  chatScreenInput.addEventListener('keydown', (e) => {
+if (chatDrawerInput) {
+  chatDrawerInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      sendSoloChatMessage()
+      sendChatDrawerMessage()
     }
   })
-  chatScreenInput.addEventListener('input', () => {
-    chatScreenInput.style.height = 'auto'
-    chatScreenInput.style.height = `${chatScreenInput.scrollHeight}px`
+  chatDrawerInput.addEventListener('input', () => {
+    chatDrawerInput.style.height = 'auto'
+    chatDrawerInput.style.height = `${chatDrawerInput.scrollHeight}px`
   })
 }
 
-if (chatScreenBackBtn) {
-  chatScreenBackBtn.addEventListener('click', () => {
-    if (soloChatState.activeStream) { soloChatState.activeStream(); soloChatState.activeStream = null }
-    location.hash = 'chats'
-  })
-}
+if (chatDrawerCloseBtn) chatDrawerCloseBtn.addEventListener('click', requestCloseChatDrawer)
+if (chatDrawerOverlayEl) chatDrawerOverlayEl.addEventListener('click', requestCloseChatDrawer)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && chatDrawerEl.classList.contains('open')) requestCloseChatDrawer()
+})
 
-if (chatScreenViewerBtn) {
-  chatScreenViewerBtn.addEventListener('click', () => {
-    if (soloChatState.docId) location.hash = `viewer?id=${encodeURIComponent(soloChatState.docId)}`
+if (chatDrawerViewerBtn) {
+  chatDrawerViewerBtn.addEventListener('click', () => {
+    if (chatDrawerState.docId) {
+      const docId = chatDrawerState.docId
+      closeChatDrawer()
+      location.hash = `viewer?id=${encodeURIComponent(docId)}`
+    }
   })
 }
 
@@ -13333,16 +13354,25 @@ async function handleRouting() {
       showToast('비교할 논문 정보를 불러올 수 없습니다.', 'error')
       location.hash = 'library'
     } else if (hash.startsWith('#chat?id=')) {
+      // AI Chats 목록의 "대화" 버튼이 이 해시로 바꾸면(hashchange) 여기로
+      // 들어온다 - 드로어는 별도 화면이 아니라 AI Chats 페이지 위에 뜨는
+      // 오버레이라서, 먼저 AI Chats 페이지가 보이는 상태를 만든 다음 그
+      // 위에 드로어를 연다.
       const params = new URLSearchParams(hash.slice('#chat?'.length))
       const docId = params.get('id')
       if (docId) {
-        if (soloChatState.docId === docId && chatScreenEl.classList.contains('active')) {
+        if (chatDrawerState.docId === docId && chatDrawerEl.classList.contains('open')) {
           return
         }
         try {
           const doc = await fetchLibraryDoc(docId)
           if (doc) {
-            await openSoloChatScreen(doc, false)
+            if (viewerScreen.classList.contains('active') || !libraryScreen.classList.contains('active')) {
+              await showLibraryScreen(false, 'chats')
+            } else if (state.currentWorkspacePage !== 'chats') {
+              await showWorkspacePage('chats', { pushState: false })
+            }
+            await openChatDrawer(doc)
             return
           }
         } catch (err) {

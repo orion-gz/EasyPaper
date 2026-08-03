@@ -310,29 +310,32 @@
     </div>
   </div>
 
-  <!-- 단일 논문 대화 화면 (뷰어 없이 채팅 메시지 + 입력창만) -->
-  <div id="chat-screen" class="screen">
+  <!-- 단일 논문 대화 드로어 (AI Chats 목록에서 열리는, 뷰어 없이 채팅
+       메시지 + 입력창만 있는 패널 - Library 상세 패널(#lib-detail-panel)과
+       동일하게 사이드바/탑바는 그대로 둔 채 우측에서 슬라이드로 열린다) -->
+  <div id="chat-drawer-overlay" class="chat-drawer-overlay"></div>
+  <aside id="chat-drawer" class="chat-drawer" aria-hidden="true">
     <header class="compare-topbar">
-      <button id="chat-screen-back-btn" class="icon-btn" title="AI Chats로 돌아가기">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
+      <button id="chat-drawer-close-btn" class="icon-btn" title="닫기">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
       </button>
       <div class="compare-topbar-title">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></svg>
-        <span id="chat-screen-title">AI 대화</span>
+        <span id="chat-drawer-title">AI 대화</span>
       </div>
-      <button type="button" id="chat-screen-viewer-btn" class="file-btn-outline compact" title="뷰어에서 열기">
+      <button type="button" id="chat-drawer-viewer-btn" class="file-btn-outline compact" title="뷰어에서 열기">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>뷰어에서 열기
       </button>
     </header>
 
     <div class="compare-chat-body">
-      <div class="chat-messages" id="chat-screen-messages"></div>
+      <div class="chat-messages" id="chat-drawer-messages"></div>
       <div class="chat-input-area compare-chat-input-area">
         <div class="chat-input-box">
-          <textarea id="chat-screen-input" class="chat-input-textarea" placeholder="이 논문에 대해 질문해보세요..." rows="1"></textarea>
+          <textarea id="chat-drawer-input" class="chat-input-textarea" placeholder="이 논문에 대해 질문해보세요..." rows="1"></textarea>
           <div class="chat-input-footer">
             <span class="compare-chat-hint">Enter로 전송 · Shift+Enter로 줄바꿈</span>
-            <button id="chat-screen-send-btn" class="chat-send-btn" title="전송">
+            <button id="chat-drawer-send-btn" class="chat-send-btn" title="전송">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="22" y1="2" x2="11" y2="13"/>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -342,7 +345,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </aside>
 
   <!-- 뷰어 화면 -->
   <div id="viewer-screen" class="screen">
