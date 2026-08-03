@@ -18,7 +18,7 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-const TYPE_LABEL = { uploaded: 'Uploaded', read: 'Read', question: 'Question', note: 'Note' }
+const TYPE_LABEL = { uploaded: '업로드', read: '읽음', question: '질문', note: '메모' }
 const TYPE_ICON = { uploaded: 'archive', read: 'bookOpen', question: 'messageCircle', note: 'edit3' }
 // 활동 구성 막대(part-to-whole)의 분류 색 - dataviz 팔레트의 앞 4개 슬롯을
 // 고정 순서(blue→orange→aqua→yellow)로만 사용해 색맹 인접성 검증을 그대로 유지한다.
@@ -26,8 +26,7 @@ const TYPE_COLOR_VAR = { read: '--rh-c1', question: '--rh-c2', note: '--rh-c3', 
 const TYPE_ORDER = ['read', 'question', 'note', 'uploaded']
 
 const DAY_MS = 86400000
-const WEEKDAY_LABELS = ['Mon', '', 'Wed', '', 'Fri', '', 'Sun']
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const WEEKDAY_LABELS = ['월', '', '수', '', '금', '', '일']
 
 // ── 날짜 키 유틸: 로컬 자정 기준 "YYYY-MM-DD". 이벤트 timestamp는
 // 백엔드가 UTC ISO 문자열로 내려주므로 .slice(0,10) 자체가 이미 날짜 키다 -
@@ -59,18 +58,18 @@ function formatDayLabel(dateKey) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const diffDays = Math.round((today - day) / DAY_MS)
-  const primary = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday'
-    : day.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
-  return { primary, secondary: day.toLocaleDateString('en-US', { weekday: 'long' }) }
+  const primary = diffDays === 0 ? '오늘' : diffDays === 1 ? '어제'
+    : day.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+  return { primary, secondary: day.toLocaleDateString('ko-KR', { weekday: 'long' }) }
 }
 function formatTime(timestamp) {
   const d = new Date(timestamp)
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })
 }
 function formatShortDate(dateKey) {
   const d = keyToLocalDate(dateKey)
   if (isNaN(d.getTime())) return dateKey
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 // ── 집계 헬퍼 ──────────────────────────────────────────────
@@ -127,10 +126,10 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
 
 function deltaHtml(curr, prev, unit = '') {
   const diff = curr - prev
-  if (diff === 0) return `<span class="rh-stat-delta">±0${unit ? ' ' + unit : ''} vs prior 30 days</span>`
+  if (diff === 0) return `<span class="rh-stat-delta">±0${unit ? ' ' + unit : ''} 이전 30일 대비</span>`
   const cls = diff > 0 ? 'up' : 'down'
   const arrow = diff > 0 ? '↑' : '↓'
-  return `<span class="rh-stat-delta ${cls}">${arrow} ${Math.abs(diff).toLocaleString()}${unit ? ' ' + unit : ''} vs prior 30 days</span>`
+  return `<span class="rh-stat-delta ${cls}">${arrow} ${Math.abs(diff).toLocaleString()}${unit ? ' ' + unit : ''} 이전 30일 대비</span>`
 }
 
 // ── 읽기 시간 포맷/집계 헬퍼 ──────────────────────────────────
@@ -144,10 +143,10 @@ function formatDuration(seconds) {
 }
 function deltaDurationHtml(currSeconds, prevSeconds) {
   const diff = Math.round(currSeconds - prevSeconds)
-  if (diff === 0) return `<span class="rh-stat-delta">±0m vs prior 30 days</span>`
+  if (diff === 0) return `<span class="rh-stat-delta">±0m 이전 30일 대비</span>`
   const cls = diff > 0 ? 'up' : 'down'
   const arrow = diff > 0 ? '↑' : '↓'
-  return `<span class="rh-stat-delta ${cls}">${arrow} ${formatDuration(Math.abs(diff))} vs prior 30 days</span>`
+  return `<span class="rh-stat-delta ${cls}">${arrow} ${formatDuration(Math.abs(diff))} 이전 30일 대비</span>`
 }
 function sumSecondsByDayRange(byDay, startKey, endKeyExclusive) {
   let total = 0
@@ -162,7 +161,7 @@ export async function renderReadingHistoryPage() {
   const el = document.getElementById('page-history')
   if (!el) return
 
-  el.innerHTML = '<div class="rh-page"><div class="rh-empty">Loading reading history...</div></div>'
+  el.innerHTML = '<div class="rh-page"><div class="rh-empty">읽기 기록을 불러오는 중...</div></div>'
 
   let events = []
   let dashboard = null
@@ -181,7 +180,7 @@ export async function renderReadingHistoryPage() {
     readingStats = readingStatsRes
   } catch (err) {
     console.error('Reading History 로드 실패:', err)
-    el.innerHTML = '<div class="rh-page"><div class="rh-empty" style="color:var(--error)">Failed to load reading history.</div></div>'
+    el.innerHTML = '<div class="rh-page"><div class="rh-empty" style="color:var(--error)">읽기 기록을 불러오지 못했습니다.</div></div>'
     return
   }
 
@@ -190,7 +189,7 @@ export async function renderReadingHistoryPage() {
   const docsById = new Map(libraryDocs.map(d => [d.id, d]))
   const docTitle = (docId, fallback) => {
     const d = docsById.get(docId)
-    return (d?.metadata?.title) || d?.filename || fallback || 'Untitled'
+    return (d?.metadata?.title) || d?.filename || fallback || '제목 없음'
   }
 
   if (events.length === 0) {
@@ -198,10 +197,10 @@ export async function renderReadingHistoryPage() {
       <div class="rh-page">
         <div class="rh-header">
           <div>
-            <p class="rh-header-subtitle">Track your reading activities and research journey.</p>
+            <p class="rh-header-subtitle">읽기 활동과 연구 여정을 확인하세요.</p>
           </div>
         </div>
-        <div class="rh-card"><div class="rh-empty">No activity yet. Upload and read a paper to start building your history.</div></div>
+        <div class="rh-card"><div class="rh-empty">아직 활동 기록이 없습니다. 논문을 업로드하고 읽으면 기록이 쌓입니다.</div></div>
       </div>`
     return
   }
@@ -225,27 +224,27 @@ export async function renderReadingHistoryPage() {
 
   const statCards = [
     {
-      icon: 'calendar', color: 'var(--rh-c1)', label: 'Days Active',
+      icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
       value: `${curr.activeDays} / 30`,
-      sub: `<span class="rh-stat-delta">${activeDaysPct}% of last 30 days</span>`,
+      sub: `<span class="rh-stat-delta">최근 30일 중 ${activeDaysPct}%</span>`,
     },
     {
-      icon: 'clock', color: 'var(--rh-c3)', label: 'Reading Time',
+      icon: 'clock', color: 'var(--rh-c3)', label: '읽은 시간',
       value: formatDuration(currReadingSeconds),
       sub: deltaDurationHtml(currReadingSeconds, prevReadingSeconds),
     },
     {
-      icon: 'layers', color: 'var(--rh-c6)', label: 'Pages Read',
+      icon: 'layers', color: 'var(--rh-c6)', label: '읽은 페이지',
       value: curr.pagesRead.toLocaleString(),
       sub: deltaHtml(curr.pagesRead, prev.pagesRead),
     },
     {
-      icon: 'messageCircle', color: 'var(--rh-c5)', label: 'Questions Asked',
+      icon: 'messageCircle', color: 'var(--rh-c5)', label: '질문 수',
       value: curr.questions.toLocaleString(),
       sub: deltaHtml(curr.questions, prev.questions),
     },
     {
-      icon: 'edit3', color: 'var(--rh-c2)', label: 'Notes Created',
+      icon: 'edit3', color: 'var(--rh-c2)', label: '작성한 메모',
       value: curr.notes.toLocaleString(),
       sub: deltaHtml(curr.notes, prev.notes),
     },
@@ -280,7 +279,7 @@ export async function renderReadingHistoryPage() {
   weeks.forEach((week, wi) => {
     const firstOfMonthDay = week.find(d => keyToLocalDate(d.key).getDate() <= 7)
     if (firstOfMonthDay) {
-      const label = MONTH_LABELS[keyToLocalDate(firstOfMonthDay.key).getMonth()]
+      const label = `${keyToLocalDate(firstOfMonthDay.key).getMonth() + 1}월`
       if (!monthMarkers.length || monthMarkers[monthMarkers.length - 1].label !== label) {
         monthMarkers.push({ col: wi + 1, label })
       }
@@ -290,7 +289,7 @@ export async function renderReadingHistoryPage() {
   const calGridHtml = weeks.map(week => week.map(cell => {
     if (cell.isFuture) return '<div class="rh-cal-cell rh-future"></div>'
     const bucket = bucketOf(cell.count)
-    const title = `${formatShortDate(cell.key)}: ${cell.count} ${cell.count === 1 ? 'activity' : 'activities'}`
+    const title = `${formatShortDate(cell.key)}: 활동 ${cell.count}건`
     return `<div class="rh-cal-cell rh-heat-${bucket}" title="${escapeHtml(title)}"></div>`
   }).join('')).join('')
 
@@ -312,7 +311,7 @@ export async function renderReadingHistoryPage() {
   // ── Reading Time Distribution (part-to-whole, 전체 기간 실측치) ──
   // 카테고리는 main.js 하트비트가 실제로 구분하는 화면 상태 3가지뿐이다:
   // reading(뷰어에서 읽는 중) / chat(채팅 사이드바 사용 중) / compare(논문 비교).
-  const CATEGORY_LABEL = { reading: 'Paper Reading', chat: 'AI Chat', compare: 'Comparing Papers' }
+  const CATEGORY_LABEL = { reading: '논문 읽기', chat: 'AI 채팅', compare: '논문 비교' }
   const CATEGORY_COLOR_VAR = { reading: '--rh-c1', chat: '--rh-c2', compare: '--rh-c5' }
   const CATEGORY_ORDER = ['reading', 'chat', 'compare']
   const byCategory = readingStats?.total_seconds_by_category || {}
@@ -380,9 +379,9 @@ export async function renderReadingHistoryPage() {
     <div class="rh-page">
       <div class="rh-header">
         <div>
-          <p class="rh-header-subtitle">Track your reading activities and research journey.</p>
+          <p class="rh-header-subtitle">읽기 활동과 연구 여정을 확인하세요.</p>
         </div>
-        <span class="rh-header-period">${icon('calendar', 13)} Last 30 days</span>
+        <span class="rh-header-period">${icon('calendar', 13)} 최근 30일</span>
       </div>
 
       <div class="rh-stat-grid">
@@ -402,15 +401,15 @@ export async function renderReadingHistoryPage() {
         <div class="rh-col">
           <div class="rh-card">
             <div class="rh-card-head">
-              <span class="rh-card-title">${icon('calendar', 15)} Reading Activity</span>
+              <span class="rh-card-title">${icon('calendar', 15)} 읽기 활동</span>
               <div class="rh-cal-legend">
-                Less
+                적음
                 <span class="rh-cal-legend-swatch rh-heat-0" style="background:color-mix(in srgb, var(--accent-mid) 6%, var(--bg-elevated))"></span>
                 <span class="rh-cal-legend-swatch rh-heat-1" style="background:color-mix(in srgb, var(--accent-mid) 28%, var(--bg-elevated))"></span>
                 <span class="rh-cal-legend-swatch rh-heat-2" style="background:color-mix(in srgb, var(--accent-mid) 50%, var(--bg-elevated))"></span>
                 <span class="rh-cal-legend-swatch rh-heat-3" style="background:color-mix(in srgb, var(--accent-mid) 72%, var(--bg-elevated))"></span>
                 <span class="rh-cal-legend-swatch rh-heat-4" style="background:var(--accent-mid)"></span>
-                More
+                많음
               </div>
             </div>
             <div class="rh-cal-scroll">
@@ -424,31 +423,31 @@ export async function renderReadingHistoryPage() {
             </div>
             <div class="rh-cal-footer">
               <span>${formatShortDate(gridStart)} &ndash; ${formatShortDate(gridEnd)}</span>
-              <span>Total <b>${allActiveKeys.size}</b> active days &bull; Longest streak <b>${streaks.longest}</b> days</span>
+              <span>총 <b>${allActiveKeys.size}</b>일 활동 &bull; 최장 연속 <b>${streaks.longest}</b>일</span>
             </div>
           </div>
 
           <div class="rh-card">
             <div class="rh-card-head">
-              <span class="rh-card-title">${icon('list', 15)} All Activities</span>
+              <span class="rh-card-title">${icon('list', 15)} 전체 활동</span>
             </div>
             <div class="rh-tabs" id="rh-filter-tabs">
-              <button type="button" class="rh-tab-btn active" data-type="all">All Activities</button>
+              <button type="button" class="rh-tab-btn active" data-type="all">전체</button>
               ${TYPE_ORDER.map(t => `<button type="button" class="rh-tab-btn" data-type="${t}">${escapeHtml(TYPE_LABEL[t])}</button>`).join('')}
             </div>
             <div id="rh-timeline-list"></div>
-            <button type="button" class="rh-more-btn hidden" id="rh-more-btn">${icon('chevronDown', 14)} Show more activities</button>
+            <button type="button" class="rh-more-btn hidden" id="rh-more-btn">${icon('chevronDown', 14)} 활동 더 보기</button>
           </div>
         </div>
 
         <div class="rh-col">
           <div class="rh-card">
             <div class="rh-card-head">
-              <span class="rh-card-title">${icon('grid', 15)} Reading Time Distribution</span>
+              <span class="rh-card-title">${icon('grid', 15)} 읽기 시간 분포</span>
               <span class="rh-card-sub">뷰어/비교 화면 실측 시간</span>
             </div>
             ${mixTotalSeconds > 0 ? `
-              <div class="rh-mix-total">All-time total: <b>${formatDuration(mixTotalSeconds)}</b></div>
+              <div class="rh-mix-total">전체 누적: <b>${formatDuration(mixTotalSeconds)}</b></div>
               <div class="rh-mix-bar">${mixBarHtml}</div>
               <div class="rh-mix-legend">${mixLegendHtml}</div>
             ` : `<div class="rh-empty">아직 기록된 읽기 시간이 없습니다.</div>`}
@@ -456,38 +455,38 @@ export async function renderReadingHistoryPage() {
 
           <div class="rh-card">
             <div class="rh-card-head">
-              <span class="rh-card-title">${icon('award', 15)} Top Papers by Reading Time</span>
+              <span class="rh-card-title">${icon('award', 15)} 읽기 시간 상위 논문</span>
             </div>
             <div class="rh-top-list">${topPapersHtml}</div>
           </div>
 
           <div class="rh-card">
             <div class="rh-card-head">
-              <span class="rh-card-title">${icon('zap', 15)} Reading Streak</span>
+              <span class="rh-card-title">${icon('zap', 15)} 연속 읽기</span>
             </div>
             <div class="rh-streak-value">
               <span class="rh-streak-num">${streaks.current}</span>
-              <span class="rh-streak-unit">day${streaks.current === 1 ? '' : 's'}</span>
+              <span class="rh-streak-unit">일</span>
             </div>
             <div class="rh-streak-week">${streakWeekHtml}</div>
-            <div class="rh-streak-msg">${streaks.current > 0 ? 'Keep it up!' : 'Read a paper today to start a streak.'}</div>
+            <div class="rh-streak-msg">${streaks.current > 0 ? '계속 이어가세요!' : '오늘 논문을 읽고 연속 기록을 시작해보세요.'}</div>
           </div>
 
           <div class="rh-callout-row">
             <div class="rh-callout">
               <div class="rh-callout-icon" style="--rh-callout-color:var(--rh-c4)">${icon('award', 16)}</div>
               <div class="rh-callout-body">
-                <div class="rh-callout-label">Most Active Day</div>
-                <div class="rh-callout-value">${bestDayCount ? `${bestDayCount} activities` : '&mdash;'}</div>
-                <div class="rh-callout-sub">${bestDayKey ? formatShortDate(bestDayKey) : 'No activity yet'}</div>
+                <div class="rh-callout-label">가장 활발했던 날</div>
+                <div class="rh-callout-value">${bestDayCount ? `${bestDayCount}건의 활동` : '&mdash;'}</div>
+                <div class="rh-callout-sub">${bestDayKey ? formatShortDate(bestDayKey) : '아직 활동 없음'}</div>
               </div>
             </div>
             <div class="rh-callout">
               <div class="rh-callout-icon" style="--rh-callout-color:var(--success)">${icon('checkCircle', 16)}</div>
               <div class="rh-callout-body">
-                <div class="rh-callout-label">Longest Streak</div>
-                <div class="rh-callout-value">${streaks.longest} day${streaks.longest === 1 ? '' : 's'}</div>
-                <div class="rh-callout-sub">${streaks.longestStart ? `${formatShortDate(streaks.longestStart)} &ndash; ${formatShortDate(streaks.longestEnd)}` : 'No activity yet'}</div>
+                <div class="rh-callout-label">최장 연속 기록</div>
+                <div class="rh-callout-value">${streaks.longest}일</div>
+                <div class="rh-callout-sub">${streaks.longestStart ? `${formatShortDate(streaks.longestStart)} &ndash; ${formatShortDate(streaks.longestEnd)}` : '아직 활동 없음'}</div>
               </div>
             </div>
           </div>
@@ -518,7 +517,7 @@ export async function renderReadingHistoryPage() {
   function renderTimeline() {
     const filtered = activeType === 'all' ? sortedEvents : sortedEvents.filter(e => e.type === activeType)
     if (filtered.length === 0) {
-      timelineListEl.innerHTML = '<div class="rh-empty">No activities of this type yet.</div>'
+      timelineListEl.innerHTML = '<div class="rh-empty">이 유형의 활동이 아직 없습니다.</div>'
       moreBtn.classList.add('hidden')
       return
     }
@@ -537,7 +536,7 @@ export async function renderReadingHistoryPage() {
               const title = docTitle(e.doc_id, e.doc_title)
               const pages = e.type === 'read' ? docsById.get(e.doc_id)?.total_pages : null
               return `
-                <div class="rh-timeline-entry" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" title="Open this paper">
+                <div class="rh-timeline-entry" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" title="이 논문 열기">
                   <div class="rh-timeline-dot">${icon(TYPE_ICON[e.type] || 'clock', 13)}</div>
                   <div class="rh-timeline-row">
                     <span class="rh-timeline-time">${escapeHtml(formatTime(e.timestamp))}</span>
@@ -546,7 +545,7 @@ export async function renderReadingHistoryPage() {
                       <div class="rh-timeline-title">${escapeHtml(title)}</div>
                       ${e.summary ? `<div class="rh-timeline-summary">${escapeHtml(e.summary)}</div>` : ''}
                     </div>
-                    ${pages ? `<span class="rh-timeline-meta">${pages} pages</span>` : ''}
+                    ${pages ? `<span class="rh-timeline-meta">${pages}페이지</span>` : ''}
                   </div>
                 </div>`
             }).join('')}

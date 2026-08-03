@@ -257,7 +257,6 @@ const sidebarSettingsBtn  = $('sidebar-settings-btn')
 const sidebarLogoutBtn    = $('sidebar-logout-btn')
 const workspacePageTitle  = $('workspace-page-title')
 const workspaceSearchInput = $('workspace-search-input')
-const workspaceAvatarBtn  = $('workspace-avatar-btn')
 const pageOutlet          = $('page-outlet')
 
 const libCompareToggleBtn   = $('lib-compare-toggle-btn')
@@ -3723,11 +3722,11 @@ async function showLibraryScreen(shouldPushState = true, targetPage) {
   viewerScreen.classList.remove('active')
   if (compareScreen) compareScreen.classList.remove('active')
   libraryScreen.classList.add('active')
-  // 워크스페이스 화면(사이드바+탑네비)에서는 Settings/로그아웃이 이미 사이드바 푸터와
-  // 탑네비 아바타에 있으므로 플로팅 버튼 묶음에서는 숨긴다(안 그러면 페이지 콘텐츠와
-  // 겹침). 테마 토글만 남겨둔다 - 탑네비/사이드바에 별도의 테마 토글이 없기 때문.
+  // 워크스페이스 화면(사이드바+탑네비)에서는 테마 토글/Settings/로그아웃이 전부
+  // 사이드바 푸터에 있으므로, 로그인/비교 화면 전용인 플로팅 버튼 묶음은 통째로 숨긴다
+  // (안 그러면 우측 상단에 뜬금없이 떠서 페이지 콘텐츠와 겹친다).
   const globalToggle = $('global-theme-toggle')
-  if (globalToggle) globalToggle.classList.remove('hidden')
+  if (globalToggle) globalToggle.classList.add('hidden')
   globalLogoutBtn.classList.add('hidden')
   globalSettingsBtn.classList.add('hidden')
   resetState()
@@ -3813,12 +3812,11 @@ if (sidebarNav) {
   })
 }
 
-// 사이드바 Settings/로그아웃, 탑네비 아바타는 기존 로직(비밀번호 변경 모달 / 로그아웃)을
-// 그대로 재사용한다 - 새 UI 진입점만 추가하고 동작 자체는 기존 global-settings-btn/
+// 사이드바 Settings/로그아웃은 기존 로직(비밀번호 변경 모달 / 로그아웃)을 그대로
+// 재사용한다 - 새 UI 진입점만 추가하고 동작 자체는 기존 global-settings-btn/
 // global-logout-btn 클릭 핸들러에 위임한다.
 if (sidebarSettingsBtn) sidebarSettingsBtn.addEventListener('click', () => globalSettingsBtn?.click())
 if (sidebarLogoutBtn) sidebarLogoutBtn.addEventListener('click', () => globalLogoutBtn?.click())
-if (workspaceAvatarBtn) workspaceAvatarBtn.addEventListener('click', () => globalSettingsBtn?.click())
 
 // 탑네비 검색창은 새 검색 기능이 아니라 기존 라이브러리 검색으로 그대로 위임한다
 // (Global Search는 기존 검색 기능을 그대로 사용 - 동작 변경 금지 원칙).
@@ -4171,13 +4169,24 @@ function toggleFavoriteDoc(docId) {
   return ids.has(docId)
 }
 
-// 번역 진행 상태 기준 분류: Unread=번역 진행 기록이 아예 없음, Reading=일부만
-// 번역됐거나 다 번역됐지만 아직 "읽음" 처리 전, Finished=완독 표시(metadata.read===true)됨.
+// 읽은 페이지(뷰어가 스크롤 위치를 저장하는 metadata.last_page - 책갈피 기능과
+// 동일한 필드) 기준 진행률. 번역 진행률(translated_pages)은 "얼마나 번역했는지"일
+// 뿐 "얼마나 읽었는지"가 아니라서 카드/대시보드의 기본 퍼센트로는 쓰지 않는다
+// (번역 진행률은 뷰어 안의 번역 진행 표시에서만 쓴다).
+function getLibraryReadProgress(doc) {
+  if (doc.metadata?.read === true) return 100
+  const lastPage = doc.metadata?.last_page
+  const total = doc.total_pages || 1
+  if (!Number.isInteger(lastPage) || lastPage <= 0) return 0
+  return Math.min(100, Math.round((lastPage / total) * 100))
+}
+
+// 읽기 진행 상태 기준 분류: Unread=읽은 기록이 아예 없음, Reading=일부 페이지까지
+// 읽었지만 아직 "읽음" 처리 전, Finished=완독 표시(metadata.read===true)됨.
 function getLibraryDocStatus(doc) {
-  const translated = doc.translated_pages?.length || 0
   const isRead = doc.metadata?.read === true
   if (isRead) return 'finished'
-  if (translated <= 0) return 'unread'
+  if (getLibraryReadProgress(doc) <= 0) return 'unread'
   return 'reading'
 }
 
@@ -4217,7 +4226,7 @@ function renderLibraryStatusTabs(docs) {
   })
 }
 
-function sortLibraryDocs(docs) {
+function sortDocsByMode(docs) {
   const sorted = docs.slice()
   if (librarySortMode === 'title') {
     sorted.sort((a, b) => {
@@ -4226,15 +4235,24 @@ function sortLibraryDocs(docs) {
       return ta.localeCompare(tb)
     })
   } else if (librarySortMode === 'progress') {
-    sorted.sort((a, b) => {
-      const pa = (a.translated_pages?.length || 0) / (a.total_pages || 1)
-      const pb = (b.translated_pages?.length || 0) / (b.total_pages || 1)
-      return pb - pa
-    })
+    sorted.sort((a, b) => getLibraryReadProgress(b) - getLibraryReadProgress(a))
   } else {
     sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   }
   return sorted
+}
+
+// 전체 탭(activeStatusFilter === 'all')에서는 완료(읽음 표시) 논문을 정렬 기준과
+// 무관하게 항상 맨 뒤로 보낸다 - "다 읽은 논문"이 최신순/진행률순 목록 사이에
+// 섞여 새로 봐야 할 논문을 찾기 번거롭다는 피드백에 따른 것. 완료 탭을 직접 볼
+// 때(activeStatusFilter === 'finished')는 원래 정렬 순서를 그대로 유지한다.
+function sortLibraryDocs(docs) {
+  if (state.currentLibraryTab === 'trash' || activeStatusFilter !== 'all') {
+    return sortDocsByMode(docs)
+  }
+  const unfinished = docs.filter(d => getLibraryDocStatus(d) !== 'finished')
+  const finished = docs.filter(d => getLibraryDocStatus(d) === 'finished')
+  return [...sortDocsByMode(unfinished), ...sortDocsByMode(finished)]
 }
 
 // Library 페이지의 새 UI 조각(상태 탭 / 정렬 드롭다운 / 상세 패널)은 index.html을
@@ -4900,6 +4918,24 @@ async function renderLibraryGraphTab() {
     rgGraphLoadedAt = new Date()
     renderGraphLegend(data.nodes, data.edges)
 
+    // Dashboard(개념 히트맵/연구 그래프 미리보기)에서 특정 노드를 보려고 넘어온
+    // 경우, sessionStorage로 넘겨받은 노드 id를 실제 클릭과 동일하게 처리한다
+    // (cy.trigger('tap')이 renderKnowledgeGraph의 tap 핸들러를 그대로 태워
+    // 하이라이트/상세 패널 표시까지 한 번에 재사용한다). fcose 레이아웃
+    // 애니메이션이 자리를 잡을 시간을 잠깐 준 뒤 실행한다.
+    const focusNodeId = sessionStorage.getItem('easypaper_graph_focus_node')
+    if (focusNodeId) {
+      sessionStorage.removeItem('easypaper_graph_focus_node')
+      setTimeout(() => {
+        if (!libraryGraphCyInstance) return
+        const node = libraryGraphCyInstance.getElementById(focusNodeId)
+        if (node && node.length) {
+          node.trigger('tap')
+          libraryGraphCyInstance.animate({ center: { eles: node }, zoom: 1.3 }, { duration: 400 })
+        }
+      }, 450)
+    }
+
     // 태그 필터 옵션 = 논문 노드들의 categories 값 전체(중복 제거, 가나다순).
     if (tagFilterEl) {
       const cats = new Set()
@@ -5381,10 +5417,8 @@ function createEmptyState(variant = 'library') {
 
 // 카드/리스트 뷰 공용: 문서 데이터로부터 두 뷰가 함께 쓰는 마크업 조각을 미리 계산한다.
 function prepareDocItemHtml(doc) {
-  const translated = doc.translated_pages?.length || 0
-  const total = doc.total_pages || 1
-  const pct = Math.round((translated / total) * 100)
-  const isDone = translated >= total
+  const pct = getLibraryReadProgress(doc)
+  const isDone = doc.metadata?.read === true || pct >= 100
   const date = new Date(doc.created_at).toLocaleDateString('ko-KR', { year:'numeric', month:'short', day:'numeric' })
 
   const categories = doc.metadata?.categories || []
@@ -5422,10 +5456,12 @@ function prepareDocItemHtml(doc) {
 
   let progressHtml = ''
   if (!isDone) {
+    const lastPage = Number.isInteger(doc.metadata?.last_page) ? doc.metadata.last_page : 0
+    const totalPages = doc.total_pages || 0
     progressHtml = `
       <div class="doc-card-progress-row">
         <div class="doc-progress-bar-wrap"><div class="doc-progress-bar" style="width:${pct}%"></div></div>
-        <span>${translated}/${total} · ${pct}%</span>
+        <span>${lastPage}/${totalPages}p · ${pct}%</span>
       </div>
     `
   }
@@ -5464,7 +5500,7 @@ function prepareDocItemHtml(doc) {
     ctaBtnFullHtml = `<button class="doc-open-btn" data-id="${doc.id}"><span>열기</span>${openIcon}</button>`
   }
 
-  return { translated, total, pct, isDone, categories, tagsHtml, displayTitle, isRead, dateHtml, checkBtnHtml, compareCheckHtml, expandBtnHtml, progressHtml, iconActionsHtml, ctaBtnHtml, ctaBtnFullHtml }
+  return { pct, isDone, categories, tagsHtml, displayTitle, isRead, dateHtml, checkBtnHtml, compareCheckHtml, expandBtnHtml, progressHtml, iconActionsHtml, ctaBtnHtml, ctaBtnFullHtml }
 }
 
 // 카드/리스트 뷰 공용: 위임 없이 각 아이템 컨테이너에 직접 붙는 이벤트 리스너를 등록한다.
@@ -5652,7 +5688,13 @@ function createDocCard(doc) {
   // 퍼센트를 보여주는 새 레이아웃을 쓴다(리스트 뷰는 손대지 않는다 - createDocListRow는
   // 편집 허용 범위 밖).
   let cardProgressHtml = ''
-  if (!d.isDone) {
+  if (d.isDone) {
+    cardProgressHtml = `
+      <div class="lib-card-progress lib-card-progress-done">
+        <span class="doc-meta-chip done">${icon('checkCircle', 11)}완료</span>
+      </div>
+    `
+  } else {
     cardProgressHtml = `
       <div class="lib-card-progress">
         <div class="lib-card-progress-bar-wrap"><div class="lib-card-progress-bar" style="width:${d.pct}%"></div></div>
@@ -5688,7 +5730,7 @@ function createDocCard(doc) {
       </div>
       ${d.tagsHtml}
       <div class="doc-card-meta">
-        ${d.dateHtml}<span class="meta-dot"></span><span class="doc-meta-chip">${d.total}p</span>
+        ${d.dateHtml}<span class="meta-dot"></span><span class="doc-meta-chip">${doc.total_pages || 0}p</span>
       </div>
       ${cardProgressHtml}
     </div>
@@ -6225,7 +6267,7 @@ function createDocListRow(doc) {
     <div class="doc-list-title" title="${escapeHtml(doc.filename)}">${escapeHtml(d.displayTitle)}</div>
     ${listTagsHtml}
     <div class="doc-card-meta">
-      ${d.dateHtml}<span class="meta-dot"></span><span class="doc-meta-chip">${d.total}p</span>
+      ${d.dateHtml}<span class="meta-dot"></span><span class="doc-meta-chip">${doc.total_pages || 0}p</span>
     </div>
     <div class="doc-list-progress-slot">${d.progressHtml}</div>
     <div class="doc-card-cta">
@@ -6912,12 +6954,16 @@ function updateThemeIcons(isLight) {
 
 const themeToggleBtn = $('theme-toggle-btn')
 const globalThemeToggleBtn = $('global-theme-toggle-btn')
+const sidebarThemeToggleBtn = $('sidebar-theme-toggle-btn')
 
 if (themeToggleBtn) {
   themeToggleBtn.addEventListener('click', toggleTheme)
 }
 if (globalThemeToggleBtn) {
   globalThemeToggleBtn.addEventListener('click', toggleTheme)
+}
+if (sidebarThemeToggleBtn) {
+  sidebarThemeToggleBtn.addEventListener('click', toggleTheme)
 }
 
 // 초기 테마 적용

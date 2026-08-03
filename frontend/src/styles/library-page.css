@@ -191,6 +191,13 @@
   color: var(--accent-mid);
   flex-shrink: 0;
 }
+.lib-card-progress-done { min-height: 5px; }
+.lib-card-progress-done .doc-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+}
 
 /* ============================================================
    상세 패널 (우측 드로어) — 카드를 클릭하면 열리며, 표지/제목/저자,
