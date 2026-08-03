@@ -578,11 +578,12 @@ function attachHandlers(root) {
     })
   })
 
-  // 최근 질문 → 해당 논문을 채팅 사이드바가 열린 채로 연다.
+  // 최근 질문 → 논문 뷰어가 아니라 AI Chats의 채팅 드로어를 바로 연다
+  // (aiChatsPage.js의 "대화" 버튼과 동일한 '#chat?id=' 해시 라우트 사용).
   root.querySelectorAll('.dash-question-item[data-doc-id]').forEach(elm => {
     elm.addEventListener('click', () => {
       const id = elm.dataset.docId
-      if (id) location.hash = `viewer?id=${encodeURIComponent(id)}&chat=1`
+      if (id) location.hash = `chat?id=${encodeURIComponent(id)}`
     })
   })
 
