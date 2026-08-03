@@ -11678,19 +11678,18 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
     
     // 1. 순차 검색 시도 (가장 최선)
     let idx = cleanText.indexOf(cleanSent, searchStart);
-    
-    // 2. 순차 검색 실패 시 전역 검색 시도 (정렬 어긋남 해결)
-    if (idx === -1) {
-      idx = cleanText.indexOf(cleanSent);
-    }
-    
-    // 3. 접두어 기반 검색 시도 (사소한 문자 오차 해결)
+
+    // 2. 접두어 기반 검색 시도 (사소한 문자 오차 해결) - searchStart 이후에서만 찾는다.
+    // 예전에는 이 단계에서 실패하면 fromIndex 없이(처음부터) 다시 검색하는 "전역
+    // 폴백"이 있었는데, indexOf(x, searchStart)가 이미 -1을 반환한 상태에서
+    // indexOf(x)(전체 검색)가 뭔가를 찾는다면 그 위치는 수학적으로 반드시
+    // searchStart보다 앞쪽일 수밖에 없다(그렇지 않다면 위 순차 검색이 이미 찾았을
+    // 것이므로). 즉 이 전역 폴백은 실행될 때마다 예외 없이 직전 문장이 이미 차지한
+    // 구간을 다시 가리켜, 인접한 두 문장의 하이라이트가 겹치는 버그로 항상 이어졌다.
+    // 실패한 문장은 대신 아래 Gap Partitioning이 겹치지 않게 처리하도록 둔다.
     if (idx === -1) {
       const prefix = cleanSent.substring(0, Math.min(15, cleanSent.length));
       idx = cleanText.indexOf(prefix, searchStart);
-      if (idx === -1) {
-        idx = cleanText.indexOf(prefix);
-      }
     }
     
     if (idx !== -1) {
@@ -11786,6 +11785,20 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
       walkIdx = k_end + 1;
     } else {
       walkIdx++;
+    }
+  }
+
+  // 최종 안전장치: 인접한 두 문장의 범위가 여전히 겹치면(접두어 폴백이 원문
+  // 오차로 실제보다 넓게 잡거나, 위 두 보정 단계가 손대지 않는 경계에서 우연히
+  // 겹치는 경우) 겹친 구간의 중간 지점에서 서로 맞닿도록 잘라 겹침을 제거한다.
+  // 어느 한쪽이 항상 옳다고 볼 근거가 없으므로 중간 지점에서 공평하게 나눈다.
+  for (let i = 1; i < sentenceRanges.length; i++) {
+    const prev = sentenceRanges[i - 1];
+    const cur = sentenceRanges[i];
+    if (cur.start < prev.end) {
+      const mid = Math.floor((cur.start + prev.end) / 2);
+      prev.end = Math.max(prev.start, mid);
+      cur.start = Math.min(cur.end, mid);
     }
   }
 
