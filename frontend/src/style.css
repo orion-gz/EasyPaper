@@ -6347,29 +6347,34 @@ body.light-theme .figure-preview-tooltip {
 }
 
 /* ── 단일 논문 대화 드로어 (AI Chats 목록 → "대화") ──────────────────
-   Library 상세 패널(.lib-detail-panel/.lib-detail-overlay, library-page.css)과
-   비슷한 "우측에서 슬라이드 인" 패턴이지만, 좌측 사이드바 내비게이션은
-   그대로 둔 채 상단 탑바(--topbar-h) 영역까지 꽉 채워 위아래로 이어지는
-   하나의 패널처럼 보이게 한다(탑바 한 겹 + 드로어 자체 헤더 한 겹이 layered
-   보이는 걸 피하려고 top:0부터 시작). */
+   좌측 사이드바(--sidebar-w)와 상단 탑바(--topbar-h)는 그대로 남겨두고,
+   그 나머지 화면 전체(.workspace-main의 page-outlet 영역)를 드로어가 덮는다.
+   #chat-drawer는 DOM상 사이드바/탑바 밖(body 레벨)에 있어 실제 사이드바
+   폭을 모를 수밖에 없으므로, 사이드바 접힘 상태를 body.sidebar-collapsed로
+   미러링해 좌측 오프셋을 맞춘다(사이드바 토글 핸들러 참고). */
 .chat-drawer-overlay {
   position: fixed;
-  inset: 0;
+  top: var(--topbar-h);
+  left: var(--sidebar-w);
+  right: 0;
+  bottom: 0;
   background: rgba(0, 0, 0, 0.32);
   z-index: 45;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, left 0.22s ease;
 }
 .chat-drawer-overlay.open { opacity: 1; pointer-events: auto; }
+body.sidebar-collapsed .chat-drawer-overlay { left: var(--sidebar-w-collapsed); }
 
 .chat-drawer {
   position: fixed;
-  top: 0;
+  top: var(--topbar-h);
+  left: var(--sidebar-w);
   right: 0;
   bottom: 0;
-  width: 480px;
-  max-width: 94vw;
+  width: auto;
+  max-width: none;
   background: var(--bg-surface);
   border-left: 1px solid var(--border);
   box-shadow: var(--shadow-md);
@@ -6377,9 +6382,10 @@ body.light-theme .figure-preview-tooltip {
   display: flex;
   flex-direction: column;
   transform: translateX(100%);
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), left 0.22s ease;
 }
 .chat-drawer.open { transform: translateX(0); }
+body.sidebar-collapsed .chat-drawer { left: var(--sidebar-w-collapsed); }
 .chat-drawer .compare-chat-body { height: 0; flex: 1 1 auto; min-height: 0; }
 /* 비교 화면(.compare-topbar-title)은 전체 화면 폭을 쓸 수 있어 제목이 안
    잘렸지만, 이 드로어는 폭이 480px로 훨씬 좁아 긴 논문 제목이 닫기/뷰어
@@ -6399,8 +6405,13 @@ body.light-theme .figure-preview-tooltip {
   flex-shrink: 0;
 }
 
-@media (max-width: 900px) {
-  .chat-drawer { width: 100vw; max-width: 100vw; }
+/* 1100px 이하에서는 shell.css가 사이드바를 접힘 폭으로 강제로 줄이므로
+   (app-sidebar.collapsed 클래스 유무와 무관) 드로어 오프셋도 맞춰준다. */
+@media (max-width: 1100px) {
+  .chat-drawer,
+  .chat-drawer-overlay {
+    left: var(--sidebar-w-collapsed);
+  }
 }
 
 /* 키워드/단어 탭 용어 클릭 시 원문 위치 하이라이트 - 스크롤이 끝난 뒤에 표시되므로

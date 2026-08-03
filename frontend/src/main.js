@@ -3707,6 +3707,9 @@ const SIDEBAR_COLLAPSED_KEY = 'easypaper_sidebar_collapsed'
 function setSidebarCollapsed(collapsed) {
   if (!appSidebar) return
   appSidebar.classList.toggle('collapsed', collapsed)
+  // chat-drawer는 DOM상 사이드바 밖(body 레벨)에 있어 폭을 알 수 없으므로
+  // body에도 미러링해 드로어의 좌측 오프셋(style.css)이 따라오게 한다.
+  document.body.classList.toggle('sidebar-collapsed', collapsed)
   localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? 'true' : 'false')
 }
 if (appSidebar) {
