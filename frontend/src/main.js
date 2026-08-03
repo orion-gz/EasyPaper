@@ -4918,6 +4918,24 @@ async function renderLibraryGraphTab() {
     rgGraphLoadedAt = new Date()
     renderGraphLegend(data.nodes, data.edges)
 
+    // Dashboard(개념 히트맵/연구 그래프 미리보기)에서 특정 노드를 보려고 넘어온
+    // 경우, sessionStorage로 넘겨받은 노드 id를 실제 클릭과 동일하게 처리한다
+    // (cy.trigger('tap')이 renderKnowledgeGraph의 tap 핸들러를 그대로 태워
+    // 하이라이트/상세 패널 표시까지 한 번에 재사용한다). fcose 레이아웃
+    // 애니메이션이 자리를 잡을 시간을 잠깐 준 뒤 실행한다.
+    const focusNodeId = sessionStorage.getItem('easypaper_graph_focus_node')
+    if (focusNodeId) {
+      sessionStorage.removeItem('easypaper_graph_focus_node')
+      setTimeout(() => {
+        if (!libraryGraphCyInstance) return
+        const node = libraryGraphCyInstance.getElementById(focusNodeId)
+        if (node && node.length) {
+          node.trigger('tap')
+          libraryGraphCyInstance.animate({ center: { eles: node }, zoom: 1.3 }, { duration: 400 })
+        }
+      }, 450)
+    }
+
     // 태그 필터 옵션 = 논문 노드들의 categories 값 전체(중복 제거, 가나다순).
     if (tagFilterEl) {
       const cats = new Set()
@@ -5438,10 +5456,12 @@ function prepareDocItemHtml(doc) {
 
   let progressHtml = ''
   if (!isDone) {
+    const lastPage = Number.isInteger(doc.metadata?.last_page) ? doc.metadata.last_page : 0
+    const totalPages = doc.total_pages || 0
     progressHtml = `
       <div class="doc-card-progress-row">
         <div class="doc-progress-bar-wrap"><div class="doc-progress-bar" style="width:${pct}%"></div></div>
-        <span>${translated}/${total} · ${pct}%</span>
+        <span>${lastPage}/${totalPages}p · ${pct}%</span>
       </div>
     `
   }
@@ -5480,7 +5500,7 @@ function prepareDocItemHtml(doc) {
     ctaBtnFullHtml = `<button class="doc-open-btn" data-id="${doc.id}"><span>열기</span>${openIcon}</button>`
   }
 
-  return { translated, total, pct, isDone, categories, tagsHtml, displayTitle, isRead, dateHtml, checkBtnHtml, compareCheckHtml, expandBtnHtml, progressHtml, iconActionsHtml, ctaBtnHtml, ctaBtnFullHtml }
+  return { pct, isDone, categories, tagsHtml, displayTitle, isRead, dateHtml, checkBtnHtml, compareCheckHtml, expandBtnHtml, progressHtml, iconActionsHtml, ctaBtnHtml, ctaBtnFullHtml }
 }
 
 // 카드/리스트 뷰 공용: 위임 없이 각 아이템 컨테이너에 직접 붙는 이벤트 리스너를 등록한다.
@@ -5710,7 +5730,7 @@ function createDocCard(doc) {
       </div>
       ${d.tagsHtml}
       <div class="doc-card-meta">
-        ${d.dateHtml}<span class="meta-dot"></span><span class="doc-meta-chip">${d.total}p</span>
+        ${d.dateHtml}<span class="meta-dot"></span><span class="doc-meta-chip">${doc.total_pages || 0}p</span>
       </div>
       ${cardProgressHtml}
     </div>
@@ -6247,7 +6267,7 @@ function createDocListRow(doc) {
     <div class="doc-list-title" title="${escapeHtml(doc.filename)}">${escapeHtml(d.displayTitle)}</div>
     ${listTagsHtml}
     <div class="doc-card-meta">
-      ${d.dateHtml}<span class="meta-dot"></span><span class="doc-meta-chip">${d.total}p</span>
+      ${d.dateHtml}<span class="meta-dot"></span><span class="doc-meta-chip">${doc.total_pages || 0}p</span>
     </div>
     <div class="doc-list-progress-slot">${d.progressHtml}</div>
     <div class="doc-card-cta">

@@ -315,7 +315,7 @@ function renderRecentQuestionsCard(list) {
       ${items.length === 0 ? emptyNote('최근 질문이 없습니다.') : `
       <ul class="dash-question-list">
         ${items.map(q => `
-          <li class="dash-question-item" data-nav="chats">
+          <li class="dash-question-item" data-doc-id="${escapeHtml(q.doc_id || '')}" title="이 논문의 채팅으로 이동">
             <span class="dash-question-icon">${icon('messageCircle', 13)}</span>
             <div class="dash-question-body">
               <div class="dash-question-text">${escapeHtml(q.summary || '')}</div>
@@ -363,7 +363,7 @@ function renderHeatmapCard(heatmap) {
         ${heatmap.slice(0, 8).map(h => {
           const pct = maxScore > 0 ? Math.max(6, Math.round(((h.score || 0) / maxScore) * 100)) : 6
           return `
-            <div class="dash-heat-cell" title="논문 ${h.paper_count}편 · 질문 ${h.question_count}개">
+            <div class="dash-heat-cell" data-node-id="concept:${escapeHtml(String(h.concept_id))}" title="${escapeHtml(h.name)} · 논문 ${h.paper_count}편 · 질문 ${h.question_count}개 · 클릭하면 연구 그래프에서 보기">
               <div class="dash-heat-swatch" style="--heat-pct:${pct}%"></div>
               <div class="dash-heat-label">${escapeHtml(h.name)}</div>
               <div class="dash-heat-count">${formatNumber(h.score)}</div>
@@ -393,7 +393,7 @@ function renderTimelineCard(events) {
       ${recent.length === 0 ? emptyNote('최근 7일간 활동이 없습니다.') : `
       <ul class="dash-timeline-list">
         ${recent.map(e => `
-          <li class="dash-timeline-item dash-timeline-${escapeHtml(e.type)}">
+          <li class="dash-timeline-item dash-timeline-${escapeHtml(e.type)}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" title="이 논문 열기">
             <span class="dash-timeline-dot"></span>
             <div class="dash-timeline-body">
               <div class="dash-timeline-top">
@@ -455,8 +455,8 @@ function renderMiniGraphSvg({ center, neighbors }) {
     const isPaper = p.node.type === 'paper'
     const labelY = p.y > cy ? p.y + 16 : p.y - 11
     return `
-      <g class="dash-graph-node ${isPaper ? 'is-paper' : 'is-concept'}">
-        <title>${escapeHtml(p.node.label || '')}</title>
+      <g class="dash-graph-node ${isPaper ? 'is-paper' : 'is-concept'}" data-node-id="${escapeHtml(p.node.id || '')}">
+        <title>${escapeHtml(p.node.label || '')} (클릭하면 연구 그래프에서 보기)</title>
         <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isPaper ? 8 : 6.5}" />
         <text x="${p.x.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle">${escapeHtml(truncateLabel(p.node.label, 13))}</text>
       </g>
@@ -467,8 +467,8 @@ function renderMiniGraphSvg({ center, neighbors }) {
     <svg class="dash-graph-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
       ${lines}
       ${nodesHtml}
-      <g class="dash-graph-node is-center">
-        <title>${escapeHtml(center.label || '')}</title>
+      <g class="dash-graph-node is-center" data-node-id="${escapeHtml(center.id || '')}">
+        <title>${escapeHtml(center.label || '')} (클릭하면 연구 그래프에서 보기)</title>
         <circle cx="${cx}" cy="${cy}" r="13" />
         <text x="${cx}" y="${cy + 26}" text-anchor="middle" class="dash-graph-center-label">${escapeHtml(truncateLabel(center.label, 12))}</text>
       </g>
@@ -494,6 +494,17 @@ function renderGraphPreviewCard(graphData, heatmap) {
   `
 }
 
+// Research Graph 페이지(main.js의 renderLibraryGraphTab)가 로드된 뒤 이 키를
+// 확인해서, 있으면 그 노드를 실제로 클릭한 것과 동일하게 선택하고(showGraphDetailPanel
+// 호출 + 하이라이트) 지운다. main.js를 거치지 않고 URL만으로 넘기면 해시 라우터가
+// 페이지 이름만 정확히 매칭하는 방식과 충돌하므로, 세션 스토리지로 핸드오프한다.
+const GRAPH_FOCUS_NODE_KEY = 'easypaper_graph_focus_node'
+function goToGraphNode(nodeId) {
+  if (!nodeId) return
+  sessionStorage.setItem(GRAPH_FOCUS_NODE_KEY, nodeId)
+  location.hash = 'graph'
+}
+
 // ── 이벤트 바인딩 ──────────────────────────────────────────────────────
 function attachHandlers(root) {
   root.querySelectorAll('[data-nav]').forEach(elm => {
@@ -509,6 +520,34 @@ function attachHandlers(root) {
       const id = elm.dataset.docId
       if (id) location.hash = `viewer?id=${encodeURIComponent(id)}`
     })
+  })
+
+  // 최근 질문 → 해당 논문을 채팅 사이드바가 열린 채로 연다.
+  root.querySelectorAll('.dash-question-item[data-doc-id]').forEach(elm => {
+    elm.addEventListener('click', () => {
+      const id = elm.dataset.docId
+      if (id) location.hash = `viewer?id=${encodeURIComponent(id)}&chat=1`
+    })
+  })
+
+  // 연구 타임라인 항목 → 해당 논문 열기(질문 이벤트는 채팅까지 함께 열기).
+  root.querySelectorAll('.dash-timeline-item[data-doc-id]').forEach(elm => {
+    elm.addEventListener('click', () => {
+      const id = elm.dataset.docId
+      if (!id) return
+      const wantChat = elm.dataset.type === 'question'
+      location.hash = `viewer?id=${encodeURIComponent(id)}${wantChat ? '&chat=1' : ''}`
+    })
+  })
+
+  // 개념 히트맵 타일 → 연구 그래프에서 해당 개념 노드를 선택된 상태로 연다.
+  root.querySelectorAll('.dash-heat-cell[data-node-id]').forEach(elm => {
+    elm.addEventListener('click', () => goToGraphNode(elm.dataset.nodeId))
+  })
+
+  // 연구 그래프 미리보기의 노드(중심 개념/이웃 논문·개념) → 연구 그래프에서 이어서 보기.
+  root.querySelectorAll('.dash-graph-node[data-node-id]').forEach(elm => {
+    elm.addEventListener('click', () => goToGraphNode(elm.dataset.nodeId))
   })
 
   const recsBtn = root.querySelector('[data-recs-btn]')
