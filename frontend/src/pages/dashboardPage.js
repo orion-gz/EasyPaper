@@ -7,7 +7,7 @@
 // (뷰어/비교 화면이 보이고 포커스된 동안 적립 → 서버 전송)가 쌓은 실측치를
 // fetchReadingTimeStats()로 가져온 것이다.
 import './../styles/dashboard.css'
-import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats } from '../library.js'
+import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats } from '../library.js'
 import { icon } from '../icons.js'
 
 function escapeHtml(str) {
@@ -328,20 +328,42 @@ function renderRecentQuestionsCard(list) {
   `
 }
 
-// ── AI 추천 논문 ── /library/graph/recommendations는 LLM+OpenAlex를 여러 번
-// 호출하는 무거운 엔드포인트라, 백엔드 주석과 기존 그래프 탭 구현이 그러듯
-// 대시보드 진입 시 자동 호출하지 않고 사용자가 버튼을 눌렀을 때만 지연
-// 로드한다(불필요한 지연/비용을 방지).
-function renderRecommendationsCard() {
+// ── AI 추천 논문 ── /library/graph/recommendations(전체 생성)는 LLM+OpenAlex를
+// 여러 번 호출하는 무거운 엔드포인트라, 백엔드 주석과 기존 그래프 탭 구현이
+// 그러듯 사용자가 버튼을 눌렀을 때만 새로 생성한다(불필요한 지연/비용 방지).
+// 다만 이미 생성된 캐시가 있으면(/recommendations/cached, 유효기간 이내 조회만
+// 하고 새로 생성하진 않는 가벼운 엔드포인트) 대시보드 진입 시 바로 보여줘,
+// 캐시가 있는데도 매번 버튼을 눌러야 했던 문제를 없앤다.
+function scholarSearchUrl(title) {
+  return `https://scholar.google.com/scholar?q=${encodeURIComponent(title || '')}`
+}
+
+function renderRecItemsHtml(recommendations) {
+  return `
+    <ul class="dash-rec-list">
+      ${recommendations.slice(0, 5).map(r => `
+        <li class="dash-rec-item">
+          <a href="${escapeHtml(scholarSearchUrl(r.title))}" target="_blank" rel="noopener noreferrer" class="dash-rec-title">${escapeHtml(r.title || '')}</a>
+          ${r.year ? `<span class="dash-rec-year">${escapeHtml(String(r.year))}</span>` : ''}
+          ${r.reason ? `<div class="dash-rec-reason">${escapeHtml(r.reason)}</div>` : ''}
+        </li>
+      `).join('')}
+    </ul>
+  `
+}
+
+function renderRecommendationsCard(cachedRecommendations) {
+  const hasCached = Array.isArray(cachedRecommendations) && cachedRecommendations.length > 0
   return `
     <div class="dash-card dash-card-list dash-card-recs">
       <div class="dash-card-head">
         <h3>${icon('star', 15)}AI 추천 논문</h3>
-        <a href="#" class="dash-link" data-nav="library">더 보기 ›</a>
       </div>
       <div class="dash-recs-body" data-recs-body>
-        ${emptyNote('읽은 논문들을 바탕으로 다음에 읽으면 좋을 논문을 추천받아 보세요.')}
-        <button type="button" class="dash-recs-btn" data-recs-btn>${icon('zap', 13)}추천 받기</button>
+        ${hasCached ? renderRecItemsHtml(cachedRecommendations) : `
+          ${emptyNote('읽은 논문들을 바탕으로 다음에 읽으면 좋을 논문을 추천받아 보세요.')}
+          <button type="button" class="dash-recs-btn" data-recs-btn>${icon('zap', 13)}추천 받기</button>
+        `}
       </div>
     </div>
   `
@@ -563,17 +585,7 @@ function attachHandlers(root) {
           body.innerHTML = emptyNote('추천할 만한 논문을 찾지 못했습니다.')
           return
         }
-        body.innerHTML = `
-          <ul class="dash-rec-list">
-            ${recommendations.slice(0, 5).map(r => `
-              <li class="dash-rec-item">
-                <a href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener noreferrer" class="dash-rec-title">${escapeHtml(r.title || '')}</a>
-                ${r.year ? `<span class="dash-rec-year">${escapeHtml(String(r.year))}</span>` : ''}
-                ${r.reason ? `<div class="dash-rec-reason">${escapeHtml(r.reason)}</div>` : ''}
-              </li>
-            `).join('')}
-          </ul>
-        `
+        body.innerHTML = renderRecItemsHtml(recommendations)
       } catch (err) {
         console.error('추천 논문 조회 실패:', err)
         body.innerHTML = `<p class="dash-empty-note dash-error-note">추천 논문을 불러오지 못했습니다.</p>`
@@ -591,7 +603,7 @@ export async function renderDashboardPage() {
 
   el.innerHTML = `<div class="dash-loading">${icon('refreshCw', 20)}<span>대시보드를 불러오는 중...</span></div>`
 
-  let dashboard, timelineData, libraryData, graphData, readingStats
+  let dashboard, timelineData, libraryData, graphData, readingStats, cachedRecs
   try {
     const results = await Promise.all([
       fetchLibraryDashboard(),
@@ -599,12 +611,14 @@ export async function renderDashboardPage() {
       fetchLibrary(),
       fetchLibraryGraph().catch(() => null),
       fetchReadingTimeStats().catch(() => null),
+      fetchCachedReadingRecommendations().catch(() => ({ recommendations: null })),
     ])
     dashboard = results[0]
     timelineData = results[1]
     libraryData = results[2]
     graphData = results[3]
     readingStats = results[4]
+    cachedRecs = results[5]
   } catch (err) {
     console.error('대시보드 데이터 로드 실패:', err)
     el.innerHTML = `<div class="dash-error">${icon('alertTriangle', 20)}<p>대시보드를 불러오지 못했습니다.</p></div>`
@@ -629,7 +643,7 @@ export async function renderDashboardPage() {
       <div class="dash-row dash-row-recent">
         ${renderRecentPapersCard(docs)}
         ${renderRecentQuestionsCard(recentQuestions)}
-        ${renderRecommendationsCard()}
+        ${renderRecommendationsCard(cachedRecs && cachedRecs.recommendations)}
       </div>
       <div class="dash-row dash-row-bottom">
         ${renderHeatmapCard(heatmap)}
