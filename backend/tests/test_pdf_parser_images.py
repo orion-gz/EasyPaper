@@ -310,6 +310,75 @@ def test_body_sentence_starting_with_table_number_is_not_treated_as_caption(tmp_
     )
 
 
+def test_long_wrapped_caption_still_matches_distant_table(tmp_path):
+    """Table 캡션이 여러 줄에 걸쳐 길게 줄바꿈되는 경우(실제 The Flexibility
+    Trap 논문에서 재현 - 설명이 긴 캡션이 6~7줄까지 이어짐), 캡션의 "첫 줄"
+    bbox만 기준으로 표까지의 거리를 재면 실제로는 캡션이 아직 끝나지 않은
+    지점을 "캡션 끝"으로 오인해 거리가 실제보다 훨씬 크게 계산된다. 이
+    거리가 매칭 임계값(40pt)을 넘으면 바로 아래 있는 진짜 표조차 캡션과
+    매칭되지 못하고 라벨 없이 남아버렸다."""
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+
+    caption_rect = fitz.Rect(50, 80, 545, 200)
+    long_caption = (
+        "Table 1: A very long and detailed caption describing the experimental "
+        "setup, baselines, and evaluation protocol used throughout this study in "
+        "extensive detail so that the caption wraps across several physical "
+        "lines before the actual table content begins right below it."
+    )
+    page.insert_textbox(caption_rect, long_caption, fontsize=9)
+
+    # 표 규칙선은 캡션의 "첫 줄" 끝에서는 40pt 넘게 떨어져 있지만, 캡션
+    # 전체(마지막 줄)가 끝나는 지점에서는 40pt 이내다.
+    page.draw_line(fitz.Point(50, 145), fitz.Point(545, 145), color=(0, 0, 0), width=1)
+    page.insert_text((60, 158), "method accuracy", fontsize=7)
+    page.draw_line(fitz.Point(50, 168), fitz.Point(545, 168), color=(0, 0, 0), width=1)
+    page.insert_text((60, 181), "Ours 88.1", fontsize=7)
+    page.draw_line(fitz.Point(50, 191), fitz.Point(545, 191), color=(0, 0, 0), width=1)
+
+    path = tmp_path / "wrapped_caption.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    result = extract_pdf_images(str(path))
+    table1_entries = [r for r in result if r.get("label") == "Table 1"]
+    assert len(table1_entries) == 1, f"여러 줄로 줄바꿈된 캡션 때문에 Table 1 매칭에 실패함: {result}"
+
+
+def test_sparse_booktabs_table_captures_distant_bottom_rule(tmp_path):
+    """구분선이 거의 없는 booktabs 스타일 표(상단 규칙-헤더 구분선만 서로
+    가깝고, 데이터 행 사이에는 선이 없어 맨 아래 규칙까지 100pt 넘게
+    떨어진 경우 - 실제 The Flexibility Trap 논문의 Table 3에서 재현)는
+    맨 아래 규칙이 별도의 1줄짜리 group으로 떨어져 나가 완전히 버려지고,
+    표의 세로 범위가 상단 규칙-헤더 구분선 사이의 얇은 띠 하나로만 잡혀
+    실제 표 본문(데이터 행 전체)이 오버레이 범위에서 빠지던 문제가 있었다."""
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+
+    page.insert_text((50, 90), "Table 1: Sparse booktabs style table with many data rows.", fontsize=9)
+    page.draw_line(fitz.Point(50, 100), fitz.Point(545, 100), color=(0, 0, 0), width=1)
+    page.insert_text((60, 112), "method accuracy", fontsize=7)
+    page.draw_line(fitz.Point(50, 115), fitz.Point(545, 115), color=(0, 0, 0), width=1)
+    # 데이터 행 다수 - booktabs 스타일답게 행 사이에 구분선 없음
+    for i in range(12):
+        page.insert_text((60, 130 + i * 12), f"Row{i} value{i}", fontsize=7)
+    page.draw_line(fitz.Point(50, 280), fitz.Point(545, 280), color=(0, 0, 0), width=1)
+
+    path = tmp_path / "sparse_booktabs.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    result = extract_pdf_images(str(path))
+    table1_entries = [r for r in result if r.get("label") == "Table 1"]
+    assert len(table1_entries) == 1, f"맨 아래 규칙이 멀리 떨어져 있어 표 자체가 감지되지 않음: {result}"
+    entry = table1_entries[0]
+    entry_bottom_pt = (entry["top"] + entry["height"]) / 100 * 842
+    # 표의 아래 경계가 맨 아래 규칙(y=280) 근처까지 내려와야 한다 - 상단
+    # 규칙-헤더 구분선 사이(y=100~115)의 얇은 띠 하나로만 잡히면 안 된다.
+    assert entry_bottom_pt > 260, f"표 하단이 맨 아래 규칙까지 확장되지 않음: {entry}"
+
+
 def test_unrelated_unlabeled_regions_are_not_merged(tmp_path):
     """캡션에 매칭되지 않는(라벨이 없는) 영역들은 서로 다른 그림/표의 잔여
     조각일 수 있으므로 하나로 합쳐지면 안 되고, 감지된 개수만큼 개별
