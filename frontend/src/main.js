@@ -13,6 +13,7 @@ import { renderDashboardPage } from './pages/dashboardPage.js'
 import { renderReadingHistoryPage } from './pages/readingHistoryPage.js'
 import { renderAiChatsPage } from './pages/aiChatsPage.js'
 import { renderNotesPage } from './pages/notesPage.js'
+import { formatTranslationHtml, applyKatexToElement } from './textFormat.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -272,6 +273,15 @@ const compareChatMessages  = $('compare-chat-messages')
 const compareChatInput     = $('compare-chat-input')
 const compareChatSendBtn   = $('compare-chat-send-btn')
 
+// ── 단일 논문 대화 화면 (뷰어 없이 채팅만) ──
+const chatScreenEl         = $('chat-screen')
+const chatScreenBackBtn    = $('chat-screen-back-btn')
+const chatScreenTitle      = $('chat-screen-title')
+const chatScreenViewerBtn  = $('chat-screen-viewer-btn')
+const chatScreenMessages   = $('chat-screen-messages')
+const chatScreenInput      = $('chat-screen-input')
+const chatScreenSendBtn    = $('chat-screen-send-btn')
+
 const docPreviewOverlay  = $('doc-preview-overlay')
 const docPreviewClose    = $('doc-preview-close')
 const docPreviewCoverImg = $('doc-preview-cover-img')
@@ -418,6 +428,7 @@ function showLogin() {
   viewerScreen.classList.remove('active')
   libraryScreen.classList.remove('active')
   if (compareScreen) compareScreen.classList.remove('active')
+  if (chatScreenEl) chatScreenEl.classList.remove('active')
   loginScreen.classList.add('active')
   // 글로벌 테마 토글 표시, 로그아웃 및 설정 버튼 숨김
   const globalToggle = $('global-theme-toggle')
@@ -430,6 +441,7 @@ function showViewer() {
   loginScreen.classList.remove('active')
   libraryScreen.classList.remove('active')
   if (compareScreen) compareScreen.classList.remove('active')
+  if (chatScreenEl) chatScreenEl.classList.remove('active')
   viewerScreen.classList.add('active')
   // 글로벌 테마 토글 숨김 (뷰어 상단바 테마 버튼 사용)
   const globalToggle = $('global-theme-toggle')
@@ -441,9 +453,24 @@ function showCompareScreen() {
   loginScreen.classList.remove('active')
   libraryScreen.classList.remove('active')
   viewerScreen.classList.remove('active')
+  if (chatScreenEl) chatScreenEl.classList.remove('active')
   if (compareScreen) compareScreen.classList.add('active')
   // 라이브러리 화면과 동일하게 글로벌 테마/로그아웃/설정 버튼을 표시한다
   // (비교 화면 자체에는 별도의 테마 버튼이 없음)
+  const globalToggle = $('global-theme-toggle')
+  if (globalToggle) globalToggle.classList.remove('hidden')
+  globalLogoutBtn.classList.remove('hidden')
+  globalSettingsBtn.classList.remove('hidden')
+}
+
+function showChatScreen() {
+  stopLibraryPolling()
+  loginScreen.classList.remove('active')
+  libraryScreen.classList.remove('active')
+  viewerScreen.classList.remove('active')
+  if (compareScreen) compareScreen.classList.remove('active')
+  chatScreenEl.classList.add('active')
+  // compare 화면과 동일하게 글로벌 테마/로그아웃/설정 버튼을 표시한다
   const globalToggle = $('global-theme-toggle')
   if (globalToggle) globalToggle.classList.remove('hidden')
   globalLogoutBtn.classList.remove('hidden')
@@ -961,132 +988,6 @@ function replaceBoldOutsideCode(text) {
     return processedSubBlocks.join('')
   })
   return processedBlocks.join('')
-}
-
-// PDF 원문에서 첫 줄 들여쓰기가 감지된 문단의 맨 앞에 backend(pdf_parser.py의
-// _INDENT_SENTINEL)가 붙여두는 표시 - 같은 문자를 여기서도 그대로 사용해야
-// chunker.py가 [S{n}:I] 태그 자리에 남겨준 표시를 인식할 수 있다.
-const INDENT_MARK = String.fromCharCode(0xE000)
-
-// ── 번역 텍스트 포맷팅 (LaTeX & HTML 처리) ─────────
-function formatTranslationHtml(text) {
-  if (!text) return ''
-
-  // 문장 정렬용 태그([S0], [S1], [S0:I] 등)가 번역창에 출력되지 않도록 제거
-  let t = text.replace(/\[[sS]\d+(?::[A-Za-z]+)?\]/g, '')
-
-  const mathBlocks = []
-
-  // 1. 블록 수식: $$...$$
-  t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, f) => {
-    const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: true })
-    return `::MATH_FLT_PLACEHOLDER_${id}::`
-  })
-  // 2. 블록 수식: \[...\]
-  t = t.replace(/\\\[([\s\S]*?)\\\]/g, (_, f) => {
-    const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: true })
-    return `::MATH_FLT_PLACEHOLDER_${id}::`
-  })
-  // 3. 인라인: $...$
-  t = t.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (_, f) => {
-    const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: false })
-    return `::MATH_FLT_PLACEHOLDER_${id}::`
-  })
-  // 4. 인라인: \(...\)
-  t = t.replace(/\\\(([\s\S]*?)\\\)/g, (_, f) => {
-    const id = mathBlocks.length; mathBlocks.push({ formula: f.trim(), display: false })
-    return `::MATH_FLT_PLACEHOLDER_${id}::`
-  })
-
-  // 4.5. 이스케이프된 볼드체 복원 및 공백 트리밍 (** 마커의 HTML 변환은 아래
-  // escapeHtml 이후 6번 단계에서 수행한다 - 여기서 <strong>으로 먼저 바꿔버리면
-  // 5번의 escapeHtml이 그 태그까지 다시 이스케이프해서 화면에 "&lt;strong&gt;"처럼
-  // 그대로 노출되는 문제가 있었다)
-  t = t.replace(/\\+\*\*/g, '**')
-  t = t.replace(/\*\*\s*([^*]+?)\s*\*\*/g, '**$1**')
-
-  // 5. 마크다운 헤더 & 이스케이프 처리 (+ 원문 들여쓰기 표시가 붙은 줄은 인라인
-  // 들여쓰기 스타일 적용 후 표시 문자 자체는 제거)
-  const lines = t.split('\n')
-  const htmlParts = lines.map(line => {
-    let workingLine = line
-    let isIndented = false
-    const leadingWs = workingLine.match(/^\s*/)[0]
-    if (workingLine.slice(leadingWs.length).startsWith(INDENT_MARK)) {
-      isIndented = true
-      workingLine = leadingWs + workingLine.slice(leadingWs.length + INDENT_MARK.length).replace(/^\s+/, '')
-    }
-    const tr = workingLine.trim()
-    let rendered
-    if (tr.startsWith('### ')) rendered = `<h4 class="md-h4">${escapeHtml(tr.slice(4))}</h4>`
-    else if (tr.startsWith('## '))  rendered = `<h3 class="md-h3">${escapeHtml(tr.slice(3))}</h3>`
-    else if (tr.startsWith('# '))   rendered = `<h2 class="md-h2">${escapeHtml(tr.slice(2))}</h2>`
-    else rendered = escapeHtml(workingLine)
-    return isIndented ? `<span class="trans-indent">${rendered}</span>` : rendered
-  })
-  let html = htmlParts.join('\n')
-    .replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>')
-
-  // 6. 볼드: **...**
-  html = html.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
-
-  // 7. 수식 플레이스홀더 복원
-  html = html.replace(/::MATH_FLT_PLACEHOLDER_(\d+)::/g, (_, idStr) => {
-    const item = mathBlocks[parseInt(idStr)]
-    if (!item) return _
-    if (window.katex) {
-      try {
-        const r = window.katex.renderToString(item.formula, { displayMode: item.display, throwOnError: false, output: 'htmlAndMathml' })
-        if (item.display) {
-          return `<div class="katex-display-wrap" data-formula="${encodeURIComponent(item.formula)}" data-display="true">${r}</div>`
-        } else {
-          return `<span class="katex-inline-wrap" data-formula="${encodeURIComponent(item.formula)}" data-display="false">${r}</span>`
-        }
-      } catch (e) {
-        return `<code class="math-error" data-formula="${encodeURIComponent(item.formula)}" data-display="${item.display}">${escapeHtml(item.formula)}</code>`
-      }
-    }
-    // KaTeX 미로드 시 pending 마킹 → 나중에 applyKatexToElement()로 재처리
-    const delim = item.display ? '$$' : '$'
-    return `<code class="math-pending" data-formula="${encodeURIComponent(item.formula)}" data-display="${item.display}">${escapeHtml(delim + item.formula + delim)}</code>`
-  })
-
-  return html
-}
-
-/** KaTeX 로드 후 .math-pending 코드를 실제 수식으로 교체 */
-function applyKatexToElement(el) {
-  if (!el || !window.katex) return
-  el.querySelectorAll('code.math-pending').forEach(code => {
-    try {
-      const formula = decodeURIComponent(code.dataset.formula || '')
-      const display = code.dataset.display === 'true'
-      const r = window.katex.renderToString(formula, { displayMode: display, throwOnError: false, output: 'htmlAndMathml' })
-      const wrapper = display
-        ? Object.assign(document.createElement('div'), { className: 'katex-display-wrap', innerHTML: r })
-        : Object.assign(document.createElement('span'), { className: 'katex-inline-wrap', innerHTML: r })
-      wrapper.dataset.formula = encodeURIComponent(formula)
-      wrapper.dataset.display = display.toString()
-      
-      // 세그멘테이션 데이터 및 마킹 속성 보존
-      if (code.classList.contains('trans-sentence')) {
-        wrapper.classList.add('trans-sentence');
-      }
-      if (code.dataset.page) {
-        wrapper.dataset.page = code.dataset.page;
-      }
-      if (code.dataset.sentenceIdx) {
-        wrapper.dataset.sentenceIdx = code.dataset.sentenceIdx;
-      }
-      if (code.style.cursor) {
-        wrapper.style.cursor = code.style.cursor;
-      }
-
-      code.replaceWith(wrapper)
-    } catch (e) {
-      code.classList.remove('math-pending')
-    }
-  })
 }
 
 function renderTransContent(pageNum, text, cached = false) {
@@ -3721,6 +3622,7 @@ async function showLibraryScreen(shouldPushState = true, targetPage) {
   loginScreen.classList.remove('active')
   viewerScreen.classList.remove('active')
   if (compareScreen) compareScreen.classList.remove('active')
+  if (chatScreenEl) chatScreenEl.classList.remove('active')
   libraryScreen.classList.add('active')
   // 워크스페이스 화면(사이드바+탑네비)에서는 테마 토글/Settings/로그아웃이 전부
   // 사이드바 푸터에 있으므로, 로그인/비교 화면 전용인 플로팅 버튼 묶음은 통째로 숨긴다
@@ -4147,6 +4049,253 @@ if (compareBackBtn) {
   compareBackBtn.addEventListener('click', () => {
     if (compareChatState.activeStream) { compareChatState.activeStream(); compareChatState.activeStream = null }
     showLibraryScreen()
+  })
+}
+
+// ── 단일 논문 대화 화면 (뷰어 없이 채팅 메시지 + 입력창만) ──────────────
+// AI Chats 페이지의 "대화 열기"는 기존에 뷰어를 열고 채팅 사이드바를 함께
+// 펼치는 방식(#viewer?id=...&chat=1)이었는데, PDF 없이 대화만 보고 싶다는
+// 요청에 따라 이 화면으로 대신 연다. 백엔드는 그대로 재사용한다 - streamChatAPI/
+// getChatHistoryAPI는 이미 뷰어를 실제로 "연" 적이 없어도 동작한다
+// (require_session_owner → ensure_session이 세션이 메모리에 없으면 DB 문서로부터
+// 알아서 복구한다, backend/routers/upload.py). 화면 구조/상태 관리는 바로 위
+// compareChatState/openCompareScreen 패턴을 논문 1편짜리로 그대로 옮긴 것이다.
+let soloChatState = { docId: null, doc: null, history: [], activeStream: null, currentText: '' }
+
+function renderSoloChatMessage(role, content, isHtml = false) {
+  const msgEl = document.createElement('div')
+  msgEl.className = `chat-message ${role}`
+
+  const bubbleEl = document.createElement('div')
+  bubbleEl.className = 'message-bubble'
+  if (isHtml) bubbleEl.innerHTML = content
+  else bubbleEl.textContent = content
+  msgEl.appendChild(bubbleEl)
+
+  if (content) appendSoloActionButtons(msgEl, role, content)
+
+  chatScreenMessages.appendChild(msgEl)
+  chatScreenMessages.scrollTop = chatScreenMessages.scrollHeight
+  return msgEl
+}
+
+function appendSoloActionButtons(msgEl, role, content) {
+  if (!content || content.includes('chat-error-text')) return
+  const actionsEl = document.createElement('div')
+  actionsEl.className = 'message-actions'
+  actionsEl.style.display = 'flex'
+  actionsEl.style.gap = '8px'
+  actionsEl.style.marginTop = '4px'
+  actionsEl.style.alignSelf = role === 'user' ? 'flex-end' : 'flex-start'
+
+  const copyBtn = document.createElement('button')
+  copyBtn.className = 'msg-action-btn'
+  copyBtn.innerHTML = `${icon('clipboard', 12, 'style="vertical-align:-2px;margin-right:3px"')}복사`
+  copyBtn.style.background = 'none'
+  copyBtn.style.border = 'none'
+  copyBtn.style.color = 'var(--text-muted)'
+  copyBtn.style.fontSize = '11px'
+  copyBtn.style.cursor = 'pointer'
+  copyBtn.title = '텍스트 복사'
+  copyBtn.addEventListener('click', () => {
+    const text = msgEl.querySelector('.message-bubble').textContent
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('텍스트가 복사되었습니다.', 'success')
+      }).catch(() => showToast('복사 실패', 'error'))
+    }
+  })
+  actionsEl.appendChild(copyBtn)
+  msgEl.appendChild(actionsEl)
+}
+
+function appendSoloTypingIndicator() {
+  const msgEl = document.createElement('div')
+  msgEl.className = 'chat-message assistant temp-typing'
+  const bubbleEl = document.createElement('div')
+  bubbleEl.className = 'message-bubble'
+  bubbleEl.innerHTML = `<div class="typing-container" style="display: flex; align-items: center; gap: 8px;"><span class="typing-text" style="font-size: 12px; color: var(--text-secondary);">AI가 답변을 준비하고 있습니다</span><div class="typing-indicator" style="display: flex; gap: 3px; align-items: center;"><span></span><span></span><span></span></div></div>`
+  msgEl.appendChild(bubbleEl)
+  chatScreenMessages.appendChild(msgEl)
+  chatScreenMessages.scrollTop = chatScreenMessages.scrollHeight
+  return msgEl
+}
+
+function removeSoloTypingIndicator() {
+  chatScreenMessages.querySelectorAll('.temp-typing').forEach(el => el.remove())
+}
+
+function updateSoloChatSendBtnIcon(isGenerating) {
+  if (!chatScreenSendBtn) return
+  if (isGenerating) {
+    chatScreenSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /></svg>`
+    chatScreenSendBtn.title = '답변 생성 중단'
+  } else {
+    chatScreenSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`
+    chatScreenSendBtn.title = '전송'
+  }
+}
+
+function renderSoloGreeting(doc) {
+  const title = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+  renderSoloChatMessage('assistant',
+    `<strong>${escapeHtml(title)}</strong>에 대해 무엇이든 물어보세요.<br><br>` +
+    `<strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong>` +
+    `<ul><li>이 논문의 핵심 기여는 무엇인가요?</li><li>실험 설정을 요약해줄 수 있나요?</li><li>이 방법론의 한계점은 뭔가요?</li></ul>`,
+    true)
+}
+
+// location.hash 대입은 popstate/hashchange를 둘 다 발생시킬 수 있어(openCompareScreen과
+// 동일한 이유), 같은 문서에 대한 재진입 호출을 걸러낸다.
+let soloChatOpeningDocId = null
+
+async function openSoloChatScreen(doc, shouldPushState = true) {
+  if (soloChatOpeningDocId === doc.id) return
+  if (chatScreenEl.classList.contains('active') && soloChatState.docId === doc.id) return
+  soloChatOpeningDocId = doc.id
+
+  if (soloChatState.activeStream) { soloChatState.activeStream(); soloChatState.activeStream = null }
+  soloChatState = { docId: doc.id, doc, history: [], activeStream: null, currentText: '' }
+
+  if (shouldPushState) {
+    history.pushState({ screen: 'chat', id: doc.id }, '', `#chat?id=${encodeURIComponent(doc.id)}`)
+  }
+
+  const title = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+  if (chatScreenTitle) chatScreenTitle.textContent = title
+
+  if (chatScreenMessages) chatScreenMessages.innerHTML = ''
+  showChatScreen()
+
+  try {
+    const res = await getChatHistoryAPI(doc.id)
+    const savedHistory = res.history || []
+    if (savedHistory.length === 0) {
+      renderSoloGreeting(doc)
+    } else {
+      savedHistory.forEach(msg => {
+        renderSoloChatMessage(msg.role, msg.role === 'assistant' ? formatChatHtml(msg.content) : msg.content, msg.role === 'assistant')
+        soloChatState.history.push({ role: msg.role, content: msg.content })
+      })
+    }
+  } catch (err) {
+    console.warn('논문 채팅 기록 로드 실패:', err)
+    renderSoloGreeting(doc)
+  } finally {
+    if (soloChatOpeningDocId === doc.id) soloChatOpeningDocId = null
+  }
+}
+
+async function sendSoloChatMessage() {
+  if (!soloChatState.docId) return
+  if (soloChatState.activeStream) return
+
+  const text = chatScreenInput.value.trim()
+  if (!text) return
+
+  chatScreenInput.value = ''
+  chatScreenInput.style.height = 'auto'
+
+  renderSoloChatMessage('user', text)
+  soloChatState.history.push({ role: 'user', content: text })
+
+  appendSoloTypingIndicator()
+  chatScreenInput.disabled = true
+  updateSoloChatSendBtnIcon(true)
+
+  let accumulatedText = ''
+  let replyBubble = null
+  let firstToken = true
+  soloChatState.currentText = ''
+
+  soloChatState.activeStream = streamChatAPI(
+    soloChatState.docId,
+    soloChatState.history,
+    // onToken
+    (token) => {
+      if (firstToken) {
+        if (!token.trim()) return
+        removeSoloTypingIndicator()
+        replyBubble = renderSoloChatMessage('assistant', '', true).querySelector('.message-bubble')
+        firstToken = false
+      }
+      accumulatedText += token
+      soloChatState.currentText = accumulatedText
+      replyBubble.innerHTML = formatChatHtml(accumulatedText)
+      chatScreenMessages.scrollTop = chatScreenMessages.scrollHeight
+    },
+    // onDone
+    () => {
+      soloChatState.activeStream = null
+      soloChatState.history.push({ role: 'assistant', content: accumulatedText })
+      if (replyBubble) {
+        replyBubble.innerHTML = formatChatHtml(accumulatedText)
+        if (replyBubble.parentElement) appendSoloActionButtons(replyBubble.parentElement, 'assistant', accumulatedText)
+      }
+      chatScreenInput.disabled = false
+      updateSoloChatSendBtnIcon(false)
+      chatScreenInput.focus()
+    },
+    // onError
+    (err) => {
+      removeSoloTypingIndicator()
+      soloChatState.activeStream = null
+      if (firstToken) {
+        renderSoloChatMessage('assistant', `<span class="chat-error-text">${icon('alertTriangle', 13, 'style="vertical-align:-2px;margin-right:3px"')}답변 중 오류가 발생했습니다: ${escapeHtml(err.message)}</span>`, true)
+      } else if (replyBubble) {
+        replyBubble.innerHTML += `<br><br><span style="color: var(--error);">[오류: ${err.message}]</span>`
+      }
+      chatScreenInput.disabled = false
+      updateSoloChatSendBtnIcon(false)
+      chatScreenInput.focus()
+    }
+  )
+}
+
+if (chatScreenSendBtn) {
+  chatScreenSendBtn.addEventListener('click', () => {
+    if (soloChatState.activeStream) {
+      soloChatState.activeStream()
+      soloChatState.activeStream = null
+      removeSoloTypingIndicator()
+      if (soloChatState.currentText) {
+        soloChatState.history.push({ role: 'assistant', content: soloChatState.currentText })
+      } else {
+        soloChatState.history.pop()
+      }
+      showToast('답변 생성이 중단되었습니다.', 'info')
+      chatScreenInput.disabled = false
+      updateSoloChatSendBtnIcon(false)
+      chatScreenInput.focus()
+    } else {
+      sendSoloChatMessage()
+    }
+  })
+}
+
+if (chatScreenInput) {
+  chatScreenInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      sendSoloChatMessage()
+    }
+  })
+  chatScreenInput.addEventListener('input', () => {
+    chatScreenInput.style.height = 'auto'
+    chatScreenInput.style.height = `${chatScreenInput.scrollHeight}px`
+  })
+}
+
+if (chatScreenBackBtn) {
+  chatScreenBackBtn.addEventListener('click', () => {
+    if (soloChatState.activeStream) { soloChatState.activeStream(); soloChatState.activeStream = null }
+    location.hash = 'chats'
+  })
+}
+
+if (chatScreenViewerBtn) {
+  chatScreenViewerBtn.addEventListener('click', () => {
+    if (soloChatState.docId) location.hash = `viewer?id=${encodeURIComponent(soloChatState.docId)}`
   })
 }
 
@@ -13183,6 +13332,25 @@ async function handleRouting() {
       }
       showToast('비교할 논문 정보를 불러올 수 없습니다.', 'error')
       location.hash = 'library'
+    } else if (hash.startsWith('#chat?id=')) {
+      const params = new URLSearchParams(hash.slice('#chat?'.length))
+      const docId = params.get('id')
+      if (docId) {
+        if (soloChatState.docId === docId && chatScreenEl.classList.contains('active')) {
+          return
+        }
+        try {
+          const doc = await fetchLibraryDoc(docId)
+          if (doc) {
+            await openSoloChatScreen(doc, false)
+            return
+          }
+        } catch (err) {
+          console.warn('[Router] 논문 채팅 문서 로드 실패:', err)
+        }
+      }
+      showToast('대화할 논문 정보를 불러올 수 없습니다.', 'error')
+      location.hash = 'chats'
     } else {
       const pageId = hash.replace('#', '') || 'dashboard'
       console.log("[Router] Routing to workspace page:", pageId, "Viewer active:", viewerScreen.classList.contains('active'), "Library active:", libraryScreen.classList.contains('active'))

@@ -425,3 +425,14 @@
   color: var(--text-primary);
   white-space: pre-wrap;
 }
+
+/* 읽기 전 브리핑(primer) 전체 내용 - 뷰어의 브리핑 모달과 같은 .primer-*
+   컴포넌트를 그대로 재사용하되, 탭으로 나누지 않고 섹션을 세로로 쭉 이어
+   붙인다(Notes는 탭 하나짜리 읽기 전용 뷰라 모달의 소탭 구조가 필요 없음). */
+.notes-primer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding: 4px;
+}
+.notes-primer-section:empty { display: none; }
