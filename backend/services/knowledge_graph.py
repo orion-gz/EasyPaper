@@ -28,11 +28,16 @@
   호출 불필요 - 순수 데이터 노출).
 """
 import asyncio
+import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
+
+# 추천 논문 목록 캐시 TTL - LLM+OpenAlex 검증이 여러 번 들어가는 무거운 작업이라
+# 매번 다시 계산하지 않고, 일주일에 한 번만 새로 생성해 app_meta에 저장해둔다.
+READING_RECOMMENDATIONS_CACHE_DAYS = 7
 
 # 그래프 조회 시점에 아직 개념/인용 동기화가 안 된(graph_synced_at 없는) 문서를
 # 백그라운드로 백필한다. 같은 문서에 대해 중복으로 백필 태스크가 여러 개
@@ -471,13 +476,37 @@ async def get_activity_timeline(username: str) -> List[dict]:
     return events
 
 
+def _reading_recommendations_cache_key(username: str) -> str:
+    return f"reading_recommendations:{username}"
+
+
 async def get_reading_recommendations(username: str) -> List[dict]:
     """읽은 논문들을 근거로 다음에 읽으면 좋을 논문을 추천한다. Primer 기능의
     기존 OpenAlex 검증 로직(_is_plausible_match, resolve_reference)을 그대로
     재사용해 LLM 환각(존재하지 않는 논문을 추천)을 걸러낸다 - 1차의
     _match_library_references 재사용과 동일한 패턴. LLM+OpenAlex 호출이
     여러 번 들어가는 무거운 작업이라 그래프 조회 시 자동 실행하지 않고,
-    프론트에서 사용자가 명시적으로 요청했을 때만 호출한다."""
+    프론트에서 사용자가 명시적으로 요청했을 때만 호출한다.
+
+    결과는 app_meta에 사용자별로 캐싱해 READING_RECOMMENDATIONS_CACHE_DAYS(7일)
+    동안 재사용하고, 그 기간이 지나면 다음 조회 시 자동으로 새로 생성한다 -
+    호출할 때마다 같은 무거운 계산을 반복하지 않으면서도, 추천 목록이 매주
+    한 번씩은 새로 갱신되게 한다.
+    """
+    from services.db import db_get_meta, db_set_meta
+
+    cache_key = _reading_recommendations_cache_key(username)
+    cached_raw = db_get_meta(cache_key)
+    if cached_raw:
+        try:
+            cached = json.loads(cached_raw)
+            generated_at = datetime.fromisoformat(cached["generated_at"])
+            age = datetime.now(timezone.utc) - generated_at
+            if age < timedelta(days=READING_RECOMMENDATIONS_CACHE_DAYS):
+                return cached["recommendations"]
+        except Exception:
+            pass  # 캐시가 손상됐으면 무시하고 새로 생성
+
     from services.library import list_documents
     docs = list_documents(username=username)
     if len(docs) < 2:
@@ -507,6 +536,11 @@ async def get_reading_recommendations(username: str) -> List[dict]:
         if any(len(result_words & seen) / len(result_words) >= 0.6 for seen in exclude_word_sets):
             continue  # 이미 읽은 논문과 같은 논문이면 제외
         results.append({**resolved, "reason": r.get("reason", "")})
+
+    db_set_meta(cache_key, json.dumps({
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "recommendations": results,
+    }, ensure_ascii=False))
     return results
 
 

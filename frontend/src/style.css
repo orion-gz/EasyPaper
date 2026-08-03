@@ -6346,6 +6346,61 @@ body.light-theme .figure-preview-tooltip {
   color: var(--text-muted);
 }
 
+/* ── 단일 논문 대화 드로어 (AI Chats 목록 → "대화") ──────────────────
+   Library 상세 패널(.lib-detail-panel/.lib-detail-overlay, library-page.css)과
+   동일한 "우측에서 슬라이드 인" 패턴 - 사이드바/탑바를 그대로 둔 채 열려서
+   페이지 이동 없이 대화만 확인할 수 있다. */
+.chat-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  z-index: 45;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.chat-drawer-overlay.open { opacity: 1; pointer-events: auto; }
+
+.chat-drawer {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  max-width: 94vw;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.chat-drawer.open { transform: translateX(0); }
+.chat-drawer .compare-chat-body { height: 0; flex: 1 1 auto; min-height: 0; }
+/* 비교 화면(.compare-topbar-title)은 전체 화면 폭을 쓸 수 있어 제목이 안
+   잘렸지만, 이 드로어는 폭이 480px로 훨씬 좁아 긴 논문 제목이 닫기/뷰어
+   버튼을 밀어내 화면 밖으로 나가버린다 - 제목만 줄여서 말줄임표 처리한다. */
+.chat-drawer .compare-topbar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.chat-drawer .compare-topbar-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-drawer .compare-topbar-title svg,
+.chat-drawer .icon-btn,
+.chat-drawer #chat-drawer-viewer-btn {
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .chat-drawer { width: 100vw; max-width: 100vw; }
+}
+
 /* 키워드/단어 탭 용어 클릭 시 원문 위치 하이라이트 - 스크롤이 끝난 뒤에 표시되므로
    citation 클릭용 pulse보다 오래 보이도록 별도 애니메이션을 둔다(일정 시간 유지 후 페이드) */
 @keyframes locateHighlightPulse {
