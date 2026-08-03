@@ -242,6 +242,14 @@ export async function fetchReadingRecommendations() {
   return res.json()
 }
 
+// 대시보드 진입 시 호출하는 가벼운 버전 - 유효한 캐시가 있으면 바로 보여주고,
+// 없으면 무거운 재계산 없이 recommendations: null을 반환받아 "추천 받기" 버튼을 띄운다.
+export async function fetchCachedReadingRecommendations() {
+  const res = await fetch(`${API_BASE}/library/graph/recommendations/cached`)
+  if (!res.ok) throw new Error('추천 논문 캐시 조회 실패')
+  return res.json()
+}
+
 export async function fetchLibraryTrash(options = {}) {
   const res = await fetch(`${API_BASE}/library/trash${buildQuery(options)}`)
   if (!res.ok) throw new Error('휴지통 조회 실패')

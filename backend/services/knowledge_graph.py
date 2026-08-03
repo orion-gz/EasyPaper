@@ -480,6 +480,36 @@ def _reading_recommendations_cache_key(username: str) -> str:
     return f"reading_recommendations:{username}"
 
 
+def _read_reading_recommendations_cache(username: str) -> Optional[List[dict]]:
+    """캐시에 유효한(READING_RECOMMENDATIONS_CACHE_DAYS 이내) 추천 결과가 있으면
+    그대로 반환하고, 없거나 만료/손상됐으면 None을 반환한다 - 새로 생성하지는
+    않는다(get_reading_recommendations와 get_cached_reading_recommendations가
+    공유하는 순수 조회 로직)."""
+    from services.db import db_get_meta
+
+    cached_raw = db_get_meta(_reading_recommendations_cache_key(username))
+    if not cached_raw:
+        return None
+    try:
+        cached = json.loads(cached_raw)
+        generated_at = datetime.fromisoformat(cached["generated_at"])
+        age = datetime.now(timezone.utc) - generated_at
+        if age < timedelta(days=READING_RECOMMENDATIONS_CACHE_DAYS):
+            return cached["recommendations"]
+    except Exception:
+        pass  # 캐시가 손상됐으면 무시하고 새로 생성
+    return None
+
+
+async def get_cached_reading_recommendations(username: str) -> Optional[List[dict]]:
+    """대시보드 진입 시 호출하는 가벼운 버전 - 유효한 캐시가 있으면 그대로
+    반환하고, 없으면 LLM+OpenAlex를 호출해 새로 생성하지 않고 None을 반환한다
+    (무거운 재계산 없이 캐시 유무만 확인). 이전에는 캐시가 있어도 사용자가
+    "추천 받기" 버튼을 다시 눌러야만 보였는데, 대시보드 로드 시 이 함수로
+    미리 조회해 캐시가 있으면 버튼 없이 바로 보여주기 위한 용도다."""
+    return _read_reading_recommendations_cache(username)
+
+
 async def get_reading_recommendations(username: str) -> List[dict]:
     """읽은 논문들을 근거로 다음에 읽으면 좋을 논문을 추천한다. Primer 기능의
     기존 OpenAlex 검증 로직(_is_plausible_match, resolve_reference)을 그대로
@@ -493,20 +523,11 @@ async def get_reading_recommendations(username: str) -> List[dict]:
     호출할 때마다 같은 무거운 계산을 반복하지 않으면서도, 추천 목록이 매주
     한 번씩은 새로 갱신되게 한다.
     """
-    from services.db import db_get_meta, db_set_meta
+    cached = _read_reading_recommendations_cache(username)
+    if cached is not None:
+        return cached
 
-    cache_key = _reading_recommendations_cache_key(username)
-    cached_raw = db_get_meta(cache_key)
-    if cached_raw:
-        try:
-            cached = json.loads(cached_raw)
-            generated_at = datetime.fromisoformat(cached["generated_at"])
-            age = datetime.now(timezone.utc) - generated_at
-            if age < timedelta(days=READING_RECOMMENDATIONS_CACHE_DAYS):
-                return cached["recommendations"]
-        except Exception:
-            pass  # 캐시가 손상됐으면 무시하고 새로 생성
-
+    from services.db import db_set_meta
     from services.library import list_documents
     docs = list_documents(username=username)
     if len(docs) < 2:
@@ -537,7 +558,7 @@ async def get_reading_recommendations(username: str) -> List[dict]:
             continue  # 이미 읽은 논문과 같은 논문이면 제외
         results.append({**resolved, "reason": r.get("reason", "")})
 
-    db_set_meta(cache_key, json.dumps({
+    db_set_meta(_reading_recommendations_cache_key(username), json.dumps({
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "recommendations": results,
     }, ensure_ascii=False))

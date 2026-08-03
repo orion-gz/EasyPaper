@@ -116,6 +116,20 @@ async def get_library_reading_recommendations(current_user: str = Depends(get_cu
     return {"recommendations": await get_reading_recommendations(current_user)}
 
 
+@router.get("/library/graph/recommendations/cached")
+async def get_library_reading_recommendations_cached(current_user: str = Depends(get_current_user)):
+    """대시보드 진입 시 호출하는 가벼운 버전입니다. 유효한 캐시가 있으면 그대로
+    반환하고, 없거나 만료됐으면 LLM+OpenAlex를 호출해 새로 생성하지 않고
+    recommendations: null을 반환합니다(대시보드를 열 때마다 무거운 재계산이
+    도는 것을 방지 - 새로 생성은 여전히 "추천 받기" 버튼을 눌렀을 때만 함).
+
+    /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
+    이유로, 그렇지 않으면 "graph"가 doc_id 경로 파라미터로 잘못 매칭된다.
+    """
+    from services.knowledge_graph import get_cached_reading_recommendations
+    return {"recommendations": await get_cached_reading_recommendations(current_user)}
+
+
 @router.get("/library/timeline")
 async def get_library_timeline(current_user: str = Depends(get_current_user)):
     """업로드/읽음/질문/메모를 시간순으로 병합한 개인 활동 타임라인을 반환합니다.
