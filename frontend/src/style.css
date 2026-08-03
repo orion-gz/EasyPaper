@@ -6348,8 +6348,10 @@ body.light-theme .figure-preview-tooltip {
 
 /* ── 단일 논문 대화 드로어 (AI Chats 목록 → "대화") ──────────────────
    Library 상세 패널(.lib-detail-panel/.lib-detail-overlay, library-page.css)과
-   동일한 "우측에서 슬라이드 인" 패턴 - 사이드바/탑바를 그대로 둔 채 열려서
-   페이지 이동 없이 대화만 확인할 수 있다. */
+   비슷한 "우측에서 슬라이드 인" 패턴이지만, 좌측 사이드바 내비게이션은
+   그대로 둔 채 상단 탑바(--topbar-h) 영역까지 꽉 채워 위아래로 이어지는
+   하나의 패널처럼 보이게 한다(탑바 한 겹 + 드로어 자체 헤더 한 겹이 layered
+   보이는 걸 피하려고 top:0부터 시작). */
 .chat-drawer-overlay {
   position: fixed;
   inset: 0;
@@ -6363,7 +6365,7 @@ body.light-theme .figure-preview-tooltip {
 
 .chat-drawer {
   position: fixed;
-  top: var(--topbar-h);
+  top: 0;
   right: 0;
   bottom: 0;
   width: 480px;
