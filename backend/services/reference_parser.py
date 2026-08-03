@@ -55,17 +55,53 @@ _BRACKET_MARKER_RE = re.compile(r"\[(" + _BRACKET_KEY_RE.pattern + r")\]")
 # 우연히 일치하는 페이지/연도 숫자를 걸러낸다.
 _PLAIN_NUMBERED_MARKER_RE = re.compile(r"(?:^|\s)(\d{1,3})[.)]\s+(?=[A-Z가-힣])")
 
+# References 섹션 뒤에 곧바로 이어지는 Appendix 표제 - 표제만 딱 담긴 줄에만
+# 일치하도록(문장 중간의 "see Appendix B" 같은 언급과 구분) 줄 전체를 앵커링한다.
+_APPENDIX_HEADER_RE = re.compile(
+    r"^(?:appendix|supplementary material|supplemental material)(?:\s+[A-Z0-9]{1,3})?\.?$",
+    re.IGNORECASE,
+)
+
 # (Author, Year) 스타일 항목의 시작 판별용 - "Surname, Initial..." 형태로
 # 시작하는 구간을 새 항목의 시작으로 본다. 실제로 참고문헌 항목인지는 flush
 # 시점에 텍스트 전체에서 연도가 발견되는지로 한 번 더 검증한다(오탐 방지).
-_AUTHOR_YEAR_ENTRY_START_RE = re.compile(r"^\s*([A-ZÀ-Ö][A-Za-zÀ-ÖØ-öø-ÿ\-']+),\s")
+#
+# 첫 저자가 "Inception Labs," "Google DeepMind," 처럼 여러 단어로 된 기관명인
+# 경우도 있어("Inception Labs, Khanna, S., ..." - 실제로 관찰된 문서), 성 뒤에
+# 공백으로 이어지는 대문자 단어를 추가로 몇 개 더 허용한다. 키(=프론트엔드
+# main.js의 extractAuthorYearClauses와 맞춰야 하는 부분)는 항상 첫 단어만
+# 쓰므로 캡처 그룹은 첫 단어에만 건다.
+#
+# 다만 이 다중 단어 허용은 "In NeurIPS, 2020." "In ICML, 2015." 같은 학회명
+# 인용구(항목 안의 문장이지 새 항목이 아님)까지 오탐하게 만든다 - "In"과
+# "NeurIPS"가 둘 다 대문자로 시작해 SURNAME_SRC에 그대로 걸림. 실제 저자
+# 목록은 콤마 뒤에 보통 이니셜("S.", "J. C.")이나 또 다른 저자 성이 이어지고
+# 곧바로 4자리 숫자가 오지 않는 반면, 학회명 인용구는 콤마 뒤에 곧장 연도가
+# 온다는 차이가 있어, 콤마 뒤에 숫자가 바로 오는 경우는 항목 시작으로 인정하지
+# 않는다(그 대가로 저자 이니셜 없이 "Google, 2023."처럼 곧장 연도가 오는
+# 극히 드문 기관 저자 항목은 놓칠 수 있음).
+_AUTHOR_YEAR_SURNAME_WORD_SRC = r"[A-ZÀ-Ö][A-Za-zÀ-ÖØ-öø-ÿ\-']*"
+_AUTHOR_YEAR_SURNAME_SRC = (
+    "(" + _AUTHOR_YEAR_SURNAME_WORD_SRC + ")"
+    r"(?:\s" + _AUTHOR_YEAR_SURNAME_WORD_SRC + r")*"
+)
+_AUTHOR_YEAR_SURNAME_END_SRC = r",\s(?!\d)"
+_AUTHOR_YEAR_ENTRY_START_RE = re.compile(r"^\s*" + _AUTHOR_YEAR_SURNAME_SRC + _AUTHOR_YEAR_SURNAME_END_SRC)
 # 항목 경계 자체를 텍스트 전체에서 찾을 때 쓴다(_parse_author_year_entries 참고) -
 # 문장 경계(마침표/느낌표/물음표 + 공백) 또는 텍스트 시작 바로 뒤에 "Surname,"
 # 패턴이 오는 지점을 새 항목의 시작으로 본다. 항목 안의 공저자 나열은 보통
 # 세미콜론이나 "&"로 구분되고 성 뒤에 곧바로 마침표+공백이 오는 경우가 거의
 # 없어(이니셜 뒤에는 대개 쉼표나 세미콜론이 옴) 오탐 위험이 낮다.
+#
+# 일부 논문(backref 패키지 사용)은 각 항목 끝에 "이 문헌이 인용된 페이지 번호"
+# 목록을 덧붙인다(예: "... 2023. 1" 또는 "... 2025. 8, 9, 10") - 이 숫자
+# 목록이 마침표와 다음 항목의 "Surname," 사이에 끼어들면 경계를 못 찾고 다음
+# 수십 개 항목 전체가 앞 항목 하나에 뭉쳐 흡수돼버리는 문제가 실제로 관찰됨.
+# 마침표 뒤에 그런 숫자 목록이 있으면 건너뛰고 그 다음에서 Surname을 찾는다.
+_AUTHOR_YEAR_CITED_PAGES_SRC = r"\d{1,4}(?:,\s*\d{1,4})*\s+"
 _AUTHOR_YEAR_ENTRY_BOUNDARY_RE = re.compile(
-    r"(?:^|[.!?]\s+)(?=[A-ZÀ-Ö][A-Za-zÀ-ÖØ-öø-ÿ\-']+,\s)"
+    r"(?:^|[.!?]\s+(?:" + _AUTHOR_YEAR_CITED_PAGES_SRC + r")?)"
+    r"(?=" + _AUTHOR_YEAR_SURNAME_SRC + _AUTHOR_YEAR_SURNAME_END_SRC + r")"
 )
 # 연도는 APA류처럼 괄호로 싸인 경우("(2020)")뿐 아니라, AAAI/IJCAI류처럼
 # 저자 목록 바로 뒤에 괄호 없이 오는 경우("... 2020. Title...")도 지원한다.
@@ -142,6 +178,23 @@ def _extract_reference_list_impl(pages: List[dict]) -> Dict[str, str]:
             start_idx = idx
             break
     body_lines = lines[start_idx:]
+
+    # 많은 논문이 References 섹션 바로 뒤에 Appendix를 이어 붙인다(같은 PDF,
+    # 페이지 구분 없음). References 시작 페이지부터 문서 끝까지를 통째로
+    # 가져오는 위 combined_text 구성 방식상, Appendix 헤더를 걷어내지 않으면
+    # 부록 본문 전체가 마지막 참고문헌 항목 하나에 통째로 흡수된다(실제로
+    # 부록 안의 "Notably, evidence shows..." 같은 일반 문장까지 "Surname,"
+    # 패턴에 우연히 걸려 항목 경계로 오인되는 경우도 있어 더 위험함). Appendix
+    # 표제만 있는 줄을 만나면 그 지점에서 자른다 - "... see Appendix B" 처럼
+    # 문장 중간에 낀 언급은 줄 전체가 표제와 일치하지 않으므로 걸리지 않는다.
+    for idx, line in enumerate(body_lines):
+        if idx == 0:
+            continue
+        stripped = re.sub(r"\*+", "", line).strip()
+        if _APPENDIX_HEADER_RE.match(stripped):
+            body_lines = body_lines[:idx]
+            break
+
     # 항목 경계 탐지는 줄바꿈에 기대지 않는다(아래 _extract_marker_entries
     # 참고) - 여기서는 그냥 하나의 문자열로 이어붙이기만 한다.
     body_text = "\n".join(body_lines)

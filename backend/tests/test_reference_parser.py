@@ -259,3 +259,73 @@ def test_author_year_supports_plain_year_without_parentheses():
     refs = extract_reference_list(pages)
     assert set(refs.keys()) == {"smith2020"}
     assert "without parenthesized year" in refs["smith2020"]
+
+
+def test_author_year_supports_multi_word_organization_author():
+    """"Inception Labs, Khanna, S., ..."처럼 첫 저자가 여러 단어로 된 기관명인
+    항목도 독립된 항목으로 인식해야 한다(실제 The Flexibility Trap 논문에서
+    재현된 케이스). 키는 프론트엔드(main.js의 extractAuthorYearClauses)와
+    맞춰 첫 단어만 사용한다."""
+    pages = [{"page_num": 1, "text": (
+        "References\n\n"
+        "Huang, Z., Chen, Z., and Li, T. Reinforcing the diffusion chain. "
+        "In NeurIPS, 2025.\n\n"
+        "Inception Labs, Khanna, S., and Kharbanda, S. Mercury: Ultra-fast "
+        "language models based on diffusion. arXiv preprint arXiv:2506.17298, 2025."
+    )}]
+    refs = extract_reference_list(pages)
+    assert set(refs.keys()) == {"huang2025", "inception2025"}
+    assert "Mercury" in refs["inception2025"]
+    assert "Mercury" not in refs["huang2025"]
+
+
+def test_author_year_boundary_tolerates_backref_cited_page_numbers():
+    """backref 패키지를 쓰는 논문은 각 항목 끝에 "이 문헌이 인용된 페이지
+    번호" 목록을 덧붙인다(예: "... 2023. 1" 또는 "... 2025. 8, 9, 10"). 이
+    숫자 목록이 마침표와 다음 항목의 "Surname," 사이에 끼면 경계를 놓쳐
+    뒤따르는 항목 전부가 앞 항목 하나에 흡수되던 문제가 실제로 있었다."""
+    pages = [{"page_num": 1, "text": (
+        "References\n\n"
+        "Achiam, J., Adler, S. GPT-4 technical report. arXiv preprint "
+        "arXiv:2303.08774, 2023. 1\n\n"
+        "Ben-Hamu, H., Gat, I. Accelerated sampling from masked diffusion "
+        "models. In NeurIPS, 2025. 8, 9, 10"
+    )}]
+    refs = extract_reference_list(pages)
+    assert set(refs.keys()) == {"achiam2023", "ben-hamu2025"}
+    assert "Ben-Hamu" not in refs["achiam2023"]
+
+
+def test_author_year_venue_citation_is_not_mistaken_for_new_entry():
+    """"In NeurIPS, 2020."처럼 항목 안에 등장하는 학회명 인용구는(두 단어 다
+    대문자로 시작해 다중 단어 기관 저자 패턴과 겉보기 형태가 같음) 새 항목의
+    시작으로 오인되면 안 된다 - 콤마 뒤에 곧장 연도가 오는지로 구분한다."""
+    pages = [{"page_num": 1, "text": (
+        "References\n\n"
+        "Ho, J., Jain, A., and Abbeel, P. Denoising diffusion probabilistic "
+        "models. In NeurIPS, 2020. Some further description continues here."
+    )}]
+    refs = extract_reference_list(pages)
+    assert set(refs.keys()) == {"ho2020"}
+    assert "NeurIPS" in refs["ho2020"]
+
+
+def test_author_year_stops_before_appendix_section():
+    """References 섹션 바로 뒤에 Appendix가 페이지 구분 없이 이어 붙는 논문이
+    흔하다. Appendix 표제를 걷어내지 않으면 부록 본문 전체가 마지막 참고문헌
+    항목 하나에 통째로 흡수된다(실제 The Flexibility Trap 논문에서 재현된
+    케이스 - 부록 안의 일반 문장이 "Surname," 패턴에 우연히 걸려 경계로
+    오인되는 경우까지 있어 더 위험함)."""
+    pages = [{"page_num": 1, "text": (
+        "References\n\n"
+        "Zhu, F., Wang, R. LLaDA 1.5: Variance-reduced preference optimization. "
+        "arXiv preprint arXiv:2505.19223, 2025. 1, 4, 8\n"
+        "**Appendix**\n\n"
+        "**A. Experimental Details**\n\n"
+        "Notably, even under these optimized settings, the arbitrary order mode "
+        "does not recover the same coverage."
+    )}]
+    refs = extract_reference_list(pages)
+    assert set(refs.keys()) == {"zhu2025"}
+    assert "Notably" not in refs["zhu2025"]
+    assert "Appendix" not in refs["zhu2025"]
