@@ -649,8 +649,10 @@ async def get_ai_insights(username: str) -> List[dict]:
     """대시보드 "AI 인사이트" 카드의 내용을 생성한다. 예전에는 get_knowledge_gaps의
     규칙 기반 격차 문구를 그대로 노출했지만, 그건 매번 같은 두 패턴("질문이
     없습니다"/"메모가 없습니다")만 반복해 내용이 다양하지 않았다. 여기서는 실제
-    질문/메모 내용과 읽은 논문 목록을 LLM에 근거로 전달해, 조언/요약/추천/격려처럼
-    더 다양하고 구체적인 인사이트를 생성한다.
+    질문/메모 내용을 LLM(지도교수 관점의 멘토 페르소나 - llm_client.
+    generate_dashboard_insights 참고)에 근거로 전달해, 질문에서 드러나는 이해
+    부족/개념 공백 진단, 교수자 관점의 조언, 스스로를 돌아보게 하는 관점 제시,
+    근거 있는 격려처럼 실질적으로 도움이 되는 인사이트를 생성한다.
 
     결과는 app_meta에 하루(AI_INSIGHTS_CACHE_HOURS) 동안 캐싱해 대시보드를 열 때마다
     LLM을 호출하지 않으면서도 매일 새 활동을 반영해 갱신되게 한다(추천 논문 캐싱과
@@ -677,9 +679,38 @@ async def get_ai_insights(username: str) -> List[dict]:
     if not docs:
         return rule_based_gaps
 
-    timeline = await get_activity_timeline(username)
-    notes = [f"[{e['doc_title']}] {e['summary']}" for e in timeline if e["type"] == "note" and e.get("summary")][:8]
-    questions = [f"[{e['doc_title']}] {e['summary']}" for e in timeline if e["type"] == "question" and e.get("summary")][:8]
+    # get_activity_timeline의 summary는 UI 카드용으로 80자로 잘려있어, 질문에서
+    # 이해 부족/개념 공백을 실제로 진단하기엔 근거가 너무 짧다. 여기서는 같은
+    # 원본(memos/questions)을 직접 조회해 더 긴 내용(최대 200자)을 LLM에 넘긴다.
+    from services.db import db_get_memos, db_get_related_questions_for_doc
+    titles_by_doc = {d["id"]: (d.get("metadata") or {}).get("title") or d["filename"] for d in docs}
+    note_entries = []
+    question_entries = []
+    for doc in docs:
+        doc_id = doc["id"]
+        title = titles_by_doc[doc_id]
+        mirrored = db_get_memos(doc_id)
+        for items in (mirrored or {}).get("data", {}).values():
+            for item in items or []:
+                item_id = (item or {}).get("id", "") if isinstance(item, dict) else ""
+                if not item_id.startswith("memo_"):
+                    continue
+                try:
+                    ts_ms = int(item_id[len("memo_"):])
+                except ValueError:
+                    continue
+                content = (item.get("content") or "").strip()
+                if content:
+                    note_entries.append((ts_ms, title, content))
+        for q in db_get_related_questions_for_doc(doc_id, limit=50):
+            content = (q["content"] or "").strip()
+            if content:
+                question_entries.append((q["created_at"], title, content))
+
+    note_entries.sort(key=lambda e: e[0], reverse=True)
+    question_entries.sort(key=lambda e: e[0], reverse=True)
+    notes = [f"[{title}] {content[:200]}" for _, title, content in note_entries[:8]]
+    questions = [f"[{title}] {content[:200]}" for _, title, content in question_entries[:8]]
 
     heatmap = await get_concept_heatmap(username)
     concepts = [h["name"] for h in heatmap[:8]]
@@ -688,8 +719,8 @@ async def get_ai_insights(username: str) -> List[dict]:
     stats = {
         "total_papers": len(docs),
         "read_papers": sum(1 for d in docs if (d.get("metadata") or {}).get("read")),
-        "total_notes": len([e for e in timeline if e["type"] == "note"]),
-        "total_questions": len([e for e in timeline if e["type"] == "question"]),
+        "total_notes": len(note_entries),
+        "total_questions": len(question_entries),
     }
 
     from services.llm_client import generate_dashboard_insights
