@@ -266,10 +266,22 @@ function renderProgressSummaryCard(events, heatmap, readingStats) {
 // 함께 보여준다("최근 읽은" = 최근에 펼쳐본 논문). 퍼센트는 번역 진행률이 아니라
 // last_page/total_pages로 계산한 실제 읽은 진행률이고, 완독 표시된 논문은
 // 퍼센트 대신 "완료" 칩을 보여준다.
+//
+// 정렬/날짜 표시 기준: last_read_at(뷰어를 열거나 페이지를 넘길 때마다 갱신되는
+// "마지막으로 읽은 시각") / read_at(완독 표시 시각) / created_at(업로드 시각)
+// 중 가장 최근 값을 쓴다. read_at만 쓰면 완독 표시를 안 하고 읽던 중인 논문은
+// 계속 created_at으로 떨어져, 방금 읽었어도 날짜가 업로드 시점("3일 전" 등)에
+// 고정되어 보이는 문제가 있었다.
+function lastActivityIso(meta, createdAt) {
+  return [meta?.last_read_at, meta?.read_at, createdAt]
+    .filter(Boolean)
+    .reduce((latest, iso) => (new Date(iso) > new Date(latest) ? iso : latest), createdAt)
+}
+
 function renderRecentPapersCard(docs) {
   const read = docs
     .filter(d => (d.metadata && d.metadata.read) || Number.isInteger(d.metadata?.last_page))
-    .sort((a, b) => new Date(b.metadata.read_at || b.created_at).getTime() - new Date(a.metadata.read_at || a.created_at).getTime())
+    .sort((a, b) => new Date(lastActivityIso(b.metadata, b.created_at)).getTime() - new Date(lastActivityIso(a.metadata, a.created_at)).getTime())
     .slice(0, 5)
 
   return `
@@ -300,7 +312,7 @@ function renderRecentPapersCard(docs) {
                 <div class="dash-paper-title">${escapeHtml(title)}</div>
                 <div class="dash-paper-meta">
                   <span>${cats.length ? escapeHtml(cats.join(' · ')) : ''}</span>
-                  <span class="dash-paper-time">${relativeTimeKo(d.metadata.read_at || d.created_at)}</span>
+                  <span class="dash-paper-time">${relativeTimeKo(lastActivityIso(d.metadata, d.created_at))}</span>
                 </div>
                 <div class="dash-paper-progress-row">
                   ${progressHtml}
