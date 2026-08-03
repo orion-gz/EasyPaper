@@ -64,6 +64,81 @@ def _pick_url(work: dict) -> Optional[str]:
     return work.get("doi") or None
 
 
+_ARXIV_ID_RE = re.compile(r'arxiv\.org/abs/([0-9]{4}\.[0-9]{4,5}(?:v\d+)?)', re.IGNORECASE)
+
+
+def _extract_arxiv_id(work: dict) -> Optional[str]:
+    for location in work.get("locations") or []:
+        url = location.get("landing_page_url") or ""
+        m = _ARXIV_ID_RE.search(url)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _extract_venue(work: dict) -> Optional[str]:
+    """게재처 이름을 찾는다. primary_location.source.display_name이 정석이지만,
+    실측 결과 상당수 레코드(예: CVPR/ICCV 등 IEEE 학회 논문)가 source를 정식
+    Source 객체로 연결해두지 않고 raw_source_name(원문 그대로의 게재처 문자열)에만
+    담아둔다 - 그 경우도 정직한 실제 값이므로 폴백으로 사용한다."""
+    primary_location = work.get("primary_location") or {}
+    source = primary_location.get("source") or {}
+    if source.get("display_name"):
+        return source["display_name"]
+    if primary_location.get("raw_source_name"):
+        return primary_location["raw_source_name"]
+    for location in work.get("locations") or []:
+        source = location.get("source") or {}
+        name = source.get("display_name") or location.get("raw_source_name")
+        if name and "arxiv" not in name.lower():
+            return name
+    return None
+
+
+async def resolve_paper_metadata(title: str) -> Optional[dict]:
+    """논문 자신의 제목으로 OpenAlex를 검색해 Venue/DOI/ArXiv ID/피인용수를
+    반환합니다(Library 상세 패널의 Quick Info용). resolve_reference()와 달리
+    참고문헌이 아니라 라이브러리에 저장된 논문 그 자체를 찾는 용도라, 인용
+    스타일 텍스트 파싱(따옴표 추출 등) 없이 제목을 그대로 검색어로 쓴다.
+    매칭 실패/네트워크 오류 시 None(호출부가 "찾지 못함"으로 캐시해 재조회를
+    막는다 - db_update_document_metadata 쪽 정책)."""
+    query = (title or "").strip()
+    if not query:
+        return None
+
+    params = {"search": query[:300], "per_page": 1}
+    mailto = get_openalex_mailto()
+    if mailto:
+        params["mailto"] = mailto
+
+    try:
+        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
+            resp = await client.get(_OPENALEX_WORKS_URL, params=params)
+            if resp.status_code != 200:
+                logger.warning(f"OpenAlex 논문 검색 실패: status={resp.status_code}")
+                return None
+
+            data = resp.json()
+            works = data.get("results") or []
+            if not works:
+                return None
+
+            work = works[0]
+            doi = work.get("doi")
+            if doi and doi.startswith("https://doi.org/"):
+                doi = doi[len("https://doi.org/"):]
+
+            return {
+                "venue": _extract_venue(work),
+                "doi": doi,
+                "arxiv_id": _extract_arxiv_id(work),
+                "citation_count": work.get("cited_by_count"),
+            }
+    except Exception as e:
+        logger.warning(f"논문 메타데이터 검색 중 오류: {e}")
+        return None
+
+
 async def resolve_reference(query_text: str) -> Optional[dict]:
     """참고문헌 원문 텍스트로 OpenAlex를 검색해 가장 관련성 높은 논문의
     제목/링크/연도를 반환합니다. 매칭 실패나 네트워크 오류 시 None.

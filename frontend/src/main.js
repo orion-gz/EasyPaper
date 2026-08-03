@@ -1,11 +1,18 @@
 import './style.css'
+import './styles/shell.css'
+import './styles/library-page.css'
+import './styles/research-graph.css'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchLibraryTimeline, fetchReadingRecommendations, fetchLibraryHeatmap, fetchLibraryDashboard } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchLibraryTimeline, fetchReadingRecommendations, fetchLibraryHeatmap, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
 import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
+import { renderDashboardPage } from './pages/dashboardPage.js'
+import { renderReadingHistoryPage } from './pages/readingHistoryPage.js'
+import { renderAiChatsPage } from './pages/aiChatsPage.js'
+import { renderNotesPage } from './pages/notesPage.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -25,8 +32,9 @@ window.fetch = async function (...args) {
 
 // ── 상태 ──────────────────────────────────────────
 const state = {
-  currentLibraryTab: 'archive', // 'archive'(보관함) / 'history'(히스토리) / 'trash'(휴지통) / 'chat'(채팅)
+  currentLibraryTab: 'archive', // 'archive'(보관함) / 'trash'(휴지통) - Library 페이지 내부 상태
   previousLibraryTab: 'archive', // 휴지통 진입 전 이전 탭 기억용
+  currentWorkspacePage: 'dashboard', // 'dashboard'/'library'/'history'/'chats'/'notes'/'graph' - 사이드바 최상위 페이지 상태
   currentDocId: null,
   currentDocMetadata: {},
   sessionId: null,
@@ -211,14 +219,8 @@ const librarySearchClearBtn = $('library-search-clear-btn')
 const librarySearchStatus = $('library-search-status')
 const libraryFilterRow  = $('library-filter-row')
 const libraryCountBadge = $('library-count-badge')
-const libTabArchive     = $('lib-tab-archive')
-const libTabHistory     = $('lib-tab-history')
 const libTabTrash       = $('lib-tab-trash')
-const libTabChat        = $('lib-tab-chat')
-const libTabAnnotations = $('lib-tab-annotations')
-const libTabGraph       = $('lib-tab-graph')
 const libEmptyTrashBtn  = $('lib-empty-trash-btn')
-const libraryStatsContainer = $('library-stats-container')
 const librarySearchBox  = $('library-search-box')
 const libraryChatSection = $('library-chat-section')
 const chatSubtabAssistant = $('chat-subtab-assistant')
@@ -239,16 +241,24 @@ const libraryGraphSearchInput   = $('library-graph-search-input')
 const libraryGraphViewToggleGraph     = $('library-graph-view-toggle-graph')
 const libraryGraphViewToggleTimeline  = $('library-graph-view-toggle-timeline')
 const libraryGraphViewToggleHeatmap   = $('library-graph-view-toggle-heatmap')
-const libraryGraphViewToggleDashboard = $('library-graph-view-toggle-dashboard')
 const libraryGraphView         = $('library-graph-view')
 const libraryTimelineView      = $('library-timeline-view')
 const libraryTimelineList      = $('library-timeline-list')
 const libraryHeatmapView       = $('library-heatmap-view')
 const libraryHeatmapList       = $('library-heatmap-list')
-const libraryDashboardView     = $('library-dashboard-view')
-const libraryDashboardContent  = $('library-dashboard-content')
 const libraryRecommendationsBtn  = $('library-recommendations-btn')
 const libraryRecommendationsList = $('library-recommendations-list')
+
+// ── 워크스페이스 셸(사이드바/탑네비/페이지 라우팅) ────────────────
+const appSidebar          = $('app-sidebar')
+const sidebarToggleBtn    = $('sidebar-toggle-btn')
+const sidebarNav          = $('app-sidebar-nav')
+const sidebarSettingsBtn  = $('sidebar-settings-btn')
+const sidebarLogoutBtn    = $('sidebar-logout-btn')
+const workspacePageTitle  = $('workspace-page-title')
+const workspaceSearchInput = $('workspace-search-input')
+const workspaceAvatarBtn  = $('workspace-avatar-btn')
+const pageOutlet          = $('page-outlet')
 
 const libCompareToggleBtn   = $('lib-compare-toggle-btn')
 const compareSelectBar      = $('compare-select-bar')
@@ -3545,6 +3555,61 @@ if (settingSkipLoginCheckbox) {
   })
 }
 
+// ── 읽기 시간 하트비트 (Reading History의 "읽은 시간" 실측) ──────────────
+// 뷰어/비교 화면이 화면에 보이고(Page Visibility) 창이 포커스된 동안만 5초
+// 간격으로 "현재 컨텍스트"(문서 id + reading/chat/compare 카테고리)에 초를
+// 적립하고, 20초마다 적립분을 서버로 보낸다. 5초 tick 시점의 컨텍스트를 그때
+// 그때 버킷에 더하므로, 20초 사이에 채팅 사이드바를 열고 닫는 등 컨텍스트가
+// 바뀌어도 각 구간이 올바른 카테고리로 집계된다.
+const READING_HEARTBEAT_TICK_SECONDS = 5
+const READING_HEARTBEAT_FLUSH_MS = 20000
+let readingHeartbeatBuffers = {} // `${docId}|${category}` -> 적립된 초
+
+function isReadingTimeActive() {
+  if (document.visibilityState !== 'visible' || !document.hasFocus()) return false
+  if (viewerScreen && viewerScreen.classList.contains('active') && state.sessionId) return true
+  if (compareScreen && compareScreen.classList.contains('active') && compareChatState.docIds.length > 0) return true
+  return false
+}
+
+function currentReadingContext() {
+  if (viewerScreen && viewerScreen.classList.contains('active') && state.sessionId) {
+    const category = (chatSidebar && !chatSidebar.classList.contains('hidden')) ? 'chat' : 'reading'
+    return { docIds: [state.sessionId], category }
+  }
+  if (compareScreen && compareScreen.classList.contains('active') && compareChatState.docIds.length > 0) {
+    return { docIds: compareChatState.docIds, category: 'compare' }
+  }
+  return null
+}
+
+function tickReadingHeartbeat() {
+  if (!isReadingTimeActive()) return
+  const ctx = currentReadingContext()
+  if (!ctx) return
+  for (const docId of ctx.docIds) {
+    const key = `${docId}|${ctx.category}`
+    readingHeartbeatBuffers[key] = (readingHeartbeatBuffers[key] || 0) + READING_HEARTBEAT_TICK_SECONDS
+  }
+}
+
+async function flushReadingHeartbeat() {
+  const buffers = readingHeartbeatBuffers
+  readingHeartbeatBuffers = {}
+  const entries = Object.entries(buffers).filter(([, s]) => s > 0)
+  if (entries.length === 0) return
+  await Promise.all(entries.map(([key, seconds]) => {
+    const sep = key.lastIndexOf('|')
+    const docId = key.slice(0, sep)
+    const category = key.slice(sep + 1)
+    return sendReadingHeartbeat(docId, seconds, category)
+  }))
+}
+
+setInterval(tickReadingHeartbeat, READING_HEARTBEAT_TICK_SECONDS * 1000)
+setInterval(flushReadingHeartbeat, READING_HEARTBEAT_FLUSH_MS)
+window.addEventListener('beforeunload', () => { flushReadingHeartbeat() })
+
 // ── 초기화 ────────────────────────────────────────
 checkAuthentication()
 checkAIStatus()
@@ -3606,69 +3671,23 @@ async function loadLibraryCount() {
 }
 
 // 탭 클릭 이벤트 리스너 등록
+// Library 페이지 내부 탭(archive: 전체 / trash: 휴지통) 전환. 채팅/주석/그래프/히스토리는
+// 더 이상 Library의 내부 탭이 아니라 사이드바의 독립된 최상위 페이지다 - showWorkspacePage() 참고.
 function updateTabUI(activeTab) {
   state.currentLibraryTab = activeTab
   activeCategoryFilter = 'ALL'
+  activeStatusFilter = 'all'
+  closeLibraryDetailPanel()
 
-  if (libTabArchive) libTabArchive.classList.toggle('active', activeTab === 'archive')
-  if (libTabHistory) libTabHistory.classList.toggle('active', activeTab === 'history')
   if (libTabTrash) libTabTrash.classList.toggle('active', activeTab === 'trash')
-  if (libTabChat) libTabChat.classList.toggle('active', activeTab === 'chat')
-  if (libTabAnnotations) libTabAnnotations.classList.toggle('active', activeTab === 'annotations')
-  if (libTabGraph) libTabGraph.classList.toggle('active', activeTab === 'graph')
-
-  if (libEmptyTrashBtn) {
-    if (activeTab === 'trash') {
-      libEmptyTrashBtn.classList.remove('hidden')
-    } else {
-      libEmptyTrashBtn.classList.add('hidden')
-    }
-  }
-
-  // 휴지통/채팅/주석/그래프 탭인 경우 새 논문 추가/비교하기 플로팅 버튼을 숨깁니다.
-  const isListOnlyTab = activeTab === 'trash' || activeTab === 'chat' || activeTab === 'annotations' || activeTab === 'graph'
-  if (libUploadBtn) {
-    if (isListOnlyTab) {
-      libUploadBtn.classList.add('hidden')
-    } else {
-      libUploadBtn.classList.remove('hidden')
-    }
-  }
-  if (libCompareToggleBtn) {
-    libCompareToggleBtn.classList.toggle('hidden', isListOnlyTab)
-  }
+  if (libEmptyTrashBtn) libEmptyTrashBtn.classList.toggle('hidden', activeTab !== 'trash')
+  if (libUploadBtn) libUploadBtn.classList.toggle('hidden', activeTab === 'trash')
+  if (libCompareToggleBtn) libCompareToggleBtn.classList.toggle('hidden', activeTab === 'trash')
   setCompareSelectMode(false)
-
-  // 채팅/주석/그래프 탭은 문서 그리드 대신 목록(또는 그래프)을 보여주므로,
-  // 검색/필터 등 논문 목록 전용 UI는 숨긴다.
-  const isChatTab = activeTab === 'chat'
-  const isAnnotationsTab = activeTab === 'annotations'
-  const isGraphTab = activeTab === 'graph'
-  const hidesGrid = isChatTab || isAnnotationsTab || isGraphTab
-  if (libraryGrid) libraryGrid.classList.toggle('hidden', hidesGrid)
-  if (libraryChatSection) libraryChatSection.classList.toggle('hidden', !isChatTab)
-  if (libraryAnnotationsSection) libraryAnnotationsSection.classList.toggle('hidden', !isAnnotationsTab)
-  if (libraryGraphSection) libraryGraphSection.classList.toggle('hidden', !isGraphTab)
-  if (librarySearchBox) librarySearchBox.classList.toggle('hidden', hidesGrid)
-  if (librarySearchStatus && hidesGrid) librarySearchStatus.classList.add('hidden')
-  if (libraryFilterRow) libraryFilterRow.classList.toggle('hidden', hidesGrid)
-  if (libraryStatsContainer && hidesGrid) libraryStatsContainer.classList.add('hidden')
 
   renderLibrary()
 }
 
-if (libTabArchive) {
-  libTabArchive.addEventListener('click', () => {
-    if (state.currentLibraryTab === 'archive') return
-    updateTabUI('archive')
-  })
-}
-if (libTabHistory) {
-  libTabHistory.addEventListener('click', () => {
-    if (state.currentLibraryTab === 'history') return
-    updateTabUI('history')
-  })
-}
 if (libTabTrash) {
   libTabTrash.addEventListener('click', () => {
     if (state.currentLibraryTab === 'trash') {
@@ -3677,24 +3696,6 @@ if (libTabTrash) {
       state.previousLibraryTab = state.currentLibraryTab
       updateTabUI('trash')
     }
-  })
-}
-if (libTabChat) {
-  libTabChat.addEventListener('click', () => {
-    if (state.currentLibraryTab === 'chat') return
-    updateTabUI('chat')
-  })
-}
-if (libTabAnnotations) {
-  libTabAnnotations.addEventListener('click', () => {
-    if (state.currentLibraryTab === 'annotations') return
-    updateTabUI('annotations')
-  })
-}
-if (libTabGraph) {
-  libTabGraph.addEventListener('click', () => {
-    if (state.currentLibraryTab === 'graph') return
-    updateTabUI('graph')
   })
 }
 
@@ -3716,23 +3717,121 @@ document.querySelectorAll('.view-toggle-btn').forEach(btn => {
 })
 updateViewToggleUI()
 
-async function showLibraryScreen(shouldPushState = true) {
+async function showLibraryScreen(shouldPushState = true, targetPage) {
   hasLibraryStateInHistory = true
-  if (shouldPushState) {
-    history.pushState({ screen: 'library' }, '', '#library')
-  }
   loginScreen.classList.remove('active')
   viewerScreen.classList.remove('active')
   if (compareScreen) compareScreen.classList.remove('active')
   libraryScreen.classList.add('active')
-  // 글로벌 테마 토글, 로그아웃, 설정 버튼 표시
+  // 워크스페이스 화면(사이드바+탑네비)에서는 Settings/로그아웃이 이미 사이드바 푸터와
+  // 탑네비 아바타에 있으므로 플로팅 버튼 묶음에서는 숨긴다(안 그러면 페이지 콘텐츠와
+  // 겹침). 테마 토글만 남겨둔다 - 탑네비/사이드바에 별도의 테마 토글이 없기 때문.
   const globalToggle = $('global-theme-toggle')
   if (globalToggle) globalToggle.classList.remove('hidden')
-  globalLogoutBtn.classList.remove('hidden')
-  globalSettingsBtn.classList.remove('hidden')
+  globalLogoutBtn.classList.add('hidden')
+  globalSettingsBtn.classList.add('hidden')
   resetState()
-  await renderLibrary()
+  await showWorkspacePage(targetPage || state.currentWorkspacePage || 'dashboard', { pushState: shouldPushState })
   startLibraryPolling()
+}
+
+// ── 워크스페이스 셸: 사이드바 / 탑네비 / 최상위 페이지 라우팅 ──────────────
+// 6개 페이지(Dashboard/Library/Reading History/AI Chats/Notes/Research Graph)는
+// 각각 #page-<id> 섹션으로 존재하며, 사이드바 클릭이나 해시 변경 시 이 함수 하나로 전환한다.
+const WORKSPACE_PAGES = ['dashboard', 'library', 'history', 'chats', 'notes', 'graph']
+const WORKSPACE_PAGE_TITLES = {
+  dashboard: '대시보드',
+  library: 'Library',
+  history: 'Reading History',
+  chats: 'AI Chats',
+  notes: 'Notes',
+  graph: 'Research Graph',
+}
+
+async function showWorkspacePage(pageId, { pushState = true } = {}) {
+  if (!WORKSPACE_PAGES.includes(pageId)) pageId = 'dashboard'
+  state.currentWorkspacePage = pageId
+
+  if (sidebarNav) {
+    sidebarNav.querySelectorAll('.sidebar-nav-item[data-page]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.page === pageId)
+    })
+  }
+  if (pageOutlet) {
+    pageOutlet.querySelectorAll('.workspace-page').forEach(sec => {
+      sec.classList.toggle('active', sec.id === `page-${pageId}`)
+    })
+  }
+  if (workspacePageTitle) workspacePageTitle.textContent = WORKSPACE_PAGE_TITLES[pageId] || ''
+
+  if (pushState) {
+    history.pushState({ screen: 'library', page: pageId }, '', `#${pageId}`)
+  }
+
+  if (pageId === 'library') {
+    await renderLibrary()
+  } else if (pageId === 'chats') {
+    await renderAiChatsPage()
+  } else if (pageId === 'notes') {
+    await renderNotesPage()
+  } else if (pageId === 'graph') {
+    await renderLibraryGraphTab()
+  } else if (pageId === 'dashboard') {
+    await renderDashboardPage()
+  } else if (pageId === 'history') {
+    await renderReadingHistoryPage()
+  }
+}
+
+// 사이드바 접기/펼치기 - 마지막 상태를 기억해 다음 방문에도 유지
+const SIDEBAR_COLLAPSED_KEY = 'easypaper_sidebar_collapsed'
+function setSidebarCollapsed(collapsed) {
+  if (!appSidebar) return
+  appSidebar.classList.toggle('collapsed', collapsed)
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? 'true' : 'false')
+}
+if (appSidebar) {
+  setSidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true')
+}
+if (sidebarToggleBtn) {
+  sidebarToggleBtn.addEventListener('click', () => {
+    setSidebarCollapsed(!appSidebar.classList.contains('collapsed'))
+  })
+}
+
+// 사이드바 네비게이션 아이콘을 icons.js 아이콘 라이브러리로 채운다 (이모지 사용 금지 원칙).
+document.querySelectorAll('[data-icon]').forEach(el => {
+  el.innerHTML = icon(el.dataset.icon, 18)
+})
+
+if (sidebarNav) {
+  sidebarNav.querySelectorAll('.sidebar-nav-item[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (state.currentWorkspacePage === btn.dataset.page) return
+      showWorkspacePage(btn.dataset.page)
+    })
+  })
+}
+
+// 사이드바 Settings/로그아웃, 탑네비 아바타는 기존 로직(비밀번호 변경 모달 / 로그아웃)을
+// 그대로 재사용한다 - 새 UI 진입점만 추가하고 동작 자체는 기존 global-settings-btn/
+// global-logout-btn 클릭 핸들러에 위임한다.
+if (sidebarSettingsBtn) sidebarSettingsBtn.addEventListener('click', () => globalSettingsBtn?.click())
+if (sidebarLogoutBtn) sidebarLogoutBtn.addEventListener('click', () => globalLogoutBtn?.click())
+if (workspaceAvatarBtn) workspaceAvatarBtn.addEventListener('click', () => globalSettingsBtn?.click())
+
+// 탑네비 검색창은 새 검색 기능이 아니라 기존 라이브러리 검색으로 그대로 위임한다
+// (Global Search는 기존 검색 기능을 그대로 사용 - 동작 변경 금지 원칙).
+if (workspaceSearchInput) {
+  workspaceSearchInput.addEventListener('input', () => {
+    if (state.currentWorkspacePage !== 'library') {
+      showWorkspacePage('library')
+    }
+    if (librarySearchInput) {
+      librarySearchInput.value = workspaceSearchInput.value
+      librarySearchInput.dispatchEvent(new Event('input'))
+    }
+  })
 }
 
 
@@ -4053,19 +4152,140 @@ if (compareBackBtn) {
   })
 }
 
+// ── Library 재설계: 상태 필터 탭(전체/읽지 않음/읽는 중/완료/즐겨찾기) + 정렬 + 즐겨찾기 ──
+// 즐겨찾기는 documents.metadata에 아직 star/favorite 개념이 없어(백엔드 스키마에
+// 없음) 새 필드를 추가하지 않고 로컬 전용 편의 기능으로만 제공한다 - localStorage에만
+// 저장되며 기기 간 동기화되거나 서버에 반영되지 않는다.
+let activeStatusFilter = 'all' // 'all' | 'unread' | 'reading' | 'finished' | 'favorites'
+let librarySortMode = localStorage.getItem('easypaper_library_sort') || 'recent' // 'recent' | 'title' | 'progress'
+
+const LIBRARY_FAVORITES_KEY = 'easypaper_library_favorites'
+function getFavoriteIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(LIBRARY_FAVORITES_KEY) || '[]')) } catch { return new Set() }
+}
+function isFavoriteDoc(docId) { return getFavoriteIds().has(docId) }
+function toggleFavoriteDoc(docId) {
+  const ids = getFavoriteIds()
+  if (ids.has(docId)) ids.delete(docId); else ids.add(docId)
+  localStorage.setItem(LIBRARY_FAVORITES_KEY, JSON.stringify(Array.from(ids)))
+  return ids.has(docId)
+}
+
+// 번역 진행 상태 기준 분류: Unread=번역 진행 기록이 아예 없음, Reading=일부만
+// 번역됐거나 다 번역됐지만 아직 "읽음" 처리 전, Finished=완독 표시(metadata.read===true)됨.
+function getLibraryDocStatus(doc) {
+  const translated = doc.translated_pages?.length || 0
+  const isRead = doc.metadata?.read === true
+  if (isRead) return 'finished'
+  if (translated <= 0) return 'unread'
+  return 'reading'
+}
+
+const LIBRARY_STATUS_TABS = [
+  { key: 'all', label: '전체' },
+  { key: 'unread', label: '읽지 않음' },
+  { key: 'reading', label: '읽는 중' },
+  { key: 'finished', label: '완료' },
+  { key: 'favorites', label: '즐겨찾기' },
+]
+
+function renderLibraryStatusTabs(docs) {
+  const el = $('library-status-tabs')
+  if (!el) return
+  if (state.currentLibraryTab === 'trash') { el.innerHTML = ''; el.classList.add('hidden'); return }
+  el.classList.remove('hidden')
+
+  const favIds = getFavoriteIds()
+  const counts = { all: docs.length, unread: 0, reading: 0, finished: 0, favorites: 0 }
+  docs.forEach(doc => {
+    counts[getLibraryDocStatus(doc)]++
+    if (favIds.has(doc.id)) counts.favorites++
+  })
+
+  el.innerHTML = LIBRARY_STATUS_TABS.map(t => `
+    <button type="button" class="lib-status-tab ${activeStatusFilter === t.key ? 'active' : ''}" data-status="${t.key}">
+      <span>${t.label}</span><span class="lib-status-tab-count">${counts[t.key]}</span>
+    </button>
+  `).join('')
+  el.querySelectorAll('.lib-status-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (activeStatusFilter === btn.dataset.status) return
+      activeStatusFilter = btn.dataset.status
+      filterLibraryCards(currentLibraryDocs)
+      renderLibraryStatusTabs(currentLibraryDocs)
+    })
+  })
+}
+
+function sortLibraryDocs(docs) {
+  const sorted = docs.slice()
+  if (librarySortMode === 'title') {
+    sorted.sort((a, b) => {
+      const ta = (a.metadata?.title || a.filename || '').toLowerCase()
+      const tb = (b.metadata?.title || b.filename || '').toLowerCase()
+      return ta.localeCompare(tb)
+    })
+  } else if (librarySortMode === 'progress') {
+    sorted.sort((a, b) => {
+      const pa = (a.translated_pages?.length || 0) / (a.total_pages || 1)
+      const pb = (b.translated_pages?.length || 0) / (b.total_pages || 1)
+      return pb - pa
+    })
+  } else {
+    sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  }
+  return sorted
+}
+
+// Library 페이지의 새 UI 조각(상태 탭 / 정렬 드롭다운 / 상세 패널)은 index.html을
+// 건드리지 않고 여기서 필요할 때 한 번만 삽입한다. renderLibrary()가 탭 전환/새로고침마다
+// 다시 호출되므로 반드시 멱등이어야 한다(이미 삽입돼 있으면 아무것도 하지 않음).
+let libraryChromeReady = false
+function ensureLibraryChrome() {
+  if (libraryChromeReady) return
+  libraryChromeReady = true
+
+  const headerLogo = document.querySelector('#page-library .library-header .logo')
+  if (headerLogo && !headerLogo.querySelector('.library-header-subtitle')) {
+    headerLogo.insertAdjacentHTML('beforeend', `<p class="library-header-subtitle">보관함에 저장된 모든 논문을 한 곳에서 관리하세요</p>`)
+  }
+
+  if (librarySearchBox && !$('library-status-tabs')) {
+    librarySearchBox.insertAdjacentHTML('beforebegin', `<div id="library-status-tabs" class="lib-status-tabs"></div>`)
+  }
+
+  const viewToggleEl = $('library-view-toggle')
+  if (viewToggleEl && !$('library-sort-select')) {
+    viewToggleEl.insertAdjacentHTML('beforebegin', `
+      <div class="lib-sort-dropdown">
+        <select id="library-sort-select" class="lib-sort-select" title="정렬 기준">
+          <option value="recent">최근 추가순</option>
+          <option value="title">제목순</option>
+          <option value="progress">번역 진행률순</option>
+        </select>
+        <span class="lib-sort-dropdown-icon">${icon('chevronDown', 12)}</span>
+      </div>
+    `)
+    const sortSelect = $('library-sort-select')
+    if (sortSelect) {
+      sortSelect.value = librarySortMode
+      sortSelect.addEventListener('change', () => {
+        librarySortMode = sortSelect.value
+        localStorage.setItem('easypaper_library_sort', librarySortMode)
+        filterLibraryCards(currentLibraryDocs)
+      })
+    }
+  }
+
+  ensureLibraryDetailPanel()
+}
+
 async function renderLibrary() {
-  if (state.currentLibraryTab === 'chat') {
-    await renderChatSessions()
-    return
-  }
-  if (state.currentLibraryTab === 'annotations') {
-    await renderAnnotationsBrowser()
-    return
-  }
-  if (state.currentLibraryTab === 'graph') {
-    await renderLibraryGraphTab()
-    return
-  }
+  // Library 페이지의 새 UI 조각(상태 탭/정렬 드롭다운/상세 패널)이 아직 없으면 삽입한다.
+  ensureLibraryChrome()
+  closeLibraryDetailPanel()
+  // 상세 패널의 "관련 자료" 탭이 쓰는 지식 그래프 캐시도 목록을 새로 불러올 때 함께 무효화한다.
+  libraryGraphCacheForDetail = null
 
   // 탭 전환 등으로 목록을 새로 불러올 때는 검색 상태를 초기화한다 - 검색
   // 결과가 다른 탭의 목록과 뒤섞여 보이는 것을 방지
@@ -4104,47 +4324,15 @@ async function renderLibrary() {
       refreshTrashTabVisibility()
     }
 
-    // 현재 선택된 탭에 따라 논문 목록 필터링
-    const docs = allDocs.filter(doc => {
-      if (state.currentLibraryTab === 'trash') return true
-      const isRead = doc.metadata?.read === true
-      return state.currentLibraryTab === 'history' ? isRead : !isRead
-    })
+    // data는 위에서 이미 currentLibraryTab(archive: 전체 / trash: 휴지통)에 맞춰 조회됨
+    const docs = allDocs
 
-    // 히스토리 탭인 경우 상단에 독서 현황 통계 요약 카드 렌더링
-    if (state.currentLibraryTab === 'history') {
-      const now = new Date()
-      const thisYear = now.getFullYear()
-      const thisMonth = now.getMonth()
-      
-      const readDocs = allDocs.filter(d => d.metadata?.read === true)
-      const thisMonthCount = readDocs.filter(d => {
-        if (!d.metadata?.read_at) return false
-        const rDate = new Date(d.metadata.read_at)
-        return rDate.getFullYear() === thisYear && rDate.getMonth() === thisMonth
-      }).length
-      
-      libraryStatsContainer.innerHTML = `
-        <div class="library-stats-widget">
-          <div class="library-stats-item">
-            <span class="library-stats-label">${icon('calendar', 13, 'style="vertical-align:-2px;margin-right:3px"')}이번 달 읽은 논문</span>
-            <span class="library-stats-value">${thisMonthCount}<span>편</span></span>
-          </div>
-          <div style="width: 1px; height: 28px; background: var(--border-strong);"></div>
-          <div class="library-stats-item">
-            <span class="library-stats-label">${icon('award', 13, 'style="vertical-align:-2px;margin-right:3px"')}누적 완독 논문</span>
-            <span class="library-stats-value">${readDocs.length}<span>편</span></span>
-          </div>
-        </div>
-      `
-      libraryStatsContainer.classList.remove('hidden')
-    } else {
-      libraryStatsContainer.classList.add('hidden')
-      libraryStatsContainer.innerHTML = ''
-    }
+    // 상태 필터 탭(전체/읽지 않음/읽는 중/완료/즐겨찾기)은 카드가 하나도 없어도
+    // 항상 최신 개수로 갱신한다(휴지통 탭에서는 renderLibraryStatusTabs 내부에서 숨김).
+    renderLibraryStatusTabs(docs)
 
     if (docs.length === 0) {
-      libraryGrid.appendChild(createEmptyState(state.currentLibraryTab === 'history')); return
+      libraryGrid.appendChild(createEmptyState(state.currentLibraryTab === 'trash' ? 'trash' : 'library')); return
     }
 
     // Extract unique categories
@@ -4190,133 +4378,21 @@ async function renderLibrary() {
   }
 }
 
-// ── 채팅 세션 조회 (AI 어시스턴트 / 논문 비교 대화 목록) ────────────────
-let chatSessionSubtab = 'assistant' // 'assistant' 또는 'compare'
-
-function updateChatSubtabUI() {
-  if (chatSubtabAssistant) chatSubtabAssistant.classList.toggle('active', chatSessionSubtab === 'assistant')
-  if (chatSubtabCompare) chatSubtabCompare.classList.toggle('active', chatSessionSubtab === 'compare')
-}
-
+// AI Chats/Notes 페이지(pages/aiChatsPage.js, pages/notesPage.js)와 Library 상세 패널이
+// 공유해서 쓰는 시간 포맷 헬퍼. 예전에는 이 근처에 라이브러리 탭용 채팅/주석 목록
+// 렌더링 함수들이 있었지만 각 페이지 전용 모듈로 옮겨졌다.
 function formatChatSessionTime(isoString) {
   if (!isoString) return ''
   return new Date(isoString).toLocaleString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-async function renderChatSessions() {
-  updateChatSubtabUI()
-  if (!chatSessionList) return
-  chatSessionList.innerHTML = `<div class="lib-empty"><p>불러오는 중...</p></div>`
-
-  try {
-    if (chatSessionSubtab === 'assistant') {
-      const data = await getChatSessionsAPI()
-      renderAssistantChatSessions(data.sessions || [])
-    } else {
-      const data = await getCompareChatSessionsAPI()
-      renderCompareChatSessions(data.sessions || [])
-    }
-  } catch (err) {
-    console.error('채팅 세션 목록 로드 실패:', err)
-    chatSessionList.innerHTML = `<div class="lib-empty"><p style="color:var(--error)">채팅 세션을 불러오지 못했습니다</p></div>`
-  }
-}
-
-if (chatSubtabAssistant) {
-  chatSubtabAssistant.addEventListener('click', () => {
-    if (chatSessionSubtab === 'assistant') return
-    chatSessionSubtab = 'assistant'
-    renderChatSessions()
-  })
-}
-if (chatSubtabCompare) {
-  chatSubtabCompare.addEventListener('click', () => {
-    if (chatSessionSubtab === 'compare') return
-    chatSessionSubtab = 'compare'
-    renderChatSessions()
-  })
-}
-
-function renderAssistantChatSessions(sessions) {
-  if (sessions.length === 0) {
-    chatSessionList.innerHTML = `<div class="lib-empty"><p>AI 어시스턴트와 나눈 대화가 없습니다</p></div>`
-    return
-  }
-  chatSessionList.innerHTML = ''
-  sessions.forEach(session => {
-    const item = document.createElement('div')
-    item.className = 'chat-session-item'
-    item.innerHTML = `
-      <div class="chat-session-item-icon">${icon('messageCircle', 17)}</div>
-      <div class="chat-session-item-body">
-        <div class="chat-session-item-title">${escapeHtml(session.title)}</div>
-        <div class="chat-session-item-meta">${formatChatSessionTime(session.last_message_at)}</div>
-      </div>
-    `
-    item.addEventListener('click', async () => {
-      // location.hash를 바꿔서 라우터(handleRouting)를 거치게 하면, 이 앱에서는
-      // hashchange와 popstate가 함께 발생해 handleRouting이 같은 문서를 두 번
-      // 라우팅하며 문서 조회(fetchLibraryDoc) 요청도 중복으로 나가 체감 로딩이
-      // 늘어진다. 라이브러리 카드의 "열기" 버튼처럼 문서를 직접 한 번만 불러와
-      // 바로 열어서 이 지연을 없앤다.
-      try {
-        const doc = await fetchLibraryDoc(session.doc_id)
-        await openFromLibrary(doc)
-        openChatSidebar()
-      } catch (err) {
-        console.error('채팅 세션에서 논문 열기 실패:', err)
-        showToast('논문을 불러오지 못했습니다.', 'error')
-      }
-    })
-    chatSessionList.appendChild(item)
-  })
-}
-
-function renderCompareChatSessions(sessions) {
-  if (sessions.length === 0) {
-    chatSessionList.innerHTML = `<div class="lib-empty"><p>논문 비교 대화가 없습니다</p></div>`
-    return
-  }
-  chatSessionList.innerHTML = ''
-  sessions.forEach(session => {
-    const item = document.createElement('div')
-    item.className = 'chat-session-item'
-    const titleText = (session.titles || []).join(' · ')
-    item.innerHTML = `
-      <div class="chat-session-item-icon">${icon('compare', 17)}</div>
-      <div class="chat-session-item-body">
-        <div class="chat-session-item-title">${escapeHtml(titleText)}</div>
-        <div class="chat-session-item-meta">${formatChatSessionTime(session.last_message_at)}</div>
-      </div>
-    `
-    item.addEventListener('click', async () => {
-      // 이유는 위 renderAssistantChatSessions와 동일 - 라우터를 거치지 않고
-      // 문서들을 직접 불러와 바로 비교 화면을 연다.
-      try {
-        const docs = await Promise.all(session.doc_ids.map(id => fetchLibraryDoc(id)))
-        if (!docs.every(Boolean)) throw new Error('일부 논문을 찾을 수 없습니다.')
-        await openCompareScreen(docs)
-      } catch (err) {
-        console.error('채팅 세션에서 비교 화면 열기 실패:', err)
-        showToast('비교할 논문 정보를 불러올 수 없습니다.', 'error')
-      }
-    })
-    chatSessionList.appendChild(item)
-  })
 }
 
 // ── 주석 조회 (메모 / 하이라이트 / 언더라인 목록) ───────────────────────
 // 메모와 하이라이트/언더라인은 서버 DB가 아니라 문서(세션)별 localStorage에만
 // 저장되므로(easypaper_memos_*, easypaper_annotations_*), 라이브러리 전체
 // 문서 목록을 한 번 불러온 뒤 각 문서의 localStorage를 순회해 모아 보여준다.
-let annotationBrowserSubtab = 'memo' // 'memo' | 'highlight' | 'underline'
-
-function updateAnnotationSubtabUI() {
-  if (annotationSubtabMemo) annotationSubtabMemo.classList.toggle('active', annotationBrowserSubtab === 'memo')
-  if (annotationSubtabHighlight) annotationSubtabHighlight.classList.toggle('active', annotationBrowserSubtab === 'highlight')
-  if (annotationSubtabUnderline) annotationSubtabUnderline.classList.toggle('active', annotationBrowserSubtab === 'underline')
-}
-
+// Notes 페이지(pages/notesPage.js)와 Library 상세 패널/Research Graph 노드 상세 패널이
+// 공유해서 쓰는 텍스트 축약 헬퍼. 예전에는 이 근처에 라이브러리 탭용 주석 브라우저
+// 렌더링 함수가 있었지만 Notes 전용 페이지 모듈로 옮겨졌다.
 function truncateForList(text, maxLen) {
   if (!text) return ''
   const trimmed = text.trim()
@@ -4336,7 +4412,6 @@ const GRAPH_SUBVIEWS = {
   graph:     { btn: () => libraryGraphViewToggleGraph,     el: () => libraryGraphView },
   timeline:  { btn: () => libraryGraphViewToggleTimeline,  el: () => libraryTimelineView,  onShow: () => renderLibraryTimelineView() },
   heatmap:   { btn: () => libraryGraphViewToggleHeatmap,   el: () => libraryHeatmapView,   onShow: () => renderLibraryHeatmapView() },
-  dashboard: { btn: () => libraryGraphViewToggleDashboard, el: () => libraryDashboardView, onShow: () => renderLibraryDashboardView() },
 }
 
 function switchGraphSubView(view) {
@@ -4421,7 +4496,7 @@ async function renderLibraryTimelineView() {
   libraryTimelineList.innerHTML = '<div class="lib-empty"><p>불러오는 중...</p></div>'
   try {
     const { events } = await fetchLibraryTimeline()
-    if (state.currentLibraryTab !== 'graph') return
+    if (state.currentWorkspacePage !== 'graph') return
     if (!events || events.length === 0) {
       libraryTimelineList.innerHTML = '<div class="lib-empty"><p>아직 활동 기록이 없습니다.</p></div>'
       return
@@ -4476,110 +4551,321 @@ async function renderLibraryHeatmapView() {
   libraryHeatmapList.innerHTML = '<div class="lib-empty"><p>불러오는 중...</p></div>'
   try {
     const { heatmap } = await fetchLibraryHeatmap()
-    if (state.currentLibraryTab !== 'graph') return
+    if (state.currentWorkspacePage !== 'graph') return
     if (!heatmap || heatmap.length === 0) {
       libraryHeatmapList.innerHTML = '<div class="lib-empty"><p>아직 추출된 개념이 없습니다.</p></div>'
       return
     }
     const maxScore = Math.max(...heatmap.map(h => h.score))
-    libraryHeatmapList.innerHTML = `<div class="kg-heatmap-list">${heatmap.map(item => renderHeatmapBar(item, maxScore)).join('')}</div>`
+    libraryHeatmapList.innerHTML = `<div class="kg-heatmap-list">${heatmap.map(item => renderHeatCell(item, maxScore)).join('')}</div>`
   } catch (err) {
     console.error('개념 히트맵 로드 실패:', err)
     libraryHeatmapList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">히트맵을 불러오지 못했습니다</p></div>'
   }
 }
 
-const KG_STAT_ICONS = {
-  papers:   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>',
-  read:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
-  pages:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"/><path d="M10 12h4"/><path d="M10 16h4"/></svg>',
-  concepts: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/></svg>',
-  questions:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
-  notes:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>',
-  insight:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/></svg>',
-  tag:      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42Z"/><circle cx="7.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/></svg>',
+// ============================================================
+// Research Graph 페이지 재설계 - 노드 타입 메타(범례/상세 패널 공용)
+// 색상은 knowledgeGraph.js의 cytoscape 스타일(off-limits, 직접 수정하지
+// 않음)과 반드시 같은 값을 유지해야 하므로 그쪽 파일이 바뀌면 여기도
+// 맞춰 갱신해야 한다.
+// ============================================================
+const GRAPH_NODE_TYPE_META = {
+  paper:   { label: '논문',          color: '#4f8ef7', icon: 'fileText' },
+  concept: { label: '개념',          color: '#f7b34f', icon: 'lightbulb' },
+  note:    { label: '메모',          color: '#8b5cf6', icon: 'edit3' },
+  figure:  { label: 'Figure/Table',  color: '#10b981', icon: 'image' },
 }
 
-function renderDashboardStats(stats) {
-  const items = [
-    ['papers', '논문', stats.total_papers], ['read', '읽음', stats.read_papers], ['pages', '페이지', stats.total_pages],
-    ['concepts', '개념', stats.total_concepts], ['questions', '질문', stats.total_questions], ['notes', '메모', stats.total_notes],
-  ]
-  return `
-    <div class="kg-stat-grid">
-      ${items.map(([icon, label, value]) => `
-        <div class="kg-stat-card">
-          <div class="kg-stat-icon">${KG_STAT_ICONS[icon]}</div>
-          <div class="kg-stat-value">${value}</div>
-          <div class="kg-stat-label">${label}</div>
-        </div>
-      `).join('')}
-    </div>
-  `
+const RG_ZOOM_IN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+const RG_ZOOM_OUT_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+const RG_MORE_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>'
+
+// 왼쪽 "노드 타입" 범례 + "Graph Overview" 통계 카드. 전부 fetchLibraryGraph()가
+// 이미 내려준 nodes/edges 배열을 클라이언트에서 집계한 값이다 - 별도 API 호출이나
+// 데이터 모델 변경 없음. "Clusters"는 mockup처럼 별도 클러스터링 알고리즘이 있는
+// 게 아니라, 논문끼리 공유 태그로 연결된(category 엣지) 서로 다른 태그 수를
+// 쓴다 - "2편 이상의 논문이 실제로 공유하는 주제"라는 점에서 정직한 근사치.
+// "업데이트"는 서버가 그래프를 마지막으로 재계산한 시각이 아니라(그런 타임스탬프가
+// 없음), 지금 이 화면이 데이터를 마지막으로 불러온 시각이다 - 그렇게 라벨을 붙여
+// 오해가 없게 한다.
+let rgGraphLoadedAt = null
+function relativeTimeShortKo(date) {
+  if (!date) return ''
+  const diffSec = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000))
+  if (diffSec < 60) return '방금 전'
+  const diffMin = Math.round(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}분 전`
+  const diffHour = Math.round(diffMin / 60)
+  if (diffHour < 24) return `${diffHour}시간 전`
+  return `${Math.round(diffHour / 24)}일 전`
 }
 
-function renderDashboardGaps(gaps) {
-  if (!gaps || gaps.length === 0) return ''
-  return `
-    <div class="kg-section">
-      <h4 class="kg-section-title">${KG_STAT_ICONS.insight}인사이트</h4>
-      <ul class="kg-insight-list">
-        ${gaps.map(g => `<li class="kg-insight-item">${KG_STAT_ICONS.insight}<span>${escapeHtml(g.message)}</span></li>`).join('')}
-      </ul>
-    </div>
-  `
-}
-
-function renderDashboardRecentSection(title, items, renderItem) {
-  if (!items || items.length === 0) return ''
-  return `
-    <div class="kg-section">
-      <h4 class="kg-section-title">${title}</h4>
-      <ul class="kg-recent-list">
-        ${items.map(renderItem).join('')}
-      </ul>
-    </div>
-  `
-}
-
-async function renderLibraryDashboardView() {
-  if (!libraryDashboardContent) return
-  libraryDashboardContent.innerHTML = '<div class="lib-empty"><p>불러오는 중...</p></div>'
-  try {
-    const data = await fetchLibraryDashboard()
-    if (state.currentLibraryTab !== 'graph') return
-
-    const maxScore = data.heatmap.length ? Math.max(...data.heatmap.map(h => h.score)) : 0
-    const hasRecent = data.recent_questions?.length || data.recent_notes?.length || data.recent_papers?.length
-    libraryDashboardContent.innerHTML = `
-      <div class="kg-dashboard">
-        ${renderDashboardStats(data.stats)}
-        ${renderDashboardGaps(data.gaps)}
-        ${data.heatmap.length ? `
-          <div class="kg-section">
-            <h4 class="kg-section-title">${KG_STAT_ICONS.tag}자주 다룬 개념</h4>
-            <div class="kg-heatmap-list">${data.heatmap.map(item => renderHeatmapBar(item, maxScore)).join('')}</div>
-          </div>
-        ` : ''}
-        ${hasRecent ? `
-          <div class="kg-recent-grid">
-            ${renderDashboardRecentSection(`${KG_STAT_ICONS.questions}최근 질문`, data.recent_questions, e => `
-              <li class="kg-recent-item">${escapeHtml(e.summary || '')}<span class="kg-recent-item-doc">${escapeHtml(e.doc_title || '')}</span></li>
-            `)}
-            ${renderDashboardRecentSection(`${KG_STAT_ICONS.notes}최근 메모`, data.recent_notes, e => `
-              <li class="kg-recent-item">${escapeHtml(e.summary || '')}<span class="kg-recent-item-doc">${escapeHtml(e.doc_title || '')}</span></li>
-            `)}
-            ${renderDashboardRecentSection(`${KG_STAT_ICONS.papers}최근 논문`, data.recent_papers, p => `
-              <li class="kg-recent-item">${escapeHtml(p.title || '')}</li>
-            `)}
-          </div>
-        ` : ''}
-      </div>
-    `
-  } catch (err) {
-    console.error('대시보드 로드 실패:', err)
-    libraryDashboardContent.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">대시보드를 불러오지 못했습니다</p></div>'
+function renderGraphLegend(nodes, edges) {
+  const legendEl = $('rg-legend-panel')
+  if (!legendEl) return
+  const counts = { paper: 0, concept: 0, note: 0, figure: 0 }
+  for (const n of nodes || []) {
+    if (counts[n.type] !== undefined) counts[n.type]++
   }
+  const connectionCount = (edges || []).length
+  const clusterTags = new Set()
+  for (const e of edges || []) {
+    if (e.type === 'category' && e.category) clusterTags.add(e.category)
+  }
+
+  legendEl.innerHTML = `
+    <div class="rg-legend-card">
+      <h4 class="rg-legend-title">노드 타입</h4>
+      <ul class="rg-legend-list">
+        ${Object.entries(GRAPH_NODE_TYPE_META).map(([type, meta]) => `
+          <li class="rg-legend-item">
+            <span class="rg-legend-dot" style="background:${meta.color}"></span>
+            <span class="rg-legend-label">${escapeHtml(meta.label)}</span>
+            <span class="rg-legend-count">${counts[type] || 0}</span>
+          </li>
+        `).join('')}
+      </ul>
+    </div>
+    <div class="rg-overview-card">
+      <h4 class="rg-legend-title">Graph Overview</h4>
+      <ul class="rg-overview-list">
+        <li class="rg-overview-row"><span>${icon('fileText', 13)}Papers</span><b>${counts.paper}</b></li>
+        <li class="rg-overview-row"><span>${icon('network', 13)}Connections</span><b>${connectionCount}</b></li>
+        <li class="rg-overview-row"><span>${icon('layers', 13)}Clusters</span><b>${clusterTags.size}</b></li>
+        <li class="rg-overview-row"><span>${icon('clock', 13)}Updated</span><b id="rg-overview-updated">${escapeHtml(relativeTimeShortKo(rgGraphLoadedAt))}</b></li>
+      </ul>
+      <button type="button" id="rg-refresh-btn" class="rg-refresh-btn">${icon('refreshCw', 13)}<span>Refresh Graph</span></button>
+    </div>
+  `
+  const refreshBtn = $('rg-refresh-btn')
+  if (refreshBtn) refreshBtn.addEventListener('click', () => renderLibraryGraphTab())
+}
+
+// 그래프 탭의 DOM 뼈대(범례/툴바/캔버스 래퍼/줌 컨트롤)를 한 번만 구성한다.
+// index.html은 건드리지 않는다는 제약 때문에, 기존 요소(id 보유 - 검색창/
+// 추천 버튼/상세 패널/캔버스 등)는 그대로 재사용하고 위치와 스타일만
+// 재배치한다. library-graph-row는 리사이저(showLibraryScreen 근처 초기화
+// 코드, off-limits)가 rowRect.right 기준으로 상세 패널 폭을 계산하므로
+// display:flex 구조를 그대로 유지해야 한다 - 왼쪽에 범례를 끼워 넣는 것은
+// 그 계산에 영향을 주지 않는다.
+let graphLayoutReady = false
+function ensureGraphLayout() {
+  if (graphLayoutReady) return
+  if (!libraryGraphView || !libraryGraphRow || !libraryGraphCanvas || !libraryGraphDetailPanel || !libraryGraphSearchInput) return
+  graphLayoutReady = true
+
+  // 상단 그래프/타임라인/히트맵 토글에 아이콘을 붙인다.
+  ;[[libraryGraphViewToggleGraph, 'network'], [libraryGraphViewToggleTimeline, 'clock'], [libraryGraphViewToggleHeatmap, 'grid']].forEach(([btn, iconName]) => {
+    if (btn) btn.innerHTML = `${icon(iconName, 13)}<span>${btn.textContent}</span>`
+  })
+  const tabsRow = libraryGraphViewToggleGraph?.parentElement
+  if (tabsRow) tabsRow.classList.add('rg-view-tabs')
+
+  // 기존 추천 박스(안내 문구용 테두리 박스)를 해체하고, 그 안의 버튼/목록
+  // (id 보유, 리스너가 이미 달려 있음)만 새 툴바로 옮긴다.
+  const recoWrapEl = libraryRecommendationsBtn ? libraryRecommendationsBtn.parentElement : null
+
+  // 검색창 자리에 툴바를 만들고 검색창을 그 안으로 옮긴다.
+  const toolbar = document.createElement('div')
+  toolbar.className = 'rg-toolbar'
+  libraryGraphSearchInput.parentElement.insertBefore(toolbar, libraryGraphSearchInput)
+  libraryGraphSearchInput.removeAttribute('style')
+  libraryGraphSearchInput.classList.add('rg-search-input')
+  const searchWrap = document.createElement('div')
+  searchWrap.className = 'rg-search-wrap'
+  searchWrap.innerHTML = icon('search', 15)
+  searchWrap.appendChild(libraryGraphSearchInput)
+  toolbar.appendChild(searchWrap)
+
+  const typeSelect = document.createElement('select')
+  typeSelect.id = 'rg-filter-type'
+  typeSelect.className = 'rg-filter-select'
+  typeSelect.innerHTML = `<option value="all">모든 타입</option>` +
+    Object.entries(GRAPH_NODE_TYPE_META).map(([t, m]) => `<option value="${t}">${escapeHtml(m.label)}</option>`).join('')
+  toolbar.appendChild(typeSelect)
+
+  const tagSelect = document.createElement('select')
+  tagSelect.id = 'rg-filter-tag'
+  tagSelect.className = 'rg-filter-select'
+  tagSelect.innerHTML = `<option value="all">모든 태그</option>`
+  toolbar.appendChild(tagSelect)
+
+  const toolbarRight = document.createElement('div')
+  toolbarRight.className = 'rg-toolbar-right'
+  toolbar.appendChild(toolbarRight)
+  if (libraryRecommendationsBtn) {
+    libraryRecommendationsBtn.removeAttribute('style')
+    libraryRecommendationsBtn.className = 'rg-recommend-btn'
+    libraryRecommendationsBtn.innerHTML = `${icon('zap', 13)}<span>다음에 읽을 논문 추천받기</span>`
+    toolbarRight.appendChild(libraryRecommendationsBtn)
+  }
+
+  const recoPanel = document.createElement('div')
+  recoPanel.className = 'rg-recommend-panel'
+  if (libraryRecommendationsList) {
+    libraryRecommendationsList.removeAttribute('style')
+    recoPanel.appendChild(libraryRecommendationsList)
+  }
+  toolbar.insertAdjacentElement('afterend', recoPanel)
+  if (recoWrapEl && recoWrapEl.parentElement) recoWrapEl.remove()
+
+  typeSelect.addEventListener('change', applyGraphFilters)
+  tagSelect.addEventListener('change', applyGraphFilters)
+
+  // 3열 레이아웃: 범례(신규) / 캔버스 래퍼(신규, 기존 canvas를 감쌈) / 상세
+  // 패널(기존 요소 재사용). library-graph-row의 flex 자식 순서만 바뀐다.
+  const legendPanel = document.createElement('div')
+  legendPanel.id = 'rg-legend-panel'
+  legendPanel.className = 'rg-legend-col'
+  libraryGraphRow.insertBefore(legendPanel, libraryGraphCanvas)
+
+  const canvasWrap = document.createElement('div')
+  canvasWrap.className = 'rg-canvas-wrap'
+  libraryGraphRow.insertBefore(canvasWrap, libraryGraphCanvas)
+  libraryGraphCanvas.removeAttribute('style')
+  libraryGraphCanvas.classList.add('rg-canvas')
+  canvasWrap.appendChild(libraryGraphCanvas)
+
+  const zoomControls = document.createElement('div')
+  zoomControls.className = 'rg-zoom-controls'
+  zoomControls.innerHTML = `
+    <button type="button" id="rg-zoom-in-btn" class="rg-zoom-btn" title="확대">${RG_ZOOM_IN_SVG}</button>
+    <button type="button" id="rg-zoom-out-btn" class="rg-zoom-btn" title="축소">${RG_ZOOM_OUT_SVG}</button>
+    <button type="button" id="rg-zoom-fit-btn" class="rg-zoom-btn" title="화면에 맞추기">${icon('expand', 14)}</button>
+    <button type="button" id="rg-relayout-btn" class="rg-zoom-btn" title="다시 정렬">${icon('refreshCw', 14)}</button>
+  `
+  canvasWrap.appendChild(zoomControls)
+  $('rg-zoom-in-btn').addEventListener('click', () => { if (libraryGraphCyInstance) libraryGraphCyInstance.zoom(libraryGraphCyInstance.zoom() * 1.25) })
+  $('rg-zoom-out-btn').addEventListener('click', () => { if (libraryGraphCyInstance) libraryGraphCyInstance.zoom(libraryGraphCyInstance.zoom() / 1.25) })
+  $('rg-zoom-fit-btn').addEventListener('click', () => { if (libraryGraphCyInstance) libraryGraphCyInstance.fit(undefined, 40) })
+  $('rg-relayout-btn').addEventListener('click', () => {
+    if (libraryGraphCyInstance) libraryGraphCyInstance.layout({ name: 'fcose', quality: 'proof', animate: true }).run()
+  })
+
+  const savedWidth = libraryGraphDetailPanel.style.width
+  libraryGraphDetailPanel.removeAttribute('style')
+  libraryGraphDetailPanel.classList.add('rg-detail-panel')
+  libraryGraphDetailPanel.style.width = savedWidth || '300px'
+
+  // 상세 패널 안에서 열리는 "더보기" 드롭다운은 매 클릭마다 innerHTML로
+  // 새로 그려지므로(showGraphDetailPanel), 여기서는 위임 방식으로 한 번만
+  // 바깥 클릭 시 닫히는 리스너를 건다(lib-detail-more-menu와 동일한 패턴).
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.rg-detail-more-menu').forEach(m => m.classList.add('hidden'))
+  })
+}
+
+// 타입/태그 드롭다운을 조합해 cytoscape 노드의 표시 여부를 결정한다.
+// 노드/엣지 데이터 자체는 건드리지 않고 화면 표시(style('display', ...))만
+// 바꾸므로 "데이터 모델은 그대로" 제약을 지킨다. 태그는 논문 노드의
+// categories 필드에만 있으므로, 논문이 아닌 노드는 태그 필터의 영향을
+// 받지 않는다(타입 필터로만 걸러진다).
+function applyGraphFilters() {
+  if (!libraryGraphCyInstance) return
+  const typeVal = $('rg-filter-type')?.value || 'all'
+  const tagVal = $('rg-filter-tag')?.value || 'all'
+  libraryGraphCyInstance.nodes().forEach(n => {
+    const data = n.data()
+    const typeOk = typeVal === 'all' || data.type === typeVal
+    const tagOk = tagVal === 'all' || data.type !== 'paper' || (data.categories || []).includes(tagVal)
+    n.style('display', (typeOk && tagOk) ? 'element' : 'none')
+  })
+}
+
+function renderGraphDetailEmptyState() {
+  return `
+    <div class="rg-detail-empty-state">
+      ${icon('network', 26)}
+      <p>노드를 클릭하면 상세 정보가 여기에 표시됩니다.</p>
+    </div>
+  `
+}
+
+function renderGraphDetailHeader(nodeData, titleOverride) {
+  const meta = GRAPH_NODE_TYPE_META[nodeData.type] || { label: '노드', color: 'var(--text-tertiary)', icon: 'fileText' }
+  return `
+    <div class="rg-detail-header">
+      <div class="rg-detail-icon" style="background:color-mix(in srgb, ${meta.color} 16%, transparent); color:${meta.color}">${icon(meta.icon, 20)}</div>
+      <div class="rg-detail-header-text">
+        <h4 class="rg-detail-title">${escapeHtml(titleOverride || nodeData.label || '')}</h4>
+        <span class="rg-detail-type-badge" style="color:${meta.color}">${escapeHtml(meta.label)}</span>
+      </div>
+    </div>
+  `
+}
+
+// 1촌 이웃 노드를 타입별로 집계한 "연결 관계" 요약. 실제 엣지 타입(인용/
+// 카테고리/개념 보유 등)은 knowledgeGraph.js의 tap 핸들러가 이웃 "노드"만
+// 넘겨주고 엣지 자체는 넘기지 않아 여기서는 알 수 없다 - 그 파일은 손대지
+// 않기로 했으므로, 대신 이웃 노드의 타입(논문/개념/메모/Figure)별 개수로
+// 보여준다.
+function renderGraphConnectionsSummary(neighborNodes) {
+  const counts = { paper: 0, concept: 0, note: 0, figure: 0 }
+  for (const n of neighborNodes || []) {
+    if (counts[n.type] !== undefined) counts[n.type]++
+  }
+  const rows = Object.entries(GRAPH_NODE_TYPE_META).filter(([type]) => counts[type] > 0)
+  if (rows.length === 0) return `<p class="rg-detail-empty">연결된 노드가 없습니다.</p>`
+  return `
+    <ul class="rg-connections-list">
+      ${rows.map(([type, meta]) => `
+        <li class="rg-connections-item">
+          <span class="rg-connections-dot" style="background:${meta.color}"></span>
+          <span class="rg-connections-label">${escapeHtml(meta.label)}</span>
+          <span class="rg-connections-count">${counts[type]}</span>
+        </li>
+      `).join('')}
+    </ul>
+  `
+}
+
+function renderGraphRelatedNodesList(neighborNodes, emptyText = '관련 노드가 없습니다.', limit = 6) {
+  const list = neighborNodes || []
+  if (list.length === 0) return `<p class="rg-detail-empty">${escapeHtml(emptyText)}</p>`
+  const shown = list.slice(0, limit)
+  return `
+    <ul class="rg-related-list">
+      ${shown.map(n => {
+        const meta = GRAPH_NODE_TYPE_META[n.type] || { label: n.type, color: 'var(--text-tertiary)' }
+        return `
+          <li class="rg-related-item">
+            <span class="rg-related-dot" style="background:${meta.color}"></span>
+            <span class="rg-related-label">${escapeHtml(n.label || '')}</span>
+            <span class="rg-related-type-tag" style="color:${meta.color}">${escapeHtml(meta.label)}</span>
+          </li>
+        `
+      }).join('')}
+    </ul>
+    ${list.length > limit ? `<p class="rg-related-more">외 ${list.length - limit}개</p>` : ''}
+  `
+}
+
+// "내 활동" 미니 통계 - 논문 노드 전용. 서버 API를 새로 호출하지 않고,
+// 이미 뷰어/메모 기능이 쓰고 있는 로컬 캐시(loadMemos/loadAnnotations)를
+// 그대로 읽어 동기적으로 집계한다.
+function renderGraphMyActivityStats(docId) {
+  let noteCount = 0, highlightCount = 0, underlineCount = 0
+  try {
+    const memos = loadMemos(docId) || {}
+    Object.values(memos).forEach(arr => { noteCount += (arr || []).length })
+  } catch { /* 로컬 캐시 파싱 실패는 0건으로 취급 */ }
+  try {
+    const annotations = loadAnnotations(docId) || {}
+    Object.values(annotations).forEach(arr => {
+      (arr || []).forEach(a => {
+        if (a.type === 'highlight') highlightCount++
+        else if (a.type === 'underline') underlineCount++
+      })
+    })
+  } catch { /* 로컬 캐시 파싱 실패는 0건으로 취급 */ }
+  return `
+    <div class="rg-activity-stats">
+      <div class="rg-activity-stat">${icon('edit3', 13)}<span class="rg-activity-stat-value">${noteCount}</span><span class="rg-activity-stat-label">메모</span></div>
+      <div class="rg-activity-stat">${icon('highlighter', 13)}<span class="rg-activity-stat-value">${highlightCount}</span><span class="rg-activity-stat-label">하이라이트</span></div>
+      <div class="rg-activity-stat">${icon('underline', 13)}<span class="rg-activity-stat-value">${underlineCount}</span><span class="rg-activity-stat-label">언더라인</span></div>
+    </div>
+  `
 }
 
 async function renderLibraryGraphTab() {
@@ -4588,16 +4874,21 @@ async function renderLibraryGraphTab() {
     libraryGraphPollTimeout = null
   }
   if (!libraryGraphCanvas) return
+  ensureGraphLayout()
   if (libraryGraphDetailPanel) {
-    libraryGraphDetailPanel.innerHTML = '<p>노드를 클릭하면 상세 정보가 여기에 표시됩니다.</p>'
+    libraryGraphDetailPanel.innerHTML = renderGraphDetailEmptyState()
   }
   if (libraryGraphSearchInput) libraryGraphSearchInput.value = ''
+  const typeFilterEl = $('rg-filter-type')
+  const tagFilterEl = $('rg-filter-tag')
+  if (typeFilterEl) typeFilterEl.value = 'all'
+  if (tagFilterEl) tagFilterEl.value = 'all'
   switchGraphSubView('graph')
 
   try {
     const data = await fetchLibraryGraph()
     // 응답을 기다리는 사이 사용자가 다른 탭으로 이동했다면 그리지 않는다.
-    if (state.currentLibraryTab !== 'graph') return
+    if (state.currentWorkspacePage !== 'graph') return
 
     if (libraryGraphCyInstance) {
       libraryGraphCyInstance.destroy()
@@ -4605,6 +4896,20 @@ async function renderLibraryGraphTab() {
     }
     libraryGraphCanvas.innerHTML = ''
     libraryGraphCyInstance = renderKnowledgeGraph(libraryGraphCanvas, data, { onNodeClick: showGraphDetailPanel })
+
+    rgGraphLoadedAt = new Date()
+    renderGraphLegend(data.nodes, data.edges)
+
+    // 태그 필터 옵션 = 논문 노드들의 categories 값 전체(중복 제거, 가나다순).
+    if (tagFilterEl) {
+      const cats = new Set()
+      for (const n of data.nodes || []) {
+        if (n.type === 'paper') (n.categories || []).forEach(c => c && cats.add(c))
+      }
+      const sorted = [...cats].sort((a, b) => a.localeCompare(b))
+      tagFilterEl.innerHTML = `<option value="all">모든 태그</option>` +
+        sorted.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')
+    }
 
     const pending = data.pending_docs || []
     if (libraryGraphPendingBanner) {
@@ -4614,7 +4919,7 @@ async function renderLibraryGraphTab() {
     // 백그라운드 백필 결과가 반영되는지 확인한다(비어질 때까지 반복).
     if (pending.length > 0) {
       libraryGraphPollTimeout = setTimeout(() => {
-        if (state.currentLibraryTab === 'graph') renderLibraryGraphTab()
+        if (state.currentWorkspacePage === 'graph') renderLibraryGraphTab()
       }, 5000)
     }
   } catch (err) {
@@ -4625,80 +4930,150 @@ async function renderLibraryGraphTab() {
 
 function renderRelatedQuestionsList(questions) {
   if (!questions || questions.length === 0) {
-    return '<p style="margin:8px 0 0;color:var(--text-tertiary)">관련 질문이 없습니다.</p>'
+    return `<p class="rg-detail-empty">관련 질문이 없습니다.</p>`
   }
   return `
-    <ul style="margin:8px 0 0;padding-left:16px;max-height:220px;overflow-y:auto">
+    <ul class="rg-questions-list">
       ${questions.map(q => `
-        <li style="margin-bottom:10px">
-          <div>${escapeHtml(q.content || '')}</div>
-          ${q.doc_title ? `<div style="color:var(--text-tertiary);font-size:11px">${escapeHtml(q.doc_title)}</div>` : ''}
+        <li class="rg-questions-item">
+          <div class="rg-questions-item-text">${escapeHtml(q.content || '')}</div>
+          ${q.doc_title ? `<div class="rg-questions-item-doc">${escapeHtml(q.doc_title)}</div>` : ''}
         </li>
       `).join('')}
     </ul>
   `
 }
 
-// 개념의 "관련 논문"/"유사 개념"처럼, 상세 패널에서 보여줄 1촌 이웃 노드
-// 목록을 렌더링한다. neighborNodes는 knowledgeGraph.js의 tap 핸들러가
-// closedNeighborhood()로 이미 계산해 넘겨준 것이라 별도 API 조회가 필요 없다.
-function renderRelatedNodesList(neighborNodes, type, emptyText) {
-  const matches = (neighborNodes || []).filter(n => n.type === type)
-  if (matches.length === 0) {
-    return `<p style="margin:6px 0 0;color:var(--text-tertiary)">${escapeHtml(emptyText)}</p>`
-  }
-  return `
-    <ul style="margin:6px 0 0;padding-left:16px">
-      ${matches.map(n => `<li style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${escapeHtml(n.label || '')}</li>`).join('')}
-    </ul>
-  `
-}
-
+// 상세 패널: 클릭된 노드 종류(논문/개념/메모/Figure)에 따라 다른 카드를
+// 그린다. neighborNodes는 knowledgeGraph.js의 tap 핸들러가 closedNeighborhood()
+// 로 이미 계산해 넘겨준 1촌 이웃 노드 목록(별도 API 조회 불필요)이다.
 function showGraphDetailPanel(nodeData, neighborNodes = []) {
   if (!libraryGraphDetailPanel) return
   if (nodeData.type === 'paper') {
-    const categories = (nodeData.categories && nodeData.categories.length) ? nodeData.categories.join(', ') : '없음'
+    const categories = nodeData.categories || []
     libraryGraphDetailPanel.innerHTML = `
-      <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
-      <p style="margin:0 0 6px"><strong>유형:</strong> 논문</p>
-      <p style="margin:0"><strong>카테고리:</strong> ${escapeHtml(categories)}</p>
-      <button id="kg-related-questions-btn" style="margin-top:10px;padding:6px 10px;border-radius:6px;border:1px solid var(--border-strong);background:var(--bg-elevated);color:var(--text-primary);font-size:12px;cursor:pointer">관련 질문 보기</button>
-      <div id="kg-related-questions-list"></div>
+      ${renderGraphDetailHeader(nodeData)}
+      ${categories.length ? `<div class="rg-detail-tags">${categories.map(c => `<span class="rg-detail-tag">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
+      <div class="rg-detail-actions">
+        <button id="rg-open-paper-btn" class="rg-detail-open-btn">${icon('externalLink', 14)}<span>논문 열기</span></button>
+        <button id="rg-fav-paper-btn" class="rg-detail-icon-btn" title="즐겨찾기">${icon('star', 15)}</button>
+        <button id="rg-more-paper-btn" class="rg-detail-icon-btn" title="더보기">${RG_MORE_SVG}</button>
+        <div id="rg-more-paper-menu" class="rg-detail-more-menu hidden">
+          <button id="rg-more-paper-library-btn" class="rg-detail-more-item">${icon('bookOpen', 13)}<span>라이브러리에서 자세히 보기</span></button>
+        </div>
+      </div>
+      <div class="rg-detail-section">
+        <h5 class="rg-detail-section-title">AI 요약</h5>
+        <div id="rg-detail-summary-text" class="rg-detail-summary-text"><p class="rg-detail-loading">불러오는 중...</p></div>
+      </div>
+      <div class="rg-detail-section">
+        <h5 class="rg-detail-section-title">연결 관계 (${(neighborNodes || []).length})</h5>
+        ${renderGraphConnectionsSummary(neighborNodes)}
+      </div>
+      <div class="rg-detail-section">
+        <h5 class="rg-detail-section-title">관련 노드</h5>
+        ${renderGraphRelatedNodesList(neighborNodes)}
+      </div>
+      <div class="rg-detail-section">
+        <h5 class="rg-detail-section-title">내 활동</h5>
+        ${renderGraphMyActivityStats(nodeData.doc_id)}
+      </div>
+      <div class="rg-detail-section">
+        <button id="kg-related-questions-btn" class="rg-detail-question-btn">${icon('messageCircle', 13)}<span>관련 질문 보기</span></button>
+        <div id="kg-related-questions-list"></div>
+      </div>
     `
+    $('rg-fav-paper-btn')?.classList.toggle('active', isFavoriteDoc(nodeData.doc_id))
+    $('rg-fav-paper-btn')?.addEventListener('click', () => {
+      const nowFav = toggleFavoriteDoc(nodeData.doc_id)
+      $('rg-fav-paper-btn')?.classList.toggle('active', nowFav)
+    })
+    $('rg-open-paper-btn')?.addEventListener('click', async () => {
+      try {
+        const doc = await fetchLibraryDoc(nodeData.doc_id)
+        await openFromLibrary(doc)
+      } catch (err) {
+        console.error('논문 열기 실패:', err)
+        showToast('논문을 불러오지 못했습니다.', 'error')
+      }
+    })
+    $('rg-more-paper-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation()
+      $('rg-more-paper-menu')?.classList.toggle('hidden')
+    })
+    $('rg-more-paper-library-btn')?.addEventListener('click', async () => {
+      $('rg-more-paper-menu')?.classList.add('hidden')
+      try {
+        const doc = await fetchLibraryDoc(nodeData.doc_id)
+        openLibraryDetailPanel(doc)
+      } catch (err) {
+        console.error('상세 정보 열기 실패:', err)
+        showToast('상세 정보를 불러오지 못했습니다.', 'error')
+      }
+    })
+    ;(async () => {
+      const summaryEl = $('rg-detail-summary-text')
+      if (!summaryEl) return
+      try {
+        const targetLang = getTranslationOptions().targetLang
+        const primer = await fetchPrimer(nodeData.doc_id, targetLang)
+        const text = primer.hook || primer.feynman || primer.lineage || ''
+        summaryEl.innerHTML = text
+          ? escapeHtml(text).replace(/\n/g, '<br>')
+          : `<p class="rg-detail-loading">아직 생성된 요약이 없습니다.</p>`
+      } catch (err) {
+        console.error('AI 요약 로드 실패:', err)
+        summaryEl.innerHTML = `<p class="rg-detail-error">AI 요약을 불러오지 못했습니다.</p>`
+      }
+    })()
   } else if (nodeData.type === 'concept') {
     const questionCount = nodeData.question_count || 0
     libraryGraphDetailPanel.innerHTML = `
-      <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
-      <p style="margin:0 0 6px"><strong>유형:</strong> 개념</p>
-      <p style="margin:0 0 10px"><strong>분류:</strong> ${escapeHtml(nodeData.kind || '미상')}</p>
-      <div style="margin-bottom:10px">
-        <h5 style="margin:0 0 4px;font-size:12px;color:var(--text-primary)">이 개념을 다루는 논문</h5>
-        ${renderRelatedNodesList(neighborNodes, 'paper', '연결된 논문이 없습니다.')}
+      ${renderGraphDetailHeader(nodeData)}
+      <p class="rg-detail-subtitle">분류: ${escapeHtml(nodeData.kind || '미상')}</p>
+      <div class="rg-detail-section">
+        <h5 class="rg-detail-section-title">연결 관계 (${(neighborNodes || []).length})</h5>
+        ${renderGraphConnectionsSummary(neighborNodes)}
       </div>
-      <div style="margin-bottom:10px">
-        <h5 style="margin:0 0 4px;font-size:12px;color:var(--text-primary)">유사 개념</h5>
-        ${renderRelatedNodesList(neighborNodes, 'concept', '유사한 개념이 없습니다.')}
+      <div class="rg-detail-section">
+        <h5 class="rg-detail-section-title">이 개념을 다루는 논문</h5>
+        ${renderGraphRelatedNodesList((neighborNodes || []).filter(n => n.type === 'paper'), '연결된 논문이 없습니다.')}
       </div>
-      <button id="kg-related-questions-btn" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border-strong);background:var(--bg-elevated);color:var(--text-primary);font-size:12px;cursor:pointer">관련 질문 ${questionCount}개 보기</button>
-      <div id="kg-related-questions-list"></div>
+      <div class="rg-detail-section">
+        <h5 class="rg-detail-section-title">유사 개념</h5>
+        ${renderGraphRelatedNodesList((neighborNodes || []).filter(n => n.type === 'concept'), '유사한 개념이 없습니다.')}
+      </div>
+      <div class="rg-detail-section">
+        <button id="kg-related-questions-btn" class="rg-detail-question-btn">${icon('messageCircle', 13)}<span>관련 질문 ${questionCount}개 보기</span></button>
+        <div id="kg-related-questions-list"></div>
+      </div>
     `
   } else if (nodeData.type === 'note') {
     libraryGraphDetailPanel.innerHTML = `
-      <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">메모</h4>
-      <p style="margin:0">${escapeHtml(nodeData.label || '')}</p>
+      ${renderGraphDetailHeader(nodeData, '메모')}
+      <p class="rg-detail-note-text">${escapeHtml(nodeData.label || '')}</p>
+      ${nodeData.doc_id ? `<button id="rg-note-open-paper-btn" class="rg-detail-open-btn">${icon('externalLink', 14)}<span>논문에서 보기</span></button>` : ''}
     `
+    $('rg-note-open-paper-btn')?.addEventListener('click', async () => {
+      try {
+        const doc = await fetchLibraryDoc(nodeData.doc_id)
+        await openFromLibrary(doc)
+      } catch (err) {
+        console.error('논문 열기 실패:', err)
+        showToast('논문을 불러오지 못했습니다.', 'error')
+      }
+    })
   } else if (nodeData.type === 'figure') {
     // 캡션은 backend(_spans_to_bold_markdown)가 **볼드**만 마크다운으로 감싸
     // 넘겨준다 - Figure/Table 오버레이 툴팁(renderBoldText 최초 도입 지점)과
     // 동일한 방식으로 렌더링해야 캡션 안의 볼드 서식이 살아난다.
     const captionHtml = nodeData.caption
-      ? `<p style="margin:0 0 10px;color:var(--text-secondary);font-size:12px">${renderBoldText(nodeData.caption)}</p>`
+      ? `<p class="rg-detail-figure-caption">${renderBoldText(nodeData.caption)}</p>`
       : ''
     const hasCrop = nodeData.doc_id != null && nodeData.index != null
     libraryGraphDetailPanel.innerHTML = `
-      <h4 style="margin:0 0 8px;font-size:14px;color:var(--text-primary)">${escapeHtml(nodeData.label || '')}</h4>
-      <p style="margin:0 0 10px"><strong>유형:</strong> Figure/Table</p>
-      ${hasCrop ? `<img id="kg-figure-img" class="primer-figure-img" style="margin-bottom:10px;width:100%;cursor:pointer" alt="${escapeHtml(nodeData.label || '')}" title="클릭하면 논문의 해당 페이지로 이동합니다">` : ''}
+      ${renderGraphDetailHeader(nodeData)}
+      ${hasCrop ? `<img id="kg-figure-img" class="rg-detail-figure-img primer-figure-img" alt="${escapeHtml(nodeData.label || '')}" title="클릭하면 논문의 해당 페이지로 이동합니다">` : ''}
       ${captionHtml}
     `
     const figureImg = $('kg-figure-img')
@@ -4706,7 +5081,7 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
       figureImg.addEventListener('error', () => {
         figureImg.replaceWith(Object.assign(document.createElement('p'), {
           textContent: '이미지를 불러올 수 없습니다.',
-          style: 'margin:0 0 10px;color:var(--text-tertiary);font-size:12px',
+          className: 'rg-detail-empty',
         }))
       })
       figureImg.src = `/api/library/${encodeURIComponent(nodeData.doc_id)}/figure-image/${encodeURIComponent(nodeData.index)}`
@@ -4719,7 +5094,7 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
       }
     }
   } else {
-    libraryGraphDetailPanel.innerHTML = '<p>알 수 없는 노드입니다.</p>'
+    libraryGraphDetailPanel.innerHTML = `<p class="rg-detail-empty">알 수 없는 노드입니다.</p>`
   }
 
   const questionsBtn = $('kg-related-questions-btn')
@@ -4727,12 +5102,12 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
     questionsBtn.addEventListener('click', async () => {
       const listEl = $('kg-related-questions-list')
       if (!listEl) return
-      listEl.innerHTML = '<p style="margin:8px 0 0;color:var(--text-tertiary)">불러오는 중...</p>'
+      listEl.innerHTML = `<p class="rg-detail-loading">불러오는 중...</p>`
       try {
         const { questions } = await fetchGraphNodeQuestions(nodeData.id)
         listEl.innerHTML = renderRelatedQuestionsList(questions)
       } catch (err) {
-        listEl.innerHTML = '<p style="margin:8px 0 0;color:var(--error)">질문을 불러오지 못했습니다.</p>'
+        listEl.innerHTML = `<p class="rg-detail-error">질문을 불러오지 못했습니다.</p>`
       }
     })
   }
@@ -4770,97 +5145,30 @@ if (libraryRecommendationsBtn) {
   libraryRecommendationsBtn.addEventListener('click', async () => {
     if (!libraryRecommendationsList) return
     libraryRecommendationsBtn.disabled = true
-    libraryRecommendationsList.innerHTML = '<p style="margin:0;color:var(--text-tertiary);font-size:12px">추천 논문을 찾는 중... (시간이 걸릴 수 있습니다)</p>'
+    libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status">추천 논문을 찾는 중... (시간이 걸릴 수 있습니다)</p>`
     try {
       const { recommendations } = await fetchReadingRecommendations()
       if (!recommendations || recommendations.length === 0) {
-        libraryRecommendationsList.innerHTML = '<p style="margin:0;color:var(--text-tertiary);font-size:12px">추천할 만한 논문을 찾지 못했습니다.</p>'
+        libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status">추천할 만한 논문을 찾지 못했습니다.</p>`
       } else {
         libraryRecommendationsList.innerHTML = recommendations.map(r => `
-          <div style="padding:8px 0;border-top:1px solid var(--border-strong)">
-            <a href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener noreferrer" style="font-size:13px;font-weight:600;color:var(--text-primary)">${escapeHtml(r.title || '')}</a>
-            ${r.reason ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${escapeHtml(r.reason)}</div>` : ''}
+          <div class="rg-recommend-item">
+            <a href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener noreferrer" class="rg-recommend-item-title">${escapeHtml(r.title || '')}</a>
+            ${r.reason ? `<div class="rg-recommend-item-reason">${escapeHtml(r.reason)}</div>` : ''}
           </div>
         `).join('')
       }
     } catch (err) {
       console.error('추천 논문 조회 실패:', err)
-      libraryRecommendationsList.innerHTML = '<p style="margin:0;color:var(--error);font-size:12px">추천 논문을 불러오지 못했습니다.</p>'
+      libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status rg-recommend-error">추천 논문을 불러오지 못했습니다.</p>`
     } finally {
       libraryRecommendationsBtn.disabled = false
     }
   })
 }
 
-async function renderAnnotationsBrowser() {
-  updateAnnotationSubtabUI()
-  if (!annotationList) return
-  annotationList.innerHTML = `<div class="lib-empty"><p>불러오는 중...</p></div>`
-
-  try {
-    const data = await fetchLibrary(getTranslationOptions())
-    const docs = data.documents || []
-    const items = []
-
-    docs.forEach(doc => {
-      const docTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
-
-      if (annotationBrowserSubtab === 'memo') {
-        const memosByPage = loadMemos(doc.id)
-        Object.keys(memosByPage).forEach(pageKey => {
-          const pageNum = parseInt(pageKey.replace('page_', ''), 10)
-          if (isNaN(pageNum)) return
-          memosByPage[pageKey].forEach(memo => items.push({ doc, docTitle, pageNum, memo }))
-        })
-      } else {
-        const annotationsByPage = loadAnnotations(doc.id)
-        Object.keys(annotationsByPage).forEach(pageKey => {
-          const pageNum = parseInt(pageKey.replace('page_', ''), 10)
-          if (isNaN(pageNum)) return
-          annotationsByPage[pageKey].forEach(ann => {
-            if (ann.type === annotationBrowserSubtab) items.push({ doc, docTitle, pageNum, annotation: ann })
-          })
-        })
-      }
-    })
-
-    if (annotationBrowserSubtab === 'memo') {
-      // 메모 id에 생성 시각(Date.now())이 들어있어 최근 순으로 정렬 가능
-      items.sort((a, b) => String(b.memo.id).localeCompare(String(a.memo.id)))
-    } else {
-      items.sort((a, b) => a.docTitle.localeCompare(b.docTitle) || a.pageNum - b.pageNum)
-    }
-
-    renderAnnotationItems(items)
-  } catch (err) {
-    console.error('주석 목록 로드 실패:', err)
-    annotationList.innerHTML = `<div class="lib-empty"><p style="color:var(--error)">주석 목록을 불러오지 못했습니다</p></div>`
-  }
-}
-
-if (annotationSubtabMemo) {
-  annotationSubtabMemo.addEventListener('click', () => {
-    if (annotationBrowserSubtab === 'memo') return
-    annotationBrowserSubtab = 'memo'
-    renderAnnotationsBrowser()
-  })
-}
-if (annotationSubtabHighlight) {
-  annotationSubtabHighlight.addEventListener('click', () => {
-    if (annotationBrowserSubtab === 'highlight') return
-    annotationBrowserSubtab = 'highlight'
-    renderAnnotationsBrowser()
-  })
-}
-if (annotationSubtabUnderline) {
-  annotationSubtabUnderline.addEventListener('click', () => {
-    if (annotationBrowserSubtab === 'underline') return
-    annotationBrowserSubtab = 'underline'
-    renderAnnotationsBrowser()
-  })
-}
-
 // 메모/하이라이트/언더라인 항목을 클릭하면 해당 논문을 열고 해당 페이지로 이동한다.
+// Notes 페이지(pages/notesPage.js)와 Library 상세 패널에서 공유해서 쓴다.
 async function openAnnotationTarget(doc, pageNum) {
   try {
     const freshDoc = await fetchLibraryDoc(doc.id)
@@ -4870,67 +5178,6 @@ async function openAnnotationTarget(doc, pageNum) {
     console.error('주석에서 논문 열기 실패:', err)
     showToast('논문을 불러오지 못했습니다.', 'error')
   }
-}
-
-function renderAnnotationItems(items) {
-  const emptyMessages = {
-    memo: 'AI 논문에 남긴 메모가 없습니다',
-    highlight: '하이라이트한 내용이 없습니다',
-    underline: '밑줄 친 내용이 없습니다',
-  }
-
-  if (items.length === 0) {
-    annotationList.innerHTML = `<div class="lib-empty"><p>${emptyMessages[annotationBrowserSubtab]}</p></div>`
-    return
-  }
-
-  annotationList.innerHTML = ''
-  items.forEach(entry => {
-    const { doc, docTitle, pageNum } = entry
-    const item = document.createElement('div')
-    item.className = 'chat-session-item'
-
-    let iconHtml, fullText, iconBg
-    if (entry.memo) {
-      iconHtml = icon('messageCircle', 17)
-      fullText = (entry.memo.content && entry.memo.content.trim()) || entry.memo.sentenceText || '(내용 없음)'
-      iconBg = ''
-    } else {
-      const isHighlight = annotationBrowserSubtab === 'highlight'
-      iconHtml = icon(isHighlight ? 'highlighter' : 'underline', 17)
-      fullText = entry.annotation.text || '(내용 없음)'
-      iconBg = entry.annotation.color ? `background:${hexToRgba(entry.annotation.color, 0.22)};color:${entry.annotation.color}` : ''
-    }
-
-    const shortText = truncateForList(fullText, 70)
-    const canExpand = fullText.trim().length > shortText.replace(/\.\.\.$/, '').length
-
-    item.innerHTML = `
-      <div class="chat-session-item-icon" style="${iconBg}">${iconHtml}</div>
-      <div class="chat-session-item-body">
-        <div class="chat-session-item-title">${escapeHtml(docTitle)} · ${pageNum}페이지</div>
-        <div class="chat-session-item-meta annotation-item-meta">${escapeHtml(shortText)}</div>
-      </div>
-      ${canExpand ? `<button class="annotation-expand-btn" title="전체 내용 보기">${icon('chevronDown', 12)}</button>` : ''}
-    `
-    item.addEventListener('click', () => openAnnotationTarget(doc, pageNum))
-
-    if (canExpand) {
-      const expandBtn = item.querySelector('.annotation-expand-btn')
-      const metaEl = item.querySelector('.annotation-item-meta')
-      let expanded = false
-      expandBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        expanded = !expanded
-        metaEl.textContent = expanded ? fullText : shortText
-        metaEl.classList.toggle('expanded', expanded)
-        expandBtn.innerHTML = icon(expanded ? 'chevronUp' : 'chevronDown', 12)
-        expandBtn.title = expanded ? '접기' : '전체 내용 보기'
-      })
-    }
-
-    annotationList.appendChild(item)
-  })
 }
 
 let currentLibraryDocs = []
@@ -5005,13 +5252,26 @@ function filterLibraryCards(docs) {
     btn.classList.toggle('active', btn.dataset.category === activeCategoryFilter)
   })
 
-  // Filter docs
-  const filteredDocs = activeCategoryFilter === 'ALL'
+  // Filter docs by category tag
+  let filteredDocs = activeCategoryFilter === 'ALL'
     ? docs
     : docs.filter(doc => (doc.metadata?.categories || []).includes(activeCategoryFilter))
 
+  // 상태 필터(전체/읽지 않음/읽는 중/완료/즐겨찾기) 적용 - 휴지통 탭에는 없는 개념이라 건너뛴다.
+  if (state.currentLibraryTab !== 'trash' && activeStatusFilter !== 'all') {
+    const favIds = getFavoriteIds()
+    filteredDocs = filteredDocs.filter(doc => (
+      activeStatusFilter === 'favorites' ? favIds.has(doc.id) : getLibraryDocStatus(doc) === activeStatusFilter
+    ))
+  }
+
+  filteredDocs = sortLibraryDocs(filteredDocs)
+
   if (filteredDocs.length === 0) {
-    libraryGrid.appendChild(createEmptyState(state.currentLibraryTab === 'history')); return
+    const variant = state.currentLibraryTab === 'trash'
+      ? 'trash'
+      : (activeStatusFilter !== 'all' ? activeStatusFilter : (docs.length > 0 ? 'filtered' : 'library'))
+    libraryGrid.appendChild(createEmptyState(variant)); return
   }
 
   const createItem = libraryViewMode === 'list' ? createDocListRow : createDocCard
@@ -5093,18 +5353,28 @@ if (librarySearchClearBtn) {
   })
 }
 
-function createEmptyState(isHistory = false) {
+// variant: 'library'(보관함 전체가 비어 있음) | 'trash'(휴지통이 비어 있음) |
+// 'unread' | 'reading' | 'finished' | 'favorites'(해당 상태 탭에 걸리는 문서가 없음) |
+// 'filtered'(태그 필터 결과가 없음). 과거 boolean(isHistory) 시그니처와의 호환을 위해
+// true도 'finished'로 취급한다.
+const LIBRARY_EMPTY_STATE_VARIANTS = {
+  trash:     { iconName: 'trash2',   title: '휴지통이 비어 있습니다', desc: '삭제한 논문이 여기에 표시됩니다' },
+  unread:    { iconName: 'bookOpen', title: '읽지 않은 논문이 없습니다', desc: '모든 논문을 확인했네요' },
+  reading:   { iconName: 'bookOpen', title: '읽는 중인 논문이 없습니다', desc: '번역이 진행 중인 논문이 여기에 표시됩니다' },
+  finished:  { iconName: 'bookOpen', title: '읽은 논문이 없습니다', desc: '보관함에서 논문의 체크 아이콘을 눌러 읽음 처리해 보세요' },
+  favorites: { iconName: 'star',     title: '즐겨찾기한 논문이 없습니다', desc: '카드의 별표 아이콘을 눌러 즐겨찾기에 추가해 보세요' },
+  filtered:  { iconName: 'tag',      title: '조건에 맞는 논문이 없습니다', desc: '다른 필터를 선택해 보세요' },
+  library:   { iconName: 'book',     title: '보관함에 저장된 논문이 없습니다', desc: '새 논문을 추가하거나 PDF를 업로드해 보세요' },
+}
+function createEmptyState(variant = 'library') {
+  if (variant === true) variant = 'finished'
+  if (variant === false) variant = 'library'
   const el = document.createElement('div')
   el.className = 'lib-empty'
-  if (isHistory) {
-    el.innerHTML = `<div style="margin-bottom:16px;color:var(--text-muted)">${icon('bookOpen', 48)}</div>
-      <p>읽은 논문이 없습니다</p>
-      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">보관함에서 논문의 체크 아이콘을 눌러 읽음 처리해 보세요</p>`
-  } else {
-    el.innerHTML = `<div style="margin-bottom:16px;color:var(--text-muted)">${icon('book', 48)}</div>
-      <p>보관함에 저장된 논문이 없습니다</p>
-      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">새 논문을 추가하거나 PDF를 업로드해 보세요</p>`
-  }
+  const c = LIBRARY_EMPTY_STATE_VARIANTS[variant] || LIBRARY_EMPTY_STATE_VARIANTS.library
+  el.innerHTML = `<div style="margin-bottom:16px;color:var(--text-muted)">${icon(c.iconName, 48)}</div>
+    <p>${c.title}</p>
+    <p style="font-size:13px;color:var(--text-muted);margin-top:8px">${c.desc}</p>`
   return el
 }
 
@@ -5376,6 +5646,26 @@ function wireDocItemEvents(container, doc, displayTitle) {
 
 function createDocCard(doc) {
   const d = prepareDocItemHtml(doc)
+  const isFav = isFavoriteDoc(doc.id)
+
+  // 카드 뷰는 리스트 뷰의 압축 진행률(d.progressHtml)과는 별도로, 전체 너비 바 +
+  // 퍼센트를 보여주는 새 레이아웃을 쓴다(리스트 뷰는 손대지 않는다 - createDocListRow는
+  // 편집 허용 범위 밖).
+  let cardProgressHtml = ''
+  if (!d.isDone) {
+    cardProgressHtml = `
+      <div class="lib-card-progress">
+        <div class="lib-card-progress-bar-wrap"><div class="lib-card-progress-bar" style="width:${d.pct}%"></div></div>
+        <span class="lib-card-progress-pct">${d.pct}%</span>
+      </div>
+    `
+  }
+
+  // 즐겨찾기는 휴지통 문서에는 의미가 없어(체크/미리보기 버튼과 동일하게) 숨긴다.
+  const favBtnHtml = state.currentLibraryTab === 'trash' ? '' : `
+    <button class="doc-card-fav-btn ${isFav ? 'active' : ''}" data-id="${escapeHtml(doc.id)}" title="즐겨찾기">${icon('star', 11)}</button>
+  `
+
   const card = document.createElement('div')
   card.className = 'doc-card'
   card.dataset.id = doc.id
@@ -5386,18 +5676,56 @@ function createDocCard(doc) {
         ${d.expandBtnHtml}
         ${d.checkBtnHtml}
       </div>
-      <div class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(d.displayTitle)}</div>
+      <div class="lib-card-top">
+        <div class="lib-card-thumb">
+          <img src="/api/library/${encodeURIComponent(doc.id)}/cover" alt="" loading="lazy" />
+          <div class="lib-card-thumb-fallback">${icon('fileText', 18)}</div>
+          ${favBtnHtml}
+        </div>
+        <div class="lib-card-top-body">
+          <div class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(d.displayTitle)}</div>
+        </div>
+      </div>
       ${d.tagsHtml}
       <div class="doc-card-meta">
         ${d.dateHtml}<span class="meta-dot"></span><span class="doc-meta-chip">${d.total}p</span>
       </div>
-      ${d.progressHtml}
+      ${cardProgressHtml}
     </div>
     <div class="doc-card-footer">
       ${d.ctaBtnFullHtml}
       <div class="doc-icon-actions">${d.iconActionsHtml}</div>
     </div>`
+
+  const thumbImg = card.querySelector('.lib-card-thumb img')
+  if (thumbImg) {
+    thumbImg.addEventListener('error', () => {
+      thumbImg.closest('.lib-card-thumb')?.classList.add('cover-fallback')
+    })
+  }
+
+  // 카드 빈 영역 클릭 시 상세 패널을 연다. wireDocItemEvents()가 곧이어 등록할
+  // "카드 전체 클릭 = 뷰어 즉시 열기" 리스너보다 먼저 걸어 stopImmediatePropagation으로
+  // 가로챈다 - 같은 엘리먼트에 등록된 리스너는 등록 순서대로 실행되므로, 여기서
+  // 먼저 등록한 뒤 막으면 이후 리스너는 아예 실행되지 않는다. 비교 선택 모드/휴지통
+  // 안내 동작은 기존과 동일하게 여기서도 복제해 그대로 유지한다.
+  card.addEventListener('click', (e) => {
+    if (compareSelectMode) {
+      toggleDocCompareSelection(card, doc)
+      e.stopImmediatePropagation()
+      return
+    }
+    if (state.currentLibraryTab === 'trash') {
+      showToast('휴지통에 있는 논문입니다. 복원 후 열 수 있습니다.', 'warning')
+      e.stopImmediatePropagation()
+      return
+    }
+    openLibraryDetailPanel(doc)
+    e.stopImmediatePropagation()
+  })
+
   wireDocItemEvents(card, doc, d.displayTitle)
+
   const expandBtn = card.querySelector('.doc-card-expand-btn')
   if (expandBtn) {
     expandBtn.addEventListener('click', (e) => {
@@ -5405,7 +5733,472 @@ function createDocCard(doc) {
       showDocPreview(doc)
     })
   }
+
+  const favBtn = card.querySelector('.doc-card-fav-btn')
+  if (favBtn) {
+    favBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const nowFav = toggleFavoriteDoc(doc.id)
+      favBtn.classList.toggle('active', nowFav)
+      renderLibraryStatusTabs(currentLibraryDocs)
+    })
+  }
+
   return card
+}
+
+// ============================================================
+// 라이브러리 카드 상세 패널 (우측 드로어)
+// 카드를 클릭하면 열리며, 표지/제목 + "논문 열기" 버튼 + 개요(AI 요약/기본 정보/태그)·
+// 메모·AI 대화·관련 자료 탭을 보여준다. index.html은 건드리지 않고 이 함수들이
+// 처음 필요할 때(ensureLibraryDetailPanel) 마크업을 직접 삽입한다.
+// ============================================================
+let libraryDetailDoc = null
+let libraryDetailLoadedTabs = new Set()
+let libraryDetailSummaryReqToken = 0
+let libraryDetailBiblioReqToken = 0
+let libraryGraphCacheForDetail = null // fetchLibraryGraph() 결과 캐시 - 패널을 열 때마다 다시 조회하지 않도록. renderLibrary()가 무효화한다.
+const LIBRARY_DETAIL_TABS = ['overview', 'notes', 'questions', 'related']
+
+function ensureLibraryDetailPanel() {
+  if ($('lib-detail-panel')) return
+
+  const openIconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>'
+  const closeIconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
+  const moreIconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>'
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="lib-detail-overlay" class="lib-detail-overlay"></div>
+    <aside id="lib-detail-panel" class="lib-detail-panel" aria-hidden="true">
+      <button id="lib-detail-close-btn" class="lib-detail-close-btn" title="닫기">${closeIconSvg}</button>
+      <div class="lib-detail-hero">
+        <div class="lib-detail-cover" id="lib-detail-cover">
+          <img id="lib-detail-cover-img" alt="" />
+          <div class="lib-detail-cover-fallback">${icon('fileText', 26)}</div>
+        </div>
+        <div class="lib-detail-title-block">
+          <h2 id="lib-detail-title" class="lib-detail-title"></h2>
+          <p id="lib-detail-subtitle" class="lib-detail-subtitle"></p>
+        </div>
+      </div>
+      <div class="lib-detail-actions">
+        <button id="lib-detail-open-btn" class="lib-detail-open-btn">${openIconSvg}<span>논문 열기</span></button>
+        <button id="lib-detail-fav-btn" class="lib-detail-icon-btn" title="즐겨찾기">${icon('star', 15)}</button>
+        <button id="lib-detail-edit-btn" class="lib-detail-icon-btn" title="제목 수정">${icon('edit3', 14)}</button>
+        <button id="lib-detail-more-btn" class="lib-detail-icon-btn" title="더보기">${moreIconSvg}</button>
+        <div id="lib-detail-more-menu" class="lib-detail-more-menu hidden">
+          <button id="lib-detail-delete-btn" class="lib-detail-more-item danger">${icon('trash2', 13)}<span>삭제 (휴지통으로 이동)</span></button>
+        </div>
+      </div>
+      <div class="lib-detail-tabs">
+        <button type="button" class="lib-detail-tab active" data-tab="overview">개요</button>
+        <button type="button" class="lib-detail-tab" data-tab="notes">메모<span id="lib-detail-tab-count-notes" class="lib-detail-tab-count hidden"></span></button>
+        <button type="button" class="lib-detail-tab" data-tab="questions">AI 대화<span id="lib-detail-tab-count-questions" class="lib-detail-tab-count hidden"></span></button>
+        <button type="button" class="lib-detail-tab" data-tab="related">관련 자료<span id="lib-detail-tab-count-related" class="lib-detail-tab-count hidden"></span></button>
+      </div>
+      <div class="lib-detail-body">
+        <section id="lib-detail-panel-overview" class="lib-detail-panel-section">
+          <div class="lib-detail-summary-block">
+            <h3>AI 요약</h3>
+            <div id="lib-detail-summary-text" class="lib-detail-summary-text"></div>
+          </div>
+          <div class="lib-detail-quickinfo-block">
+            <h3>기본 정보</h3>
+            <dl id="lib-detail-quickinfo" class="lib-detail-quickinfo"></dl>
+          </div>
+          <div class="lib-detail-tags-block">
+            <h3>태그</h3>
+            <div id="lib-detail-tags" class="lib-detail-tags"></div>
+          </div>
+        </section>
+        <section id="lib-detail-panel-notes" class="lib-detail-panel-section hidden"></section>
+        <section id="lib-detail-panel-questions" class="lib-detail-panel-section hidden"></section>
+        <section id="lib-detail-panel-related" class="lib-detail-panel-section hidden"></section>
+      </div>
+    </aside>
+  `)
+
+  $('lib-detail-overlay')?.addEventListener('click', closeLibraryDetailPanel)
+  $('lib-detail-close-btn')?.addEventListener('click', closeLibraryDetailPanel)
+
+  document.querySelectorAll('#lib-detail-panel .lib-detail-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchLibraryDetailTab(btn.dataset.tab))
+  })
+
+  $('lib-detail-open-btn')?.addEventListener('click', () => {
+    if (!libraryDetailDoc) return
+    const doc = libraryDetailDoc
+    closeLibraryDetailPanel()
+    openFromLibrary(doc)
+  })
+
+  $('lib-detail-fav-btn')?.addEventListener('click', () => {
+    if (!libraryDetailDoc) return
+    const nowFav = toggleFavoriteDoc(libraryDetailDoc.id)
+    $('lib-detail-fav-btn')?.classList.toggle('active', nowFav)
+    const cardFavBtn = libraryGrid.querySelector(`.doc-card-fav-btn[data-id="${CSS.escape(libraryDetailDoc.id)}"]`)
+    if (cardFavBtn) cardFavBtn.classList.toggle('active', nowFav)
+    renderLibraryStatusTabs(currentLibraryDocs)
+  })
+
+  $('lib-detail-edit-btn')?.addEventListener('click', () => {
+    if (libraryDetailDoc) startLibraryDetailTitleEdit(libraryDetailDoc)
+  })
+
+  const moreBtn = $('lib-detail-more-btn')
+  const moreMenu = $('lib-detail-more-menu')
+  if (moreBtn && moreMenu) {
+    moreBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      moreMenu.classList.toggle('hidden')
+    })
+    document.addEventListener('click', () => moreMenu.classList.add('hidden'))
+  }
+
+  $('lib-detail-delete-btn')?.addEventListener('click', async () => {
+    if (!libraryDetailDoc) return
+    const doc = libraryDetailDoc
+    const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+    moreMenu?.classList.add('hidden')
+    const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요? (휴지통으로 이동합니다)`, { title: '논문 삭제', confirmText: '삭제', danger: true })
+    if (!ok) return
+    try {
+      await deleteLibraryDoc(doc.id)
+      showToast('휴지통으로 이동되었습니다.', 'success')
+      closeLibraryDetailPanel()
+      await renderLibrary()
+    } catch {
+      showToast('삭제 실패', 'error')
+    }
+  })
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && $('lib-detail-panel')?.classList.contains('open')) closeLibraryDetailPanel()
+  })
+}
+
+function openLibraryDetailPanel(doc) {
+  ensureLibraryDetailPanel()
+  libraryDetailDoc = doc
+  libraryDetailLoadedTabs = new Set(['overview'])
+
+  const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+  const titleEl = $('lib-detail-title')
+  if (titleEl) titleEl.textContent = displayTitle
+  const subtitleEl = $('lib-detail-subtitle')
+  if (subtitleEl) {
+    const date = new Date(doc.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
+    subtitleEl.textContent = `등록 ${date} · ${doc.total_pages || 1}페이지`
+  }
+
+  const coverWrap = $('lib-detail-cover')
+  const coverImg = $('lib-detail-cover-img')
+  if (coverWrap && coverImg) {
+    coverWrap.classList.remove('cover-fallback')
+    coverImg.onerror = () => coverWrap.classList.add('cover-fallback')
+    coverImg.src = `/api/library/${encodeURIComponent(doc.id)}/cover`
+  }
+
+  $('lib-detail-fav-btn')?.classList.toggle('active', isFavoriteDoc(doc.id))
+  ;['notes', 'questions', 'related'].forEach(t => {
+    const c = $(`lib-detail-tab-count-${t}`)
+    if (c) { c.textContent = ''; c.classList.add('hidden') }
+  })
+
+  switchLibraryDetailTab('overview')
+  loadLibraryDetailOverview(doc)
+
+  $('lib-detail-overlay')?.classList.add('open')
+  const panel = $('lib-detail-panel')
+  if (panel) { panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false') }
+}
+
+function closeLibraryDetailPanel() {
+  if (!libraryDetailDoc) return
+  libraryDetailDoc = null
+  libraryDetailSummaryReqToken++ // 진행 중이던 AI 요약 요청의 응답이 늦게 와도 화면에 반영되지 않도록 무효화
+  libraryDetailBiblioReqToken++ // 진행 중이던 서지 정보 요청도 동일하게 무효화
+  $('lib-detail-overlay')?.classList.remove('open')
+  const panel = $('lib-detail-panel')
+  if (panel) { panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true') }
+  $('lib-detail-more-menu')?.classList.add('hidden')
+}
+
+function switchLibraryDetailTab(tab) {
+  document.querySelectorAll('#lib-detail-panel .lib-detail-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab)
+  })
+  LIBRARY_DETAIL_TABS.forEach(t => {
+    $(`lib-detail-panel-${t}`)?.classList.toggle('hidden', t !== tab)
+  })
+  if (!libraryDetailDoc) return
+  if (!libraryDetailLoadedTabs.has(tab)) {
+    libraryDetailLoadedTabs.add(tab)
+    if (tab === 'notes') loadLibraryDetailNotes(libraryDetailDoc)
+    else if (tab === 'questions') loadLibraryDetailQuestions(libraryDetailDoc)
+    else if (tab === 'related') loadLibraryDetailRelated(libraryDetailDoc)
+  }
+}
+
+// 카드의 제목 인라인 수정(wireDocItemEvents의 .doc-edit-btn 핸들러)과 동일한 방식으로,
+// 패널 안에서도 제목을 바로 고칠 수 있게 한다.
+function startLibraryDetailTitleEdit(doc) {
+  const titleEl = $('lib-detail-title')
+  if (!titleEl) return
+  const oldTitle = titleEl.textContent
+
+  const input = document.createElement('input')
+  input.type = 'text'
+  input.className = 'lib-detail-title-input'
+  input.value = oldTitle
+  titleEl.replaceWith(input)
+  input.focus()
+  input.select()
+
+  let isSaving = false
+  async function save() {
+    if (isSaving) return
+    isSaving = true
+    const newTitle = input.value.trim()
+    if (newTitle && newTitle !== oldTitle) {
+      try {
+        await updateLibraryDocMetadata(doc.id, { title: newTitle })
+        showToast('제목이 변경되었습니다.', 'success')
+        titleEl.textContent = newTitle
+        await renderLibrary()
+      } catch (err) {
+        showToast('제목 변경 실패: ' + err.message, 'error')
+        titleEl.textContent = oldTitle
+      }
+    } else {
+      titleEl.textContent = oldTitle
+    }
+    input.replaceWith(titleEl)
+  }
+  input.addEventListener('keydown', async (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); await save() }
+    else if (ev.key === 'Escape') {
+      ev.preventDefault()
+      isSaving = true
+      titleEl.textContent = oldTitle
+      input.replaceWith(titleEl)
+    }
+  })
+  input.addEventListener('blur', () => { if (!isSaving) save() })
+}
+
+// 개요 탭: Quick Info/태그는 이미 갖고 있는 문서 데이터로 즉시 렌더링하고, AI 요약은
+// 읽기 전 브리핑(primer)의 hook 텍스트를 재사용한다(백엔드에 별도 "요약" 필드는 없음).
+// 아직 캐시가 없으면 생성에 시간이 걸릴 수 있어(fetchPrimer가 내부적으로 폴링), 패널을
+// 닫거나 다른 논문으로 바꾼 뒤 응답이 와도 화면에 반영되지 않도록 요청 토큰으로 막는다.
+async function loadLibraryDetailOverview(doc) {
+  const total = doc.total_pages || 1
+  const translated = doc.translated_pages?.length || 0
+  const pct = Math.round((translated / total) * 100)
+  const status = getLibraryDocStatus(doc)
+  const statusLabel = { unread: '읽지 않음', reading: '읽는 중', finished: '완료' }[status] || status
+  const addedDate = new Date(doc.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
+
+  const quickInfoEl = $('lib-detail-quickinfo')
+  if (quickInfoEl) {
+    quickInfoEl.innerHTML = `
+      <dt>Venue</dt><dd id="lib-detail-qi-venue">불러오는 중...</dd>
+      <dt>등록일</dt><dd>${escapeHtml(addedDate)}</dd>
+      <dt>페이지</dt><dd>${total}p</dd>
+      <dt>DOI</dt><dd id="lib-detail-qi-doi">불러오는 중...</dd>
+      <dt>ArXiv</dt><dd id="lib-detail-qi-arxiv">불러오는 중...</dd>
+      <dt>Citations</dt><dd id="lib-detail-qi-citations">불러오는 중...</dd>
+      <dt>번역 진행률</dt><dd>${pct}%</dd>
+      <dt>상태</dt><dd>${escapeHtml(statusLabel)}</dd>
+    `
+  }
+  // Venue/DOI/ArXiv/Citations는 문서 자체에 저장된 필드가 없어 OpenAlex 제목
+  // 검색으로 채운다(서버가 첫 조회 때만 검색하고 이후엔 캐시 반환 - services/
+  // reference_linker.py resolve_paper_metadata). 못 찾은 필드는 "—"로 표시하고
+  // 지어내지 않는다.
+  const myBiblioToken = ++libraryDetailBiblioReqToken
+  fetchLibraryBibliography(doc.id).then(biblio => {
+    if (myBiblioToken !== libraryDetailBiblioReqToken) return
+    const venueEl = $('lib-detail-qi-venue')
+    const doiEl = $('lib-detail-qi-doi')
+    const arxivEl = $('lib-detail-qi-arxiv')
+    const citationsEl = $('lib-detail-qi-citations')
+    if (venueEl) venueEl.textContent = biblio.venue || '—'
+    if (doiEl) doiEl.textContent = biblio.doi || '—'
+    if (arxivEl) arxivEl.textContent = biblio.arxiv_id || '—'
+    if (citationsEl) citationsEl.textContent = biblio.citation_count != null ? biblio.citation_count.toLocaleString('ko-KR') : '—'
+  }).catch(err => {
+    if (myBiblioToken !== libraryDetailBiblioReqToken) return
+    console.error('서지 정보 로드 실패:', err)
+    ;['lib-detail-qi-venue', 'lib-detail-qi-doi', 'lib-detail-qi-arxiv', 'lib-detail-qi-citations'].forEach(id => {
+      const el = $(id)
+      if (el) el.textContent = '—'
+    })
+  })
+
+  const tagsEl = $('lib-detail-tags')
+  if (tagsEl) {
+    const categories = doc.metadata?.categories || []
+    tagsEl.innerHTML = categories.length
+      ? categories.map(c => `<span class="lib-detail-tag">${escapeHtml(c)}</span>`).join('')
+      : `<p class="lib-detail-empty" style="padding:0">지정된 태그가 없습니다.</p>`
+  }
+
+  const myToken = ++libraryDetailSummaryReqToken
+  const summaryEl = $('lib-detail-summary-text')
+  if (summaryEl) summaryEl.innerHTML = `<p class="lib-detail-summary-loading">AI 요약을 불러오는 중...</p>`
+  try {
+    const targetLang = getTranslationOptions().targetLang
+    const data = await fetchPrimer(doc.id, targetLang)
+    if (myToken !== libraryDetailSummaryReqToken) return
+    const text = data.hook || data.feynman || data.lineage || ''
+    if (summaryEl) {
+      summaryEl.innerHTML = text
+        ? escapeHtml(text).replace(/\n/g, '<br>')
+        : `<p class="lib-detail-summary-loading">아직 생성된 요약이 없습니다.</p>`
+    }
+  } catch (err) {
+    if (myToken !== libraryDetailSummaryReqToken) return
+    console.error('AI 요약 로드 실패:', err)
+    if (summaryEl) summaryEl.innerHTML = `<p class="lib-detail-summary-error">AI 요약을 불러오지 못했습니다.</p>`
+  }
+}
+
+// 메모 탭: 서버 API가 아니라 문서별 localStorage(easypaper_memos_*)에서 바로 읽는다
+// (loadMemos는 이미 메모/하이라이트 목록 화면(renderAnnotationsBrowser)이 쓰는 함수).
+function loadLibraryDetailNotes(doc) {
+  const section = $('lib-detail-panel-notes')
+  const countEl = $('lib-detail-tab-count-notes')
+  if (!section) return
+
+  const memosByPage = loadMemos(doc.id)
+  const items = []
+  Object.keys(memosByPage).forEach(pageKey => {
+    const pageNum = parseInt(pageKey.replace('page_', ''), 10)
+    if (isNaN(pageNum)) return
+    memosByPage[pageKey].forEach(memo => items.push({ pageNum, memo }))
+  })
+  items.sort((a, b) => String(b.memo.id).localeCompare(String(a.memo.id)))
+
+  if (countEl) { countEl.textContent = String(items.length); countEl.classList.toggle('hidden', items.length === 0) }
+
+  if (items.length === 0) {
+    section.innerHTML = `<p class="lib-detail-empty">이 논문에 남긴 메모가 없습니다.</p>`
+    return
+  }
+  section.innerHTML = items.map((entry, i) => {
+    const text = (entry.memo.content && entry.memo.content.trim()) || entry.memo.sentenceText || '(내용 없음)'
+    return `
+      <div class="lib-detail-list-item" data-idx="${i}">
+        <div class="lib-detail-list-item-meta">${entry.pageNum}페이지</div>
+        <div class="lib-detail-list-item-text">${escapeHtml(truncateForList(text, 90))}</div>
+      </div>
+    `
+  }).join('')
+  section.querySelectorAll('.lib-detail-list-item').forEach((item, i) => {
+    item.addEventListener('click', () => {
+      const entry = items[i]
+      closeLibraryDetailPanel()
+      openAnnotationTarget(doc, entry.pageNum)
+    })
+  })
+}
+
+// "질문" 탭: 문서별 질문 개수를 직접 세는 API/필드가 없어(메시지 단위 카운트는
+// 제공되지 않음), 이 문서에 대해 실제로 나눈 AI 어시스턴트 대화 세션 수/목록으로
+// 대체한다 - getChatSessionsAPI()는 이미 AI Chats 페이지가 쓰는 기존 엔드포인트다.
+async function loadLibraryDetailQuestions(doc) {
+  const section = $('lib-detail-panel-questions')
+  const countEl = $('lib-detail-tab-count-questions')
+  if (!section) return
+  section.innerHTML = `<p class="lib-detail-empty">불러오는 중...</p>`
+  try {
+    const data = await getChatSessionsAPI()
+    const sessions = (data.sessions || []).filter(s => s.doc_id === doc.id)
+    if (countEl) { countEl.textContent = String(sessions.length); countEl.classList.toggle('hidden', sessions.length === 0) }
+    if (sessions.length === 0) {
+      section.innerHTML = `<p class="lib-detail-empty">이 논문에 대해 나눈 AI 대화가 없습니다.</p>`
+      return
+    }
+    section.innerHTML = sessions.map((s, i) => `
+      <div class="lib-detail-list-item" data-idx="${i}">
+        <div class="lib-detail-list-item-meta">${escapeHtml(formatChatSessionTime(s.last_message_at))}</div>
+        <div class="lib-detail-list-item-text">${escapeHtml(s.title || '')}</div>
+      </div>
+    `).join('')
+    section.querySelectorAll('.lib-detail-list-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        try {
+          closeLibraryDetailPanel()
+          await openFromLibrary(doc)
+          openChatSidebar()
+        } catch {
+          showToast('대화를 열 수 없습니다.', 'error')
+        }
+      })
+    })
+  } catch (err) {
+    console.error('AI 대화 목록 로드 실패:', err)
+    section.innerHTML = `<p class="lib-detail-empty" style="color:var(--error)">대화 목록을 불러오지 못했습니다.</p>`
+  }
+}
+
+// "관련 자료" 탭: 지식 그래프에서 이 논문(paper:{id}) 노드와 직접 연결된 이웃(인용/카테고리/
+// 개념/메모/Figure)을 보여준다. 전체 그래프를 한 번만 불러와 캐시하고(renderLibrary가 무효화),
+// 문서 하나마다 새 API를 만들지 않는다.
+async function getLibraryGraphForDetail() {
+  if (!libraryGraphCacheForDetail) {
+    libraryGraphCacheForDetail = await fetchLibraryGraph()
+  }
+  return libraryGraphCacheForDetail
+}
+
+async function loadLibraryDetailRelated(doc) {
+  const section = $('lib-detail-panel-related')
+  const countEl = $('lib-detail-tab-count-related')
+  if (!section) return
+  section.innerHTML = `<p class="lib-detail-empty">불러오는 중...</p>`
+  try {
+    const graph = await getLibraryGraphForDetail()
+    const nodeId = `paper:${doc.id}`
+    const nodesById = new Map((graph.nodes || []).map(n => [n.id, n]))
+    const neighborIds = new Set()
+    ;(graph.edges || []).forEach(e => {
+      if (e.source === nodeId) neighborIds.add(e.target)
+      else if (e.target === nodeId) neighborIds.add(e.source)
+    })
+    const neighbors = Array.from(neighborIds).map(id => nodesById.get(id)).filter(Boolean)
+
+    if (countEl) { countEl.textContent = String(neighbors.length); countEl.classList.toggle('hidden', neighbors.length === 0) }
+
+    if (neighbors.length === 0) {
+      section.innerHTML = `<p class="lib-detail-empty">아직 연결된 논문/개념이 없습니다.</p>`
+      return
+    }
+    const typeLabel = { paper: '논문', concept: '개념', note: '메모', figure: 'Figure' }
+    section.innerHTML = neighbors.map((n, i) => `
+      <div class="lib-detail-list-item" data-idx="${i}">
+        <div class="lib-detail-list-item-meta">${escapeHtml(typeLabel[n.type] || n.type || '')}</div>
+        <div class="lib-detail-list-item-text">${escapeHtml(n.label || '')}</div>
+      </div>
+    `).join('')
+    section.querySelectorAll('.lib-detail-list-item').forEach((item, i) => {
+      item.addEventListener('click', async () => {
+        const n = neighbors[i]
+        if (n.type !== 'paper') return
+        try {
+          const targetDoc = await fetchLibraryDoc(n.id.replace('paper:', ''))
+          closeLibraryDetailPanel()
+          openLibraryDetailPanel(targetDoc)
+        } catch {
+          showToast('논문 정보를 불러오지 못했습니다.', 'error')
+        }
+      })
+    })
+  } catch (err) {
+    console.error('관련 자료 로드 실패:', err)
+    section.innerHTML = `<p class="lib-detail-empty" style="color:var(--error)">관련 정보를 불러오지 못했습니다.</p>`
+  }
 }
 
 function createDocListRow(doc) {
@@ -12345,9 +13138,12 @@ async function handleRouting() {
       showToast('비교할 논문 정보를 불러올 수 없습니다.', 'error')
       location.hash = 'library'
     } else {
-      console.log("[Router] Routing to Library screen. Viewer active:", viewerScreen.classList.contains('active'), "Library active:", libraryScreen.classList.contains('active'))
+      const pageId = hash.replace('#', '') || 'dashboard'
+      console.log("[Router] Routing to workspace page:", pageId, "Viewer active:", viewerScreen.classList.contains('active'), "Library active:", libraryScreen.classList.contains('active'))
       if (viewerScreen.classList.contains('active') || !libraryScreen.classList.contains('active')) {
-        await showLibraryScreen(false)
+        await showLibraryScreen(false, WORKSPACE_PAGES.includes(pageId) ? pageId : 'dashboard')
+      } else if (WORKSPACE_PAGES.includes(pageId) && state.currentWorkspacePage !== pageId) {
+        await showWorkspacePage(pageId, { pushState: false })
       }
     }
   } catch (err) {

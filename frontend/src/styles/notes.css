@@ -1,0 +1,427 @@
+/* ============================================================
+   Notes 페이지 — 논문별 메모 / 하이라이트 / 언더라인 읽기 전용 뷰어
+   좌: 논문 목록, 우: 선택한 논문의 주석 목록(서브탭). 색/간격/모서리는
+   전부 앱 전역 디자인 토큰(--bg-*, --text-*, --border*, --radius-*,
+   --control-accent* 등)을 그대로 재사용해 라이트/다크 테마에 자동 대응한다.
+   ============================================================ */
+
+.notes-page-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.notes-page-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.notes-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 20px;
+}
+
+/* ── 좌측: 논문 목록 ── */
+.notes-sidebar {
+  flex: 0 0 320px;
+  width: 320px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.notes-sidebar-header {
+  flex-shrink: 0;
+  padding: 16px 16px 4px;
+}
+.notes-sidebar-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.notes-search-box {
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 12px 16px;
+  color: var(--text-muted);
+}
+.notes-search-box svg { position: absolute; left: 10px; pointer-events: none; }
+.notes-search-input {
+  width: 100%;
+  padding: 8px 10px 8px 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.notes-search-input:focus { border-color: var(--control-accent); }
+.notes-search-input::placeholder { color: var(--text-muted); }
+
+.notes-filter-tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.notes-filter-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.notes-filter-tab-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.notes-filter-tab-btn.active { background: var(--control-accent-soft); color: var(--control-accent-text); }
+.notes-filter-tab-btn span {
+  font-size: 11px;
+  font-weight: 700;
+  color: inherit;
+  opacity: 0.8;
+}
+
+.notes-paper-list-items {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.notes-paper-row {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  border: 1px solid transparent;
+}
+.notes-paper-row:hover { background: var(--bg-hover); }
+.notes-paper-row.selected {
+  background: var(--control-accent-soft);
+  border-color: var(--control-accent);
+}
+.notes-paper-row-body { min-width: 0; flex: 1 1 auto; }
+.notes-paper-row-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.notes-paper-row-meta {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notes-paper-row-counts {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.notes-count-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.notes-count-chip svg { flex-shrink: 0; }
+
+/* ── 공용: 논문 커버 썸네일 ── */
+.notes-thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--notes-thumb-size, 40px);
+  height: var(--notes-thumb-size, 40px);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.notes-thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ── 우측: 상세 패널 ── */
+.notes-detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.notes-detail-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 40px;
+}
+.notes-detail-empty p { margin: 0; font-size: 13px; line-height: 1.6; }
+
+.notes-paper-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.notes-paper-header-info { min-width: 0; flex: 1 1 auto; }
+.notes-paper-header-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.notes-paper-header-meta {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+.notes-paper-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.notes-read-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--success);
+}
+.notes-open-viewer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.notes-open-viewer-btn:hover { border-color: var(--control-accent); color: var(--control-accent-text); }
+
+.notes-tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  padding: 10px 22px 0;
+  border-bottom: 1px solid var(--border);
+}
+.notes-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.notes-tab-btn:hover { color: var(--text-primary); }
+.notes-tab-btn.active { color: var(--control-accent-text); border-bottom-color: var(--control-accent); }
+.notes-tab-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.notes-tab-btn.active .notes-tab-count { color: var(--control-accent-text); }
+
+.notes-tab-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px 26px;
+}
+
+.notes-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.notes-annotation-card {
+  --notes-item-accent: var(--control-accent);
+  position: relative;
+  padding: 12px 14px 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--notes-item-accent);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.notes-annotation-card:hover { background: var(--bg-hover); }
+.notes-card-memo { --notes-item-accent: var(--control-accent); }
+.notes-card-highlight { --notes-item-accent: #eab308; }
+.notes-card-underline { --notes-item-accent: #22c55e; }
+
+.notes-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.notes-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--notes-item-accent);
+}
+.notes-card-ts {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.notes-card-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.notes-card-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--control-accent-text);
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notes-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ── 좁은 화면: 좌우 2열 대신 위/아래 스택 ── */
+@media (max-width: 900px) {
+  .notes-layout { flex-direction: column; }
+  .notes-sidebar { width: 100%; flex: 0 0 auto; max-height: 260px; }
+}
+
+/* ── 즐겨찾기 별 토글 (목록 행 / 상세 헤더 공용) ── */
+.notes-fav-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  align-self: flex-start;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.notes-fav-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.notes-fav-btn.active { color: #f59e0b; }
+.notes-fav-btn.active svg { fill: #f59e0b; }
+.notes-fav-btn-lg {
+  width: 32px;
+  height: 32px;
+  align-self: center;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+}
+
+/* ── 요약 탭 ── */
+.notes-summary-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 4px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+.notes-summary-loading svg { animation: notes-spin 1s linear infinite; }
+@keyframes notes-spin { to { transform: rotate(360deg); } }
+.notes-summary-text {
+  padding: 4px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}

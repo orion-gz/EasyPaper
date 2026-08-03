@@ -1,0 +1,417 @@
+/* ── 대시보드 페이지 (Research Workspace) ──────────────────────────────
+   Apple HIG / Linear / Vercel / Notion 느낌의 여백 있고 절제된 카드형
+   레이아웃. 모든 색상은 기존 style.css의 디자인 토큰(var(--...))만
+   사용해 라이트/다크 테마 전환에 자동으로 대응한다. */
+
+.dash-root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dash-loading,
+.dash-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 96px 20px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+.dash-error svg { color: var(--error); }
+.dash-loading svg { animation: dash-spin 1s linear infinite; }
+@keyframes dash-spin { to { transform: rotate(360deg); } }
+
+/* ── 통계 카드 그리드 ── */
+.dash-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.dash-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 18px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+.dash-stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-glow, var(--border-strong));
+}
+
+.dash-stat-top { display: flex; align-items: center; gap: 12px; }
+
+.dash-stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dash-tint-1 { background: color-mix(in srgb, var(--accent-mid) 16%, transparent); color: var(--accent-mid); }
+.dash-tint-2 { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
+.dash-tint-3 { background: color-mix(in srgb, var(--control-accent) 18%, transparent); color: var(--control-accent-text); }
+.dash-tint-4 { background: color-mix(in srgb, var(--warning) 16%, transparent); color: var(--warning); }
+.dash-tint-5 { background: color-mix(in srgb, var(--error) 14%, transparent); color: var(--error); }
+.dash-tint-6 { background: color-mix(in srgb, var(--accent-to) 20%, transparent); color: var(--accent-to); }
+
+.dash-stat-textwrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dash-stat-label { font-size: 12.5px; font-weight: 600; color: var(--text-tertiary); }
+.dash-stat-value {
+  font-family: var(--font-mono);
+  font-size: 23px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.dash-stat-delta {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.dash-stat-delta.is-up { color: var(--success); }
+
+/* ── 공용 카드 ── */
+.dash-row { display: grid; gap: 16px; }
+.dash-row-3 { grid-template-columns: 1.15fr 1fr 1fr; }
+.dash-row-recent { grid-template-columns: 1.2fr 1fr 0.95fr; }
+.dash-row-bottom { grid-template-columns: 1.3fr 1fr 1fr; }
+
+@media (max-width: 1180px) {
+  .dash-row-3, .dash-row-recent, .dash-row-bottom { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 760px) {
+  .dash-row-3, .dash-row-recent, .dash-row-bottom { grid-template-columns: 1fr; }
+  .dash-stat-grid { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); }
+}
+
+.dash-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 18px 18px 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.dash-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.dash-card-head h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.dash-card-head h3 svg { color: var(--control-accent-text); flex-shrink: 0; }
+
+.dash-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--control-accent-text);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dash-link:hover { text-decoration: underline; }
+
+.dash-card-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+  padding: 3px 9px;
+  border-radius: 100px;
+}
+.dash-card-tag-inline { align-self: flex-start; margin: -6px 0 12px; }
+
+.dash-empty-note { margin: 0; font-size: 12px; color: var(--text-tertiary); line-height: 1.55; }
+.dash-error-note { color: var(--error); }
+
+/* ── AI 인사이트 ── */
+.dash-insight-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.dash-insight-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  background: var(--control-accent-soft);
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.dash-insight-icon { color: var(--control-accent-text); flex-shrink: 0; margin-top: 1px; display: flex; }
+
+/* ── 이번 주 활동 / 진행률 바 (여기 트랙은 최근 읽은 논문 카드와도 공유) ── */
+.dash-activity-list { display: flex; flex-direction: column; gap: 15px; }
+.dash-activity-row { display: flex; flex-direction: column; gap: 7px; }
+.dash-activity-top { display: flex; align-items: center; justify-content: space-between; }
+.dash-activity-label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.dash-activity-value { font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; color: var(--text-primary); }
+
+.dash-activity-track { flex: 1 1 auto; height: 7px; border-radius: 5px; background: var(--border-strong); overflow: hidden; }
+.dash-activity-track.small { height: 5px; }
+.dash-activity-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── 연구 진행 요약 ── */
+.dash-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.dash-summary-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 8px;
+  text-align: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.dash-summary-value { font-family: var(--font-mono); font-size: 19px; font-weight: 800; color: var(--text-primary); }
+.dash-summary-value-text { font-family: var(--font-body); font-size: 13.5px; word-break: keep-all; }
+.dash-summary-unit { font-size: 11px; font-weight: 600; color: var(--text-tertiary); margin-left: 2px; }
+.dash-summary-label { font-size: 10.5px; font-weight: 600; color: var(--text-tertiary); }
+
+/* ── 최근 읽은 논문 ── */
+.dash-paper-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.dash-paper-item {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.dash-paper-item:last-child { border-bottom: none; padding-bottom: 0; }
+.dash-paper-item:hover { transform: translateX(2px); }
+.dash-paper-cover {
+  width: 38px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+.dash-paper-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.dash-paper-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.dash-paper-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.dash-paper-time { flex-shrink: 0; }
+.dash-paper-progress-row { display: flex; align-items: center; gap: 8px; }
+.dash-paper-pct { flex-shrink: 0; font-size: 10.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* ── 최근 질문 ── */
+.dash-question-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.dash-question-item { display: flex; gap: 10px; cursor: pointer; }
+.dash-question-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
+}
+.dash-question-body { flex: 1 1 auto; min-width: 0; }
+.dash-question-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.dash-question-meta { margin-top: 4px; font-size: 11px; color: var(--text-tertiary); }
+.dash-dot { margin: 0 5px; }
+
+/* ── AI 추천 논문 ── */
+.dash-recs-body { display: flex; flex-direction: column; }
+.dash-recs-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.dash-recs-btn:hover { background: var(--bg-hover); }
+.dash-recs-btn:disabled { opacity: 0.6; cursor: default; }
+
+.dash-rec-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.dash-rec-item { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.dash-rec-item:last-child { border-bottom: none; padding-bottom: 0; }
+.dash-rec-title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); text-decoration: none; line-height: 1.4; }
+.dash-rec-title:hover { color: var(--control-accent-text); }
+.dash-rec-year { margin-left: 6px; font-size: 11px; color: var(--text-muted); }
+.dash-rec-reason { margin-top: 4px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.45; }
+
+/* ── 개념 히트맵 ── */
+.dash-heat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.dash-heat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 9px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.dash-heat-cell:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.dash-heat-swatch {
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent-mid) var(--heat-pct, 6%), var(--bg-elevated));
+}
+.dash-heat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-heat-count { font-family: var(--font-mono); font-size: 14.5px; font-weight: 700; color: var(--text-secondary); }
+
+.dash-heat-legend { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
+.dash-heat-legend-bar {
+  width: 100px;
+  height: 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent-mid) 6%, var(--bg-elevated)),
+    var(--accent-mid));
+}
+
+/* ── 연구 타임라인 ── */
+.dash-timeline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dash-timeline-item { position: relative; display: flex; gap: 10px; padding-bottom: 14px; }
+.dash-timeline-item:last-child { padding-bottom: 0; }
+.dash-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 13px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--border);
+}
+.dash-timeline-item:last-child::before { display: none; }
+.dash-timeline-dot {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--control-accent);
+}
+.dash-timeline-uploaded .dash-timeline-dot { background: var(--accent-mid); }
+.dash-timeline-read .dash-timeline-dot { background: var(--success); }
+.dash-timeline-question .dash-timeline-dot { background: var(--warning); }
+.dash-timeline-note .dash-timeline-dot { background: var(--control-accent-text); }
+.dash-timeline-body { flex: 1 1 auto; min-width: 0; }
+.dash-timeline-top { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.dash-timeline-type { font-size: 10.5px; font-weight: 700; color: var(--text-tertiary); letter-spacing: 0.02em; }
+.dash-timeline-time { margin-left: auto; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.dash-timeline-title { font-size: 12.5px; font-weight: 600; color: var(--text-primary); line-height: 1.4; }
+.dash-timeline-summary { margin-top: 2px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.4; }
+
+/* ── 연구 그래프 미리보기 ── */
+.dash-card-graph { align-items: stretch; }
+.dash-graph-svg { width: 100%; height: 168px; }
+.dash-graph-edge { stroke: var(--border-strong); stroke-width: 1.2; }
+.dash-graph-node circle {
+  fill: var(--bg-panel);
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+.dash-graph-node.is-center circle { fill: var(--accent-mid); stroke: var(--accent-to); stroke-width: 2; }
+.dash-graph-node.is-paper circle { fill: color-mix(in srgb, var(--success) 32%, var(--bg-panel)); stroke: var(--success); }
+.dash-graph-node.is-concept circle { fill: color-mix(in srgb, var(--control-accent) 38%, var(--bg-panel)); stroke: var(--control-accent-text); }
+.dash-graph-node text { font-size: 8.5px; fill: var(--text-tertiary); }
+.dash-graph-center-label { font-size: 9.5px; font-weight: 700; fill: var(--text-primary); }
+
+.dash-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.dash-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.dash-legend-dot.is-center { background: var(--accent-mid); }
+.dash-legend-dot.is-paper { background: var(--success); }
+.dash-legend-dot.is-concept { background: var(--control-accent-text); }

@@ -1,0 +1,512 @@
+/* ============================================================
+   Library Page — 재설계된 라이브러리 화면 전용 스타일
+   (상태 필터 탭 / 정렬 드롭다운 / 카드 커버 썸네일+즐겨찾기 / 우측 상세 패널)
+
+   기존 style.css의 .doc-card* 클래스(다른 화면과 공유)는 건드리지 않고, 여기서는
+   이 파일에서만 쓰는 새 클래스로 덧붙여 확장한다. 색상은 전부 기존 디자인 토큰
+   (var(--...))만 사용해 라이트/다크 테마를 자동으로 따라간다.
+   ============================================================ */
+
+/* ── 라이브러리 헤더 부제목 ── */
+.library-header-subtitle {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* ── 상태 필터 탭 (전체 / 읽지 않음 / 읽는 중 / 완료 / 즐겨찾기) ── */
+.lib-status-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  width: fit-content;
+  flex-wrap: wrap;
+}
+.lib-status-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+.lib-status-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+.lib-status-tab.active {
+  background: var(--bg-surface);
+  color: var(--control-accent-text);
+  box-shadow: var(--shadow-sm);
+}
+.lib-status-tab-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+  border-radius: 100px;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+}
+.lib-status-tab.active .lib-status-tab-count {
+  color: var(--control-accent-text);
+  background: var(--control-accent-soft);
+}
+
+/* ── 정렬 드롭다운 ── */
+.lib-sort-dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.lib-sort-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 7px 28px 7px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.lib-sort-select:hover, .lib-sort-select:focus { border-color: var(--control-accent); }
+.lib-sort-dropdown-icon {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--text-muted);
+  display: flex;
+}
+
+/* ── 카드: 커버 썸네일 + 제목 2열 배치 ── */
+.lib-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.lib-card-thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 52px;
+  height: 68px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+.lib-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.lib-card-thumb-fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: linear-gradient(160deg, var(--bg-elevated), var(--bg-hover));
+}
+.lib-card-thumb.cover-fallback img { display: none; }
+.lib-card-thumb.cover-fallback .lib-card-thumb-fallback { display: flex; }
+
+.lib-card-top-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.lib-card-top-body .doc-card-title { padding-right: 28px; }
+
+/* 즐겨찾기 배지 - 카드 썸네일 오른쪽 위 모서리에 겹쳐 배치해 기존
+   읽음 체크/미리보기 아이콘(카드 우상단, .doc-card-zone-actions)과
+   시각적으로 겹치지 않게 한다. */
+.doc-card-fav-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  z-index: 3;
+  padding: 0;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.doc-card-fav-btn:hover { color: var(--warning); border-color: var(--warning); transform: scale(1.08); }
+.doc-card-fav-btn.active { color: var(--warning); border-color: var(--warning); }
+.doc-card-fav-btn.active svg { fill: var(--warning); }
+
+/* ── 카드: 전체 너비 진행률 바 (기존 .doc-card-progress-row는 리스트 뷰의
+   압축된 형태로 그대로 남겨두고, 카드 뷰는 이 새 클래스로 별도 렌더링한다) ── */
+.lib-card-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lib-card-progress-bar-wrap {
+  flex: 1;
+  height: 5px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+.lib-card-progress-bar {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lib-card-progress-pct {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-mid);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   상세 패널 (우측 드로어) — 카드를 클릭하면 열리며, 표지/제목/저자,
+   "논문 열기" 버튼, 개요(AI 요약+기본 정보+태그)/메모/AI 대화/관련 자료 탭을 보여준다.
+   ============================================================ */
+.lib-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  z-index: 45;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.lib-detail-overlay.open { opacity: 1; pointer-events: auto; }
+
+.lib-detail-panel {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  max-width: 94vw;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lib-detail-panel.open { transform: translateX(0); }
+
+.lib-detail-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: all 0.15s ease;
+}
+.lib-detail-close-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+.lib-detail-hero {
+  display: flex;
+  gap: 14px;
+  padding: 26px 50px 18px 24px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+.lib-detail-cover {
+  position: relative;
+  flex-shrink: 0;
+  width: 72px;
+  height: 96px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.lib-detail-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lib-detail-cover-fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: linear-gradient(160deg, var(--bg-elevated), var(--bg-hover));
+}
+.lib-detail-cover.cover-fallback img { display: none; }
+.lib-detail-cover.cover-fallback .lib-detail-cover-fallback { display: flex; }
+
+.lib-detail-title-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+.lib-detail-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lib-detail-title-input {
+  width: 100%;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 5px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--control-accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  outline: none;
+  font-family: var(--font-body);
+}
+.lib-detail-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.lib-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+}
+.lib-detail-open-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--control-accent);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+.lib-detail-open-btn:hover { filter: brightness(1.08); }
+.lib-detail-open-btn:active { transform: scale(0.98); }
+
+.lib-detail-icon-btn {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.lib-detail-icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+.lib-detail-icon-btn.active { color: var(--warning); border-color: var(--warning); }
+.lib-detail-icon-btn.active svg { fill: var(--warning); }
+
+.lib-detail-more-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 24px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 6px;
+  min-width: 200px;
+  z-index: 5;
+}
+.lib-detail-more-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.lib-detail-more-item:hover { background: var(--bg-hover); }
+.lib-detail-more-item.danger { color: var(--error); }
+.lib-detail-more-item.danger:hover { background: color-mix(in srgb, var(--error) 12%, transparent); }
+
+.lib-detail-tabs {
+  display: flex;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.lib-detail-tab {
+  padding: 12px 4px;
+  margin-right: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+.lib-detail-tab:hover { color: var(--text-primary); }
+.lib-detail-tab.active { color: var(--control-accent-text); border-bottom-color: var(--control-accent); }
+.lib-detail-tab-count {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+  border-radius: 100px;
+  padding: 1px 6px;
+}
+.lib-detail-tab.active .lib-detail-tab-count { color: var(--control-accent-text); background: var(--control-accent-soft); }
+
+.lib-detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px 32px;
+}
+.lib-detail-panel-section h3 {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.lib-detail-summary-block,
+.lib-detail-quickinfo-block,
+.lib-detail-tags-block { margin-bottom: 24px; }
+
+.lib-detail-summary-text {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  max-height: 132px;
+  overflow: hidden;
+  position: relative;
+}
+.lib-detail-summary-text.expanded { max-height: none; }
+.lib-detail-summary-loading,
+.lib-detail-summary-error { margin: 0; font-size: 12.5px; color: var(--text-tertiary); }
+.lib-detail-summary-error { color: var(--error); }
+.lib-detail-summary-more-btn {
+  margin-top: 8px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--control-accent-text);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lib-detail-quickinfo {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 9px 12px;
+  margin: 0;
+}
+.lib-detail-quickinfo dt { font-size: 12px; color: var(--text-tertiary); font-weight: 600; }
+.lib-detail-quickinfo dd { margin: 0; font-size: 12.5px; color: var(--text-primary); font-weight: 600; }
+
+.lib-detail-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.lib-detail-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
+}
+
+.lib-detail-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.lib-detail-list-item:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.lib-detail-list-item-meta { font-size: 11px; color: var(--text-tertiary); font-weight: 600; }
+.lib-detail-list-item-text { font-size: 12.5px; color: var(--text-primary); line-height: 1.4; }
+.lib-detail-empty { font-size: 12.5px; color: var(--text-tertiary); padding: 4px 0; }
+
+@media (max-width: 640px) {
+  .lib-detail-panel { width: 100vw; max-width: 100vw; }
+}

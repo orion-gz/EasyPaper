@@ -63,134 +63,212 @@
 
   <input type="file" id="file-input" accept=".pdf" multiple hidden />
 
-  <!-- 라이브러리 화면 -->
+  <!-- 워크스페이스 화면 (Dashboard / Library / Reading History / AI Chats / Notes / Research Graph) -->
   <div id="library-screen" class="screen">
-    <div class="upload-bg">
-      <div class="orb orb-1"></div>
-      <div class="orb orb-2"></div>
-    </div>
     <div class="library-container">
-      <div class="library-header">
-        <div class="logo">
-          <span class="logo-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M12 9 Q12 13 16 13 Q12 13 12 17 Q12 13 8 13 Q12 13 12 9 Z" fill="currentColor"/></svg></span>
-          <span class="logo-text">내 라이브러리</span>
-        </div>
-        <div style="display: flex; gap: 10px; align-items: center;">
-          <button id="lib-compare-toggle-btn" class="file-btn-outline" title="여러 논문을 선택해 비교 질문을 할 수 있습니다">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 3v18"/></svg>
-            비교하기
+
+      <!-- 좌측 Collapsible Navigation Sidebar -->
+      <aside id="app-sidebar" class="app-sidebar">
+        <div class="app-sidebar-header">
+          <button type="button" id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="사이드바 접기/펼치기">
+            <span class="sidebar-nav-icon" data-icon="panelLeft"></span>
           </button>
-          <button id="lib-upload-btn" class="file-btn">
-            + 새 논문 추가
-          </button>
-        </div>
-      </div>
-
-      <!-- 탭 영역 -->
-      <div class="library-tabs-container">
-        <button id="lib-tab-archive" class="library-tab-btn active" data-tab="archive"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>보관함</button>
-        <button id="lib-tab-history" class="library-tab-btn" data-tab="history"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>히스토리</button>
-        <button id="lib-tab-chat" class="library-tab-btn" data-tab="chat"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></svg>채팅</button>
-        <button id="lib-tab-annotations" class="library-tab-btn" data-tab="annotations"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>주석</button>
-        <button id="lib-tab-graph" class="library-tab-btn" data-tab="graph"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><circle cx="5" cy="6" r="3"/><circle cx="19" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M7.5 7.5 10.5 16"/><path d="M16.5 7.5 13.5 16"/></svg>지식 그래프</button>
-      </div>
-
-      <!-- 독서 통계 위젯 영역 -->
-      <div id="library-stats-container" class="hidden" style="margin-bottom: 16px;"></div>
-
-      <!-- 라이브러리 전체 검색 (파일명/제목/카테고리 + 번역된 본문 텍스트) -->
-      <div id="library-search-box" style="position: relative; margin-bottom: 14px;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input type="text" id="library-search-input" placeholder="논문 제목, 파일명, 번역된 내용 검색..." style="width: 100%; padding: 11px 40px 11px 38px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text-primary); outline: none; font-size: 13.5px;" />
-        <button type="button" id="library-search-clear-btn" class="hidden" title="검색 지우기" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; display: flex;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-        </button>
-      </div>
-      <div id="library-search-status" class="hidden" style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 14px;"></div>
-
-      <!-- 카테고리 필터 + 보기 방식 전환 영역 -->
-      <div id="library-filter-row" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px;">
-        <div id="library-category-filters" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;"></div>
-        <div id="library-view-toggle" class="library-view-toggle">
-          <button class="view-toggle-btn" data-view="card" title="카드 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
-          <button class="view-toggle-btn" data-view="list" title="리스트 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg></button>
-        </div>
-      </div>
-
-      <div id="library-grid" class="library-grid">
-        <div class="lib-empty" id="lib-empty">
-          <div style="margin-bottom:16px;color:var(--text-muted)"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg></div>
-          <p>저장된 논문이 없습니다</p>
-          <p style="font-size:13px;color:var(--text-muted);margin-top:8px">PDF를 업로드하면 자동으로 저장됩니다</p>
-        </div>
-      </div>
-
-      <!-- 채팅 세션 조회 (AI 어시스턴트 / 논문 비교 채팅 세션 목록) -->
-      <div id="library-chat-section" class="hidden">
-        <div class="chat-session-subtabs">
-          <button id="chat-subtab-assistant" class="chat-session-subtab-btn active" data-subtab="assistant">AI 어시스턴트</button>
-          <button id="chat-subtab-compare" class="chat-session-subtab-btn" data-subtab="compare">논문 비교</button>
-        </div>
-        <div id="chat-session-list" class="chat-session-list"></div>
-      </div>
-
-      <!-- 주석 조회 (메모 / 하이라이트 / 언더라인 목록) -->
-      <div id="library-annotations-section" class="hidden">
-        <div class="chat-session-subtabs">
-          <button id="annotation-subtab-memo" class="chat-session-subtab-btn active" data-subtab="memo">메모</button>
-          <button id="annotation-subtab-highlight" class="chat-session-subtab-btn" data-subtab="highlight">하이라이트</button>
-          <button id="annotation-subtab-underline" class="chat-session-subtab-btn" data-subtab="underline">언더라인</button>
-        </div>
-        <div id="annotation-list" class="chat-session-list"></div>
-      </div>
-
-      <!-- 지식 그래프 (논문 + LLM 추출 개념/메모/Figure 노드, 인용/카테고리/유사개념 엣지) -->
-      <div id="library-graph-section" class="hidden">
-        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-          <button id="library-graph-view-toggle-graph" class="library-tab-btn active" data-view="graph">그래프</button>
-          <button id="library-graph-view-toggle-timeline" class="library-tab-btn" data-view="timeline">타임라인</button>
-          <button id="library-graph-view-toggle-heatmap" class="library-tab-btn" data-view="heatmap">히트맵</button>
-          <button id="library-graph-view-toggle-dashboard" class="library-tab-btn" data-view="dashboard">대시보드</button>
-        </div>
-        <div id="library-graph-pending-banner" class="hidden" style="margin-bottom: 12px; padding: 10px 14px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 10px; font-size: 13px; color: var(--text-secondary);">
-          일부 논문의 그래프 데이터를 준비 중입니다. 잠시 후 자동으로 갱신됩니다...
-        </div>
-        <div id="library-graph-view">
-          <div style="margin-bottom: 12px; padding: 12px 14px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 10px;">
-            <button id="library-recommendations-btn" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border-strong);background:var(--bg-primary);color:var(--text-primary);font-size:12px;cursor:pointer">다음에 읽을 논문 추천받기</button>
-            <div id="library-recommendations-list" style="margin-top:10px"></div>
+          <div class="sidebar-brand">
+            <span class="logo-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M12 9 Q12 13 16 13 Q12 13 12 17 Q12 13 8 13 Q12 13 12 9 Z" fill="currentColor"/></svg></span>
+            <span class="sidebar-brand-text">EasyPaper</span>
           </div>
-          <input id="library-graph-search-input" type="text" placeholder="논문/개념/메모/질문 검색" style="width: 100%; margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--bg-elevated); color: var(--text-primary); font-size: 13px;" />
-          <div id="library-graph-row" style="display: flex; align-items: stretch;">
-            <div id="library-graph-canvas" style="flex: 1 1 auto; min-width: 0; height: 600px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px;"></div>
-            <div id="library-graph-resizer" class="chat-resizer" style="border-radius: 3px;"></div>
-            <div id="library-graph-detail-panel" style="flex: 0 0 auto; width: 260px; max-width: 70%; overflow-y: auto; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; padding: 16px; font-size: 13px; color: var(--text-secondary);">
-              <p>노드를 클릭하면 상세 정보가 여기에 표시됩니다.</p>
+        </div>
+
+        <nav class="app-sidebar-nav" id="app-sidebar-nav">
+          <button type="button" class="sidebar-nav-item" data-page="dashboard">
+            <span class="sidebar-nav-icon" data-icon="home"></span>
+            <span class="sidebar-nav-label">Dashboard</span>
+            <span class="sidebar-tooltip">Dashboard</span>
+          </button>
+          <button type="button" class="sidebar-nav-item" data-page="library">
+            <span class="sidebar-nav-icon" data-icon="bookOpen"></span>
+            <span class="sidebar-nav-label">Library</span>
+            <span class="sidebar-tooltip">Library</span>
+          </button>
+          <button type="button" class="sidebar-nav-item" data-page="history">
+            <span class="sidebar-nav-icon" data-icon="clock"></span>
+            <span class="sidebar-nav-label">Reading History</span>
+            <span class="sidebar-tooltip">Reading History</span>
+          </button>
+          <button type="button" class="sidebar-nav-item" data-page="chats">
+            <span class="sidebar-nav-icon" data-icon="messageCircle"></span>
+            <span class="sidebar-nav-label">AI Chats</span>
+            <span class="sidebar-tooltip">AI Chats</span>
+          </button>
+          <button type="button" class="sidebar-nav-item" data-page="notes">
+            <span class="sidebar-nav-icon" data-icon="fileText"></span>
+            <span class="sidebar-nav-label">Notes</span>
+            <span class="sidebar-tooltip">Notes</span>
+          </button>
+          <button type="button" class="sidebar-nav-item" data-page="graph">
+            <span class="sidebar-nav-icon" data-icon="network"></span>
+            <span class="sidebar-nav-label">Research Graph</span>
+            <span class="sidebar-tooltip">Research Graph</span>
+          </button>
+        </nav>
+
+        <div class="app-sidebar-footer">
+          <button type="button" id="sidebar-settings-btn" class="sidebar-nav-item">
+            <span class="sidebar-nav-icon" data-icon="settings"></span>
+            <span class="sidebar-nav-label">Settings</span>
+            <span class="sidebar-tooltip">Settings</span>
+          </button>
+          <button type="button" id="sidebar-logout-btn" class="sidebar-nav-item">
+            <span class="sidebar-nav-icon" data-icon="logOut"></span>
+            <span class="sidebar-nav-label">로그아웃</span>
+            <span class="sidebar-tooltip">로그아웃</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- 우측 Top Navigation + Page Outlet -->
+      <div class="workspace-main">
+        <header class="workspace-topnav">
+          <h1 id="workspace-page-title" class="workspace-page-title">대시보드</h1>
+          <div class="workspace-topnav-actions">
+            <div class="workspace-search-box">
+              <span class="workspace-search-icon" data-icon="search"></span>
+              <input type="text" id="workspace-search-input" placeholder="논문, 개념, 질문 검색..." />
             </div>
+            <button type="button" id="workspace-avatar-btn" class="workspace-avatar-btn" title="설정">
+              <span data-icon="user"></span>
+            </button>
           </div>
-        </div>
-        <div id="library-timeline-view" class="hidden">
-          <div id="library-timeline-list"></div>
-        </div>
-        <div id="library-heatmap-view" class="hidden">
-          <div id="library-heatmap-list"></div>
-        </div>
-        <div id="library-dashboard-view" class="hidden">
-          <div id="library-dashboard-content"></div>
-        </div>
-      </div>
-    </div>
-    <!-- 우하단 휴지통 비우기 플로팅 버튼 -->
-    <button id="lib-empty-trash-btn" class="file-btn hidden">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>휴지통 비우기
-    </button>
+        </header>
 
-    <!-- 비교하기 선택 모드 하단 플로팅 바 -->
-    <div id="compare-select-bar" class="compare-select-bar hidden">
-      <span id="compare-select-count">0/5개 선택됨</span>
-      <div class="compare-select-bar-actions">
-        <button id="compare-select-cancel-btn" class="file-btn-outline compact">취소</button>
-        <button id="compare-select-start-btn" class="file-btn compact" disabled>비교 채팅 시작</button>
+        <div id="page-outlet" class="page-outlet">
+
+          <!-- Dashboard -->
+          <section id="page-dashboard" class="workspace-page"></section>
+
+          <!-- Library -->
+          <section id="page-library" class="workspace-page">
+            <div class="library-header">
+              <div class="logo">
+                <span class="logo-text">Library</span>
+              </div>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="lib-tab-trash" class="file-btn-outline compact" data-tab="trash" title="휴지통">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>휴지통
+                </button>
+                <button id="lib-compare-toggle-btn" class="file-btn-outline" title="여러 논문을 선택해 비교 질문을 할 수 있습니다">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 3v18"/></svg>
+                  비교하기
+                </button>
+                <button id="lib-upload-btn" class="file-btn">
+                  + 새 논문 추가
+                </button>
+              </div>
+            </div>
+
+            <!-- 라이브러리 전체 검색 (파일명/제목/카테고리 + 번역된 본문 텍스트) -->
+            <div id="library-search-box" style="position: relative; margin-bottom: 14px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="library-search-input" placeholder="논문 제목, 파일명, 번역된 내용 검색..." style="width: 100%; padding: 11px 40px 11px 38px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text-primary); outline: none; font-size: 13.5px;" />
+              <button type="button" id="library-search-clear-btn" class="hidden" title="검색 지우기" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; display: flex;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+            <div id="library-search-status" class="hidden" style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 14px;"></div>
+
+            <!-- 카테고리 필터 + 보기 방식 전환 영역 -->
+            <div id="library-filter-row" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px;">
+              <div id="library-category-filters" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;"></div>
+              <div id="library-view-toggle" class="library-view-toggle">
+                <button class="view-toggle-btn" data-view="card" title="카드 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
+                <button class="view-toggle-btn" data-view="list" title="리스트 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg></button>
+              </div>
+            </div>
+
+            <div id="library-grid" class="library-grid">
+              <div class="lib-empty" id="lib-empty">
+                <div style="margin-bottom:16px;color:var(--text-muted)"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg></div>
+                <p>저장된 논문이 없습니다</p>
+                <p style="font-size:13px;color:var(--text-muted);margin-top:8px">PDF를 업로드하면 자동으로 저장됩니다</p>
+              </div>
+            </div>
+
+            <!-- 우하단 휴지통 비우기 플로팅 버튼 -->
+            <button id="lib-empty-trash-btn" class="file-btn hidden">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>휴지통 비우기
+            </button>
+
+            <!-- 비교하기 선택 모드 하단 플로팅 바 -->
+            <div id="compare-select-bar" class="compare-select-bar hidden">
+              <span id="compare-select-count">0/5개 선택됨</span>
+              <div class="compare-select-bar-actions">
+                <button id="compare-select-cancel-btn" class="file-btn-outline compact">취소</button>
+                <button id="compare-select-start-btn" class="file-btn compact" disabled>비교 채팅 시작</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Reading History -->
+          <section id="page-history" class="workspace-page"></section>
+
+          <!-- AI Chats -->
+          <section id="page-chats" class="workspace-page">
+            <div id="library-chat-section">
+              <div class="chat-session-subtabs">
+                <button id="chat-subtab-assistant" class="chat-session-subtab-btn active" data-subtab="assistant">AI 어시스턴트</button>
+                <button id="chat-subtab-compare" class="chat-session-subtab-btn" data-subtab="compare">논문 비교</button>
+              </div>
+              <div id="chat-session-list" class="chat-session-list"></div>
+            </div>
+          </section>
+
+          <!-- Notes -->
+          <section id="page-notes" class="workspace-page">
+            <div id="library-annotations-section">
+              <div class="chat-session-subtabs">
+                <button id="annotation-subtab-memo" class="chat-session-subtab-btn active" data-subtab="memo">메모</button>
+                <button id="annotation-subtab-highlight" class="chat-session-subtab-btn" data-subtab="highlight">하이라이트</button>
+                <button id="annotation-subtab-underline" class="chat-session-subtab-btn" data-subtab="underline">언더라인</button>
+              </div>
+              <div id="annotation-list" class="chat-session-list"></div>
+            </div>
+          </section>
+
+          <!-- Research Graph (논문 + LLM 추출 개념/메모/Figure 노드, 인용/카테고리/유사개념 엣지) -->
+          <section id="page-graph" class="workspace-page">
+            <div id="library-graph-section">
+              <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <button id="library-graph-view-toggle-graph" class="library-tab-btn active" data-view="graph">그래프</button>
+                <button id="library-graph-view-toggle-timeline" class="library-tab-btn" data-view="timeline">타임라인</button>
+                <button id="library-graph-view-toggle-heatmap" class="library-tab-btn" data-view="heatmap">히트맵</button>
+              </div>
+              <div id="library-graph-pending-banner" class="hidden" style="margin-bottom: 12px; padding: 10px 14px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 10px; font-size: 13px; color: var(--text-secondary);">
+                일부 논문의 그래프 데이터를 준비 중입니다. 잠시 후 자동으로 갱신됩니다...
+              </div>
+              <div id="library-graph-view">
+                <div style="margin-bottom: 12px; padding: 12px 14px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 10px;">
+                  <button id="library-recommendations-btn" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border-strong);background:var(--bg-primary);color:var(--text-primary);font-size:12px;cursor:pointer">다음에 읽을 논문 추천받기</button>
+                  <div id="library-recommendations-list" style="margin-top:10px"></div>
+                </div>
+                <input id="library-graph-search-input" type="text" placeholder="논문/개념/메모/질문 검색" style="width: 100%; margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--bg-elevated); color: var(--text-primary); font-size: 13px;" />
+                <div id="library-graph-row" style="display: flex; align-items: stretch;">
+                  <div id="library-graph-canvas" style="flex: 1 1 auto; min-width: 0; height: 600px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px;"></div>
+                  <div id="library-graph-resizer" class="chat-resizer" style="border-radius: 3px;"></div>
+                  <div id="library-graph-detail-panel" style="flex: 0 0 auto; width: 260px; max-width: 70%; overflow-y: auto; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; padding: 16px; font-size: 13px; color: var(--text-secondary);">
+                    <p>노드를 클릭하면 상세 정보가 여기에 표시됩니다.</p>
+                  </div>
+                </div>
+              </div>
+              <div id="library-timeline-view" class="hidden">
+                <div id="library-timeline-list"></div>
+              </div>
+              <div id="library-heatmap-view" class="hidden">
+                <div id="library-heatmap-list"></div>
+              </div>
+            </div>
+          </section>
+
+        </div>
       </div>
     </div>
   </div>
@@ -432,11 +510,9 @@
   <!-- 토스트 알림 -->
   <div id="toast" class="toast"></div>
 
-  <!-- 공통 테마 토글 버튼 (업로드 & 라이브러리 화면용) -->
+  <!-- 공통 테마 토글/설정/로그아웃 버튼 (로그인 & 비교 화면용 - 라이브러리/워크스페이스 화면은
+       상단 탑네비의 아바타 버튼 및 사이드바 Settings/로그아웃이 같은 핸들러를 대신 호출한다) -->
   <div class="global-theme-toggle" id="global-theme-toggle">
-    <button id="lib-tab-trash" class="file-btn hidden" data-tab="trash" title="휴지통">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-    </button>
     <button id="global-theme-toggle-btn" title="화이트/다크 모드 전환">
       <svg class="sun-icon hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>

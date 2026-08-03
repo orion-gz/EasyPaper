@@ -1,0 +1,265 @@
+/* ============================================================
+   Workspace Shell — Collapsible Sidebar + Top Navigation + Page Outlet
+   (Dashboard / Library / Reading History / AI Chats / Notes / Research Graph)
+   기존 디자인 토큰(--bg-*, --accent-*, --border-*, --radius-*, --shadow-*, --text-*)을
+   그대로 재사용하며, 셸 전용 토큰만 여기서 추가로 정의한다.
+   ============================================================ */
+
+:root {
+  --sidebar-w: 236px;
+  --sidebar-w-collapsed: 68px;
+  --sidebar-transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* .library-container를 사이드바+메인 2열 레이아웃으로 재정의 (기존: 세로 패딩 컨테이너) */
+.library-container {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 100%;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* ── 좌측 Collapsible Navigation Sidebar ── */
+.app-sidebar {
+  flex: 0 0 var(--sidebar-w);
+  width: var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  padding: 16px 12px;
+  gap: 4px;
+  transition: var(--sidebar-transition);
+  overflow: hidden;
+}
+.app-sidebar.collapsed {
+  flex-basis: var(--sidebar-w-collapsed);
+  width: var(--sidebar-w-collapsed);
+}
+
+.app-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 16px;
+  flex-shrink: 0;
+}
+.sidebar-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.sidebar-toggle-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+.sidebar-brand .logo-icon { color: var(--control-accent); flex-shrink: 0; display: flex; }
+.sidebar-brand-text {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.app-sidebar.collapsed .sidebar-brand-text { display: none; }
+
+.app-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.app-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.sidebar-nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sidebar-nav-item.active {
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
+}
+.sidebar-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.sidebar-nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-sidebar.collapsed .sidebar-nav-item { justify-content: center; padding: 9px; }
+.app-sidebar.collapsed .sidebar-nav-label { display: none; }
+
+/* Hover 시 Tooltip - 접힌 상태에서만 노출 */
+.sidebar-tooltip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 40;
+}
+.app-sidebar.collapsed .sidebar-nav-item:hover .sidebar-tooltip {
+  opacity: 1;
+}
+.app-sidebar:not(.collapsed) .sidebar-tooltip { display: none; }
+
+/* ── 우측 Top Navigation + Page Outlet ── */
+.workspace-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.workspace-topnav {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--topbar-h);
+  padding: 0 28px;
+  border-bottom: 1px solid var(--border);
+}
+.workspace-page-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+.workspace-topnav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* 로그인/비교 화면과 공유하는 플로팅 테마/설정/로그아웃 버튼(우상단 고정)과
+     겹치지 않도록 여유 공간을 둔다 */
+  margin-right: 78px;
+}
+.workspace-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.workspace-search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  display: flex;
+  pointer-events: none;
+}
+.workspace-search-box input {
+  width: 260px;
+  padding: 8px 12px 8px 34px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease, width 0.15s ease;
+}
+.workspace-search-box input:focus {
+  border-color: var(--control-accent);
+  width: 300px;
+}
+.workspace-avatar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.workspace-avatar-btn:hover { color: var(--text-primary); border-color: var(--control-accent); }
+
+.page-outlet {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px 32px 40px;
+}
+
+.workspace-page { display: none; }
+.workspace-page.active { display: block; height: 100%; }
+
+/* Library 페이지는 자체적으로 세로 flex 레이아웃(헤더/검색/그리드)을 유지한다 */
+#page-library.active {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Tablet 대응 - 사이드바를 기본 축소 폭으로 */
+@media (max-width: 1100px) {
+  .app-sidebar:not(.collapsed) { flex-basis: var(--sidebar-w-collapsed); width: var(--sidebar-w-collapsed); }
+  .app-sidebar:not(.collapsed) .sidebar-brand-text,
+  .app-sidebar:not(.collapsed) .sidebar-nav-label { display: none; }
+  .app-sidebar:not(.collapsed) .sidebar-nav-item { justify-content: center; padding: 9px; }
+  .app-sidebar:not(.collapsed) .sidebar-tooltip { display: block; }
+  .app-sidebar:not(.collapsed) .sidebar-nav-item:hover .sidebar-tooltip { opacity: 1; }
+}
