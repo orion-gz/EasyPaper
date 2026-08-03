@@ -6375,7 +6375,7 @@ body.sidebar-collapsed .chat-drawer-overlay { left: var(--sidebar-w-collapsed); 
   bottom: 0;
   width: auto;
   max-width: none;
-  background: var(--bg-surface);
+  background: var(--bg-panel);
   border-left: 1px solid var(--border);
   box-shadow: var(--shadow-md);
   z-index: 46;

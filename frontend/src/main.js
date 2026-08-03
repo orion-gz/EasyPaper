@@ -4208,7 +4208,8 @@ async function openChatDrawer(doc) {
       renderChatDrawerGreeting(doc)
     } else {
       savedHistory.forEach(msg => {
-        renderChatDrawerMessage(msg.role, msg.role === 'assistant' ? formatChatHtml(msg.content) : msg.content, msg.role === 'assistant')
+        const renderedContent = msg.role === 'assistant' ? formatChatHtml(msg.content) : formatUserChatHtml(msg.content, doc.id)
+        renderChatDrawerMessage(msg.role, renderedContent, true)
         chatDrawerState.history.push({ role: msg.role, content: msg.content })
       })
     }
@@ -10542,7 +10543,7 @@ function formatChatHtml(text) {
   return html
 }
 
-function formatUserChatHtml(content) {
+function formatUserChatHtml(content, sessionId = state.sessionId) {
   if (!content) return ''
   
   if (content.startsWith('[인용된 본문 내용]:')) {
@@ -10577,7 +10578,7 @@ function formatUserChatHtml(content) {
       if (sepIdx !== -1) {
         const quoteId = pageInfo.substring(sepIdx + 1)
         pageInfo = pageInfo.substring(0, sepIdx)
-        imgSrc = getChatQuoteImage(state.sessionId, quoteId)
+        imgSrc = getChatQuoteImage(sessionId, quoteId)
       }
 
       const quoteBodyHtml = imgSrc
