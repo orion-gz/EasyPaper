@@ -2329,12 +2329,14 @@ JSON Array:"""
 async def generate_dashboard_insights(profile: dict, session_id: str = None) -> List[dict]:
     """사용자의 최근 질문/메모 내용, 읽은 논문 통계, 관심 개념/카테고리를 근거로
     대시보드 "AI 인사이트" 카드에 표시할 개인화된 인사이트 3~5개를 생성한다.
-    규칙 기반 격차 감지(knowledge_graph.get_knowledge_gaps)와 달리 매번 똑같은
-    문구가 아니라, 실제 활동 내용을 반영해 조언/요약/추천/격려처럼 다양한
-    성격의 문장을 만들도록 유도한다. 반환값: [{"type": str, "message": str}, ...].
-    profile 형태는 knowledge_graph.get_ai_insights가 만든다:
-    {"stats": {...}, "notes": [str], "questions": [str], "concepts": [str],
-     "categories": [str], "gap_hints": [str]}."""
+    규칙 기반 격차 감지(knowledge_graph.get_knowledge_gaps)처럼 매번 똑같은 두
+    문구를 반복하는 대신, 지도교수가 실제로 학생의 질문/메모를 읽고 1:1 면담에서
+    해줄 법한 - 이해 부족/개념 공백을 콕 짚어주고, 스스로를 돌아보게 하는 관점을
+    던지는 - 실질적인 조언을 생성하도록 유도한다. 반환값:
+    [{"type": str, "message": str}, ...]. profile 형태는
+    knowledge_graph.get_ai_insights가 만든다: {"stats": {...}, "notes": [str],
+    "questions": [str], "concepts": [str], "categories": [str],
+    "gap_hints": [str]}."""
     stats = profile.get("stats") or {}
     notes_block = "\n".join(f"- {n}" for n in profile.get("notes") or []) or "(없음)"
     questions_block = "\n".join(f"- {q}" for q in profile.get("questions") or []) or "(없음)"
@@ -2342,7 +2344,14 @@ async def generate_dashboard_insights(profile: dict, session_id: str = None) -> 
     categories_line = ", ".join(profile.get("categories") or []) or "(알 수 없음)"
     gap_hints_block = "\n".join(f"- {g}" for g in profile.get("gap_hints") or []) or "(없음)"
 
-    prompt = f"""You are a thoughtful academic research mentor reviewing a researcher's recent activity in their paper-reading app. Based on the data below, write 3 to 5 short, varied, and genuinely useful insights in Korean for their dashboard. Mix DIFFERENT kinds of insights - do not make them all the same type. Ground every insight in the actual data given; do not invent facts, paper titles, or activity that isn't there.
+    prompt = f"""You are an experienced professor and thesis advisor mentoring this researcher on their reading and research practice, reviewing their actual recent questions and notes below before a 1-on-1 meeting. Do NOT write generic praise or generic advice that could apply to anyone - every insight must be clearly traceable to something specific in the data given.
+
+Write 3 to 5 short insights in Korean, covering a MIX of these four angles (skip an angle entirely if there isn't real evidence for it - never force a filler insight):
+
+1. "gap_diagnosis" (이해도 진단) - Read the QUESTIONS closely for signs of shallow or missing understanding: repeated confusion about the same concept, a surface-level question about something conceptually deep, or a prerequisite concept they seem to be missing given what they're reading. When you spot one, name the specific concept and suggest a concrete next step (what to review, what paper/section to revisit, or a sharper question to ask themselves).
+2. "mentor_advice" (교수자의 조언) - Give the kind of pointed, sometimes candid feedback a thesis advisor gives about research direction, reading habits, or blind spots - grounded in the actual pattern of what they've read/asked/noted, not generic productivity tips.
+3. "perspective" (바라보는 관점) - Help them step back and see their own recent activity from an angle they probably haven't noticed themselves: a connection between papers/concepts, a shift in focus over time, or a way to reframe what they're working on.
+4. "encouragement" (근거 있는 격려) - When there is concrete evidence of real progress (a well-formed question, growing depth, consistent effort), name that evidence specifically. Do not hand out generic cheerleading with no basis.
 
 Research areas: {categories_line}
 Frequently studied concepts: {concepts_line}
@@ -2354,12 +2363,12 @@ Recent notes (memo excerpts, [paper title] content):
 Recent questions asked (excerpts, [paper title] content):
 {questions_block}
 
-Rule-detected gaps (for reference only, rephrase naturally instead of copying verbatim):
+Rule-detected gaps (for reference only, rephrase naturally and go deeper instead of copying verbatim):
 {gap_hints_block}
 
 Output ONLY a pure JSON array, with no markdown code fences, no explanations, and no extra prose. Each element must be an object with:
-- "type": one of "advice" (조언), "summary" (최근 활동 요약), "recommendation" (다음에 해볼 만한 것 추천), "encouragement" (격려/성과 인정)
-- "message": the insight itself, in Korean, one or two sentences.
+- "type": exactly one of "gap_diagnosis", "mentor_advice", "perspective", "encouragement"
+- "message": the insight itself, in Korean, one to three sentences, specific enough that the researcher would recognize exactly what it's referring to.
 
 JSON Array:"""
     return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="AI 인사이트 생성", required_key="message")

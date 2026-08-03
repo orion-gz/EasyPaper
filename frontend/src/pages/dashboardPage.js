@@ -162,14 +162,15 @@ function renderStatGrid(stats, events, docs) {
 }
 
 // ── AI 인사이트 ── services/knowledge_graph.get_ai_insights가 사용자의 최근
-// 질문/메모/읽은 논문 데이터를 근거로 LLM(llm_client.generate_dashboard_insights)을
-// 호출해 생성한 조언/요약/추천/격려를 보여준다(하루 단위로 캐싱 - 매일 최신화).
-// LLM 호출이 실패하면 백엔드가 조용히 규칙 기반 지식 격차 감지 결과로
-// 대체하므로, 프론트는 type이 둘 중 어느 쪽이든 적절한 아이콘만 골라주면 된다.
+// 질문/메모 내용을 근거로 LLM(llm_client.generate_dashboard_insights, 지도교수
+// 멘토 페르소나)을 호출해 이해도 진단/교수자 조언/관점 제시/근거 있는 격려를
+// 생성한다(하루 단위로 캐싱 - 매일 최신화). LLM 호출이 실패하면 백엔드가
+// 조용히 규칙 기반 지식 격차 감지 결과로 대체하므로, 프론트는 type이 둘 중
+// 어느 체계든 적절한 아이콘만 골라주면 된다.
 const INSIGHT_TYPE_ICON = {
-  advice: 'lightbulb',
-  summary: 'fileText',
-  recommendation: 'star',
+  gap_diagnosis: 'helpCircle',
+  mentor_advice: 'lightbulb',
+  perspective: 'compare',
   encouragement: 'smile',
   low_question_concept: 'messageCircle',
   no_notes_paper: 'edit3',
