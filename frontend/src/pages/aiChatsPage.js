@@ -186,11 +186,11 @@ export async function renderAiChatsPage() {
 
   function actionsHtml(session) {
     return `
-      <button type="button" class="aic-action-btn aic-action-primary" data-action="chat" data-doc="${escapeHtml(session.doc_id)}">
-        ${icon('messageCircle', 14)} 대화 열기
+      <button type="button" class="aic-action-btn aic-action-primary" data-action="chat" data-doc="${escapeHtml(session.doc_id)}" title="대화 열기">
+        ${icon('messageCircle', 14)} 대화
       </button>
-      <button type="button" class="aic-action-btn" data-action="viewer" data-doc="${escapeHtml(session.doc_id)}">
-        ${icon('bookOpen', 14)} 뷰어 열기
+      <button type="button" class="aic-action-btn" data-action="viewer" data-doc="${escapeHtml(session.doc_id)}" title="뷰어 열기">
+        ${icon('bookOpen', 14)} 뷰어
       </button>
     `
   }
