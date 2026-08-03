@@ -161,10 +161,22 @@ function renderStatGrid(stats, events, docs) {
   `
 }
 
-// ── AI 인사이트 ── 지식 격차 감지(services/knowledge_graph.get_knowledge_gaps)
-// 결과를 그대로 인사이트 문구로 노출한다 - 규칙 기반이라 매번 근거가 있다.
-function renderInsightsCard(gaps) {
-  const items = (gaps || []).slice(0, 4)
+// ── AI 인사이트 ── services/knowledge_graph.get_ai_insights가 사용자의 최근
+// 질문/메모/읽은 논문 데이터를 근거로 LLM(llm_client.generate_dashboard_insights)을
+// 호출해 생성한 조언/요약/추천/격려를 보여준다(하루 단위로 캐싱 - 매일 최신화).
+// LLM 호출이 실패하면 백엔드가 조용히 규칙 기반 지식 격차 감지 결과로
+// 대체하므로, 프론트는 type이 둘 중 어느 쪽이든 적절한 아이콘만 골라주면 된다.
+const INSIGHT_TYPE_ICON = {
+  advice: 'lightbulb',
+  summary: 'fileText',
+  recommendation: 'star',
+  encouragement: 'smile',
+  low_question_concept: 'messageCircle',
+  no_notes_paper: 'edit3',
+}
+
+function renderInsightsCard(insights) {
+  const items = (insights || []).slice(0, 4)
   return `
     <div class="dash-card dash-card-insights">
       <div class="dash-card-head"><h3>${icon('lightbulb', 15)}AI 인사이트</h3></div>
@@ -172,7 +184,7 @@ function renderInsightsCard(gaps) {
         ? emptyNote('아직 표시할 인사이트가 없습니다. 논문을 더 읽고 질문/메모를 남기면 여기에 제안이 쌓입니다.')
         : `<ul class="dash-insight-list">${items.map(g => `
             <li class="dash-insight-item">
-              <span class="dash-insight-icon">${icon(g.type === 'no_notes_paper' ? 'edit3' : 'messageCircle', 14)}</span>
+              <span class="dash-insight-icon">${icon(INSIGHT_TYPE_ICON[g.type] || 'lightbulb', 14)}</span>
               <span>${escapeHtml(g.message)}</span>
             </li>`).join('')}</ul>`
       }
@@ -629,14 +641,14 @@ export async function renderDashboardPage() {
   const docs = (libraryData && libraryData.documents) || []
   const stats = dashboard.stats || {}
   const heatmap = dashboard.heatmap || []
-  const gaps = dashboard.gaps || []
+  const insights = dashboard.insights || []
   const recentQuestions = dashboard.recent_questions || []
 
   el.innerHTML = `
     <div class="dash-root">
       ${renderStatGrid(stats, events, docs)}
       <div class="dash-row dash-row-3">
-        ${renderInsightsCard(gaps)}
+        ${renderInsightsCard(insights)}
         ${renderWeeklyActivityCard(events, stats, docs, readingStats)}
         ${renderProgressSummaryCard(events, heatmap, readingStats)}
       </div>

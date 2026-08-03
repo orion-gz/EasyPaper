@@ -2325,3 +2325,42 @@ Already Read:
 JSON Array:"""
     return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="읽을 논문 추천", required_key="title")
 
+
+async def generate_dashboard_insights(profile: dict, session_id: str = None) -> List[dict]:
+    """사용자의 최근 질문/메모 내용, 읽은 논문 통계, 관심 개념/카테고리를 근거로
+    대시보드 "AI 인사이트" 카드에 표시할 개인화된 인사이트 3~5개를 생성한다.
+    규칙 기반 격차 감지(knowledge_graph.get_knowledge_gaps)와 달리 매번 똑같은
+    문구가 아니라, 실제 활동 내용을 반영해 조언/요약/추천/격려처럼 다양한
+    성격의 문장을 만들도록 유도한다. 반환값: [{"type": str, "message": str}, ...].
+    profile 형태는 knowledge_graph.get_ai_insights가 만든다:
+    {"stats": {...}, "notes": [str], "questions": [str], "concepts": [str],
+     "categories": [str], "gap_hints": [str]}."""
+    stats = profile.get("stats") or {}
+    notes_block = "\n".join(f"- {n}" for n in profile.get("notes") or []) or "(없음)"
+    questions_block = "\n".join(f"- {q}" for q in profile.get("questions") or []) or "(없음)"
+    concepts_line = ", ".join(profile.get("concepts") or []) or "(없음)"
+    categories_line = ", ".join(profile.get("categories") or []) or "(알 수 없음)"
+    gap_hints_block = "\n".join(f"- {g}" for g in profile.get("gap_hints") or []) or "(없음)"
+
+    prompt = f"""You are a thoughtful academic research mentor reviewing a researcher's recent activity in their paper-reading app. Based on the data below, write 3 to 5 short, varied, and genuinely useful insights in Korean for their dashboard. Mix DIFFERENT kinds of insights - do not make them all the same type. Ground every insight in the actual data given; do not invent facts, paper titles, or activity that isn't there.
+
+Research areas: {categories_line}
+Frequently studied concepts: {concepts_line}
+Stats: papers {stats.get('total_papers', 0)}, read {stats.get('read_papers', 0)}, questions {stats.get('total_questions', 0)}, notes {stats.get('total_notes', 0)}
+
+Recent notes (memo excerpts, [paper title] content):
+{notes_block}
+
+Recent questions asked (excerpts, [paper title] content):
+{questions_block}
+
+Rule-detected gaps (for reference only, rephrase naturally instead of copying verbatim):
+{gap_hints_block}
+
+Output ONLY a pure JSON array, with no markdown code fences, no explanations, and no extra prose. Each element must be an object with:
+- "type": one of "advice" (조언), "summary" (최근 활동 요약), "recommendation" (다음에 해볼 만한 것 추천), "encouragement" (격려/성과 인정)
+- "message": the insight itself, in Korean, one or two sentences.
+
+JSON Array:"""
+    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="AI 인사이트 생성", required_key="message")
+

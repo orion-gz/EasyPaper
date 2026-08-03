@@ -39,6 +39,10 @@ logger = logging.getLogger(__name__)
 # 매번 다시 계산하지 않고, 일주일에 한 번만 새로 생성해 app_meta에 저장해둔다.
 READING_RECOMMENDATIONS_CACHE_DAYS = 7
 
+# AI 인사이트 캐시 TTL - 대시보드를 열 때마다 LLM을 호출하지 않으면서도 하루에
+# 한 번은 그날의 최신 활동(질문/메모/읽은 논문)을 반영해 새로 생성되게 한다.
+AI_INSIGHTS_CACHE_HOURS = 24
+
 # 그래프 조회 시점에 아직 개념/인용 동기화가 안 된(graph_synced_at 없는) 문서를
 # 백그라운드로 백필한다. 같은 문서에 대해 중복으로 백필 태스크가 여러 개
 # 뜨는 것을 막기 위한 in-flight 집합.
@@ -637,15 +641,86 @@ async def get_knowledge_gaps(username: str) -> List[dict]:
     return concept_gaps + paper_gaps[:5]
 
 
+def _ai_insights_cache_key(username: str) -> str:
+    return f"ai_insights:{username}"
+
+
+async def get_ai_insights(username: str) -> List[dict]:
+    """대시보드 "AI 인사이트" 카드의 내용을 생성한다. 예전에는 get_knowledge_gaps의
+    규칙 기반 격차 문구를 그대로 노출했지만, 그건 매번 같은 두 패턴("질문이
+    없습니다"/"메모가 없습니다")만 반복해 내용이 다양하지 않았다. 여기서는 실제
+    질문/메모 내용과 읽은 논문 목록을 LLM에 근거로 전달해, 조언/요약/추천/격려처럼
+    더 다양하고 구체적인 인사이트를 생성한다.
+
+    결과는 app_meta에 하루(AI_INSIGHTS_CACHE_HOURS) 동안 캐싱해 대시보드를 열 때마다
+    LLM을 호출하지 않으면서도 매일 새 활동을 반영해 갱신되게 한다(추천 논문 캐싱과
+    동일한 패턴). LLM 호출이 실패하거나 빈 배열을 반환하면(프로바이더 장애, 아직
+    분석할 활동이 전혀 없음 등) 기존 규칙 기반 지식 격차 감지로 조용히 대체해
+    카드가 비지 않게 한다."""
+    from services.db import db_get_meta, db_set_meta
+
+    cache_key = _ai_insights_cache_key(username)
+    cached_raw = db_get_meta(cache_key)
+    if cached_raw:
+        try:
+            cached = json.loads(cached_raw)
+            generated_at = datetime.fromisoformat(cached["generated_at"])
+            age = datetime.now(timezone.utc) - generated_at
+            if age < timedelta(hours=AI_INSIGHTS_CACHE_HOURS):
+                return cached["insights"]
+        except Exception:
+            pass  # 캐시가 손상됐으면 무시하고 새로 생성
+
+    from services.library import list_documents
+    docs = list_documents(username=username)
+    rule_based_gaps = await get_knowledge_gaps(username)
+    if not docs:
+        return rule_based_gaps
+
+    timeline = await get_activity_timeline(username)
+    notes = [f"[{e['doc_title']}] {e['summary']}" for e in timeline if e["type"] == "note" and e.get("summary")][:8]
+    questions = [f"[{e['doc_title']}] {e['summary']}" for e in timeline if e["type"] == "question" and e.get("summary")][:8]
+
+    heatmap = await get_concept_heatmap(username)
+    concepts = [h["name"] for h in heatmap[:8]]
+    categories = sorted({c for d in docs for c in (d.get("metadata") or {}).get("categories", []) or []})
+
+    stats = {
+        "total_papers": len(docs),
+        "read_papers": sum(1 for d in docs if (d.get("metadata") or {}).get("read")),
+        "total_notes": len([e for e in timeline if e["type"] == "note"]),
+        "total_questions": len([e for e in timeline if e["type"] == "question"]),
+    }
+
+    from services.llm_client import generate_dashboard_insights
+    insights = await generate_dashboard_insights({
+        "stats": stats,
+        "notes": notes,
+        "questions": questions,
+        "concepts": concepts,
+        "categories": categories,
+        "gap_hints": [g["message"] for g in rule_based_gaps],
+    }, session_id=username)
+
+    if not insights:
+        insights = rule_based_gaps  # LLM 실패/빈 응답 시 규칙 기반으로 폴백
+
+    db_set_meta(cache_key, json.dumps({
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "insights": insights,
+    }, ensure_ascii=False))
+    return insights
+
+
 async def get_dashboard_summary(username: str) -> dict:
     """지식 그래프 탭의 "대시보드" 뷰에 필요한 데이터를 한 번에 모은다.
-    새 집계 로직 없이 get_concept_heatmap/get_knowledge_gaps/
+    새 집계 로직 없이 get_concept_heatmap/get_ai_insights/
     get_activity_timeline을 조합할 뿐이다."""
     from services.library import list_documents
     docs = list_documents(username=username)  # 이미 created_at DESC 정렬됨
 
     heatmap = await get_concept_heatmap(username)
-    gaps = await get_knowledge_gaps(username)
+    insights = await get_ai_insights(username)
     timeline = await get_activity_timeline(username)
 
     recent_questions = [e for e in timeline if e["type"] == "question"][:10]
@@ -667,7 +742,7 @@ async def get_dashboard_summary(username: str) -> dict:
     return {
         "stats": stats,
         "heatmap": heatmap[:10],
-        "gaps": gaps,
+        "insights": insights,
         "recent_questions": recent_questions,
         "recent_notes": recent_notes,
         "recent_papers": recent_papers,

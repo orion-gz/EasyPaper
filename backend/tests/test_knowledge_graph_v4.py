@@ -1,8 +1,12 @@
 """지식 그래프 4차(Concept Heatmap / Knowledge Gap Detection / Research
 Dashboard) 회귀 테스트. 이전 차수와 동일한 fixture 패턴(test_client/
-isolated_dirs)을 사용한다. 이번 차수는 LLM/외부 API 호출이 전혀 없어
-monkeypatch 없이 순수 데이터로 검증한다.
+isolated_dirs)을 사용한다. Concept Heatmap/Knowledge Gap Detection은
+LLM/외부 API 호출이 전혀 없어 monkeypatch 없이 순수 데이터로 검증하지만,
+Research Dashboard의 AI 인사이트(get_ai_insights)는 LLM을 호출하므로
+test_knowledge_graph_v3.py의 추천 논문 테스트와 동일하게
+llm_client.generate_dashboard_insights를 monkeypatch한다.
 """
+import pytest
 
 
 def _create_doc_owned_by(isolated_dirs, doc_id: str, username: str, metadata: dict = None):
@@ -127,7 +131,14 @@ def test_gap_skips_unread_paper_without_notes(test_client, isolated_dirs):
 
 # ── Research Dashboard ───────────────────────────────────────────────────
 
-def test_dashboard_stats_and_recent_lists(test_client, isolated_dirs):
+def test_dashboard_stats_and_recent_lists(test_client, isolated_dirs, monkeypatch):
+    import services.llm_client as llm_client
+
+    async def fake_generate_insights(profile, session_id=None):
+        return [{"type": "summary", "message": "테스트 인사이트"}]
+
+    monkeypatch.setattr(llm_client, "generate_dashboard_insights", fake_generate_insights)
+
     db = isolated_dirs["db"]
     _create_doc_owned_by(
         isolated_dirs, "doc-dash-1", "testuser",
@@ -154,12 +165,78 @@ def test_dashboard_stats_and_recent_lists(test_client, isolated_dirs):
     assert any(q["summary"] == "질문 테스트" for q in data["recent_questions"])
     assert any(n["summary"] == "메모 테스트" for n in data["recent_notes"])
     assert any(p["doc_id"] == "doc-dash-1" for p in data["recent_papers"])
+    assert data["insights"] == [{"type": "summary", "message": "테스트 인사이트"}]
 
 
 def test_dashboard_excludes_other_users_data(test_client, isolated_dirs):
+    # testuser 소유 문서가 0건이라 get_ai_insights가 LLM을 호출하지 않고 바로
+    # 빈 규칙 기반 결과로 반환하므로(문서가 없으면 근거가 없어 조기 반환)
+    # 별도 monkeypatch가 필요 없다.
     _create_doc_owned_by(isolated_dirs, "doc-dash-other", "otheruser", {"title": "Not Mine"})
 
     res = test_client.get("/api/library/dashboard")
     data = res.json()
     assert data["stats"]["total_papers"] == 0
     assert not any(p["doc_id"] == "doc-dash-other" for p in data["recent_papers"])
+
+
+# ── AI Insights (LLM 기반) ───────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_ai_insights_uses_llm_result_when_available(isolated_dirs, monkeypatch):
+    import services.llm_client as llm_client
+    import services.knowledge_graph as knowledge_graph
+
+    _create_doc_owned_by(isolated_dirs, "doc-insight-1", "testuser", {"title": "Insight Paper"})
+
+    captured = {}
+
+    async def fake_generate_insights(profile, session_id=None):
+        captured["profile"] = profile
+        return [{"type": "advice", "message": "다음엔 관련 논문을 더 찾아보세요."}]
+
+    monkeypatch.setattr(llm_client, "generate_dashboard_insights", fake_generate_insights)
+
+    result = await knowledge_graph.get_ai_insights("testuser")
+    assert result == [{"type": "advice", "message": "다음엔 관련 논문을 더 찾아보세요."}]
+    assert captured["profile"]["stats"]["total_papers"] == 1
+
+
+@pytest.mark.asyncio
+async def test_ai_insights_falls_back_to_rule_based_gaps_when_llm_empty(isolated_dirs, monkeypatch):
+    import services.llm_client as llm_client
+    import services.knowledge_graph as knowledge_graph
+
+    _create_doc_owned_by(
+        isolated_dirs, "doc-insight-nonotes", "testuser",
+        {"title": "No Notes Paper", "read": True, "read_at": "2026-01-01T00:00:00+00:00"},
+    )
+
+    async def fake_generate_insights(profile, session_id=None):
+        return []  # LLM 실패/빈 응답 상황을 흉내
+
+    monkeypatch.setattr(llm_client, "generate_dashboard_insights", fake_generate_insights)
+
+    result = await knowledge_graph.get_ai_insights("testuser")
+    assert any(g["type"] == "no_notes_paper" and g["doc_id"] == "doc-insight-nonotes" for g in result)
+
+
+@pytest.mark.asyncio
+async def test_ai_insights_caches_result_for_a_day(isolated_dirs, monkeypatch):
+    import services.llm_client as llm_client
+    import services.knowledge_graph as knowledge_graph
+
+    _create_doc_owned_by(isolated_dirs, "doc-insight-cache", "testuser", {"title": "Cache Paper"})
+
+    call_count = {"n": 0}
+
+    async def fake_generate_insights(profile, session_id=None):
+        call_count["n"] += 1
+        return [{"type": "summary", "message": f"호출 {call_count['n']}회"}]
+
+    monkeypatch.setattr(llm_client, "generate_dashboard_insights", fake_generate_insights)
+
+    first = await knowledge_graph.get_ai_insights("testuser")
+    second = await knowledge_graph.get_ai_insights("testuser")
+    assert first == second
+    assert call_count["n"] == 1  # 캐시가 있으면 LLM을 다시 호출하지 않는다
