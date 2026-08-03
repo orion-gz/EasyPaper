@@ -156,11 +156,45 @@ function sumSecondsByDayRange(byDay, startKey, endKeyExclusive) {
   return total
 }
 
+// ── 캘린더 히트맵 호버 툴팁 ───────────────────────────────────
+// rh-cal-scroll이 overflow-x:auto라 overflow-y도 함께 clip되므로(CSS 스펙상
+// 한 축이라도 visible이 아니면 다른 축도 auto로 강제됨), 셀 위에 절대배치로
+// 띄우면 그리드 밖으로 잘려 안 보일 수 있다 - body에 fixed로 붙여 스크롤
+// 컨테이너의 클리핑을 피하는 싱글턴 툴팁을 쓴다.
+let rhTooltipEl = null
+function getRhTooltipEl() {
+  if (!rhTooltipEl) {
+    rhTooltipEl = document.createElement('div')
+    rhTooltipEl.className = 'rh-cal-tooltip'
+    document.body.appendChild(rhTooltipEl)
+  }
+  return rhTooltipEl
+}
+function showRhTooltip(cellEl) {
+  const text = cellEl.dataset.tooltip
+  if (!text) return
+  const tip = getRhTooltipEl()
+  tip.textContent = text
+  tip.classList.add('visible')
+  const rect = cellEl.getBoundingClientRect()
+  const tipRect = tip.getBoundingClientRect()
+  let top = rect.top - tipRect.height - 8
+  if (top < 4) top = rect.bottom + 8 // 화면 맨 위 줄 셀은 위 공간이 없으므로 아래로 표시
+  let left = rect.left + rect.width / 2 - tipRect.width / 2
+  left = Math.max(4, Math.min(left, window.innerWidth - tipRect.width - 4))
+  tip.style.top = `${top}px`
+  tip.style.left = `${left}px`
+}
+function hideRhTooltip() {
+  if (rhTooltipEl) rhTooltipEl.classList.remove('visible')
+}
+
 // ── 렌더 ───────────────────────────────────────────────────
 export async function renderReadingHistoryPage() {
   const el = document.getElementById('page-history')
   if (!el) return
 
+  hideRhTooltip() // 다른 페이지로 이동한 뒤에도 뜬 채로 남아있지 않도록
   el.innerHTML = '<div class="rh-page"><div class="rh-empty">읽기 기록을 불러오는 중...</div></div>'
 
   let events = []
@@ -275,6 +309,11 @@ export async function renderReadingHistoryPage() {
   }
   const bucketOf = (count) => count === 0 ? 0 : Math.min(4, Math.ceil((count / Math.max(1, maxCountInGrid)) * 4))
 
+  // rh-cal-months(월 라벨)와 rh-cal-grid(요일 칸)는 서로 다른 grid라, 둘 다
+  // 명시적으로 같은 grid-template-columns(렌더 시 인라인 스타일로 주입)를
+  // 쓰지 않으면 라벨 열의 auto 폭 계산이 칸 그리드와 어긋나 최근 달(예: 이번
+  // 달) 라벨이 실제 칸 밖으로 밀려나 잘려 보인다 - 라벨 위치는 grid-column
+  // span만으로 정하고, 폭은 항상 두 grid가 동일하게 갖도록 한다.
   const monthMarkers = []
   weeks.forEach((week, wi) => {
     const firstOfMonthDay = week.find(d => keyToLocalDate(d.key).getDate() <= 7)
@@ -289,8 +328,8 @@ export async function renderReadingHistoryPage() {
   const calGridHtml = weeks.map(week => week.map(cell => {
     if (cell.isFuture) return '<div class="rh-cal-cell rh-future"></div>'
     const bucket = bucketOf(cell.count)
-    const title = `${formatShortDate(cell.key)}: 활동 ${cell.count}건`
-    return `<div class="rh-cal-cell rh-heat-${bucket}" title="${escapeHtml(title)}"></div>`
+    const tooltip = `${formatShortDate(cell.key)}: 활동 ${cell.count}건`
+    return `<div class="rh-cal-cell rh-heat-${bucket}" data-tooltip="${escapeHtml(tooltip)}"></div>`
   }).join('')).join('')
 
   const monthsHtml = (() => {
@@ -414,10 +453,10 @@ export async function renderReadingHistoryPage() {
             </div>
             <div class="rh-cal-scroll">
               <div class="rh-cal">
-                <div class="rh-cal-months">${monthsHtml}</div>
+                <div class="rh-cal-months" style="grid-template-columns:repeat(${WEEKS}, 12px)">${monthsHtml}</div>
                 <div class="rh-cal-body">
                   <div class="rh-cal-weekday-labels">${WEEKDAY_LABELS.map(l => `<span>${l}</span>`).join('')}</div>
-                  <div class="rh-cal-grid">${calGridHtml}</div>
+                  <div class="rh-cal-grid" style="grid-template-columns:repeat(${WEEKS}, 12px)">${calGridHtml}</div>
                 </div>
               </div>
             </div>
@@ -587,6 +626,17 @@ export async function renderReadingHistoryPage() {
     if (!row) return
     openDoc(row.dataset.docId)
   })
+
+  const calGridEl = el.querySelector('.rh-cal-grid')
+  if (calGridEl) {
+    calGridEl.addEventListener('mouseover', (event) => {
+      const cell = event.target.closest('.rh-cal-cell[data-tooltip]')
+      if (cell) showRhTooltip(cell)
+    })
+    calGridEl.addEventListener('mouseout', (event) => {
+      if (event.target.closest('.rh-cal-cell[data-tooltip]')) hideRhTooltip()
+    })
+  }
 
   renderTimeline()
 }

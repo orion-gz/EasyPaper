@@ -227,6 +227,30 @@ body.light-theme {
 .rh-cal-cell.rh-heat-4 { background: var(--accent-mid); border-color: var(--accent-mid); }
 .rh-cal-cell.rh-future { background: transparent; border-color: transparent; }
 
+/* readingHistoryPage.js가 body에 fixed로 붙여 위치를 계산해주는 싱글턴
+   호버 툴팁 - rh-cal-scroll(overflow-x:auto)의 클리핑을 피하려고 그리드
+   바깥(body)에 둔다. */
+.rh-cal-tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 200;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.1s ease;
+}
+.rh-cal-tooltip.visible { opacity: 1; visibility: visible; }
+
 .rh-cal-footer {
   display: flex;
   align-items: center;
