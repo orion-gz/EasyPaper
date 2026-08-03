@@ -1,7 +1,7 @@
 import sqlite3
 import os
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 
 # DB_PATH 환경변수가 있으면 그대로 쓰고(Docker 등에서 데이터 볼륨 경로로
@@ -244,6 +244,26 @@ def init_db():
         )
         """)
 
+        # 13. reading_time 테이블 (Reading History의 "읽은 시간" 실측치). 뷰어/비교
+        #     화면이 화면에 보이고 포커스된 동안 프런트가 일정 간격(하트비트)으로
+        #     경과 초를 보내오면 (doc_id, username, day, category) 단위로 누적한다.
+        #     category는 'reading'(뷰어 기본)/'chat'(채팅 사이드바가 열려있는 동안)/
+        #     'compare'(논문 비교 채팅 화면) 중 하나 - 실제로 구분 가능한 화면
+        #     상태만 카테고리로 쓰고, 근거 없는 세부 항목(예: "메모 작성 시간")은
+        #     만들지 않는다.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reading_time (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            day TEXT NOT NULL,
+            category TEXT NOT NULL,
+            seconds INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            UNIQUE(doc_id, username, day, category)
+        )
+        """)
+
         # 라이브러리 목록/문서 조회가 doc_id(+suffix)로 translations를,
         # doc_id로 documents/page_insights/chats를 매번 훑는데(문서 수 x
         # 페이지 수만큼 뻥튀기됨) 인덱스가 없어 전부 풀스캔이었다. 목록
@@ -263,6 +283,8 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_question_concepts_chat ON question_concepts(chat_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_concept_edges_a ON concept_edges(concept_id_a)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_concept_edges_b ON concept_edges(concept_id_b)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_time_username_day ON reading_time(username, day)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_time_doc ON reading_time(doc_id, username)")
 
         conn.commit()
 
@@ -1183,3 +1205,63 @@ def db_get_memo_counts_for_docs(doc_ids: List[str]) -> Dict[str, int]:
         if total:
             counts[doc_id] = total
     return counts
+
+
+def db_add_reading_time(doc_id: str, username: str, category: str, seconds: int) -> None:
+    """뷰어/비교 화면 하트비트로 들어온 경과 초를 (doc_id, username, 오늘 날짜,
+    category) 버킷에 누적한다. 하루 단위로 쌓아두면 캘린더 히트맵/기간별 통계를
+    reading_time만으로 바로 집계할 수 있다."""
+    if seconds <= 0:
+        return
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO reading_time (doc_id, username, day, category, seconds, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(doc_id, username, day, category)
+            DO UPDATE SET seconds = seconds + excluded.seconds, updated_at = excluded.updated_at
+            """,
+            (doc_id, username, day, category, int(seconds), now)
+        )
+        conn.commit()
+
+
+def db_get_reading_time_stats(username: str, since_days: Optional[int] = None) -> Dict[str, Any]:
+    """사용자의 실측 읽기 시간을 세 가지 형태로 집계해서 반환한다:
+    - total_seconds_by_category: {"reading": n, "chat": n, "compare": n} (시간 분포용)
+    - total_seconds_by_doc: {doc_id: seconds} (Top Papers by Reading Time용, 카테고리 무관 합계)
+    - total_seconds_by_day: {"YYYY-MM-DD": seconds} (일별 총 읽기 시간)
+    since_days가 주어지면 오늘 포함 최근 N일로 제한한다."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        params: List[Any] = [username]
+        day_filter = ""
+        if since_days is not None:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=since_days - 1)).strftime("%Y-%m-%d")
+            day_filter = " AND day >= ?"
+            params.append(cutoff)
+        cursor.execute(
+            f"SELECT doc_id, day, category, seconds FROM reading_time WHERE username = ?{day_filter}",
+            params,
+        )
+        rows = cursor.fetchall()
+
+    by_category: Dict[str, int] = {}
+    by_doc: Dict[str, int] = {}
+    by_day: Dict[str, int] = {}
+    total_seconds = 0
+    for r in rows:
+        by_category[r["category"]] = by_category.get(r["category"], 0) + r["seconds"]
+        by_doc[r["doc_id"]] = by_doc.get(r["doc_id"], 0) + r["seconds"]
+        by_day[r["day"]] = by_day.get(r["day"], 0) + r["seconds"]
+        total_seconds += r["seconds"]
+
+    return {
+        "total_seconds": total_seconds,
+        "total_seconds_by_category": by_category,
+        "total_seconds_by_doc": by_doc,
+        "total_seconds_by_day": by_day,
+    }

@@ -161,6 +161,25 @@ async def get_library_dashboard(current_user: str = Depends(get_current_user)):
     return await get_dashboard_summary(current_user)
 
 
+class ReadingHeartbeatRequest(BaseModel):
+    seconds: int
+    category: str = "reading"
+
+
+@router.get("/library/reading-stats")
+async def get_library_reading_stats(since_days: Optional[int] = None, current_user: str = Depends(get_current_user)):
+    """Reading History 페이지의 "읽은 시간" 관련 위젯(총 읽기 시간, 카테고리별
+    시간 분포, 논문별 읽기 시간 랭킹)에 쓰이는 실측 집계를 반환합니다. 프론트가
+    뷰어/비교 화면에서 보낸 하트비트(POST /library/{doc_id}/reading-heartbeat)를
+    누적한 값이며, since_days를 주면 최근 N일로 제한합니다.
+
+    /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
+    이유로, 그렇지 않으면 "reading-stats"가 doc_id 경로 파라미터로 잘못 매칭된다.
+    """
+    from services.db import db_get_reading_time_stats
+    return db_get_reading_time_stats(current_user, since_days)
+
+
 @router.get("/library/{doc_id}")
 async def get_library_document(
     doc_id: str,
@@ -338,6 +357,21 @@ async def delete_library_document(doc_id: str, current_user: str = Depends(get_c
     if not soft_delete_document(doc_id):
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
     return {"message": "문서가 휴지통으로 이동되었습니다."}
+
+@router.post("/library/{doc_id}/reading-heartbeat")
+async def post_reading_heartbeat(doc_id: str, body: ReadingHeartbeatRequest, current_user: str = Depends(get_current_user)):
+    """뷰어/비교 화면이 보이고 포커스된 동안 프론트가 주기적으로 보내는 경과
+    시간(초)을 누적합니다. category는 'reading'(뷰어 기본) / 'chat'(채팅
+    사이드바가 열려있는 동안) / 'compare'(논문 비교 채팅 화면) 중 하나입니다.
+    한 번의 하트비트 간격(예: 20초) 이상을 보내는 조작을 막기 위해 상한을 둡니다."""
+    _require_owned_document(doc_id, current_user)
+    if body.category not in ("reading", "chat", "compare"):
+        raise HTTPException(status_code=400, detail="알 수 없는 category입니다.")
+    seconds = max(0, min(body.seconds, 120))
+    from services.db import db_add_reading_time
+    db_add_reading_time(doc_id, current_user, body.category, seconds)
+    return {"message": "ok"}
+
 
 @router.post("/library/{doc_id}/restore")
 async def restore_library_document(doc_id: str, current_user: str = Depends(get_current_user)):
@@ -537,6 +571,31 @@ async def put_library_memos(doc_id: str, payload: dict, current_user: str = Depe
     from services.db import db_put_memos
     db_put_memos(doc_id, payload.get("data", {}))
     return {"status": "ok"}
+
+
+@router.get("/library/{doc_id}/bibliography")
+async def get_library_bibliography(doc_id: str, current_user: str = Depends(get_current_user)):
+    """Library 상세 패널 Quick Info의 Venue/DOI/ArXiv/Citations를 채운다. 논문
+    자체의 서지 정보는 데이터베이스에 없으므로, 제목으로 OpenAlex를 검색해서
+    찾는다(참고문헌 링크 연결과 동일한 무료/키 불필요 API - services/
+    reference_linker.py). 첫 조회 때만 실제로 검색하고 결과를(못 찾은 경우도
+    포함해서) documents.metadata.bibliography에 캐시해, 상세 패널을 열 때마다
+    매번 외부 API를 다시 호출하지 않는다."""
+    doc = _require_owned_document(doc_id, current_user)
+    meta = doc.get("metadata") or {}
+
+    cached = meta.get("bibliography")
+    if cached:
+        return cached
+
+    from services.reference_linker import resolve_paper_metadata
+    title = meta.get("title") or doc.get("filename") or ""
+    result = await resolve_paper_metadata(title)
+
+    bibliography = result or {"venue": None, "doi": None, "arxiv_id": None, "citation_count": None}
+    meta["bibliography"] = bibliography
+    update_document_metadata(doc_id, meta)
+    return bibliography
 
 
 @router.put("/library/{doc_id}/metadata")

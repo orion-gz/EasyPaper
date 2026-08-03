@@ -211,6 +211,31 @@ export async function fetchLibraryDashboard() {
   return res.json()
 }
 
+// 뷰어/비교 화면이 보이고 포커스된 동안 주기적으로 경과 초를 보고한다(main.js의
+// 읽기 시간 하트비트 타이머가 호출). 실패해도 다음 하트비트에서 다시 시도되므로
+// 조용히 무시한다 - 토스트 등으로 사용자에게 알릴 만한 오류가 아니다.
+export async function sendReadingHeartbeat(docId, seconds, category = 'reading') {
+  try {
+    const res = await fetch(`${API_BASE}/library/${docId}/reading-heartbeat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seconds, category }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+// Reading History 페이지의 총 읽기 시간/카테고리별 시간 분포/논문별 읽기 시간
+// 랭킹에 쓰이는 실측 집계. sinceDays를 주면 최근 N일로 제한한다.
+export async function fetchReadingTimeStats(sinceDays) {
+  const query = sinceDays ? `?since_days=${sinceDays}` : ''
+  const res = await fetch(`${API_BASE}/library/reading-stats${query}`)
+  if (!res.ok) throw new Error('읽기 시간 통계 조회 실패')
+  return res.json()
+}
+
 export async function fetchReadingRecommendations() {
   const res = await fetch(`${API_BASE}/library/graph/recommendations`)
   if (!res.ok) throw new Error('추천 논문 조회 실패')
@@ -248,6 +273,16 @@ export async function deleteLibraryDocPermanently(docId) {
 // 간격으로 재조회한다.
 const PRIMER_POLL_INTERVAL_MS = 3000
 const PRIMER_POLL_MAX_ATTEMPTS = 150 // 최대 약 7.5분 대기
+
+// Library 상세 패널 Quick Info의 Venue/DOI/ArXiv/Citations. 서버가 OpenAlex
+// 제목 검색으로 첫 조회 시 채워서 문서 메타데이터에 캐시해두므로, 여기서는
+// 폴링 없이 단발성 GET이면 된다(생성이 아니라 짧은 검색 1회이기 때문에
+// fetchPrimer처럼 오래 걸리지 않음).
+export async function fetchLibraryBibliography(docId) {
+  const res = await fetch(`${API_BASE}/library/${docId}/bibliography`)
+  if (!res.ok) throw new Error('서지 정보 조회 실패')
+  return res.json()
+}
 
 export async function fetchPrimer(docId, targetLang = '한국어') {
   for (let attempt = 0; attempt < PRIMER_POLL_MAX_ATTEMPTS; attempt++) {
