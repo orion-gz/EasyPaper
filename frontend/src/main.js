@@ -1037,7 +1037,11 @@ function scheduleSaveLastReadPage(pageNum) {
     saveLastReadPageTimer = null
     const p = pendingLastReadPage
     pendingLastReadPage = null
-    updateLibraryDocMetadata(state.currentDocId, { last_page: p }).catch(() => {})
+    // last_page와 함께 last_read_at(마지막으로 읽은 시각)도 갱신한다 - 완독
+    // 표시(read_at)를 하지 않고 읽던 중인 논문은 이 필드가 없으면 대시보드
+    // "최근 읽은 논문"의 정렬/날짜 표시가 read_at||created_at로 떨어져
+    // 계속 업로드 날짜("3일 전" 등)로만 보이는 문제가 있었다.
+    updateLibraryDocMetadata(state.currentDocId, { last_page: p, last_read_at: new Date().toISOString() }).catch(() => {})
   }, 1500)
 }
 
@@ -1055,7 +1059,7 @@ async function flushSaveLastReadPage() {
   pendingLastReadPage = null
   if (!docId || pageNum == null) return
   try {
-    await updateLibraryDocMetadata(docId, { last_page: pageNum })
+    await updateLibraryDocMetadata(docId, { last_page: pageNum, last_read_at: new Date().toISOString() })
   } catch {}
 }
 
@@ -7004,6 +7008,13 @@ async function openFromLibrary(doc, shouldPushState = true) {
     // (아래 loadPDF에서 페이지를 렌더링하며 바로 참조한다) 서버 미러 데이터를
     // 먼저 끌어와야 다른 기기에서 저장한 하이라이트/메모가 반영된다.
     await hydrateAnnotationsAndMemosFromServer(doc.id)
+
+    // 논문을 여는 시점 자체를 "마지막으로 읽은 시각"으로 기록한다(fire-and-forget).
+    // 스크롤로 페이지가 바뀔 때만 last_read_at이 갱신되면, 열자마자 바로 나가거나
+    // (이 fix 이전에 이미 last_page가 있던 예전 문서처럼) 페이지 이동이 없는
+    // 경우 대시보드 "최근 읽은 논문"의 날짜가 계속 업로드 시각에 머물러 있었다.
+    state.currentDocMetadata.last_read_at = new Date().toISOString()
+    updateLibraryDocMetadata(doc.id, { last_read_at: state.currentDocMetadata.last_read_at }).catch(() => {})
 
     if (viewerReadToggleBtn) {
       const isRead = state.currentDocMetadata.read === true
