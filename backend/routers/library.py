@@ -651,12 +651,45 @@ async def update_doc_metadata(
 
     meta = doc.get("metadata") or {}
     if "read_sessions" in payload and isinstance(payload["read_sessions"], list):
+        from datetime import datetime
         existing_sessions = meta.get("read_sessions") or []
         new_sessions = payload["read_sessions"]
         combined = list(existing_sessions)
+        
         for ns in new_sessions:
-            if ns not in combined:
+            if not isinstance(ns, dict):
+                continue
+            ns_ts = ns.get("timestamp")
+            ns_end = ns.get("end_timestamp")
+            ns_dur = ns.get("duration_seconds") or 0
+
+            updated = False
+            # 1) 동일한 timestamp(시작 시각)를 가진 기존 세션이 있다면 해당 세션 항목을 갱신 (In-place update)
+            for i, es in enumerate(combined):
+                if isinstance(es, dict) and es.get("timestamp") == ns_ts:
+                    combined[i] = {**es, **ns}
+                    updated = True
+                    break
+            
+            # 2) 직전 세션의 end_timestamp와 새 세션의 timestamp 차이가 2분(120초) 이내라면 직전 세션에 병합 (Merge)
+            if not updated and combined and isinstance(combined[-1], dict) and combined[-1].get("end_timestamp") and ns_ts:
+                try:
+                    last_end_dt = datetime.fromisoformat(combined[-1]["end_timestamp"].replace("Z", "+00:00"))
+                    curr_start_dt = datetime.fromisoformat(ns_ts.replace("Z", "+00:00"))
+                    gap_sec = (curr_start_dt - last_end_dt).total_seconds()
+                    if 0 <= gap_sec <= 120:
+                        prev_dur = combined[-1].get("duration_seconds") or 0
+                        combined[-1]["end_timestamp"] = ns_end or ns_ts
+                        combined[-1]["duration_seconds"] = prev_dur + ns_dur + int(gap_sec)
+                        combined[-1]["end_page"] = max(combined[-1].get("end_page", 1), ns.get("end_page", 1))
+                        combined[-1]["verified_pages"] = (combined[-1].get("verified_pages") or 1) + (ns.get("verified_pages") or 1)
+                        updated = True
+                except Exception:
+                    pass
+            
+            if not updated and ns not in combined:
                 combined.append(ns)
+
         meta["read_sessions"] = combined[-100:]
         payload_copy = dict(payload)
         payload_copy.pop("read_sessions")
