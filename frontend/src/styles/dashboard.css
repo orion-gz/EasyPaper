@@ -88,22 +88,23 @@
 /* ── 공용 카드 ── */
 .dash-row { display: grid; gap: 16px; }
 .dash-row-3 { grid-template-columns: 1.15fr 1fr 1fr; }
-/* dash-row-recent/dash-row-bottom는 카드마다 내용 성격이 달라(표지 이미지가
-   있는 목록 vs 텍스트만 있는 목록, 타일 그리드 vs 세로로 긴 리스트) 항목
-   개수가 같아도 자연스러운 높이가 크게 차이 난다. 기본값(stretch)으로
-   카드를 억지로 같은 높이까지 늘리면 짧은 카드 안쪽에 실제로 빈 칸이
-   남는다 - 가운데 정렬해도 빈 공간의 위치만 바뀔 뿐 총량은 그대로다.
-   align-items: start로 각 카드가 자기 내용만큼만 높이를 갖게 해 빈 공간
-   자체를 없앤다(대신 같은 행의 카드 아래쪽 끝은 서로 맞지 않을 수 있음). */
-.dash-row-recent, .dash-row-bottom { align-items: start; }
-.dash-row-recent { grid-template-columns: 1.2fr 1fr 0.95fr; }
-.dash-row-bottom { grid-template-columns: 1.3fr 1fr 1fr; }
+/* dash-row-recent와 dash-row-bottom는 행별로 적정한 min-height를 유지하며
+   카드들의 높이를 stretch로 맞춰 밑선(bottom alignment)을 통일한다.
+   카드 내부 요소는 flex-1 및 margin-top: auto를 사용하여 빈 공간을 자연스럽게 분할한다. */
+.dash-row-recent {
+  grid-template-columns: 1.2fr 1fr 0.95fr;
+  min-height: 380px;
+}
+.dash-row-bottom {
+  grid-template-columns: 1.3fr 1fr 1fr;
+  min-height: 340px;
+}
 
 @media (max-width: 1180px) {
-  .dash-row-3, .dash-row-recent, .dash-row-bottom { grid-template-columns: 1fr 1fr; }
+  .dash-row-3, .dash-row-recent, .dash-row-bottom { grid-template-columns: 1fr 1fr; min-height: auto; }
 }
 @media (max-width: 760px) {
-  .dash-row-3, .dash-row-recent, .dash-row-bottom { grid-template-columns: 1fr; }
+  .dash-row-3, .dash-row-recent, .dash-row-bottom { grid-template-columns: 1fr; min-height: auto; }
   .dash-stat-grid { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); }
 }
 
@@ -111,6 +112,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
   padding: 18px 18px 20px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
@@ -124,6 +127,7 @@
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 14px;
+  flex-shrink: 0;
 }
 .dash-card-head h3 {
   margin: 0;
@@ -154,9 +158,20 @@
   padding: 3px 9px;
   border-radius: 100px;
 }
-.dash-card-tag-inline { align-self: flex-start; margin: -6px 0 12px; }
+.dash-card-tag-inline { align-self: flex-start; margin: -6px 0 12px; flex-shrink: 0; }
 
-.dash-empty-note { margin: 0; font-size: 12px; color: var(--text-tertiary); line-height: 1.55; }
+.dash-empty-note {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin: 0;
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.55;
+}
 .dash-error-note { color: var(--error); }
 
 /* ── AI 인사이트 ── */
@@ -208,7 +223,17 @@
 .dash-summary-label { font-size: 10.5px; font-weight: 600; color: var(--text-tertiary); }
 
 /* ── 최근 읽은 논문 ── */
-.dash-paper-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.dash-paper-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: 310px;
+}
 .dash-paper-item {
   display: flex;
   gap: 12px;
@@ -261,7 +286,17 @@
 }
 
 /* ── 최근 질문 ── */
-.dash-question-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.dash-question-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: 310px;
+}
 .dash-question-item { display: flex; gap: 10px; cursor: pointer; }
 .dash-question-icon {
   width: 26px;
@@ -290,13 +325,14 @@
 .dash-dot { margin: 0 5px; }
 
 /* ── AI 추천 논문 ── */
-.dash-recs-body { display: flex; flex-direction: column; }
+.dash-card-recs { display: flex; flex-direction: column; }
+.dash-recs-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .dash-recs-btn {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 12px;
+  margin-top: auto;
   padding: 8px 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
@@ -316,6 +352,7 @@
   align-self: center;
   width: 100%;
   justify-content: center;
+  margin-top: auto;
   background: transparent;
   border: 1px dashed var(--border);
   color: var(--text-secondary);
@@ -323,7 +360,17 @@
 }
 .dash-recs-btn-refresh:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-.dash-rec-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.dash-rec-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: 260px;
+}
 .dash-rec-item { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .dash-rec-item:last-child { border-bottom: none; padding-bottom: 0; }
 .dash-rec-title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); text-decoration: none; line-height: 1.4; }
@@ -332,11 +379,14 @@
 .dash-rec-reason { margin-top: 4px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.45; }
 
 /* ── 개념 히트맵 ── */
+.dash-card-heatmap { display: flex; flex-direction: column; }
 .dash-heat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
   gap: 12px;
   margin-bottom: 14px;
+  flex: 1 1 auto;
+  align-content: start;
 }
 .dash-heat-cell {
   display: flex;
@@ -365,7 +415,16 @@
 }
 .dash-heat-count { font-family: var(--font-mono); font-size: 14.5px; font-weight: 700; color: var(--text-secondary); }
 
-.dash-heat-legend { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
+.dash-heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
 .dash-heat-legend-bar {
   width: 100px;
   height: 7px;
@@ -377,7 +436,16 @@
 }
 
 /* ── 연구 타임라인 ── */
-.dash-timeline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dash-timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: 260px;
+}
 .dash-timeline-item { position: relative; display: flex; gap: 10px; padding-bottom: 14px; cursor: pointer; border-radius: var(--radius-sm); transition: background 0.15s ease; }
 .dash-timeline-item:hover { background: var(--bg-hover); }
 .dash-timeline-item:last-child { padding-bottom: 0; }
@@ -413,8 +481,14 @@
 .dash-timeline-summary { margin-top: 2px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.4; }
 
 /* ── 연구 그래프 미리보기 ── */
-.dash-card-graph { align-items: stretch; }
-.dash-graph-svg { width: 100%; height: 168px; }
+.dash-card-graph { display: flex; flex-direction: column; }
+.dash-graph-svg {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 168px;
+  max-height: 220px;
+}
 .dash-graph-edge { stroke: var(--border-strong); stroke-width: 1.2; }
 .dash-graph-node { cursor: pointer; }
 .dash-graph-node circle {
@@ -434,7 +508,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  margin-top: 8px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
   font-size: 11px;
   color: var(--text-tertiary);
 }
@@ -449,3 +525,24 @@
 .dash-legend-dot.is-center { background: var(--accent-mid); }
 .dash-legend-dot.is-paper { background: var(--success); }
 .dash-legend-dot.is-concept { background: var(--control-accent-text); }
+
+/* ── 카드 내 스크롤바 슬림 스타일 ── */
+.dash-paper-list::-webkit-scrollbar,
+.dash-question-list::-webkit-scrollbar,
+.dash-rec-list::-webkit-scrollbar,
+.dash-timeline-list::-webkit-scrollbar {
+  width: 4px;
+}
+.dash-paper-list::-webkit-scrollbar-thumb,
+.dash-question-list::-webkit-scrollbar-thumb,
+.dash-rec-list::-webkit-scrollbar-thumb,
+.dash-timeline-list::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+.dash-paper-list::-webkit-scrollbar-track,
+.dash-question-list::-webkit-scrollbar-track,
+.dash-rec-list::-webkit-scrollbar-track,
+.dash-timeline-list::-webkit-scrollbar-track {
+  background: transparent;
+}
