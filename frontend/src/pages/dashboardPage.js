@@ -291,8 +291,7 @@ function renderProgressSummaryCard(events, heatmap, readingStats, analyticsSumma
   return `
     <div class="dash-card">
       <div class="dash-card-head">
-        <h3>${icon('award', 15)}연구 성과 & Reading Score</h3>
-        <a href="#" class="dash-link" data-nav="graph">자세히 보기 ›</a>
+        <h3>${icon('award', 15)}활동 요약</h3>
       </div>
       <div class="dash-score-pie-container" style="display: flex; align-items: center; gap: 14px; padding: 12px; margin-bottom: 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
         <div style="position: relative; width: 64px; height: 64px; flex-shrink: 0;">
@@ -473,7 +472,7 @@ function renderHeatmapCard(heatmap) {
     <div class="dash-card dash-card-heatmap">
       <div class="dash-card-head">
         <h3>${icon('tag', 15)}개념 히트맵</h3>
-        <a href="#" class="dash-link" data-nav="graph">전체보기 ›</a>
+        <a href="#" class="dash-link" data-nav="graph" data-subview="heatmap">전체보기 ›</a>
       </div>
       ${heatmap.length === 0 ? emptyNote('아직 추출된 개념이 없습니다.') : `
       <div class="dash-heat-grid">
@@ -628,6 +627,10 @@ function attachHandlers(root) {
     elm.addEventListener('click', (ev) => {
       ev.preventDefault()
       const page = elm.dataset.nav
+      const subview = elm.dataset.subview
+      if (subview) {
+        sessionStorage.setItem('easypaper_graph_subview', subview)
+      }
       if (page) location.hash = page
     })
   })
