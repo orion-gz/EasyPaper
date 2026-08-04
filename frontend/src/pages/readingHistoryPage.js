@@ -398,7 +398,7 @@ export async function renderReadingHistoryPage() {
   let analyticsSummary = null
   try {
     const [timelineRes, dashboardRes, libraryRes, readingStatsRes, analyticsSummaryRes] = await Promise.all([
-      fetchLibraryTimeline(),
+      fetchLibraryTimeline().catch(() => ({ events: [] })),
       fetchLibraryDashboard().catch(() => null),
       fetchLibrary().catch(() => ({ documents: [] })),
       fetchReadingTimeStats().catch(() => null),
