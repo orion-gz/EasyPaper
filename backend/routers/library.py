@@ -210,6 +210,214 @@ async def get_library_reading_stats(since_days: Optional[int] = None, current_us
     return db_get_reading_time_stats(current_user, since_days)
 
 
+class StartSessionRequest(BaseModel):
+    totalPages: Optional[int] = None
+
+
+@router.post("/library/{doc_id}/reading-session/start")
+async def start_reading_session_api(doc_id: str, body: Optional[StartSessionRequest] = None, current_user: str = Depends(get_current_user)):
+    """PDF Viewer 진입 시 Reading Session을 생성하거나 2분 이내 이전 세션과 병합합니다."""
+    _require_owned_document(doc_id, current_user)
+    import uuid
+    from datetime import datetime, timezone
+    from services.db import db_get_latest_reading_session, db_save_reading_session
+
+    latest = db_get_latest_reading_session(doc_id, current_user)
+    now = datetime.now(timezone.utc)
+
+    if latest and latest.get("updated_at"):
+        try:
+            last_updated = datetime.fromisoformat(latest["updated_at"])
+            diff_sec = (now - last_updated).total_seconds()
+            if diff_sec <= 120:
+                return {
+                    "sessionId": latest["id"],
+                    "merged": True,
+                    "startedAt": latest["started_at"],
+                    "activeReadingTime": latest["active_reading_time"],
+                    "version": latest["version"],
+                }
+        except Exception:
+            pass
+
+    new_session_id = str(uuid.uuid4())
+    now_iso = now.isoformat()
+    db_save_reading_session(
+        session_id=new_session_id,
+        username=current_user,
+        paper_id=doc_id,
+        started_at=now_iso,
+        ended_at=None,
+        active_reading_time=0,
+        version=0,
+        page_sessions_json="[]",
+        interaction_summary_json="{}",
+        reading_depth="Opened",
+        reading_score=0.0,
+        reading_confidence=0.0,
+        verified_pages_count=0,
+        total_pages=body.totalPages if body and body.totalPages else 0,
+    )
+    return {
+        "sessionId": new_session_id,
+        "merged": False,
+        "startedAt": now_iso,
+        "activeReadingTime": 0,
+        "version": 0,
+    }
+
+
+from services.reading_analytics import ReadingSessionPayload
+
+
+@router.post("/library/{doc_id}/reading-session/heartbeat")
+async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessionPayload, current_user: str = Depends(get_current_user)):
+    """Viewer에서 20초 간격으로 전달되는 Heartbeat 데이터를 처리하고 Analytics를 재계산합니다."""
+    _require_owned_document(doc_id, current_user)
+    import json
+    from datetime import datetime, timezone
+    from services.db import (
+        db_get_user_reading_profile,
+        db_save_user_reading_profile,
+        db_save_reading_session,
+        db_add_reading_time,
+        db_get_reading_session,
+        get_document,
+    )
+    from services.reading_analytics import process_reading_analytics, update_user_ema
+
+    doc = get_document(doc_id)
+    doc_total_pages = doc.get("total_pages", 0) if doc else 0
+
+    profile = db_get_user_reading_profile(current_user)
+    user_ema = profile.get("ema_seconds_per_page", 600.0)
+    session_count = profile.get("session_count", 0)
+
+    res = process_reading_analytics(payload, doc_total_pages, user_ema)
+
+    new_ema, new_count = update_user_ema(
+        user_ema,
+        session_count,
+        payload.activeReadingTime,
+        len(payload.pageSessions),
+    )
+    db_save_user_reading_profile(current_user, new_ema, new_count)
+
+    existing = db_get_reading_session(payload.sessionId, current_user)
+    started_at = existing["started_at"] if existing else datetime.now(timezone.utc).isoformat()
+
+    db_save_reading_session(
+        session_id=payload.sessionId,
+        username=current_user,
+        paper_id=doc_id,
+        started_at=started_at,
+        ended_at=None,
+        active_reading_time=int(payload.activeReadingTime),
+        version=payload.version,
+        page_sessions_json=json.dumps([ps.dict() for ps in payload.pageSessions]),
+        interaction_summary_json=json.dumps(payload.interactionSummary.dict()),
+        reading_depth=res.readingDepth,
+        reading_score=res.readingScore,
+        reading_confidence=res.readingConfidence,
+        verified_pages_count=res.verifiedPagesCount,
+        total_pages=res.totalPages,
+    )
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    db_add_reading_time(doc_id, current_user, "reading", 20)
+
+    return res.dict()
+
+
+@router.post("/library/{doc_id}/reading-session/end")
+async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, current_user: str = Depends(get_current_user)):
+    """Viewer 세션 종료 시 최종 상태를 기록하고 Analytics 결과를 저장합니다."""
+    _require_owned_document(doc_id, current_user)
+    import json
+    from datetime import datetime, timezone
+    from services.db import db_get_reading_session, db_save_reading_session, get_document, update_document_metadata
+    from services.reading_analytics import process_reading_analytics
+
+    doc = get_document(doc_id)
+    doc_total_pages = doc.get("total_pages", 0) if doc else 0
+
+    res = process_reading_analytics(payload, doc_total_pages, 600.0)
+    existing = db_get_reading_session(payload.sessionId, current_user)
+    started_at = existing["started_at"] if existing else datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    db_save_reading_session(
+        session_id=payload.sessionId,
+        username=current_user,
+        paper_id=doc_id,
+        started_at=started_at,
+        ended_at=now_iso,
+        active_reading_time=int(payload.activeReadingTime),
+        version=payload.version,
+        page_sessions_json=json.dumps([ps.dict() for ps in payload.pageSessions]),
+        interaction_summary_json=json.dumps(payload.interactionSummary.dict()),
+        reading_depth=res.readingDepth,
+        reading_score=res.readingScore,
+        reading_confidence=res.readingConfidence,
+        verified_pages_count=res.verifiedPagesCount,
+        total_pages=res.totalPages,
+    )
+
+    update_document_metadata(doc_id, {"last_read_at": now_iso})
+
+    return res.dict()
+
+
+@router.get("/library/reading-analytics-summary")
+async def get_reading_analytics_summary_api(since_days: Optional[int] = None, current_user: str = Depends(get_current_user)):
+    """전체 논문의 Reading Analytics 요약 집계 정보(평균 Score, Depth, Confidence 등)를 반환합니다."""
+    from services.db import db_get_all_reading_analytics_summary, db_get_user_reading_profile
+    summary = db_get_all_reading_analytics_summary(current_user, since_days)
+    profile = db_get_user_reading_profile(current_user)
+    summary["user_profile"] = profile
+    return summary
+
+
+@router.get("/library/{doc_id}/reading-analytics")
+async def get_paper_reading_analytics_api(doc_id: str, current_user: str = Depends(get_current_user)):
+    """특정 논문의 Reading Analytics (Page Score, Reading Score, Depth, Confidence) 정보를 반환합니다."""
+    _require_owned_document(doc_id, current_user)
+    import json
+    from services.db import db_get_latest_reading_session
+    session = db_get_latest_reading_session(doc_id, current_user)
+    if not session:
+        return {
+            "reading_score": 0.0,
+            "reading_confidence": 0.0,
+            "reading_depth": "Opened",
+            "verified_pages_count": 0,
+            "total_pages": 0,
+            "active_reading_time": 0,
+            "page_scores": {},
+        }
+    page_scores = {}
+    if session.get("page_sessions_json"):
+        try:
+            ps_list = json.loads(session["page_sessions_json"])
+            from services.reading_analytics import analyze_page_sessions, PageSession
+            ps_objs = [PageSession(**p) for p in ps_list]
+            page_scores, _, _ = analyze_page_sessions(ps_objs, 600.0, session.get("total_pages", 0))
+        except Exception:
+            pass
+
+    return {
+        "sessionId": session["id"],
+        "paperId": doc_id,
+        "reading_score": session["reading_score"],
+        "reading_confidence": session["reading_confidence"],
+        "reading_depth": session["reading_depth"],
+        "verified_pages_count": session["verified_pages_count"],
+        "total_pages": session["total_pages"],
+        "active_reading_time": session["active_reading_time"],
+        "page_scores": page_scores,
+    }
+
+
 @router.get("/library/{doc_id}")
 async def get_library_document(
     doc_id: str,

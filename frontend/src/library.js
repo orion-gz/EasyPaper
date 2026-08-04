@@ -243,6 +243,19 @@ export async function fetchReadingTimeStats(sinceDays) {
   return res.json()
 }
 
+export async function fetchReadingAnalyticsSummary(sinceDays) {
+  const query = sinceDays ? `?since_days=${sinceDays}` : ''
+  const res = await fetch(`${API_BASE}/library/reading-analytics-summary${query}`)
+  if (!res.ok) throw new Error('Reading Analytics summary fetch failed')
+  return res.json()
+}
+
+export async function fetchPaperReadingAnalytics(docId) {
+  const res = await fetch(`${API_BASE}/library/${docId}/reading-analytics`)
+  if (!res.ok) throw new Error('Paper Reading Analytics fetch failed')
+  return res.json()
+}
+
 // force: true면 유효한 캐시가 있어도 무시하고 새로 생성한다("다시 받기" 버튼용).
 export async function fetchReadingRecommendations({ force = false } = {}) {
   const res = await fetch(`${API_BASE}/library/graph/recommendations${force ? '?force=true' : ''}`)

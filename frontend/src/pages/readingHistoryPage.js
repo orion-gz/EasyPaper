@@ -652,15 +652,29 @@ export async function renderReadingHistoryPage() {
     .slice(0, 5)
   const topMaxSeconds = topPapers.length ? topPapers[0].seconds : 1
 
+  const paperAnalyticsMap = analyticsSummary?.paper_stats || {}
   const topPapersHtml = topPapers.length ? topPapers.map((p, i) => {
     const title = docTitle(p.doc_id)
     const widthPct = Math.max(6, Math.round((p.seconds / topMaxSeconds) * 100))
+    const pStat = paperAnalyticsMap[p.doc_id]
+    const depth = pStat?.reading_depth || 'Opened'
+    const depthCls = `depth-${depth.toLowerCase().replace(/\s+/g, '-')}`
+    const score = pStat ? pStat.reading_score.toFixed(1) : '-'
+    const verifiedPages = pStat ? pStat.verified_pages_count : '-'
+
     return `
       <div class="rh-top-row" data-doc-id="${escapeHtml(p.doc_id || '')}">
         <span class="rh-top-rank">${i + 1}</span>
         <div class="rh-top-body">
-          <div class="rh-top-title">${escapeHtml(title)}</div>
+          <div class="rh-top-title" style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+            <span>${escapeHtml(title)}</span>
+            <span class="reading-depth-badge ${depthCls}">${escapeHtml(depth)}</span>
+          </div>
           <div class="rh-top-track"><div class="rh-top-fill" style="width:${widthPct}%"></div></div>
+          <div style="font-size:11px; color:var(--text-tertiary); margin-top:2px; display:flex; gap:10px;">
+            <span>Score: <b>${score}</b></span>
+            <span>Verified Pages: <b>${verifiedPages}</b></span>
+          </div>
         </div>
         <span class="rh-top-value">${formatDuration(p.seconds)}</span>
       </div>`

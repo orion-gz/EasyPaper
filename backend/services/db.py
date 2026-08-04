@@ -283,6 +283,40 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_question_concepts_chat ON question_concepts(chat_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_concept_edges_a ON concept_edges(concept_id_a)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_concept_edges_b ON concept_edges(concept_id_b)")
+        # 14. reading_sessions 테이블 (Reading Analytics System)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reading_sessions (
+            id TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            paper_id TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            active_reading_time INTEGER NOT NULL DEFAULT 0,
+            version INTEGER NOT NULL DEFAULT 0,
+            page_sessions_json TEXT,
+            interaction_summary_json TEXT,
+            reading_depth TEXT DEFAULT 'Opened',
+            reading_score REAL DEFAULT 0.0,
+            reading_confidence REAL DEFAULT 0.0,
+            verified_pages_count INTEGER DEFAULT 0,
+            total_pages INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """)
+
+        # 15. user_reading_profiles 테이블 (EMA Learning)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_reading_profiles (
+            username TEXT PRIMARY KEY,
+            ema_seconds_per_page REAL DEFAULT 600.0,
+            session_count INTEGER DEFAULT 0,
+            updated_at TEXT NOT NULL
+        )
+        """)
+
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_sessions_user_paper ON reading_sessions(username, paper_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_sessions_user_updated ON reading_sessions(username, updated_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_time_username_day ON reading_time(username, day)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_time_doc ON reading_time(doc_id, username)")
 
@@ -1287,3 +1321,204 @@ def db_get_reading_time_stats(username: str, since_days: Optional[int] = None) -
         "total_seconds_by_doc": by_doc,
         "total_seconds_by_day": by_day,
     }
+
+
+def db_get_latest_reading_session(paper_id: str, username: str) -> Optional[Dict[str, Any]]:
+    """Gets the most recently updated reading session for a given paper and user."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, paper_id, started_at, ended_at, active_reading_time, version,
+                   page_sessions_json, interaction_summary_json, reading_depth,
+                   reading_score, reading_confidence, verified_pages_count, total_pages,
+                   created_at, updated_at
+            FROM reading_sessions
+            WHERE username = ? AND paper_id = ?
+            ORDER BY updated_at DESC LIMIT 1
+            """,
+            (username, paper_id),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return dict(row)
+
+
+def db_get_reading_session(session_id: str, username: str) -> Optional[Dict[str, Any]]:
+    """Gets a specific reading session by ID."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, paper_id, started_at, ended_at, active_reading_time, version,
+                   page_sessions_json, interaction_summary_json, reading_depth,
+                   reading_score, reading_confidence, verified_pages_count, total_pages,
+                   created_at, updated_at
+            FROM reading_sessions
+            WHERE id = ? AND username = ?
+            """,
+            (session_id, username),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return dict(row)
+
+
+def db_save_reading_session(
+    session_id: str,
+    username: str,
+    paper_id: str,
+    started_at: str,
+    ended_at: Optional[str],
+    active_reading_time: int,
+    version: int,
+    page_sessions_json: str,
+    interaction_summary_json: str,
+    reading_depth: str,
+    reading_score: float,
+    reading_confidence: float,
+    verified_pages_count: int,
+    total_pages: int,
+) -> None:
+    """Inserts or updates a reading session."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO reading_sessions (
+                id, username, paper_id, started_at, ended_at, active_reading_time, version,
+                page_sessions_json, interaction_summary_json, reading_depth,
+                reading_score, reading_confidence, verified_pages_count, total_pages,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                ended_at = excluded.ended_at,
+                active_reading_time = excluded.active_reading_time,
+                version = excluded.version,
+                page_sessions_json = excluded.page_sessions_json,
+                interaction_summary_json = excluded.interaction_summary_json,
+                reading_depth = excluded.reading_depth,
+                reading_score = excluded.reading_score,
+                reading_confidence = excluded.reading_confidence,
+                verified_pages_count = excluded.verified_pages_count,
+                total_pages = excluded.total_pages,
+                updated_at = excluded.updated_at
+            """,
+            (
+                session_id,
+                username,
+                paper_id,
+                started_at,
+                ended_at,
+                active_reading_time,
+                version,
+                page_sessions_json,
+                interaction_summary_json,
+                reading_depth,
+                reading_score,
+                reading_confidence,
+                verified_pages_count,
+                total_pages,
+                now_iso,
+                now_iso,
+            ),
+        )
+        conn.commit()
+
+
+def db_get_user_reading_profile(username: str) -> Dict[str, Any]:
+    """Gets or initializes the user EMA reading profile."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT ema_seconds_per_page, session_count FROM user_reading_profiles WHERE username = ?",
+            (username,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return {"ema_seconds_per_page": 600.0, "session_count": 0}
+        return dict(row)
+
+
+def db_save_user_reading_profile(username: str, ema_seconds_per_page: float, session_count: int) -> None:
+    """Updates user EMA profile."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO user_reading_profiles (username, ema_seconds_per_page, session_count, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(username) DO UPDATE SET
+                ema_seconds_per_page = excluded.ema_seconds_per_page,
+                session_count = excluded.session_count,
+                updated_at = excluded.updated_at
+            """,
+            (username, ema_seconds_per_page, session_count, now_iso),
+        )
+        conn.commit()
+
+
+def db_get_all_reading_analytics_summary(username: str, since_days: Optional[int] = None) -> Dict[str, Any]:
+    """Aggregates reading analytics metrics per paper and overall for dashboard and history."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        params: List[Any] = [username]
+        day_filter = ""
+        if since_days is not None:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=since_days - 1)).strftime("%Y-%m-%d")
+            day_filter = " AND updated_at >= ?"
+            params.append(cutoff)
+
+        cursor.execute(
+            f"""
+            SELECT paper_id, reading_score, reading_confidence, reading_depth,
+                   verified_pages_count, total_pages, active_reading_time, updated_at
+            FROM reading_sessions
+            WHERE username = ?{day_filter}
+            ORDER BY updated_at DESC
+            """,
+            params,
+        )
+        rows = cursor.fetchall()
+
+    paper_stats: Dict[str, Dict[str, Any]] = {}
+    total_active_time = 0
+    scores = []
+    confidences = []
+    verified_sum = 0
+
+    for r in rows:
+        pid = r["paper_id"]
+        # Keep latest session info per paper
+        if pid not in paper_stats:
+            paper_stats[pid] = {
+                "paper_id": pid,
+                "reading_score": r["reading_score"],
+                "reading_confidence": r["reading_confidence"],
+                "reading_depth": r["reading_depth"],
+                "verified_pages_count": r["verified_pages_count"],
+                "total_pages": r["total_pages"],
+                "active_reading_time": r["active_reading_time"],
+                "updated_at": r["updated_at"],
+            }
+            scores.append(r["reading_score"])
+            confidences.append(r["reading_confidence"])
+            verified_sum += r["verified_pages_count"]
+
+        total_active_time += r["active_reading_time"]
+
+    avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
+    avg_confidence = round(sum(confidences) / len(confidences), 1) if confidences else 0.0
+
+    return {
+        "overall_avg_score": avg_score,
+        "overall_avg_confidence": avg_confidence,
+        "overall_verified_pages": verified_sum,
+        "total_active_reading_time": total_active_time,
+        "paper_stats": paper_stats,
+    }
+
