@@ -9,7 +9,7 @@
 // 이전의 활동에는 시간 데이터가 없을 수 있다 - 그런 경우 위젯은 "아직 기록된
 // 읽기 시간이 없습니다"로 정직하게 표시한다.
 
-import { fetchLibraryTimeline, fetchLibraryDashboard, fetchLibrary, fetchReadingTimeStats } from '../library.js'
+import { fetchLibraryTimeline, fetchLibraryDashboard, fetchLibrary, fetchReadingTimeStats, fetchReadingAnalyticsSummary } from '../library.js'
 import { icon } from '../icons.js'
 import { readPageCount, lastActivityIso, hasReadActivity, lastActivityDateKey, isoToLocalDateKey } from '../readPages.js'
 import '../styles/reading-history.css'
@@ -348,17 +348,20 @@ export async function renderReadingHistoryPage() {
   let dashboard = null
   let libraryDocs = []
   let readingStats = null
+  let analyticsSummary = null
   try {
-    const [timelineRes, dashboardRes, libraryRes, readingStatsRes] = await Promise.all([
+    const [timelineRes, dashboardRes, libraryRes, readingStatsRes, analyticsSummaryRes] = await Promise.all([
       fetchLibraryTimeline(),
       fetchLibraryDashboard().catch(() => null),
       fetchLibrary().catch(() => ({ documents: [] })),
       fetchReadingTimeStats().catch(() => null),
+      fetchReadingAnalyticsSummary().catch(() => null),
     ])
     events = timelineRes?.events || []
     dashboard = dashboardRes
     libraryDocs = libraryRes?.documents || []
     readingStats = readingStatsRes
+    analyticsSummary = analyticsSummaryRes
   } catch (err) {
     console.error('Reading History 로드 실패:', err)
     el.innerHTML = '<div class="rh-page"><div class="rh-empty" style="color:var(--error)">읽기 기록을 불러오지 못했습니다.</div></div>'
