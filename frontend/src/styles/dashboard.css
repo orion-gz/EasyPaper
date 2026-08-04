@@ -88,6 +88,14 @@
 /* ── 공용 카드 ── */
 .dash-row { display: grid; gap: 16px; }
 .dash-row-3 { grid-template-columns: 1.15fr 1fr 1fr; }
+/* dash-row-recent/dash-row-bottom는 카드마다 내용 성격이 달라(표지 이미지가
+   있는 목록 vs 텍스트만 있는 목록, 타일 그리드 vs 세로로 긴 리스트) 항목
+   개수가 같아도 자연스러운 높이가 크게 차이 난다. 기본값(stretch)으로
+   카드를 억지로 같은 높이까지 늘리면 짧은 카드 안쪽에 실제로 빈 칸이
+   남는다 - 가운데 정렬해도 빈 공간의 위치만 바뀔 뿐 총량은 그대로다.
+   align-items: start로 각 카드가 자기 내용만큼만 높이를 갖게 해 빈 공간
+   자체를 없앤다(대신 같은 행의 카드 아래쪽 끝은 서로 맞지 않을 수 있음). */
+.dash-row-recent, .dash-row-bottom { align-items: start; }
 .dash-row-recent { grid-template-columns: 1.2fr 1fr 0.95fr; }
 .dash-row-bottom { grid-template-columns: 1.3fr 1fr 1fr; }
 
@@ -200,10 +208,7 @@
 .dash-summary-label { font-size: 10.5px; font-weight: 600; color: var(--text-tertiary); }
 
 /* ── 최근 읽은 논문 ── */
-/* flex:1 + justify-content:center: 같은 행의 옆 카드(최근 질문 등)보다
-   항목당 높이가 낮은 카드가 위쪽에 붙어 아래쪽에 큰 공백을 남기는 대신,
-   그리드가 늘려준 카드 높이 안에서 내용이 세로로 가운데 정렬되게 한다. */
-.dash-paper-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; }
+.dash-paper-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .dash-paper-item {
   display: flex;
   gap: 12px;
@@ -256,7 +261,7 @@
 }
 
 /* ── 최근 질문 ── */
-.dash-question-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; }
+.dash-question-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .dash-question-item { display: flex; gap: 10px; cursor: pointer; }
 .dash-question-icon {
   width: 26px;
@@ -285,7 +290,7 @@
 .dash-dot { margin: 0 5px; }
 
 /* ── AI 추천 논문 ── */
-.dash-recs-body { display: flex; flex-direction: column; flex: 1; justify-content: center; }
+.dash-recs-body { display: flex; flex-direction: column; }
 .dash-recs-btn {
   align-self: flex-start;
   display: inline-flex;
@@ -327,10 +332,6 @@
 .dash-rec-reason { margin-top: 4px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.45; }
 
 /* ── 개념 히트맵 ── */
-/* 옆 카드(연구 타임라인)보다 개념 수가 적어 그리드가 짧게 끝나도, 위쪽에
-   붙어 아래에 큰 공백을 남기는 대신 늘려진 카드 높이 안에서 가운데
-   정렬되게 한다(타일 그리드+범례를 한 블록으로 묶어서 함께 정렬). */
-.dash-heatmap-body { display: flex; flex-direction: column; flex: 1; justify-content: center; }
 .dash-heat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
@@ -376,7 +377,7 @@
 }
 
 /* ── 연구 타임라인 ── */
-.dash-timeline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; flex: 1; justify-content: center; }
+.dash-timeline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .dash-timeline-item { position: relative; display: flex; gap: 10px; padding-bottom: 14px; cursor: pointer; border-radius: var(--radius-sm); transition: background 0.15s ease; }
 .dash-timeline-item:hover { background: var(--bg-hover); }
 .dash-timeline-item:last-child { padding-bottom: 0; }
@@ -413,9 +414,6 @@
 
 /* ── 연구 그래프 미리보기 ── */
 .dash-card-graph { align-items: stretch; }
-/* SVG 크기가 고정이라 옆 카드보다 짧게 끝나기 쉬우므로, 늘려진 카드 높이
-   안에서 세로 가운데 정렬해 아래쪽 공백을 줄인다. */
-.dash-graph-preview-body { display: flex; flex-direction: column; flex: 1; justify-content: center; }
 .dash-graph-svg { width: 100%; height: 168px; }
 .dash-graph-edge { stroke: var(--border-strong); stroke-width: 1.2; }
 .dash-graph-node { cursor: pointer; }
