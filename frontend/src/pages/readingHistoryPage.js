@@ -315,11 +315,14 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
   const pagesRead = Array.from(activePageDocIds).reduce((sum, id) => sum + readPageCount(docsById.get(id)), 0)
   const questions = inPeriod.filter(e => e.type === 'question').length
   const notes = inPeriod.filter(e => e.type === 'note').length
-  return { activeDays, papersRead: activePageDocIds.size, pagesRead, questions, notes }
+  const uploadedPapers = inPeriod.filter(e => e.type === 'uploaded').length
+  return { activeDays, papersRead: activePageDocIds.size, pagesRead, questions, notes, uploadedPapers }
 }
 
 function deltaHtml(curr, prev, unit = '', compareText = '이전 30일 대비') {
-  const diff = curr - prev
+  const c = curr || 0
+  const p = prev || 0
+  const diff = c - p
   if (diff === 0) return `<span class="rh-stat-delta">±0${unit ? ' ' + unit : ''} ${compareText}</span>`
   const cls = diff > 0 ? 'up' : 'down'
   const arrow = diff > 0 ? '↑' : '↓'
@@ -511,17 +514,17 @@ export async function renderReadingHistoryPage() {
       return [
         {
           icon: 'bookOpen', color: 'var(--rh-c4)', label: '등록 논문',
-          value: curr7.uploadedPapers.toLocaleString(),
+          value: (curr7.uploadedPapers || 0).toLocaleString(),
           sub: deltaHtml(curr7.uploadedPapers, prev7.uploadedPapers, '', '이전 7일 대비'),
         },
         {
           icon: 'checkCircle', color: 'var(--rh-c2)', label: '읽은 논문',
-          value: curr7.papersRead.toLocaleString(),
+          value: (curr7.papersRead || 0).toLocaleString(),
           sub: deltaHtml(curr7.papersRead, prev7.papersRead, '', '이전 7일 대비'),
         },
         {
           icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
-          value: `${curr7.activeDays} / 7`,
+          value: `${curr7.activeDays || 0} / 7`,
           sub: `<span class="rh-stat-delta">최근 7일 중 ${activeDaysPct7}%</span>`,
         },
         {
@@ -536,12 +539,12 @@ export async function renderReadingHistoryPage() {
         },
         {
           icon: 'messageCircle', color: 'var(--rh-c5)', label: '질문 수',
-          value: curr7.questions.toLocaleString(),
+          value: (curr7.questions || 0).toLocaleString(),
           sub: deltaHtml(curr7.questions, prev7.questions, '', '이전 7일 대비'),
         },
         {
           icon: 'edit3', color: 'var(--rh-c2)', label: '작성한 메모',
-          value: curr7.notes.toLocaleString(),
+          value: (curr7.notes || 0).toLocaleString(),
           sub: deltaHtml(curr7.notes, prev7.notes, '', '이전 7일 대비'),
         },
       ]
@@ -590,17 +593,17 @@ export async function renderReadingHistoryPage() {
     return [
       {
         icon: 'bookOpen', color: 'var(--rh-c4)', label: '등록 논문',
-        value: curr.uploadedPapers.toLocaleString(),
+        value: (curr.uploadedPapers || 0).toLocaleString(),
         sub: deltaHtml(curr.uploadedPapers, prev.uploadedPapers),
       },
       {
         icon: 'checkCircle', color: 'var(--rh-c2)', label: '읽은 논문',
-        value: curr.papersRead.toLocaleString(),
+        value: (curr.papersRead || 0).toLocaleString(),
         sub: deltaHtml(curr.papersRead, prev.papersRead),
       },
       {
         icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
-        value: `${curr.activeDays} / 30`,
+        value: `${curr.activeDays || 0} / 30`,
         sub: `<span class="rh-stat-delta">최근 30일 중 ${activeDaysPct}%</span>`,
       },
       {
@@ -615,12 +618,12 @@ export async function renderReadingHistoryPage() {
       },
       {
         icon: 'messageCircle', color: 'var(--rh-c5)', label: '질문 수',
-        value: curr.questions.toLocaleString(),
+        value: (curr.questions || 0).toLocaleString(),
         sub: deltaHtml(curr.questions, prev.questions),
       },
       {
         icon: 'edit3', color: 'var(--rh-c2)', label: '작성한 메모',
-        value: curr.notes.toLocaleString(),
+        value: (curr.notes || 0).toLocaleString(),
         sub: deltaHtml(curr.notes, prev.notes),
       },
     ]
@@ -1031,7 +1034,7 @@ export async function renderReadingHistoryPage() {
   })
 
   const tabsEl = el.querySelector('#rh-filter-tabs')
-  tabsEl.addEventListener('click', (event) => {
+  tabsEl?.addEventListener('click', (event) => {
     const btn = event.target.closest('.rh-tab-btn')
     if (!btn) return
     tabsEl.querySelectorAll('.rh-tab-btn').forEach(b => b.classList.toggle('active', b === btn))
@@ -1040,7 +1043,7 @@ export async function renderReadingHistoryPage() {
     renderTimeline()
   })
 
-  moreBtn.addEventListener('click', () => {
+  moreBtn?.addEventListener('click', () => {
     visibleGroups += 6
     renderTimeline()
   })
