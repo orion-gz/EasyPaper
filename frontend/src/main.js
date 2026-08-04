@@ -4657,33 +4657,15 @@ for (const [view, cfg] of Object.entries(GRAPH_SUBVIEWS)) {
   if (btn) btn.addEventListener('click', () => switchGraphSubView(view))
 }
 
-// 개념 히트맵: 논문(행) x 개념(열) 2D 매트릭스(seaborn류 히트맵 참고). 셀 색
-// 진하기는 정규화된 강도값을 인코딩한다 - accent 색 1종의 sequential 램프라
-// (color-mix가 --control-accent 기준) 사용자가 고른 테마 색과 라이트/다크
-// 모드에 자동으로 맞춰진다. 정규화 기준(행/열/전체)을 바꾸면 재요청 없이
-// 이미 받아둔 원본 데이터(heatmapMatrixData)로 다시 계산해 그린다.
-let heatmapMatrixData = null
-let heatmapNormalizeMode = 'row' // 'row' | 'col' | 'global'
-
-function computeHeatmapMaxes(cells) {
-  const rowMax = {}, colMax = {}
-  let globalMax = 0
-  for (const cell of cells) {
-    rowMax[cell.doc_id] = Math.max(rowMax[cell.doc_id] || 0, cell.raw)
-    colMax[cell.concept_id] = Math.max(colMax[cell.concept_id] || 0, cell.raw)
-    globalMax = Math.max(globalMax, cell.raw)
-  }
-  return { rowMax, colMax, globalMax }
-}
-
-function normalizedHeatmapValue(cell, maxes, mode) {
-  const denom = mode === 'row' ? maxes.rowMax[cell.doc_id] : mode === 'col' ? maxes.colMax[cell.concept_id] : maxes.globalMax
-  return denom > 0 ? cell.raw / denom : 0
-}
-
+// 개념 히트맵: 논문(행) x 개념(열) 2D 매트릭스(seaborn류 히트맵 참고). 셀 값은
+// 서버가 논문 텍스트를 근거로 LLM으로 직접 채점한 0.0~1.0 관련도 점수라(하루
+// 단위로 캐싱됨) 이미 그 자체로 비교 가능한 절대 스케일이다 - 과거의
+// "등장 여부+질문 수" 근사치와 달리 행/열/전체 기준으로 다시 정규화하면 오히려
+// 절대값의 의미를 왜곡하므로, 점수를 그대로 색 진하기(accent 색 sequential
+// 램프, color-mix가 --control-accent 기준이라 테마/다크모드에 자동으로
+// 맞춰짐)와 셀 텍스트에 쓴다.
 function renderHeatmapMatrix(data) {
   const { concepts, papers, cells } = data
-  const maxes = computeHeatmapMaxes(cells)
   const cellByKey = {}
   for (const c of cells) cellByKey[`${c.doc_id}:${c.concept_id}`] = c
 
@@ -4691,10 +4673,10 @@ function renderHeatmapMatrix(data) {
   const bodyRows = papers.map(p => {
     const rowCells = concepts.map(c => {
       const cell = cellByKey[`${p.doc_id}:${c.concept_id}`]
-      const val = cell ? normalizedHeatmapValue(cell, maxes, heatmapNormalizeMode) : 0
+      const val = cell ? cell.score : 0
       const pct = Math.round(val * 100)
       const detail = cell
-        ? `${escapeHtml(p.title)} · ${escapeHtml(c.name)} · ${cell.present ? '개념 등장' : '개념 미등장'} · 관련 질문 ${cell.question_count}개`
+        ? `${escapeHtml(p.title)} · ${escapeHtml(c.name)} · 관련도 ${val.toFixed(2)} · ${cell.present ? '개념 등장' : '개념 미등장'} · 관련 질문 ${cell.question_count}개`
         : `${escapeHtml(p.title)} · ${escapeHtml(c.name)} · 연관 없음`
       return `<td class="rg-heatmap-cell${val >= 0.55 ? ' rg-heatmap-cell-dark' : ''}" style="background:color-mix(in srgb, var(--control-accent) ${pct}%, var(--bg-elevated))" title="${detail}">${val.toFixed(2)}</td>`
     }).join('')
@@ -4714,16 +4696,9 @@ function renderHeatmapMatrix(data) {
       <div class="rg-heatmap-toolbar">
         <div class="rg-heatmap-heading">
           <h4>개념 히트맵</h4>
-          <p>선택된 논문에서 개념이 얼마나 등장하고 논의됐는지를 색상 강도로 보여줍니다.</p>
+          <p>선택된 논문의 본문을 AI가 읽고, 각 개념을 얼마나 깊이 다루는지 0~1 관련도로 채점한 값입니다.</p>
         </div>
-        <label class="rg-heatmap-normalize">
-          정규화
-          <select id="rg-heatmap-normalize-select">
-            <option value="row"${heatmapNormalizeMode === 'row' ? ' selected' : ''}>행 기준</option>
-            <option value="col"${heatmapNormalizeMode === 'col' ? ' selected' : ''}>열 기준</option>
-            <option value="global"${heatmapNormalizeMode === 'global' ? ' selected' : ''}>전체 기준</option>
-          </select>
-        </label>
+        <button type="button" id="rg-heatmap-refresh-btn" class="rg-refresh-btn">${icon('refreshCw', 13)}<span>다시 계산</span></button>
       </div>
       <div class="rg-heatmap-body">
         <div class="rg-heatmap-main">
@@ -4755,17 +4730,20 @@ function renderHeatmapMatrix(data) {
   `
 }
 
-async function renderLibraryHeatmapView() {
+// force=true는 "다시 계산" 버튼용 - 서버 캐시(하루 단위)를 무시하고 LLM을
+// 다시 호출하므로, 첫 로드보다 오래 걸릴 수 있다는 걸 로딩 문구로 알려준다.
+async function renderLibraryHeatmapView(force = false) {
   if (!libraryHeatmapList) return
-  libraryHeatmapList.innerHTML = '<div class="lib-empty"><p>불러오는 중...</p></div>'
+  libraryHeatmapList.innerHTML = force
+    ? '<div class="lib-empty"><p>AI가 논문을 다시 읽고 채점하는 중입니다... (다소 시간이 걸릴 수 있어요)</p></div>'
+    : '<div class="lib-empty"><p>불러오는 중...</p></div>'
   try {
-    const data = await fetchLibraryHeatmapMatrix()
+    const data = await fetchLibraryHeatmapMatrix({ force })
     if (state.currentWorkspacePage !== 'graph') return
     if (!data.concepts?.length || !data.papers?.length) {
       libraryHeatmapList.innerHTML = '<div class="lib-empty"><p>아직 히트맵을 그릴 만큼 개념/논문 데이터가 쌓이지 않았습니다.</p></div>'
       return
     }
-    heatmapMatrixData = data
     libraryHeatmapList.innerHTML = renderHeatmapMatrix(data)
   } catch (err) {
     console.error('개념 히트맵 로드 실패:', err)
@@ -4773,16 +4751,15 @@ async function renderLibraryHeatmapView() {
   }
 }
 
-// 정규화 기준 셀렉트는 재요청 없이 이미 받아둔 데이터로 다시 그린다. 행 헤더/
-// 사이드 패널의 논문 클릭은 목록마다 리스너를 다는 대신 컨테이너에 위임
-// 리스너를 한 번만 건다.
+// "다시 계산" 버튼과 행 헤더/사이드 패널의 논문 클릭은 매번 innerHTML로 새로
+// 그려지는 요소라, 항목마다 리스너를 다는 대신 컨테이너에 위임 리스너를
+// 한 번만 건다.
 if (libraryHeatmapList) {
-  libraryHeatmapList.addEventListener('change', (event) => {
-    if (event.target.id !== 'rg-heatmap-normalize-select') return
-    heatmapNormalizeMode = event.target.value
-    if (heatmapMatrixData) libraryHeatmapList.innerHTML = renderHeatmapMatrix(heatmapMatrixData)
-  })
   libraryHeatmapList.addEventListener('click', async (event) => {
+    if (event.target.closest('#rg-heatmap-refresh-btn')) {
+      renderLibraryHeatmapView(true)
+      return
+    }
     const target = event.target.closest('[data-doc-id]')
     const docId = target?.dataset.docId
     if (!docId) return
