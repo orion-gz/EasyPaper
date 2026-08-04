@@ -31,7 +31,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -604,6 +604,87 @@ async def get_concept_heatmap(username: str) -> List[dict]:
         })
     result.sort(key=lambda r: r["score"], reverse=True)
     return result
+
+
+async def get_concept_paper_matrix(username: str, concept_limit: int = 12, paper_limit: int = 10) -> dict:
+    """개념 히트맵을 논문(행) x 개념(열) 매트릭스로 구성한다(seaborn류 2D 히트맵 UI용).
+    새 테이블이나 새 LLM 호출 없이 기존 3개 테이블만 재사용한다:
+    - paper_concepts: 논문에 개념이 등장했는지(이진 링크)
+    - question_papers/question_concepts: 그 논문·개념 조합에 대한 질문이 몇 개 있었는지
+      (db_get_question_doc_concept_counts가 chat_id로 두 테이블을 조인해 집계)
+    셀 값(raw) = 등장 여부(0/1) + 그 조합에 대한 질문 수. "논문 내 개념 언급 빈도"를 정밀하게
+    분석한 값이 아니라 "등장 + 얼마나 논의됐는가"를 결합한 근사 강도이며, 프런트에서 행/열/전체
+    기준으로 정규화해 색상에 매핑한다. 열은 get_concept_heatmap과 동일한 활동량 순위 상위
+    concept_limit개, 행은 그 개념들과 실제로 연결된 논문 중 활동량 상위 paper_limit개만 골라
+    표가 스크린 안에 들어오게 한다(현재 히트맵 개편의 동기 - 항목이 너무 많으면 비직관적)."""
+    from services.library import list_documents
+    from services.db import db_get_concepts_for_docs, db_get_question_count_for_concepts, db_get_question_doc_concept_counts
+
+    docs = {d["id"]: d for d in list_documents(username=username)}
+    doc_ids = list(docs.keys())
+    concept_links = db_get_concepts_for_docs(doc_ids)
+
+    by_concept = {}
+    for link in concept_links:
+        cid = link["concept_id"]
+        entry = by_concept.setdefault(
+            cid, {"concept_id": cid, "name": link["name"], "kind": link.get("kind"), "doc_ids": set()}
+        )
+        entry["doc_ids"].add(link["doc_id"])
+
+    question_counts = db_get_question_count_for_concepts(list(by_concept.keys()))
+    ranked_concepts = sorted(
+        by_concept.values(),
+        key=lambda e: len(e["doc_ids"]) + question_counts.get(e["concept_id"], 0),
+        reverse=True,
+    )[:concept_limit]
+    concept_ids = {c["concept_id"] for c in ranked_concepts}
+
+    pair_question_counts = db_get_question_doc_concept_counts(doc_ids)
+
+    # 이 개념들과 실제로 연결된 논문만, 연결된 개념 수 + 관련 질문 수 순으로 상위 paper_limit개.
+    doc_scores: Dict[str, int] = {}
+    for link in concept_links:
+        if link["concept_id"] in concept_ids:
+            doc_scores[link["doc_id"]] = doc_scores.get(link["doc_id"], 0) + 1
+    for (doc_id, cid), cnt in pair_question_counts.items():
+        if cid in concept_ids:
+            doc_scores[doc_id] = doc_scores.get(doc_id, 0) + cnt
+    ranked_doc_ids = sorted(doc_scores.keys(), key=lambda d: doc_scores[d], reverse=True)[:paper_limit]
+
+    doc_concept_present = {(link["doc_id"], link["concept_id"]) for link in concept_links}
+
+    papers = []
+    for doc_id in ranked_doc_ids:
+        doc = docs.get(doc_id)
+        if not doc:
+            continue
+        meta = doc.get("metadata") or {}
+        papers.append({
+            "doc_id": doc_id,
+            "title": meta.get("title") or doc.get("filename") or "제목 없음",
+            "category": (meta.get("categories") or [None])[0],
+        })
+
+    cells = []
+    for doc_id in ranked_doc_ids:
+        for c in ranked_concepts:
+            cid = c["concept_id"]
+            present = (doc_id, cid) in doc_concept_present
+            qcount = pair_question_counts.get((doc_id, cid), 0)
+            cells.append({
+                "doc_id": doc_id,
+                "concept_id": cid,
+                "present": present,
+                "question_count": qcount,
+                "raw": (1 if present else 0) + qcount,
+            })
+
+    return {
+        "concepts": [{"concept_id": c["concept_id"], "name": c["name"], "kind": c["kind"]} for c in ranked_concepts],
+        "papers": papers,
+        "cells": cells,
+    }
 
 
 async def get_knowledge_gaps(username: str) -> List[dict]:

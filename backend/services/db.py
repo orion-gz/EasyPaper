@@ -2,7 +2,7 @@ import sqlite3
 import os
 import json
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 # DB_PATH 환경변수가 있으면 그대로 쓰고(Docker 등에서 데이터 볼륨 경로로
 # 지정), 없으면 기존과 동일하게 backend/의 부모 기준 경로를 그대로 쓴다.
@@ -999,6 +999,28 @@ def db_get_question_count_for_concepts(concept_ids: List[int]) -> Dict[int, int]
             concept_ids
         )
         return {r["concept_id"]: r["cnt"] for r in cursor.fetchall()}
+
+
+def db_get_question_doc_concept_counts(doc_ids: List[str]) -> Dict[Tuple[str, int], int]:
+    """(논문, 개념) 쌍마다 그 논문에 대해 그 개념과 관련된 질문이 몇 개 있었는지 센다.
+    새 테이블 없이 question_papers(질문-논문)와 question_concepts(질문-개념)를 chat_id로
+    조인해 교집합만 집계한다 - Concept Heatmap 매트릭스의 셀 강도에 쓰인다."""
+    if not doc_ids:
+        return {}
+    with get_db() as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in doc_ids)
+        cursor.execute(
+            f"""
+            SELECT qp.doc_id, qc.concept_id, COUNT(*) AS cnt
+            FROM question_papers qp
+            JOIN question_concepts qc ON qc.chat_id = qp.chat_id
+            WHERE qp.doc_id IN ({placeholders})
+            GROUP BY qp.doc_id, qc.concept_id
+            """,
+            doc_ids
+        )
+        return {(r["doc_id"], r["concept_id"]): r["cnt"] for r in cursor.fetchall()}
 
 
 def db_get_related_questions_for_concept(concept_id: int, limit: int = 50) -> List[Dict[str, Any]]:

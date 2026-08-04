@@ -12,6 +12,8 @@
 
 #library-graph-section { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 #library-graph-view { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+#library-heatmap-view { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+#library-heatmap-list { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 
 /* ── 상단 그래프/타임라인/히트맵 토글 ── */
 .rg-view-tabs { display: inline-flex; }

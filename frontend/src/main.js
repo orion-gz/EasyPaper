@@ -6,7 +6,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchLibraryTimeline, fetchReadingRecommendations, fetchLibraryHeatmap, sendReadingHeartbeat } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchLibraryTimeline, fetchReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
 import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
 import { renderDashboardPage } from './pages/dashboardPage.js'
@@ -4760,18 +4760,100 @@ if (libraryTimelineList) {
   })
 }
 
-// 히트맵 타일 하나. 크기(활동량)는 정사각형 타일의 "색 진하기"로 인코딩한다
-// (accent 색 1종의 sequential 램프 - color-mix가 --accent-mid를 기준으로
-// 계산하므로 사용자가 고른 테마 색과 라이트/다크 모드에 자동으로 맞춰진다).
-// 정확한 수치는 title(hover 시 네이티브 툴팁)로 노출한다.
-function renderHeatCell(item, maxScore) {
-  const pct = maxScore > 0 ? Math.max(6, Math.round((item.score / maxScore) * 100)) : 6
-  const kindLabel = item.kind ? escapeHtml(item.kind) : ''
+// 개념 히트맵: 논문(행) x 개념(열) 2D 매트릭스(seaborn류 히트맵 참고). 셀 색
+// 진하기는 정규화된 강도값을 인코딩한다 - accent 색 1종의 sequential 램프라
+// (color-mix가 --control-accent 기준) 사용자가 고른 테마 색과 라이트/다크
+// 모드에 자동으로 맞춰진다. 정규화 기준(행/열/전체)을 바꾸면 재요청 없이
+// 이미 받아둔 원본 데이터(heatmapMatrixData)로 다시 계산해 그린다.
+let heatmapMatrixData = null
+let heatmapNormalizeMode = 'row' // 'row' | 'col' | 'global'
+
+function computeHeatmapMaxes(cells) {
+  const rowMax = {}, colMax = {}
+  let globalMax = 0
+  for (const cell of cells) {
+    rowMax[cell.doc_id] = Math.max(rowMax[cell.doc_id] || 0, cell.raw)
+    colMax[cell.concept_id] = Math.max(colMax[cell.concept_id] || 0, cell.raw)
+    globalMax = Math.max(globalMax, cell.raw)
+  }
+  return { rowMax, colMax, globalMax }
+}
+
+function normalizedHeatmapValue(cell, maxes, mode) {
+  const denom = mode === 'row' ? maxes.rowMax[cell.doc_id] : mode === 'col' ? maxes.colMax[cell.concept_id] : maxes.globalMax
+  return denom > 0 ? cell.raw / denom : 0
+}
+
+function renderHeatmapMatrix(data) {
+  const { concepts, papers, cells } = data
+  const maxes = computeHeatmapMaxes(cells)
+  const cellByKey = {}
+  for (const c of cells) cellByKey[`${c.doc_id}:${c.concept_id}`] = c
+
+  const headerCells = concepts.map(c => `<th class="rg-heatmap-col-head"><span>${escapeHtml(c.name)}</span></th>`).join('')
+  const bodyRows = papers.map(p => {
+    const rowCells = concepts.map(c => {
+      const cell = cellByKey[`${p.doc_id}:${c.concept_id}`]
+      const val = cell ? normalizedHeatmapValue(cell, maxes, heatmapNormalizeMode) : 0
+      const pct = Math.round(val * 100)
+      const detail = cell
+        ? `${escapeHtml(p.title)} · ${escapeHtml(c.name)} · ${cell.present ? '개념 등장' : '개념 미등장'} · 관련 질문 ${cell.question_count}개`
+        : `${escapeHtml(p.title)} · ${escapeHtml(c.name)} · 연관 없음`
+      return `<td class="rg-heatmap-cell${val >= 0.55 ? ' rg-heatmap-cell-dark' : ''}" style="background:color-mix(in srgb, var(--control-accent) ${pct}%, var(--bg-elevated))" title="${detail}">${val.toFixed(2)}</td>`
+    }).join('')
+    return `
+      <tr>
+        <th class="rg-heatmap-row-head" data-doc-id="${escapeHtml(p.doc_id)}" title="클릭하면 이 논문을 엽니다">
+          <span class="rg-heatmap-row-title">${escapeHtml(truncateForList(p.title, 28))}</span>
+          ${p.category ? `<span class="rg-heatmap-row-tag">${escapeHtml(p.category)}</span>` : ''}
+        </th>
+        ${rowCells}
+      </tr>
+    `
+  }).join('')
+
   return `
-    <div class="kg-heatmap-row" title="${escapeHtml(item.name)} · 논문 ${item.paper_count}편 · 질문 ${item.question_count}개">
-      <span class="kg-heatmap-label">${escapeHtml(item.name)}${kindLabel ? ` <span class="kg-heatmap-kind">(${kindLabel})</span>` : ''}</span>
-      <div class="kg-heatmap-track"><div class="kg-heatmap-fill" style="width:${pct}%"></div></div>
-      <span class="kg-heatmap-meta">논문 ${item.paper_count} · 질문 ${item.question_count}</span>
+    <div class="rg-heatmap">
+      <div class="rg-heatmap-toolbar">
+        <div class="rg-heatmap-heading">
+          <h4>개념 히트맵</h4>
+          <p>선택된 논문에서 개념이 얼마나 등장하고 논의됐는지를 색상 강도로 보여줍니다.</p>
+        </div>
+        <label class="rg-heatmap-normalize">
+          정규화
+          <select id="rg-heatmap-normalize-select">
+            <option value="row"${heatmapNormalizeMode === 'row' ? ' selected' : ''}>행 기준</option>
+            <option value="col"${heatmapNormalizeMode === 'col' ? ' selected' : ''}>열 기준</option>
+            <option value="global"${heatmapNormalizeMode === 'global' ? ' selected' : ''}>전체 기준</option>
+          </select>
+        </label>
+      </div>
+      <div class="rg-heatmap-body">
+        <div class="rg-heatmap-main">
+          <div class="rg-heatmap-legend">
+            <span>낮음</span>
+            <div class="rg-heatmap-legend-bar"></div>
+            <span>높음</span>
+          </div>
+          <div class="rg-heatmap-scroll">
+            <table class="rg-heatmap-table">
+              <thead><tr><th class="rg-heatmap-corner"></th>${headerCells}</tr></thead>
+              <tbody>${bodyRows}</tbody>
+            </table>
+          </div>
+          <p class="rg-heatmap-caption">${papers.length}개 논문 × ${concepts.length}개 개념 · 칸에 마우스를 올리면 자세한 값을 볼 수 있습니다.</p>
+        </div>
+        <div class="rg-heatmap-side">
+          <h4>표시 중인 개념 (${concepts.length})</h4>
+          <div class="rg-heatmap-concept-chips">
+            ${concepts.map(c => `<span class="rg-heatmap-chip">${escapeHtml(c.name)}</span>`).join('')}
+          </div>
+          <h4>표시 중인 논문 (${papers.length})</h4>
+          <ul class="rg-heatmap-paper-list">
+            ${papers.map(p => `<li data-doc-id="${escapeHtml(p.doc_id)}" title="클릭하면 이 논문을 엽니다">${escapeHtml(truncateForList(p.title, 40))}</li>`).join('')}
+          </ul>
+        </div>
+      </div>
     </div>
   `
 }
@@ -4780,18 +4862,41 @@ async function renderLibraryHeatmapView() {
   if (!libraryHeatmapList) return
   libraryHeatmapList.innerHTML = '<div class="lib-empty"><p>불러오는 중...</p></div>'
   try {
-    const { heatmap } = await fetchLibraryHeatmap()
+    const data = await fetchLibraryHeatmapMatrix()
     if (state.currentWorkspacePage !== 'graph') return
-    if (!heatmap || heatmap.length === 0) {
-      libraryHeatmapList.innerHTML = '<div class="lib-empty"><p>아직 추출된 개념이 없습니다.</p></div>'
+    if (!data.concepts?.length || !data.papers?.length) {
+      libraryHeatmapList.innerHTML = '<div class="lib-empty"><p>아직 히트맵을 그릴 만큼 개념/논문 데이터가 쌓이지 않았습니다.</p></div>'
       return
     }
-    const maxScore = Math.max(...heatmap.map(h => h.score))
-    libraryHeatmapList.innerHTML = `<div class="kg-heatmap-list">${heatmap.map(item => renderHeatCell(item, maxScore)).join('')}</div>`
+    heatmapMatrixData = data
+    libraryHeatmapList.innerHTML = renderHeatmapMatrix(data)
   } catch (err) {
     console.error('개념 히트맵 로드 실패:', err)
     libraryHeatmapList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">히트맵을 불러오지 못했습니다</p></div>'
   }
+}
+
+// 정규화 기준 셀렉트는 재요청 없이 이미 받아둔 데이터로 다시 그린다. 행 헤더/
+// 사이드 패널의 논문 클릭은 목록마다 리스너를 다는 대신 컨테이너에 위임
+// 리스너를 한 번만 건다(renderLibraryTimelineView와 동일한 패턴).
+if (libraryHeatmapList) {
+  libraryHeatmapList.addEventListener('change', (event) => {
+    if (event.target.id !== 'rg-heatmap-normalize-select') return
+    heatmapNormalizeMode = event.target.value
+    if (heatmapMatrixData) libraryHeatmapList.innerHTML = renderHeatmapMatrix(heatmapMatrixData)
+  })
+  libraryHeatmapList.addEventListener('click', async (event) => {
+    const target = event.target.closest('[data-doc-id]')
+    const docId = target?.dataset.docId
+    if (!docId) return
+    try {
+      const doc = await fetchLibraryDoc(docId)
+      await openFromLibrary(doc)
+    } catch (err) {
+      console.error('히트맵에서 논문 열기 실패:', err)
+      showToast('논문을 불러오지 못했습니다.', 'error')
+    }
+  })
 }
 
 // ============================================================

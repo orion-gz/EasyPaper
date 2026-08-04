@@ -68,6 +68,50 @@ def test_heatmap_excludes_other_users_data(test_client, isolated_dirs):
     assert not any(h["concept_id"] == concept_id for h in heatmap)
 
 
+# ── Concept Heatmap Matrix (논문 x 개념 2D) ───────────────────────────────
+
+def test_heatmap_matrix_cell_combines_presence_and_questions(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    _create_doc_owned_by(isolated_dirs, "doc-mx-1", "testuser", {"title": "Paper A"})
+    concept_id = db.db_upsert_concept("Attention", "attention", "method")
+    db.db_link_paper_concept("doc-mx-1", concept_id)
+    chat_id = db.db_save_chat_message("doc-mx-1", "user", "How does attention work?")
+    db.db_link_question_paper(chat_id, "doc-mx-1")
+    db.db_link_question_concept(chat_id, concept_id)
+
+    res = test_client.get("/api/library/graph/heatmap/matrix")
+    assert res.status_code == 200
+    body = res.json()
+    assert any(c["concept_id"] == concept_id for c in body["concepts"])
+    assert any(p["doc_id"] == "doc-mx-1" for p in body["papers"])
+
+    cell = next(c for c in body["cells"] if c["doc_id"] == "doc-mx-1" and c["concept_id"] == concept_id)
+    assert cell["present"] is True
+    assert cell["question_count"] == 1
+    assert cell["raw"] == 2  # 등장(1) + 질문 1개
+
+
+def test_heatmap_matrix_omits_papers_without_ranked_concepts(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    _create_doc_owned_by(isolated_dirs, "doc-mx-unrelated", "testuser", {"title": "Unrelated Paper"})
+
+    res = test_client.get("/api/library/graph/heatmap/matrix")
+    body = res.json()
+    assert not any(p["doc_id"] == "doc-mx-unrelated" for p in body["papers"])
+
+
+def test_heatmap_matrix_excludes_other_users_data(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    _create_doc_owned_by(isolated_dirs, "doc-mx-other", "otheruser", {"title": "Not Mine"})
+    concept_id = db.db_upsert_concept("Other Concept", "other concept matrix", "method")
+    db.db_link_paper_concept("doc-mx-other", concept_id)
+
+    res = test_client.get("/api/library/graph/heatmap/matrix")
+    body = res.json()
+    assert not any(p["doc_id"] == "doc-mx-other" for p in body["papers"])
+    assert not any(c["concept_id"] == concept_id for c in body["concepts"])
+
+
 # ── Knowledge Gap Detection ──────────────────────────────────────────────
 
 def test_gap_detects_low_question_concept(test_client, isolated_dirs):
