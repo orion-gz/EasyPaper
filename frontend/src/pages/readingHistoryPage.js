@@ -830,7 +830,19 @@ export async function renderReadingHistoryPage() {
             ${dayEvents.map(e => {
               const title = docTitle(e.doc_id, e.doc_title)
               let pageMeta = ''
+              let timeLabel = formatTime(e.timestamp)
+              let hoverTitle = '이 논문 열기'
+
               if (e.type === 'read') {
+                const startStr = formatTime(e.timestamp)
+                const endStr = e.end_timestamp ? formatTime(e.end_timestamp) : null
+                if (startStr && endStr) {
+                  timeLabel = `${startStr} ~ ${endStr}`
+                  hoverTitle = `읽기 시간: ${startStr} 시작 ~ ${endStr} 종료 | 클릭하여 이 논문 열기`
+                } else if (startStr) {
+                  hoverTitle = `읽기 시작: ${startStr} | 클릭하여 이 논문 열기`
+                }
+
                 if (e.start_page && e.end_page) {
                   const range = e.start_page === e.end_page ? `${e.start_page}p` : `${e.start_page}p ~ ${e.end_page}p`
                   const verified = e.verified_pages || 1
@@ -841,10 +853,10 @@ export async function renderReadingHistoryPage() {
                 }
               }
               return `
-                <div class="rh-timeline-entry" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" title="이 논문 열기">
+                <div class="rh-timeline-entry" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" title="${escapeHtml(hoverTitle)}">
                   <div class="rh-timeline-dot">${icon(TYPE_ICON[e.type] || 'clock', 13)}</div>
                   <div class="rh-timeline-row">
-                    <span class="rh-timeline-time">${escapeHtml(formatTime(e.timestamp))}</span>
+                    <span class="rh-timeline-time">${escapeHtml(timeLabel)}</span>
                     <span class="rh-timeline-type">${escapeHtml(TYPE_LABEL[e.type] || e.type)}</span>
                     <div class="rh-timeline-main">
                       <div class="rh-timeline-title">${escapeHtml(title)}</div>
