@@ -68,16 +68,28 @@ def test_heatmap_excludes_other_users_data(test_client, isolated_dirs):
     assert not any(h["concept_id"] == concept_id for h in heatmap)
 
 
-# ── Concept Heatmap Matrix (논문 x 개념 2D) ───────────────────────────────
+# ── Concept Heatmap Matrix (논문 x 개념 2D, LLM 채점) ─────────────────────
 
-def test_heatmap_matrix_cell_combines_presence_and_questions(test_client, isolated_dirs):
+def _setup_one_paper_one_concept(isolated_dirs, doc_id="doc-mx-1", title="Paper A"):
     db = isolated_dirs["db"]
-    _create_doc_owned_by(isolated_dirs, "doc-mx-1", "testuser", {"title": "Paper A"})
+    _create_doc_owned_by(isolated_dirs, doc_id, "testuser", {"title": title})
     concept_id = db.db_upsert_concept("Attention", "attention", "method")
-    db.db_link_paper_concept("doc-mx-1", concept_id)
-    chat_id = db.db_save_chat_message("doc-mx-1", "user", "How does attention work?")
-    db.db_link_question_paper(chat_id, "doc-mx-1")
+    db.db_link_paper_concept(doc_id, concept_id)
+    chat_id = db.db_save_chat_message(doc_id, "user", "How does attention work?")
+    db.db_link_question_paper(chat_id, doc_id)
     db.db_link_question_concept(chat_id, concept_id)
+    return concept_id
+
+
+def test_heatmap_matrix_uses_llm_score(test_client, isolated_dirs, monkeypatch):
+    import services.llm_client as llm_client
+
+    async def fake_score(title, text, concept_names, session_id=None):
+        return [{"concept": name, "score": 0.75} for name in concept_names]
+
+    monkeypatch.setattr(llm_client, "score_paper_concept_relevance", fake_score)
+
+    concept_id = _setup_one_paper_one_concept(isolated_dirs)
 
     res = test_client.get("/api/library/graph/heatmap/matrix")
     assert res.status_code == 200
@@ -88,11 +100,55 @@ def test_heatmap_matrix_cell_combines_presence_and_questions(test_client, isolat
     cell = next(c for c in body["cells"] if c["doc_id"] == "doc-mx-1" and c["concept_id"] == concept_id)
     assert cell["present"] is True
     assert cell["question_count"] == 1
-    assert cell["raw"] == 2  # 등장(1) + 질문 1개
+    assert cell["score"] == 0.75
+
+
+def test_heatmap_matrix_falls_back_to_presence_when_llm_fails(test_client, isolated_dirs, monkeypatch):
+    import services.llm_client as llm_client
+
+    async def failing_score(title, text, concept_names, session_id=None):
+        raise RuntimeError("LLM 호출 실패")
+
+    monkeypatch.setattr(llm_client, "score_paper_concept_relevance", failing_score)
+
+    concept_id = _setup_one_paper_one_concept(isolated_dirs)
+
+    res = test_client.get("/api/library/graph/heatmap/matrix")
+    assert res.status_code == 200
+    body = res.json()
+    cell = next(c for c in body["cells"] if c["doc_id"] == "doc-mx-1" and c["concept_id"] == concept_id)
+    # LLM 채점이 실패해도 매트릭스 자체는 무너지지 않고 등장 여부(1.0)로 대체된다.
+    assert cell["present"] is True
+    assert cell["score"] == 1.0
+
+
+def test_heatmap_matrix_caches_result_without_recalling_llm(test_client, isolated_dirs, monkeypatch):
+    import services.llm_client as llm_client
+
+    call_count = {"n": 0}
+
+    async def fake_score(title, text, concept_names, session_id=None):
+        call_count["n"] += 1
+        return [{"concept": name, "score": 0.5} for name in concept_names]
+
+    monkeypatch.setattr(llm_client, "score_paper_concept_relevance", fake_score)
+
+    _setup_one_paper_one_concept(isolated_dirs)
+
+    res1 = test_client.get("/api/library/graph/heatmap/matrix")
+    assert res1.status_code == 200
+    assert call_count["n"] == 1
+
+    res2 = test_client.get("/api/library/graph/heatmap/matrix")
+    assert res2.status_code == 200
+    assert call_count["n"] == 1  # 캐시가 유효한 동안은 LLM을 다시 호출하지 않는다
+
+    res3 = test_client.get("/api/library/graph/heatmap/matrix?force=true")
+    assert res3.status_code == 200
+    assert call_count["n"] == 2  # force=true는 캐시를 무시하고 새로 채점한다
 
 
 def test_heatmap_matrix_omits_papers_without_ranked_concepts(test_client, isolated_dirs):
-    db = isolated_dirs["db"]
     _create_doc_owned_by(isolated_dirs, "doc-mx-unrelated", "testuser", {"title": "Unrelated Paper"})
 
     res = test_client.get("/api/library/graph/heatmap/matrix")

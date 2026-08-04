@@ -5335,10 +5335,10 @@ body.light-theme .library-tab-btn.active {
 .kg-insight-item svg { flex-shrink: 0; margin-top: 2px; color: var(--control-accent-text); }
 
 /* ── Research Graph · 개념 히트맵 (논문 x 개념 2D 매트릭스, seaborn류) ──
-   셀 색 진하기는 정규화된 강도값을 accent 색 1종의 sequential 램프로
-   인코딩한다(color-mix가 --control-accent 기준이라 테마 색/라이트-다크에
-   자동으로 맞춰진다). 값이 진해지면(0.55 이상) 텍스트를 밝은 색으로
-   전환해 대비를 유지한다. */
+   셀 색 진하기는 서버가 LLM으로 채점한 0.0~1.0 관련도 점수를 accent 색
+   1종의 sequential 램프로 인코딩한다(color-mix가 --control-accent 기준이라
+   테마 색/라이트-다크에 자동으로 맞춰진다). 값이 진해지면(0.55 이상)
+   텍스트를 밝은 색으로 전환해 대비를 유지한다. */
 .rg-heatmap { display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
 
 .rg-heatmap-toolbar {
@@ -5348,24 +5348,11 @@ body.light-theme .library-tab-btn.active {
   gap: 16px;
   flex-wrap: wrap;
 }
+/* .rg-refresh-btn(research-graph.css)은 원래 사이드바 카드용이라 width:100%다 -
+   여기 툴바 행에서는 텍스트 폭만큼만 차지하도록 되돌린다. */
+.rg-heatmap-toolbar .rg-refresh-btn { width: auto; flex-shrink: 0; }
 .rg-heatmap-heading h4 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: var(--text-primary); }
 .rg-heatmap-heading p { margin: 0; font-size: 12.5px; color: var(--text-secondary); }
-.rg-heatmap-normalize {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-.rg-heatmap-normalize select {
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: 12.5px;
-}
 
 .rg-heatmap-body { display: flex; gap: 20px; min-height: 0; flex: 1; }
 .rg-heatmap-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }

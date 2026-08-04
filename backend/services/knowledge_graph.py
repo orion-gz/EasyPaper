@@ -606,17 +606,94 @@ async def get_concept_heatmap(username: str) -> List[dict]:
     return result
 
 
-async def get_concept_paper_matrix(username: str, concept_limit: int = 12, paper_limit: int = 10) -> dict:
+# 히트맵 매트릭스 캐시 TTL - 논문마다 LLM 채점 호출이 들어가는 무거운 작업이라
+# AI 인사이트와 동일하게 하루 단위로만 다시 계산한다.
+HEATMAP_MATRIX_CACHE_HOURS = 24
+
+
+def _heatmap_matrix_cache_key(username: str) -> str:
+    return f"heatmap_matrix:{username}"
+
+
+async def _get_paper_text_for_scoring(doc_id: str) -> str:
+    """히트맵 LLM 채점용 논문 서두 텍스트. sync_document_for_graph(개념 추출)와
+    동일하게 첫 2페이지만 써서 비용을 억제하고 근거 범위를 일관되게 유지한다.
+    PDF가 없거나 추출에 실패하면 빈 문자열을 반환한다 - 호출부가 제목만으로도
+    채점을 시도하거나 등장 여부 기반 값으로 대체할 수 있어 파이프라인을
+    막지 않는다."""
+    try:
+        from services.library import get_pdf_path
+        from services.cache import get_cached_pages, save_pages_cache
+        from services.pdf_parser import extract_pages
+        pdf_path = get_pdf_path(doc_id)
+        if not pdf_path:
+            return ""
+        pages = get_cached_pages(doc_id, pdf_path)
+        if pages is None:
+            pages = await asyncio.to_thread(extract_pages, pdf_path)
+            save_pages_cache(doc_id, pdf_path, pages)
+        return "\n".join(p.get("text", "") for p in pages[:2])
+    except Exception:
+        return ""
+
+
+async def _score_one_paper(doc_id: str, title: str, concept_names: List[str]) -> Dict[str, float]:
+    """한 논문에 대해 concept_names 전체를 LLM 호출 1회로 채점한다(개념별로 나눠
+    호출하면 비용이 개념 수 x 논문 수로 늘어나므로, 논문당 1회로 제한). 텍스트
+    추출 실패, LLM 오류, 응답 파싱 실패 등 어떤 이유로든 실패하면 조용히 빈
+    dict를 반환해 호출부가 등장 여부 기반 값으로 대체하게 한다 - 이 함수 하나가
+    실패해도 나머지 논문의 채점이나 매트릭스 자체가 막히면 안 된다."""
+    from services.llm_client import score_paper_concept_relevance
+    text = await _get_paper_text_for_scoring(doc_id)
+    try:
+        raw = await score_paper_concept_relevance(title, text, concept_names, session_id=doc_id)
+    except Exception:
+        return {}
+    scores: Dict[str, float] = {}
+    for item in raw:
+        name = (item.get("concept") or "").strip()
+        if not name:
+            continue
+        try:
+            score = float(item.get("score", 0))
+        except (TypeError, ValueError):
+            continue
+        scores[name.lower()] = max(0.0, min(1.0, score))
+    return scores
+
+
+async def get_concept_paper_matrix(username: str, concept_limit: int = 12, paper_limit: int = 10, force: bool = False) -> dict:
     """개념 히트맵을 논문(행) x 개념(열) 매트릭스로 구성한다(seaborn류 2D 히트맵 UI용).
-    새 테이블이나 새 LLM 호출 없이 기존 3개 테이블만 재사용한다:
-    - paper_concepts: 논문에 개념이 등장했는지(이진 링크)
-    - question_papers/question_concepts: 그 논문·개념 조합에 대한 질문이 몇 개 있었는지
-      (db_get_question_doc_concept_counts가 chat_id로 두 테이블을 조인해 집계)
-    셀 값(raw) = 등장 여부(0/1) + 그 조합에 대한 질문 수. "논문 내 개념 언급 빈도"를 정밀하게
-    분석한 값이 아니라 "등장 + 얼마나 논의됐는가"를 결합한 근사 강도이며, 프런트에서 행/열/전체
-    기준으로 정규화해 색상에 매핑한다. 열은 get_concept_heatmap과 동일한 활동량 순위 상위
-    concept_limit개, 행은 그 개념들과 실제로 연결된 논문 중 활동량 상위 paper_limit개만 골라
-    표가 스크린 안에 들어오게 한다(현재 히트맵 개편의 동기 - 항목이 너무 많으면 비직관적)."""
+
+    열/행 선정은 기존 3개 테이블(paper_concepts, question_papers, question_concepts)만
+    재사용하는 규칙 기반 집계다 - get_concept_heatmap과 동일한 활동량 순위로 상위
+    concept_limit개 개념을, 그 개념들과 실제로 연결된 논문 중 활동량 상위 paper_limit개
+    논문만 골라 표가 스크린 안에 들어오게 한다(항목이 너무 많으면 비직관적이라는
+    피드백에서 시작된 제약).
+
+    셀 값(score)은 선정된 논문마다 제목+서두 텍스트를 근거로 LLM이 각 개념을
+    0.0~1.0으로 직접 채점한 값이다. 이전 버전은 "등장 여부 + 질문 수"로 근사했지만,
+    개념 중복 제거가 완벽하지 않아(concepts.normalized_name이 소문자+trim만 함) 논문이
+    실제로 다루는 개념인데도 다른 concept_id로 잡혀 0으로 뜨는 문제가 있었다 - 텍스트를
+    직접 읽고 판단하므로 그 문제에서 자유롭다. 논문당 LLM 호출 1회로 비용을 제한하고
+    (그 논문에 대해 concept_limit개 전부를 한 번에 채점), 논문들은 asyncio.gather로
+    병렬 호출해 전체 지연 시간을 줄인다. 결과는 HEATMAP_MATRIX_CACHE_HOURS 동안
+    app_meta에 캐싱해 히트맵을 열 때마다 다시 채점하지 않는다(get_reading_recommendations와
+    동일한 캐싱 패턴). force=True면 캐시를 무시하고 새로 채점한다("다시 계산" 버튼)."""
+    from services.db import db_get_meta, db_set_meta
+
+    cache_key = _heatmap_matrix_cache_key(username)
+    if not force:
+        cached_raw = db_get_meta(cache_key)
+        if cached_raw:
+            try:
+                cached = json.loads(cached_raw)
+                generated_at = datetime.fromisoformat(cached["generated_at"])
+                if datetime.now(timezone.utc) - generated_at < timedelta(hours=HEATMAP_MATRIX_CACHE_HOURS):
+                    return cached["matrix"]
+            except Exception:
+                pass  # 캐시가 손상됐으면 무시하고 새로 계산
+
     from services.library import list_documents
     from services.db import db_get_concepts_for_docs, db_get_question_count_for_concepts, db_get_question_doc_concept_counts
 
@@ -639,6 +716,7 @@ async def get_concept_paper_matrix(username: str, concept_limit: int = 12, paper
         reverse=True,
     )[:concept_limit]
     concept_ids = {c["concept_id"] for c in ranked_concepts}
+    concept_names = [c["name"] for c in ranked_concepts]
 
     pair_question_counts = db_get_question_doc_concept_counts(doc_ids)
 
@@ -666,25 +744,47 @@ async def get_concept_paper_matrix(username: str, concept_limit: int = 12, paper
             "category": (meta.get("categories") or [None])[0],
         })
 
+    if not ranked_concepts or not papers:
+        # 아직 채점할 데이터가 없는 상태를 24시간짜리 빈 캐시로 굳히지 않는다 -
+        # 다음 조회 때 데이터가 쌓여 있으면 바로 반영되게 캐싱을 건너뛴다.
+        return {"concepts": [], "papers": [], "cells": []}
+
+    score_results = await asyncio.gather(
+        *[_score_one_paper(p["doc_id"], p["title"], concept_names) for p in papers],
+        return_exceptions=True,
+    )
+    scores_by_doc: Dict[str, Dict[str, float]] = {
+        p["doc_id"]: (result if isinstance(result, dict) else {})
+        for p, result in zip(papers, score_results)
+    }
+
     cells = []
     for doc_id in ranked_doc_ids:
+        doc_scores_by_name = scores_by_doc.get(doc_id, {})
         for c in ranked_concepts:
             cid = c["concept_id"]
             present = (doc_id, cid) in doc_concept_present
             qcount = pair_question_counts.get((doc_id, cid), 0)
+            llm_score = doc_scores_by_name.get(c["name"].strip().lower())
+            score = llm_score if llm_score is not None else (1.0 if present else 0.0)
             cells.append({
                 "doc_id": doc_id,
                 "concept_id": cid,
                 "present": present,
                 "question_count": qcount,
-                "raw": (1 if present else 0) + qcount,
+                "score": round(score, 3),
             })
 
-    return {
+    matrix = {
         "concepts": [{"concept_id": c["concept_id"], "name": c["name"], "kind": c["kind"]} for c in ranked_concepts],
         "papers": papers,
         "cells": cells,
     }
+    db_set_meta(cache_key, json.dumps({
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "matrix": matrix,
+    }, ensure_ascii=False))
+    return matrix
 
 
 async def get_knowledge_gaps(username: str) -> List[dict]:

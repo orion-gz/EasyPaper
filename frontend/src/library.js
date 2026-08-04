@@ -199,8 +199,9 @@ export async function fetchLibraryHeatmap() {
   return res.json()
 }
 
-export async function fetchLibraryHeatmapMatrix() {
-  const res = await fetch(`${API_BASE}/library/graph/heatmap/matrix`)
+// force: true면 서버 캐시(하루 단위)를 무시하고 LLM 채점을 새로 돌린다("다시 계산" 버튼용).
+export async function fetchLibraryHeatmapMatrix({ force = false } = {}) {
+  const res = await fetch(`${API_BASE}/library/graph/heatmap/matrix${force ? '?force=true' : ''}`)
   if (!res.ok) throw new Error('개념 히트맵 매트릭스 조회 실패')
   return res.json()
 }

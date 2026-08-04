@@ -2307,6 +2307,31 @@ JSON Array:"""
     return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="유사 개념 탐색")
 
 
+async def score_paper_concept_relevance(title: str, text: str, concept_names: List[str], session_id: str = None) -> List[dict]:
+    """논문 제목+서두 텍스트를 근거로, 주어진 개념 목록 각각을 이 논문이 얼마나
+    깊이/중심적으로 다루는지 0.0~1.0으로 채점한다(Concept Heatmap 매트릭스의
+    셀 값). match_question_to_concepts와 같은 폐쇄형 목록(concept_names에
+    없는 개념을 지어내면 안 됨)이지만, 부분집합을 고르는 대신 목록 전체에
+    점수를 매긴다는 점이 다르다. 반환값: [{"concept": str, "score": number}, ...]
+    (concept_names와 정확히 같은 이름, 순서는 무관)."""
+    if not concept_names:
+        return []
+    names_list = "\n".join(f"- {n}" for n in concept_names)
+    prompt = f"""You are an academic paper analyst. Given a paper's title and beginning text (abstract/introduction), score how deeply and centrally EACH concept in the list below is discussed in this paper, on a scale from 0.0 (not discussed at all / irrelevant) to 1.0 (a central, deeply discussed topic of the paper).
+
+Output ONLY a pure JSON array, with no markdown code fences, no explanations, and no extra prose. Each element must be an object with a "concept" key whose value is copied EXACTLY (verbatim) from the list below, and a "score" key (a number between 0.0 and 1.0). You MUST include EVERY concept from the list, even if its score is 0.0.
+
+Concept List:
+{names_list}
+
+Title: {title}
+Beginning Text:
+{text[:2000]}
+
+JSON Array:"""
+    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="논문-개념 관련도 채점", required_key="concept")
+
+
 async def generate_reading_recommendations(titles: List[str], categories: List[str], session_id: str = None) -> List[dict]:
     """읽은 논문 제목/카테고리를 근거로 다음에 읽으면 좋을 논문 후보와 그
     이유를 추천한다. 반환값: [{"title": str, "reason": str}, ...]. 여기서
