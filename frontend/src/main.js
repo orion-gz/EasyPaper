@@ -4517,13 +4517,12 @@ function ensureLibraryChrome() {
   if (libraryChromeReady) return
   libraryChromeReady = true
 
-  const headerLogo = document.querySelector('#page-library .library-header .logo')
-  if (headerLogo && !headerLogo.querySelector('.library-header-subtitle')) {
-    headerLogo.insertAdjacentHTML('beforeend', `<p class="library-header-subtitle">보관함에 저장된 모든 논문을 한 곳에서 관리하세요</p>`)
-  }
-
   if (librarySearchBox && !$('library-status-tabs')) {
-    librarySearchBox.insertAdjacentHTML('beforebegin', `<div id="library-status-tabs" class="lib-status-tabs"></div>`)
+    librarySearchBox.insertAdjacentHTML('beforebegin', `
+      <div class="library-toolbar-row">
+        <div id="library-status-tabs" class="lib-status-tabs"></div>
+      </div>
+    `)
   }
 
   const viewToggleEl = $('library-view-toggle')
