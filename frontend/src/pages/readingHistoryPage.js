@@ -148,10 +148,7 @@ function buildDailyActivityStats(events, readingStats) {
   // 4. 일별 활동 점수 및 환산 페이지 계산
   for (const [_, item] of byDay.entries()) {
     if (item.readingSeconds > 0) {
-      item.estPagesRead = Math.max(
-        item.readingSeconds >= 60 ? 1 : 0,
-        Math.floor(item.readingSeconds / userPaceSec)
-      )
+      item.estPagesRead = Math.floor(item.readingSeconds / userPaceSec)
     }
 
     const readTimeScore = Math.floor(item.readingSeconds / 60)
@@ -413,9 +410,9 @@ export async function renderReadingHistoryPage() {
   const currEstPages = sumEstPagesByDayRange(currStart, currEnd)
   const prevEstPages = sumEstPagesByDayRange(prevStart, prevEnd)
 
-  // 실측 읽기 시간 기반 환산 페이지를 사용하되, 하트비트가 없는 극초기 과거 데이터는 기존 문서 메타 수치로 폴백
-  const currPagesReadDisplay = currEstPages > 0 ? currEstPages : curr.pagesRead
-  const prevPagesReadDisplay = prevEstPages > 0 ? prevEstPages : prev.pagesRead
+  // 실측 읽기 시간 기반 환산 페이지를 사용하되, 하트비트가 없는 극초기 과거 데이터만 기존 문서 메타 수치로 폴백
+  const currPagesReadDisplay = currReadingSeconds > 0 ? currEstPages : curr.pagesRead
+  const prevPagesReadDisplay = prevReadingSeconds > 0 ? prevEstPages : prev.pagesRead
 
   let totalEstPages = 0
   for (const item of dailyStatsMap.values()) {
