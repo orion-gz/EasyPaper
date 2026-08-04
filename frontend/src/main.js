@@ -3519,10 +3519,12 @@ function updatePageDwellTime() {
   session.pageDwellTimes[state.currentPage] = (session.pageDwellTimes[state.currentPage] || 0) + READING_HEARTBEAT_TICK_SECONDS
 }
 
-async function flushActiveReadingSession(userPaceSec = 240) {
+async function flushActiveReadingSession(userPaceSec = 240, isFinal = false) {
   if (!activeViewerSession || !activeViewerSession.docId) return
   const session = activeViewerSession
-  activeViewerSession = null
+  if (isFinal) {
+    activeViewerSession = null
+  }
 
   // 개인 EMA 정독 페이스(userPaceSec)의 50% 이상 체류 시에만 해당 페이지 완독 인정
   const dynamicDwellThreshold = Math.max(1, Math.round(userPaceSec * 0.5))
@@ -3565,7 +3567,7 @@ function tickReadingHeartbeat() {
 async function flushReadingHeartbeat() {
   const buffers = readingHeartbeatBuffers
   readingHeartbeatBuffers = {}
-  flushActiveReadingSession().catch(() => {})
+  flushActiveReadingSession(240, false).catch(() => {})
   const entries = Object.entries(buffers).filter(([, s]) => s > 0)
   if (entries.length === 0) return
   await Promise.all(entries.map(([key, seconds]) => {
@@ -3578,7 +3580,7 @@ async function flushReadingHeartbeat() {
 
 setInterval(tickReadingHeartbeat, READING_HEARTBEAT_TICK_SECONDS * 1000)
 setInterval(flushReadingHeartbeat, READING_HEARTBEAT_FLUSH_MS)
-window.addEventListener('beforeunload', () => { flushReadingHeartbeat(); flushActiveReadingSession() })
+window.addEventListener('beforeunload', () => { flushReadingHeartbeat(); flushActiveReadingSession(240, true) })
 
 // ── 초기화 ────────────────────────────────────────
 checkAuthentication()

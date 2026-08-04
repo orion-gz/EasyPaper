@@ -162,6 +162,49 @@ def test_metadata_put_accumulates_read_sessions(test_client, isolated_dirs):
     assert len(updated_meta["read_sessions"]) == 2
 
 
+def test_metadata_put_updates_same_timestamp_session(test_client, isolated_dirs):
+    _create_doc_owned_by(isolated_dirs, "doc-tl-update-same", "testuser", {
+        "title": "Same Session Update Paper",
+        "read_sessions": [
+            {"timestamp": "2026-02-02T10:00:00+00:00", "end_timestamp": "2026-02-02T10:00:20+00:00", "duration_seconds": 20}
+        ]
+    })
+    # 20초 후 하트비트가 동일 세션(시작 시각 동일)의 연장 정보를 보냄
+    new_payload = {
+        "read_sessions": [
+            {"timestamp": "2026-02-02T10:00:00+00:00", "end_timestamp": "2026-02-02T10:00:40+00:00", "duration_seconds": 40}
+        ]
+    }
+    res = test_client.put("/api/library/doc-tl-update-same/metadata", json=new_payload)
+    assert res.status_code == 200
+    updated_meta = res.json()["metadata"]
+    assert len(updated_meta["read_sessions"]) == 1
+    assert updated_meta["read_sessions"][0]["end_timestamp"] == "2026-02-02T10:00:40+00:00"
+    assert updated_meta["read_sessions"][0]["duration_seconds"] == 40
+
+
+def test_metadata_put_merges_consecutive_sessions_within_2min(test_client, isolated_dirs):
+    _create_doc_owned_by(isolated_dirs, "doc-tl-merge-consec", "testuser", {
+        "title": "Consecutive Merge Paper",
+        "read_sessions": [
+            {"timestamp": "2026-02-02T10:00:00+00:00", "end_timestamp": "2026-02-02T10:05:00+00:00", "duration_seconds": 300, "verified_pages": 2}
+        ]
+    })
+    # 직전 종료시각(10:05:00) 후 1분 뒤(10:06:00) 세션 전송 -> 하나의 연속 세션으로 병합되어야 함
+    new_payload = {
+        "read_sessions": [
+            {"timestamp": "2026-02-02T10:06:00+00:00", "end_timestamp": "2026-02-02T10:10:00+00:00", "duration_seconds": 240, "verified_pages": 1}
+        ]
+    }
+    res = test_client.put("/api/library/doc-tl-merge-consec/metadata", json=new_payload)
+    assert res.status_code == 200
+    updated_meta = res.json()["metadata"]
+    assert len(updated_meta["read_sessions"]) == 1
+    assert updated_meta["read_sessions"][0]["end_timestamp"] == "2026-02-02T10:10:00+00:00"
+    assert updated_meta["read_sessions"][0]["duration_seconds"] == 600
+
+
+
 
 # ── Reading Recommendation ───────────────────────────────────────────────
 
