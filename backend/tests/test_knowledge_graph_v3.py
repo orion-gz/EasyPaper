@@ -125,6 +125,44 @@ def test_timeline_excludes_other_users_events(test_client, isolated_dirs):
     assert not any(e["doc_id"] == "doc-tl-other" for e in events)
 
 
+def test_timeline_read_session_identical_start_end_timestamp(test_client, isolated_dirs):
+    _create_doc_owned_by(isolated_dirs, "doc-tl-same-ts", "testuser", {
+        "title": "Same Timestamp Paper",
+        "read_sessions": [
+            {
+                "timestamp": "2026-02-02T10:00:00+00:00",
+                "end_timestamp": "2026-02-02T10:00:00+00:00",
+                "duration_seconds": 0,
+            }
+        ]
+    })
+    res = test_client.get("/api/library/timeline")
+    assert res.status_code == 200
+    events = res.json()["events"]
+    read_events = [e for e in events if e.get("doc_id") == "doc-tl-same-ts" and e["type"] == "read"]
+    assert len(read_events) == 1
+    assert read_events[0]["end_timestamp"] is None
+
+
+def test_metadata_put_accumulates_read_sessions(test_client, isolated_dirs):
+    _create_doc_owned_by(isolated_dirs, "doc-tl-accum", "testuser", {
+        "title": "Accumulation Paper",
+        "read_sessions": [
+            {"timestamp": "2026-02-02T10:00:00+00:00", "end_timestamp": "2026-02-02T10:05:00+00:00", "duration_seconds": 300}
+        ]
+    })
+    new_payload = {
+        "read_sessions": [
+            {"timestamp": "2026-02-02T11:00:00+00:00", "end_timestamp": "2026-02-02T11:05:00+00:00", "duration_seconds": 300}
+        ]
+    }
+    res = test_client.put("/api/library/doc-tl-accum/metadata", json=new_payload)
+    assert res.status_code == 200
+    updated_meta = res.json()["metadata"]
+    assert len(updated_meta["read_sessions"]) == 2
+
+
+
 # ── Reading Recommendation ───────────────────────────────────────────────
 
 @pytest.mark.asyncio

@@ -889,11 +889,12 @@ export async function renderReadingHistoryPage() {
               if (e.type === 'read') {
                 const startStr = formatTime(e.timestamp)
                 const endStr = e.end_timestamp ? formatTime(e.end_timestamp) : null
-                if (startStr && endStr) {
+                if (startStr && endStr && startStr !== endStr) {
                   timeLabel = `${startStr} ~ ${endStr}`
                   hoverTitle = `읽기 시간: ${startStr} 시작 ~ ${endStr} 종료 | 클릭하여 이 논문 열기`
                 } else if (startStr) {
-                  hoverTitle = `읽기 시작: ${startStr} | 클릭하여 이 논문 열기`
+                  timeLabel = startStr
+                  hoverTitle = `읽기 시각: ${startStr} | 클릭하여 이 논문 열기`
                 }
 
                 if (e.start_page && e.end_page) {

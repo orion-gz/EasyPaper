@@ -460,6 +460,8 @@ async def get_activity_timeline(username: str) -> List[dict]:
                         end_ts = (dt + timedelta(seconds=duration)).isoformat()
                     except Exception:
                         pass
+                if end_ts and ts and end_ts == ts:
+                    end_ts = None
                 events.append({
                     "type": "read",
                     "doc_id": doc_id,

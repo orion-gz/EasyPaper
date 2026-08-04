@@ -650,7 +650,19 @@ async def update_doc_metadata(
     doc = _require_owned_document(doc_id, current_user)
 
     meta = doc.get("metadata") or {}
-    meta.update(payload)
+    if "read_sessions" in payload and isinstance(payload["read_sessions"], list):
+        existing_sessions = meta.get("read_sessions") or []
+        new_sessions = payload["read_sessions"]
+        combined = list(existing_sessions)
+        for ns in new_sessions:
+            if ns not in combined:
+                combined.append(ns)
+        meta["read_sessions"] = combined[-100:]
+        payload_copy = dict(payload)
+        payload_copy.pop("read_sessions")
+        meta.update(payload_copy)
+    else:
+        meta.update(payload)
     
     update_document_metadata(doc_id, meta)
     
