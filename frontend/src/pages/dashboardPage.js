@@ -391,22 +391,23 @@ function renderRecommendationsCard(cachedRecommendations) {
 // 기준 정렬)을 그대로 타일로 표시하고, 색 진하기는 이 목록 안에서의
 // 상대적 score로 정규화한다.
 function renderHeatmapCard(heatmap) {
-  const maxScore = heatmap.length ? Math.max(...heatmap.map(h => h.score || 0)) : 0
+  const safeHeatmap = Array.isArray(heatmap) ? heatmap : []
+  const maxScore = safeHeatmap.length ? Math.max(...safeHeatmap.map(h => h?.score || 0)) : 0
   return `
     <div class="dash-card dash-card-heatmap">
       <div class="dash-card-head">
         <h3>${icon('tag', 15)}개념 히트맵</h3>
         <a href="#" class="dash-link" data-nav="graph" data-subview="heatmap">전체보기 ›</a>
       </div>
-      ${heatmap.length === 0 ? emptyNote('아직 추출된 개념이 없습니다.') : `
+      ${safeHeatmap.length === 0 ? emptyNote('아직 추출된 개념이 없습니다.') : `
       <div class="dash-heat-grid">
-        ${heatmap.slice(0, 8).map(h => {
-          const pct = maxScore > 0 ? Math.max(6, Math.round(((h.score || 0) / maxScore) * 100)) : 6
+        ${safeHeatmap.slice(0, 8).map(h => {
+          const pct = maxScore > 0 ? Math.max(6, Math.round(((h?.score || 0) / maxScore) * 100)) : 6
           return `
-            <div class="dash-heat-cell" data-node-id="concept:${escapeHtml(String(h.concept_id))}" title="${escapeHtml(h.name)} · 논문 ${h.paper_count}편 · 질문 ${h.question_count}개 · 클릭하면 연구 그래프에서 보기">
+            <div class="dash-heat-cell" data-node-id="concept:${escapeHtml(String(h?.concept_id || ''))}" title="${escapeHtml(h?.name || '')} · 논문 ${h?.paper_count || 0}편 · 질문 ${h?.question_count || 0}개 · 클릭하면 연구 그래프에서 보기">
               <div class="dash-heat-swatch" style="--heat-pct:${pct}%"></div>
-              <div class="dash-heat-label">${escapeHtml(h.name)}</div>
-              <div class="dash-heat-count">${formatNumber(h.score)}</div>
+              <div class="dash-heat-label">${escapeHtml(h?.name || '')}</div>
+              <div class="dash-heat-count">${formatNumber(h?.score || 0)}</div>
             </div>
           `
         }).join('')}
@@ -422,7 +423,8 @@ function renderHeatmapCard(heatmap) {
 const TIMELINE_TYPE_LABEL = { uploaded: '업로드', read: '읽음', question: '질문', note: '메모' }
 
 function renderTimelineCard(events) {
-  const recent = events.filter(e => isWithinDays(e.timestamp, 7)).slice(0, 7)
+  const safeEvents = Array.isArray(events) ? events : []
+  const recent = safeEvents.filter(e => e && isWithinDaysLocal(e.timestamp, 7)).slice(0, 7)
   return `
     <div class="dash-card">
       <div class="dash-card-head">
@@ -433,11 +435,11 @@ function renderTimelineCard(events) {
       ${recent.length === 0 ? emptyNote('최근 7일간 활동이 없습니다.') : `
       <ul class="dash-timeline-list">
         ${recent.map(e => `
-          <li class="dash-timeline-item dash-timeline-${escapeHtml(e.type)}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" title="이 논문 열기">
+          <li class="dash-timeline-item dash-timeline-${escapeHtml(e.type || '')}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type || '')}" title="이 논문 열기">
             <span class="dash-timeline-dot"></span>
             <div class="dash-timeline-body">
               <div class="dash-timeline-top">
-                <span class="dash-timeline-type">${escapeHtml(TIMELINE_TYPE_LABEL[e.type] || e.type)}</span>
+                <span class="dash-timeline-type">${escapeHtml(TIMELINE_TYPE_LABEL[e.type] || e.type || '')}</span>
                 <span class="dash-timeline-time">${relativeTimeKo(e.timestamp)}</span>
               </div>
               <div class="dash-timeline-title">${escapeHtml(e.doc_title || '')}</div>
@@ -457,16 +459,18 @@ function renderTimelineCard(events) {
 // 노드 자체가 없으므로 범례에서 제외했다(실데이터 없는 항목은 만들지
 // 않는다는 원칙).
 function buildGraphPreview(graphData, heatmap) {
-  if (!graphData || !graphData.nodes || !heatmap.length) return null
-  const nodeById = new Map(graphData.nodes.map(n => [n.id, n]))
-  const top = heatmap.find(h => nodeById.has(`concept:${h.concept_id}`))
+  if (!graphData || !Array.isArray(graphData.nodes) || !Array.isArray(graphData.edges) || !Array.isArray(heatmap) || !heatmap.length) return null
+  const nodeById = new Map(graphData.nodes.map(n => [n?.id, n]).filter(([id]) => Boolean(id)))
+  const top = heatmap.find(h => h && nodeById.has(`concept:${h.concept_id}`))
   if (!top) return null
   const centerId = `concept:${top.concept_id}`
   const center = nodeById.get(centerId)
+  if (!center) return null
 
   const seen = new Set()
   const neighbors = []
   for (const e of graphData.edges) {
+    if (!e || e.source === undefined || e.target === undefined) continue
     if (e.source !== centerId && e.target !== centerId) continue
     const otherId = e.source === centerId ? e.target : e.source
     if (seen.has(otherId)) continue
