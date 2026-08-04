@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, Response
 from services.auth import get_current_user
 from services.library import (
@@ -616,18 +616,20 @@ async def put_library_memos(doc_id: str, payload: dict, current_user: str = Depe
 
 
 @router.get("/library/{doc_id}/bibliography")
-async def get_library_bibliography(doc_id: str, current_user: str = Depends(get_current_user)):
+async def get_library_bibliography(
+    doc_id: str,
+    refresh: bool = Query(False),
+    current_user: str = Depends(get_current_user)
+):
     """Library 상세 패널 Quick Info의 Venue/DOI/ArXiv/Citations를 채운다. 논문
     자체의 서지 정보는 데이터베이스에 없으므로, 제목으로 OpenAlex를 검색해서
     찾는다(참고문헌 링크 연결과 동일한 무료/키 불필요 API - services/
-    reference_linker.py). 첫 조회 때만 실제로 검색하고 결과를(못 찾은 경우도
-    포함해서) documents.metadata.bibliography에 캐시해, 상세 패널을 열 때마다
-    매번 외부 API를 다시 호출하지 않는다."""
+    reference_linker.py). refresh=True 시 기존 캐시를 지우고 재검색합니다."""
     doc = _require_owned_document(doc_id, current_user)
     meta = doc.get("metadata") or {}
 
     cached = meta.get("bibliography")
-    if cached:
+    if cached and not refresh:
         return cached
 
     from services.reference_linker import resolve_paper_metadata
@@ -646,12 +648,16 @@ async def update_doc_metadata(
     payload: dict,
     current_user: str = Depends(get_current_user)
 ):
-    """문서의 메타데이터(예: 제목 등)를 업데이트합니다."""
+    """문서의 메타데이터(예: 제목 등)를 업데이트합니다. 제목 변경 시 서지 정보 캐시를 초기화합니다."""
     doc = _require_owned_document(doc_id, current_user)
 
     meta = doc.get("metadata") or {}
+    old_title = meta.get("title")
     meta.update(payload)
     
+    if "title" in payload and payload["title"] != old_title:
+        meta.pop("bibliography", None)
+
     update_document_metadata(doc_id, meta)
     
     # 활성 메모리 세션도 업데이트하여 정합성 유지

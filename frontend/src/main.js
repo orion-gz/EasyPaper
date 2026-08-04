@@ -6251,6 +6251,16 @@ function startLibraryDetailTitleEdit(doc) {
         showToast('제목이 변경되었습니다.', 'success')
         titleEl.textContent = newTitle
         await renderLibrary()
+        fetchLibraryBibliography(doc.id, true).then(biblio => {
+          const venueEl = $('lib-detail-qi-venue')
+          const doiEl = $('lib-detail-qi-doi')
+          const arxivEl = $('lib-detail-qi-arxiv')
+          const citationsEl = $('lib-detail-qi-citations')
+          if (venueEl) venueEl.textContent = biblio.venue || '—'
+          if (doiEl) doiEl.textContent = biblio.doi || '—'
+          if (arxivEl) arxivEl.textContent = biblio.arxiv_id || '—'
+          if (citationsEl) citationsEl.textContent = biblio.citation_count != null ? biblio.citation_count.toLocaleString('ko-KR') : '—'
+        }).catch(() => {})
       } catch (err) {
         showToast('제목 변경 실패: ' + err.message, 'error')
         titleEl.textContent = oldTitle

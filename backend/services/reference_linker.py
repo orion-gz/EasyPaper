@@ -14,6 +14,7 @@ IP 기준 공유 레이트리밋이 꽤 엄격해서(실제로 이 프로젝트 
 
 import logging
 import re
+from difflib import SequenceMatcher
 from typing import Optional
 
 import httpx
@@ -24,6 +25,44 @@ logger = logging.getLogger(__name__)
 
 _OPENALEX_WORKS_URL = "https://api.openalex.org/works"
 _REQUEST_TIMEOUT_SECONDS = 10.0
+
+
+def _clean_paper_title(raw: str) -> str:
+    if not raw:
+        return ""
+    clean = raw.strip()
+    clean = re.sub(r'\.pdf$', '', clean, flags=re.IGNORECASE)
+    clean = clean.replace("_", " ")
+    return re.sub(r'\s+', ' ', clean).strip()
+
+
+def _normalize_title_for_match(text: str) -> str:
+    cleaned = re.sub(r'[^a-zA-Z0-9\s]', '', text or '').lower()
+    return re.sub(r'\s+', ' ', cleaned).strip()
+
+
+def _calculate_title_similarity(query_title: str, cand_title: str) -> float:
+    q_norm = _normalize_title_for_match(query_title)
+    c_norm = _normalize_title_for_match(cand_title)
+    if not q_norm or not c_norm:
+        return 0.0
+    if q_norm == c_norm:
+        return 1.0
+
+    q_words = set(q_norm.split())
+    c_words = set(c_norm.split())
+    if not q_words or not c_words:
+        return 0.0
+
+    jaccard = len(q_words.intersection(c_words)) / len(q_words.union(c_words))
+    seq_ratio = SequenceMatcher(None, q_norm, c_norm).ratio()
+
+    if len(q_words) >= 3 and q_words.issubset(c_words):
+        containment = len(q_words) / len(c_words)
+        return max(jaccard, seq_ratio, containment * 0.85)
+
+    return max(jaccard, seq_ratio)
+
 
 # IEEE 등 학술 인용 스타일은 흔히 제목을 따옴표로 감싼다(예: Author, "Title," Venue,
 # year.). 저자명·학회명·권/호/페이지 번호까지 통째로 검색하면 관련 없는 논문이
@@ -97,16 +136,16 @@ def _extract_venue(work: dict) -> Optional[str]:
 
 async def resolve_paper_metadata(title: str) -> Optional[dict]:
     """논문 자신의 제목으로 OpenAlex를 검색해 Venue/DOI/ArXiv ID/피인용수를
-    반환합니다(Library 상세 패널의 Quick Info용). resolve_reference()와 달리
-    참고문헌이 아니라 라이브러리에 저장된 논문 그 자체를 찾는 용도라, 인용
-    스타일 텍스트 파싱(따옴표 추출 등) 없이 제목을 그대로 검색어로 쓴다.
-    매칭 실패/네트워크 오류 시 None(호출부가 "찾지 못함"으로 캐시해 재조회를
-    막는다 - db_update_document_metadata 쪽 정책)."""
-    query = (title or "").strip()
-    if not query:
+    반환합니다(Library 상세 패널의 Quick Info용).
+    제목 정제 후 상위 후보(top 5)를 검증하여 유사도가 검증된 항목의 서지 정보를 반환합니다."""
+    raw_query = _clean_paper_title(title)
+    if not raw_query:
         return None
 
-    params = {"search": query[:300], "per_page": 1}
+    doi_match = re.search(r'10\.\d{4,9}/[-._;()/:A-Za-z0-9]+', raw_query)
+    arxiv_match = re.search(r'(?:arxiv:)?([0-9]{4}\.[0-9]{4,5}(?:v\d+)?)', raw_query, re.IGNORECASE)
+
+    params = {"search": raw_query[:300], "per_page": 5}
     mailto = get_openalex_mailto()
     if mailto:
         params["mailto"] = mailto
@@ -123,16 +162,41 @@ async def resolve_paper_metadata(title: str) -> Optional[dict]:
             if not works:
                 return None
 
-            work = works[0]
-            doi = work.get("doi")
+            best_work = None
+            best_score = 0.0
+
+            for work in works:
+                cand_title = work.get("title") or work.get("display_name") or ""
+                cand_doi = work.get("doi") or ""
+                cand_arxiv = _extract_arxiv_id(work) or ""
+
+                if doi_match and doi_match.group(0).lower() in cand_doi.lower():
+                    best_work = work
+                    best_score = 1.0
+                    break
+                if arxiv_match and arxiv_match.group(1).lower() == cand_arxiv.lower():
+                    best_work = work
+                    best_score = 1.0
+                    break
+
+                score = _calculate_title_similarity(raw_query, cand_title)
+                if score > best_score:
+                    best_score = score
+                    best_work = work
+
+            if not best_work or best_score < 0.40:
+                logger.info(f"OpenAlex 논문 매칭 실패 (최고 유사도: {best_score:.2f}, query='{raw_query}')")
+                return None
+
+            doi = best_work.get("doi")
             if doi and doi.startswith("https://doi.org/"):
                 doi = doi[len("https://doi.org/"):]
 
             return {
-                "venue": _extract_venue(work),
+                "venue": _extract_venue(best_work),
                 "doi": doi,
-                "arxiv_id": _extract_arxiv_id(work),
-                "citation_count": work.get("cited_by_count"),
+                "arxiv_id": _extract_arxiv_id(best_work),
+                "citation_count": best_work.get("cited_by_count"),
             }
     except Exception as e:
         logger.warning(f"논문 메타데이터 검색 중 오류: {e}")
