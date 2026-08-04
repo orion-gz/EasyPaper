@@ -426,6 +426,18 @@ export async function renderReadingHistoryPage() {
   const fallbackTotalReadPages = dashboard?.stats?.read_pages ?? Array.from(docsById.values()).reduce((sum, d) => sum + readPageCount(d), 0)
   const totalReadPagesDisplay = totalEstPages > 0 ? totalEstPages : fallbackTotalReadPages
 
+  const allActiveKeys = new Set(
+    Array.from(dailyStatsMap.entries())
+      .filter(([_, item]) => item.score > 0)
+      .map(([k, _]) => k)
+  )
+
+  const CATEGORY_LABEL = { reading: '논문 읽기', chat: 'AI 채팅', compare: '논문 비교' }
+  const CATEGORY_COLOR_VAR = { reading: '--rh-c1', chat: '--rh-c2', compare: '--rh-c5' }
+  const CATEGORY_ORDER = ['reading', 'chat', 'compare']
+  const byCategory = readingStats?.total_seconds_by_category || {}
+  const mixTotalSeconds = CATEGORY_ORDER.reduce((s, c) => s + (byCategory[c] || 0), 0)
+
   const allReadingSeconds = mixTotalSeconds > 0
     ? mixTotalSeconds
     : Object.values(byDay).reduce((sum, sec) => sum + (Number(sec) || 0), 0)
@@ -497,12 +509,6 @@ export async function renderReadingHistoryPage() {
   const endDow = (gridEndDate.getDay() + 6) % 7 // 0=Mon..6=Sun
   const gridStart = addDaysKey(gridEnd, -(endDow) - (WEEKS - 1) * 7)
 
-  const allActiveKeys = new Set(
-    Array.from(dailyStatsMap.entries())
-      .filter(([_, item]) => item.score > 0)
-      .map(([k, _]) => k)
-  )
-
   const weeks = []
   let cursorKey = gridStart
   for (let w = 0; w < WEEKS; w++) {
@@ -567,12 +573,6 @@ export async function renderReadingHistoryPage() {
   // ── Reading Time Distribution (part-to-whole, 전체 기간 실측치) ──
   // 카테고리는 main.js 하트비트가 실제로 구분하는 화면 상태 3가지뿐이다:
   // reading(뷰어에서 읽는 중) / chat(채팅 사이드바 사용 중) / compare(논문 비교).
-  const CATEGORY_LABEL = { reading: '논문 읽기', chat: 'AI 채팅', compare: '논문 비교' }
-  const CATEGORY_COLOR_VAR = { reading: '--rh-c1', chat: '--rh-c2', compare: '--rh-c5' }
-  const CATEGORY_ORDER = ['reading', 'chat', 'compare']
-  const byCategory = readingStats?.total_seconds_by_category || {}
-  const mixTotalSeconds = CATEGORY_ORDER.reduce((s, c) => s + (byCategory[c] || 0), 0)
-
   const mixBarHtml = CATEGORY_ORDER.map(c => {
     const seconds = byCategory[c] || 0
     const pct = mixTotalSeconds ? (seconds / mixTotalSeconds) * 100 : 0
