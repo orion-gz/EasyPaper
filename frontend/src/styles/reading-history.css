@@ -357,12 +357,18 @@ body.light-theme {
   width: 2px;
   background: var(--border-strong);
 }
-.rh-timeline-entry { position: relative; cursor: pointer; }
+.rh-timeline-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
 .rh-timeline-entry + .rh-timeline-entry { margin-top: 10px; }
 .rh-timeline-dot {
   position: absolute;
   left: -34px;
-  top: 1px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -373,10 +379,13 @@ body.light-theme {
   border: 1px solid var(--border-strong);
   color: var(--control-accent-text);
   box-sizing: border-box;
+  z-index: 1;
 }
 .rh-timeline-row {
   display: flex;
   align-items: center;
+  flex: 1;
+  min-width: 0;
   gap: 10px;
   padding: 9px 12px;
   border-radius: var(--radius-md);
