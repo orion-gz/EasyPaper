@@ -54,7 +54,9 @@ const PATHS = {
   activity: '<path d="M3 12h4l3 8 4-16 3 8h4"/>',
   smile: '<circle cx="12" cy="12" r="10"/><path d="M8 15s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
   flaskConical: '<path d="M9 2v6l-6 10a2 2 0 0 0 2 3h14a2 2 0 0 0 2-3l-6-10V2"/><path d="M9 2h6"/>',
+  moreVertical: '<circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="5" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.8" fill="currentColor" stroke="none"/>',
 }
+
 
 // name: PATHS 키, size: 정사각형 픽셀 크기, attrs: svg 태그에 추가로 넣을 속성 문자열(style 등)
 export function icon(name, size = 14, attrs = '') {

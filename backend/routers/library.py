@@ -640,6 +640,21 @@ async def delete_library_document_permanently(doc_id: str, current_user: str = D
     return {"message": "문서가 영구적으로 삭제되었습니다."}
 
 
+@router.post("/library/{doc_id}/clear-cache")
+async def clear_library_document_cache(doc_id: str, current_user: str = Depends(get_current_user)):
+    """특정 문서의 PDF 텍스트 및 이미지 추출 디스크 캐시를 삭제합니다."""
+    _require_owned_document(doc_id, current_user)
+    from services.cache import clear_document_cache
+    cleared_files, freed_bytes = clear_document_cache(doc_id)
+    return {
+        "message": "PDF 추출 캐시가 삭제되었습니다.",
+        "cleared_files": cleared_files,
+        "freed_bytes": freed_bytes,
+    }
+
+
+
+
 @router.get("/library/{doc_id}/images")
 async def get_library_document_images(doc_id: str, current_user: str = Depends(get_current_user)):
     """특정 문서의 모든 페이지에서 이미지/Figure 좌표 정보(백분율) 목록을 반환합니다.
