@@ -6,7 +6,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchLibraryTimeline, fetchReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
 import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
 import { renderDashboardPage } from './pages/dashboardPage.js'
@@ -240,11 +240,8 @@ const libraryGraphDetailPanel   = $('library-graph-detail-panel')
 const libraryGraphPendingBanner = $('library-graph-pending-banner')
 const libraryGraphSearchInput   = $('library-graph-search-input')
 const libraryGraphViewToggleGraph     = $('library-graph-view-toggle-graph')
-const libraryGraphViewToggleTimeline  = $('library-graph-view-toggle-timeline')
 const libraryGraphViewToggleHeatmap   = $('library-graph-view-toggle-heatmap')
 const libraryGraphView         = $('library-graph-view')
-const libraryTimelineView      = $('library-timeline-view')
-const libraryTimelineList      = $('library-timeline-list')
 const libraryHeatmapView       = $('library-heatmap-view')
 const libraryHeatmapList       = $('library-heatmap-list')
 const libraryRecommendationsBtn  = $('library-recommendations-btn')
@@ -4634,13 +4631,12 @@ function truncateForList(text, maxLen) {
 let libraryGraphCyInstance = null
 let libraryGraphPollTimeout = null
 
-// 그래프 탭 안의 "그래프/타임라인/히트맵/대시보드" 서브뷰 전환. 완전히 새
-// 최상위 탭을 만드는 대신 같은 섹션 안에서 뷰만 바꾼다(기획서의 "Research
-// Dashboard"가 이 뷰들을 한 화면의 다른 뷰로 묶어 다루는 것과 일치). 표
-// 기반으로 짜서 서브뷰가 늘어나도 분기를 추가하지 않고 항목만 추가하면 된다.
+// 그래프 탭 안의 "그래프/히트맵" 서브뷰 전환. 완전히 새 최상위 탭을 만드는
+// 대신 같은 섹션 안에서 뷰만 바꾼다(기획서의 "Research Dashboard"가 이
+// 뷰들을 한 화면의 다른 뷰로 묶어 다루는 것과 일치). 표 기반으로 짜서
+// 서브뷰가 늘어나도 분기를 추가하지 않고 항목만 추가하면 된다.
 const GRAPH_SUBVIEWS = {
   graph:     { btn: () => libraryGraphViewToggleGraph,     el: () => libraryGraphView },
-  timeline:  { btn: () => libraryGraphViewToggleTimeline,  el: () => libraryTimelineView,  onShow: () => renderLibraryTimelineView() },
   heatmap:   { btn: () => libraryGraphViewToggleHeatmap,   el: () => libraryHeatmapView,   onShow: () => renderLibraryHeatmapView() },
 }
 
@@ -4659,105 +4655,6 @@ function switchGraphSubView(view) {
 for (const [view, cfg] of Object.entries(GRAPH_SUBVIEWS)) {
   const btn = cfg.btn()
   if (btn) btn.addEventListener('click', () => switchGraphSubView(view))
-}
-
-const TIMELINE_TYPE_LABEL = { uploaded: '업로드', read: '읽음', question: '질문', note: '메모' }
-const TIMELINE_TYPE_ICON  = { uploaded: 'archive', read: 'bookOpen', question: 'messageCircle', note: 'edit3' }
-
-function groupTimelineEventsByDate(events) {
-  const groups = {}
-  for (const e of events) {
-    const date = (e.timestamp || '').slice(0, 10) || '날짜 미상'
-    if (!groups[date]) groups[date] = []
-    groups[date].push(e)
-  }
-  return groups
-}
-
-// 날짜 그룹 헤더에 쓸 라벨. "오늘/어제"는 상대적으로, 그 밖에는 "8월 1일" +
-// 요일로 표기해 리스트를 죽 훑을 때 날짜 감각을 유지하기 쉽게 한다.
-function formatTimelineDayLabel(dateKey) {
-  const day = new Date(`${dateKey}T00:00:00`)
-  if (isNaN(day.getTime())) return { primary: dateKey, secondary: '' }
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const diffDays = Math.round((today - day) / 86400000)
-  const primary = diffDays === 0 ? '오늘' : diffDays === 1 ? '어제' : day.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
-  return { primary, secondary: day.toLocaleDateString('ko-KR', { weekday: 'long' }) }
-}
-
-function formatTimelineTime(timestamp) {
-  const d = new Date(timestamp)
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-}
-
-// 하루 안의 이벤트들을 세로선으로 잇는 카드 타임라인. 이벤트 종류는 색이
-// 아니라 아이콘+라벨로만 구분한다 - 문서 카드(.doc-card-tag)와 동일하게
-// "카테고리마다 색을 바꾸지 않고 브랜드 색 하나만 쓴다"는 원칙을 따른다.
-function renderTimelineDayGroup(date, events) {
-  const { primary, secondary } = formatTimelineDayLabel(date)
-  return `
-    <div class="kg-timeline-day">
-      <div class="kg-timeline-day-header">
-        <span class="kg-timeline-day-date">${escapeHtml(primary)}</span>
-        ${secondary ? `<span class="kg-timeline-day-weekday">${escapeHtml(secondary)}</span>` : ''}
-      </div>
-      <div class="kg-timeline-track">
-        ${events.map(e => `
-          <div class="kg-timeline-entry" data-doc-id="${escapeHtml(e.doc_id || '')}" title="클릭하면 이 논문의 대화 세션으로 이동합니다">
-            <div class="kg-timeline-dot">${icon(TIMELINE_TYPE_ICON[e.type] || 'clock', 13)}</div>
-            <div class="kg-timeline-card">
-              <div class="kg-timeline-card-top">
-                <span class="kg-timeline-type">${escapeHtml(TIMELINE_TYPE_LABEL[e.type] || e.type)}</span>
-                <span class="kg-timeline-time">${escapeHtml(formatTimelineTime(e.timestamp))}</span>
-              </div>
-              <div class="kg-timeline-card-title">${escapeHtml(e.doc_title || '')}</div>
-              ${e.summary ? `<p class="kg-timeline-card-summary">${escapeHtml(e.summary)}</p>` : ''}
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `
-}
-
-async function renderLibraryTimelineView() {
-  if (!libraryTimelineList) return
-  libraryTimelineList.innerHTML = '<div class="lib-empty"><p>불러오는 중...</p></div>'
-  try {
-    const { events } = await fetchLibraryTimeline()
-    if (state.currentWorkspacePage !== 'graph') return
-    if (!events || events.length === 0) {
-      libraryTimelineList.innerHTML = '<div class="lib-empty"><p>아직 활동 기록이 없습니다.</p></div>'
-      return
-    }
-    const groups = groupTimelineEventsByDate(events)
-    const dates = Object.keys(groups).sort((a, b) => b.localeCompare(a))
-    libraryTimelineList.innerHTML = `<div class="kg-timeline">${dates.map(date => renderTimelineDayGroup(date, groups[date])).join('')}</div>`
-  } catch (err) {
-    console.error('타임라인 로드 실패:', err)
-    libraryTimelineList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">타임라인을 불러오지 못했습니다</p></div>'
-  }
-}
-
-// 타임라인 카드 클릭 시 해당 논문을 열고 대화 세션(채팅 사이드바)으로 바로
-// 이동한다. 카드가 renderLibraryTimelineView에서 매번 innerHTML로 새로
-// 그려지므로, 채팅 세션 목록(renderAssistantChatSessions)처럼 항목마다
-// 리스너를 다는 대신 컨테이너에 한 번만 위임 리스너를 건다.
-if (libraryTimelineList) {
-  libraryTimelineList.addEventListener('click', async (event) => {
-    const entry = event.target.closest('.kg-timeline-entry')
-    const docId = entry?.dataset.docId
-    if (!docId) return
-    try {
-      const doc = await fetchLibraryDoc(docId)
-      await openFromLibrary(doc)
-      openChatSidebar()
-    } catch (err) {
-      console.error('타임라인에서 논문 열기 실패:', err)
-      showToast('논문을 불러오지 못했습니다.', 'error')
-    }
-  })
 }
 
 // 개념 히트맵: 논문(행) x 개념(열) 2D 매트릭스(seaborn류 히트맵 참고). 셀 색
@@ -4878,7 +4775,7 @@ async function renderLibraryHeatmapView() {
 
 // 정규화 기준 셀렉트는 재요청 없이 이미 받아둔 데이터로 다시 그린다. 행 헤더/
 // 사이드 패널의 논문 클릭은 목록마다 리스너를 다는 대신 컨테이너에 위임
-// 리스너를 한 번만 건다(renderLibraryTimelineView와 동일한 패턴).
+// 리스너를 한 번만 건다.
 if (libraryHeatmapList) {
   libraryHeatmapList.addEventListener('change', (event) => {
     if (event.target.id !== 'rg-heatmap-normalize-select') return
@@ -4990,8 +4887,8 @@ function ensureGraphLayout() {
   if (!libraryGraphView || !libraryGraphRow || !libraryGraphCanvas || !libraryGraphDetailPanel || !libraryGraphSearchInput) return
   graphLayoutReady = true
 
-  // 상단 그래프/타임라인/히트맵 토글에 아이콘을 붙인다.
-  ;[[libraryGraphViewToggleGraph, 'network'], [libraryGraphViewToggleTimeline, 'clock'], [libraryGraphViewToggleHeatmap, 'grid']].forEach(([btn, iconName]) => {
+  // 상단 그래프/히트맵 토글에 아이콘을 붙인다.
+  ;[[libraryGraphViewToggleGraph, 'network'], [libraryGraphViewToggleHeatmap, 'grid']].forEach(([btn, iconName]) => {
     if (btn) btn.innerHTML = `${icon(iconName, 13)}<span>${btn.textContent}</span>`
   })
   const tabsRow = libraryGraphViewToggleGraph?.parentElement
