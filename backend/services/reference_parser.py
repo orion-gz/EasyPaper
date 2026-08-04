@@ -135,6 +135,22 @@ def _match_section_header_prefix(line: str) -> Optional[str]:
     return None
 
 
+def find_reference_start_page_index(pages: List[dict]) -> Optional[int]:
+    """참고문헌 섹션이 시작하는 페이지의 0-based 인덱스를 찾습니다. 끝
+    페이지부터 거꾸로 스캔해 실제 섹션 헤더(본문 중 우연히 "References"라는
+    단어가 언급된 경우가 아니라 섹션 자체의 시작)를 찾습니다 - 결론 뒤에
+    참고문헌이 오는 일반적인 논문 구조를 전제로, 뒤에서부터 찾는 편이 앞에서
+    찾는 것보다 본문 중 언급과의 오탐이 적습니다. 찾지 못하면 None을
+    반환합니다. extract_reference_list와 services.library.get_reference_start_page
+    (읽은 페이지 수 계산에서 참고문헌 페이지를 제외하는 데 사용) 양쪽에서
+    공유합니다."""
+    for i in range(len(pages) - 1, -1, -1):
+        text = pages[i].get("text", "") or ""
+        if any(_match_section_header_prefix(line) is not None for line in text.split("\n")):
+            return i
+    return None
+
+
 def extract_reference_list(pages: List[dict]) -> Dict[str, str]:
     """페이지 목록(각 {"text": ...} 포함)에서 참고문헌 목록을 파싱합니다.
 
@@ -149,13 +165,7 @@ def extract_reference_list(pages: List[dict]) -> Dict[str, str]:
 
 
 def _extract_reference_list_impl(pages: List[dict]) -> Dict[str, str]:
-    ref_start_page_idx = None
-    for i in range(len(pages) - 1, -1, -1):
-        text = pages[i].get("text", "") or ""
-        if any(_match_section_header_prefix(line) is not None for line in text.split("\n")):
-            ref_start_page_idx = i
-            break
-
+    ref_start_page_idx = find_reference_start_page_index(pages)
     if ref_start_page_idx is None:
         return {}
 

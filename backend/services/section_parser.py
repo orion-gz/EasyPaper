@@ -17,7 +17,7 @@ reference_parser의 헤더 매처를 그대로 재사용해 "결론 발췌에 �
 import re
 from typing import Dict, List, Optional
 
-from services.reference_parser import _match_section_header_prefix as _match_reference_header
+from services.reference_parser import find_reference_start_page_index
 
 _INTRO_RELATED_MAX_CHARS = 4000
 _METHOD_RESULTS_MAX_CHARS = 4000
@@ -60,12 +60,9 @@ def _min_found(*positions: Optional[int]) -> Optional[int]:
 def _find_reference_start_offset(page_texts: List[str]) -> Optional[int]:
     """References/참고문헌 섹션이 시작하는 페이지를 찾아 전체 텍스트 기준
     글자 오프셋으로 변환한다. 결론 발췌 끝을 여기서 잘라 참고문헌 목록이
-    섞여 들어가지 않게 하는 데 쓴다."""
-    ref_start_page_idx = None
-    for i in range(len(page_texts) - 1, -1, -1):
-        if any(_match_reference_header(line) is not None for line in page_texts[i].split("\n")):
-            ref_start_page_idx = i
-            break
+    섞여 들어가지 않게 하는 데 쓴다(페이지 탐지 자체는 reference_parser.
+    find_reference_start_page_index와 동일 로직을 공유)."""
+    ref_start_page_idx = find_reference_start_page_index([{"text": t} for t in page_texts])
     if ref_start_page_idx is None:
         return None
     return sum(len(page_texts[i]) + 1 for i in range(ref_start_page_idx))

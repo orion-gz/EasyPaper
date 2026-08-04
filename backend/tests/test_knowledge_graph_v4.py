@@ -260,6 +260,10 @@ def test_dashboard_stats_and_recent_lists(test_client, isolated_dirs, monkeypatc
     assert data["stats"]["total_concepts"] == 1
     assert data["stats"]["total_questions"] == 1
     assert data["stats"]["total_notes"] == 1
+    assert data["stats"]["total_pages"] == 3
+    # 완독 표시됐고 참고문헌 시작 페이지 정보가 아직 없는 문서는(캐시된 페이지
+    # 텍스트가 없음) 전체 페이지 수(3)를 그대로 읽은 페이지로 본다(폴백).
+    assert data["stats"]["read_pages"] == 3
 
     assert any(h["concept_id"] == concept_id for h in data["heatmap"])
     assert any(q["summary"] == "질문 테스트" for q in data["recent_questions"])
