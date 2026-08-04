@@ -1,19 +1,19 @@
 /* ============================================================
    Research Graph 페이지 — 3열 레이아웃(범례 / 캔버스 / 상세 패널) 재설계
-   (노드 클릭 → 상세 패널, 검색, 타입/태그 필터, 그래프-타임라인-히트맵
-   서브뷰 전환은 main.js가 그대로 담당한다 — 여기는 시각 스타일만.)
+   (노드 클릭 → 상세 패널, 검색, 타입/태그 필터, 그래프-히트맵 서브뷰
+   전환은 main.js가 그대로 담당한다 — 여기는 시각 스타일만.)
 
    요소 대부분은 index.html에 이미 있던 id 보유 노드를 main.js가 런타임에
    재배치/재사용한 것이다(ensureGraphLayout). 기존 style.css의 .doc-card*,
-   .kg-timeline*, .kg-heatmap* 클래스는 건드리지 않고, 여기서는 이 파일
-   전용의 새 클래스(rg- 접두사)만 사용한다. 색상은 전부 디자인 토큰
-   (var(--...))만 사용해 라이트/다크 테마를 자동으로 따라간다.
+   .kg-heatmap* 클래스는 건드리지 않고, 여기서는 이 파일 전용의 새 클래스
+   (rg- 접두사)만 사용한다. 색상은 전부 디자인 토큰(var(--...))만 사용해
+   라이트/다크 테마를 자동으로 따라간다.
    ============================================================ */
 
 #library-graph-section { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 #library-graph-view { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 
-/* ── 상단 그래프/타임라인/히트맵 토글 ── */
+/* ── 상단 그래프/히트맵 토글 ── */
 .rg-view-tabs { display: inline-flex; }
 .rg-view-tabs .library-tab-btn { display: inline-flex; align-items: center; gap: 6px; }
 
