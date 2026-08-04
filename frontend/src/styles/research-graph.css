@@ -98,9 +98,39 @@
 .rg-recommend-btn:active:not(:disabled) { transform: scale(0.98); }
 .rg-recommend-btn:disabled { opacity: 0.65; cursor: default; }
 
-/* library-recommendations-list는 클릭 전엔 완전히 비어 있는 <div>라
-   :empty로 걸러내면 카드 테두리가 미리 나타나지 않는다. */
-#library-recommendations-list:not(:empty) {
+.rg-recommend-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.rg-recommend-refresh-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+.rg-recommend-refresh-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.rg-recommend-refresh-btn.hidden {
+  display: none !important;
+}
+
+/* library-recommendations-list는 클릭 전이나 접힌 상태에서는 hidden이라
+   :not(:empty):not(.hidden)으로 걸러내면 카드 테두리가 미리 나타나지 않는다. */
+#library-recommendations-list:not(:empty):not(.hidden) {
   margin-bottom: 12px;
   padding: 4px 14px;
   background: var(--bg-elevated);

@@ -6,7 +6,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
 import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
 import { renderDashboardPage } from './pages/dashboardPage.js'
@@ -4910,6 +4910,100 @@ function renderGraphLegend(nodes, edges) {
 // 코드, off-limits)가 rowRect.right 기준으로 상세 패널 폭을 계산하므로
 // display:flex 구조를 그대로 유지해야 한다 - 왼쪽에 범례를 끼워 넣는 것은
 // 그 계산에 영향을 주지 않는다.
+let cachedGraphRecommendations = null
+let isGraphRecommendationsExpanded = false
+
+function renderGraphRecItemsHtml(recommendations) {
+  if (!recommendations || recommendations.length === 0) {
+    return `<p class="rg-recommend-status">추천할 만한 논문을 찾지 못했습니다.</p>`
+  }
+  return recommendations.map(r => `
+    <div class="rg-recommend-item">
+      <a href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener noreferrer" class="rg-recommend-item-title">${escapeHtml(r.title || '')}</a>
+      ${r.reason ? `<div class="rg-recommend-item-reason">${escapeHtml(r.reason)}</div>` : ''}
+    </div>
+  `).join('')
+}
+
+function updateGraphRecommendationsUI() {
+  if (!libraryRecommendationsBtn) return
+  const refreshBtn = $('rg-recommend-refresh-btn')
+  const hasCached = Array.isArray(cachedGraphRecommendations) && cachedGraphRecommendations.length > 0
+
+  if (hasCached) {
+    if (refreshBtn) refreshBtn.classList.remove('hidden')
+    const count = cachedGraphRecommendations.length
+    const chevronIcon = isGraphRecommendationsExpanded ? icon('chevronUp', 13) : icon('chevronDown', 13)
+    libraryRecommendationsBtn.innerHTML = `${icon('sparkles', 13)}<span>AI 추천 논문 (${count}개)</span>${chevronIcon}`
+    libraryRecommendationsBtn.title = isGraphRecommendationsExpanded ? '클릭하여 접기' : '클릭하여 추천 논문 펼치기'
+
+    if (libraryRecommendationsList) {
+      if (isGraphRecommendationsExpanded) {
+        libraryRecommendationsList.innerHTML = renderGraphRecItemsHtml(cachedGraphRecommendations)
+        libraryRecommendationsList.classList.remove('hidden')
+      } else {
+        libraryRecommendationsList.classList.add('hidden')
+      }
+    }
+  } else {
+    if (refreshBtn) refreshBtn.classList.add('hidden')
+    libraryRecommendationsBtn.innerHTML = `${icon('zap', 13)}<span>다음에 읽을 논문 추천받기</span>`
+    libraryRecommendationsBtn.title = '다음에 읽을 논문 추천받기'
+    if (libraryRecommendationsList) {
+      if (!isGraphRecommendationsExpanded && (!libraryRecommendationsList.innerHTML || libraryRecommendationsList.children.length === 0)) {
+        libraryRecommendationsList.classList.add('hidden')
+      }
+    }
+  }
+}
+
+async function loadCachedGraphRecommendations() {
+  try {
+    const res = await fetchCachedReadingRecommendations()
+    if (res && Array.isArray(res.recommendations) && res.recommendations.length > 0) {
+      cachedGraphRecommendations = res.recommendations
+      isGraphRecommendationsExpanded = false
+    } else {
+      cachedGraphRecommendations = null
+    }
+  } catch (err) {
+    console.error('추천 논문 캐시 조회 실패:', err)
+    cachedGraphRecommendations = null
+  }
+  updateGraphRecommendationsUI()
+}
+
+async function runGraphRecommendationsFetch({ force = false } = {}) {
+  if (!libraryRecommendationsBtn || !libraryRecommendationsList) return
+  const refreshBtn = $('rg-recommend-refresh-btn')
+
+  libraryRecommendationsBtn.disabled = true
+  if (refreshBtn) refreshBtn.disabled = true
+
+  isGraphRecommendationsExpanded = true
+  libraryRecommendationsList.classList.remove('hidden')
+  const statusText = force ? '추천 논문을 다시 찾는 중... (시간이 걸릴 수 있습니다)' : '추천 논문을 찾는 중... (시간이 걸릴 수 있습니다)'
+  libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status">${statusText}</p>`
+
+  try {
+    const { recommendations } = await fetchReadingRecommendations({ force })
+    if (!recommendations || recommendations.length === 0) {
+      libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status">추천할 만한 논문을 찾지 못했습니다.</p>`
+      cachedGraphRecommendations = null
+    } else {
+      cachedGraphRecommendations = recommendations
+      libraryRecommendationsList.innerHTML = renderGraphRecItemsHtml(recommendations)
+    }
+  } catch (err) {
+    console.error('추천 논문 조회 실패:', err)
+    libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status rg-recommend-error">추천 논문을 불러오지 못했습니다.</p>`
+  } finally {
+    libraryRecommendationsBtn.disabled = false
+    if (refreshBtn) refreshBtn.disabled = false
+    updateGraphRecommendationsUI()
+  }
+}
+
 let graphLayoutReady = false
 function ensureGraphLayout() {
   if (graphLayoutReady) return
@@ -4960,6 +5054,18 @@ function ensureGraphLayout() {
     libraryRecommendationsBtn.className = 'rg-recommend-btn'
     libraryRecommendationsBtn.innerHTML = `${icon('zap', 13)}<span>다음에 읽을 논문 추천받기</span>`
     toolbarRight.appendChild(libraryRecommendationsBtn)
+
+    let refreshRecoBtn = $('rg-recommend-refresh-btn')
+    if (!refreshRecoBtn) {
+      refreshRecoBtn = document.createElement('button')
+      refreshRecoBtn.id = 'rg-recommend-refresh-btn'
+      refreshRecoBtn.type = 'button'
+      refreshRecoBtn.className = 'rg-recommend-refresh-btn hidden'
+      refreshRecoBtn.title = '새로운 추천을 다시 받아옵니다'
+      refreshRecoBtn.innerHTML = `${icon('refreshCw', 12)}<span>다시받기</span>`
+      refreshRecoBtn.addEventListener('click', () => runGraphRecommendationsFetch({ force: true }))
+      toolbarRight.appendChild(refreshRecoBtn)
+    }
   }
 
   const recoPanel = document.createElement('div')
@@ -5136,6 +5242,7 @@ async function renderLibraryGraphTab() {
   }
   if (!libraryGraphCanvas) return
   ensureGraphLayout()
+  loadCachedGraphRecommendations()
   if (libraryGraphDetailPanel) {
     libraryGraphDetailPanel.innerHTML = renderGraphDetailEmptyState()
   }
@@ -5417,31 +5524,14 @@ if (libraryGraphSearchInput) {
   })
 }
 
-// 추천은 LLM+OpenAlex 호출이 여러 번 들어가는 무거운 작업이라 그래프 탭
-// 진입 시 자동 실행하지 않고, 사용자가 버튼을 눌렀을 때만 요청한다(2차의
-// "관련 질문 보기" 지연 로드와 동일한 절제 원칙).
+// 추천 논문: 캐시가 있는 경우 버튼 클릭 시 접힘/펼침 토글, 없는 경우 새로 추천 요청.
 if (libraryRecommendationsBtn) {
   libraryRecommendationsBtn.addEventListener('click', async () => {
-    if (!libraryRecommendationsList) return
-    libraryRecommendationsBtn.disabled = true
-    libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status">추천 논문을 찾는 중... (시간이 걸릴 수 있습니다)</p>`
-    try {
-      const { recommendations } = await fetchReadingRecommendations()
-      if (!recommendations || recommendations.length === 0) {
-        libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status">추천할 만한 논문을 찾지 못했습니다.</p>`
-      } else {
-        libraryRecommendationsList.innerHTML = recommendations.map(r => `
-          <div class="rg-recommend-item">
-            <a href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener noreferrer" class="rg-recommend-item-title">${escapeHtml(r.title || '')}</a>
-            ${r.reason ? `<div class="rg-recommend-item-reason">${escapeHtml(r.reason)}</div>` : ''}
-          </div>
-        `).join('')
-      }
-    } catch (err) {
-      console.error('추천 논문 조회 실패:', err)
-      libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status rg-recommend-error">추천 논문을 불러오지 못했습니다.</p>`
-    } finally {
-      libraryRecommendationsBtn.disabled = false
+    if (cachedGraphRecommendations && cachedGraphRecommendations.length > 0) {
+      isGraphRecommendationsExpanded = !isGraphRecommendationsExpanded
+      updateGraphRecommendationsUI()
+    } else {
+      await runGraphRecommendationsFetch({ force: false })
     }
   })
 }
