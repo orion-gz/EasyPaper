@@ -473,7 +473,7 @@ function renderHeatmapCard(heatmap) {
     <div class="dash-card dash-card-heatmap">
       <div class="dash-card-head">
         <h3>${icon('tag', 15)}개념 히트맵</h3>
-        <a href="#" class="dash-link" data-nav="graph">전체보기 ›</a>
+        <a href="#" class="dash-link" data-nav="graph" data-subview="heatmap">전체보기 ›</a>
       </div>
       ${heatmap.length === 0 ? emptyNote('아직 추출된 개념이 없습니다.') : `
       <div class="dash-heat-grid">
@@ -628,6 +628,10 @@ function attachHandlers(root) {
     elm.addEventListener('click', (ev) => {
       ev.preventDefault()
       const page = elm.dataset.nav
+      const subview = elm.dataset.subview
+      if (subview) {
+        sessionStorage.setItem('easypaper_graph_subview', subview)
+      }
       if (page) location.hash = page
     })
   })
