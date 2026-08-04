@@ -362,3 +362,57 @@ def save_primer_figure(doc_id: str, pdf_path: str, page_num: int, bbox_percent: 
 def update_document_metadata(doc_id: str, metadata: dict) -> None:
     """문서 메타데이터를 업데이트합니다."""
     db_update_document_metadata(doc_id, metadata)
+
+
+def get_reference_start_page(doc: dict) -> Optional[int]:
+    """문서에서 참고문헌 섹션이 시작하는 페이지 번호(1-based)를 반환합니다
+    ("읽은 페이지 수"를 계산할 때 참고문헌 페이지를 본문에서 제외하는 데
+    씀). metadata.reference_start_page에 이미 계산된 값(참고문헌을 못 찾은
+    경우는 None)이 있으면 그대로 쓰고, 아직 계산한 적이 없으면(키 자체가
+    없음) 캐시된 페이지 텍스트가 있을 때만 계산해 metadata에 영구 저장합니다
+    - 페이지 텍스트가 아직 캐시되지 않은 문서(처리 중/실패)까지 이 함수
+    때문에 PDF를 새로 파싱하지는 않고, 다음에 캐시가 생기면 그때 계산합니다.
+    doc는 list_documents()/get_document()가 반환하는 dict(“metadata” 포함)여야
+    하며, 계산 결과는 그 자리에서 doc["metadata"]에도 반영됩니다(같은 요청
+    안에서 곧바로 다시 읽어도 최신 값을 보게 하기 위함)."""
+    meta = doc.get("metadata")
+    if meta is None:
+        meta = {}
+        doc["metadata"] = meta
+    if "reference_start_page" in meta:
+        return meta["reference_start_page"]
+
+    pdf_path = doc.get("pdf_path")
+    if not pdf_path:
+        return None
+    from services.cache import get_cached_pages
+    pages = get_cached_pages(doc["id"], pdf_path)
+    if pages is None:
+        return None  # 아직 캐시가 없다 - 계산은 다음 기회로 미루고 지금은 저장하지 않는다
+
+    from services.reference_parser import find_reference_start_page_index
+    idx = find_reference_start_page_index(pages)
+    start_page = (idx + 1) if idx is not None else None  # 0-based 인덱스 -> 1-based 페이지 번호
+
+    meta["reference_start_page"] = start_page
+    update_document_metadata(doc["id"], meta)
+    return start_page
+
+
+def read_page_count(doc: dict) -> int:
+    """이 문서에서 실제로 "읽은" 것으로 볼 수 있는 페이지 수를 계산합니다:
+    완독 표시(metadata.read)된 문서는 참고문헌을 제외한 본문 페이지 수
+    전체를, 읽던 중인 문서(metadata.last_page만 있음)는 그 진행률(참고문헌
+    페이지를 넘지 않게 상한)을, 둘 다 아니면 0을 반환합니다. 대시보드/Reading
+    History의 "읽은 페이지" 계열 통계가 전부 이 함수를 공유합니다."""
+    meta = doc.get("metadata") or {}
+    total = doc.get("total_pages") or 0
+    ref_start = get_reference_start_page(doc)
+    content_pages = (ref_start - 1) if isinstance(ref_start, int) and 1 < ref_start <= total else total
+
+    if meta.get("read") is True:
+        return content_pages
+    last_page = meta.get("last_page")
+    if isinstance(last_page, int):
+        return min(last_page, content_pages)
+    return 0

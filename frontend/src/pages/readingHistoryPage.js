@@ -11,6 +11,7 @@
 
 import { fetchLibraryTimeline, fetchLibraryDashboard, fetchLibrary, fetchReadingTimeStats } from '../library.js'
 import { icon } from '../icons.js'
+import { readPageCount } from '../readPages.js'
 import '../styles/reading-history.css'
 
 function escapeHtml(str) {
@@ -117,7 +118,7 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
   })
   const activeDays = new Set(inPeriod.map(eventKey)).size
   const readDocIds = new Set(inPeriod.filter(e => e.type === 'read').map(e => e.doc_id))
-  const pagesRead = Array.from(readDocIds).reduce((sum, id) => sum + (docsById.get(id)?.total_pages || 0), 0)
+  const pagesRead = Array.from(readDocIds).reduce((sum, id) => sum + readPageCount(docsById.get(id)), 0)
   const questions = inPeriod.filter(e => e.type === 'question').length
   const notes = inPeriod.filter(e => e.type === 'note').length
   return { activeDays, papersRead: readDocIds.size, pagesRead, questions, notes }
@@ -572,7 +573,7 @@ export async function renderReadingHistoryPage() {
           <div class="rh-timeline-track">
             ${dayEvents.map(e => {
               const title = docTitle(e.doc_id, e.doc_title)
-              const pages = e.type === 'read' ? docsById.get(e.doc_id)?.total_pages : null
+              const pages = e.type === 'read' ? readPageCount(docsById.get(e.doc_id)) : null
               return `
                 <div class="rh-timeline-entry" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" title="이 논문 열기">
                   <div class="rh-timeline-dot">${icon(TYPE_ICON[e.type] || 'clock', 13)}</div>

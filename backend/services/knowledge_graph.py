@@ -944,9 +944,16 @@ async def get_dashboard_summary(username: str) -> dict:
         for d in docs[:10]
     ]
 
+    from services.library import read_page_count
     stats = {
         "total_papers": len(docs),
         "total_pages": sum(d.get("total_pages") or 0 for d in docs),
+        # 완독 표시된 문서는 참고문헌을 제외한 본문 페이지 수 전체를, 읽던
+        # 중인 문서는 그 진행률(참고문헌 페이지 제외 상한)을 더한다 - 대시보드
+        # 상단 통계 카드가 "전체 라이브러리 페이지 수"가 아니라 실제로 읽은
+        # 페이지 수를 보여주도록 함(read_page_count는 프론트의 readPageCount와
+        # 동일한 공식을 공유).
+        "read_pages": sum(read_page_count(d) for d in docs),
         "read_papers": sum(1 for d in docs if (d.get("metadata") or {}).get("read")),
         "total_concepts": len(heatmap),
         "total_questions": len([e for e in timeline if e["type"] == "question"]),

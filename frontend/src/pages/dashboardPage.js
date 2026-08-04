@@ -9,6 +9,7 @@
 import './../styles/dashboard.css'
 import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats } from '../library.js'
 import { icon } from '../icons.js'
+import { readPageCount } from '../readPages.js'
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
@@ -103,14 +104,17 @@ function countEventsInDays(events, type, days) {
   return events.filter(e => e.type === type && isWithinDays(e.timestamp, days)).length
 }
 
-// "이번 주 읽은 페이지"는 서버에 별도 집계가 없어, 이번 주 안에 읽음
-// 처리(read_at)된 논문들의 total_pages 합으로 근사한다 - 실존하는 필드만
-// 조합한 값이라 근거가 있는 근사치다.
+// "이번 주 읽은 페이지"는 서버에 별도 집계가 없어, 이번 주 안에 읽기
+// 활동(last_read_at - 열람/페이지 이동 - 또는 read_at - 완독 표시)이 있던
+// 논문들의 readPageCount(참고문헌 제외 진행률/본문 페이지 수) 합으로
+// 근사한다 - 실존하는 필드만 조합한 값이라 근거가 있는 근사치다. 완독
+// 여부만 보던 예전 로직과 달리 읽던 중인 논문도 포함한다.
 function pagesReadInDays(docs, days) {
   return docs.reduce((sum, d) => {
     const meta = d.metadata || {}
-    if (meta.read && meta.read_at && isWithinDays(meta.read_at, days)) return sum + (d.total_pages || 0)
-    return sum
+    if (!meta.last_read_at && !meta.read_at) return sum
+    if (!isWithinDays(lastActivityIso(meta, d.created_at), days)) return sum
+    return sum + readPageCount(d)
   }, 0)
 }
 
@@ -123,7 +127,7 @@ function truncateLabel(s, n) {
 const STAT_DEFS = [
   { key: 'total_papers', label: '논문', iconName: 'bookOpen', tint: 1, weekly: (events) => countEventsInDays(events, 'uploaded', 7) },
   { key: 'read_papers', label: '읽은 논문', iconName: 'checkCircle', tint: 2, weekly: (events) => countEventsInDays(events, 'read', 7) },
-  { key: 'total_pages', label: '페이지', iconName: 'fileText', tint: 3, weekly: (events, docs) => pagesReadInDays(docs, 7) },
+  { key: 'read_pages', label: '읽은 페이지 수', iconName: 'fileText', tint: 3, weekly: (events, docs) => pagesReadInDays(docs, 7) },
   // 개념은 생성 시각이 저장되지 않아 "이번 주 신규 개념 수"를 계산할 근거가
   // 없다 - 지어내지 않고 주간 델타 자체를 생략한다.
   { key: 'total_concepts', label: '개념', iconName: 'layers', tint: 4, weekly: null },
