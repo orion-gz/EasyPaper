@@ -6,53 +6,57 @@
 
 **학술 PDF 논문을 AI로 번역하고, 논문 내용을 바탕으로 바로 대화하는 통합 서비스 — 웹 & 데스크톱 앱**
 
-[![Last Commit](https://img.shields.io/github/last-commit/orion-gz/EasyPaper?color=4f7cff&label=last%20commit)](https://github.com/orion-gz/EasyPaper/commits/main)
-[![Open Issues](https://img.shields.io/github/issues/orion-gz/EasyPaper?color=4f7cff)](https://github.com/orion-gz/EasyPaper/issues)
-[![Stars](https://img.shields.io/github/stars/orion-gz/EasyPaper?color=4f7cff)](https://github.com/orion-gz/EasyPaper/stargazers)
-[![Changelog](https://img.shields.io/badge/changelog-keep%20a%20changelog-4f7cff)](./CHANGELOG.md)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-4f7cff.svg)](https://github.com/orion-gz/EasyPaper/pulls)
+[![Last Commit](https://shieldcn.dev/github/last-commit/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/commits/main)
+[![Open Issues](https://shieldcn.dev/github/issues/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/issues)
+[![Stars](https://shieldcn.dev/github/stars/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/stargazers)
+[![Changelog](https://shieldcn.dev/badge/changelog-keep_a_changelog-4f7cff.svg)](./CHANGELOG.md)
+[![PRs Welcome](https://shieldcn.dev/badge/PRs-welcome-4f7cff.svg)](https://github.com/orion-gz/EasyPaper/pulls)
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)](backend/requirements.txt)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](backend/requirements.txt)
-[![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)](frontend/package.json)
-[![SQLite](https://img.shields.io/badge/SQLite-DB-003B57?logo=sqlite&logoColor=white)](backend/services/db.py)
-[![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](./Dockerfile)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#-빠른-시작)
+[![Python](https://shieldcn.dev/badge/Python-3.8%2B-3776AB.svg?logo=python&logoColor=white)](backend/requirements.txt)
+[![FastAPI](https://shieldcn.dev/badge/FastAPI-0.115-009688.svg?logo=fastapi&logoColor=white)](backend/requirements.txt)
+[![Vite](https://shieldcn.dev/badge/Vite-5-646CFF.svg?logo=vite&logoColor=white)](frontend/package.json)
+[![SQLite](https://shieldcn.dev/badge/SQLite-DB-003B57.svg?logo=sqlite&logoColor=white)](backend/services/db.py)
+[![Docker Ready](https://shieldcn.dev/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](./Dockerfile)
+[![Platform](https://shieldcn.dev/badge/platform-Windows_%7C_macOS_%7C_Linux-lightgrey.svg)](#-빠른-시작)
 
-[![Download Desktop App](https://img.shields.io/github/v/release/orion-gz/EasyPaper?label=%E2%AC%87%EF%B8%8F%20Download%20Desktop%20App&color=4f7cff)](https://github.com/orion-gz/EasyPaper/releases/latest)
+[![Download Desktop App](https://shieldcn.dev/github/v/release/orion-gz/EasyPaper.svg?label=%E2%AC%87%EF%B8%8F%20Download%20Desktop%20App)](https://github.com/orion-gz/EasyPaper/releases/latest)
 
 </div>
 
 <br>
 
-논문을 업로드하면 원문 옆에 AI 번역본이 나란히 표시되고, 궁금한 내용을 그 자리에서 바로 질문할 수 있습니다. 번역·어시스턴트 모델로는 로컬 Ollama, 외부 API(Gemini/Claude/OpenAI), CLI 기반 엔진(Antigravity/Claude Code/Codex)을 모두 지원합니다. Windows/macOS/Linux용 네이티브 데스크톱 앱과, 직접 구동하는 웹 앱 두 가지 방식으로 모두 사용할 수 있습니다.
+논문을 업로드하면 원문 옆에 AI 번역본이 나란히 표시되고, 궁금한 내용을 그 자리에서 바로 질문할 수 있습니다. 사이드바 기반 Research Workspace를 통해 내 라이브러리, 읽기 전 브리핑, 독립 AI Chats 대화, 개인화 지식 그래프(Research Graph), 독서 활동 분석(Reading History)까지 한곳에서 통합 활용할 수 있습니다. 번역·어시스턴트 모델로는 로컬 Ollama, 외부 API(Gemini/Claude/OpenAI), CLI 기반 엔진(Antigravity/Claude Code/Codex)을 모두 지원합니다. Windows/macOS/Linux용 네이티브 데스크톱 앱과 직접 구동하는 웹 앱 두 가지 방식으로 모두 사용할 수 있습니다.
 
 <br>
 
 <p align="center">
-  <img src="./image/viewer1.webp" alt="EasyPaper 듀얼 패널 뷰어 + AI 어시스턴트" width="100%">
-  <sub>원문 · 번역 · AI 채팅을 한 화면에서 — 수식·강조 서식까지 그대로 유지됩니다</sub>
+  <img src="./image/dashboard.png" alt="EasyPaper Research Workspace 대시보드" width="100%">
+  <sub>연구 워크스페이스 대시보드 — 활동 요약, AI 인사이트, 지도교수 관점 맞춤 추천 논문을 한눈에 확인</sub>
 </p>
 
 <details>
-<summary><b>스크린샷 더 보기</b> — 라이브러리, 논문 미리보기, 키워드 인사이트</summary>
+<summary><b>Research Workspace 주요 기능 스크린샷</b> — 뷰어, 라이브러리, AI Chats, 지식 그래프, 독서 분석, 브리핑</summary>
 <br>
 
 <table>
 <tr>
-<td width="50%"><img src="./image/library1.webp" alt="내 라이브러리 화면"><br><sub align="center">카테고리 자동 태깅이 적용된 내 라이브러리</sub></td>
-<td width="50%"><img src="./image/library2.webp" alt="논문 미리보기 팝업"><br><sub align="center">클릭 한 번으로 보는 논문 미리보기</sub></td>
+<td width="50%"><img src="./image/viewer1.webp" alt="듀얼 패널 뷰어 + AI 어시스턴트"><br><sub align="center"><b>듀얼 패널 뷰어</b>: 원문 · 번역 · AI 채팅 및 수식 렌더링</sub></td>
+<td width="50%"><img src="./image/library.png" alt="내 라이브러리 화면"><br><sub align="center"><b>내 라이브러리</b>: AI 카테고리 자동 태깅 및 카드/리스트 보관함</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="./image/viewer2.webp" alt="키워드·용어 인사이트 패널"><br><sub align="center">어려운 용어를 짚어주는 키워드·용어 패널</sub></td>
-<td width="50%"><img src="./image/reference_overlay.png" alt="참고문헌 호버 오버레이"><br><sub align="center">인용 번호에 마우스를 올리면 원문 + 검색 링크가 바로 뜹니다</sub></td>
+<td width="50%"><img src="./image/ai_chats.png" alt="AI Chats 독립 대화 화면"><br><sub align="center"><b>AI Chats</b>: 여러 논문을 아우르는 독립 대화 및 우측 드로어</sub></td>
+<td width="50%"><img src="./image/research_graph.png" alt="Research Graph 지식 그래프"><br><sub align="center"><b>Research Graph</b>: 논문×개념 매트릭스 히트맵 및 지식 그래프</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="./image/reading_history.png" alt="Reading History 독서 분석"><br><sub align="center"><b>Reading History</b>: 독서 캘린더 히트맵 및 활동 타임라인 분석</sub></td>
+<td width="50%"><img src="./image/notes.png" alt="읽기 전 브리핑 및 노트 요약"><br><sub align="center"><b>읽기 전 브리핑 & 노트</b>: 논문 브리핑 및 Floating 메모 요약</sub></td>
 </tr>
 </table>
 
 </details>
 
 <details>
-<summary><b>참조 오버레이 미리보기</b> — Figure · Table · 수식 참조</summary>
+<summary><b>정밀 참조 오버레이 미리보기</b> — Figure · Table · 수식 · 참고문헌 참조</summary>
 <br>
 
 <table>
@@ -62,7 +66,7 @@
 </tr>
 <tr>
 <td width="50%"><img src="./image/eq_overlay.png" alt="수식 참조 호버 오버레이"><br><sub align="center">수식 번호 참조 시 해당 수식만 정확히 크롭해 표시</sub></td>
-<td width="50%" valign="middle" align="center"><i>클릭하면 원문의 해당 페이지로 바로 이동합니다</i></td>
+<td width="50%"><img src="./image/reference_overlay.png" alt="참고문헌 호버 오버레이"><br><sub align="center">인용 번호 마우스 오버 시 참고문헌 원문 + 검색 링크 표시</sub></td>
 </tr>
 </table>
 
@@ -159,17 +163,18 @@ scripts\bat\cleanup.bat      # Windows
 <a id="-주요-기능"></a>
 ## ✨ 주요 기능
 
-1. **내 라이브러리** — 라이브러리 화면에 PDF를 드래그 앤 드롭하여 바로 업로드할 수 있으며, 업로드 완료 즉시 백그라운드 번역이 시작됩니다. 카드형/리스트형 보기를 전환할 수 있고, 카테고리 필터로 원하는 논문만 모아볼 수 있습니다.
-2. **AI 카테고리 자동 태깅** — 업로드 후 AI가 논문 초록과 본문을 분석하여 카테고리 태그(예: `VLM`, `VLA`, `GAN`, `CNN`,`Optimizer` 등)를 자동으로 부여합니다.
-3. **정밀한 1:1 문장 매칭 & 스크롤 이동** — 원문 PDF 문장과 번역문 문장 간의 마우스 오버 하이라이트 및 클릭 시 반대편 패널 위치 자동 스크롤(양방향) 기능을 지원합니다. LLM 의미론적 태깅 정렬 방식(Semantic Tag Alignment)을 통해 정밀도 높은 문장 정렬을 제공합니다.
-4. **듀얼 패널 뷰어** — 원본 PDF와 AI 번역 결과를 나란히 보며 읽을 수 있고, 패널 너비를 자유롭게 조절할 수 있습니다.
-5. **AI 채팅 어시스턴트** — 논문 내용을 바탕으로 질문할 수 있으며, 답변 생성 대기 상태의 **선형 프로그레스 바(Linear Loader)**와 **현대적인 알약(Capsule) 디자인 UI**를 제공합니다. 여러 논문을 함께 선택해 비교 질문도 할 수 있습니다.
-6. **인용·그림·표·수식 참조 오버레이** — 본문의 번호 인용, Figure/Table/수식 참조 어디에든 마우스를 올리면 원문에서 크롭한 미리보기가 바로 뜹니다. 인용은 참고문헌 원문과 함께 OpenAlex/Google Scholar 검색 링크도 함께 제공하고, 여러 서브패널로 나뉜 그림도 하나의 오버레이로 합쳐서 보여줍니다. 참조를 클릭하면 원문의 해당 페이지로 바로 이동하며, 설정에서 오버레이 표시 자체를 끌 수도 있습니다.
-7. **라이브러리 전체 검색 & PDF 내보내기** — 파일명·제목·번역된 본문까지 가로지르는 통합 검색과, 번역·하이라이트·밑줄·메모가 그대로 포함된 PDF 내보내기를 지원합니다. 내보낸 PDF는 뷰어와 동일하게 원문·번역 페이지가 나란히 페어링되며, 번역이 길어져도 한 페이지 안에 맞도록 자동으로 축소됩니다.
-8. **통합 모델 선택기** — UI 안에서 제공업체와 AI 모델(Ollama, Gemini, Claude, OpenAI, Antigravity, Claude Code, Codex)을 즉시 전환할 수 있습니다. 로컬에 Ollama가 설치되어 있지 않다면 설정 화면에서 원클릭으로 바로 설치할 수 있습니다.
-9. **자유 배치 Floating 메모** — 논문 본문 및 번역문 위에 메모를 자유롭게 배치하여 기록할 수 있습니다. 실시간 Markdown & LaTeX 수식 렌더링, 5색 테마 컬러 피커, 커스텀 삭제 대화상자를 지원합니다.
-10. **테마 색상 커스터마이징** — 설정 화면에서 프리셋 컬러 또는 컬러 피커로 서비스 전체의 강조 색상을 자유롭게 바꿀 수 있으며, 미니멀하고 절제된 다크/라이트 테마를 기본으로 제공합니다.
-11. **네이티브 데스크톱 앱 (Windows/macOS/Linux)** — Tauri 기반 데스크톱 앱으로도 배포됩니다. FastAPI 백엔드가 사이드카로 앱에 내장되어 있어 별도 서버 구동 없이 바로 실행되며, 새 버전이 나오면 앱 내에서 자동으로 감지해 업데이트를 설치할 수 있습니다.
+1. **통합 Research Workspace** — 대시보드, 라이브러리, AI Chats, Research Graph, Reading History 등을 아우르는 사이드바 기반 연구 통합 워크스페이스를 제공합니다.
+2. **듀얼 패널 뷰어 & 1:1 정밀 문장 매칭** — 원본 PDF와 AI 번역본을 나란히 보며 패널 너비를 자유롭게 조절할 수 있으며, LLM 의미론적 태깅 정렬 방식(Semantic Tag Alignment)을 통해 원문-번역문 양방향 마우스 오버 하이라이트 및 클릭 스크롤 정밀 매칭을 지원합니다.
+3. **읽기 전 브리핑 (Pre-reading Briefing)** — 논문을 새로 열었을 때 핵심 개요, 연구 계보, 파인만 방식 설명, 용어집, 질문거리를 한눈에 정리해 주어 핵심 맥락을 즉시 파악할 수 있도록 돕습니다.
+4. **인용 · 그림 · 표 · 수식 참조 오버레이** — 본문의 인용 번호, Figure/Table/수식 참조 마우스 오버 시 원문에서 정밀 크롭한 호버 미리보기를 보여줍니다. 인용 참고문헌 원문+검색 링크(OpenAlex/Google Scholar), 서브패널 그림 합치기, 수식 행 재구성 크롭 및 호버 오버레이 드래그 리사이즈를 지원합니다.
+5. **독립 AI Chats & 우측 슬라이드 드로어** — 뷰어 외부에서도 여러 논문을 통합해 대화할 수 있는 독립 AI Chats 화면 및 우측 슬라이드 드로어를 제공합니다. 논문 질문, 후속 질문 추천, 복수 논문 비교 질문 및 답변 생성 대기 상태의 선형 프로그레스 바를 제공합니다.
+6. **개인화 지식 그래프 (Research Graph)** — 논문 간 연관성 및 연구 개념을 시각화하는 논문×개념 매트릭스 히트맵과 개념별 깊이 분석(LLM 점수 기반)을 지원합니다. 노드 및 카드 클릭 시 상세 콘텐츠 확인과 관련 논문 대화 세션 즉시 이동이 가능합니다.
+7. **독서 활동 분석 (Reading History & Analytics)** — 독서 활동 캘린더/히트맵과 기간 필터(7일/전체 등)를 제공합니다. EMA(지수 이동 평균) 기반 독서 속도 추정과 실제 읽은 페이지 수 검증을 통해 정확한 독서 현황을 대시보드 활동 요약으로 확인할 수 있습니다.
+8. **AI 인사이트 & 맞춤 논문 추천** — 대시보드에서 독서 패턴과 라이브러리를 바탕으로 한 지도교수 관점의 LLM 기반 맞춤 인사이트와 추천 논문 리스트(자동 캐싱, 주간 갱신, 수동 다시 받기, 구글 스칼라 연동)를 제공합니다.
+9. **AI 카테고리 자동 태깅 & 전체 검색** — 업로드 시 AI가 논문 초록과 본문을 분석해 카테고리 태그(예: `VLM`, `VLA`, `GAN`, `CNN`, `Optimizer` 등)를 자동 부여하며, 파일명·제목·번역 본문을 아우르는 통합 검색을 지원합니다.
+10. **번역 포함 PDF 내보내기 & 자유 배치 Floating 메모** — 원문과 번역문이 뷰어처럼 페어링되고 메모·하이라이트·밑줄이 포함된 PDF 내보내기를 지원합니다. 논문 및 번역문 위 어디서든 Markdown & LaTeX 수식 렌더링, 5색 테마 피커를 갖춘 Floating 메모를 작성할 수 있습니다.
+11. **통합 모델 선택기 (로컬 & API & CLI)** — Ollama, Gemini, Claude, OpenAI 외에도 Antigravity(`agy`), Claude Code(`claude`), Codex(`codex`) 등 CLI 기반 AI 엔진을 자동 탐지하여 UI에서 자유롭게 전환할 수 있습니다.
+12. **네이티브 데스크톱 앱 (Windows/macOS/Linux)** — Tauri 기반 데스크톱 앱으로 배포되어 별도 서버 설정 없이 사이드카 백엔드로 실행되며, 앱 내 원클릭 자동 업데이트 감지 및 설치를 지원합니다.
 
 ---
 
