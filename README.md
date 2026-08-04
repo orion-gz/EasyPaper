@@ -30,29 +30,33 @@
 <br>
 
 <p align="center">
-  <img src="./image/viewer1.webp" alt="EasyPaper 듀얼 패널 뷰어 + AI 어시스턴트" width="100%">
-  <sub>원문 · 번역 · AI 채팅을 한 화면에서 — 수식·강조 서식까지 그대로 유지됩니다</sub>
+  <img src="./image/dashboard.png" alt="EasyPaper Research Workspace 대시보드" width="100%">
+  <sub>연구 워크스페이스 대시보드 — 활동 요약, AI 인사이트, 지도교수 관점 맞춤 추천 논문을 한눈에 확인</sub>
 </p>
 
 <details>
-<summary><b>스크린샷 더 보기</b> — 라이브러리, 논문 미리보기, 키워드 인사이트</summary>
+<summary><b>Research Workspace 주요 기능 스크린샷</b> — 뷰어, 라이브러리, AI Chats, 지식 그래프, 독서 분석, 브리핑</summary>
 <br>
 
 <table>
 <tr>
-<td width="50%"><img src="./image/library1.webp" alt="내 라이브러리 화면"><br><sub align="center">카테고리 자동 태깅이 적용된 내 라이브러리</sub></td>
-<td width="50%"><img src="./image/library2.webp" alt="논문 미리보기 팝업"><br><sub align="center">클릭 한 번으로 보는 논문 미리보기</sub></td>
+<td width="50%"><img src="./image/viewer1.webp" alt="듀얼 패널 뷰어 + AI 어시스턴트"><br><sub align="center"><b>듀얼 패널 뷰어</b>: 원문 · 번역 · AI 채팅 및 수식 렌더링</sub></td>
+<td width="50%"><img src="./image/library.png" alt="내 라이브러리 화면"><br><sub align="center"><b>내 라이브러리</b>: AI 카테고리 자동 태깅 및 카드/리스트 보관함</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="./image/viewer2.webp" alt="키워드·용어 인사이트 패널"><br><sub align="center">어려운 용어를 짚어주는 키워드·용어 패널</sub></td>
-<td width="50%"><img src="./image/reference_overlay.png" alt="참고문헌 호버 오버레이"><br><sub align="center">인용 번호에 마우스를 올리면 원문 + 검색 링크가 바로 뜹니다</sub></td>
+<td width="50%"><img src="./image/ai_chats.png" alt="AI Chats 독립 대화 화면"><br><sub align="center"><b>AI Chats</b>: 여러 논문을 아우르는 독립 대화 및 우측 드로어</sub></td>
+<td width="50%"><img src="./image/research_graph.png" alt="Research Graph 지식 그래프"><br><sub align="center"><b>Research Graph</b>: 논문×개념 매트릭스 히트맵 및 지식 그래프</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="./image/reading_history.png" alt="Reading History 독서 분석"><br><sub align="center"><b>Reading History</b>: 독서 캘린더 히트맵 및 활동 타임라인 분석</sub></td>
+<td width="50%"><img src="./image/notes.png" alt="읽기 전 브리핑 및 노트 요약"><br><sub align="center"><b>읽기 전 브리핑 & 노트</b>: 논문 브리핑 및 Floating 메모 요약</sub></td>
 </tr>
 </table>
 
 </details>
 
 <details>
-<summary><b>참조 오버레이 미리보기</b> — Figure · Table · 수식 참조</summary>
+<summary><b>정밀 참조 오버레이 미리보기</b> — Figure · Table · 수식 · 참고문헌 참조</summary>
 <br>
 
 <table>
@@ -62,7 +66,7 @@
 </tr>
 <tr>
 <td width="50%"><img src="./image/eq_overlay.png" alt="수식 참조 호버 오버레이"><br><sub align="center">수식 번호 참조 시 해당 수식만 정확히 크롭해 표시</sub></td>
-<td width="50%" valign="middle" align="center"><i>클릭하면 원문의 해당 페이지로 바로 이동합니다</i></td>
+<td width="50%"><img src="./image/reference_overlay.png" alt="참고문헌 호버 오버레이"><br><sub align="center">인용 번호 마우스 오버 시 참고문헌 원문 + 검색 링크 표시</sub></td>
 </tr>
 </table>
 
