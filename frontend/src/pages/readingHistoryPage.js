@@ -295,7 +295,7 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
   const activeDays = new Set(inPeriod.map(eventKey)).size
 
   // 단순히 뷰어를 1초 열어보기만 해서 last_read_at만 갱신된 문서는 제외하고,
-  // 해당 기간 내 실측 read 세션 이벤트가 있거나 완독(read_at) 표시된 문서만 계산
+  // 해당 기간 내 실측 read 세션 이벤트가 있거나 완독/읽기 표시된 문서만 계산
   const readDocIds = new Set(inPeriod.filter(e => e.type === 'read').map(e => e.doc_id))
   const activePageDocIds = new Set()
   for (const id of readDocIds) {
@@ -304,8 +304,8 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
   }
   for (const doc of docsById.values()) {
     const meta = doc?.metadata || {}
-    if (meta.read && meta.read_at) {
-      const k = isoToLocalDateKey(meta.read_at)
+    if (hasReadActivity(meta)) {
+      const k = isoToLocalDateKey(meta.read_at || meta.last_read_at)
       if (k && k >= startKey && k < endKeyExclusive) {
         activePageDocIds.add(doc.id)
       }
@@ -506,8 +506,27 @@ export async function renderReadingHistoryPage() {
     ? mixTotalSeconds
     : Object.values(byDay).reduce((sum, sec) => sum + (Number(sec) || 0), 0)
 
-  const totalUploadedCount = dashboard?.stats?.total_papers ?? docsById.size
-  const totalReadCount = dashboard?.stats?.read_papers ?? Array.from(docsById.values()).filter(d => hasReadActivity(d.metadata)).length
+  const allReadDocIds = new Set()
+  for (const e of events) {
+    if (e.type === 'read' && e.doc_id && docsById.has(e.doc_id)) {
+      allReadDocIds.add(e.doc_id)
+    }
+  }
+  const byDocSeconds = readingStats?.total_seconds_by_doc || {}
+  for (const [docId, sec] of Object.entries(byDocSeconds)) {
+    if (sec > 0 && docsById.has(docId)) {
+      allReadDocIds.add(docId)
+    }
+  }
+  for (const doc of docsById.values()) {
+    const meta = doc?.metadata || {}
+    if (meta.read || hasReadActivity(meta)) {
+      allReadDocIds.add(doc.id)
+    }
+  }
+
+  const totalUploadedCount = Math.max(dashboard?.stats?.total_papers ?? 0, docsById.size)
+  const totalReadCount = Math.max(allReadDocIds.size, curr.papersRead, curr7.papersRead)
 
   const getStatCards = (period) => {
     if (period === '7') {
