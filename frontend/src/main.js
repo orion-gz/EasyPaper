@@ -5170,8 +5170,9 @@ async function renderLibraryGraphTab() {
   const typeFilterEl = $('rg-filter-type')
   const tagFilterEl = $('rg-filter-tag')
   if (typeFilterEl) typeFilterEl.value = 'all'
-  if (tagFilterEl) tagFilterEl.value = 'all'
-  switchGraphSubView('graph')
+  const targetSubView = sessionStorage.getItem('easypaper_graph_subview') || 'graph'
+  sessionStorage.removeItem('easypaper_graph_subview')
+  switchGraphSubView(targetSubView)
 
   try {
     const data = await fetchLibraryGraph()
@@ -13528,11 +13529,27 @@ async function handleRouting() {
       showToast('대화할 논문 정보를 불러올 수 없습니다.', 'error')
       location.hash = 'chats'
     } else {
-      const pageId = hash.replace('#', '') || 'dashboard'
+      let rawPage = hash.replace('#', '') || 'dashboard'
+      const queryIdx = rawPage.indexOf('?')
+      let subviewParam = null
+      if (queryIdx !== -1) {
+        const queryStr = rawPage.slice(queryIdx + 1)
+        rawPage = rawPage.slice(0, queryIdx)
+        const params = new URLSearchParams(queryStr)
+        subviewParam = params.get('subview') || params.get('view')
+      }
+      if (rawPage === 'heatmap') {
+        rawPage = 'graph'
+        subviewParam = 'heatmap'
+      }
+      if (subviewParam) {
+        sessionStorage.setItem('easypaper_graph_subview', subviewParam)
+      }
+      const pageId = rawPage
       console.log("[Router] Routing to workspace page:", pageId, "Viewer active:", viewerScreen.classList.contains('active'), "Library active:", libraryScreen.classList.contains('active'))
       if (viewerScreen.classList.contains('active') || !libraryScreen.classList.contains('active')) {
         await showLibraryScreen(false, WORKSPACE_PAGES.includes(pageId) ? pageId : 'dashboard')
-      } else if (WORKSPACE_PAGES.includes(pageId) && state.currentWorkspacePage !== pageId) {
+      } else if (WORKSPACE_PAGES.includes(pageId) && (state.currentWorkspacePage !== pageId || subviewParam)) {
         await showWorkspacePage(pageId, { pushState: false })
       }
     }
