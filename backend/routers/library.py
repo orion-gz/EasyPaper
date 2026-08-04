@@ -155,6 +155,17 @@ async def get_library_concept_heatmap(current_user: str = Depends(get_current_us
     return {"heatmap": await get_concept_heatmap(current_user)}
 
 
+@router.get("/library/graph/heatmap/matrix")
+async def get_library_concept_heatmap_matrix(current_user: str = Depends(get_current_user)):
+    """개념 히트맵을 논문(행) x 개념(열) 매트릭스로 반환합니다(2D 히트맵 UI용).
+
+    /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
+    이유로, 그렇지 않으면 "graph"가 doc_id 경로 파라미터로 잘못 매칭된다.
+    """
+    from services.knowledge_graph import get_concept_paper_matrix
+    return await get_concept_paper_matrix(current_user)
+
+
 @router.get("/library/graph/gaps")
 async def get_library_knowledge_gaps(current_user: str = Depends(get_current_user)):
     """질문이 거의 없는 개념, 메모 없이 읽음 표시된 논문 등 격차를 감지합니다

@@ -199,6 +199,12 @@ export async function fetchLibraryHeatmap() {
   return res.json()
 }
 
+export async function fetchLibraryHeatmapMatrix() {
+  const res = await fetch(`${API_BASE}/library/graph/heatmap/matrix`)
+  if (!res.ok) throw new Error('개념 히트맵 매트릭스 조회 실패')
+  return res.json()
+}
+
 export async function fetchLibraryGaps() {
   const res = await fetch(`${API_BASE}/library/graph/gaps`)
   if (!res.ok) throw new Error('지식 격차 조회 실패')
