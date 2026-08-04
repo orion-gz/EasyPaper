@@ -421,33 +421,69 @@ export async function renderReadingHistoryPage() {
   const fallbackTotalReadPages = dashboard?.stats?.read_pages ?? Array.from(docsById.values()).reduce((sum, d) => sum + readPageCount(d), 0)
   const totalReadPagesDisplay = totalEstPages > 0 ? totalEstPages : fallbackTotalReadPages
 
-  const statCards = [
-    {
-      icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
-      value: `${curr.activeDays} / 30`,
-      sub: `<span class="rh-stat-delta">최근 30일 중 ${activeDaysPct}%</span>`,
-    },
-    {
-      icon: 'clock', color: 'var(--rh-c3)', label: '읽은 시간',
-      value: formatDuration(currReadingSeconds),
-      sub: deltaDurationHtml(currReadingSeconds, prevReadingSeconds),
-    },
-    {
-      icon: 'layers', color: 'var(--rh-c6)', label: '최근 30일 읽은 페이지',
-      value: currPagesReadDisplay.toLocaleString(),
-      sub: `${deltaHtml(currPagesReadDisplay, prevPagesReadDisplay)} <span class="rh-stat-total" style="opacity:0.75;font-size:0.8em;margin-left:4px;">(누적 ${totalReadPagesDisplay.toLocaleString()}p)</span>`,
-    },
-    {
-      icon: 'messageCircle', color: 'var(--rh-c5)', label: '질문 수',
-      value: curr.questions.toLocaleString(),
-      sub: deltaHtml(curr.questions, prev.questions),
-    },
-    {
-      icon: 'edit3', color: 'var(--rh-c2)', label: '작성한 메모',
-      value: curr.notes.toLocaleString(),
-      sub: deltaHtml(curr.notes, prev.notes),
-    },
-  ]
+  const allReadingSeconds = mixTotalSeconds > 0
+    ? mixTotalSeconds
+    : Object.values(byDay).reduce((sum, sec) => sum + (Number(sec) || 0), 0)
+
+  const getStatCards = (period) => {
+    if (period === 'all') {
+      return [
+        {
+          icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
+          value: `${allActiveKeys.size}일`,
+          sub: `<span class="rh-stat-delta">총 ${allActiveKeys.size}일 동안 활동</span>`,
+        },
+        {
+          icon: 'clock', color: 'var(--rh-c3)', label: '읽은 시간',
+          value: formatDuration(allReadingSeconds),
+          sub: `<span class="rh-stat-delta">전체 누적 시간</span>`,
+        },
+        {
+          icon: 'layers', color: 'var(--rh-c6)', label: '읽은 페이지',
+          value: totalReadPagesDisplay.toLocaleString(),
+          sub: `<span class="rh-stat-delta">전체 누적 페이지</span>`,
+        },
+        {
+          icon: 'messageCircle', color: 'var(--rh-c5)', label: '질문 수',
+          value: totalQuestions.toLocaleString(),
+          sub: `<span class="rh-stat-delta">전체 누적 질문</span>`,
+        },
+        {
+          icon: 'edit3', color: 'var(--rh-c2)', label: '작성한 메모',
+          value: totalNotes.toLocaleString(),
+          sub: `<span class="rh-stat-delta">전체 누적 메모</span>`,
+        },
+      ]
+    }
+
+    return [
+      {
+        icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
+        value: `${curr.activeDays} / 30`,
+        sub: `<span class="rh-stat-delta">최근 30일 중 ${activeDaysPct}%</span>`,
+      },
+      {
+        icon: 'clock', color: 'var(--rh-c3)', label: '읽은 시간',
+        value: formatDuration(currReadingSeconds),
+        sub: deltaDurationHtml(currReadingSeconds, prevReadingSeconds),
+      },
+      {
+        icon: 'layers', color: 'var(--rh-c6)', label: '읽은 페이지',
+        value: currPagesReadDisplay.toLocaleString(),
+        sub: deltaHtml(currPagesReadDisplay, prevPagesReadDisplay),
+      },
+      {
+        icon: 'messageCircle', color: 'var(--rh-c5)', label: '질문 수',
+        value: curr.questions.toLocaleString(),
+        sub: deltaHtml(curr.questions, prev.questions),
+      },
+      {
+        icon: 'edit3', color: 'var(--rh-c2)', label: '작성한 메모',
+        value: curr.notes.toLocaleString(),
+        sub: deltaHtml(curr.notes, prev.notes),
+      },
+    ]
+  }
 
   // ── 캘린더 히트맵: 최근 12주(84일), 월~일 ──
   const WEEKS = 12
@@ -589,6 +625,8 @@ export async function renderReadingHistoryPage() {
     return `<span class="${cls.join(' ')}" title="${escapeHtml(formatShortDate(k))}">${label}</span>`
   }).join('')
 
+  const initialCards = getStatCards('30')
+
   // ── HTML 조립 ──
   el.innerHTML = `
     <div class="rh-page">
@@ -596,11 +634,14 @@ export async function renderReadingHistoryPage() {
         <div>
           <p class="rh-header-subtitle">읽기 활동과 연구 여정을 확인하세요.</p>
         </div>
-        <span class="rh-header-period">${icon('calendar', 13)} 최근 30일</span>
+        <div class="rh-header-chips" id="rh-period-chips">
+          <button type="button" class="rh-chip active" data-period="30">${icon('calendar', 13)} 최근 30일</button>
+          <button type="button" class="rh-chip" data-period="all">${icon('clock', 13)} 전체 기록</button>
+        </div>
       </div>
 
-      <div class="rh-stat-grid">
-        ${statCards.map(c => `
+      <div class="rh-stat-grid" id="rh-stat-grid">
+        ${initialCards.map(c => `
           <div class="rh-stat-card">
             <div class="rh-stat-icon" style="--rh-stat-color:${c.color}">${icon(c.icon, 17)}</div>
             <div class="rh-stat-body">
@@ -644,7 +685,7 @@ export async function renderReadingHistoryPage() {
 
           <div class="rh-card">
             <div class="rh-card-head">
-              <span class="rh-card-title">${icon('list', 15)} 전체 활동</span>
+              <span class="rh-card-title">${icon('list', 15)} <span id="rh-timeline-title">최근 30일 활동</span></span>
             </div>
             <div class="rh-tabs" id="rh-filter-tabs">
               <button type="button" class="rh-tab-btn active" data-type="all">전체</button>
@@ -711,7 +752,40 @@ export async function renderReadingHistoryPage() {
   `
 
   // ── All Activities: 필터 + 더보기 상태 ──
-  const sortedEvents = events.slice().sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
+  let currentPeriod = '30'
+  let activeType = 'all'
+  const INITIAL_GROUPS = 4
+  let visibleGroups = INITIAL_GROUPS
+
+  const timelineListEl = el.querySelector('#rh-timeline-list')
+  const moreBtn = el.querySelector('#rh-more-btn')
+
+  function renderStatGrid(period) {
+    const gridEl = el.querySelector('#rh-stat-grid')
+    if (!gridEl) return
+    const cards = getStatCards(period)
+    gridEl.innerHTML = cards.map(c => `
+      <div class="rh-stat-card">
+        <div class="rh-stat-icon" style="--rh-stat-color:${c.color}">${icon(c.icon, 17)}</div>
+        <div class="rh-stat-body">
+          <div class="rh-stat-label">${escapeHtml(c.label)}</div>
+          <div class="rh-stat-value">${c.value}</div>
+          <div>${c.sub}</div>
+        </div>
+      </div>
+    `).join('')
+  }
+
+  const getTimelineEvents = () => {
+    if (currentPeriod === '30') {
+      return events.filter(e => {
+        const k = eventKey(e)
+        return k && k >= currStart && k < currEnd
+      })
+    }
+    return events
+  }
+
   const groupByDay = (list) => {
     const groups = new Map()
     for (const e of list) {
@@ -722,17 +796,12 @@ export async function renderReadingHistoryPage() {
     return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]))
   }
 
-  const INITIAL_GROUPS = 4
-  let activeType = 'all'
-  let visibleGroups = INITIAL_GROUPS
-
-  const timelineListEl = el.querySelector('#rh-timeline-list')
-  const moreBtn = el.querySelector('#rh-more-btn')
-
   function renderTimeline() {
+    const periodEvents = getTimelineEvents()
+    const sortedEvents = periodEvents.slice().sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
     const filtered = activeType === 'all' ? sortedEvents : sortedEvents.filter(e => e.type === activeType)
     if (filtered.length === 0) {
-      timelineListEl.innerHTML = '<div class="rh-empty">이 유형의 활동이 아직 없습니다.</div>'
+      timelineListEl.innerHTML = '<div class="rh-empty">이 기간의 활동이 아직 없습니다.</div>'
       moreBtn.classList.add('hidden')
       return
     }
@@ -770,6 +839,19 @@ export async function renderReadingHistoryPage() {
 
     moreBtn.classList.toggle('hidden', shown.length >= dayGroups.length)
   }
+
+  const periodChipsEl = el.querySelector('#rh-period-chips')
+  periodChipsEl?.addEventListener('click', (event) => {
+    const btn = event.target.closest('.rh-chip')
+    if (!btn || btn.classList.contains('active')) return
+    periodChipsEl.querySelectorAll('.rh-chip').forEach(b => b.classList.toggle('active', b === btn))
+    currentPeriod = btn.dataset.period
+    renderStatGrid(currentPeriod)
+    const titleEl = el.querySelector('#rh-timeline-title')
+    if (titleEl) titleEl.textContent = currentPeriod === '30' ? '최근 30일 활동' : '전체 활동'
+    visibleGroups = INITIAL_GROUPS
+    renderTimeline()
+  })
 
   const tabsEl = el.querySelector('#rh-filter-tabs')
   tabsEl.addEventListener('click', (event) => {
@@ -816,3 +898,4 @@ export async function renderReadingHistoryPage() {
 
   renderTimeline()
 }
+
