@@ -9,7 +9,8 @@
 import './../styles/dashboard.css'
 import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats, fetchReadingAnalyticsSummary } from '../library.js'
 import { icon } from '../icons.js'
-import { readPageCount, lastActivityIso, hasReadActivity, isWithinDaysLocal } from '../readPages.js'
+import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, todayKey, addDaysKey } from '../readPages.js'
+import { periodStats, sumSecondsByDayRange, buildDailyActivityStats, formatDuration } from './readingHistoryPage.js'
 
 function renderReadingAnalyticsCard(analyticsData) {
   if (!analyticsData) return ''
@@ -70,35 +71,6 @@ function formatNumber(n) {
   return (n || 0).toLocaleString('ko-KR')
 }
 
-function formatDuration(seconds) {
-  const s = Math.max(0, Math.round(seconds || 0))
-  const h = Math.floor(s / 3600)
-  const m = Math.round((s % 3600) / 60)
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m`
-  return s > 0 ? `${s}s` : '0m'
-}
-
-function sumSecondsInDays(byDay, days) {
-  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
-  let total = 0
-  for (const [day, seconds] of Object.entries(byDay || {})) {
-    const t = new Date(`${day}T00:00:00`).getTime()
-    if (!Number.isNaN(t) && t >= cutoff) total += seconds
-  }
-  return total
-}
-
-// ── 시간 계산 헬퍼 ── 전부 백엔드가 이미 내려주는 ISO 타임스탬프(timeline
-// events, metadata.read_at)를 그대로 재사용한다. 새 저장소나 서버 집계가
-// 필요 없다.
-function isWithinDays(iso, days) {
-  if (!iso) return false
-  const t = new Date(iso).getTime()
-  if (Number.isNaN(t)) return false
-  return t >= Date.now() - days * 24 * 60 * 60 * 1000
-}
-
 function relativeTimeKo(iso) {
   if (!iso) return ''
   const t = new Date(iso).getTime()
@@ -117,53 +89,6 @@ function relativeTimeKo(iso) {
   return new Date(iso).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-function dateKey(iso) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return null
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
-
-// 활동(업로드/읽음/질문/메모) 타임스탬프가 찍힌 날짜들을 모아 오늘(또는
-// 어제, 아직 오늘 활동을 안 했을 수 있으니)부터 거슬러 며칠 연속으로
-// 활동이 있었는지 센다 - 순수하게 실제 이벤트 날짜만으로 계산.
-function computeStreakDays(events) {
-  const dates = new Set()
-  events.forEach(e => { const k = dateKey(e.timestamp); if (k) dates.add(k) })
-  if (dates.size === 0) return 0
-  const today = new Date()
-  const yesterday = new Date(today)
-  yesterday.setDate(yesterday.getDate() - 1)
-  let cursor = null
-  if (dates.has(dateKey(today))) cursor = today
-  else if (dates.has(dateKey(yesterday))) cursor = yesterday
-  else return 0
-  const c = new Date(cursor)
-  let streak = 0
-  while (dates.has(dateKey(c))) {
-    streak++
-    c.setDate(c.getDate() - 1)
-  }
-  return streak
-}
-
-function countEventsInDays(events, type, days) {
-  return events.filter(e => e.type === type && isWithinDays(e.timestamp, days)).length
-}
-
-// "이번 주 읽은 페이지"는 서버에 별도 집계가 없어, 이번 주 안에 읽기
-// 활동(last_read_at - 열람/페이지 이동 - 또는 read_at - 완독 표시)이 있던
-// 논문들의 readPageCount(참고문헌 제외 진행률/본문 페이지 수) 합으로
-// 근사한다 - 실존하는 필드만 조합한 값이라 근거가 있는 근사치다. 완독
-// 여부만 보던 예전 로직과 달리 읽던 중인 논문도 포함한다.
-function pagesReadInDays(docs, days) {
-  return docs.reduce((sum, d) => {
-    const meta = d.metadata || {}
-    if (!hasReadActivity(meta)) return sum
-    if (!isWithinDaysLocal(lastActivityIso(meta, d.created_at), days)) return sum
-    return sum + readPageCount(d)
-  }, 0)
-}
-
 function truncateLabel(s, n) {
   if (!s) return ''
   return s.length > n ? `${s.slice(0, n - 1)}…` : s
@@ -171,18 +96,18 @@ function truncateLabel(s, n) {
 
 // ── 통계 카드 ──────────────────────────────────────────────────────────
 const STAT_DEFS = [
-  { key: 'total_papers', label: '논문', iconName: 'bookOpen', tint: 1, weekly: (events) => countEventsInDays(events, 'uploaded', 7) },
-  { key: 'read_papers', label: '읽은 논문', iconName: 'checkCircle', tint: 2, weekly: (events) => countEventsInDays(events, 'read', 7) },
-  { key: 'read_pages', label: '읽은 페이지 수', iconName: 'fileText', tint: 3, weekly: (events, docs) => pagesReadInDays(docs, 7) },
+  { key: 'total_papers', label: '논문', iconName: 'bookOpen', tint: 1, weekly: (c7) => c7.uploadedPapers },
+  { key: 'read_papers', label: '읽은 논문', iconName: 'checkCircle', tint: 2, weekly: (c7) => c7.papersRead },
+  { key: 'read_pages', label: '읽은 페이지 수', iconName: 'fileText', tint: 3, weekly: (c7, wp) => wp },
   // 개념은 생성 시각이 저장되지 않아 "이번 주 신규 개념 수"를 계산할 근거가
   // 없다 - 지어내지 않고 주간 델타 자체를 생략한다.
   { key: 'total_concepts', label: '개념', iconName: 'layers', tint: 4, weekly: null },
-  { key: 'total_questions', label: '질문', iconName: 'messageCircle', tint: 5, weekly: (events) => countEventsInDays(events, 'question', 7) },
-  { key: 'total_notes', label: '메모', iconName: 'edit3', tint: 6, weekly: (events) => countEventsInDays(events, 'note', 7) },
+  { key: 'total_questions', label: '질문', iconName: 'messageCircle', tint: 5, weekly: (c7) => c7.questions },
+  { key: 'total_notes', label: '메모', iconName: 'edit3', tint: 6, weekly: (c7) => c7.notes },
 ]
 
-function renderStatCard(def, value, events, docs) {
-  const delta = def.weekly ? def.weekly(events, docs) : null
+function renderStatCard(def, value, curr7, weeklyPagesRead) {
+  const delta = def.weekly ? def.weekly(curr7, weeklyPagesRead) : null
   const deltaHtml = delta === null ? '' : `
     <div class="dash-stat-delta ${delta > 0 ? 'is-up' : ''}">
       ${delta > 0 ? icon('chevronUp', 11) : ''}
@@ -203,10 +128,10 @@ function renderStatCard(def, value, events, docs) {
   `
 }
 
-function renderStatGrid(stats, events, docs) {
+function renderStatGrid(stats, curr7, weeklyPagesRead) {
   return `
     <div class="dash-stat-grid">
-      ${STAT_DEFS.map(def => renderStatCard(def, stats[def.key], events, docs)).join('')}
+      ${STAT_DEFS.map(def => renderStatCard(def, stats[def.key], curr7, weeklyPagesRead)).join('')}
     </div>
   `
 }
@@ -243,16 +168,14 @@ function renderInsightsCard(insights) {
   `
 }
 
-// ── 이번 주 활동 ── 목표(target)를 알 수 없어 mockup처럼 "goal" 대비
-// 진행률을 표시하는 대신, 실제 라이브러리 전체 규모 대비 이번 주 활동
-// 비중으로 바를 채운다(둘 다 실존 값).
-function renderWeeklyActivityCard(events, stats, docs, readingStats) {
-  const weeklySeconds = sumSecondsInDays(readingStats?.total_seconds_by_day, 7)
+// ── 이번 주 활동 ── Reading History 통계 엔진과 동일한 주간 집계 데이터를 공유하여 시각화한다.
+function renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs) {
+  const totalCompletedCount = stats.read_papers ?? docs.filter(d => d.metadata?.read === true).length
   const totalSeconds = readingStats?.total_seconds || 0
   const rows = [
-    { iconName: 'bookOpen', label: '읽은 논문', value: countEventsInDays(events, 'read', 7), total: stats.total_papers || 0, kind: 'count' },
-    { iconName: 'fileText', label: '읽은 페이지', value: pagesReadInDays(docs, 7), total: stats.total_pages || 0, kind: 'count' },
-    { iconName: 'messageCircle', label: '질문', value: countEventsInDays(events, 'question', 7), total: stats.total_questions || 0, kind: 'count' },
+    { iconName: 'bookOpen', label: '읽은 논문', value: curr7.papersRead, total: totalCompletedCount, kind: 'count' },
+    { iconName: 'fileText', label: '읽은 페이지', value: weeklyPagesRead, total: stats.total_pages || 0, kind: 'count' },
+    { iconName: 'messageCircle', label: '질문', value: curr7.questions, total: stats.total_questions || 0, kind: 'count' },
     { iconName: 'clock', label: '읽은 시간', value: weeklySeconds, total: totalSeconds, kind: 'duration' },
   ]
   return `
@@ -281,9 +204,8 @@ function renderWeeklyActivityCard(events, stats, docs, readingStats) {
 }
 
 // ── 연구 성과 & Reading Score ──
-function renderProgressSummaryCard(events, heatmap, readingStats, analyticsSummary) {
+function renderProgressSummaryCard(events, heatmap, weeklySeconds, analyticsSummary) {
   const streak = computeStreakDays(events)
-  const weeklySeconds = sumSecondsInDays(readingStats?.total_seconds_by_day, 7)
   const focusTopic = heatmap[0]
   const score = analyticsSummary?.overall_avg_score || 0.0
   const scorePct = Math.max(0, Math.min(100, score))
@@ -743,13 +665,30 @@ export async function renderDashboardPage() {
   const insights = dashboard.insights || []
   const recentQuestions = dashboard.recent_questions || []
 
+  const docsById = new Map(docs.map(d => [d.id, d]))
+  const tKey = todayKey()
+  const currStart7 = addDaysKey(tKey, -6)
+  const currEnd7 = addDaysKey(tKey, 1)
+
+  const curr7 = periodStats(events, docsById, currStart7, currEnd7)
+  const weeklySeconds = sumSecondsByDayRange(readingStats?.total_seconds_by_day, currStart7, currEnd7)
+  const dailyStatsMap = buildDailyActivityStats(events, readingStats)
+
+  let currEstPages7 = 0
+  for (const [day, item] of dailyStatsMap.entries()) {
+    if (day >= currStart7 && day < currEnd7) {
+      currEstPages7 += item.estPagesRead
+    }
+  }
+  const weeklyPagesRead = Math.max(curr7.pagesRead, currEstPages7)
+
   el.innerHTML = `
     <div class="dash-root">
-      ${renderStatGrid(stats, events, docs)}
+      ${renderStatGrid(stats, curr7, weeklyPagesRead)}
       <div class="dash-row dash-row-3">
         ${renderInsightsCard(insights)}
-        ${renderWeeklyActivityCard(events, stats, docs, readingStats)}
-        ${renderProgressSummaryCard(events, heatmap, readingStats, analyticsSummary)}
+        ${renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs)}
+        ${renderProgressSummaryCard(events, heatmap, weeklySeconds, analyticsSummary)}
       </div>
       <div class="dash-row dash-row-recent">
         ${renderRecentPapersCard(docs)}
