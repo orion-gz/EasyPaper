@@ -637,9 +637,9 @@ export async function renderDashboardPage() {
   let dashboard, timelineData, libraryData, graphData, readingStats, cachedRecs, analyticsSummary
   try {
     const results = await Promise.all([
-      fetchLibraryDashboard(),
-      fetchLibraryTimeline(),
-      fetchLibrary(),
+      fetchLibraryDashboard().catch(() => null),
+      fetchLibraryTimeline().catch(() => ({ events: [] })),
+      fetchLibrary().catch(() => ({ documents: [] })),
       fetchLibraryGraph().catch(() => null),
       fetchReadingTimeStats().catch(() => null),
       fetchCachedReadingRecommendations().catch(() => ({ recommendations: null })),
@@ -658,50 +658,55 @@ export async function renderDashboardPage() {
     return
   }
 
-  const events = (timelineData && timelineData.events) || []
-  const docs = (libraryData && libraryData.documents) || []
-  const stats = dashboard.stats || {}
-  const heatmap = dashboard.heatmap || []
-  const insights = dashboard.insights || []
-  const recentQuestions = dashboard.recent_questions || []
+  try {
+    const events = (timelineData && Array.isArray(timelineData.events)) ? timelineData.events : []
+    const docs = (libraryData && Array.isArray(libraryData.documents)) ? libraryData.documents : []
+    const stats = (dashboard && dashboard.stats) ? dashboard.stats : {}
+    const heatmap = (dashboard && Array.isArray(dashboard.heatmap)) ? dashboard.heatmap : []
+    const insights = (dashboard && Array.isArray(dashboard.insights)) ? dashboard.insights : []
+    const recentQuestions = (dashboard && Array.isArray(dashboard.recent_questions)) ? dashboard.recent_questions : []
 
-  const docsById = new Map(docs.map(d => [d.id, d]))
-  const tKey = todayKey()
-  const currStart7 = addDaysKey(tKey, -6)
-  const currEnd7 = addDaysKey(tKey, 1)
+    const docsById = new Map(docs.map(d => [d.id, d]))
+    const tKey = todayKey()
+    const currStart7 = addDaysKey(tKey, -6)
+    const currEnd7 = addDaysKey(tKey, 1)
 
-  const curr7 = periodStats(events, docsById, currStart7, currEnd7)
-  const weeklySeconds = sumSecondsByDayRange(readingStats?.total_seconds_by_day, currStart7, currEnd7)
-  const dailyStatsMap = buildDailyActivityStats(events, readingStats)
+    const curr7 = periodStats(events, docsById, currStart7, currEnd7)
+    const weeklySeconds = sumSecondsByDayRange(readingStats?.total_seconds_by_day, currStart7, currEnd7)
+    const dailyStatsMap = buildDailyActivityStats(events, readingStats)
 
-  let currEstPages7 = 0
-  for (const [day, item] of dailyStatsMap.entries()) {
-    if (day >= currStart7 && day < currEnd7) {
-      currEstPages7 += item.estPagesRead
+    let currEstPages7 = 0
+    for (const [day, item] of dailyStatsMap.entries()) {
+      if (day >= currStart7 && day < currEnd7) {
+        currEstPages7 += item.estPagesRead
+      }
     }
+    const weeklyPagesRead = Math.max(curr7.pagesRead, currEstPages7)
+
+    el.innerHTML = `
+      <div class="dash-root">
+        ${renderStatGrid(stats, curr7, weeklyPagesRead)}
+        <div class="dash-row dash-row-3">
+          ${renderInsightsCard(insights)}
+          ${renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs)}
+          ${renderProgressSummaryCard(events, heatmap, weeklySeconds, analyticsSummary)}
+        </div>
+        <div class="dash-row dash-row-recent">
+          ${renderRecentPapersCard(docs)}
+          ${renderRecentQuestionsCard(recentQuestions)}
+          ${renderRecommendationsCard(cachedRecs && cachedRecs.recommendations)}
+        </div>
+        <div class="dash-row dash-row-bottom">
+          ${renderHeatmapCard(heatmap)}
+          ${renderTimelineCard(events)}
+          ${renderGraphPreviewCard(graphData, heatmap)}
+        </div>
+      </div>
+    `
+
+    attachHandlers(el)
+  } catch (renderErr) {
+    console.error('대시보드 렌더링 예외 발생:', renderErr)
+    el.innerHTML = `<div class="dash-error">${icon('alertTriangle', 20)}<p>대시보드를 불러오지 못했습니다.</p></div>`
   }
-  const weeklyPagesRead = Math.max(curr7.pagesRead, currEstPages7)
-
-  el.innerHTML = `
-    <div class="dash-root">
-      ${renderStatGrid(stats, curr7, weeklyPagesRead)}
-      <div class="dash-row dash-row-3">
-        ${renderInsightsCard(insights)}
-        ${renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs)}
-        ${renderProgressSummaryCard(events, heatmap, weeklySeconds, analyticsSummary)}
-      </div>
-      <div class="dash-row dash-row-recent">
-        ${renderRecentPapersCard(docs)}
-        ${renderRecentQuestionsCard(recentQuestions)}
-        ${renderRecommendationsCard(cachedRecs && cachedRecs.recommendations)}
-      </div>
-      <div class="dash-row dash-row-bottom">
-        ${renderHeatmapCard(heatmap)}
-        ${renderTimelineCard(events)}
-        ${renderGraphPreviewCard(graphData, heatmap)}
-      </div>
-    </div>
-  `
-
-  attachHandlers(el)
 }

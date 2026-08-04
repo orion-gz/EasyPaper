@@ -517,27 +517,9 @@ export async function renderReadingHistoryPage() {
     ? mixTotalSeconds
     : Object.values(byDay).reduce((sum, sec) => sum + (Number(sec) || 0), 0)
 
-  const allReadDocIds = new Set()
-  for (const e of events) {
-    if (e.type === 'read' && e.doc_id && docsById.has(e.doc_id)) {
-      allReadDocIds.add(e.doc_id)
-    }
-  }
-  const byDocSeconds = readingStats?.total_seconds_by_doc || {}
-  for (const [docId, sec] of Object.entries(byDocSeconds)) {
-    if (sec > 0 && docsById.has(docId)) {
-      allReadDocIds.add(docId)
-    }
-  }
-  for (const doc of docsById.values()) {
-    const meta = doc?.metadata || {}
-    if (meta.read || hasReadActivity(meta)) {
-      allReadDocIds.add(doc.id)
-    }
-  }
-
   const totalUploadedCount = Math.max(dashboard?.stats?.total_papers ?? 0, docsById.size)
-  const totalReadCount = Math.max(allReadDocIds.size, curr.papersRead, curr7.papersRead)
+  const completedDocsCount = Array.from(docsById.values()).filter(d => d.metadata?.read === true).length
+  const totalReadCount = Math.max(dashboard?.stats?.read_papers ?? 0, completedDocsCount, curr.papersRead, curr7.papersRead)
 
   const getStatCards = (period) => {
     if (period === '7') {
