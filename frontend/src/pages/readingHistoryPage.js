@@ -13,6 +13,53 @@ import { fetchLibraryTimeline, fetchLibraryDashboard, fetchLibrary, fetchReading
 import { icon } from '../icons.js'
 import { readPageCount, lastActivityIso, hasReadActivity, lastActivityDateKey, isoToLocalDateKey } from '../readPages.js'
 import '../styles/reading-history.css'
+import '../styles/dashboard.css'
+
+function renderReadingAnalyticsSummaryCard(analyticsSummary) {
+  if (!analyticsSummary) return ''
+
+  const avgScore = analyticsSummary.overall_avg_score || 0.0
+  const avgConfidence = analyticsSummary.overall_avg_confidence || 0.0
+  const verifiedPages = analyticsSummary.overall_verified_pages || 0
+  const profile = analyticsSummary.user_profile || {}
+  const emaMinPerPage = Math.round((profile.ema_seconds_per_page || 600.0) / 60)
+
+  return `
+    <div class="rh-card" style="margin-top: 16px;">
+      <div class="rh-card-head">
+        <span class="rh-card-title">${icon('activity', 15)} Reading Analytics Summary</span>
+        <span class="reading-depth-badge depth-reading">Score Engine Active</span>
+      </div>
+      <div class="dash-analytics-grid">
+        <div class="dash-analytics-metric">
+          <span class="dash-analytics-metric-label">평균 Reading Score</span>
+          <div class="dash-analytics-metric-value">${avgScore.toFixed(1)} <span style="font-size: 14px; font-weight: normal; color: var(--text-tertiary);">/ 100</span></div>
+          <div class="reading-score-bar-bg">
+            <div class="reading-score-bar-fill" style="width: ${Math.min(100, avgScore)}%;"></div>
+          </div>
+        </div>
+
+        <div class="dash-analytics-metric">
+          <span class="dash-analytics-metric-label">평균 Reading Confidence</span>
+          <div class="dash-analytics-metric-value">${avgConfidence.toFixed(1)}%</div>
+          <span class="dash-analytics-metric-sub">페이지 정독 확률 기반</span>
+        </div>
+
+        <div class="dash-analytics-metric">
+          <span class="dash-analytics-metric-label">Verified Pages (검증 페이지)</span>
+          <div class="dash-analytics-metric-value">${verifiedPages.toLocaleString()} <span style="font-size: 13px; font-weight: normal;">p</span></div>
+          <span class="dash-analytics-metric-sub">실제 읽기 패턴 인정 페이지</span>
+        </div>
+
+        <div class="dash-analytics-metric">
+          <span class="dash-analytics-metric-label">개인 EMA 정독 페이스</span>
+          <div class="dash-analytics-metric-value">~${emaMinPerPage} <span style="font-size: 13px; font-weight: normal;">분/p</span></div>
+          <span class="dash-analytics-metric-sub">EMA 지수이동평균 학습</span>
+        </div>
+      </div>
+    </div>
+  `
+}
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
@@ -467,9 +514,22 @@ export async function renderReadingHistoryPage() {
     ? mixTotalSeconds
     : Object.values(byDay).reduce((sum, sec) => sum + (Number(sec) || 0), 0)
 
+  const totalUploadedCount = dashboard?.stats?.total_papers ?? docsById.size
+  const totalReadCount = dashboard?.stats?.read_papers ?? Array.from(docsById.values()).filter(d => hasReadActivity(d.metadata)).length
+
   const getStatCards = (period) => {
     if (period === '7') {
       return [
+        {
+          icon: 'bookOpen', color: 'var(--rh-c4)', label: '등록 논문',
+          value: curr7.uploadedPapers.toLocaleString(),
+          sub: deltaHtml(curr7.uploadedPapers, prev7.uploadedPapers, '', '이전 7일 대비'),
+        },
+        {
+          icon: 'checkCircle', color: 'var(--rh-c2)', label: '읽은 논문',
+          value: curr7.papersRead.toLocaleString(),
+          sub: deltaHtml(curr7.papersRead, prev7.papersRead, '', '이전 7일 대비'),
+        },
         {
           icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
           value: `${curr7.activeDays} / 7`,
@@ -501,6 +561,16 @@ export async function renderReadingHistoryPage() {
     if (period === 'all') {
       return [
         {
+          icon: 'bookOpen', color: 'var(--rh-c4)', label: '등록 논문',
+          value: totalUploadedCount.toLocaleString(),
+          sub: `<span class="rh-stat-delta">전체 등록 논문</span>`,
+        },
+        {
+          icon: 'checkCircle', color: 'var(--rh-c2)', label: '읽은 논문',
+          value: totalReadCount.toLocaleString(),
+          sub: `<span class="rh-stat-delta">전체 완독/읽기 문서</span>`,
+        },
+        {
           icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
           value: `${allActiveKeys.size}일`,
           sub: `<span class="rh-stat-delta">총 ${allActiveKeys.size}일 동안 활동</span>`,
@@ -529,6 +599,16 @@ export async function renderReadingHistoryPage() {
     }
 
     return [
+      {
+        icon: 'bookOpen', color: 'var(--rh-c4)', label: '등록 논문',
+        value: curr.uploadedPapers.toLocaleString(),
+        sub: deltaHtml(curr.uploadedPapers, prev.uploadedPapers),
+      },
+      {
+        icon: 'checkCircle', color: 'var(--rh-c2)', label: '읽은 논문',
+        value: curr.papersRead.toLocaleString(),
+        sub: deltaHtml(curr.papersRead, prev.papersRead),
+      },
       {
         icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
         value: `${curr.activeDays} / 30`,
@@ -727,6 +807,8 @@ export async function renderReadingHistoryPage() {
           </div>
         `).join('')}
       </div>
+
+      ${renderReadingAnalyticsSummaryCard(analyticsSummary)}
 
       <div class="rh-columns">
         <div class="rh-col">

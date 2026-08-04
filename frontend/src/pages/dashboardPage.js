@@ -280,19 +280,40 @@ function renderWeeklyActivityCard(events, stats, docs, readingStats) {
   `
 }
 
-// ── 연구 진행 요약 ── mockup의 "연구 점수"(0~100 + 스파크라인)는 뒷받침할
-// 시계열 데이터가 전혀 없어 생략했다(임의 가중치로 점수를 지어내는 건
-// 지시사항 위반). 대신 실제 타임스탬프/읽기 시간 하트비트에서 계산 가능한
-// 세 지표(연구 연속일, 주간 읽기 시간, 집중 주제)를 보여준다.
-function renderProgressSummaryCard(events, heatmap, readingStats) {
+// ── 연구 성과 & Reading Score ──
+function renderProgressSummaryCard(events, heatmap, readingStats, analyticsSummary) {
   const streak = computeStreakDays(events)
   const weeklySeconds = sumSecondsInDays(readingStats?.total_seconds_by_day, 7)
   const focusTopic = heatmap[0]
+  const score = analyticsSummary?.overall_avg_score || 0.0
+  const scorePct = Math.max(0, Math.min(100, score))
+
   return `
     <div class="dash-card">
       <div class="dash-card-head">
-        <h3>${icon('award', 15)}연구 진행 요약</h3>
+        <h3>${icon('award', 15)}연구 성과 & Reading Score</h3>
         <a href="#" class="dash-link" data-nav="graph">자세히 보기 ›</a>
+      </div>
+      <div class="dash-score-pie-container" style="display: flex; align-items: center; gap: 14px; padding: 12px; margin-bottom: 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+        <div style="position: relative; width: 64px; height: 64px; flex-shrink: 0;">
+          <svg width="64" height="64" viewBox="0 0 36 36" style="transform: rotate(-90deg);">
+            <path stroke="var(--bg-hover)" stroke-width="3.6" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            <path stroke="url(#dashReadingScoreGrad)" stroke-width="3.6" stroke-dasharray="${scorePct.toFixed(1)}, 100" stroke-linecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            <defs>
+              <linearGradient id="dashReadingScoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#3b82f6" />
+                <stop offset="100%" stop-color="#8b5cf6" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+            ${score.toFixed(1)}
+          </div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Reading Score Engine</div>
+          <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">정독 패턴, verified pages & interaction 종합 평가</div>
+        </div>
       </div>
       <div class="dash-summary-grid">
         <div class="dash-summary-box">
@@ -722,11 +743,10 @@ export async function renderDashboardPage() {
   el.innerHTML = `
     <div class="dash-root">
       ${renderStatGrid(stats, events, docs)}
-      ${renderReadingAnalyticsCard(analyticsSummary)}
       <div class="dash-row dash-row-3">
         ${renderInsightsCard(insights)}
         ${renderWeeklyActivityCard(events, stats, docs, readingStats)}
-        ${renderProgressSummaryCard(events, heatmap, readingStats)}
+        ${renderProgressSummaryCard(events, heatmap, readingStats, analyticsSummary)}
       </div>
       <div class="dash-row dash-row-recent">
         ${renderRecentPapersCard(docs)}
