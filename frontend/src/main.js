@@ -3867,73 +3867,167 @@ if (workspaceSearchInput) {
 let activeCategoryFilter = 'ALL'
 
 // ── 여러 논문 비교 채팅: 라이브러리 선택 모드 ──────────────
-let compareSelectMode = false
-const compareSelectedDocs = new Map() // doc.id -> doc
-const COMPARE_MAX_DOCS = 5
-const COMPARE_MIN_DOCS = 2
+// ── 라이브러리 논문 선택 모드 & 하단 플로팅 알약 툴바 ──
+const selectedDocIds = new Set()
 
-function updateCompareSelectUI() {
-  const count = compareSelectedDocs.size
-  if (compareSelectCount) compareSelectCount.textContent = `${count}/${COMPARE_MAX_DOCS}개 선택됨`
-  if (compareSelectStartBtn) compareSelectStartBtn.disabled = count < COMPARE_MIN_DOCS
+function getVisibleDocIds() {
+  return currentLibraryDocs.map(d => d.id)
 }
 
-function setCompareCheckboxVisual(container, checked) {
-  const box = container.querySelector('.doc-card-compare-check')
-  if (!box) return
-  box.classList.toggle('checked', checked)
-  box.innerHTML = checked
-    ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
-    : ''
-}
-
-function toggleDocCompareSelection(container, doc) {
-  const isSelected = compareSelectedDocs.has(doc.id)
-  if (isSelected) {
-    compareSelectedDocs.delete(doc.id)
-    setCompareCheckboxVisual(container, false)
+function toggleDocSelection(docId) {
+  if (selectedDocIds.has(docId)) {
+    selectedDocIds.delete(docId)
   } else {
-    if (compareSelectedDocs.size >= COMPARE_MAX_DOCS) {
-      showToast(`최대 ${COMPARE_MAX_DOCS}편까지 선택할 수 있습니다.`, 'warning')
+    selectedDocIds.add(docId)
+  }
+  updateDocCardSelectionVisuals(docId)
+  updateSelectToolbarUI()
+}
+
+function updateDocCardSelectionVisuals(docId) {
+  const isSelected = selectedDocIds.has(docId)
+  const els = document.querySelectorAll(`.doc-card[data-id="${CSS.escape(docId)}"], .doc-list-row[data-id="${CSS.escape(docId)}"]`)
+  els.forEach(el => {
+    el.classList.toggle('doc-card-selected', isSelected)
+    const checkBtn = el.querySelector('.doc-card-check-btn')
+    if (checkBtn) {
+      checkBtn.classList.toggle('checked', isSelected)
+      checkBtn.title = isSelected ? '선택 해제' : '선택'
+    }
+  })
+}
+
+function clearDocSelection() {
+  selectedDocIds.clear()
+  document.querySelectorAll('.doc-card-selected').forEach(el => el.classList.remove('doc-card-selected'))
+  document.querySelectorAll('.doc-card-check-btn.checked').forEach(el => {
+    el.classList.remove('checked')
+    el.title = '선택'
+  })
+  updateSelectToolbarUI()
+}
+
+function updateSelectToolbarUI() {
+  const count = selectedDocIds.size
+  const toolbar = $('lib-select-toolbar')
+  if (!toolbar) return
+
+  if (count > 0 && state.currentLibraryTab !== 'trash') {
+    toolbar.classList.remove('hidden')
+    const countEl = $('lib-select-count')
+    if (countEl) countEl.textContent = `${count}개 선택됨`
+
+    const compareBtn = $('lib-select-compare-btn')
+    if (compareBtn) compareBtn.disabled = (count < 2 || count > 5)
+
+    const visibleIds = getVisibleDocIds()
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedDocIds.has(id))
+    const selectAllBtn = $('lib-select-all-btn')
+    if (selectAllBtn) selectAllBtn.textContent = allSelected ? '선택 해제' : '전체 선택'
+  } else {
+    toolbar.classList.add('hidden')
+  }
+}
+
+function initSelectToolbarEvents() {
+  $('lib-select-all-btn')?.addEventListener('click', () => {
+    const visibleIds = getVisibleDocIds()
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedDocIds.has(id))
+    if (allSelected) {
+      clearDocSelection()
+    } else {
+      visibleIds.forEach(id => selectedDocIds.add(id))
+      visibleIds.forEach(id => updateDocCardSelectionVisuals(id))
+      updateSelectToolbarUI()
+    }
+  })
+
+  $('lib-select-read-btn')?.addEventListener('click', async () => {
+    if (selectedDocIds.size === 0) return
+    const selectedDocsList = currentLibraryDocs.filter(d => selectedDocIds.has(d.id))
+    const allRead = selectedDocsList.length > 0 && selectedDocsList.every(d => d.metadata?.read === true)
+    const nextReadState = !allRead
+    const payload = { read: nextReadState, read_at: nextReadState ? new Date().toISOString() : null }
+
+    try {
+      await Promise.all(Array.from(selectedDocIds).map(id => updateLibraryDocMetadata(id, payload)))
+      showToast(nextReadState ? `${selectedDocIds.size}개 논문을 읽음으로 표시했습니다.` : `${selectedDocIds.size}개 논문의 완독 상태를 해제했습니다.`, 'success')
+      clearDocSelection()
+      await renderLibrary()
+    } catch (err) {
+      showToast('상태 변경 실패: ' + err.message, 'error')
+    }
+  })
+
+  $('lib-select-fav-btn')?.addEventListener('click', async () => {
+    if (selectedDocIds.size === 0) return
+    const count = selectedDocIds.size
+    selectedDocIds.forEach(id => toggleFavoriteDoc(id))
+    showToast(`${count}개 논문의 북마크 상태가 변경되었습니다.`, 'success')
+    clearDocSelection()
+    await renderLibrary()
+  })
+
+  $('lib-select-cache-btn')?.addEventListener('click', async () => {
+    if (selectedDocIds.size === 0) return
+    const count = selectedDocIds.size
+    const ok = await showCustomConfirm(`선택한 ${count}개 논문의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+    if (!ok) return
+    try {
+      await Promise.allSettled(Array.from(selectedDocIds).map(id => clearSingleDocCacheAPI(id)))
+      showToast(`선택한 ${count}개 논문의 PDF 추출 캐시가 삭제되었습니다.`, 'success')
+      clearDocSelection()
+    } catch (err) {
+      showToast('캐시 삭제 실패: ' + err.message, 'error')
+    }
+  })
+
+  $('lib-select-compare-btn')?.addEventListener('click', () => {
+    const ids = Array.from(selectedDocIds)
+    if (ids.length < 2 || ids.length > 5) {
+      showToast('논문 비교는 2~5개 논문을 선택했을 때만 가능합니다.', 'warning')
       return
     }
-    compareSelectedDocs.set(doc.id, doc)
-    setCompareCheckboxVisual(container, true)
-  }
-  updateCompareSelectUI()
-}
-
-function setCompareSelectMode(enabled) {
-  compareSelectMode = enabled
-  compareSelectedDocs.clear()
-  if (libraryGrid) libraryGrid.classList.toggle('compare-select-mode', enabled)
-  if (libCompareToggleBtn) libCompareToggleBtn.classList.toggle('active', enabled)
-  if (compareSelectBar) compareSelectBar.classList.toggle('hidden', !enabled)
-  document.querySelectorAll('.doc-card-compare-check').forEach(box => {
-    box.classList.remove('checked')
-    box.innerHTML = ''
-  })
-  updateCompareSelectUI()
-}
-
-if (libCompareToggleBtn) {
-  libCompareToggleBtn.addEventListener('click', () => {
-    setCompareSelectMode(!compareSelectMode)
-  })
-}
-
-if (compareSelectCancelBtn) {
-  compareSelectCancelBtn.addEventListener('click', () => setCompareSelectMode(false))
-}
-
-if (compareSelectStartBtn) {
-  compareSelectStartBtn.addEventListener('click', () => {
-    const ids = Array.from(compareSelectedDocs.keys())
-    if (ids.length < COMPARE_MIN_DOCS) return
-    setCompareSelectMode(false)
+    clearDocSelection()
     location.hash = `#compare?ids=${ids.map(encodeURIComponent).join(',')}`
   })
+
+  $('lib-select-delete-btn')?.addEventListener('click', async () => {
+    if (selectedDocIds.size === 0) return
+    const count = selectedDocIds.size
+    const ok = await showCustomConfirm(`선택한 ${count}개 논문을 삭제할까요? (휴지통으로 이동합니다)`, { title: '논문 삭제', confirmText: '삭제', danger: true })
+    if (!ok) return
+    try {
+      await Promise.allSettled(Array.from(selectedDocIds).map(id => deleteLibraryDoc(id)))
+      showToast(`${count}개 논문이 휴지통으로 이동되었습니다.`, 'success')
+      clearDocSelection()
+      await renderLibrary()
+    } catch {
+      showToast('삭제 실패', 'error')
+    }
+  })
+
+  $('lib-select-close-btn')?.addEventListener('click', () => {
+    clearDocSelection()
+  })
+
+  if (libCompareToggleBtn) {
+    libCompareToggleBtn.addEventListener('click', () => {
+      if (selectedDocIds.size === 0) {
+        showToast('카드 우상단 체크 버튼을 눌러 비교할 논문을 선택하세요.', 'info')
+      } else if (selectedDocIds.size >= 2 && selectedDocIds.size <= 5) {
+        const ids = Array.from(selectedDocIds)
+        clearDocSelection()
+        location.hash = `#compare?ids=${ids.map(encodeURIComponent).join(',')}`
+      } else {
+        showToast('논문 비교는 2~5개 논문을 선택해야 합니다.', 'warning')
+      }
+    })
+  }
 }
+
+initSelectToolbarEvents()
+
 
 // ── 여러 논문 비교 채팅 화면 ────────────────────────────
 let compareChatState = { docIds: [], docs: [], history: [], activeStream: null, currentText: '' }
@@ -5820,17 +5914,17 @@ function prepareDocItemHtml(doc) {
     dateHtml = `<span class="doc-meta-chip done">완독 ${readDateStr}</span>`
   }
 
-  const compareCheckHtml = state.currentLibraryTab === 'trash' ? '' : `
-    <div class="doc-card-compare-check" data-id="${doc.id}" title="비교할 논문으로 선택"></div>
-  `
+  const isSelected = selectedDocIds.has(doc.id)
+  const compareCheckHtml = ''
 
   const checkBtnHtml = state.currentLibraryTab === 'trash' ? '' : `
-    <button class="doc-card-check-btn ${isRead ? 'checked' : ''}" data-id="${doc.id}" title="${isRead ? '읽지 않음으로 표시' : '읽음으로 표시'}">
+    <button class="doc-card-check-btn ${isSelected ? 'checked' : ''}" data-id="${doc.id}" title="${isSelected ? '선택 해제' : '선택'}">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
     </button>
   `
+
 
   const expandBtnHtml = state.currentLibraryTab === 'trash' ? '' : `
     <button class="doc-card-expand-btn" data-id="${doc.id}" title="미리보기">${icon('expand', 12)}</button>
@@ -5897,35 +5991,15 @@ function prepareDocItemHtml(doc) {
 // 카드/리스트 뷰 공용: 위임 없이 각 아이템 컨테이너에 직접 붙는 이벤트 리스너를 등록한다.
 // 클래스명(.doc-card-check-btn, .doc-open-btn 등)만 맞으면 어떤 레이아웃이든 동작한다.
 function wireDocItemEvents(container, doc, displayTitle) {
-  const compareCheck = container.querySelector('.doc-card-compare-check')
-  if (compareCheck) {
-    setCompareCheckboxVisual(container, compareSelectedDocs.has(doc.id))
-    compareCheck.addEventListener('click', (e) => {
-      e.stopPropagation()
-      toggleDocCompareSelection(container, doc)
-    })
+  if (selectedDocIds.has(doc.id)) {
+    container.classList.add('doc-card-selected')
   }
 
   const checkBtn = container.querySelector('.doc-card-check-btn')
   if (checkBtn) {
-    checkBtn.addEventListener('click', async (e) => {
+    checkBtn.addEventListener('click', (e) => {
       e.stopPropagation()
-      const currentReadState = doc.metadata?.read === true
-      const nextReadState = !currentReadState
-      const payload = { read: nextReadState }
-      if (nextReadState) {
-        payload.read_at = new Date().toISOString()
-      } else {
-        payload.read_at = null
-      }
-      
-      try {
-        await updateLibraryDocMetadata(doc.id, payload)
-        showToast(nextReadState ? '읽은 논문으로 표시되었습니다.' : '보관함으로 이동되었습니다.', 'success')
-        await renderLibrary()
-      } catch (err) {
-        showToast('상태 변경 실패: ' + err.message, 'error')
-      }
+      toggleDocSelection(doc.id)
     })
   }
 
@@ -5933,13 +6007,14 @@ function wireDocItemEvents(container, doc, displayTitle) {
   if (openBtn) {
     openBtn.addEventListener('click', (e) => {
       e.stopPropagation()
-      // 편집/삭제/미리보기 버튼은 비교 선택 모드에서 CSS(pointer-events: none)로
-      // 막혀있지만, "열기" 버튼은 카드 풋터에 별도로 배치되어 그 대상에서 빠져있다.
-      // 막지 않으면 선택 모드 중 클릭 시 선택 대신 뷰어로 즉시 이동해버린다.
-      if (compareSelectMode) { toggleDocCompareSelection(container, doc); return }
+      if (selectedDocIds.size > 0) {
+        toggleDocSelection(doc.id)
+        return
+      }
       openFromLibrary(doc)
     })
   }
+
 
   const kebabBtn = container.querySelector('.doc-card-kebab-btn')
   const kebabMenu = container.querySelector('.doc-card-kebab-menu')
@@ -6090,9 +6165,11 @@ function wireDocItemEvents(container, doc, displayTitle) {
   })
   }
 
-  container.addEventListener('click', () => {
-    if (compareSelectMode) {
-      toggleDocCompareSelection(container, doc)
+  container.addEventListener('click', (e) => {
+    if (e.target.closest('.doc-card-kebab-wrapper, .doc-edit-btn, .doc-open-btn, .doc-restore-btn, .doc-permanent-delete-btn, .doc-card-fav-btn, .doc-card-expand-btn')) return
+
+    if (selectedDocIds.size > 0) {
+      toggleDocSelection(doc.id)
       return
     }
     if (state.currentLibraryTab === 'trash') {
@@ -6169,14 +6246,11 @@ function createDocCard(doc) {
     })
   }
 
-  // 카드 빈 영역 클릭 시 상세 패널을 연다. wireDocItemEvents()가 곧이어 등록할
-  // "카드 전체 클릭 = 뷰어 즉시 열기" 리스너보다 먼저 걸어 stopImmediatePropagation으로
-  // 가로챈다 - 같은 엘리먼트에 등록된 리스너는 등록 순서대로 실행되므로, 여기서
-  // 먼저 등록한 뒤 막으면 이후 리스너는 아예 실행되지 않는다. 비교 선택 모드/휴지통
-  // 안내 동작은 기존과 동일하게 여기서도 복제해 그대로 유지한다.
   card.addEventListener('click', (e) => {
-    if (compareSelectMode) {
-      toggleDocCompareSelection(card, doc)
+    if (e.target.closest('.doc-card-kebab-wrapper, .doc-edit-btn, .doc-open-btn, .doc-restore-btn, .doc-permanent-delete-btn, .doc-card-fav-btn, .doc-card-expand-btn')) return
+
+    if (selectedDocIds.size > 0) {
+      toggleDocSelection(doc.id)
       e.stopImmediatePropagation()
       return
     }
@@ -6188,6 +6262,7 @@ function createDocCard(doc) {
     openLibraryDetailPanel(doc)
     e.stopImmediatePropagation()
   })
+
 
   wireDocItemEvents(card, doc, d.displayTitle)
 
