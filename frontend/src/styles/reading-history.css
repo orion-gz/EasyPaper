@@ -44,18 +44,38 @@ body.light-theme {
   font-size: 13.5px;
   color: var(--text-secondary);
 }
-.rh-header-period {
+.rh-header-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-elevated);
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 100px;
+}
+.rh-chip {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-tertiary);
-  padding: 6px 12px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 100px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.rh-chip:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.rh-chip.active {
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
+  font-weight: 700;
 }
 
 /* ── 공통 카드 ── */
