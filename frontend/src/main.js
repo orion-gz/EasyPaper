@@ -14,6 +14,7 @@ import { renderReadingHistoryPage } from './pages/readingHistoryPage.js'
 import { renderAiChatsPage } from './pages/aiChatsPage.js'
 import { renderNotesPage } from './pages/notesPage.js'
 import { formatTranslationHtml, applyKatexToElement } from './textFormat.js'
+import { globalAnalyticsTracker } from './readingAnalytics.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -462,6 +463,7 @@ function showCompareScreen() {
 }
 
 function resetState() {
+  globalAnalyticsTracker.stopSession()
   // 폴링 중단
   if (state.pollingTimer) { clearInterval(state.pollingTimer); state.pollingTimer = null }
   if (state.chatActiveStream) { state.chatActiveStream(); state.chatActiveStream = null }
@@ -650,6 +652,28 @@ async function ensureTranslationJobStarted() {
 async function initScrollViewer() {
   viewerScrollContainer.innerHTML = ''
 
+  if (state.sessionId) {
+    globalAnalyticsTracker.startSession(state.sessionId, state.totalPages || 0)
+  }
+
+  if (!viewerScrollContainer.dataset.analyticsListenersAttached) {
+    viewerScrollContainer.dataset.analyticsListenersAttached = 'true'
+
+    viewerScrollContainer.addEventListener('scroll', () => {
+      if (state.currentPage) {
+        const curPageEl = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${state.currentPage}"]`)
+        globalAnalyticsTracker.trackScroll(state.currentPage, curPageEl, viewerScrollContainer, true)
+      }
+    }, { passive: true })
+
+    viewerScrollContainer.addEventListener('mouseup', () => {
+      const sel = window.getSelection()
+      if (sel && sel.toString().trim().length > 0) {
+        globalAnalyticsTracker.trackInteraction('selection', state.currentPage)
+      }
+    })
+  }
+
   for (let i = 1; i <= state.totalPages; i++) {
     viewerScrollContainer.appendChild(createPagePair(i))
   }
@@ -657,6 +681,7 @@ async function initScrollViewer() {
   await renderScrollView(viewerScrollContainer, state.zoom, {
     onPageVisible: async (pageNum) => {
       updatePageDisplay(pageNum)
+      globalAnalyticsTracker.setCurrentPage(pageNum)
       
       // 페이지가 가시화되었을 때 번역 완료된 페이지인데 캐시가 없는 경우 레이지 로딩 적용
       if (state.translationCache[pageNum]) {

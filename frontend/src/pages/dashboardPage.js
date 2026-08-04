@@ -7,9 +7,55 @@
 // (뷰어/비교 화면이 보이고 포커스된 동안 적립 → 서버 전송)가 쌓은 실측치를
 // fetchReadingTimeStats()로 가져온 것이다.
 import './../styles/dashboard.css'
-import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats } from '../library.js'
+import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats, fetchReadingAnalyticsSummary } from '../library.js'
 import { icon } from '../icons.js'
 import { readPageCount, lastActivityIso, hasReadActivity, isWithinDaysLocal } from '../readPages.js'
+
+function renderReadingAnalyticsCard(analyticsData) {
+  if (!analyticsData) return ''
+
+  const avgScore = analyticsData.overall_avg_score || 0.0
+  const avgConfidence = analyticsData.overall_avg_confidence || 0.0
+  const verifiedPages = analyticsData.overall_verified_pages || 0
+  const profile = analyticsData.user_profile || {}
+  const emaMinPerPage = Math.round((profile.ema_seconds_per_page || 600.0) / 60)
+
+  return `
+    <div class="dash-analytics-card">
+      <div class="dash-analytics-header">
+        <h3>${icon('activity', 16)} Reading Analytics Summary</h3>
+        <span class="reading-depth-badge depth-reading">Score Engine Active</span>
+      </div>
+      <div class="dash-analytics-grid">
+        <div class="dash-analytics-metric">
+          <span class="dash-analytics-metric-label">평균 Reading Score</span>
+          <div class="dash-analytics-metric-value">${avgScore.toFixed(1)} <span style="font-size: 14px; font-weight: normal; color: var(--text-tertiary);">/ 100</span></div>
+          <div class="reading-score-bar-bg">
+            <div class="reading-score-bar-fill" style="width: ${Math.min(100, avgScore)}%;"></div>
+          </div>
+        </div>
+
+        <div class="dash-analytics-metric">
+          <span class="dash-analytics-metric-label">평균 Reading Confidence</span>
+          <div class="dash-analytics-metric-value">${avgConfidence.toFixed(1)}%</div>
+          <span class="dash-analytics-metric-sub">페이지 정독 확률 기반</span>
+        </div>
+
+        <div class="dash-analytics-metric">
+          <span class="dash-analytics-metric-label">Verified Pages (검증 페이지)</span>
+          <div class="dash-analytics-metric-value">${formatNumber(verifiedPages)} <span style="font-size: 13px; font-weight: normal;">p</span></div>
+          <span class="dash-analytics-metric-sub">실제 읽기 패턴 인정 페이지</span>
+        </div>
+
+        <div class="dash-analytics-metric">
+          <span class="dash-analytics-metric-label">개인 EMA 정독 페이스</span>
+          <div class="dash-analytics-metric-value">~${emaMinPerPage} <span style="font-size: 13px; font-weight: normal;">분/p</span></div>
+          <span class="dash-analytics-metric-sub">EMA 지수이동평균 학습</span>
+        </div>
+      </div>
+    </div>
+  `
+}
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
@@ -642,7 +688,7 @@ export async function renderDashboardPage() {
 
   el.innerHTML = `<div class="dash-loading">${icon('refreshCw', 20)}<span>대시보드를 불러오는 중...</span></div>`
 
-  let dashboard, timelineData, libraryData, graphData, readingStats, cachedRecs
+  let dashboard, timelineData, libraryData, graphData, readingStats, cachedRecs, analyticsSummary
   try {
     const results = await Promise.all([
       fetchLibraryDashboard(),
@@ -651,6 +697,7 @@ export async function renderDashboardPage() {
       fetchLibraryGraph().catch(() => null),
       fetchReadingTimeStats().catch(() => null),
       fetchCachedReadingRecommendations().catch(() => ({ recommendations: null })),
+      fetchReadingAnalyticsSummary().catch(() => null),
     ])
     dashboard = results[0]
     timelineData = results[1]
@@ -658,6 +705,7 @@ export async function renderDashboardPage() {
     graphData = results[3]
     readingStats = results[4]
     cachedRecs = results[5]
+    analyticsSummary = results[6]
   } catch (err) {
     console.error('대시보드 데이터 로드 실패:', err)
     el.innerHTML = `<div class="dash-error">${icon('alertTriangle', 20)}<p>대시보드를 불러오지 못했습니다.</p></div>`
@@ -674,6 +722,7 @@ export async function renderDashboardPage() {
   el.innerHTML = `
     <div class="dash-root">
       ${renderStatGrid(stats, events, docs)}
+      ${renderReadingAnalyticsCard(analyticsSummary)}
       <div class="dash-row dash-row-3">
         ${renderInsightsCard(insights)}
         ${renderWeeklyActivityCard(events, stats, docs, readingStats)}
