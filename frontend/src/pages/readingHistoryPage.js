@@ -11,7 +11,7 @@
 
 import { fetchLibraryTimeline, fetchLibraryDashboard, fetchLibrary, fetchReadingTimeStats } from '../library.js'
 import { icon } from '../icons.js'
-import { readPageCount } from '../readPages.js'
+import { readPageCount, lastActivityIso, hasReadActivity } from '../readPages.js'
 import '../styles/reading-history.css'
 
 function escapeHtml(str) {
@@ -118,7 +118,20 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
   })
   const activeDays = new Set(inPeriod.map(eventKey)).size
   const readDocIds = new Set(inPeriod.filter(e => e.type === 'read').map(e => e.doc_id))
-  const pagesRead = Array.from(readDocIds).reduce((sum, id) => sum + readPageCount(docsById.get(id)), 0)
+
+  const activePageDocIds = new Set(readDocIds)
+  for (const doc of docsById.values()) {
+    const meta = doc?.metadata || {}
+    if (hasReadActivity(meta)) {
+      const actIso = lastActivityIso(meta, doc.created_at)
+      const k = (actIso || '').slice(0, 10)
+      if (k >= startKey && k < endKeyExclusive) {
+        activePageDocIds.add(doc.id)
+      }
+    }
+  }
+
+  const pagesRead = Array.from(activePageDocIds).reduce((sum, id) => sum + readPageCount(docsById.get(id)), 0)
   const questions = inPeriod.filter(e => e.type === 'question').length
   const notes = inPeriod.filter(e => e.type === 'note').length
   return { activeDays, papersRead: readDocIds.size, pagesRead, questions, notes }

@@ -9,7 +9,7 @@
 import './../styles/dashboard.css'
 import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats } from '../library.js'
 import { icon } from '../icons.js'
-import { readPageCount } from '../readPages.js'
+import { readPageCount, lastActivityIso, hasReadActivity } from '../readPages.js'
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
@@ -112,7 +112,7 @@ function countEventsInDays(events, type, days) {
 function pagesReadInDays(docs, days) {
   return docs.reduce((sum, d) => {
     const meta = d.metadata || {}
-    if (!meta.last_read_at && !meta.read_at) return sum
+    if (!hasReadActivity(meta)) return sum
     if (!isWithinDays(lastActivityIso(meta, d.created_at), days)) return sum
     return sum + readPageCount(d)
   }, 0)
@@ -277,11 +277,7 @@ function renderProgressSummaryCard(events, heatmap, readingStats) {
 // 중 가장 최근 값을 쓴다. read_at만 쓰면 완독 표시를 안 하고 읽던 중인 논문은
 // 계속 created_at으로 떨어져, 방금 읽었어도 날짜가 업로드 시점("3일 전" 등)에
 // 고정되어 보이는 문제가 있었다.
-function lastActivityIso(meta, createdAt) {
-  return [meta?.last_read_at, meta?.read_at, createdAt]
-    .filter(Boolean)
-    .reduce((latest, iso) => (new Date(iso) > new Date(latest) ? iso : latest), createdAt)
-}
+
 
 function renderRecentPapersCard(docs) {
   const read = docs
