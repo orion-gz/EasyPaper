@@ -451,11 +451,22 @@ async def get_activity_timeline(username: str) -> List[dict]:
         read_sessions = meta.get("read_sessions") or []
         if read_sessions:
             for s in read_sessions:
+                ts = s.get("timestamp") or s.get("read_at") or meta.get("last_read_at") or doc["created_at"]
+                end_ts = s.get("end_timestamp")
+                duration = s.get("duration_seconds")
+                if not end_ts and ts and duration:
+                    try:
+                        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                        end_ts = (dt + timedelta(seconds=duration)).isoformat()
+                    except Exception:
+                        pass
                 events.append({
                     "type": "read",
                     "doc_id": doc_id,
                     "doc_title": title,
-                    "timestamp": s.get("timestamp") or s.get("read_at") or meta.get("last_read_at") or doc["created_at"],
+                    "timestamp": ts,
+                    "end_timestamp": end_ts,
+                    "duration_seconds": duration,
                     "start_page": s.get("start_page", 1),
                     "end_page": s.get("end_page", 1),
                     "verified_pages": s.get("verified_pages", 1),

@@ -3509,6 +3509,7 @@ function updatePageDwellTime() {
       docId: state.sessionId,
       startPage: state.currentPage,
       endPage: state.currentPage,
+      startTime: new Date().toISOString(),
       pageDwellTimes: {},
     }
   }
@@ -3529,16 +3530,23 @@ async function flushActiveReadingSession(userPaceSec = 240) {
 
   try {
     const docId = session.docId
+    const now = new Date()
+    const startTimeIso = session.startTime || now.toISOString()
+    const endTimeIso = now.toISOString()
+    const durationSec = Math.max(1, Math.round((now - (new Date(startTimeIso).getTime() ? new Date(startTimeIso) : now)) / 1000))
+
     const newSession = {
       start_page: session.startPage,
       end_page: session.endPage,
       verified_pages: verifiedPagesCount,
-      timestamp: new Date().toISOString(),
+      timestamp: startTimeIso,
+      end_timestamp: endTimeIso,
+      duration_seconds: durationSec,
     }
     await updateLibraryDocMetadata(docId, {
       read_sessions: [newSession],
       last_page: session.endPage,
-      last_read_at: new Date().toISOString(),
+      last_read_at: endTimeIso,
     }).catch(() => {})
   } catch {}
 }
