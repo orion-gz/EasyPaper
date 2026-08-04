@@ -152,7 +152,7 @@ function computeUserReadingPace(byDayMap) {
   return Math.max(60, Math.min(480, Math.round(currentEma)))
 }
 
-function buildDailyActivityStats(events, readingStats) {
+export function buildDailyActivityStats(events, readingStats) {
   const byDay = new Map()
 
   function getOrCreate(key) {
@@ -287,15 +287,26 @@ function computeStreaks(activeDayKeys) {
   return { current, longest, longestStart, longestEnd }
 }
 
-function periodStats(events, docsById, startKey, endKeyExclusive) {
+export function periodStats(events, docsById, startKey, endKeyExclusive) {
   const inPeriod = events.filter(e => {
     const k = eventKey(e)
     return k && k >= startKey && k < endKeyExclusive
   })
   const activeDays = new Set(inPeriod.map(eventKey)).size
 
-  // 단순히 뷰어를 1초 열어보기만 해서 last_read_at만 갱신된 문서는 제외하고,
-  // 해당 기간 내 실측 read 세션 이벤트가 있거나 완독/읽기 표시된 문서만 계산
+  // 완독 체크(read === true)를 누른 논문만 해당 기간 읽은 논문으로 집계
+  const completedDocIds = new Set()
+  for (const doc of docsById.values()) {
+    const meta = doc?.metadata || {}
+    if (meta.read === true) {
+      const k = isoToLocalDateKey(meta.read_at || meta.last_read_at)
+      if (k && k >= startKey && k < endKeyExclusive) {
+        completedDocIds.add(doc.id)
+      }
+    }
+  }
+
+  // 해당 기간 실측 세션 또는 읽기 활동이 있던 문서를 기준으로 페이지 수 산정
   const readDocIds = new Set(inPeriod.filter(e => e.type === 'read').map(e => e.doc_id))
   const activePageDocIds = new Set()
   for (const id of readDocIds) {
@@ -316,7 +327,7 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
   const questions = inPeriod.filter(e => e.type === 'question').length
   const notes = inPeriod.filter(e => e.type === 'note').length
   const uploadedPapers = inPeriod.filter(e => e.type === 'uploaded').length
-  return { activeDays, papersRead: activePageDocIds.size, pagesRead, questions, notes, uploadedPapers }
+  return { activeDays, papersRead: completedDocIds.size, pagesRead, questions, notes, uploadedPapers }
 }
 
 function deltaHtml(curr, prev, unit = '', compareText = '이전 30일 대비') {
@@ -330,7 +341,7 @@ function deltaHtml(curr, prev, unit = '', compareText = '이전 30일 대비') {
 }
 
 // ── 읽기 시간 포맷/집계 헬퍼 ──────────────────────────────────
-function formatDuration(seconds) {
+export function formatDuration(seconds) {
   const s = Math.max(0, Math.round(seconds || 0))
   const h = Math.floor(s / 3600)
   const m = Math.round((s % 3600) / 60)
@@ -345,7 +356,7 @@ function deltaDurationHtml(currSeconds, prevSeconds, compareText = '이전 30일
   const arrow = diff > 0 ? '↑' : '↓'
   return `<span class="rh-stat-delta ${cls}">${arrow} ${formatDuration(Math.abs(diff))} ${compareText}</span>`
 }
-function sumSecondsByDayRange(byDay, startKey, endKeyExclusive) {
+export function sumSecondsByDayRange(byDay, startKey, endKeyExclusive) {
   let total = 0
   for (const [day, seconds] of Object.entries(byDay || {})) {
     if (day >= startKey && day < endKeyExclusive) total += seconds

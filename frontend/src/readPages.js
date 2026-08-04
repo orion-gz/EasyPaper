@@ -40,14 +40,35 @@ export function hasReadActivity(meta) {
 // ISO 타임스탬프 문자열을 사용자 로컬 시간대 자정 기준 "YYYY-MM-DD" 날짜 키로 변환한다.
 // 단순 .slice(0, 10)을 하면 UTC 날짜가 잘려 나와 한국 시간(KST) 등에서 9시간 시차
 // 어긋남이 발생하므로, local Date 객체의 연/월/일을 사용한다.
-export function isoToLocalDateKey(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return ''
+export function localDateToKey(d) {
+  if (!d || isNaN(d.getTime())) return ''
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+export function todayKey() {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return localDateToKey(d)
+}
+
+export function keyToLocalDate(key) {
+  return new Date(`${key}T00:00:00`)
+}
+
+export function addDaysKey(key, delta) {
+  const d = keyToLocalDate(key)
+  if (isNaN(d.getTime())) return key
+  d.setDate(d.getDate() + delta)
+  return localDateToKey(d)
+}
+
+export function isoToLocalDateKey(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return localDateToKey(d)
 }
 
 export function lastActivityDateKey(meta, createdAt) {
@@ -60,11 +81,32 @@ export function isWithinDaysLocal(iso, days) {
   if (!iso) return false
   const key = isoToLocalDateKey(iso)
   if (!key) return false
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const target = new Date(`${key}T00:00:00`)
-  if (isNaN(target.getTime())) return false
-  const diffDays = Math.round((today - target) / 86400000)
-  return diffDays >= 0 && diffDays < days
+  const tKey = todayKey()
+  const startKey = addDaysKey(tKey, -(days - 1))
+  const endKeyExclusive = addDaysKey(tKey, 1)
+  return key >= startKey && key < endKeyExclusive
 }
+
+// 타임라인 이벤트의 날짜 키(로컬 자정 기준) 집합을 모아 오늘/어제 기준 연속 활동일을 계산한다.
+export function computeStreakDays(events) {
+  const dates = new Set()
+  for (const e of events || []) {
+    const k = isoToLocalDateKey(e.timestamp)
+    if (k) dates.add(k)
+  }
+  if (dates.size === 0) return 0
+
+  const tKey = todayKey()
+  const yKey = addDaysKey(tKey, -1)
+  let cursor = dates.has(tKey) ? tKey : (dates.has(yKey) ? yKey : null)
+  if (!cursor) return 0
+
+  let streak = 0
+  while (dates.has(cursor)) {
+    streak++
+    cursor = addDaysKey(cursor, -1)
+  }
+  return streak
+}
+
 
