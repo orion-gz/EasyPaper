@@ -72,11 +72,38 @@ function formatShortDate(dateKey) {
   return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-// ── 일별 종합 활동 데이터 집계 헬퍼 ─────────────────────────────
-// 질문(question)의 과도한 이벤트 누적 편향을 보완하고, 읽기 시간(하트비트)을
-// "한 페이지당 읽는 시간(학술 논문 정독 기준 5분/300초)"에 따라 환산한 읽은 페이지 수 및
-// 읽기 활동 점수로 반영하여 종합 활동 점수(Activity Score)와 상세 내역을 산출한다.
-const SECONDS_PER_PAGE = 300 // 평균 1페이지 논문 정독 시간 = 5분(300초)
+// ── 개인 맞춤형 읽기 페이스(EMA: Exponential Moving Average) 및 활동 데이터 집계 ──
+// 사용자의 실측 읽기 시간(하트비트)과 이동/완독 이력을 지수이동평균(EMA)으로 학습하여
+// 개인 맞춤형 초/페이지 페이스(Pace)를 산출합니다.
+// - 기본 초기 기준 페이스: 240초 (4분/페이지)
+// - 10초 미만의 스크롤 이동 및 10분(600초) 이상의 자리비움 이상치는 EMA 학습에서 제외
+// - 유효 학습 구간: 60초 ~ 480초 (1분 ~ 8분/페이지)
+const DEFAULT_PACE_SEC = 240 // 초기 기준 4분/페이지
+const ALPHA = 0.2 // EMA 감쇠 비율
+
+function computeUserReadingPace(byDayMap) {
+  let currentEma = DEFAULT_PACE_SEC
+  const sortedEntries = Array.from(byDayMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+
+  for (const [_, item] of sortedEntries) {
+    if (item.readingSeconds <= 0) continue
+
+    let pages = item.readEvents
+    if (pages === 0 && item.readingSeconds >= 60) {
+      pages = Math.max(1, Math.round(item.readingSeconds / currentEma))
+    }
+
+    if (pages > 0) {
+      const dailyPace = item.readingSeconds / pages
+      // 유효 페이스 구간(60초 ~ 600초) 내 데이터만 EMA 업데이트에 포함해 이상치(스크롤/부재) 제거
+      if (dailyPace >= 60 && dailyPace <= 600) {
+        currentEma = ALPHA * dailyPace + (1 - ALPHA) * currentEma
+      }
+    }
+  }
+
+  return Math.max(60, Math.min(480, Math.round(currentEma)))
+}
 
 function buildDailyActivityStats(events, readingStats) {
   const byDay = new Map()
@@ -96,7 +123,7 @@ function buildDailyActivityStats(events, readingStats) {
     return byDay.get(key)
   }
 
-  // 1. 하트비트 읽기 시간 반영 (total_seconds_by_day)
+  // 1. 하트비트 읽기 시간 반영
   const timeByDay = readingStats?.total_seconds_by_day || {}
   for (const [dayKey, seconds] of Object.entries(timeByDay)) {
     if (!dayKey || seconds <= 0) continue
@@ -115,12 +142,15 @@ function buildDailyActivityStats(events, readingStats) {
     else if (e.type === 'read') item.readEvents += 1
   }
 
-  // 3. 일별 활동 점수 및 환산 페이지 계산
-  for (const [key, item] of byDay.entries()) {
+  // 3. EMA 기반 개인 맞춤형 읽기 페이스(초/페이지) 학습
+  const userPaceSec = computeUserReadingPace(byDay)
+
+  // 4. 일별 활동 점수 및 환산 페이지 계산
+  for (const [_, item] of byDay.entries()) {
     if (item.readingSeconds > 0) {
       item.estPagesRead = Math.max(
         item.readingSeconds >= 60 ? 1 : 0,
-        Math.floor(item.readingSeconds / SECONDS_PER_PAGE)
+        Math.floor(item.readingSeconds / userPaceSec)
       )
     }
 
@@ -147,6 +177,7 @@ function buildDailyActivityStats(events, readingStats) {
     item.score = Math.round((readScore + noteScore + uploadScore + questionScore) * 10) / 10
   }
 
+  byDay.userPaceSec = userPaceSec
   return byDay
 }
 
@@ -564,7 +595,7 @@ export async function renderReadingHistoryPage() {
           <div class="rh-card">
             <div class="rh-card-head">
               <span class="rh-card-title">${icon('calendar', 15)} 읽기 활동</span>
-              <div class="rh-cal-legend" title="시간·페이지 환산 읽기량, 메모, 질문, 업로드를 종합 반영한 활동 포인트">
+              <div class="rh-cal-legend" title="개인 읽기 페이스(EMA 학습)와 실측 시간, 메모, 질문, 업로드를 종합 반영한 활동 포인트">
                 적음
                 <span class="rh-cal-legend-swatch rh-heat-0" style="background:color-mix(in srgb, var(--accent-mid) 6%, var(--bg-elevated))"></span>
                 <span class="rh-cal-legend-swatch rh-heat-1" style="background:color-mix(in srgb, var(--accent-mid) 28%, var(--bg-elevated))"></span>
