@@ -74,14 +74,7 @@ export async function renderAiChatsPage() {
   container.innerHTML = `
     <div class="aic-page">
       <div class="aic-header">
-        <div class="aic-header-text">
-          <h2 class="aic-title">AI Chats</h2>
-          <p class="aic-subtitle">논문별 AI 채팅 세션을 관리하고 이어서 대화하세요.</p>
-        </div>
-        <div class="aic-search-box">
-          <span class="aic-search-icon">${icon('search', 15)}</span>
-          <input type="text" id="aic-search-input" placeholder="논문 제목으로 검색..." autocomplete="off" />
-        </div>
+        <p class="aic-subtitle">논문별 AI 채팅 세션을 관리하고 이어서 대화하세요.</p>
       </div>
 
       <div class="aic-controls">
@@ -400,12 +393,14 @@ export async function renderAiChatsPage() {
   }
 
   // ── 정적 컨트롤 이벤트 바인딩 ──
-  searchInput.addEventListener('input', () => {
-    state.searchQuery = searchInput.value
-    state.currentPage = 1
-    renderBody()
-    renderPagination()
-  })
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      state.searchQuery = searchInput.value
+      state.currentPage = 1
+      renderBody()
+      renderPagination()
+    })
+  }
 
   sortBtn.addEventListener('click', (e) => {
     e.stopPropagation()
