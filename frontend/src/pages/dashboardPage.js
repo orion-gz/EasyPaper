@@ -9,7 +9,7 @@
 import './../styles/dashboard.css'
 import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats } from '../library.js'
 import { icon } from '../icons.js'
-import { readPageCount, lastActivityIso, hasReadActivity } from '../readPages.js'
+import { readPageCount, lastActivityIso, hasReadActivity, isWithinDaysLocal } from '../readPages.js'
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
@@ -113,7 +113,7 @@ function pagesReadInDays(docs, days) {
   return docs.reduce((sum, d) => {
     const meta = d.metadata || {}
     if (!hasReadActivity(meta)) return sum
-    if (!isWithinDays(lastActivityIso(meta, d.created_at), days)) return sum
+    if (!isWithinDaysLocal(lastActivityIso(meta, d.created_at), days)) return sum
     return sum + readPageCount(d)
   }, 0)
 }

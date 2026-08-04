@@ -36,3 +36,35 @@ export function lastActivityIso(meta, createdAt) {
 export function hasReadActivity(meta) {
   return Boolean(meta?.last_read_at || meta?.read_at)
 }
+
+// ISO 타임스탬프 문자열을 사용자 로컬 시간대 자정 기준 "YYYY-MM-DD" 날짜 키로 변환한다.
+// 단순 .slice(0, 10)을 하면 UTC 날짜가 잘려 나와 한국 시간(KST) 등에서 9시간 시차
+// 어긋남이 발생하므로, local Date 객체의 연/월/일을 사용한다.
+export function isoToLocalDateKey(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+export function lastActivityDateKey(meta, createdAt) {
+  const iso = lastActivityIso(meta, createdAt)
+  return isoToLocalDateKey(iso)
+}
+
+// ISO 시각이 로컬 시간 자정 기준 최근 N일(days) 이내인지 판별한다.
+export function isWithinDaysLocal(iso, days) {
+  if (!iso) return false
+  const key = isoToLocalDateKey(iso)
+  if (!key) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const target = new Date(`${key}T00:00:00`)
+  if (isNaN(target.getTime())) return false
+  const diffDays = Math.round((today - target) / 86400000)
+  return diffDays >= 0 && diffDays < days
+}
+

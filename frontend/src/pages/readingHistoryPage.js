@@ -11,7 +11,7 @@
 
 import { fetchLibraryTimeline, fetchLibraryDashboard, fetchLibrary, fetchReadingTimeStats } from '../library.js'
 import { icon } from '../icons.js'
-import { readPageCount, lastActivityIso, hasReadActivity } from '../readPages.js'
+import { readPageCount, lastActivityIso, hasReadActivity, lastActivityDateKey } from '../readPages.js'
 import '../styles/reading-history.css'
 
 function escapeHtml(str) {
@@ -123,9 +123,8 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
   for (const doc of docsById.values()) {
     const meta = doc?.metadata || {}
     if (hasReadActivity(meta)) {
-      const actIso = lastActivityIso(meta, doc.created_at)
-      const k = (actIso || '').slice(0, 10)
-      if (k >= startKey && k < endKeyExclusive) {
+      const k = lastActivityDateKey(meta, doc.created_at)
+      if (k && k >= startKey && k < endKeyExclusive) {
         activePageDocIds.add(doc.id)
       }
     }
@@ -269,6 +268,8 @@ export async function renderReadingHistoryPage() {
   const currReadingSeconds = sumSecondsByDayRange(byDay, currStart, currEnd)
   const prevReadingSeconds = sumSecondsByDayRange(byDay, prevStart, prevEnd)
 
+  const totalReadPages = dashboard?.stats?.read_pages ?? Array.from(docsById.values()).reduce((sum, d) => sum + readPageCount(d), 0)
+
   const statCards = [
     {
       icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
@@ -281,9 +282,9 @@ export async function renderReadingHistoryPage() {
       sub: deltaDurationHtml(currReadingSeconds, prevReadingSeconds),
     },
     {
-      icon: 'layers', color: 'var(--rh-c6)', label: '읽은 페이지',
+      icon: 'layers', color: 'var(--rh-c6)', label: '최근 30일 읽은 페이지',
       value: curr.pagesRead.toLocaleString(),
-      sub: deltaHtml(curr.pagesRead, prev.pagesRead),
+      sub: `${deltaHtml(curr.pagesRead, prev.pagesRead)} <span class="rh-stat-total" style="opacity:0.75;font-size:0.8em;margin-left:4px;">(누적 ${totalReadPages.toLocaleString()}p)</span>`,
     },
     {
       icon: 'messageCircle', color: 'var(--rh-c5)', label: '질문 수',
