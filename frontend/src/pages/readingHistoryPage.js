@@ -395,7 +395,34 @@ export async function renderReadingHistoryPage() {
   const currReadingSeconds = sumSecondsByDayRange(byDay, currStart, currEnd)
   const prevReadingSeconds = sumSecondsByDayRange(byDay, prevStart, prevEnd)
 
-  const totalReadPages = dashboard?.stats?.read_pages ?? Array.from(docsById.values()).reduce((sum, d) => sum + readPageCount(d), 0)
+  // 일별 종합 활동 스탯 집계 (질문 편향 보정 + EMA 개인 읽기 페이스 학습)
+  const dailyStatsMap = buildDailyActivityStats(events, readingStats)
+  const userPaceSec = dailyStatsMap.userPaceSec
+
+  // EMA 정독 시간 기반 환산 페이지 수 합산
+  const sumEstPagesByDayRange = (startKey, endKeyExclusive) => {
+    let sum = 0
+    for (const [day, item] of dailyStatsMap.entries()) {
+      if (day >= startKey && day < endKeyExclusive) {
+        sum += item.estPagesRead
+      }
+    }
+    return sum
+  }
+
+  const currEstPages = sumEstPagesByDayRange(currStart, currEnd)
+  const prevEstPages = sumEstPagesByDayRange(prevStart, prevEnd)
+
+  // 실측 읽기 시간 기반 환산 페이지를 사용하되, 하트비트가 없는 극초기 과거 데이터는 기존 문서 메타 수치로 폴백
+  const currPagesReadDisplay = currEstPages > 0 ? currEstPages : curr.pagesRead
+  const prevPagesReadDisplay = prevEstPages > 0 ? prevEstPages : prev.pagesRead
+
+  let totalEstPages = 0
+  for (const item of dailyStatsMap.values()) {
+    totalEstPages += item.estPagesRead
+  }
+  const fallbackTotalReadPages = dashboard?.stats?.read_pages ?? Array.from(docsById.values()).reduce((sum, d) => sum + readPageCount(d), 0)
+  const totalReadPagesDisplay = totalEstPages > 0 ? totalEstPages : fallbackTotalReadPages
 
   const statCards = [
     {
@@ -410,8 +437,8 @@ export async function renderReadingHistoryPage() {
     },
     {
       icon: 'layers', color: 'var(--rh-c6)', label: '최근 30일 읽은 페이지',
-      value: curr.pagesRead.toLocaleString(),
-      sub: `${deltaHtml(curr.pagesRead, prev.pagesRead)} <span class="rh-stat-total" style="opacity:0.75;font-size:0.8em;margin-left:4px;">(누적 ${totalReadPages.toLocaleString()}p)</span>`,
+      value: currPagesReadDisplay.toLocaleString(),
+      sub: `${deltaHtml(currPagesReadDisplay, prevPagesReadDisplay)} <span class="rh-stat-total" style="opacity:0.75;font-size:0.8em;margin-left:4px;">(누적 ${totalReadPagesDisplay.toLocaleString()}p)</span>`,
     },
     {
       icon: 'messageCircle', color: 'var(--rh-c5)', label: '질문 수',
@@ -432,8 +459,6 @@ export async function renderReadingHistoryPage() {
   const endDow = (gridEndDate.getDay() + 6) % 7 // 0=Mon..6=Sun
   const gridStart = addDaysKey(gridEnd, -(endDow) - (WEEKS - 1) * 7)
 
-  // 일별 종합 활동 스탯 집계 (질문 편향 보정 + 읽기시간/페이지환산 점수 산출)
-  const dailyStatsMap = buildDailyActivityStats(events, readingStats)
   const allActiveKeys = new Set(
     Array.from(dailyStatsMap.entries())
       .filter(([_, item]) => item.score > 0)
