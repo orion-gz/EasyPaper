@@ -419,21 +419,19 @@ function renderHeatmapCard(heatmap) {
         <a href="#" class="dash-link" data-nav="graph">전체보기 ›</a>
       </div>
       ${heatmap.length === 0 ? emptyNote('아직 추출된 개념이 없습니다.') : `
-      <div class="dash-heatmap-body">
-        <div class="dash-heat-grid">
-          ${heatmap.slice(0, 8).map(h => {
-            const pct = maxScore > 0 ? Math.max(6, Math.round(((h.score || 0) / maxScore) * 100)) : 6
-            return `
-              <div class="dash-heat-cell" data-node-id="concept:${escapeHtml(String(h.concept_id))}" title="${escapeHtml(h.name)} · 논문 ${h.paper_count}편 · 질문 ${h.question_count}개 · 클릭하면 연구 그래프에서 보기">
-                <div class="dash-heat-swatch" style="--heat-pct:${pct}%"></div>
-                <div class="dash-heat-label">${escapeHtml(h.name)}</div>
-                <div class="dash-heat-count">${formatNumber(h.score)}</div>
-              </div>
-            `
-          }).join('')}
-        </div>
-        <div class="dash-heat-legend"><span>낮음</span><div class="dash-heat-legend-bar"></div><span>높음</span></div>
+      <div class="dash-heat-grid">
+        ${heatmap.slice(0, 8).map(h => {
+          const pct = maxScore > 0 ? Math.max(6, Math.round(((h.score || 0) / maxScore) * 100)) : 6
+          return `
+            <div class="dash-heat-cell" data-node-id="concept:${escapeHtml(String(h.concept_id))}" title="${escapeHtml(h.name)} · 논문 ${h.paper_count}편 · 질문 ${h.question_count}개 · 클릭하면 연구 그래프에서 보기">
+              <div class="dash-heat-swatch" style="--heat-pct:${pct}%"></div>
+              <div class="dash-heat-label">${escapeHtml(h.name)}</div>
+              <div class="dash-heat-count">${formatNumber(h.score)}</div>
+            </div>
+          `
+        }).join('')}
       </div>
+      <div class="dash-heat-legend"><span>낮음</span><div class="dash-heat-legend-bar"></div><span>높음</span></div>
       `}
     </div>
   `
@@ -551,9 +549,7 @@ function renderGraphPreviewCard(graphData, heatmap) {
         <h3>${icon('network', 15)}연구 그래프 미리보기</h3>
         <a href="#" class="dash-link" data-nav="graph">그래프 보기 ›</a>
       </div>
-      <div class="dash-graph-preview-body">
-        ${!preview ? emptyNote('아직 미리 볼 만큼 연결된 그래프 데이터가 없습니다.') : renderMiniGraphSvg(preview)}
-      </div>
+      ${!preview ? emptyNote('아직 미리 볼 만큼 연결된 그래프 데이터가 없습니다.') : renderMiniGraphSvg(preview)}
     </div>
   `
 }
