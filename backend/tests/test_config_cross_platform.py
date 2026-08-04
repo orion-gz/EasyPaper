@@ -163,7 +163,7 @@ def test_project_root_falls_back_when_configured_path_missing():
         text=True,
         timeout=15,
     )
-    resolved = result.stdout.strip()
+    resolved = [line.strip() for line in result.stdout.strip().splitlines() if line.strip()][-1]
     assert os.path.isdir(resolved), f"폴백된 PROJECT_ROOT({resolved!r})가 존재해야 한다 (stderr: {result.stderr})"
     assert resolved == expected_project_root
 

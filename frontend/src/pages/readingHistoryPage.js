@@ -72,16 +72,143 @@ function formatShortDate(dateKey) {
   return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-// ── 집계 헬퍼 ──────────────────────────────────────────────
-function countByDay(events) {
-  const map = new Map()
+// ── 개인 맞춤형 읽기 페이스(EMA: Exponential Moving Average) 및 활동 데이터 집계 ──
+// 사용자의 실측 읽기 시간(하트비트)과 이동/완독 이력을 지수이동평균(EMA)으로 학습하여
+// 개인 맞춤형 초/페이지 페이스(Pace)를 산출합니다.
+// - 기본 초기 기준 페이스: 240초 (4분/페이지)
+// - 10초 미만의 스크롤 이동 및 10분(600초) 이상의 자리비움 이상치는 EMA 학습에서 제외
+// - 유효 학습 구간: 60초 ~ 480초 (1분 ~ 8분/페이지)
+const DEFAULT_PACE_SEC = 240 // 초기 기준 4분/페이지
+const ALPHA = 0.2 // EMA 감쇠 비율
+
+function computeUserReadingPace(byDayMap) {
+  let currentEma = DEFAULT_PACE_SEC
+  const sortedEntries = Array.from(byDayMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+
+  for (const [_, item] of sortedEntries) {
+    if (item.readingSeconds <= 0) continue
+
+    let pages = item.readEvents
+    if (pages === 0 && item.readingSeconds >= 60) {
+      pages = Math.max(1, Math.round(item.readingSeconds / currentEma))
+    }
+
+    if (pages > 0) {
+      const dailyPace = item.readingSeconds / pages
+      // 유효 페이스 구간(60초 ~ 600초) 내 데이터만 EMA 업데이트에 포함해 이상치(스크롤/부재) 제거
+      if (dailyPace >= 60 && dailyPace <= 600) {
+        currentEma = ALPHA * dailyPace + (1 - ALPHA) * currentEma
+      }
+    }
+  }
+
+  return Math.max(60, Math.min(480, Math.round(currentEma)))
+}
+
+function buildDailyActivityStats(events, readingStats) {
+  const byDay = new Map()
+
+  function getOrCreate(key) {
+    if (!byDay.has(key)) {
+      byDay.set(key, {
+        readingSeconds: 0,
+        estPagesRead: 0,
+        questions: 0,
+        notes: 0,
+        uploaded: 0,
+        readEvents: 0,
+        score: 0,
+      })
+    }
+    return byDay.get(key)
+  }
+
+  // 1. 하트비트 읽기 시간 반영
+  const timeByDay = readingStats?.total_seconds_by_day || {}
+  for (const [dayKey, seconds] of Object.entries(timeByDay)) {
+    if (!dayKey || seconds <= 0) continue
+    const item = getOrCreate(dayKey)
+    item.readingSeconds += seconds
+  }
+
+  // 2. 타임라인 이벤트 분류
   for (const e of events) {
     const k = eventKey(e)
     if (!k) continue
-    map.set(k, (map.get(k) || 0) + 1)
+    const item = getOrCreate(k)
+    if (e.type === 'question') item.questions += 1
+    else if (e.type === 'note') item.notes += 1
+    else if (e.type === 'uploaded') item.uploaded += 1
+    else if (e.type === 'read') item.readEvents += 1
   }
-  return map
+
+  // 3. EMA 기반 개인 맞춤형 읽기 페이스(초/페이지) 학습
+  const userPaceSec = computeUserReadingPace(byDay)
+
+  // 4. 일별 활동 점수 및 환산 페이지 계산
+  for (const [_, item] of byDay.entries()) {
+    if (item.readingSeconds > 0) {
+      item.estPagesRead = Math.max(
+        item.readingSeconds >= 60 ? 1 : 0,
+        Math.floor(item.readingSeconds / userPaceSec)
+      )
+    }
+
+    const readTimeScore = Math.floor(item.readingSeconds / 60)
+    const pageScore = item.estPagesRead * 2
+    const readEventScore = item.readEvents * 2
+    const readScore = readTimeScore + pageScore + readEventScore
+
+    const noteScore = item.notes * 3
+    const uploadScore = item.uploaded * 2
+
+    let questionScore = 0
+    if (item.questions > 0) {
+      if (item.questions <= 5) {
+        questionScore = item.questions * 1.0
+      } else if (item.questions <= 15) {
+        questionScore = 5 + (item.questions - 5) * 0.5
+      } else {
+        questionScore = 10 + (item.questions - 15) * 0.2
+      }
+      questionScore = Math.min(15, Math.round(questionScore * 10) / 10)
+    }
+
+    item.score = Math.round((readScore + noteScore + uploadScore + questionScore) * 10) / 10
+  }
+
+  byDay.userPaceSec = userPaceSec
+  return byDay
 }
+
+function bucketOfScore(score) {
+  if (!score || score <= 0) return 0
+  if (score < 5) return 1
+  if (score < 15) return 2
+  if (score < 35) return 3
+  return 4
+}
+
+function formatActivityTooltip(dateKey, item) {
+  const dateStr = formatShortDate(dateKey)
+  if (!item || item.score <= 0) {
+    return `${dateStr}: 활동 없음`
+  }
+
+  const parts = []
+  if (item.readingSeconds > 0) {
+    const durStr = formatDuration(item.readingSeconds)
+    const pageStr = item.estPagesRead > 0 ? ` [약 ${item.estPagesRead}페이지]` : ''
+    parts.push(`읽기 ${durStr}${pageStr}`)
+  }
+  if (item.questions > 0) parts.push(`질문 ${item.questions}건`)
+  if (item.notes > 0) parts.push(`메모 ${item.notes}건`)
+  if (item.uploaded > 0) parts.push(`업로드 ${item.uploaded}건`)
+
+  const detailStr = parts.length > 0 ? ` (${parts.join(', ')})` : ''
+  return `${dateStr}: 활동 ${item.score}pt${detailStr}`
+}
+
 
 // 실제 연속일 스트릭(현재/최장)을 날짜 집합에서 그대로 계산한다 - 절대 임의의
 // 숫자를 넣지 않는다.
@@ -268,7 +395,34 @@ export async function renderReadingHistoryPage() {
   const currReadingSeconds = sumSecondsByDayRange(byDay, currStart, currEnd)
   const prevReadingSeconds = sumSecondsByDayRange(byDay, prevStart, prevEnd)
 
-  const totalReadPages = dashboard?.stats?.read_pages ?? Array.from(docsById.values()).reduce((sum, d) => sum + readPageCount(d), 0)
+  // 일별 종합 활동 스탯 집계 (질문 편향 보정 + EMA 개인 읽기 페이스 학습)
+  const dailyStatsMap = buildDailyActivityStats(events, readingStats)
+  const userPaceSec = dailyStatsMap.userPaceSec
+
+  // EMA 정독 시간 기반 환산 페이지 수 합산
+  const sumEstPagesByDayRange = (startKey, endKeyExclusive) => {
+    let sum = 0
+    for (const [day, item] of dailyStatsMap.entries()) {
+      if (day >= startKey && day < endKeyExclusive) {
+        sum += item.estPagesRead
+      }
+    }
+    return sum
+  }
+
+  const currEstPages = sumEstPagesByDayRange(currStart, currEnd)
+  const prevEstPages = sumEstPagesByDayRange(prevStart, prevEnd)
+
+  // 실측 읽기 시간 기반 환산 페이지를 사용하되, 하트비트가 없는 극초기 과거 데이터는 기존 문서 메타 수치로 폴백
+  const currPagesReadDisplay = currEstPages > 0 ? currEstPages : curr.pagesRead
+  const prevPagesReadDisplay = prevEstPages > 0 ? prevEstPages : prev.pagesRead
+
+  let totalEstPages = 0
+  for (const item of dailyStatsMap.values()) {
+    totalEstPages += item.estPagesRead
+  }
+  const fallbackTotalReadPages = dashboard?.stats?.read_pages ?? Array.from(docsById.values()).reduce((sum, d) => sum + readPageCount(d), 0)
+  const totalReadPagesDisplay = totalEstPages > 0 ? totalEstPages : fallbackTotalReadPages
 
   const statCards = [
     {
@@ -283,8 +437,8 @@ export async function renderReadingHistoryPage() {
     },
     {
       icon: 'layers', color: 'var(--rh-c6)', label: '최근 30일 읽은 페이지',
-      value: curr.pagesRead.toLocaleString(),
-      sub: `${deltaHtml(curr.pagesRead, prev.pagesRead)} <span class="rh-stat-total" style="opacity:0.75;font-size:0.8em;margin-left:4px;">(누적 ${totalReadPages.toLocaleString()}p)</span>`,
+      value: currPagesReadDisplay.toLocaleString(),
+      sub: `${deltaHtml(currPagesReadDisplay, prevPagesReadDisplay)} <span class="rh-stat-total" style="opacity:0.75;font-size:0.8em;margin-left:4px;">(누적 ${totalReadPagesDisplay.toLocaleString()}p)</span>`,
     },
     {
       icon: 'messageCircle', color: 'var(--rh-c5)', label: '질문 수',
@@ -304,24 +458,25 @@ export async function renderReadingHistoryPage() {
   const gridEndDate = keyToLocalDate(gridEnd)
   const endDow = (gridEndDate.getDay() + 6) % 7 // 0=Mon..6=Sun
   const gridStart = addDaysKey(gridEnd, -(endDow) - (WEEKS - 1) * 7)
-  const dayCounts = countByDay(events)
-  const allActiveKeys = new Set(dayCounts.keys())
+
+  const allActiveKeys = new Set(
+    Array.from(dailyStatsMap.entries())
+      .filter(([_, item]) => item.score > 0)
+      .map(([k, _]) => k)
+  )
 
   const weeks = []
   let cursorKey = gridStart
-  let maxCountInGrid = 0
   for (let w = 0; w < WEEKS; w++) {
     const week = []
     for (let d = 0; d < 7; d++) {
-      const count = dayCounts.get(cursorKey) || 0
+      const item = dailyStatsMap.get(cursorKey) || { score: 0 }
       const isFuture = cursorKey > gridEnd
-      if (!isFuture) maxCountInGrid = Math.max(maxCountInGrid, count)
-      week.push({ key: cursorKey, count, isFuture })
+      week.push({ key: cursorKey, item, isFuture })
       cursorKey = addDaysKey(cursorKey, 1)
     }
     weeks.push(week)
   }
-  const bucketOf = (count) => count === 0 ? 0 : Math.min(4, Math.ceil((count / Math.max(1, maxCountInGrid)) * 4))
 
   // rh-cal-months(월 라벨)와 rh-cal-grid(요일 칸)는 서로 다른 grid라, 둘 다
   // 명시적으로 같은 grid-template-columns(렌더 시 인라인 스타일로 주입)를
@@ -341,8 +496,8 @@ export async function renderReadingHistoryPage() {
 
   const calGridHtml = weeks.map(week => week.map(cell => {
     if (cell.isFuture) return '<div class="rh-cal-cell rh-future"></div>'
-    const bucket = bucketOf(cell.count)
-    const tooltip = `${formatShortDate(cell.key)}: 활동 ${cell.count}건`
+    const bucket = bucketOfScore(cell.item.score)
+    const tooltip = formatActivityTooltip(cell.key, cell.item)
     return `<div class="rh-cal-cell rh-heat-${bucket}" data-tooltip="${escapeHtml(tooltip)}"></div>`
   }).join('')).join('')
 
@@ -358,8 +513,18 @@ export async function renderReadingHistoryPage() {
   })()
 
   const streaks = computeStreaks(allActiveKeys)
-  let bestDayKey = null, bestDayCount = 0
-  for (const [k, c] of dayCounts) { if (c > bestDayCount) { bestDayCount = c; bestDayKey = k } }
+  let bestDayKey = null, bestDayScore = 0, bestDayDetail = ''
+  for (const [k, item] of dailyStatsMap.entries()) {
+    if (item.score > bestDayScore) {
+      bestDayScore = item.score
+      bestDayKey = k
+      const p = []
+      if (item.readingSeconds > 0) p.push(`읽기 ${formatDuration(item.readingSeconds)}`)
+      if (item.questions > 0) p.push(`질문 ${item.questions}건`)
+      if (item.notes > 0) p.push(`메모 ${item.notes}건`)
+      bestDayDetail = p.join(', ')
+    }
+  }
 
   // ── Reading Time Distribution (part-to-whole, 전체 기간 실측치) ──
   // 카테고리는 main.js 하트비트가 실제로 구분하는 화면 상태 3가지뿐이다:
@@ -455,14 +620,14 @@ export async function renderReadingHistoryPage() {
           <div class="rh-card">
             <div class="rh-card-head">
               <span class="rh-card-title">${icon('calendar', 15)} 읽기 활동</span>
-              <div class="rh-cal-legend">
+              <div class="rh-cal-legend" title="개인 읽기 페이스(EMA 학습)와 실측 시간, 메모, 질문, 업로드를 종합 반영한 활동 포인트">
                 적음
                 <span class="rh-cal-legend-swatch rh-heat-0" style="background:color-mix(in srgb, var(--accent-mid) 6%, var(--bg-elevated))"></span>
                 <span class="rh-cal-legend-swatch rh-heat-1" style="background:color-mix(in srgb, var(--accent-mid) 28%, var(--bg-elevated))"></span>
                 <span class="rh-cal-legend-swatch rh-heat-2" style="background:color-mix(in srgb, var(--accent-mid) 50%, var(--bg-elevated))"></span>
                 <span class="rh-cal-legend-swatch rh-heat-3" style="background:color-mix(in srgb, var(--accent-mid) 72%, var(--bg-elevated))"></span>
                 <span class="rh-cal-legend-swatch rh-heat-4" style="background:var(--accent-mid)"></span>
-                많음
+                많음 (pt)
               </div>
             </div>
             <div class="rh-cal-scroll">
@@ -530,8 +695,8 @@ export async function renderReadingHistoryPage() {
               <div class="rh-callout-icon" style="--rh-callout-color:var(--rh-c4)">${icon('award', 16)}</div>
               <div class="rh-callout-body">
                 <div class="rh-callout-label">가장 활발했던 날</div>
-                <div class="rh-callout-value">${bestDayCount ? `${bestDayCount}건의 활동` : '&mdash;'}</div>
-                <div class="rh-callout-sub">${bestDayKey ? formatShortDate(bestDayKey) : '아직 활동 없음'}</div>
+                <div class="rh-callout-value">${bestDayScore ? `${bestDayScore}pt` : '&mdash;'}</div>
+                <div class="rh-callout-sub">${bestDayKey ? `${formatShortDate(bestDayKey)}${bestDayDetail ? ' (' + escapeHtml(bestDayDetail) + ')' : ''}` : '아직 활동 없음'}</div>
               </div>
             </div>
             <div class="rh-callout">
