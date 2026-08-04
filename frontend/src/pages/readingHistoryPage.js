@@ -131,7 +131,7 @@ function buildDailyActivityStats(events, readingStats) {
     item.readingSeconds += seconds
   }
 
-  // 2. 타임라인 이벤트 분류
+  // 2. 타임라인 이벤트 분류 및 검증된 실측 읽은 페이지 수 집계
   for (const e of events) {
     const k = eventKey(e)
     if (!k) continue
@@ -139,20 +139,24 @@ function buildDailyActivityStats(events, readingStats) {
     if (e.type === 'question') item.questions += 1
     else if (e.type === 'note') item.notes += 1
     else if (e.type === 'uploaded') item.uploaded += 1
-    else if (e.type === 'read') item.readEvents += 1
+    else if (e.type === 'read') {
+      item.readEvents += 1
+      item.verifiedPages = (item.verifiedPages || 0) + (e.verified_pages || 1)
+    }
   }
 
   // 3. EMA 기반 개인 맞춤형 읽기 페이스(초/페이지) 학습
   const userPaceSec = computeUserReadingPace(byDay)
 
-  // 4. 일별 활동 점수 및 환산 페이지 계산
+  // 4. 일별 활동 점수 및 검증된 실제 읽은 페이지 계산
   for (const [_, item] of byDay.entries()) {
     if (item.readingSeconds > 0) {
       item.estPagesRead = Math.floor(item.readingSeconds / userPaceSec)
     }
+    const displayPages = item.verifiedPages || item.estPagesRead || 0
 
     const readTimeScore = Math.floor(item.readingSeconds / 60)
-    const pageScore = item.estPagesRead * 2
+    const pageScore = displayPages * 3
     const readEventScore = item.readEvents * 2
     const readScore = readTimeScore + pageScore + readEventScore
 
@@ -193,9 +197,10 @@ function formatActivityTooltip(dateKey, item) {
   }
 
   const parts = []
-  if (item.readingSeconds > 0) {
+  const pages = item.verifiedPages || item.estPagesRead || 0
+  if (item.readingSeconds > 0 || pages > 0) {
     const durStr = formatDuration(item.readingSeconds)
-    const pageStr = item.estPagesRead > 0 ? ` [약 ${item.estPagesRead}페이지]` : ''
+    const pageStr = pages > 0 ? ` [실제 ${pages}페이지 정독]` : ''
     parts.push(`읽기 ${durStr}${pageStr}`)
   }
   if (item.questions > 0) parts.push(`질문 ${item.questions}건`)
@@ -818,7 +823,17 @@ export async function renderReadingHistoryPage() {
           <div class="rh-timeline-track">
             ${dayEvents.map(e => {
               const title = docTitle(e.doc_id, e.doc_title)
-              const pages = e.type === 'read' ? readPageCount(docsById.get(e.doc_id)) : null
+              let pageMeta = ''
+              if (e.type === 'read') {
+                if (e.start_page && e.end_page) {
+                  const range = e.start_page === e.end_page ? `${e.start_page}p` : `${e.start_page}p ~ ${e.end_page}p`
+                  const verified = e.verified_pages || 1
+                  pageMeta = `${range} (${verified}p 정독)`
+                } else {
+                  const p = readPageCount(docsById.get(e.doc_id))
+                  if (p) pageMeta = `${p}페이지`
+                }
+              }
               return `
                 <div class="rh-timeline-entry" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" title="이 논문 열기">
                   <div class="rh-timeline-dot">${icon(TYPE_ICON[e.type] || 'clock', 13)}</div>
@@ -829,7 +844,7 @@ export async function renderReadingHistoryPage() {
                       <div class="rh-timeline-title">${escapeHtml(title)}</div>
                       ${e.summary ? `<div class="rh-timeline-summary">${escapeHtml(e.summary)}</div>` : ''}
                     </div>
-                    ${pages ? `<span class="rh-timeline-meta">${pages}페이지</span>` : ''}
+                    ${pageMeta ? `<span class="rh-timeline-meta">${escapeHtml(pageMeta)}</span>` : ''}
                   </div>
                 </div>`
             }).join('')}

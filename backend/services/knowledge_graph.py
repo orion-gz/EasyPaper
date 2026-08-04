@@ -448,10 +448,33 @@ async def get_activity_timeline(username: str) -> List[dict]:
         })
 
         meta = doc.get("metadata") or {}
-        if meta.get("read") and meta.get("read_at"):
+        read_sessions = meta.get("read_sessions") or []
+        if read_sessions:
+            for s in read_sessions:
+                events.append({
+                    "type": "read",
+                    "doc_id": doc_id,
+                    "doc_title": title,
+                    "timestamp": s.get("timestamp") or s.get("read_at") or meta.get("last_read_at") or doc["created_at"],
+                    "start_page": s.get("start_page", 1),
+                    "end_page": s.get("end_page", 1),
+                    "verified_pages": s.get("verified_pages", 1),
+                })
+        elif meta.get("read") and meta.get("read_at"):
             events.append({
                 "type": "read", "doc_id": doc_id, "doc_title": title,
                 "timestamp": meta["read_at"],
+                "start_page": 1,
+                "end_page": meta.get("last_page") or 1,
+                "verified_pages": meta.get("last_page") or 1,
+            })
+        elif meta.get("last_read_at"):
+            events.append({
+                "type": "read", "doc_id": doc_id, "doc_title": title,
+                "timestamp": meta["last_read_at"],
+                "start_page": 1,
+                "end_page": meta.get("last_page") or 1,
+                "verified_pages": meta.get("last_page") or 1,
             })
 
         mirrored = db_get_memos(doc_id)
