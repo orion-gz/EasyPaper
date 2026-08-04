@@ -415,16 +415,16 @@ export async function renderReadingHistoryPage() {
   const currEstPages = sumEstPagesByDayRange(currStart, currEnd)
   const prevEstPages = sumEstPagesByDayRange(prevStart, prevEnd)
 
-  // 실측 읽기 시간 기반 환산 페이지를 사용하되, 하트비트가 없는 극초기 과거 데이터만 기존 문서 메타 수치로 폴백
-  const currPagesReadDisplay = currReadingSeconds > 0 ? currEstPages : curr.pagesRead
-  const prevPagesReadDisplay = prevReadingSeconds > 0 ? prevEstPages : prev.pagesRead
+  // 완독 표시(read === true)된 문서의 참고문헌 제외 본문 전체 페이지 수(readPageCount) 및 세션/하트비트 실측치 중 강건(Robust)하게 최대치 집계
+  const currPagesReadDisplay = Math.max(curr.pagesRead, currEstPages)
+  const prevPagesReadDisplay = Math.max(prev.pagesRead, prevEstPages)
 
   let totalEstPages = 0
   for (const item of dailyStatsMap.values()) {
     totalEstPages += item.estPagesRead
   }
   const fallbackTotalReadPages = dashboard?.stats?.read_pages ?? Array.from(docsById.values()).reduce((sum, d) => sum + readPageCount(d), 0)
-  const totalReadPagesDisplay = totalEstPages > 0 ? totalEstPages : fallbackTotalReadPages
+  const totalReadPagesDisplay = Math.max(fallbackTotalReadPages, totalEstPages)
 
   const allActiveKeys = new Set(
     Array.from(dailyStatsMap.entries())
