@@ -423,18 +423,7 @@ export async function renderReadingHistoryPage() {
     return (d?.metadata?.title) || d?.filename || fallback || '제목 없음'
   }
 
-  if (events.length === 0) {
-    el.innerHTML = `
-      <div class="rh-page">
-        <div class="rh-header">
-          <div>
-            <p class="rh-header-subtitle">읽기 활동과 연구 여정을 확인하세요.</p>
-          </div>
-        </div>
-        <div class="rh-card"><div class="rh-empty">아직 활동 기록이 없습니다. 논문을 업로드하고 읽으면 기록이 쌓입니다.</div></div>
-      </div>`
-    return
-  }
+
 
   // ── 스탯 카드: 최근 7일, 최근 30일, 전체 ──
   const tKey = todayKey()
