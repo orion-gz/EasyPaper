@@ -74,9 +74,9 @@ function formatShortDate(dateKey) {
 
 // ── 일별 종합 활동 데이터 집계 헬퍼 ─────────────────────────────
 // 질문(question)의 과도한 이벤트 누적 편향을 보완하고, 읽기 시간(하트비트)을
-// "한 페이지당 읽는 시간(기본 2.5분/150초)"에 따라 환산한 읽은 페이지 수 및
+// "한 페이지당 읽는 시간(학술 논문 정독 기준 5분/300초)"에 따라 환산한 읽은 페이지 수 및
 // 읽기 활동 점수로 반영하여 종합 활동 점수(Activity Score)와 상세 내역을 산출한다.
-const SECONDS_PER_PAGE = 150 // 평균 1페이지 정독 시간 = 2.5분(150초)
+const SECONDS_PER_PAGE = 300 // 평균 1페이지 논문 정독 시간 = 5분(300초)
 
 function buildDailyActivityStats(events, readingStats) {
   const byDay = new Map()
