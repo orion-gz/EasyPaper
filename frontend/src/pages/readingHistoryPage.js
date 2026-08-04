@@ -246,13 +246,19 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
     return k && k >= startKey && k < endKeyExclusive
   })
   const activeDays = new Set(inPeriod.map(eventKey)).size
-  const readDocIds = new Set(inPeriod.filter(e => e.type === 'read').map(e => e.doc_id))
 
-  const activePageDocIds = new Set(readDocIds)
+  // 단순히 뷰어를 1초 열어보기만 해서 last_read_at만 갱신된 문서는 제외하고,
+  // 해당 기간 내 실측 read 세션 이벤트가 있거나 완독(read_at) 표시된 문서만 계산
+  const readDocIds = new Set(inPeriod.filter(e => e.type === 'read').map(e => e.doc_id))
+  const activePageDocIds = new Set()
+  for (const id of readDocIds) {
+    const doc = docsById.get(id)
+    if (doc) activePageDocIds.add(id)
+  }
   for (const doc of docsById.values()) {
     const meta = doc?.metadata || {}
-    if (hasReadActivity(meta)) {
-      const k = lastActivityDateKey(meta, doc.created_at)
+    if (meta.read && meta.read_at) {
+      const k = isoToLocalDateKey(meta.read_at)
       if (k && k >= startKey && k < endKeyExclusive) {
         activePageDocIds.add(doc.id)
       }
@@ -262,7 +268,7 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
   const pagesRead = Array.from(activePageDocIds).reduce((sum, id) => sum + readPageCount(docsById.get(id)), 0)
   const questions = inPeriod.filter(e => e.type === 'question').length
   const notes = inPeriod.filter(e => e.type === 'note').length
-  return { activeDays, papersRead: readDocIds.size, pagesRead, questions, notes }
+  return { activeDays, papersRead: activePageDocIds.size, pagesRead, questions, notes }
 }
 
 function deltaHtml(curr, prev, unit = '') {
