@@ -3523,8 +3523,8 @@ async function flushActiveReadingSession(userPaceSec = 240) {
   const session = activeViewerSession
   activeViewerSession = null
 
-  // 개인 EMA 정독 페이스(userPaceSec)의 50% 이상 체류 시에만 해당 페이지 완독 인정 (이상치 및 훑어보기 자동 제외)
-  const dynamicDwellThreshold = Math.max(20, Math.round(userPaceSec * 0.5))
+  // 개인 EMA 정독 페이스(userPaceSec)의 50% 이상 체류 시에만 해당 페이지 완독 인정
+  const dynamicDwellThreshold = Math.max(1, Math.round(userPaceSec * 0.5))
   const verifiedPagesCount = Object.values(session.pageDwellTimes).filter(s => s >= dynamicDwellThreshold).length || 1
 
   try {

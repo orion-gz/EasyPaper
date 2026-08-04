@@ -11,7 +11,7 @@
 
 import { fetchLibraryTimeline, fetchLibraryDashboard, fetchLibrary, fetchReadingTimeStats } from '../library.js'
 import { icon } from '../icons.js'
-import { readPageCount, lastActivityIso, hasReadActivity, lastActivityDateKey } from '../readPages.js'
+import { readPageCount, lastActivityIso, hasReadActivity, lastActivityDateKey, isoToLocalDateKey } from '../readPages.js'
 import '../styles/reading-history.css'
 
 function escapeHtml(str) {
