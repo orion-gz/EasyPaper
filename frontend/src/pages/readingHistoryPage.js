@@ -29,8 +29,7 @@ const DAY_MS = 86400000
 const WEEKDAY_LABELS = ['월', '', '수', '', '금', '', '일']
 
 // ── 날짜 키 유틸: 로컬 자정 기준 "YYYY-MM-DD". 이벤트 timestamp는
-// 백엔드가 UTC ISO 문자열로 내려주므로 .slice(0,10) 자체가 이미 날짜 키다 -
-// main.js의 groupTimelineEventsByDate와 동일한 관례를 그대로 따른다. ──
+// 백엔드가 UTC ISO 문자열로 내려주므로 .slice(0,10) 자체가 이미 날짜 키다. ──
 function localDateToKey(d) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
