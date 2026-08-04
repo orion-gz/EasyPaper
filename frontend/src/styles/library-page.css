@@ -9,10 +9,25 @@
 
 /* ── 라이브러리 헤더 부제목 ── */
 .library-header-subtitle {
-  margin: 3px 0 0;
-  font-size: 13px;
+  margin: 0;
+  font-size: 13.5px;
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+/* ── 상태 필터 탭 + 액션 버튼 툴바 ── */
+.library-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.library-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ── 상태 필터 탭 (전체 / 읽지 않음 / 읽는 중 / 완료 / 즐겨찾기) ── */

@@ -154,19 +154,26 @@
           <!-- Library -->
           <section id="page-library" class="workspace-page">
             <div class="library-header">
-              <div class="logo">
-                <span class="logo-text">Library</span>
+              <div>
+                <p class="library-header-subtitle">보관함에 저장된 모든 논문을 한 곳에서 관리하세요</p>
               </div>
-              <div style="display: flex; gap: 10px; align-items: center;">
-                <button id="lib-tab-trash" class="file-btn-outline compact" data-tab="trash" title="휴지통">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>휴지통
+              <div>
+                <button id="lib-upload-btn" class="file-btn">
+                  + 새 논문 추가
                 </button>
+              </div>
+            </div>
+
+            <!-- 상태 필터 탭 + 비교하기/휴지통 버튼 툴바 -->
+            <div class="library-toolbar-row">
+              <div id="library-status-tabs" class="lib-status-tabs"></div>
+              <div class="library-toolbar-actions">
                 <button id="lib-compare-toggle-btn" class="file-btn-outline" title="여러 논문을 선택해 비교 질문을 할 수 있습니다">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 3v18"/></svg>
                   비교하기
                 </button>
-                <button id="lib-upload-btn" class="file-btn">
-                  + 새 논문 추가
+                <button id="lib-tab-trash" class="file-btn-outline compact" data-tab="trash" title="휴지통">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>휴지통
                 </button>
               </div>
             </div>
