@@ -96,14 +96,14 @@ function truncateLabel(s, n) {
 
 // ── 통계 카드 ──────────────────────────────────────────────────────────
 const STAT_DEFS = [
-  { key: 'total_papers', label: '논문', iconName: 'bookOpen', tint: 1, weekly: (c7) => c7.uploadedPapers },
-  { key: 'read_papers', label: '읽은 논문', iconName: 'checkCircle', tint: 2, weekly: (c7) => c7.papersRead },
-  { key: 'read_pages', label: '읽은 페이지 수', iconName: 'fileText', tint: 3, weekly: (c7, wp) => wp },
+  { key: 'total_papers', label: '논문', iconName: 'bookOpen', tint: 1, weekly: (c7) => c7?.uploadedPapers || 0 },
+  { key: 'read_papers', label: '읽은 논문', iconName: 'checkCircle', tint: 2, weekly: (c7) => c7?.papersRead || 0 },
+  { key: 'read_pages', label: '읽은 페이지 수', iconName: 'fileText', tint: 3, weekly: (c7, wp) => wp || 0 },
   // 개념은 생성 시각이 저장되지 않아 "이번 주 신규 개념 수"를 계산할 근거가
   // 없다 - 지어내지 않고 주간 델타 자체를 생략한다.
   { key: 'total_concepts', label: '개념', iconName: 'layers', tint: 4, weekly: null },
-  { key: 'total_questions', label: '질문', iconName: 'messageCircle', tint: 5, weekly: (c7) => c7.questions },
-  { key: 'total_notes', label: '메모', iconName: 'edit3', tint: 6, weekly: (c7) => c7.notes },
+  { key: 'total_questions', label: '질문', iconName: 'messageCircle', tint: 5, weekly: (c7) => c7?.questions || 0 },
+  { key: 'total_notes', label: '메모', iconName: 'edit3', tint: 6, weekly: (c7) => c7?.notes || 0 },
 ]
 
 function renderStatCard(def, value, curr7, weeklyPagesRead) {
@@ -129,9 +129,10 @@ function renderStatCard(def, value, curr7, weeklyPagesRead) {
 }
 
 function renderStatGrid(stats, curr7, weeklyPagesRead) {
+  const safeStats = stats || {}
   return `
     <div class="dash-stat-grid">
-      ${STAT_DEFS.map(def => renderStatCard(def, stats[def.key], curr7, weeklyPagesRead)).join('')}
+      ${STAT_DEFS.map(def => renderStatCard(def, safeStats[def.key], curr7, weeklyPagesRead)).join('')}
     </div>
   `
 }
@@ -170,13 +171,14 @@ function renderInsightsCard(insights) {
 
 // ── 이번 주 활동 ── Reading History 통계 엔진과 동일한 주간 집계 데이터를 공유하여 시각화한다.
 function renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs) {
-  const totalCompletedCount = stats.read_papers ?? docs.filter(d => d.metadata?.read === true).length
+  const safeDocs = Array.isArray(docs) ? docs : []
+  const totalCompletedCount = stats?.read_papers ?? safeDocs.filter(d => d?.metadata?.read === true).length
   const totalSeconds = readingStats?.total_seconds || 0
   const rows = [
-    { iconName: 'bookOpen', label: '읽은 논문', value: curr7.papersRead, total: totalCompletedCount, kind: 'count' },
-    { iconName: 'fileText', label: '읽은 페이지', value: weeklyPagesRead, total: stats.total_pages || 0, kind: 'count' },
-    { iconName: 'messageCircle', label: '질문', value: curr7.questions, total: stats.total_questions || 0, kind: 'count' },
-    { iconName: 'clock', label: '읽은 시간', value: weeklySeconds, total: totalSeconds, kind: 'duration' },
+    { iconName: 'bookOpen', label: '읽은 논문', value: curr7?.papersRead || 0, total: totalCompletedCount, kind: 'count' },
+    { iconName: 'fileText', label: '읽은 페이지', value: weeklyPagesRead || 0, total: stats?.total_pages || 0, kind: 'count' },
+    { iconName: 'messageCircle', label: '질문', value: curr7?.questions || 0, total: stats?.total_questions || 0, kind: 'count' },
+    { iconName: 'clock', label: '읽은 시간', value: weeklySeconds || 0, total: totalSeconds, kind: 'duration' },
   ]
   return `
     <div class="dash-card">

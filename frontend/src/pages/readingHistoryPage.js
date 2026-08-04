@@ -288,7 +288,8 @@ function computeStreaks(activeDayKeys) {
 }
 
 export function periodStats(events, docsById, startKey, endKeyExclusive) {
-  const inPeriod = events.filter(e => {
+  const safeEvents = Array.isArray(events) ? events : []
+  const inPeriod = safeEvents.filter(e => {
     const k = eventKey(e)
     return k && k >= startKey && k < endKeyExclusive
   })
@@ -296,12 +297,15 @@ export function periodStats(events, docsById, startKey, endKeyExclusive) {
 
   // 완독 체크(read === true)를 누른 논문만 해당 기간 읽은 논문으로 집계
   const completedDocIds = new Set()
-  for (const doc of docsById.values()) {
-    const meta = doc?.metadata || {}
-    if (meta.read === true) {
-      const k = isoToLocalDateKey(meta.read_at || meta.last_read_at)
-      if (k && k >= startKey && k < endKeyExclusive) {
-        completedDocIds.add(doc.id)
+  if (docsById && typeof docsById.values === 'function') {
+    for (const doc of docsById.values()) {
+      if (!doc) continue
+      const meta = doc.metadata || {}
+      if (meta.read === true) {
+        const k = isoToLocalDateKey(meta.read_at || meta.last_read_at || doc.created_at)
+        if (k && k >= startKey && k < endKeyExclusive) {
+          completedDocIds.add(doc.id)
+        }
       }
     }
   }
@@ -310,20 +314,23 @@ export function periodStats(events, docsById, startKey, endKeyExclusive) {
   const readDocIds = new Set(inPeriod.filter(e => e.type === 'read').map(e => e.doc_id))
   const activePageDocIds = new Set()
   for (const id of readDocIds) {
-    const doc = docsById.get(id)
+    const doc = docsById?.get(id)
     if (doc) activePageDocIds.add(id)
   }
-  for (const doc of docsById.values()) {
-    const meta = doc?.metadata || {}
-    if (hasReadActivity(meta)) {
-      const k = isoToLocalDateKey(meta.read_at || meta.last_read_at)
-      if (k && k >= startKey && k < endKeyExclusive) {
-        activePageDocIds.add(doc.id)
+  if (docsById && typeof docsById.values === 'function') {
+    for (const doc of docsById.values()) {
+      if (!doc) continue
+      const meta = doc.metadata || {}
+      if (hasReadActivity(meta)) {
+        const k = isoToLocalDateKey(meta.read_at || meta.last_read_at)
+        if (k && k >= startKey && k < endKeyExclusive) {
+          activePageDocIds.add(doc.id)
+        }
       }
     }
   }
 
-  const pagesRead = Array.from(activePageDocIds).reduce((sum, id) => sum + readPageCount(docsById.get(id)), 0)
+  const pagesRead = Array.from(activePageDocIds).reduce((sum, id) => sum + readPageCount(docsById?.get(id)), 0)
   const questions = inPeriod.filter(e => e.type === 'question').length
   const notes = inPeriod.filter(e => e.type === 'note').length
   const uploadedPapers = inPeriod.filter(e => e.type === 'uploaded').length
