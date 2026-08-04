@@ -9,7 +9,7 @@
 import './../styles/dashboard.css'
 import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats, fetchReadingAnalyticsSummary } from '../library.js'
 import { icon } from '../icons.js'
-import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, todayKey, addDaysKey } from '../readPages.js'
+import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, todayKey, addDaysKey, isWithinDaysLocal } from '../readPages.js'
 import { periodStats, sumSecondsByDayRange, buildDailyActivityStats, formatDuration } from './readingHistoryPage.js'
 
 function renderReadingAnalyticsCard(analyticsData) {
