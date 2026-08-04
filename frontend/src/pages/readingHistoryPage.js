@@ -271,12 +271,12 @@ function periodStats(events, docsById, startKey, endKeyExclusive) {
   return { activeDays, papersRead: activePageDocIds.size, pagesRead, questions, notes }
 }
 
-function deltaHtml(curr, prev, unit = '') {
+function deltaHtml(curr, prev, unit = '', compareText = '이전 30일 대비') {
   const diff = curr - prev
-  if (diff === 0) return `<span class="rh-stat-delta">±0${unit ? ' ' + unit : ''} 이전 30일 대비</span>`
+  if (diff === 0) return `<span class="rh-stat-delta">±0${unit ? ' ' + unit : ''} ${compareText}</span>`
   const cls = diff > 0 ? 'up' : 'down'
   const arrow = diff > 0 ? '↑' : '↓'
-  return `<span class="rh-stat-delta ${cls}">${arrow} ${Math.abs(diff).toLocaleString()}${unit ? ' ' + unit : ''} 이전 30일 대비</span>`
+  return `<span class="rh-stat-delta ${cls}">${arrow} ${Math.abs(diff).toLocaleString()}${unit ? ' ' + unit : ''} ${compareText}</span>`
 }
 
 // ── 읽기 시간 포맷/집계 헬퍼 ──────────────────────────────────
@@ -288,12 +288,12 @@ function formatDuration(seconds) {
   if (m > 0) return `${m}m`
   return s > 0 ? `${s}s` : '0m'
 }
-function deltaDurationHtml(currSeconds, prevSeconds) {
+function deltaDurationHtml(currSeconds, prevSeconds, compareText = '이전 30일 대비') {
   const diff = Math.round(currSeconds - prevSeconds)
-  if (diff === 0) return `<span class="rh-stat-delta">±0m 이전 30일 대비</span>`
+  if (diff === 0) return `<span class="rh-stat-delta">±0m ${compareText}</span>`
   const cls = diff > 0 ? 'up' : 'down'
   const arrow = diff > 0 ? '↑' : '↓'
-  return `<span class="rh-stat-delta ${cls}">${arrow} ${formatDuration(Math.abs(diff))} 이전 30일 대비</span>`
+  return `<span class="rh-stat-delta ${cls}">${arrow} ${formatDuration(Math.abs(diff))} ${compareText}</span>`
 }
 function sumSecondsByDayRange(byDay, startKey, endKeyExclusive) {
   let total = 0
@@ -386,8 +386,19 @@ export async function renderReadingHistoryPage() {
     return
   }
 
-  // ── 스탯 카드: 최근 30일 vs 그 이전 30일 ──
+  // ── 스탯 카드: 최근 7일, 최근 30일, 전체 ──
   const tKey = todayKey()
+
+  // 최근 7일 vs 그 이전 7일
+  const currStart7 = addDaysKey(tKey, -6)
+  const currEnd7 = addDaysKey(tKey, 1)
+  const prevStart7 = addDaysKey(tKey, -13)
+  const prevEnd7 = currStart7
+  const curr7 = periodStats(events, docsById, currStart7, currEnd7)
+  const prev7 = periodStats(events, docsById, prevStart7, prevEnd7)
+  const activeDaysPct7 = Math.round((curr7.activeDays / 7) * 100)
+
+  // 최근 30일 vs 그 이전 30일
   const currStart = addDaysKey(tKey, -29)
   const currEnd = addDaysKey(tKey, 1)
   const prevStart = addDaysKey(tKey, -59)
@@ -400,6 +411,8 @@ export async function renderReadingHistoryPage() {
   const totalNotes = dashboard?.stats?.total_notes ?? events.filter(e => e.type === 'note').length
 
   const byDay = readingStats?.total_seconds_by_day || {}
+  const currReadingSeconds7 = sumSecondsByDayRange(byDay, currStart7, currEnd7)
+  const prevReadingSeconds7 = sumSecondsByDayRange(byDay, prevStart7, prevEnd7)
   const currReadingSeconds = sumSecondsByDayRange(byDay, currStart, currEnd)
   const prevReadingSeconds = sumSecondsByDayRange(byDay, prevStart, prevEnd)
 
@@ -418,10 +431,13 @@ export async function renderReadingHistoryPage() {
     return sum
   }
 
+  const currEstPages7 = sumEstPagesByDayRange(currStart7, currEnd7)
+  const prevEstPages7 = sumEstPagesByDayRange(prevStart7, prevEnd7)
+  const currPagesReadDisplay7 = Math.max(curr7.pagesRead, currEstPages7)
+  const prevPagesReadDisplay7 = Math.max(prev7.pagesRead, prevEstPages7)
+
   const currEstPages = sumEstPagesByDayRange(currStart, currEnd)
   const prevEstPages = sumEstPagesByDayRange(prevStart, prevEnd)
-
-  // 완독 표시(read === true)된 문서의 참고문헌 제외 본문 전체 페이지 수(readPageCount) 및 세션/하트비트 실측치 중 강건(Robust)하게 최대치 집계
   const currPagesReadDisplay = Math.max(curr.pagesRead, currEstPages)
   const prevPagesReadDisplay = Math.max(prev.pagesRead, prevEstPages)
 
@@ -449,6 +465,36 @@ export async function renderReadingHistoryPage() {
     : Object.values(byDay).reduce((sum, sec) => sum + (Number(sec) || 0), 0)
 
   const getStatCards = (period) => {
+    if (period === '7') {
+      return [
+        {
+          icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
+          value: `${curr7.activeDays} / 7`,
+          sub: `<span class="rh-stat-delta">최근 7일 중 ${activeDaysPct7}%</span>`,
+        },
+        {
+          icon: 'clock', color: 'var(--rh-c3)', label: '읽은 시간',
+          value: formatDuration(currReadingSeconds7),
+          sub: deltaDurationHtml(currReadingSeconds7, prevReadingSeconds7, '이전 7일 대비'),
+        },
+        {
+          icon: 'layers', color: 'var(--rh-c6)', label: '읽은 페이지',
+          value: currPagesReadDisplay7.toLocaleString(),
+          sub: deltaHtml(currPagesReadDisplay7, prevPagesReadDisplay7, '', '이전 7일 대비'),
+        },
+        {
+          icon: 'messageCircle', color: 'var(--rh-c5)', label: '질문 수',
+          value: curr7.questions.toLocaleString(),
+          sub: deltaHtml(curr7.questions, prev7.questions, '', '이전 7일 대비'),
+        },
+        {
+          icon: 'edit3', color: 'var(--rh-c2)', label: '작성한 메모',
+          value: curr7.notes.toLocaleString(),
+          sub: deltaHtml(curr7.notes, prev7.notes, '', '이전 7일 대비'),
+        },
+      ]
+    }
+
     if (period === 'all') {
       return [
         {
@@ -646,6 +692,7 @@ export async function renderReadingHistoryPage() {
           <p class="rh-header-subtitle">읽기 활동과 연구 여정을 확인하세요.</p>
         </div>
         <div class="rh-header-chips" id="rh-period-chips">
+          <button type="button" class="rh-chip" data-period="7">${icon('calendar', 13)} 최근 7일</button>
           <button type="button" class="rh-chip active" data-period="30">${icon('calendar', 13)} 최근 30일</button>
           <button type="button" class="rh-chip" data-period="all">${icon('clock', 13)} 전체 기록</button>
         </div>
@@ -788,6 +835,12 @@ export async function renderReadingHistoryPage() {
   }
 
   const getTimelineEvents = () => {
+    if (currentPeriod === '7') {
+      return events.filter(e => {
+        const k = eventKey(e)
+        return k && k >= currStart7 && k < currEnd7
+      })
+    }
     if (currentPeriod === '30') {
       return events.filter(e => {
         const k = eventKey(e)
@@ -881,7 +934,9 @@ export async function renderReadingHistoryPage() {
     currentPeriod = btn.dataset.period
     renderStatGrid(currentPeriod)
     const titleEl = el.querySelector('#rh-timeline-title')
-    if (titleEl) titleEl.textContent = currentPeriod === '30' ? '최근 30일 활동' : '전체 활동'
+    if (titleEl) {
+      titleEl.textContent = currentPeriod === '7' ? '최근 7일 활동' : currentPeriod === '30' ? '최근 30일 활동' : '전체 활동'
+    }
     visibleGroups = INITIAL_GROUPS
     renderTimeline()
   })
