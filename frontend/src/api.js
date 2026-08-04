@@ -592,6 +592,24 @@ export async function clearPagesCacheAPI() {
 }
 
 /**
+ * 특정 문서의 PDF 텍스트/이미지 추출 결과 디스크 캐시를 삭제합니다.
+ */
+export async function clearSingleDocCacheAPI(docId) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/clear-cache`, {
+    method: 'POST'
+  })
+  if (!res.ok) {
+    try {
+      const err = await res.json()
+      throw new Error(err.detail || '캐시 삭제 실패')
+    } catch {
+      throw new Error('캐시 삭제 실패')
+    }
+  }
+  return res.json()
+}
+
+/**
  * 특정 문서의 이전 채팅 히스토리를 반환합니다.
  */
 export async function getChatHistoryAPI(sessionId) {

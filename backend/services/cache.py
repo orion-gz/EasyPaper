@@ -191,3 +191,31 @@ def clear_all_images_cache() -> "tuple[int, int]":
             except Exception:
                 pass
     return count, freed_bytes
+
+
+def clear_document_cache(doc_id: str) -> "tuple[int, int]":
+    """단일 문서의 PDF 텍스트 및 이미지/표 좌표 추출 디스크 캐시를 삭제합니다.
+    (삭제한 파일 개수, 확보한 바이트 수)를 반환합니다.
+    """
+    count = 0
+    freed_bytes = 0
+    pages_path = _pages_cache_path(doc_id)
+    if os.path.exists(pages_path):
+        try:
+            freed_bytes += os.path.getsize(pages_path)
+            os.remove(pages_path)
+            count += 1
+        except Exception:
+            pass
+
+    images_path = _images_cache_path(doc_id)
+    if os.path.exists(images_path):
+        try:
+            freed_bytes += os.path.getsize(images_path)
+            os.remove(images_path)
+            count += 1
+        except Exception:
+            pass
+
+    return count, freed_bytes
+

@@ -4,7 +4,7 @@ import './styles/library-page.css'
 import './styles/research-graph.css'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
@@ -1471,7 +1471,28 @@ if (toolbarKebabBtn && toolbarKebabMenu) {
   })
 }
 
+const viewerClearCacheBtn = $('viewer-clear-cache-btn')
+if (viewerClearCacheBtn) {
+  viewerClearCacheBtn.addEventListener('click', async () => {
+    toolbarKebabMenu?.classList.add('hidden')
+    if (!state.sessionId) {
+      showToast('열려있는 논문이 없습니다.', 'error')
+      return
+    }
+    const currentDocTitle = $('doc-title')?.textContent || '현재 논문'
+    const ok = await showCustomConfirm(`"${currentDocTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+    if (!ok) return
+    try {
+      await clearSingleDocCacheAPI(state.sessionId)
+      showToast('PDF 추출 캐시가 삭제되었습니다.', 'success')
+    } catch (err) {
+      showToast('캐시 삭제 실패: ' + err.message, 'error')
+    }
+  })
+}
+
 // ── 다시 번역하기 ──────────────────────────────────
+
 retranslateBtn.addEventListener('click', async () => {
   if (!state.sessionId) return
   
@@ -5850,12 +5871,21 @@ function prepareDocItemHtml(doc) {
       <button class="doc-edit-btn" data-id="${doc.id}" title="제목 수정">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg>
       </button>
-      <button class="doc-delete-btn" data-id="${doc.id}" title="삭제">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-          <path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
-        </svg>
-      </button>
+      <div class="doc-card-kebab-wrapper">
+        <button class="doc-card-kebab-btn" data-id="${doc.id}" title="더보기">
+          ${icon('moreVertical', 14)}
+        </button>
+        <div class="doc-card-kebab-menu hidden" data-id="${doc.id}">
+          <button class="doc-card-kebab-item doc-card-delete-btn" data-id="${doc.id}">
+            ${icon('trash2', 13)}
+            <span>삭제하기</span>
+          </button>
+          <button class="doc-card-kebab-item doc-card-clear-cache-btn" data-id="${doc.id}">
+            ${icon('refreshCw', 13)}
+            <span>캐시 삭제</span>
+          </button>
+        </div>
+      </div>
     `
     ctaBtnHtml = `<button class="doc-open-btn doc-cta-compact" data-id="${doc.id}" title="열기">${openIcon}</button>`
     ctaBtnFullHtml = `<button class="doc-open-btn" data-id="${doc.id}"><span>열기</span>${openIcon}</button>`
@@ -5911,10 +5941,24 @@ function wireDocItemEvents(container, doc, displayTitle) {
     })
   }
 
-  const deleteBtn = container.querySelector('.doc-delete-btn')
-  if (deleteBtn) {
-    deleteBtn.addEventListener('click', async (e) => {
+  const kebabBtn = container.querySelector('.doc-card-kebab-btn')
+  const kebabMenu = container.querySelector('.doc-card-kebab-menu')
+  if (kebabBtn && kebabMenu) {
+    kebabBtn.addEventListener('click', (e) => {
       e.stopPropagation()
+      const isHidden = kebabMenu.classList.contains('hidden')
+      document.querySelectorAll('.doc-card-kebab-menu').forEach(m => m.classList.add('hidden'))
+      if (isHidden) {
+        kebabMenu.classList.remove('hidden')
+      }
+    })
+  }
+
+  const cardDeleteBtn = container.querySelector('.doc-card-delete-btn, .doc-delete-btn')
+  if (cardDeleteBtn) {
+    cardDeleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      kebabMenu?.classList.add('hidden')
       const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
       const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요? (휴지통으로 이동합니다)`, { title: '논문 삭제', confirmText: '삭제', danger: true })
       if (!ok) return
@@ -5927,6 +5971,24 @@ function wireDocItemEvents(container, doc, displayTitle) {
       }
     })
   }
+
+  const cardClearCacheBtn = container.querySelector('.doc-card-clear-cache-btn')
+  if (cardClearCacheBtn) {
+    cardClearCacheBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      kebabMenu?.classList.add('hidden')
+      const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+      const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+      if (!ok) return
+      try {
+        await clearSingleDocCacheAPI(doc.id)
+        showToast('PDF 추출 캐시가 삭제되었습니다.', 'success')
+      } catch (err) {
+        showToast('캐시 삭제 실패: ' + err.message, 'error')
+      }
+    })
+  }
+
 
   const restoreBtn = container.querySelector('.doc-restore-btn')
   if (restoreBtn) {
@@ -6190,8 +6252,10 @@ function ensureLibraryDetailPanel() {
         <button id="lib-detail-edit-btn" class="lib-detail-icon-btn" title="제목 수정">${icon('edit3', 14)}</button>
         <button id="lib-detail-more-btn" class="lib-detail-icon-btn" title="더보기">${moreIconSvg}</button>
         <div id="lib-detail-more-menu" class="lib-detail-more-menu hidden">
+          <button id="lib-detail-clear-cache-btn" class="lib-detail-more-item">${icon('refreshCw', 13)}<span>PDF 추출 캐시 삭제</span></button>
           <button id="lib-detail-delete-btn" class="lib-detail-more-item danger">${icon('trash2', 13)}<span>삭제 (휴지통으로 이동)</span></button>
         </div>
+
       </div>
       <div class="lib-detail-tabs">
         <button type="button" class="lib-detail-tab active" data-tab="overview">개요</button>
@@ -6258,7 +6322,23 @@ function ensureLibraryDetailPanel() {
     document.addEventListener('click', () => moreMenu.classList.add('hidden'))
   }
 
+  $('lib-detail-clear-cache-btn')?.addEventListener('click', async () => {
+    if (!libraryDetailDoc) return
+    const doc = libraryDetailDoc
+    const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+    moreMenu?.classList.add('hidden')
+    const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+    if (!ok) return
+    try {
+      await clearSingleDocCacheAPI(doc.id)
+      showToast('PDF 추출 캐시가 삭제되었습니다.', 'success')
+    } catch (err) {
+      showToast('캐시 삭제 실패: ' + err.message, 'error')
+    }
+  })
+
   $('lib-detail-delete-btn')?.addEventListener('click', async () => {
+
     if (!libraryDetailDoc) return
     const doc = libraryDetailDoc
     const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
