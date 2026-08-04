@@ -221,7 +221,7 @@
 .lib-detail-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.32);
+  background: transparent;
   z-index: 45;
   opacity: 0;
   pointer-events: none;
@@ -236,9 +236,9 @@
   bottom: 0;
   width: 420px;
   max-width: 94vw;
-  background: var(--bg-surface);
+  background: #0f0d1b;
   border-left: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
   z-index: 46;
   display: flex;
   flex-direction: column;
@@ -246,6 +246,11 @@
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .lib-detail-panel.open { transform: translateX(0); }
+
+body.light-theme .lib-detail-panel {
+  background: #ffffff;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+}
 
 .lib-detail-close-btn {
   position: absolute;

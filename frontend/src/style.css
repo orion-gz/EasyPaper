@@ -6287,7 +6287,7 @@ body.light-theme .figure-preview-tooltip {
   left: var(--sidebar-w);
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.32);
+  background: transparent;
   z-index: 45;
   opacity: 0;
   pointer-events: none;
@@ -6304,9 +6304,9 @@ body.sidebar-collapsed .chat-drawer-overlay { left: var(--sidebar-w-collapsed); 
   bottom: 0;
   width: auto;
   max-width: none;
-  background: var(--bg-panel);
+  background: #0f0d1b;
   border-left: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
   z-index: 46;
   display: flex;
   flex-direction: column;
@@ -6315,6 +6315,10 @@ body.sidebar-collapsed .chat-drawer-overlay { left: var(--sidebar-w-collapsed); 
 }
 .chat-drawer.open { transform: translateX(0); }
 body.sidebar-collapsed .chat-drawer { left: var(--sidebar-w-collapsed); }
+body.light-theme .chat-drawer {
+  background: #ffffff;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+}
 .chat-drawer .compare-chat-body { height: 0; flex: 1 1 auto; min-height: 0; }
 /* 비교 화면(.compare-topbar-title)은 전체 화면 폭을 쓸 수 있어 제목이 안
    잘렸지만, 이 드로어는 폭이 480px로 훨씬 좁아 긴 논문 제목이 닫기/뷰어

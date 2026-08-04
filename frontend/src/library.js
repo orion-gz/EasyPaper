@@ -294,8 +294,9 @@ const PRIMER_POLL_MAX_ATTEMPTS = 150 // 최대 약 7.5분 대기
 // 제목 검색으로 첫 조회 시 채워서 문서 메타데이터에 캐시해두므로, 여기서는
 // 폴링 없이 단발성 GET이면 된다(생성이 아니라 짧은 검색 1회이기 때문에
 // fetchPrimer처럼 오래 걸리지 않음).
-export async function fetchLibraryBibliography(docId) {
-  const res = await fetch(`${API_BASE}/library/${docId}/bibliography`)
+export async function fetchLibraryBibliography(docId, refresh = false) {
+  const query = refresh ? '?refresh=true' : ''
+  const res = await fetch(`${API_BASE}/library/${docId}/bibliography${query}`)
   if (!res.ok) throw new Error('서지 정보 조회 실패')
   return res.json()
 }
