@@ -2167,7 +2167,14 @@ Category Tags:"""
         result = result[:-1]
         
     tags = [t.strip() for t in result.split(",") if t.strip()]
-    return tags
+    seen = set()
+    unique_tags = []
+    for t in tags:
+        key = t.lower()
+        if key not in seen:
+            seen.add(key)
+            unique_tags.append(t)
+    return unique_tags
 
 
 def _parse_json_array_response(raw: str, required_key: str = "concept") -> list:

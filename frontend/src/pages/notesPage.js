@@ -153,7 +153,18 @@ async function buildPaperEntry(doc) {
   const meta = doc.metadata || {}
   const title = meta.title || doc.filename
   const author = meta.author || ''
-  const categories = meta.categories || []
+  const rawCategories = meta.categories || []
+  const seenCats = new Set()
+  const categories = []
+  for (const c of rawCategories) {
+    if (typeof c === 'string') {
+      const trimmed = c.trim()
+      if (trimmed && !seenCats.has(trimmed.toLowerCase())) {
+        seenCats.add(trimmed.toLowerCase())
+        categories.push(trimmed)
+      }
+    }
+  }
   const read = meta.read === true
 
   return {
