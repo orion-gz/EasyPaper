@@ -2583,11 +2583,11 @@ if (settingPdfParserEngineSelect) {
 
     updateParserCardInfo(selectedId)
 
-    if (parser && !parser.installed && parser.id !== 'pymupdf') {
+    if (parser && parser.id !== 'pymupdf') {
       targetInstallParserId = selectedId
       openPdfParserInstallModal(parser)
     } else {
-      await autoSaveSystemSettings(false)
+      await autoSaveSystemSettings({ silent: false })
       showToast(`PDF 파서 엔진이 [${parser ? parser.name : selectedId}]로 설정되었습니다.`, 'success')
     }
   })
