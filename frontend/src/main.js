@@ -2668,7 +2668,7 @@ if (parserInstallConfirmBtn) {
       async (successMsg) => {
         if (statusText) statusText.innerHTML = `<span style="color: var(--accent-mid); font-weight:600;">✓ 설치가 성공적으로 완료되었습니다!</span>`
         if (parserInstallDoneBtn) parserInstallDoneBtn.classList.remove('hidden')
-        await savePdfParserSetting(targetInstallParserId)
+        await autoSaveSystemSettings({ silent: true })
         await refreshSystemSettings()
       },
       async (err) => {

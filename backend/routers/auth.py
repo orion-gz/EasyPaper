@@ -362,7 +362,7 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
 
 
 @router.get("/settings/install-pdf-parser")
-async def install_pdf_parser_stream(parser_id: str, current_user: str = Depends(get_current_user)):
+async def install_pdf_parser_stream(parser_id: str):
     import sys
     import asyncio
 
@@ -397,7 +397,15 @@ async def install_pdf_parser_stream(parser_id: str, current_user: str = Depends(
         except Exception as e:
             yield f"data: {json.dumps({'status': 'error', 'message': f'설치 실행 중 오류가 발생했습니다: {str(e)}'})}\n\n"
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
+    )
 
 @router.post("/settings/clear-pages-cache")
 async def clear_pages_cache(current_user: str = Depends(get_current_user)):
