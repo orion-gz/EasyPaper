@@ -3692,7 +3692,7 @@ async function loadLibraryCount() {
 // 탭 클릭 이벤트 리스너 등록
 // Library 페이지 내부 탭(archive: 전체 / trash: 휴지통) 전환. 채팅/주석/그래프/히스토리는
 // 더 이상 Library의 내부 탭이 아니라 사이드바의 독립된 최상위 페이지다 - showWorkspacePage() 참고.
-function updateTabUI(activeTab) {
+function syncLibraryTabUI(activeTab) {
   state.currentLibraryTab = activeTab
   activeCategoryFilter = 'ALL'
   activeStatusFilter = 'all'
@@ -3712,7 +3712,10 @@ function updateTabUI(activeTab) {
   if (libUploadBtn) libUploadBtn.classList.toggle('hidden', activeTab === 'trash')
   if (libCompareToggleBtn) libCompareToggleBtn.classList.toggle('hidden', activeTab === 'trash')
   setCompareSelectMode(false)
+}
 
+function updateTabUI(activeTab) {
+  syncLibraryTabUI(activeTab)
   renderLibrary()
 }
 
@@ -3806,6 +3809,7 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
   }
 
   if (pageId === 'library') {
+    syncLibraryTabUI(state.currentLibraryTab || 'archive')
     await renderLibrary()
   } else if (pageId === 'chats') {
     await renderAiChatsPage()
@@ -3847,9 +3851,6 @@ document.querySelectorAll('[data-icon]').forEach(el => {
 if (sidebarNav) {
   sidebarNav.querySelectorAll('.sidebar-nav-item[data-page]').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (btn.dataset.page === 'library') {
-        updateTabUI('archive')
-      }
       if (state.currentWorkspacePage === btn.dataset.page) return
       showWorkspacePage(btn.dataset.page)
     })
