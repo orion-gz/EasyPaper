@@ -40,6 +40,8 @@ CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
 # pool"로 분류된다. 선택 사항이라 비워둬도 정상 동작한다.
 OPENALEX_MAILTO = os.getenv("OPENALEX_MAILTO", "")
 
+PDF_PARSER_ENGINE = os.getenv("PDF_PARSER_ENGINE", "pymupdf")
+
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "50"))
 SESSION_TTL_HOURS = int(os.getenv("SESSION_TTL_HOURS", "24"))
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./uploads")
@@ -162,6 +164,9 @@ def get_claude_api_key() -> str:
 def get_openalex_mailto() -> str:
     return OPENALEX_MAILTO
 
+def get_pdf_parser_engine() -> str:
+    return PDF_PARSER_ENGINE
+
 def update_system_settings(
     ollama_host: str,
     trans_provider: str,
@@ -171,9 +176,10 @@ def update_system_settings(
     openai_api_key: str = "",
     gemini_api_key: str = "",
     claude_api_key: str = "",
-    openalex_mailto: str = ""
+    openalex_mailto: str = "",
+    pdf_parser_engine: str = "pymupdf"
 ):
-    global OLLAMA_HOST, TRANS_PROVIDER, TRANS_MODEL, CHAT_PROVIDER, CHAT_MODEL, OPENAI_API_KEY, GEMINI_API_KEY, CLAUDE_API_KEY, OPENALEX_MAILTO
+    global OLLAMA_HOST, TRANS_PROVIDER, TRANS_MODEL, CHAT_PROVIDER, CHAT_MODEL, OPENAI_API_KEY, GEMINI_API_KEY, CLAUDE_API_KEY, OPENALEX_MAILTO, PDF_PARSER_ENGINE
 
     OLLAMA_HOST = ollama_host
     TRANS_PROVIDER = trans_provider
@@ -184,6 +190,7 @@ def update_system_settings(
     GEMINI_API_KEY = gemini_api_key
     CLAUDE_API_KEY = claude_api_key
     OPENALEX_MAILTO = openalex_mailto
+    PDF_PARSER_ENGINE = pdf_parser_engine
 
     env_path = os.path.join(_get_config_dir(), ".env")
     settings = {
@@ -195,7 +202,8 @@ def update_system_settings(
         "OPENAI_API_KEY": openai_api_key,
         "GEMINI_API_KEY": gemini_api_key,
         "CLAUDE_API_KEY": claude_api_key,
-        "OPENALEX_MAILTO": openalex_mailto
+        "OPENALEX_MAILTO": openalex_mailto,
+        "PDF_PARSER_ENGINE": pdf_parser_engine
     }
 
     if not os.path.exists(env_path):

@@ -4,21 +4,136 @@ import re
 from typing import List, Dict, Any, Optional
 
 
-def extract_pages(pdf_path: str) -> List[Dict[str, Any]]:
+def extract_pages(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     PDF에서 페이지별 텍스트 블록을 추출합니다.
-    2단 레이아웃을 감지하여 읽기 순서대로 정렬합니다.
+    선택된 엔진(pymupdf, pdfplumber, marker, mineru)에 따라 파싱을 수행합니다.
     """
+    if engine is None:
+        try:
+            from config import get_pdf_parser_engine
+            engine = get_pdf_parser_engine()
+        except Exception:
+            engine = "pymupdf"
+
+    engine = (engine or "pymupdf").lower().strip()
+
+    if engine == "pdfplumber":
+        return _extract_pages_pdfplumber(pdf_path)
+    elif engine == "marker":
+        return _extract_pages_marker(pdf_path)
+    elif engine == "mineru":
+        return _extract_pages_mineru(pdf_path)
+    else:
+        return _extract_pages_pymupdf(pdf_path)
+
+
+def _extract_pages_pymupdf(pdf_path: str) -> List[Dict[str, Any]]:
     doc = fitz.open(pdf_path)
     pages = []
 
     for page_num in range(len(doc)):
         page = doc[page_num]
         page_data = _extract_page(page, page_num + 1)
+        page_data["parser_engine"] = "pymupdf"
         pages.append(page_data)
 
     doc.close()
     return pages
+
+
+def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
+    try:
+        import pdfplumber
+    except ImportError:
+        import logging
+        logging.warning("pdfplumber가 설치되어 있지 않아 PyMuPDF 파서로 폴백합니다.")
+        return _extract_pages_pymupdf(pdf_path)
+
+    try:
+        pages = []
+        with pdfplumber.open(pdf_path) as pdf:
+            for idx, p in enumerate(pdf.pages):
+                page_num = idx + 1
+                text = p.extract_text() or ""
+                blocks = []
+                if text:
+                    blocks.append({
+                        "bbox": (0, 0, p.width, p.height),
+                        "text": text,
+                        "type": 0
+                    })
+                pages.append({
+                    "page": page_num,
+                    "text": text,
+                    "blocks": blocks,
+                    "parser_engine": "pdfplumber"
+                })
+        return pages if pages else _extract_pages_pymupdf(pdf_path)
+    except Exception as e:
+        import logging
+        logging.warning(f"pdfplumber 파싱 중 오류 발생 ({e}). PyMuPDF로 폴백합니다.")
+        return _extract_pages_pymupdf(pdf_path)
+
+
+def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:
+    try:
+        from marker.converters.pdf import PdfConverter
+        from marker.models import create_model_dict
+
+        converter = PdfConverter(artifact_dict=create_model_dict())
+        rendered = converter(pdf_path)
+        markdown_text = getattr(rendered, "markdown", "") or str(rendered)
+
+        raw_pages = markdown_text.split("\n\n---\n\n")
+        pages = []
+        for idx, page_str in enumerate(raw_pages):
+            pages.append({
+                "page": idx + 1,
+                "text": page_str,
+                "blocks": [{"bbox": (0, 0, 100, 100), "text": page_str, "type": 0}],
+                "markdown": page_str,
+                "parser_engine": "marker"
+            })
+        return pages if pages else _extract_pages_pymupdf(pdf_path)
+    except Exception as e:
+        import logging
+        logging.warning(f"Marker 파서 실행 실패 ({e}). PyMuPDF 파서로 폴백합니다.")
+        return _extract_pages_pymupdf(pdf_path)
+
+
+def _extract_pages_mineru(pdf_path: str) -> List[Dict[str, Any]]:
+    try:
+        import importlib
+        if not importlib.util.find_spec("magic_pdf"):
+            raise ImportError("magic_pdf 패키지가 설치되어 있지 않습니다.")
+
+        from magic_pdf.data.dataset import PymuDocDataset
+        from magic_pdf.model.doc_analyze_by_custom_model import doc_analyze
+
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+
+        ds = PymuDocDataset(pdf_bytes)
+        infer_result = ds.apply(doc_analyze, ocr=False)
+        pipe_result = infer_result.pipe_txt()
+        markdown_text = pipe_result.get_markdown() if hasattr(pipe_result, "get_markdown") else str(pipe_result)
+
+        raw_pages = markdown_text.split("\n\n---\n\n")
+        pages = []
+        for idx, page_str in enumerate(raw_pages):
+            pages.append({
+                "page": idx + 1,
+                "text": page_str,
+                "blocks": [{"bbox": (0, 0, 100, 100), "text": page_str, "type": 0}],
+                "markdown": page_str,
+                "parser_engine": "mineru"
+            })
+        return pages if pages else _extract_pages_pymupdf(pdf_path)
+    except Exception as e:
+        import logging
+        logging.warning(f"MinerU 파서 실행 실패 ({e}). PyMuPDF 파서로 폴백합니다.")
+        return _extract_pages_pymupdf(pdf_path)
 
 
 def _extract_page(page: fitz.Page, page_num: int) -> Dict[str, Any]:
@@ -1386,19 +1501,20 @@ def _has_caption_between(y0: float, y1: float, captions: List[Dict[str, Any]]) -
     return False
 
 
-def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
+def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 테이블(Table)의 영역 정보를 추출합니다.
-    인접한 이미지/테이블 요소를 그룹화(Merge)하고 마진(Padding)을 주어 크롭 시 잘림 현상을 방지합니다.
-    가능한 경우 근처 캡션("Figure 1", "Table 2" 등)을 찾아 label로 함께 반환합니다.
-
-    캡션-사각형 매칭(4단계)은 문서 전체에서 Table 캡션이 어느 방향(위/아래)에
-    있는 관례인지를 먼저 확정한 뒤에야 할 수 있다(_resolve_table_caption_direction
-    참고 - 페이지 단위로 그때그때 판단하면 인접한 두 표가 서로의 캡션을
-    가로채는 문제가 생긴다). 그래서 이 함수는 두 단계로 나뉜다: 1단계에서
-    모든 페이지를 훑어 캡션/후보 사각형만 모으고, 방향을 확정한 뒤, 2단계에서
-    그 방향을 적용해 실제 매칭·그룹화·출력을 수행한다.
+    선택된 파서 엔진(pymupdf, pdfplumber, marker, mineru)에 맞춰 유연하게 영역 정보를 수집합니다.
     """
+    if engine is None:
+        try:
+            from config import get_pdf_parser_engine
+            engine = get_pdf_parser_engine()
+        except Exception:
+            engine = "pymupdf"
+
+    engine = (engine or "pymupdf").lower().strip()
+
     doc = fitz.open(pdf_path)
     images_data = []
 
@@ -1414,6 +1530,19 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
 
         page_captions = _find_page_captions(page)
         raw_rects = []
+
+        # pdfplumber 엔진인 경우 표(Table) 영역 추적 추가
+        if engine == "pdfplumber":
+            try:
+                import pdfplumber
+                with pdfplumber.open(pdf_path) as pl_pdf:
+                    if page_num < len(pl_pdf.pages):
+                        pl_page = pl_pdf.pages[page_num]
+                        for tbl in pl_page.find_tables():
+                            bbox = tbl.bbox # (x0, top, x1, bottom)
+                            raw_rects.append([bbox[0], bbox[1], bbox[2], bbox[3]])
+            except Exception:
+                pass
 
         # 1. 래스터 이미지(Raster Images) 좌표 수집
         page_imgs = page.get_image_info(xrefs=True)
