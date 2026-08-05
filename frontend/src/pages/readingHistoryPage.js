@@ -439,6 +439,8 @@ export async function renderReadingHistoryPage() {
   if (document.getElementById('page-history') !== el) return // 페이지 전환됨
 
   const docsById = new Map(libraryDocs.map(d => [d.id, d]))
+  // readingStats.title_by_doc: 하트비트 시 스냅샷된 doc별 제목 (영구 삭제 후에도 복원 가능)
+  const titleByDoc = new Map(Object.entries(readingStats?.title_by_doc || {}))
   const timelineDocTitles = new Map()
   events.forEach(e => {
     if (e.doc_id && e.doc_title && !timelineDocTitles.has(e.doc_id)) {
@@ -447,7 +449,13 @@ export async function renderReadingHistoryPage() {
   })
   const docTitle = (docId, fallback) => {
     const d = docsById.get(docId)
-    return (d?.metadata?.title) || d?.filename || fallback || timelineDocTitles.get(docId) || '제목 없음'
+    // 우선순위: 1) 현재 documents 테이블 제목  2) reading_time 스냅샷 제목
+    //           3) 타임라인 이벤트 제목        4) fallback  5) '제목 없음'
+    return (d?.metadata?.title) || d?.filename
+      || titleByDoc.get(docId)
+      || timelineDocTitles.get(docId)
+      || fallback
+      || '제목 없음'
   }
 
 
@@ -756,7 +764,9 @@ export async function renderReadingHistoryPage() {
   const topPapersHtml = topPapers.length ? topPapers.map((p, i) => {
     const doc = docsById.get(p.doc_id)
     const isDeleted = !doc || doc.is_deleted === 1
-    const title = docTitle(p.doc_id, '삭제된 논문')
+    // 삭제된 논문: titleByDoc(reading_time 스냅샷) → timelineDocTitles → '삭제된 논문' 순으로 fallback
+    const deletedFallback = titleByDoc.get(p.doc_id) || timelineDocTitles.get(p.doc_id) || '삭제된 논문'
+    const title = docTitle(p.doc_id, deletedFallback)
     const widthPct = Math.max(6, Math.round((p.seconds / topMaxSeconds) * 100))
     const pStat = paperAnalyticsMap[p.doc_id]
     const depth = pStat?.reading_depth || 'Opened'

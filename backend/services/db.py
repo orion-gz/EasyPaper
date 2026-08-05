@@ -322,6 +322,14 @@ def init_db():
 
         conn.commit()
 
+        # reading_time 테이블 동적 스키마 마이그레이션: doc_title 컬럼 추가
+        # 논문이 영구 삭제된 후에도 제목을 보존하기 위해 하트비트 시 스냅샷 저장.
+        try:
+            cursor.execute("ALTER TABLE reading_time ADD COLUMN doc_title TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # 이미 존재하면 무시
+
         # WAL: 여러 읽기 커넥션이 번역 잡의 쓰기 커넥션과 부딪혀 잠기는
         # 문제를 줄인다. 커넥션 단위 PRAGMA가 아니라 DB 파일에 영속되는
         # 설정이라 여기서 한 번만 켜두면 이후 모든 커넥션에 적용된다.
@@ -1277,21 +1285,40 @@ def db_get_memo_counts_for_docs(doc_ids: List[str]) -> Dict[str, int]:
 def db_add_reading_time(doc_id: str, username: str, category: str, seconds: int) -> None:
     """뷰어/비교 화면 하트비트로 들어온 경과 초를 (doc_id, username, 오늘 날짜,
     category) 버킷에 누적한다. 하루 단위로 쌓아두면 캘린더 히트맵/기간별 통계를
-    reading_time만으로 바로 집계할 수 있다."""
+    reading_time만으로 바로 집계할 수 있다.
+    논문이 나중에 영구 삭제되더라도 제목을 보존하기 위해 documents 테이블에서
+    현재 제목을 조회해 doc_title 컬럼에 스냅샷한다."""
     if seconds <= 0:
         return
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     now = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         cursor = conn.cursor()
+        # 논문 제목 스냅샷: 영구 삭제 후에도 제목을 복원하기 위해 저장
+        doc_title: Optional[str] = None
+        try:
+            cursor.execute(
+                "SELECT filename, metadata FROM documents WHERE id = ?",
+                (doc_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                meta = json.loads(row["metadata"]) if row["metadata"] else {}
+                doc_title = meta.get("title") or row["filename"] or None
+        except Exception:
+            pass
+
         cursor.execute(
             """
-            INSERT INTO reading_time (doc_id, username, day, category, seconds, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO reading_time (doc_id, username, day, category, seconds, updated_at, doc_title)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(doc_id, username, day, category)
-            DO UPDATE SET seconds = seconds + excluded.seconds, updated_at = excluded.updated_at
+            DO UPDATE SET
+                seconds = seconds + excluded.seconds,
+                updated_at = excluded.updated_at,
+                doc_title = COALESCE(excluded.doc_title, reading_time.doc_title)
             """,
-            (doc_id, username, day, category, int(seconds), now)
+            (doc_id, username, day, category, int(seconds), now, doc_title)
         )
         conn.commit()
 
@@ -1326,11 +1353,27 @@ def db_get_reading_time_stats(username: str, since_days: Optional[int] = None) -
         by_day[r["day"]] = by_day.get(r["day"], 0) + r["seconds"]
         total_seconds += r["seconds"]
 
+    # doc별 저장된 제목 스냅샷 조회 (영구 삭제된 논문 제목 복원용)
+    title_by_doc: Dict[str, str] = {}
+    with get_db() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "SELECT doc_id, doc_title FROM reading_time WHERE username = ? AND doc_title IS NOT NULL GROUP BY doc_id",
+                (username,)
+            )
+            for tr in cursor.fetchall():
+                if tr["doc_id"] and tr["doc_title"]:
+                    title_by_doc[tr["doc_id"]] = tr["doc_title"]
+        except Exception:
+            pass
+
     return {
         "total_seconds": total_seconds,
         "total_seconds_by_category": by_category,
         "total_seconds_by_doc": by_doc,
         "total_seconds_by_day": by_day,
+        "title_by_doc": title_by_doc,
     }
 
 

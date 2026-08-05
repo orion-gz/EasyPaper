@@ -524,8 +524,15 @@ async def get_activity_timeline(username: str) -> List[dict]:
     try:
         with get_db() as conn:
             cursor = conn.cursor()
+            # doc_title 스냅샷이 있으면 함께 조회 (doc별 최신 제목)
             cursor.execute(
-                "SELECT doc_id, day, SUM(seconds) as total_sec, MAX(updated_at) as last_ts FROM reading_time WHERE username = ? GROUP BY doc_id, day",
+                """
+                SELECT doc_id, day, SUM(seconds) as total_sec,
+                       MAX(updated_at) as last_ts,
+                       MAX(doc_title) as stored_title
+                FROM reading_time WHERE username = ?
+                GROUP BY doc_id, day
+                """,
                 (username,)
             )
             rows = cursor.fetchall()
@@ -533,10 +540,12 @@ async def get_activity_timeline(username: str) -> List[dict]:
                 r_dict = dict(r)
                 d_id = r_dict["doc_id"]
                 if d_id not in doc_ids_seen:
+                    # reading_time에 저장된 제목을 우선 사용, 없으면 "삭제된 논문"
+                    stored_title = r_dict.get("stored_title") or "삭제된 논문"
                     events.append({
                         "type": "read",
                         "doc_id": d_id,
-                        "doc_title": "삭제된 논문",
+                        "doc_title": stored_title,
                         "timestamp": r_dict["last_ts"] or f"{r_dict['day']}T00:00:00Z",
                         "duration_seconds": r_dict["total_sec"],
                         "start_page": 1,
