@@ -2230,6 +2230,9 @@ const chatSidebarPicker = new ProviderModelPicker($('chat-sidebar-provider'), {
   onChange: (provider, model) => changeProviderAndModel('chat', provider, model)
 })
 
+const _PDF_DOC_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`
+const _TRASH_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`
+
 class PdfParserPicker {
   constructor(containerEl, { onChange } = {}) {
     if (!containerEl) return
@@ -2248,7 +2251,7 @@ class PdfParserPicker {
     this._btn = document.createElement('button')
     this._btn.type = 'button'
     this._btn.className = 'provider-picker-btn picker-full'
-    this._btn.innerHTML = `<span class="picker-icon">📄</span><span class="picker-label">PyMuPDF (fitz) - [기본] (0 MB)</span><span class="picker-arrow">▾</span>`
+    this._btn.innerHTML = `<span class="picker-icon">${_PDF_DOC_SVG}</span><span class="picker-label">PyMuPDF (fitz) - [기본] (0 MB)</span><span class="picker-arrow">▾</span>`
 
     this._panel = document.createElement('div')
     this._panel.className = 'provider-picker-panel'
@@ -2282,16 +2285,48 @@ class PdfParserPicker {
 
     const header = document.createElement('div')
     header.className = 'picker-group-header'
-    header.innerHTML = `<span class="g-icon">📄</span><span>PDF 파서 엔진 목록</span>`
+    header.innerHTML = `<span class="g-icon">${_PDF_DOC_SVG}</span><span>PDF 파서 엔진 목록</span>`
     group.appendChild(header)
 
     list.forEach(p => {
       const item = document.createElement('div')
       item.className = 'picker-model-item' + (this._selectedId === p.id ? ' selected' : '')
-      const badge = p.installed ? '<span class="picker-available-chip" style="margin-left:auto;">설치됨</span>' : `<span style="margin-left:auto; font-size:11px; color:var(--text-muted);">${p.size_info || '미설치'}</span>`
-      item.innerHTML = `<div style="display:flex; align-items:center; width:100%; gap:8px;"><span>${p.name}</span> ${badge}</div>`
-      
+
+      let badgeHtml = ''
+      if (p.installed) {
+        badgeHtml = `<span class="picker-available-chip" style="margin-left:auto;">설치됨</span>`
+        if (p.id !== 'pymupdf') {
+          badgeHtml += `<button type="button" data-parser-del="${p.id}" style="margin-left:6px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:3px;">${_TRASH_SVG} 삭제</button>`
+        }
+      } else {
+        badgeHtml = `<span style="margin-left:auto;font-size:11px;color:var(--text-muted);">${p.size_info || '미설치'}</span>`
+      }
+
+      item.innerHTML = `<div style="display:flex;align-items:center;width:100%;gap:8px;"><span>${p.name}</span>${badgeHtml}</div>`
+
+      const delBtn = item.querySelector('[data-parser-del]')
+      if (delBtn) {
+        delBtn.addEventListener('click', async (evt) => {
+          evt.stopPropagation()
+          evt.preventDefault()
+          this.container.classList.remove('open')
+          const ok = await showCustomConfirm(`[${p.name}] 파서 패키지를 가상환경(.venv)에서 삭제하시겠습니까?`, {
+            title: '파서 패키지 삭제', confirmText: '삭제', danger: true
+          })
+          if (!ok) return
+          try {
+            showToast(`[${p.name}] 패키지 삭제 진행 중...`, 'info')
+            await uninstallPdfParserAPI(p.id)
+            showToast(`[${p.name}] 패키지 삭제가 완료되었습니다.`, 'success')
+            await refreshSystemSettings()
+          } catch (err) {
+            showToast(`삭제 실패: ${err.message}`, 'error')
+          }
+        })
+      }
+
       item.addEventListener('click', (e) => {
+        if (e.target.closest('[data-parser-del]')) return
         e.stopPropagation()
         this._selectedId = p.id
         this._updateBtn()
@@ -2308,7 +2343,7 @@ class PdfParserPicker {
     const p = (this._parsers && this._parsers.find(item => item.id === this._selectedId)) || PARSER_FALLBACK_META[this._selectedId] || PARSER_FALLBACK_META.pymupdf
     const label = p ? `${p.name} - ${p.installed ? '[설치됨]' : `[미설치 - ${p.size_info}]`}` : this._selectedId
     if (this._btn) {
-      this._btn.querySelector('.picker-icon').innerHTML = '📄'
+      this._btn.querySelector('.picker-icon').innerHTML = _PDF_DOC_SVG
       this._btn.querySelector('.picker-label').textContent = label
     }
   }
