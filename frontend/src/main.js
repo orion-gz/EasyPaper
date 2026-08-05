@@ -5775,7 +5775,7 @@ function renderRelatedQuestionsList(questions) {
 function showGraphDetailPanel(nodeData, neighborNodes = []) {
   if (!libraryGraphDetailPanel) return
   if (nodeData.type === 'paper') {
-    const categories = nodeData.categories || []
+    const categories = dedupeTags(nodeData.categories || [])
     libraryGraphDetailPanel.innerHTML = `
       ${renderGraphDetailHeader(nodeData)}
       ${categories.length ? `<div class="rg-detail-tags">${categories.map(c => `<span class="rg-detail-tag">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
@@ -6187,13 +6187,29 @@ function createEmptyState(variant = 'library') {
 }
 
 
+function dedupeTags(rawCategories) {
+  if (!Array.isArray(rawCategories)) return []
+  const result = []
+  const seen = new Set()
+  for (const cat of rawCategories) {
+    if (typeof cat === 'string') {
+      const trimmed = cat.trim()
+      if (trimmed && !seen.has(trimmed.toLowerCase())) {
+        seen.add(trimmed.toLowerCase())
+        result.push(trimmed)
+      }
+    }
+  }
+  return result
+}
+
 // 카드/리스트 뷰 공용: 문서 데이터로부터 두 뷰가 함께 쓰는 마크업 조각을 미리 계산한다.
 function prepareDocItemHtml(doc) {
   const pct = getLibraryReadProgress(doc)
   const isDone = doc.metadata?.read === true || pct >= 100
   const date = new Date(doc.created_at).toLocaleDateString('ko-KR', { year:'numeric', month:'short', day:'numeric' })
 
-  const categories = doc.metadata?.categories || []
+  const categories = dedupeTags(doc.metadata?.categories || [])
   let tagsHtml = ''
   if (categories.length > 0) {
     tagsHtml = `<div class="doc-card-tags">` +
@@ -6902,7 +6918,7 @@ async function loadLibraryDetailOverview(doc) {
 
   const tagsEl = $('lib-detail-tags')
   if (tagsEl) {
-    const categories = doc.metadata?.categories || []
+    const categories = dedupeTags(doc.metadata?.categories || [])
     tagsEl.innerHTML = categories.length
       ? categories.map(c => `<span class="lib-detail-tag">${escapeHtml(c)}</span>`).join('')
       : `<p class="lib-detail-empty" style="padding:0">지정된 태그가 없습니다.</p>`
@@ -7120,7 +7136,7 @@ function showDocPreview(doc) {
   docPreviewCoverImg.src = `/api/library/${doc.id}/cover`
   docPreviewPages.textContent = `${doc.total_pages || 1}p`
 
-  const categories = doc.metadata?.categories || []
+  const categories = dedupeTags(doc.metadata?.categories || [])
   docPreviewTags.innerHTML = categories.map(cat => `<span>${escapeHtml(cat)}</span>`).join('')
 
   const date = new Date(doc.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
