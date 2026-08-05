@@ -1037,32 +1037,45 @@
 
         <!-- 모델 다운로드 섹션 (Ollama 전용) -->
         <div id="pull-model-section" class="modal-form hidden" style="border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 10px; padding-top: 10px;">
-          <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>새 모델 다운로드 (Pull)</h3>
+          <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 14px; display: flex; align-items: center; gap: 6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>Ollama 모델 다운로드 및 관리</h3>
           
-          <div class="form-group" style="margin-bottom: 12px;">
+          <!-- 설치된 모델 목록 및 삭제 -->
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label style="margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:2px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              설치된 모델 목록 (삭제 가능)
+            </label>
+            <div id="ollama-installed-models-container" style="background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); padding: 10px 12px;">
+              <div id="ollama-installed-models-list" style="display: flex; flex-direction: column; gap: 6px;">
+                <span style="font-size: 12px; color: var(--text-muted);">설치된 모델을 확인하는 중...</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
             <label style="margin-bottom: 6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>추천 번역 모델 (클릭하여 즉시 다운로드)</label>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="qwen3.5:9b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);">Qwen 3.5 9B (qwen3.5:9b)</button>
-              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="llama3.1:8b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);">Llama 3.1 8B (llama3.1:8b)</button>
-              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="gemma4:e4b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);">Gemma 4 E4B (gemma4:e4b)</button>
-              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="gemma4:12b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);">Gemma 4 12B (gemma4:12b)</button>
-              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="qwen3.6:27b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);">Qwen 3.6 27B (qwen3.6:27b)</button>
-              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="mistral-small3.2:24b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);">Mistral Small 3.2 24B (mistral-small3.2:24b)</button>
-              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="phi4-reasoning:14b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);">Phi-4 Reasoning 14B (phi4-reasoning:14b)</button>
-              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="deepseek-r1:8b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);">DeepSeek R1 8B (deepseek-r1:8b)</button>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="qwen3.5:9b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); display: inline-flex; align-items: center; gap: 4px;">Qwen 3.5 9B (qwen3.5:9b)</button>
+              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="llama3.1:8b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); display: inline-flex; align-items: center; gap: 4px;">Llama 3.1 8B (llama3.1:8b)</button>
+              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="gemma4:e4b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); display: inline-flex; align-items: center; gap: 4px;">Gemma 4 E4B (gemma4:e4b)</button>
+              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="gemma4:12b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); display: inline-flex; align-items: center; gap: 4px;">Gemma 4 12B (gemma4:12b)</button>
+              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="qwen3.6:27b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); display: inline-flex; align-items: center; gap: 4px;">Qwen 3.6 27B (qwen3.6:27b)</button>
+              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="mistral-small3.2:24b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); display: inline-flex; align-items: center; gap: 4px;">Mistral Small 3.2 24B (mistral-small3.2:24b)</button>
+              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="phi4-reasoning:14b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); display: inline-flex; align-items: center; gap: 4px;">Phi-4 Reasoning 14B (phi4-reasoning:14b)</button>
+              <button type="button" class="btn btn-secondary recommend-model-btn" data-model="deepseek-r1:8b" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); display: inline-flex; align-items: center; gap: 4px;">DeepSeek R1 8B (deepseek-r1:8b)</button>
             </div>
           </div>
 
           <div class="form-group">
-            <label for="setting-pull-model-name">Ollama 모델명 직접 입력</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="text" id="setting-pull-model-name" placeholder="예: qwen2.5:7b, llama3, gemma2" style="flex: 1; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text-primary); outline: none; font-size: 14px;" />
-              <button type="button" id="setting-pull-model-btn" class="btn btn-primary" style="padding: 10px 18px; font-size: 13px; white-space: nowrap;">다운로드</button>
+            <label for="setting-pull-model-name" style="margin-bottom: 6px;">Ollama 모델명 직접 입력</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" id="setting-pull-model-name" placeholder="예: qwen2.5:7b, llama3, gemma2" style="flex: 1; height: 42px; padding: 0 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text-primary); outline: none; font-size: 14px; box-sizing: border-box;" />
+              <button type="button" id="setting-pull-model-btn" class="btn btn-primary" style="height: 42px; padding: 0 18px; font-size: 13px; font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">다운로드</button>
             </div>
           </div>
           
           <div id="pull-model-progress-area" class="hidden" style="margin-top: 15px; background: var(--bg-elevated); border: 1px solid var(--border-strong); padding: 12px; border-radius: var(--radius-md);">
-            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; align-items: center;">
               <span id="pull-status-text" style="color: var(--text-secondary);">대기 중...</span>
               <span id="pull-pct-text" style="font-weight: 600; color: var(--accent-mid);">0%</span>
             </div>
@@ -1071,6 +1084,7 @@
             </div>
           </div>
         </div>
+
       </div>
 
       <!-- 계정 설정 탭 -->
