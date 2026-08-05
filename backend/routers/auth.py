@@ -380,7 +380,7 @@ async def install_pdf_parser_stream(parser_id: str):
         python_bin = sys.executable
         yield f"data: {json.dumps({'status': 'progress', 'line': f'백엔드 가상환경({python_bin})에 {pkg_name} 설치를 시작합니다...'})}\n\n"
         try:
-            cmd = [python_bin, "-m", "pip", "install", pkg_name]
+            cmd = [python_bin, "-u", "-m", "pip", "install", pkg_name]
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
