@@ -2575,9 +2575,8 @@ function updateParserCardInfo(engineId) {
   if (cardCons) cardCons.textContent = parser.cons
 }
 
-const settingPdfParserEngineSelect = $('setting-pdf-parser-engine')
-if (settingPdfParserEngineSelect) {
-  settingPdfParserEngineSelect.addEventListener('change', async (e) => {
+document.addEventListener('change', async (e) => {
+  if (e.target && e.target.id === 'setting-pdf-parser-engine') {
     const selectedId = e.target.value
     let parser = pdfParsersData.find(p => p.id === selectedId) || PARSER_FALLBACK_META[selectedId]
 
@@ -2590,8 +2589,8 @@ if (settingPdfParserEngineSelect) {
       await autoSaveSystemSettings({ silent: false })
       showToast(`PDF 파서 엔진이 [${parser ? parser.name : selectedId}]로 설정되었습니다.`, 'success')
     }
-  })
-}
+  }
+})
 
 function openPdfParserInstallModal(parser) {
   const modal = $('pdf-parser-install-modal')
@@ -2601,13 +2600,22 @@ function openPdfParserInstallModal(parser) {
   const logElem = $('pdf-parser-install-log')
   const doneBtn = $('pdf-parser-install-done-btn')
 
+  // 설정 카드 내부 인라인 엘리먼트
+  const inlineProgressArea = $('pdf-parser-inline-progress')
+  const inlineStatusText = $('pdf-parser-inline-status')
+  const inlineLogElem = $('pdf-parser-inline-log')
+
   if (introArea) introArea.classList.add('hidden')
   if (progressArea) progressArea.classList.remove('hidden')
+  if (inlineProgressArea) inlineProgressArea.classList.remove('hidden')
+
   if (logElem) logElem.textContent = ''
+  if (inlineLogElem) inlineLogElem.textContent = ''
   if (doneBtn) doneBtn.classList.add('hidden')
-  if (statusText) {
-    statusText.innerHTML = `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 백엔드 가상환경에 [${parser.name}] 설치를 시작합니다...`
-  }
+
+  const initialMsg = `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 백엔드 가상환경에 [${parser.name}] 설치 진행 중...`
+  if (statusText) statusText.innerHTML = initialMsg
+  if (inlineStatusText) inlineStatusText.innerHTML = initialMsg
 
   openOverlayModal(modal)
 
@@ -2618,15 +2626,23 @@ function openPdfParserInstallModal(parser) {
         logElem.textContent += line + '\n'
         logElem.scrollTop = logElem.scrollHeight
       }
+      if (inlineLogElem) {
+        inlineLogElem.textContent += line + '\n'
+        inlineLogElem.scrollTop = inlineLogElem.scrollHeight
+      }
     },
     async (successMsg) => {
-      if (statusText) statusText.innerHTML = `<span style="color: var(--accent-mid); font-weight:600;">✓ [${parser.name}] 설치가 성공적으로 완료되었습니다!</span>`
+      const succMsg = `<span style="color: var(--accent-mid); font-weight:600;">✓ [${parser.name}] 설치가 성공적으로 완료되었습니다!</span>`
+      if (statusText) statusText.innerHTML = succMsg
+      if (inlineStatusText) inlineStatusText.innerHTML = succMsg
       if (doneBtn) doneBtn.classList.remove('hidden')
       await autoSaveSystemSettings({ silent: true })
       await refreshSystemSettings()
     },
     async (err) => {
-      if (statusText) statusText.innerHTML = `<span style="color: var(--danger, #ef4444); font-weight:600;">✕ 설치 중 오류 발생: ${err.message}</span>`
+      const errMsg = `<span style="color: var(--danger, #ef4444); font-weight:600;">✕ 설치 중 오류 발생: ${err.message}</span>`
+      if (statusText) statusText.innerHTML = errMsg
+      if (inlineStatusText) inlineStatusText.innerHTML = errMsg
       if (doneBtn) doneBtn.classList.remove('hidden')
       await refreshSystemSettings()
     }

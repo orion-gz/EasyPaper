@@ -987,6 +987,14 @@
                   <div style="flex: 1;"><strong style="color: var(--accent-mid);">장점:</strong> <span id="pdf-parser-card-pros">초고속 (몇 ms 내 처리), 별도 설치 필요 없음</span></div>
                   <div style="flex: 1;"><strong style="color: var(--text-muted);">단점:</strong> <span id="pdf-parser-card-cons">2단 복잡 구조, 수식 텍스트 엉킴 발생 가능</span></div>
                 </div>
+                <!-- 설정 카드 내부 직관적 인라인 다운로드 진행 화면 -->
+                <div id="pdf-parser-inline-progress" class="hidden" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
+                  <div style="font-size: 12.5px; font-weight: 600; color: var(--accent-mid); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;" id="pdf-parser-inline-status">
+                    <svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    가상환경(.venv)에 설치 중입니다...
+                  </div>
+                  <pre id="pdf-parser-inline-log" style="width: 100%; height: 140px; background: #0d1117; color: #c9d1d9; border-radius: 6px; padding: 10px; font-family: var(--font-mono); font-size: 11px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin: 0; border: 1px solid var(--border-strong); box-sizing: border-radius;"></pre>
+                </div>
               </div>
             </div>
           </div>
