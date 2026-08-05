@@ -3657,7 +3657,7 @@ function updateTrashTabVisibility(trashDocs) {
   const countBadge = $('lib-tab-trash-count')
   if (countBadge) {
     if (trashCount > 0) {
-      countBadge.textContent = ` (${trashCount})`
+      countBadge.textContent = trashCount
       countBadge.classList.remove('hidden')
     } else {
       countBadge.textContent = ''

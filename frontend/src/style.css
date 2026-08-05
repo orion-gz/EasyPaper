@@ -6505,6 +6505,7 @@ body.light-theme .chat-drawer {
 
 /* 우측 상단 플로팅 패널 내 휴지통 버튼 스타일 */
 #lib-tab-trash {
+  position: relative;
   width: 42px;
   height: 42px;
   border-radius: 50%;
@@ -6519,6 +6520,26 @@ body.light-theme .chat-drawer {
   font-size: 16px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   padding: 0;
+}
+
+.lib-tab-trash-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid var(--bg-surface);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  line-height: 1;
 }
 
 #lib-tab-trash:hover {
