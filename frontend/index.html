@@ -982,6 +982,13 @@
                   <div style="flex: 1;"><strong style="color: var(--accent-mid);">장점:</strong> <span id="pdf-parser-card-pros">초고속 (몇 ms 내 처리), 별도 설치 필요 없음</span></div>
                   <div style="flex: 1;"><strong style="color: var(--text-muted);">단점:</strong> <span id="pdf-parser-card-cons">2단 복잡 구조, 수식 텍스트 엉킴 발생 가능</span></div>
                 </div>
+                <!-- 미설치 파서 설치 버튼 -->
+                <div id="pdf-parser-install-row" class="hidden" style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">
+                  <button id="pdf-parser-install-btn" type="button" style="display:inline-flex;align-items:center;gap:5px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.4);color:var(--accent-mid, #6366f1);border-radius:6px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s ease;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+                    패키지 설치
+                  </button>
+                </div>
                 <!-- 설치된 파서 삭제 버튼 -->
                 <div id="pdf-parser-uninstall-row" class="hidden" style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">
                   <button id="pdf-parser-uninstall-btn" type="button" style="display:inline-flex;align-items:center;gap:5px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);color:#ef4444;border-radius:6px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s ease;">

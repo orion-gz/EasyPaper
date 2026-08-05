@@ -2352,16 +2352,12 @@ const settingChatPicker = new ProviderModelPicker($('setting-chat-provider'), {
 
 const settingPdfParserPicker = new PdfParserPicker($('setting-pdf-parser-picker'), {
   onChange: async (selectedId) => {
-    let parser = pdfParsersData.find(p => p.id === selectedId) || PARSER_FALLBACK_META[selectedId]
-
     updateParserCardInfo(selectedId)
-
-    if (parser && !parser.installed && parser.id !== 'pymupdf') {
-      targetInstallParserId = selectedId
-      openPdfParserInstallModal(parser)
-    } else {
+    const parser = pdfParsersData.find(p => p.id === selectedId) || PARSER_FALLBACK_META[selectedId]
+    // 설치된 파서만 즉시 엔진 변경 저장. 미설치 파서는 카드의 [패키지 설치] 버튼을 눌러야 함.
+    if (parser && parser.installed) {
       await autoSaveSystemSettings({ silent: false })
-      showToast(`PDF 파서 엔진이 [${parser ? parser.name : selectedId}]로 설정되었습니다.`, 'success')
+      showToast(`PDF 파서 엔진이 [${parser.name}]로 설정되었습니다.`, 'success')
     }
   }
 })
@@ -2684,6 +2680,8 @@ function updateParserCardInfo(engineId) {
   const cardDesc = $('pdf-parser-card-desc')
   const cardPros = $('pdf-parser-card-pros')
   const cardCons = $('pdf-parser-card-cons')
+  const installRow = $('pdf-parser-install-row')
+  const installBtn = $('pdf-parser-install-btn')
   const uninstallRow = $('pdf-parser-uninstall-row')
   const uninstallBtn = $('pdf-parser-uninstall-btn')
 
@@ -2694,6 +2692,24 @@ function updateParserCardInfo(engineId) {
   if (cardDesc) cardDesc.textContent = parser.description
   if (cardPros) cardPros.textContent = parser.pros
   if (cardCons) cardCons.textContent = parser.cons
+
+  // 설치 버튼: pymupdf 제외, 미설치인 경우만 표시
+  if (installRow) {
+    if (parser.id !== 'pymupdf' && !parser.installed) {
+      installRow.classList.remove('hidden')
+    } else {
+      installRow.classList.add('hidden')
+    }
+  }
+
+  if (installBtn) {
+    const newInstallBtn = installBtn.cloneNode(true)
+    installBtn.parentNode.replaceChild(newInstallBtn, installBtn)
+    newInstallBtn.addEventListener('click', () => {
+      targetInstallParserId = parser.id
+      openPdfParserInstallModal(parser)
+    })
+  }
 
   // 삭제 버튼: pymupdf 제외, 설치된 경우만 표시
   if (uninstallRow) {
