@@ -1501,19 +1501,20 @@ def _has_caption_between(y0: float, y1: float, captions: List[Dict[str, Any]]) -
     return False
 
 
-def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
+def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 테이블(Table)의 영역 정보를 추출합니다.
-    인접한 이미지/테이블 요소를 그룹화(Merge)하고 마진(Padding)을 주어 크롭 시 잘림 현상을 방지합니다.
-    가능한 경우 근처 캡션("Figure 1", "Table 2" 등)을 찾아 label로 함께 반환합니다.
-
-    캡션-사각형 매칭(4단계)은 문서 전체에서 Table 캡션이 어느 방향(위/아래)에
-    있는 관례인지를 먼저 확정한 뒤에야 할 수 있다(_resolve_table_caption_direction
-    참고 - 페이지 단위로 그때그때 판단하면 인접한 두 표가 서로의 캡션을
-    가로채는 문제가 생긴다). 그래서 이 함수는 두 단계로 나뉜다: 1단계에서
-    모든 페이지를 훑어 캡션/후보 사각형만 모으고, 방향을 확정한 뒤, 2단계에서
-    그 방향을 적용해 실제 매칭·그룹화·출력을 수행한다.
+    선택된 파서 엔진(pymupdf, pdfplumber, marker, mineru)에 맞춰 유연하게 영역 정보를 수집합니다.
     """
+    if engine is None:
+        try:
+            from config import get_pdf_parser_engine
+            engine = get_pdf_parser_engine()
+        except Exception:
+            engine = "pymupdf"
+
+    engine = (engine or "pymupdf").lower().strip()
+
     doc = fitz.open(pdf_path)
     images_data = []
 
@@ -1529,6 +1530,19 @@ def extract_pdf_images(pdf_path: str) -> List[Dict[str, Any]]:
 
         page_captions = _find_page_captions(page)
         raw_rects = []
+
+        # pdfplumber 엔진인 경우 표(Table) 영역 추적 추가
+        if engine == "pdfplumber":
+            try:
+                import pdfplumber
+                with pdfplumber.open(pdf_path) as pl_pdf:
+                    if page_num < len(pl_pdf.pages):
+                        pl_page = pl_pdf.pages[page_num]
+                        for tbl in pl_page.find_tables():
+                            bbox = tbl.bbox # (x0, top, x1, bottom)
+                            raw_rects.append([bbox[0], bbox[1], bbox[2], bbox[3]])
+            except Exception:
+                pass
 
         # 1. 래스터 이미지(Raster Images) 좌표 수집
         page_imgs = page.get_image_info(xrefs=True)
