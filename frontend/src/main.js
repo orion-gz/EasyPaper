@@ -1982,14 +1982,9 @@ class ProviderModelPicker {
     const hasClaudeKey = !!settingClaudeKey.value.trim()
     const downloaded = state.availableOllamaModels || []
 
-    // Ollama 다운로드 모델 매칭을 유연하게 처리하기 위한 헬퍼 함수
-    const isMatch = (installed, baseValue) => {
-      if (installed === baseValue) return true
-      if (baseValue === 'custom_input') return false
-      const instClean = installed.split(':')[0].toLowerCase()
-      const baseClean = baseValue.split(':')[0].toLowerCase()
-      return instClean === baseClean
-    }
+    // Ollama 다운로드 모델 매칭을 처리하기 위한 헬퍼 함수
+    const isMatch = (installed, baseValue) => isOllamaModelMatch(installed, baseValue)
+
 
     // 지금 바로 사용 가능한(=키가 있거나, CLI가 감지됐거나, 모델이 받아져 있는) 공급자인지 여부
     const isProviderAvailable = (providerId) => {
@@ -2487,19 +2482,29 @@ function renderOllamaInstalledModels() {
   })
 }
 
+export function isOllamaModelMatch(installedName, targetName) {
+  if (!installedName || !targetName) return false
+  if (targetName === 'custom_input' || installedName === 'custom_input') return false
+
+  const cleanInst = installedName.trim().toLowerCase()
+  const cleanTarget = targetName.trim().toLowerCase()
+
+  if (cleanInst === cleanTarget) return true
+
+  // 태그 분리 (:latest 생략 케이스 대응)
+  const [instBase, instTag = 'latest'] = cleanInst.split(':')
+  const [targetBase, targetTag = 'latest'] = cleanTarget.split(':')
+
+  return instBase === targetBase && instTag === targetTag
+}
+
 function updateRecommendModelButtons() {
   const downloaded = state.availableOllamaModels || []
-  const isMatch = (installed, baseValue) => {
-    if (installed === baseValue) return true
-    const instClean = installed.split(':')[0].toLowerCase()
-    const baseClean = baseValue.split(':')[0].toLowerCase()
-    return instClean === baseClean
-  }
 
   document.querySelectorAll('.recommend-model-btn').forEach(btn => {
     const model = btn.getAttribute('data-model')
     if (!model) return
-    const isInstalled = downloaded.some(dm => isMatch(dm, model))
+    const isInstalled = downloaded.some(dm => isOllamaModelMatch(dm, model))
     const baseLabel = btn.textContent.replace(' (설치됨)', '')
     if (isInstalled) {
       btn.textContent = `${baseLabel} (설치됨)`
@@ -2514,6 +2519,7 @@ function updateRecommendModelButtons() {
     }
   })
 }
+
 
 
 // ── PDF 파서 엔진 선택 및 동적 설치 UI 핸들러 ──────────────────
@@ -2906,7 +2912,7 @@ document.querySelectorAll('.recommend-model-btn').forEach(btn => {
     const model = btn.dataset.model
     if (!model) return
     const downloaded = state.availableOllamaModels || []
-    const isInstalled = downloaded.some(dm => dm === model || dm.split(':')[0].toLowerCase() === model.split(':')[0].toLowerCase())
+    const isInstalled = downloaded.some(dm => isOllamaModelMatch(dm, model))
     if (isInstalled) {
       const ok = await showCustomConfirm(`'${model}' 모델은 이미 설치되어 있습니다. 다시 다운로드하시겠습니까?`, {
         title: '모델 재다운로드',
@@ -2919,6 +2925,7 @@ document.querySelectorAll('.recommend-model-btn').forEach(btn => {
     settingPullModelBtn.click()
   })
 })
+
 
 
 // 일반 설정: 저장 버튼 없이 필드 변경 즉시 저장한다. 번역 결과에 영향을 주는
