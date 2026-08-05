@@ -3657,7 +3657,8 @@ function updateTrashTabVisibility(trashDocs) {
   if (trashCount > 0 || state.currentLibraryTab === 'trash') {
     libTabTrash.classList.remove('hidden')
     libTabTrash.title = `휴지통 (${trashCount}개 문서)`
-    libTabTrash.innerHTML = icon('trash2', 14)
+    const countBadge = trashCount > 0 ? ` (${trashCount})` : ''
+    libTabTrash.innerHTML = `${icon('trash2', 14, 'style="vertical-align:-2px;margin-right:4px"')}휴지통${countBadge}`
   } else {
     libTabTrash.classList.add('hidden')
   }
@@ -3696,6 +3697,15 @@ function updateTabUI(activeTab) {
   activeCategoryFilter = 'ALL'
   activeStatusFilter = 'all'
   closeLibraryDetailPanel()
+
+  const subtitleEl = document.querySelector('.library-header-subtitle')
+  if (subtitleEl) {
+    if (activeTab === 'trash') {
+      subtitleEl.textContent = '휴지통에 보관 중인 논문입니다. 복원하거나 영구 삭제할 수 있습니다.'
+    } else {
+      subtitleEl.textContent = '보관함에 저장된 모든 논문을 한 곳에서 관리하세요'
+    }
+  }
 
   if (libTabTrash) libTabTrash.classList.toggle('active', activeTab === 'trash')
   if (libEmptyTrashBtn) libEmptyTrashBtn.classList.toggle('hidden', activeTab !== 'trash')
@@ -3837,6 +3847,9 @@ document.querySelectorAll('[data-icon]').forEach(el => {
 if (sidebarNav) {
   sidebarNav.querySelectorAll('.sidebar-nav-item[data-page]').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (btn.dataset.page === 'library') {
+        updateTabUI('archive')
+      }
       if (state.currentWorkspacePage === btn.dataset.page) return
       showWorkspacePage(btn.dataset.page)
     })
