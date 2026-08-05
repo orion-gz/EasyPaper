@@ -410,6 +410,8 @@ async def install_pdf_parser_stream(parser_id: str):
 @router.post("/settings/uninstall-pdf-parser")
 async def uninstall_pdf_parser(request: Request):
     import sys, subprocess
+    import config as cfg
+
     body = await request.json()
     parser_id = body.get("parser_id", "")
 
@@ -430,15 +432,23 @@ async def uninstall_pdf_parser(request: Request):
     )
 
     if result.returncode != 0:
-        raise HTTPException(status_code=500, detail=f"삭제 실패: {result.stderr}")
+        raise HTTPException(status_code=500, detail=f"삭제 실패: {result.stderr.strip() or result.stdout.strip()}")
 
     # 삭제한 파서가 현재 엔진이면 pymupdf로 복귀
-    from config import get_system_settings, update_system_settings
-    settings = get_system_settings()
-    if settings.get("pdf_parser_engine") == parser_id:
-        update_system_settings(pdf_parser_engine="pymupdf", **{
-            k: v for k, v in settings.items() if k != "pdf_parser_engine"
-        })
+    from config import update_system_settings
+    if cfg.PDF_PARSER_ENGINE == parser_id:
+        update_system_settings(
+            ollama_host=cfg.OLLAMA_HOST,
+            trans_provider=cfg.TRANS_PROVIDER,
+            trans_model=cfg.TRANS_MODEL,
+            chat_provider=cfg.CHAT_PROVIDER,
+            chat_model=cfg.CHAT_MODEL,
+            openai_api_key=cfg.OPENAI_API_KEY,
+            gemini_api_key=cfg.GEMINI_API_KEY,
+            claude_api_key=cfg.CLAUDE_API_KEY,
+            openalex_mailto=cfg.OPENALEX_MAILTO,
+            pdf_parser_engine="pymupdf"
+        )
 
     return {"status": "success", "message": f"{pkg_name} 패키지가 삭제되었습니다."}
 
