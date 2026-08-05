@@ -2675,6 +2675,15 @@ async function refreshPdfParsersUI(savedEngine) {
   }
 }
 
+function clearParserInlineProgress() {
+  const inlineProgress = $('pdf-parser-inline-progress')
+  const inlineLog = $('pdf-parser-inline-log')
+  const inlineStatus = $('pdf-parser-inline-status')
+  if (inlineProgress) inlineProgress.classList.add('hidden')
+  if (inlineLog) inlineLog.textContent = ''
+  if (inlineStatus) inlineStatus.innerHTML = ''
+}
+
 function updateParserCardInfo(engineId) {
   const cardName = $('pdf-parser-card-name')
   const cardDesc = $('pdf-parser-card-desc')
@@ -2687,6 +2696,9 @@ function updateParserCardInfo(engineId) {
 
   const parser = pdfParsersData.find(p => p.id === engineId) || PARSER_FALLBACK_META[engineId] || PARSER_FALLBACK_META.pymupdf
   if (!parser) return
+
+  // 파서 변경 시 인라인 설치 로그 초기화
+  clearParserInlineProgress()
 
   if (cardName) cardName.textContent = `${parser.name} ${parser.installed ? '(설치됨)' : `(${parser.size_info})`}`
   if (cardDesc) cardDesc.textContent = parser.description
@@ -2733,6 +2745,7 @@ function updateParserCardInfo(engineId) {
         showToast(`[${parser.name}] 패키지 삭제 진행 중...`, 'info')
         await uninstallPdfParserAPI(parser.id)
         showToast(`[${parser.name}] 패키지 삭제가 완료되었습니다.`, 'success')
+        clearParserInlineProgress()
         await refreshSystemSettings()
       } catch (err) {
         showToast(`삭제 실패: ${err.message}`, 'error')
@@ -2921,11 +2934,13 @@ globalSettingsBtn.addEventListener('click', async () => {
 })
 
 closeSettingsBtn.addEventListener('click', () => {
+  clearParserInlineProgress()
   closeOverlayModal(settingsModal)
 })
 
 settingsModal.addEventListener('click', (e) => {
   if (e.target === settingsModal) {
+    clearParserInlineProgress()
     closeOverlayModal(settingsModal)
   }
 })
