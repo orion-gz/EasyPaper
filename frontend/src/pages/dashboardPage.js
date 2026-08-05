@@ -434,19 +434,24 @@ function renderTimelineCard(events) {
       <div class="dash-card-tag dash-card-tag-inline">최근 7일</div>
       ${recent.length === 0 ? emptyNote('최근 7일간 활동이 없습니다.') : `
       <ul class="dash-timeline-list">
-        ${recent.map(e => `
-          <li class="dash-timeline-item dash-timeline-${escapeHtml(e.type || '')}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type || '')}" title="이 논문 열기">
+        ${recent.map(e => {
+          const isDeleted = Boolean(e.is_deleted)
+          return `
+          <li class="dash-timeline-item dash-timeline-${escapeHtml(e.type || '')} ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type || '')}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${isDeleted ? '삭제된 논문입니다' : '이 논문 열기'}">
             <span class="dash-timeline-dot"></span>
             <div class="dash-timeline-body">
               <div class="dash-timeline-top">
                 <span class="dash-timeline-type">${escapeHtml(TIMELINE_TYPE_LABEL[e.type] || e.type || '')}</span>
                 <span class="dash-timeline-time">${relativeTimeKo(e.timestamp)}</span>
               </div>
-              <div class="dash-timeline-title">${escapeHtml(e.doc_title || '')}</div>
+              <div class="dash-timeline-title">
+                ${escapeHtml(e.doc_title || '')}
+                ${isDeleted ? '<span class="rh-deleted-badge">삭제됨</span>' : ''}
+              </div>
               ${e.summary ? `<div class="dash-timeline-summary">${escapeHtml(e.summary)}</div>` : ''}
             </div>
           </li>
-        `).join('')}
+        `}).join('')}
       </ul>`}
     </div>
   `
@@ -583,7 +588,7 @@ function attachHandlers(root) {
   root.querySelectorAll('.dash-timeline-item[data-doc-id]').forEach(elm => {
     elm.addEventListener('click', () => {
       const id = elm.dataset.docId
-      if (!id) return
+      if (!id || elm.dataset.isDeleted === 'true') return
       const wantChat = elm.dataset.type === 'question'
       location.hash = `viewer?id=${encodeURIComponent(id)}${wantChat ? '&chat=1' : ''}`
     })

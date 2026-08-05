@@ -586,3 +586,30 @@ body.light-theme {
 @media (max-width: 560px) {
   .rh-callout-row { flex-direction: column; }
 }
+
+/* ── 삭제된 논문 뱃지 및 스타일 ── */
+.rh-deleted-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--error, #ef4444);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  margin-left: 6px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.rh-timeline-entry.is-deleted,
+.dash-timeline-item.is-deleted,
+.rh-top-row.is-deleted {
+  cursor: default !important;
+  opacity: 0.85;
+}
+.rh-timeline-entry.is-deleted:hover,
+.dash-timeline-item.is-deleted:hover,
+.rh-top-row.is-deleted:hover {
+  background: transparent;
+}

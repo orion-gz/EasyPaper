@@ -106,7 +106,8 @@ def list_documents(
     ignore_math: Optional[bool] = None,
     ignore_table: Optional[bool] = None,
     ignore_refs: Optional[bool] = None,
-    only_trash: bool = False
+    only_trash: bool = False,
+    include_deleted: bool = False,
 ) -> list:
     """라이브러리의 문서를 최신순으로 반환합니다 (필터링 가능).
 
@@ -114,7 +115,7 @@ def list_documents(
     문서 수와 4초 주기 폴링이 곱해지며 라이브러리 화면 자체가 느려지는
     주 원인이었던 부분 - 이제 전체 문서의 번역 행을 한 번의 커넥션으로 모아
     메모리에서 매칭한다."""
-    docs = db_list_documents(username, only_trash=only_trash)
+    docs = db_list_documents(username, only_trash=only_trash, include_deleted=include_deleted)
     if not docs:
         return docs
 
