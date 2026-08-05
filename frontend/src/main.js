@@ -2230,6 +2230,109 @@ const chatSidebarPicker = new ProviderModelPicker($('chat-sidebar-provider'), {
   onChange: (provider, model) => changeProviderAndModel('chat', provider, model)
 })
 
+class PdfParserPicker {
+  constructor(containerEl, { onChange } = {}) {
+    if (!containerEl) return
+    this.container = containerEl
+    this.onChange = onChange || (() => {})
+    this._selectedId = 'pymupdf'
+    this._parsers = []
+    this._build()
+    this._bindClose()
+  }
+
+  _build() {
+    const c = this.container
+    c.className = 'provider-picker picker-left picker-full-wrap'
+
+    this._btn = document.createElement('button')
+    this._btn.type = 'button'
+    this._btn.className = 'provider-picker-btn picker-full'
+    this._btn.innerHTML = `<span class="picker-icon">📄</span><span class="picker-label">PyMuPDF (fitz) - [기본] (0 MB)</span><span class="picker-arrow">▾</span>`
+
+    this._panel = document.createElement('div')
+    this._panel.className = 'provider-picker-panel'
+
+    c.appendChild(this._btn)
+    c.appendChild(this._panel)
+
+    this._btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const isOpen = c.classList.contains('open')
+      document.querySelectorAll('.provider-picker.open').forEach(p => p.classList.remove('open'))
+      if (!isOpen) {
+        this._rebuildPanel()
+        c.classList.add('open')
+      }
+    })
+  }
+
+  setParsersData(parsers, currentId) {
+    this._parsers = parsers || []
+    if (currentId) this._selectedId = currentId
+    this._updateBtn()
+  }
+
+  _rebuildPanel() {
+    this._panel.innerHTML = ''
+    const list = this._parsers.length > 0 ? this._parsers : Object.values(PARSER_FALLBACK_META)
+
+    const group = document.createElement('div')
+    group.className = 'picker-group'
+
+    const header = document.createElement('div')
+    header.className = 'picker-group-header'
+    header.innerHTML = `<span class="g-icon">📄</span><span>PDF 파서 엔진 목록</span>`
+    group.appendChild(header)
+
+    list.forEach(p => {
+      const item = document.createElement('div')
+      item.className = 'picker-model-item' + (this._selectedId === p.id ? ' selected' : '')
+      const badge = p.installed ? '<span class="picker-available-chip" style="margin-left:auto;">설치됨</span>' : `<span style="margin-left:auto; font-size:11px; color:var(--text-muted);">${p.size_info || '미설치'}</span>`
+      item.innerHTML = `<div style="display:flex; align-items:center; width:100%; gap:8px;"><span>${p.name}</span> ${badge}</div>`
+      
+      item.addEventListener('click', (e) => {
+        e.stopPropagation()
+        this._selectedId = p.id
+        this._updateBtn()
+        this.container.classList.remove('open')
+        this.onChange(p.id)
+      })
+      group.appendChild(item)
+    })
+
+    this._panel.appendChild(group)
+  }
+
+  _updateBtn() {
+    const p = (this._parsers && this._parsers.find(item => item.id === this._selectedId)) || PARSER_FALLBACK_META[this._selectedId] || PARSER_FALLBACK_META.pymupdf
+    const label = p ? `${p.name} - ${p.installed ? '[설치됨]' : `[미설치 - ${p.size_info}]`}` : this._selectedId
+    if (this._btn) {
+      this._btn.querySelector('.picker-icon').innerHTML = '📄'
+      this._btn.querySelector('.picker-label').textContent = label
+    }
+  }
+
+  _bindClose() {
+    document.addEventListener('click', (e) => {
+      if (!this.container.contains(e.target)) {
+        this.container.classList.remove('open')
+      }
+    })
+  }
+
+  getValue() {
+    return this._selectedId
+  }
+
+  setValue(val) {
+    if (val) {
+      this._selectedId = val
+      this._updateBtn()
+    }
+  }
+}
+
 const settingTransPicker = new ProviderModelPicker($('setting-trans-provider'), {
   compact: false,
   onChange: () => { applyChatSameAsTransUI(); autoSaveSystemSettings() }
@@ -2238,6 +2341,22 @@ const settingTransPicker = new ProviderModelPicker($('setting-trans-provider'), 
 const settingChatPicker = new ProviderModelPicker($('setting-chat-provider'), {
   compact: false,
   onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
+})
+
+const settingPdfParserPicker = new PdfParserPicker($('setting-pdf-parser-picker'), {
+  onChange: async (selectedId) => {
+    let parser = pdfParsersData.find(p => p.id === selectedId) || PARSER_FALLBACK_META[selectedId]
+
+    updateParserCardInfo(selectedId)
+
+    if (parser && parser.id !== 'pymupdf') {
+      targetInstallParserId = selectedId
+      openPdfParserInstallModal(parser)
+    } else {
+      await autoSaveSystemSettings({ silent: false })
+      showToast(`PDF 파서 엔진이 [${parser ? parser.name : selectedId}]로 설정되었습니다.`, 'success')
+    }
+  }
 })
 
 // "번역 모델과 동일한 모델 사용" 체크박스: 켜져 있으면 어시스턴트 선택기를
@@ -2534,28 +2653,21 @@ const PARSER_FALLBACK_META = {
 }
 
 async function refreshPdfParsersUI(savedEngine) {
-  const select = $('setting-pdf-parser-engine')
-  if (!select) return
-
   try {
     const data = await fetchPdfParsersInfoAPI()
     pdfParsersData = data.parsers || []
     const currentEngine = savedEngine || data.current_engine || 'pymupdf'
 
-    // dropdown options update
-    select.innerHTML = ''
-    pdfParsersData.forEach(p => {
-      const opt = document.createElement('option')
-      opt.value = p.id
-      const statusBadge = p.installed ? '[설치됨]' : `[미설치 - ${p.size_info}]`
-      opt.textContent = `${p.name} - ${statusBadge}`
-      if (p.id === currentEngine) opt.selected = true
-      select.appendChild(opt)
-    })
+    if (typeof settingPdfParserPicker !== 'undefined' && settingPdfParserPicker) {
+      settingPdfParserPicker.setParsersData(pdfParsersData, currentEngine)
+    }
 
     updateParserCardInfo(currentEngine)
   } catch (err) {
     console.warn('PDF 파서 목록 로드 실패:', err)
+    if (typeof settingPdfParserPicker !== 'undefined' && settingPdfParserPicker) {
+      settingPdfParserPicker.setParsersData(Object.values(PARSER_FALLBACK_META), savedEngine || 'pymupdf')
+    }
     updateParserCardInfo(savedEngine || 'pymupdf')
   }
 }
@@ -3063,8 +3175,7 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
     chatModel = transModel
   }
 
-  const pdfParserSelect = $('setting-pdf-parser-engine')
-  const pdfParserEngine = pdfParserSelect ? pdfParserSelect.value : 'pymupdf'
+  const pdfParserEngine = (typeof settingPdfParserPicker !== 'undefined' && settingPdfParserPicker) ? settingPdfParserPicker.getValue() : 'pymupdf'
 
   const settings = {
     ollama_host: settingOllamaHost ? settingOllamaHost.value.trim() : '',
