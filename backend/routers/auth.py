@@ -27,6 +27,7 @@ from config import (
     get_gemini_api_key,
     get_claude_api_key,
     get_openalex_mailto,
+    get_pdf_parser_engine,
     get_translation_prompt_template,
     update_translation_prompt_template,
     get_agy_path,
@@ -240,6 +241,7 @@ class SystemSettingsRequest(BaseModel):
     claude_api_key: str = ""
     openalex_mailto: str = ""
     translation_prompt_template: str = ""
+    pdf_parser_engine: str = "pymupdf"
 
 @router.get("/settings/system")
 async def get_system_settings(current_user: str = Depends(get_current_user)):
@@ -257,13 +259,15 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
         "gemini_api_key": get_gemini_api_key(),
         "claude_api_key": get_claude_api_key(),
         "openalex_mailto": get_openalex_mailto(),
-        "translation_prompt_template": get_translation_prompt_template()
+        "translation_prompt_template": get_translation_prompt_template(),
+        "pdf_parser_engine": get_pdf_parser_engine()
     }
 
 @router.post("/settings/system")
 async def save_system_settings(data: SystemSettingsRequest, current_user: str = Depends(get_current_user)):
     trans_provider = data.trans_provider.strip().lower()
     chat_provider = data.chat_provider.strip().lower()
+    pdf_parser_engine = data.pdf_parser_engine.strip().lower() if data.pdf_parser_engine else "pymupdf"
     
     valid_providers = ["ollama", "openai", "gemini", "claude", "antigravity", "claude_code", "codex"]
     if trans_provider not in valid_providers or chat_provider not in valid_providers:
@@ -272,6 +276,13 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
             detail="올바르지 않은 AI 제공업체입니다."
         )
         
+    valid_parsers = ["pymupdf", "pdfplumber", "marker", "mineru"]
+    if pdf_parser_engine not in valid_parsers:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="올바르지 않은 PDF 파서 엔진입니다."
+        )
+
     update_system_settings(
         ollama_host=data.ollama_host.strip(),
         trans_provider=trans_provider,
@@ -281,13 +292,112 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
         openai_api_key=data.openai_api_key.strip(),
         gemini_api_key=data.gemini_api_key.strip(),
         claude_api_key=data.claude_api_key.strip(),
-        openalex_mailto=data.openalex_mailto.strip()
+        openalex_mailto=data.openalex_mailto.strip(),
+        pdf_parser_engine=pdf_parser_engine
     )
     
     # 고급 설정: 번역 프롬프트 템플릿 저장
     update_translation_prompt_template(data.translation_prompt_template)
     
     return {"message": "시스템 설정이 성공적으로 변경되었습니다."}
+
+
+def _is_package_installed(module_name: str) -> bool:
+    import importlib.util
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except Exception:
+        return False
+
+
+@router.get("/settings/pdf-parsers")
+async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
+    current_engine = get_pdf_parser_engine()
+    parsers = [
+        {
+            "id": "pymupdf",
+            "name": "PyMuPDF (fitz)",
+            "description": "기본 파서 - 초고속, 경량 (텍스트 중심 논문 추천)",
+            "pros": "초고속 (몇 ms), 별도 설치 필요 없음",
+            "cons": "2단 복잡 구조, 수식 텍스트 엉킴 발생 가능",
+            "size_info": "기본 설치됨 (0 MB)",
+            "installed": True,
+            "install_package": None
+        },
+        {
+            "id": "pdfplumber",
+            "name": "pdfplumber",
+            "description": "표(Table) 정밀 분석 및 위치 레이아웃 보존 파서",
+            "pros": "표 구조 및 그래픽 좌표 추적 우수",
+            "cons": "PyMuPDF보다 약간 느림",
+            "size_info": "약 15 MB",
+            "installed": _is_package_installed("pdfplumber"),
+            "install_package": "pdfplumber"
+        },
+        {
+            "id": "marker",
+            "name": "Marker (AI Markdown)",
+            "description": "AI 딥러닝 논문 파서 (LaTeX 수식, 표, 2단 레이아웃 지원)",
+            "pros": "수식을 LaTeX 변환, 정교한 오버레이 크롭",
+            "cons": "PyTorch/Vision 포함 (대용량), 처리 속도 느림",
+            "size_info": "약 2.5 GB (PyTorch & Vision 모델 포함)",
+            "installed": _is_package_installed("marker"),
+            "install_package": "marker-pdf"
+        },
+        {
+            "id": "mineru",
+            "name": "MinerU (Magic-PDF)",
+            "description": "대규모 학술 서적 및 논문 레이아웃 분석 AI 파서",
+            "pros": "YOLOv8 기반 레이아웃 핀포인트 세그멘테이션",
+            "cons": "대용량 패키지, 높은 CPU/GPU 및 메모리 소모",
+            "size_info": "약 3.0 GB (YOLO & Layout/Formula 모델 포함)",
+            "installed": _is_package_installed("magic_pdf"),
+            "install_package": "magic-pdf"
+        }
+    ]
+    return {
+        "current_engine": current_engine,
+        "parsers": parsers
+    }
+
+
+@router.get("/settings/install-pdf-parser")
+async def install_pdf_parser_stream(parser_id: str, current_user: str = Depends(get_current_user)):
+    import sys
+    import asyncio
+
+    package_map = {
+        "pdfplumber": "pdfplumber",
+        "marker": "marker-pdf",
+        "mineru": "magic-pdf"
+    }
+
+    pkg_name = package_map.get(parser_id)
+    if not pkg_name:
+        raise HTTPException(status_code=400, detail="지원되지 않는 파서 엔진입니다.")
+
+    async def event_stream():
+        python_bin = sys.executable
+        yield f"data: {json.dumps({'status': 'progress', 'line': f'백엔드 가상환경({python_bin})에 {pkg_name} 설치를 시작합니다...'})}\n\n"
+        try:
+            cmd = [python_bin, "-m", "pip", "install", pkg_name]
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                stdin=asyncio.subprocess.DEVNULL
+            )
+            async for text in _stream_subprocess_lines(proc):
+                yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
+            await proc.wait()
+            if proc.returncode == 0:
+                yield f"data: {json.dumps({'status': 'success', 'message': f'{pkg_name} 설치가 정상적으로 완료되었습니다.'})}\n\n"
+            else:
+                yield f"data: {json.dumps({'status': 'error', 'message': f'설치가 오류 코드 {proc.returncode}로 종료되었습니다.'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'status': 'error', 'message': f'설치 실행 중 오류가 발생했습니다: {str(e)}'})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 @router.post("/settings/clear-pages-cache")
 async def clear_pages_cache(current_user: str = Depends(get_current_user)):

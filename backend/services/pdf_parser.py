@@ -4,21 +4,136 @@ import re
 from typing import List, Dict, Any, Optional
 
 
-def extract_pages(pdf_path: str) -> List[Dict[str, Any]]:
+def extract_pages(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     PDF에서 페이지별 텍스트 블록을 추출합니다.
-    2단 레이아웃을 감지하여 읽기 순서대로 정렬합니다.
+    선택된 엔진(pymupdf, pdfplumber, marker, mineru)에 따라 파싱을 수행합니다.
     """
+    if engine is None:
+        try:
+            from config import get_pdf_parser_engine
+            engine = get_pdf_parser_engine()
+        except Exception:
+            engine = "pymupdf"
+
+    engine = (engine or "pymupdf").lower().strip()
+
+    if engine == "pdfplumber":
+        return _extract_pages_pdfplumber(pdf_path)
+    elif engine == "marker":
+        return _extract_pages_marker(pdf_path)
+    elif engine == "mineru":
+        return _extract_pages_mineru(pdf_path)
+    else:
+        return _extract_pages_pymupdf(pdf_path)
+
+
+def _extract_pages_pymupdf(pdf_path: str) -> List[Dict[str, Any]]:
     doc = fitz.open(pdf_path)
     pages = []
 
     for page_num in range(len(doc)):
         page = doc[page_num]
         page_data = _extract_page(page, page_num + 1)
+        page_data["parser_engine"] = "pymupdf"
         pages.append(page_data)
 
     doc.close()
     return pages
+
+
+def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
+    try:
+        import pdfplumber
+    except ImportError:
+        import logging
+        logging.warning("pdfplumber가 설치되어 있지 않아 PyMuPDF 파서로 폴백합니다.")
+        return _extract_pages_pymupdf(pdf_path)
+
+    try:
+        pages = []
+        with pdfplumber.open(pdf_path) as pdf:
+            for idx, p in enumerate(pdf.pages):
+                page_num = idx + 1
+                text = p.extract_text() or ""
+                blocks = []
+                if text:
+                    blocks.append({
+                        "bbox": (0, 0, p.width, p.height),
+                        "text": text,
+                        "type": 0
+                    })
+                pages.append({
+                    "page": page_num,
+                    "text": text,
+                    "blocks": blocks,
+                    "parser_engine": "pdfplumber"
+                })
+        return pages if pages else _extract_pages_pymupdf(pdf_path)
+    except Exception as e:
+        import logging
+        logging.warning(f"pdfplumber 파싱 중 오류 발생 ({e}). PyMuPDF로 폴백합니다.")
+        return _extract_pages_pymupdf(pdf_path)
+
+
+def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:
+    try:
+        from marker.converters.pdf import PdfConverter
+        from marker.models import create_model_dict
+
+        converter = PdfConverter(artifact_dict=create_model_dict())
+        rendered = converter(pdf_path)
+        markdown_text = getattr(rendered, "markdown", "") or str(rendered)
+
+        raw_pages = markdown_text.split("\n\n---\n\n")
+        pages = []
+        for idx, page_str in enumerate(raw_pages):
+            pages.append({
+                "page": idx + 1,
+                "text": page_str,
+                "blocks": [{"bbox": (0, 0, 100, 100), "text": page_str, "type": 0}],
+                "markdown": page_str,
+                "parser_engine": "marker"
+            })
+        return pages if pages else _extract_pages_pymupdf(pdf_path)
+    except Exception as e:
+        import logging
+        logging.warning(f"Marker 파서 실행 실패 ({e}). PyMuPDF 파서로 폴백합니다.")
+        return _extract_pages_pymupdf(pdf_path)
+
+
+def _extract_pages_mineru(pdf_path: str) -> List[Dict[str, Any]]:
+    try:
+        import importlib
+        if not importlib.util.find_spec("magic_pdf"):
+            raise ImportError("magic_pdf 패키지가 설치되어 있지 않습니다.")
+
+        from magic_pdf.data.dataset import PymuDocDataset
+        from magic_pdf.model.doc_analyze_by_custom_model import doc_analyze
+
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+
+        ds = PymuDocDataset(pdf_bytes)
+        infer_result = ds.apply(doc_analyze, ocr=False)
+        pipe_result = infer_result.pipe_txt()
+        markdown_text = pipe_result.get_markdown() if hasattr(pipe_result, "get_markdown") else str(pipe_result)
+
+        raw_pages = markdown_text.split("\n\n---\n\n")
+        pages = []
+        for idx, page_str in enumerate(raw_pages):
+            pages.append({
+                "page": idx + 1,
+                "text": page_str,
+                "blocks": [{"bbox": (0, 0, 100, 100), "text": page_str, "type": 0}],
+                "markdown": page_str,
+                "parser_engine": "mineru"
+            })
+        return pages if pages else _extract_pages_pymupdf(pdf_path)
+    except Exception as e:
+        import logging
+        logging.warning(f"MinerU 파서 실행 실패 ({e}). PyMuPDF 파서로 폴백합니다.")
+        return _extract_pages_pymupdf(pdf_path)
 
 
 def _extract_page(page: fitz.Page, page_num: int) -> Dict[str, Any]:

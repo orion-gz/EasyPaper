@@ -4,7 +4,7 @@ import './styles/library-page.css'
 import './styles/research-graph.css'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
@@ -2409,12 +2409,182 @@ async function refreshSystemSettings() {
       promptTemplate.value = sys.translation_prompt_template || promptTemplate.value
     }
     updateSettingsUIVisibility()
-    
+    await refreshPdfParsersUI(sys.pdf_parser_engine || 'pymupdf')
 
-    
   } catch (err) {
     console.warn('System settings load error:', err)
   }
+}
+
+// ── PDF 파서 엔진 선택 및 동적 설치 UI 핸들러 ──────────────────
+let pdfParsersData = []
+let targetInstallParserId = null
+
+async function refreshPdfParsersUI(savedEngine) {
+  const select = $('setting-pdf-parser-engine')
+  if (!select) return
+
+  try {
+    const data = await fetchPdfParsersInfoAPI()
+    pdfParsersData = data.parsers || []
+    const currentEngine = savedEngine || data.current_engine || 'pymupdf'
+
+    // dropdown options update
+    select.innerHTML = ''
+    pdfParsersData.forEach(p => {
+      const opt = document.createElement('option')
+      opt.value = p.id
+      const statusBadge = p.installed ? '[설치됨]' : `[미설치 - ${p.size_info}]`
+      opt.textContent = `${p.name} - ${statusBadge}`
+      if (p.id === currentEngine) opt.selected = true
+      select.appendChild(opt)
+    })
+
+    updateParserCardInfo(currentEngine)
+  } catch (err) {
+    console.warn('PDF 파서 목록 로드 실패:', err)
+  }
+}
+
+function updateParserCardInfo(engineId) {
+  const cardName = $('pdf-parser-card-name')
+  const cardDesc = $('pdf-parser-card-desc')
+  const cardPros = $('pdf-parser-card-pros')
+  const cardCons = $('pdf-parser-card-cons')
+
+  const parser = pdfParsersData.find(p => p.id === engineId)
+  if (!parser) return
+
+  if (cardName) cardName.textContent = `${parser.name} ${parser.installed ? '(설치됨)' : `(${parser.size_info})`}`
+  if (cardDesc) cardDesc.textContent = parser.description
+  if (cardPros) cardPros.textContent = parser.pros
+  if (cardCons) cardCons.textContent = parser.cons
+}
+
+async function savePdfParserSetting(engineId) {
+  try {
+    const sys = await getSystemSettingsAPI()
+    const payload = {
+      ollama_host: sys.ollama_host || '',
+      trans_provider: sys.trans_provider || 'antigravity',
+      trans_model: sys.trans_model || '',
+      chat_provider: sys.chat_provider || 'antigravity',
+      chat_model: sys.chat_model || '',
+      openai_api_key: sys.openai_api_key || '',
+      gemini_api_key: sys.gemini_api_key || '',
+      claude_api_key: sys.claude_api_key || '',
+      openalex_mailto: sys.openalex_mailto || '',
+      translation_prompt_template: sys.translation_prompt_template || '',
+      pdf_parser_engine: engineId
+    }
+    await saveSystemSettingsAPI(payload)
+    showToast(`PDF 파서 엔진이 [${engineId}]로 변경되었습니다.`, 'success')
+  } catch (err) {
+    showToast(err.message, 'error')
+  }
+}
+
+const settingPdfParserEngineSelect = $('setting-pdf-parser-engine')
+if (settingPdfParserEngineSelect) {
+  settingPdfParserEngineSelect.addEventListener('change', async (e) => {
+    const selectedId = e.target.value
+    const parser = pdfParsersData.find(p => p.id === selectedId)
+
+    if (parser && !parser.installed && parser.id !== 'pymupdf') {
+      targetInstallParserId = selectedId
+      openPdfParserInstallModal(parser)
+    } else {
+      updateParserCardInfo(selectedId)
+      await savePdfParserSetting(selectedId)
+    }
+  })
+}
+
+function openPdfParserInstallModal(parser) {
+  const modal = $('pdf-parser-install-modal')
+  const targetText = $('pdf-parser-install-target-text')
+  const descText = $('pdf-parser-install-desc-text')
+  const prosText = $('pdf-parser-install-pros')
+  const consText = $('pdf-parser-install-cons')
+
+  const introArea = $('pdf-parser-install-intro')
+  const progressArea = $('pdf-parser-install-progress-area')
+  const logElem = $('pdf-parser-install-log')
+  const doneBtn = $('pdf-parser-install-done-btn')
+
+  if (introArea) introArea.classList.remove('hidden')
+  if (progressArea) progressArea.classList.add('hidden')
+  if (logElem) logElem.textContent = ''
+  if (doneBtn) doneBtn.classList.add('hidden')
+
+  if (targetText) targetText.textContent = `${parser.name} (${parser.size_info})`
+  if (descText) descText.textContent = `${parser.description}. 해당 파서를 사용하려면 백엔드 가상환경(.venv)에 필요 패키지 설치가 필요합니다.`
+  if (prosText) prosText.textContent = parser.pros
+  if (consText) consText.textContent = parser.cons
+
+  openOverlayModal(modal)
+}
+
+const parserInstallConfirmBtn = $('pdf-parser-install-confirm-btn')
+const parserInstallCancelBtn = $('pdf-parser-install-cancel-btn')
+const parserInstallCloseBtn = $('pdf-parser-install-close-btn')
+const parserInstallModal = $('pdf-parser-install-modal')
+const parserInstallDoneBtn = $('pdf-parser-install-done-btn')
+
+if (parserInstallCancelBtn) {
+  parserInstallCancelBtn.addEventListener('click', async () => {
+    closeOverlayModal(parserInstallModal)
+    await refreshSystemSettings()
+  })
+}
+
+if (parserInstallCloseBtn) {
+  parserInstallCloseBtn.addEventListener('click', async () => {
+    closeOverlayModal(parserInstallModal)
+    await refreshSystemSettings()
+  })
+}
+
+if (parserInstallDoneBtn) {
+  parserInstallDoneBtn.addEventListener('click', async () => {
+    closeOverlayModal(parserInstallModal)
+    await refreshSystemSettings()
+  })
+}
+
+if (parserInstallConfirmBtn) {
+  parserInstallConfirmBtn.addEventListener('click', () => {
+    if (!targetInstallParserId) return
+
+    const introArea = $('pdf-parser-install-intro')
+    const progressArea = $('pdf-parser-install-progress-area')
+    const statusText = $('pdf-parser-install-status-text')
+    const logElem = $('pdf-parser-install-log')
+
+    if (introArea) introArea.classList.add('hidden')
+    if (progressArea) progressArea.classList.remove('hidden')
+
+    installPdfParserAPI(
+      targetInstallParserId,
+      (line) => {
+        if (logElem) {
+          logElem.textContent += line + '\n'
+          logElem.scrollTop = logElem.scrollHeight
+        }
+      },
+      async (successMsg) => {
+        if (statusText) statusText.innerHTML = `<span style="color: var(--accent-mid); font-weight:600;">✓ 설치가 성공적으로 완료되었습니다!</span>`
+        if (parserInstallDoneBtn) parserInstallDoneBtn.classList.remove('hidden')
+        await savePdfParserSetting(targetInstallParserId)
+        await refreshSystemSettings()
+      },
+      async (err) => {
+        if (statusText) statusText.innerHTML = `<span style="color: var(--danger, #ef4444); font-weight:600;">✕ 설치 중 오류 발생: ${err.message}</span>`
+        if (parserInstallDoneBtn) parserInstallDoneBtn.classList.remove('hidden')
+        await refreshSystemSettings()
+      }
+    )
+  })
 }
 
 // ── Provider + Model 통합 변경 헬퍼 ──────────────────

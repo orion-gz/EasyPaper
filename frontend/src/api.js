@@ -796,6 +796,47 @@ export async function emptyTrashAPI() {
   return res.json()
 }
 
+/**
+ * PDF 파서 엔진 목록 및 상태 정보를 조회합니다.
+ */
+export async function fetchPdfParsersInfoAPI() {
+  const res = await fetch(`${API_BASE}/settings/pdf-parsers`, { cache: 'no-store' })
+  if (!res.ok) throw new Error('PDF 파서 정보 조회 실패')
+  return res.json()
+}
+
+/**
+ * 특정 PDF 파서 패키지를 가상환경에 동적으로 설치하는 SSE 스트리밍 API를 호출합니다.
+ */
+export function installPdfParserAPI(parserId, onProgress, onSuccess, onError) {
+  const es = new EventSource(`${API_BASE}/settings/install-pdf-parser?parser_id=${encodeURIComponent(parserId)}`)
+
+  es.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      if (data.status === 'progress') {
+        if (onProgress) onProgress(data.line)
+      } else if (data.status === 'success') {
+        es.close()
+        if (onSuccess) onSuccess(data.message)
+      } else if (data.status === 'error') {
+        es.close()
+        if (onError) onError(new Error(data.message || '설치 중 오류가 발생했습니다.'))
+      }
+    } catch (err) {
+      es.close()
+      if (onError) onError(err)
+    }
+  }
+
+  es.onerror = (err) => {
+    es.close()
+    if (onError) onError(new Error('네트워크 연결 끊김 또는 서버 오류가 발생했습니다.'))
+  }
+
+  return es
+}
+
 
 
 
