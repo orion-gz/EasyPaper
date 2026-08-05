@@ -289,19 +289,7 @@ function renderRecentPapersCard(docs) {
           const total = d.total_pages || 1
           const lastPage = d.metadata?.last_page
           const pct = isDone ? 100 : (Number.isInteger(lastPage) ? Math.min(100, Math.round((lastPage / total) * 100)) : 0)
-          const rawCats = (d.metadata && d.metadata.categories) || []
-          const seenCats = new Set()
-          const uniqueCats = []
-          for (const c of rawCats) {
-            if (typeof c === 'string') {
-              const trimmed = c.trim()
-              if (trimmed && !seenCats.has(trimmed.toLowerCase())) {
-                seenCats.add(trimmed.toLowerCase())
-                uniqueCats.push(trimmed)
-              }
-            }
-          }
-          const cats = uniqueCats.slice(0, 2)
+          const cats = ((d.metadata && d.metadata.categories) || []).slice(0, 2)
           const progressHtml = isDone
             ? `<span class="dash-paper-done-chip">${icon('checkCircle', 12)}완료</span>`
             : `

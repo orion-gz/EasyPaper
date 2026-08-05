@@ -923,18 +923,7 @@ async def update_doc_metadata(
         meta.update(payload_copy)
     else:
         meta.update(payload)
-
-    if "categories" in meta and isinstance(meta["categories"], list):
-        seen = set()
-        unique_cats = []
-        for cat in meta["categories"]:
-            if isinstance(cat, str):
-                c_str = cat.strip()
-                if c_str and c_str.lower() not in seen:
-                    seen.add(c_str.lower())
-                    unique_cats.append(c_str)
-        meta["categories"] = unique_cats
-
+    
     if "title" in payload and payload["title"] != old_title:
         meta.pop("bibliography", None)
 

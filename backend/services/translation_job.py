@@ -271,16 +271,9 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                 doc = get_document(session_id)
                 if doc:
                     meta = doc.get("metadata", {})
-                    seen = set()
-                    unique_tags = []
-                    for t in tags:
-                        key = t.lower()
-                        if key not in seen:
-                            seen.add(key)
-                            unique_tags.append(t)
-                    meta["categories"] = unique_tags
+                    meta["categories"] = tags
                     update_document_metadata(session_id, meta)
-                    print(f"[Job {session_id}] Classified categories: {unique_tags}")
+                    print(f"[Job {session_id}] Classified categories: {tags}")
         except Exception as ex:
             print(f"[Job {session_id}] Category classification failed: {ex}")
 
