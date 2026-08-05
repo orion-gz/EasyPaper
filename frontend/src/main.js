@@ -2349,7 +2349,7 @@ const settingPdfParserPicker = new PdfParserPicker($('setting-pdf-parser-picker'
 
     updateParserCardInfo(selectedId)
 
-    if (parser && parser.id !== 'pymupdf') {
+    if (parser && !parser.installed && parser.id !== 'pymupdf') {
       targetInstallParserId = selectedId
       openPdfParserInstallModal(parser)
     } else {
@@ -2687,22 +2687,7 @@ function updateParserCardInfo(engineId) {
   if (cardCons) cardCons.textContent = parser.cons
 }
 
-document.addEventListener('change', async (e) => {
-  if (e.target && e.target.id === 'setting-pdf-parser-engine') {
-    const selectedId = e.target.value
-    let parser = pdfParsersData.find(p => p.id === selectedId) || PARSER_FALLBACK_META[selectedId]
 
-    updateParserCardInfo(selectedId)
-
-    if (parser && parser.id !== 'pymupdf') {
-      targetInstallParserId = selectedId
-      openPdfParserInstallModal(parser)
-    } else {
-      await autoSaveSystemSettings({ silent: false })
-      showToast(`PDF 파서 엔진이 [${parser ? parser.name : selectedId}]로 설정되었습니다.`, 'success')
-    }
-  }
-})
 
 function openPdfParserInstallModal(parser) {
   const modal = $('pdf-parser-install-modal')
