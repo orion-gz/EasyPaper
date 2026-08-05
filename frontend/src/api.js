@@ -854,9 +854,18 @@ export function installPdfParserAPI(parserId, onProgress, onSuccess, onError) {
   return es
 }
 
-
-
-
+export async function uninstallPdfParserAPI(parserId) {
+  const res = await fetch(`${API_BASE}/settings/uninstall-pdf-parser`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parser_id: parserId })
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `삭제 요청 실패 (${res.status})`)
+  }
+  return res.json()
+}
 
 
 

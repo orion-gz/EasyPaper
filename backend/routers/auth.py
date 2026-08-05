@@ -407,6 +407,43 @@ async def install_pdf_parser_stream(parser_id: str):
         }
     )
 
+@router.post("/settings/uninstall-pdf-parser")
+async def uninstall_pdf_parser(request: Request):
+    import sys, subprocess
+    body = await request.json()
+    parser_id = body.get("parser_id", "")
+
+    package_map = {
+        "pdfplumber": "pdfplumber",
+        "marker": "marker-pdf",
+        "mineru": "magic-pdf"
+    }
+
+    pkg_name = package_map.get(parser_id)
+    if not pkg_name:
+        raise HTTPException(status_code=400, detail="지원되지 않는 파서 엔진입니다.")
+
+    python_bin = sys.executable
+    result = subprocess.run(
+        [python_bin, "-m", "pip", "uninstall", "-y", pkg_name],
+        capture_output=True, text=True
+    )
+
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=f"삭제 실패: {result.stderr}")
+
+    # 삭제한 파서가 현재 엔진이면 pymupdf로 복귀
+    from config import get_system_settings, update_system_settings
+    settings = get_system_settings()
+    if settings.get("pdf_parser_engine") == parser_id:
+        update_system_settings(pdf_parser_engine="pymupdf", **{
+            k: v for k, v in settings.items() if k != "pdf_parser_engine"
+        })
+
+    return {"status": "success", "message": f"{pkg_name} 패키지가 삭제되었습니다."}
+
+
+
 @router.post("/settings/clear-pages-cache")
 async def clear_pages_cache(current_user: str = Depends(get_current_user)):
     """모든 문서의 PDF 텍스트/이미지 추출 결과 디스크 캐시(extract_pages(),
