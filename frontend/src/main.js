@@ -3711,7 +3711,7 @@ function syncLibraryTabUI(activeTab) {
   if (libEmptyTrashBtn) libEmptyTrashBtn.classList.toggle('hidden', activeTab !== 'trash')
   if (libUploadBtn) libUploadBtn.classList.toggle('hidden', activeTab === 'trash')
   if (libCompareToggleBtn) libCompareToggleBtn.classList.toggle('hidden', activeTab === 'trash')
-  setCompareSelectMode(false)
+  clearDocSelection()
 }
 
 function updateTabUI(activeTab) {
