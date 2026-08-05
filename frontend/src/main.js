@@ -4236,7 +4236,7 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
   }
 
   if (pageId === 'library') {
-    syncLibraryTabUI(state.currentLibraryTab || 'archive')
+    syncLibraryTabUI('archive')
     await renderLibrary()
   } else if (pageId === 'chats') {
     await renderAiChatsPage()
@@ -4278,9 +4278,10 @@ document.querySelectorAll('[data-icon]').forEach(el => {
 if (sidebarNav) {
   sidebarNav.querySelectorAll('.sidebar-nav-item[data-page]').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (btn.dataset.page === 'library') {
-        updateTabUI('archive')
-      }
+      // library 탭 클릭 시 archive 탭으로 초기화는 showWorkspacePage 내부의
+      // syncLibraryTabUI가 담당하므로 여기서 updateTabUI를 별도로 호출하지 않는다.
+      // (updateTabUI → renderLibrary 가 fire-and-forget으로 실행되어
+      //  showWorkspacePage → renderLibrary 와 동시에 돌면 태그 필터가 2배로 렌더링되는 Race Condition 발생)
       if (state.currentWorkspacePage === btn.dataset.page) return
       showWorkspacePage(btn.dataset.page)
     })
