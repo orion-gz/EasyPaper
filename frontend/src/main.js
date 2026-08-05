@@ -3653,12 +3653,20 @@ function updateUnreadBadge(docs) {
 
 function updateTrashTabVisibility(trashDocs) {
   if (!libTabTrash) return
-  const trashCount = trashDocs.length
+  const trashCount = trashDocs ? trashDocs.length : 0
+  const countBadge = $('lib-tab-trash-count')
+  if (countBadge) {
+    if (trashCount > 0) {
+      countBadge.textContent = ` (${trashCount})`
+      countBadge.classList.remove('hidden')
+    } else {
+      countBadge.textContent = ''
+      countBadge.classList.add('hidden')
+    }
+  }
+  libTabTrash.title = `휴지통${trashCount > 0 ? ` (${trashCount}개 문서)` : ''}`
   if (trashCount > 0 || state.currentLibraryTab === 'trash') {
     libTabTrash.classList.remove('hidden')
-    libTabTrash.title = `휴지통 (${trashCount}개 문서)`
-    const countBadge = trashCount > 0 ? ` (${trashCount})` : ''
-    libTabTrash.innerHTML = `${icon('trash2', 14, 'style="vertical-align:-2px;margin-right:4px"')}휴지통${countBadge}`
   } else {
     libTabTrash.classList.add('hidden')
   }
