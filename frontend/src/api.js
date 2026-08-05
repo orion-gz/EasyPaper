@@ -477,6 +477,23 @@ export function streamPullModelAPI(modelName, onStatus, onDone, onError) {
 }
 
 /**
+ * Ollama 서버에서 설치된 모델을 삭제합니다.
+ */
+export async function deleteModelAPI(modelName) {
+  const resp = await fetch(`${API_BASE}/settings/delete-model`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model_name: modelName })
+  })
+  if (!resp.ok) {
+    const errorData = await resp.json().catch(() => ({}))
+    throw new Error(errorData.detail || 'Ollama 모델 삭제에 실패했습니다.')
+  }
+  return await resp.json()
+}
+
+
+/**
  * AI 전문가와 채팅을 주고받는 POST 스트리밍 API를 호출합니다.
  * @param {string} sessionId
  * @param {Array} messages - [{role: 'user', content: '...'}, ...]

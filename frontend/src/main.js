@@ -4,7 +4,7 @@ import './styles/library-page.css'
 import './styles/research-graph.css'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
@@ -2409,12 +2409,112 @@ async function refreshSystemSettings() {
       promptTemplate.value = sys.translation_prompt_template || promptTemplate.value
     }
     updateSettingsUIVisibility()
+    renderOllamaInstalledModels()
+    updateRecommendModelButtons()
     await refreshPdfParsersUI(sys.pdf_parser_engine || 'pymupdf')
 
   } catch (err) {
     console.warn('System settings load error:', err)
   }
 }
+
+function renderOllamaInstalledModels() {
+  const container = $('ollama-installed-models-list')
+  if (!container) return
+
+  const downloaded = state.availableOllamaModels || []
+  const actualModels = downloaded.filter(m => m && m !== 'custom_input')
+
+  if (actualModels.length === 0) {
+    container.innerHTML = `<div style="font-size: 12px; color: var(--text-muted); padding: 4px 0;">설치된 Ollama 모델이 없습니다. 아래 추천 모델 또는 직접 입력으로 다운로드해 주세요.</div>`
+    return
+  }
+
+  const transVal = settingTransPicker ? settingTransPicker.getValue() : {}
+  const chatVal = settingChatPicker ? settingChatPicker.getValue() : {}
+
+  container.innerHTML = ''
+  actualModels.forEach(modelName => {
+    const row = document.createElement('div')
+    row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12.5px; gap: 8px;'
+
+    const isTransActive = transVal.provider === 'ollama' && transVal.model === modelName
+    const isChatActive = chatVal.provider === 'ollama' && chatVal.model === modelName
+    let inUseBadge = ''
+    if (isTransActive && isChatActive) {
+      inUseBadge = `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(번역/어시스턴트 사용 중)</span>`
+    } else if (isTransActive) {
+      inUseBadge = `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(번역 사용 중)</span>`
+    } else if (isChatActive) {
+      inUseBadge = `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(어시스턴트 사용 중)</span>`
+    }
+
+    const left = document.createElement('div')
+    left.style.cssText = 'display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; flex: 1;'
+    left.innerHTML = `<span style="font-weight: 600; color: var(--text-primary); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis;">${escapeHtml(modelName)}</span>${inUseBadge}`
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.type = 'button'
+    deleteBtn.className = 'btn btn-secondary'
+    deleteBtn.style.cssText = 'padding: 4px 10px; font-size: 11.5px; color: var(--color-danger, #ef4444); border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; flex-shrink: 0; border-radius: var(--radius-sm); font-weight: 500;'
+    deleteBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>삭제`
+
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const confirm = await showCustomConfirm(`'${modelName}' 모델을 진짜로 삭제하시겠습니까?\n(Ollama 서버 디스크 공간에서 해당 모델 파일이 삭제됩니다)`, {
+        title: 'Ollama 모델 삭제',
+        confirmText: '삭제',
+        danger: true
+      })
+      if (!confirm) return
+
+      deleteBtn.disabled = true
+      deleteBtn.textContent = '삭제 중...'
+      try {
+        await deleteModelAPI(modelName)
+        showToast(`모델 '${modelName}'이(가) 성공적으로 삭제되었습니다.`, 'success')
+        await refreshSystemSettings()
+      } catch (err) {
+        showToast(`삭제 실패: ${err.message}`, 'error')
+        deleteBtn.disabled = false
+        deleteBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>삭제`
+      }
+    })
+
+    row.appendChild(left)
+    row.appendChild(deleteBtn)
+    container.appendChild(row)
+  })
+}
+
+function updateRecommendModelButtons() {
+  const downloaded = state.availableOllamaModels || []
+  const isMatch = (installed, baseValue) => {
+    if (installed === baseValue) return true
+    const instClean = installed.split(':')[0].toLowerCase()
+    const baseClean = baseValue.split(':')[0].toLowerCase()
+    return instClean === baseClean
+  }
+
+  document.querySelectorAll('.recommend-model-btn').forEach(btn => {
+    const model = btn.getAttribute('data-model')
+    if (!model) return
+    const isInstalled = downloaded.some(dm => isMatch(dm, model))
+    const baseLabel = btn.textContent.replace(' (설치됨)', '')
+    if (isInstalled) {
+      btn.textContent = `${baseLabel} (설치됨)`
+      btn.style.borderColor = 'rgba(74, 135, 181, 0.4)'
+      btn.style.background = 'rgba(74, 135, 181, 0.1)'
+      btn.style.color = 'var(--accent-mid)'
+    } else {
+      btn.textContent = baseLabel
+      btn.style.borderColor = 'var(--border-strong)'
+      btn.style.background = 'var(--bg-secondary)'
+      btn.style.color = 'var(--text-primary)'
+    }
+  })
+}
+
 
 // ── PDF 파서 엔진 선택 및 동적 설치 UI 핸들러 ──────────────────
 let pdfParsersData = []
@@ -2802,14 +2902,24 @@ settingPullModelBtn.addEventListener('click', () => {
 
 // 추천 모델 버튼 클릭 시 자동 입력 및 다운로드 시작
 document.querySelectorAll('.recommend-model-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     const model = btn.dataset.model
-    if (model) {
-      settingPullModelName.value = model
-      settingPullModelBtn.click()
+    if (!model) return
+    const downloaded = state.availableOllamaModels || []
+    const isInstalled = downloaded.some(dm => dm === model || dm.split(':')[0].toLowerCase() === model.split(':')[0].toLowerCase())
+    if (isInstalled) {
+      const ok = await showCustomConfirm(`'${model}' 모델은 이미 설치되어 있습니다. 다시 다운로드하시겠습니까?`, {
+        title: '모델 재다운로드',
+        confirmText: '다시 다운로드',
+        danger: false
+      })
+      if (!ok) return
     }
+    settingPullModelName.value = model
+    settingPullModelBtn.click()
   })
 })
+
 
 // 일반 설정: 저장 버튼 없이 필드 변경 즉시 저장한다. 번역 결과에 영향을 주는
 // 필드(대상 언어/문체/모드/제외 요소)가 바뀌면 기존과 동일하게 재번역을 제안하고,

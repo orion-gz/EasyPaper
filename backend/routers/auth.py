@@ -759,6 +759,40 @@ async def pull_model_stream(model_name: str, current_user: str = Depends(get_cur
     )
 
 
+class DeleteModelRequest(BaseModel):
+    model_name: str
+
+
+@router.delete("/settings/delete-model")
+async def delete_model(data: DeleteModelRequest, current_user: str = Depends(get_current_user)):
+    """Ollama 서버에서 설치된 모델을 삭제합니다."""
+    model_name = data.model_name.strip()
+    if not model_name:
+        raise HTTPException(status_code=400, detail="모델명을 입력해주세요.")
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.request(
+                "DELETE",
+                f"{get_ollama_host()}/api/delete",
+                json={"name": model_name}
+            )
+            if resp.status_code != 200:
+                detail = resp.text
+                try:
+                    err_json = resp.json()
+                    if "error" in err_json:
+                        detail = err_json["error"]
+                except Exception:
+                    pass
+                raise HTTPException(status_code=resp.status_code, detail=f"Ollama 모델 삭제 실패: {detail}")
+            return {"status": "success", "message": f"모델 '{model_name}'이(가) 삭제되었습니다."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ollama 모델 삭제 중 오류 발생: {str(e)}")
+
+
+
 def _is_running_under_systemd() -> bool:
     """이 프로세스가 systemd 유닛으로 실행 중인지 확인합니다.
 
