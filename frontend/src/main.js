@@ -3076,7 +3076,7 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
   }
 }
 
-;[settingOllamaHost, settingOpenAIKey, settingGeminiKey, settingClaudeKey, settingOpenAlexMailto, settingPdfParserEngineSelect].forEach(el => {
+;[settingOllamaHost, settingOpenAIKey, settingGeminiKey, settingClaudeKey, settingOpenAlexMailto].forEach(el => {
   if (el) el.addEventListener('change', () => autoSaveSystemSettings())
 })
 
