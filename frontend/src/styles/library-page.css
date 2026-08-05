@@ -28,6 +28,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
 /* ── 상태 필터 탭 (전체 / 읽지 않음 / 읽는 중 / 완료 / 즐겨찾기) ── */
