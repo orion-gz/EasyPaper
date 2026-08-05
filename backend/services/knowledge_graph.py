@@ -429,22 +429,25 @@ async def search_graph_nodes(username: str, query: str) -> dict:
 
 async def get_activity_timeline(username: str) -> List[dict]:
     """업로드/읽음/질문/메모를 시간순(최신순)으로 병합한 활동 타임라인을
-    반환한다. 전부 이미 존재하는 타임스탬프를 재구성한 것이라 신규 저장소가
-    필요 없다 - 메모는 id가 "memo_{ms}" 형식(frontend의 createFloatingMemoForSentence)
-    이라는 점을 이용해 별도 스키마 변경 없이 생성 시각을 그대로 복원한다."""
+    반환한다. 삭제된 논문의 활동도 타임라인에 유지되며 holds is_deleted=True."""
     from services.library import list_documents
-    from services.db import db_get_memos, db_get_related_questions_for_doc
+    from services.db import db_get_memos, db_get_related_questions_for_doc, get_db
 
-    docs = list_documents(username=username)
+    docs = list_documents(username=username, include_deleted=True)
     titles_by_doc = {d["id"]: (d.get("metadata") or {}).get("title") or d["filename"] for d in docs}
+    deleted_by_doc = {d["id"]: bool(d.get("is_deleted")) for d in docs}
 
+    doc_ids_seen = set(titles_by_doc.keys())
     events = []
     for doc in docs:
         doc_id = doc["id"]
         title = titles_by_doc[doc_id]
+        is_deleted = deleted_by_doc[doc_id]
+
         events.append({
             "type": "uploaded", "doc_id": doc_id, "doc_title": title,
             "timestamp": doc["created_at"],
+            "is_deleted": is_deleted,
         })
 
         meta = doc.get("metadata") or {}
@@ -472,6 +475,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
                     "start_page": s.get("start_page", 1),
                     "end_page": s.get("end_page", 1),
                     "verified_pages": s.get("verified_pages", 1),
+                    "is_deleted": is_deleted,
                 })
         elif meta.get("read") and meta.get("read_at"):
             events.append({
@@ -480,6 +484,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
                 "start_page": 1,
                 "end_page": meta.get("last_page") or 1,
                 "verified_pages": meta.get("last_page") or 1,
+                "is_deleted": is_deleted,
             })
         elif meta.get("last_read_at"):
             events.append({
@@ -488,6 +493,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
                 "start_page": 1,
                 "end_page": meta.get("last_page") or 1,
                 "verified_pages": meta.get("last_page") or 1,
+                "is_deleted": is_deleted,
             })
 
         mirrored = db_get_memos(doc_id)
@@ -504,13 +510,42 @@ async def get_activity_timeline(username: str) -> List[dict]:
                     "type": "note", "doc_id": doc_id, "doc_title": title,
                     "timestamp": datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat(),
                     "summary": (item.get("content") or "")[:80],
+                    "is_deleted": is_deleted,
                 })
 
         for q in db_get_related_questions_for_doc(doc_id, limit=200):
             events.append({
                 "type": "question", "doc_id": doc_id, "doc_title": title,
                 "timestamp": q["created_at"], "summary": (q["content"] or "")[:80],
+                "is_deleted": is_deleted,
             })
+
+    # also handle reading_time entries for permanently deleted documents
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT doc_id, day, SUM(seconds) as total_sec, MAX(updated_at) as last_ts FROM reading_time WHERE username = ? GROUP BY doc_id, day",
+                (username,)
+            )
+            rows = cursor.fetchall()
+            for r in rows:
+                r_dict = dict(r)
+                d_id = r_dict["doc_id"]
+                if d_id not in doc_ids_seen:
+                    events.append({
+                        "type": "read",
+                        "doc_id": d_id,
+                        "doc_title": "삭제된 논문",
+                        "timestamp": r_dict["last_ts"] or f"{r_dict['day']}T00:00:00Z",
+                        "duration_seconds": r_dict["total_sec"],
+                        "start_page": 1,
+                        "end_page": 1,
+                        "verified_pages": 1,
+                        "is_deleted": True,
+                    })
+    except Exception as err:
+        pass
 
     events.sort(key=lambda e: e["timestamp"], reverse=True)
     return events

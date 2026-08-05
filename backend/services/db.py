@@ -434,20 +434,31 @@ def db_get_document(doc_id: str) -> Optional[dict]:
             return doc
         return None
 
-def db_list_documents(username: Optional[str] = None, only_trash: bool = False) -> list:
-    is_deleted_val = 1 if only_trash else 0
+def db_list_documents(username: Optional[str] = None, only_trash: bool = False, include_deleted: bool = False) -> list:
     with get_db() as conn:
         cursor = conn.cursor()
-        if username:
-            cursor.execute(
-                "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents WHERE username = ? AND is_deleted = ? ORDER BY created_at DESC",
-                (username, is_deleted_val)
-            )
+        if include_deleted:
+            if username:
+                cursor.execute(
+                    "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents WHERE username = ? ORDER BY created_at DESC",
+                    (username,)
+                )
+            else:
+                cursor.execute(
+                    "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents ORDER BY created_at DESC"
+                )
         else:
-            cursor.execute(
-                "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents WHERE is_deleted = ? ORDER BY created_at DESC",
-                (is_deleted_val,)
-            )
+            is_deleted_val = 1 if only_trash else 0
+            if username:
+                cursor.execute(
+                    "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents WHERE username = ? AND is_deleted = ? ORDER BY created_at DESC",
+                    (username, is_deleted_val)
+                )
+            else:
+                cursor.execute(
+                    "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents WHERE is_deleted = ? ORDER BY created_at DESC",
+                    (is_deleted_val,)
+                )
         rows = cursor.fetchall()
         docs = []
         for r in rows:

@@ -439,9 +439,15 @@ export async function renderReadingHistoryPage() {
   if (document.getElementById('page-history') !== el) return // 페이지 전환됨
 
   const docsById = new Map(libraryDocs.map(d => [d.id, d]))
+  const timelineDocTitles = new Map()
+  events.forEach(e => {
+    if (e.doc_id && e.doc_title && !timelineDocTitles.has(e.doc_id)) {
+      timelineDocTitles.set(e.doc_id, e.doc_title)
+    }
+  })
   const docTitle = (docId, fallback) => {
     const d = docsById.get(docId)
-    return (d?.metadata?.title) || d?.filename || fallback || '제목 없음'
+    return (d?.metadata?.title) || d?.filename || fallback || timelineDocTitles.get(docId) || '제목 없음'
   }
 
 
@@ -748,7 +754,9 @@ export async function renderReadingHistoryPage() {
 
   const paperAnalyticsMap = analyticsSummary?.paper_stats || {}
   const topPapersHtml = topPapers.length ? topPapers.map((p, i) => {
-    const title = docTitle(p.doc_id)
+    const doc = docsById.get(p.doc_id)
+    const isDeleted = !doc || doc.is_deleted === 1
+    const title = docTitle(p.doc_id, '삭제된 논문')
     const widthPct = Math.max(6, Math.round((p.seconds / topMaxSeconds) * 100))
     const pStat = paperAnalyticsMap[p.doc_id]
     const depth = pStat?.reading_depth || 'Opened'
@@ -757,11 +765,14 @@ export async function renderReadingHistoryPage() {
     const verifiedPages = pStat ? pStat.verified_pages_count : '-'
 
     return `
-      <div class="rh-top-row" data-doc-id="${escapeHtml(p.doc_id || '')}">
+      <div class="rh-top-row ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(p.doc_id || '')}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${isDeleted ? '삭제된 논문입니다' : ''}">
         <span class="rh-top-rank">${i + 1}</span>
         <div class="rh-top-body">
           <div class="rh-top-title" style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
-            <span>${escapeHtml(title)}</span>
+            <span>
+              ${escapeHtml(title)}
+              ${isDeleted ? '<span class="rh-deleted-badge">삭제됨</span>' : ''}
+            </span>
             <span class="reading-depth-badge ${depthCls}">${escapeHtml(depth)}</span>
           </div>
           <div class="rh-top-track"><div class="rh-top-fill" style="width:${widthPct}%"></div></div>
@@ -992,19 +1003,20 @@ export async function renderReadingHistoryPage() {
           <div class="rh-timeline-track">
             ${dayEvents.map(e => {
               const title = docTitle(e.doc_id, e.doc_title)
+              const isDeleted = Boolean(e.is_deleted)
               let pageMeta = ''
               let timeLabel = formatTime(e.timestamp)
-              let hoverTitle = '이 논문 열기'
+              let hoverTitle = isDeleted ? '삭제된 논문입니다' : '이 논문 열기'
 
               if (e.type === 'read') {
                 const startStr = formatTime(e.timestamp)
                 const endStr = e.end_timestamp ? formatTime(e.end_timestamp) : null
                 if (startStr && endStr && startStr !== endStr) {
                   timeLabel = `${startStr} ~ ${endStr}`
-                  hoverTitle = `읽기 시간: ${startStr} 시작 ~ ${endStr} 종료 | 클릭하여 이 논문 열기`
+                  hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시간: ${startStr} ~ ${endStr})` : `읽기 시간: ${startStr} 시작 ~ ${endStr} 종료 | 클릭하여 이 논문 열기`
                 } else if (startStr) {
                   timeLabel = startStr
-                  hoverTitle = `읽기 시각: ${startStr} | 클릭하여 이 논문 열기`
+                  hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시각: ${startStr})` : `읽기 시각: ${startStr} | 클릭하여 이 논문 열기`
                 }
 
                 if (e.start_page && e.end_page) {
@@ -1017,13 +1029,16 @@ export async function renderReadingHistoryPage() {
                 }
               }
               return `
-                <div class="rh-timeline-entry" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" title="${escapeHtml(hoverTitle)}">
+                <div class="rh-timeline-entry ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${escapeHtml(hoverTitle)}">
                   <div class="rh-timeline-dot">${icon(TYPE_ICON[e.type] || 'clock', 13)}</div>
                   <div class="rh-timeline-row">
                     <span class="rh-timeline-time">${escapeHtml(timeLabel)}</span>
                     <span class="rh-timeline-type">${escapeHtml(TYPE_LABEL[e.type] || e.type)}</span>
                     <div class="rh-timeline-main">
-                      <div class="rh-timeline-title">${escapeHtml(title)}</div>
+                      <div class="rh-timeline-title">
+                        ${escapeHtml(title)}
+                        ${isDeleted ? '<span class="rh-deleted-badge">삭제됨</span>' : ''}
+                      </div>
                       ${e.summary ? `<div class="rh-timeline-summary">${escapeHtml(e.summary)}</div>` : ''}
                     </div>
                     ${pageMeta ? `<span class="rh-timeline-meta">${escapeHtml(pageMeta)}</span>` : ''}
@@ -1075,12 +1090,14 @@ export async function renderReadingHistoryPage() {
   timelineListEl.addEventListener('click', (event) => {
     const entry = event.target.closest('.rh-timeline-entry')
     if (!entry) return
+    if (entry.dataset.isDeleted === 'true') return
     openDoc(entry.dataset.docId, entry.dataset.type)
   })
 
   el.querySelector('.rh-top-list')?.addEventListener('click', (event) => {
     const row = event.target.closest('.rh-top-row')
     if (!row) return
+    if (row.dataset.isDeleted === 'true') return
     openDoc(row.dataset.docId)
   })
 
