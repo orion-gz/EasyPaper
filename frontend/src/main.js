@@ -2420,6 +2420,13 @@ async function refreshSystemSettings() {
 let pdfParsersData = []
 let targetInstallParserId = null
 
+const PARSER_FALLBACK_META = {
+  pymupdf: { id: 'pymupdf', name: 'PyMuPDF (fitz)', installed: true, size_info: '0 MB', description: '기본 제공 파서 - 텍스트 중심 문서에서 초고속으로 작동합니다.', pros: '초고속 (몇 ms 내 처리), 별도 설치 필요 없음', cons: '2단 복잡 구조, 수식 텍스트 엉킴 발생 가능' },
+  pdfplumber: { id: 'pdfplumber', name: 'pdfplumber', installed: false, size_info: '약 15 MB', description: 'Python 기반 파서 - 표(Table) 추출 및 텍스트 위치 정밀 추적에 강점.', pros: '표(Table) 파싱 우수, 정밀 좌표 추적', cons: '소폭 더 큼, 수식 OCR 미지정' },
+  marker: { id: 'marker', name: 'Marker (AI Markdown)', installed: false, size_info: '약 2.5 GB', description: '딥러닝 비전/레이아웃 AI - 논문 전체를 깨끗한 Markdown/LaTeX 수식으로 변환.', pros: '수식, 표, 2단 레이아웃 매우 정밀 분석', cons: '최초 모델 설치 시 대용량 다운로드 필요' },
+  mineru: { id: 'mineru', name: 'MinerU (Magic-PDF)', installed: false, size_info: '약 3.0 GB', description: 'OpenDataLab 학술 서적 및 복잡 레이아웃 전문 추출 파서.', pros: '복잡 서적, 수식, 다단 구조 추출 최강', cons: '최초 모델 설치 시 대용량 다운로드 필요' }
+}
+
 async function refreshPdfParsersUI(savedEngine) {
   const select = $('setting-pdf-parser-engine')
   if (!select) return
@@ -2443,6 +2450,7 @@ async function refreshPdfParsersUI(savedEngine) {
     updateParserCardInfo(currentEngine)
   } catch (err) {
     console.warn('PDF 파서 목록 로드 실패:', err)
+    updateParserCardInfo(savedEngine || 'pymupdf')
   }
 }
 
@@ -2452,7 +2460,7 @@ function updateParserCardInfo(engineId) {
   const cardPros = $('pdf-parser-card-pros')
   const cardCons = $('pdf-parser-card-cons')
 
-  const parser = pdfParsersData.find(p => p.id === engineId)
+  const parser = pdfParsersData.find(p => p.id === engineId) || PARSER_FALLBACK_META[engineId] || PARSER_FALLBACK_META.pymupdf
   if (!parser) return
 
   if (cardName) cardName.textContent = `${parser.name} ${parser.installed ? '(설치됨)' : `(${parser.size_info})`}`
@@ -2461,41 +2469,20 @@ function updateParserCardInfo(engineId) {
   if (cardCons) cardCons.textContent = parser.cons
 }
 
-async function savePdfParserSetting(engineId) {
-  try {
-    const sys = await getSystemSettingsAPI()
-    const payload = {
-      ollama_host: sys.ollama_host || '',
-      trans_provider: sys.trans_provider || 'antigravity',
-      trans_model: sys.trans_model || '',
-      chat_provider: sys.chat_provider || 'antigravity',
-      chat_model: sys.chat_model || '',
-      openai_api_key: sys.openai_api_key || '',
-      gemini_api_key: sys.gemini_api_key || '',
-      claude_api_key: sys.claude_api_key || '',
-      openalex_mailto: sys.openalex_mailto || '',
-      translation_prompt_template: sys.translation_prompt_template || '',
-      pdf_parser_engine: engineId
-    }
-    await saveSystemSettingsAPI(payload)
-    showToast(`PDF 파서 엔진이 [${engineId}]로 변경되었습니다.`, 'success')
-  } catch (err) {
-    showToast(err.message, 'error')
-  }
-}
-
 const settingPdfParserEngineSelect = $('setting-pdf-parser-engine')
 if (settingPdfParserEngineSelect) {
   settingPdfParserEngineSelect.addEventListener('change', async (e) => {
     const selectedId = e.target.value
-    const parser = pdfParsersData.find(p => p.id === selectedId)
+    let parser = pdfParsersData.find(p => p.id === selectedId) || PARSER_FALLBACK_META[selectedId]
+
+    updateParserCardInfo(selectedId)
 
     if (parser && !parser.installed && parser.id !== 'pymupdf') {
       targetInstallParserId = selectedId
       openPdfParserInstallModal(parser)
     } else {
-      updateParserCardInfo(selectedId)
-      await savePdfParserSetting(selectedId)
+      await autoSaveSystemSettings(false)
+      showToast(`PDF 파서 엔진이 [${parser ? parser.name : selectedId}]로 설정되었습니다.`, 'success')
     }
   })
 }
@@ -2964,26 +2951,28 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
     chatModel = transModel
   }
 
-  if (!transModel || !chatModel) return
+  const pdfParserSelect = $('setting-pdf-parser-engine')
+  const pdfParserEngine = pdfParserSelect ? pdfParserSelect.value : 'pymupdf'
 
   const settings = {
-    ollama_host: settingOllamaHost.value.trim(),
-    trans_provider: transProvider,
-    trans_model: transModel,
-    chat_provider: chatProvider,
-    chat_model: chatModel,
-    openai_api_key: settingOpenAIKey.value.trim(),
-    gemini_api_key: settingGeminiKey.value.trim(),
-    claude_api_key: settingClaudeKey.value.trim(),
-    openalex_mailto: settingOpenAlexMailto.value.trim(),
-    translation_prompt_template: $('setting-prompt-template').value
+    ollama_host: settingOllamaHost ? settingOllamaHost.value.trim() : '',
+    trans_provider: transProvider || 'antigravity',
+    trans_model: transModel || '',
+    chat_provider: chatProvider || 'antigravity',
+    chat_model: chatModel || '',
+    openai_api_key: settingOpenAIKey ? settingOpenAIKey.value.trim() : '',
+    gemini_api_key: settingGeminiKey ? settingGeminiKey.value.trim() : '',
+    claude_api_key: settingClaudeKey ? settingClaudeKey.value.trim() : '',
+    openalex_mailto: settingOpenAlexMailto ? settingOpenAlexMailto.value.trim() : '',
+    translation_prompt_template: $('setting-prompt-template') ? $('setting-prompt-template').value : '',
+    pdf_parser_engine: pdfParserEngine
   }
 
   try {
     await saveSystemSettingsAPI(settings)
     // sync compact pickers
-    viewerTransPicker.setValue(transProvider, transModel)
-    chatSidebarPicker.setValue(chatProvider, chatModel)
+    if (transProvider && transModel) viewerTransPicker.setValue(transProvider, transModel)
+    if (chatProvider && chatModel) chatSidebarPicker.setValue(chatProvider, chatModel)
     if (!silent) showToast('설정이 저장되었습니다.', 'success')
     checkAIStatus()
   } catch (err) {
@@ -2991,8 +2980,8 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
   }
 }
 
-;[settingOllamaHost, settingOpenAIKey, settingGeminiKey, settingClaudeKey, settingOpenAlexMailto].forEach(el => {
-  el.addEventListener('change', () => autoSaveSystemSettings())
+;[settingOllamaHost, settingOpenAIKey, settingGeminiKey, settingClaudeKey, settingOpenAlexMailto, settingPdfParserEngineSelect].forEach(el => {
+  if (el) el.addEventListener('change', () => autoSaveSystemSettings())
 })
 
 if (settingChatSameAsTrans) {
