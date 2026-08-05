@@ -2595,30 +2595,44 @@ if (settingPdfParserEngineSelect) {
 
 function openPdfParserInstallModal(parser) {
   const modal = $('pdf-parser-install-modal')
-  const targetText = $('pdf-parser-install-target-text')
-  const descText = $('pdf-parser-install-desc-text')
-  const prosText = $('pdf-parser-install-pros')
-  const consText = $('pdf-parser-install-cons')
-
   const introArea = $('pdf-parser-install-intro')
   const progressArea = $('pdf-parser-install-progress-area')
+  const statusText = $('pdf-parser-install-status-text')
   const logElem = $('pdf-parser-install-log')
   const doneBtn = $('pdf-parser-install-done-btn')
 
-  if (introArea) introArea.classList.remove('hidden')
-  if (progressArea) progressArea.classList.add('hidden')
+  if (introArea) introArea.classList.add('hidden')
+  if (progressArea) progressArea.classList.remove('hidden')
   if (logElem) logElem.textContent = ''
   if (doneBtn) doneBtn.classList.add('hidden')
-
-  if (targetText) targetText.textContent = `${parser.name} (${parser.size_info})`
-  if (descText) descText.textContent = `${parser.description}. 해당 파서를 사용하려면 백엔드 가상환경(.venv)에 필요 패키지 설치가 필요합니다.`
-  if (prosText) prosText.textContent = parser.pros
-  if (consText) consText.textContent = parser.cons
+  if (statusText) {
+    statusText.innerHTML = `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 백엔드 가상환경에 [${parser.name}] 설치를 시작합니다...`
+  }
 
   openOverlayModal(modal)
+
+  installPdfParserAPI(
+    parser.id,
+    (line) => {
+      if (logElem) {
+        logElem.textContent += line + '\n'
+        logElem.scrollTop = logElem.scrollHeight
+      }
+    },
+    async (successMsg) => {
+      if (statusText) statusText.innerHTML = `<span style="color: var(--accent-mid); font-weight:600;">✓ [${parser.name}] 설치가 성공적으로 완료되었습니다!</span>`
+      if (doneBtn) doneBtn.classList.remove('hidden')
+      await autoSaveSystemSettings({ silent: true })
+      await refreshSystemSettings()
+    },
+    async (err) => {
+      if (statusText) statusText.innerHTML = `<span style="color: var(--danger, #ef4444); font-weight:600;">✕ 설치 중 오류 발생: ${err.message}</span>`
+      if (doneBtn) doneBtn.classList.remove('hidden')
+      await refreshSystemSettings()
+    }
+  )
 }
 
-const parserInstallConfirmBtn = $('pdf-parser-install-confirm-btn')
 const parserInstallCancelBtn = $('pdf-parser-install-cancel-btn')
 const parserInstallCloseBtn = $('pdf-parser-install-close-btn')
 const parserInstallModal = $('pdf-parser-install-modal')
@@ -2642,41 +2656,6 @@ if (parserInstallDoneBtn) {
   parserInstallDoneBtn.addEventListener('click', async () => {
     closeOverlayModal(parserInstallModal)
     await refreshSystemSettings()
-  })
-}
-
-if (parserInstallConfirmBtn) {
-  parserInstallConfirmBtn.addEventListener('click', () => {
-    if (!targetInstallParserId) return
-
-    const introArea = $('pdf-parser-install-intro')
-    const progressArea = $('pdf-parser-install-progress-area')
-    const statusText = $('pdf-parser-install-status-text')
-    const logElem = $('pdf-parser-install-log')
-
-    if (introArea) introArea.classList.add('hidden')
-    if (progressArea) progressArea.classList.remove('hidden')
-
-    installPdfParserAPI(
-      targetInstallParserId,
-      (line) => {
-        if (logElem) {
-          logElem.textContent += line + '\n'
-          logElem.scrollTop = logElem.scrollHeight
-        }
-      },
-      async (successMsg) => {
-        if (statusText) statusText.innerHTML = `<span style="color: var(--accent-mid); font-weight:600;">✓ 설치가 성공적으로 완료되었습니다!</span>`
-        if (parserInstallDoneBtn) parserInstallDoneBtn.classList.remove('hidden')
-        await autoSaveSystemSettings({ silent: true })
-        await refreshSystemSettings()
-      },
-      async (err) => {
-        if (statusText) statusText.innerHTML = `<span style="color: var(--danger, #ef4444); font-weight:600;">✕ 설치 중 오류 발생: ${err.message}</span>`
-        if (parserInstallDoneBtn) parserInstallDoneBtn.classList.remove('hidden')
-        await refreshSystemSettings()
-      }
-    )
   })
 }
 
