@@ -2292,41 +2292,13 @@ class PdfParserPicker {
       const item = document.createElement('div')
       item.className = 'picker-model-item' + (this._selectedId === p.id ? ' selected' : '')
 
-      let badgeHtml = ''
-      if (p.installed) {
-        badgeHtml = `<span class="picker-available-chip" style="margin-left:auto;">설치됨</span>`
-        if (p.id !== 'pymupdf') {
-          badgeHtml += `<button type="button" data-parser-del="${p.id}" style="margin-left:6px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:3px;">${_TRASH_SVG} 삭제</button>`
-        }
-      } else {
-        badgeHtml = `<span style="margin-left:auto;font-size:11px;color:var(--text-muted);">${p.size_info || '미설치'}</span>`
-      }
+      const badgeHtml = p.installed
+        ? `<span class="picker-available-chip" style="margin-left:auto;">설치됨</span>`
+        : `<span style="margin-left:auto;font-size:11px;color:var(--text-muted);">${p.size_info || '미설치'}</span>`
 
       item.innerHTML = `<div style="display:flex;align-items:center;width:100%;gap:8px;"><span>${p.name}</span>${badgeHtml}</div>`
 
-      const delBtn = item.querySelector('[data-parser-del]')
-      if (delBtn) {
-        delBtn.addEventListener('click', async (evt) => {
-          evt.stopPropagation()
-          evt.preventDefault()
-          this.container.classList.remove('open')
-          const ok = await showCustomConfirm(`[${p.name}] 파서 패키지를 가상환경(.venv)에서 삭제하시겠습니까?`, {
-            title: '파서 패키지 삭제', confirmText: '삭제', danger: true
-          })
-          if (!ok) return
-          try {
-            showToast(`[${p.name}] 패키지 삭제 진행 중...`, 'info')
-            await uninstallPdfParserAPI(p.id)
-            showToast(`[${p.name}] 패키지 삭제가 완료되었습니다.`, 'success')
-            await refreshSystemSettings()
-          } catch (err) {
-            showToast(`삭제 실패: ${err.message}`, 'error')
-          }
-        })
-      }
-
       item.addEventListener('click', (e) => {
-        if (e.target.closest('[data-parser-del]')) return
         e.stopPropagation()
         this._selectedId = p.id
         this._updateBtn()
@@ -2712,6 +2684,8 @@ function updateParserCardInfo(engineId) {
   const cardDesc = $('pdf-parser-card-desc')
   const cardPros = $('pdf-parser-card-pros')
   const cardCons = $('pdf-parser-card-cons')
+  const uninstallRow = $('pdf-parser-uninstall-row')
+  const uninstallBtn = $('pdf-parser-uninstall-btn')
 
   const parser = pdfParsersData.find(p => p.id === engineId) || PARSER_FALLBACK_META[engineId] || PARSER_FALLBACK_META.pymupdf
   if (!parser) return
@@ -2720,9 +2694,36 @@ function updateParserCardInfo(engineId) {
   if (cardDesc) cardDesc.textContent = parser.description
   if (cardPros) cardPros.textContent = parser.pros
   if (cardCons) cardCons.textContent = parser.cons
+
+  // 삭제 버튼: pymupdf 제외, 설치된 경우만 표시
+  if (uninstallRow) {
+    if (parser.id !== 'pymupdf' && parser.installed) {
+      uninstallRow.classList.remove('hidden')
+    } else {
+      uninstallRow.classList.add('hidden')
+    }
+  }
+
+  // 삭제 버튼 클릭 이벤트 연결 (매번 바인드 방지용 클론)
+  if (uninstallBtn) {
+    const newBtn = uninstallBtn.cloneNode(true)
+    uninstallBtn.parentNode.replaceChild(newBtn, uninstallBtn)
+    newBtn.addEventListener('click', async () => {
+      const ok = await showCustomConfirm(`[${parser.name}] 파서 패키지를 가상환경(.venv)에서 삭제하시겠습니까?`, {
+        title: '파서 패키지 삭제', confirmText: '삭제', danger: true
+      })
+      if (!ok) return
+      try {
+        showToast(`[${parser.name}] 패키지 삭제 진행 중...`, 'info')
+        await uninstallPdfParserAPI(parser.id)
+        showToast(`[${parser.name}] 패키지 삭제가 완료되었습니다.`, 'success')
+        await refreshSystemSettings()
+      } catch (err) {
+        showToast(`삭제 실패: ${err.message}`, 'error')
+      }
+    })
+  }
 }
-
-
 
 function openPdfParserInstallModal(parser) {
   const modal = $('pdf-parser-install-modal')
