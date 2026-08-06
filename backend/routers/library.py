@@ -229,13 +229,19 @@ async def start_reading_session_api(doc_id: str, body: Optional[StartSessionRequ
         try:
             last_updated = datetime.fromisoformat(latest["updated_at"])
             diff_sec = (now - last_updated).total_seconds()
-            if diff_sec <= 120:
+            if 0 <= diff_sec <= 120:
+                stored_pages = json.loads(latest.get("page_sessions_json") or "[]")
+                current_page = max(stored_pages, key=lambda p: p.get("leaveTime", 0), default={"page": 1}).get("page", 1)
                 return {
                     "sessionId": latest["id"],
                     "merged": True,
                     "startedAt": latest["started_at"],
                     "activeReadingTime": latest["active_reading_time"],
                     "version": latest["version"],
+                    "currentPage": current_page,
+                    "pageSessions": stored_pages,
+                    "interactionSummary": json.loads(latest.get("interaction_summary_json") or "{}"),
+                    "totalPages": latest.get("total_pages", 0),
                 }
         except Exception:
             pass
@@ -274,48 +280,44 @@ from services.reading_analytics import ReadingSessionPayload
 async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessionPayload, current_user: str = Depends(get_current_user)):
     """Viewer에서 20초 간격으로 전달되는 Heartbeat 데이터를 처리하고 Analytics를 재계산합니다."""
     _require_owned_document(doc_id, current_user)
+    if payload.paperId != doc_id:
+        raise HTTPException(status_code=400, detail="paperId does not match the route document")
+
     import json
     from datetime import datetime, timezone
     from services.db import (
         db_get_user_reading_profile,
-        db_save_user_reading_profile,
         db_save_reading_session,
-        db_add_reading_time,
         db_get_reading_session,
-        get_document,
     )
-    from services.reading_analytics import process_reading_analytics, update_user_ema
+    from services.reading_analytics import process_reading_analytics
 
     doc = get_document(doc_id)
     doc_total_pages = doc.get("total_pages", 0) if doc else 0
 
+    existing = db_get_reading_session(payload.sessionId, current_user)
+    if existing and existing["paper_id"] != doc_id:
+        raise HTTPException(status_code=409, detail="session belongs to another document")
+    if existing and payload.version <= existing["version"]:
+        return {"stale": True, "version": existing["version"]}
+
     profile = db_get_user_reading_profile(current_user)
     user_ema = profile.get("ema_seconds_per_page", 600.0)
-    session_count = profile.get("session_count", 0)
 
     res = process_reading_analytics(payload, doc_total_pages, user_ema)
 
-    new_ema, new_count = update_user_ema(
-        user_ema,
-        session_count,
-        payload.activeReadingTime,
-        len(payload.pageSessions),
-    )
-    db_save_user_reading_profile(current_user, new_ema, new_count)
-
-    existing = db_get_reading_session(payload.sessionId, current_user)
     started_at = existing["started_at"] if existing else datetime.now(timezone.utc).isoformat()
 
-    db_save_reading_session(
+    saved = db_save_reading_session(
         session_id=payload.sessionId,
         username=current_user,
         paper_id=doc_id,
         started_at=started_at,
-        ended_at=None,
+        ended_at=existing["ended_at"] if existing else None,
         active_reading_time=int(payload.activeReadingTime),
         version=payload.version,
-        page_sessions_json=json.dumps([ps.dict() for ps in payload.pageSessions]),
-        interaction_summary_json=json.dumps(payload.interactionSummary.dict()),
+        page_sessions_json=json.dumps([ps.model_dump() for ps in payload.pageSessions]),
+        interaction_summary_json=json.dumps(payload.interactionSummary.model_dump()),
         reading_depth=res.readingDepth,
         reading_score=res.readingScore,
         reading_confidence=res.readingConfidence,
@@ -323,30 +325,44 @@ async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessio
         total_pages=res.totalPages,
     )
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    db_add_reading_time(doc_id, current_user, "reading", 20)
-
-    return res.dict()
+    if not saved:
+        current = db_get_reading_session(payload.sessionId, current_user)
+        return {"stale": True, "version": current["version"] if current else payload.version}
+    return res.model_dump()
 
 
 @router.post("/library/{doc_id}/reading-session/end")
 async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, current_user: str = Depends(get_current_user)):
     """Viewer 세션 종료 시 최종 상태를 기록하고 Analytics 결과를 저장합니다."""
     _require_owned_document(doc_id, current_user)
+    if payload.paperId != doc_id:
+        raise HTTPException(status_code=400, detail="paperId does not match the route document")
+
     import json
     from datetime import datetime, timezone
-    from services.db import db_get_reading_session, db_save_reading_session, get_document, update_document_metadata
-    from services.reading_analytics import process_reading_analytics
+    from services.db import (
+        db_get_reading_session,
+        db_get_user_reading_profile,
+        db_save_reading_session,
+        db_save_user_reading_profile,
+    )
+    from services.reading_analytics import process_reading_analytics, update_user_ema
 
     doc = get_document(doc_id)
     doc_total_pages = doc.get("total_pages", 0) if doc else 0
-
-    res = process_reading_analytics(payload, doc_total_pages, 600.0)
     existing = db_get_reading_session(payload.sessionId, current_user)
+    if existing and existing["paper_id"] != doc_id:
+        raise HTTPException(status_code=409, detail="session belongs to another document")
+    if existing and payload.version <= existing["version"]:
+        return {"stale": True, "version": existing["version"]}
+
+    profile = db_get_user_reading_profile(current_user)
+    user_ema = profile.get("ema_seconds_per_page", 600.0)
+    res = process_reading_analytics(payload, doc_total_pages, user_ema)
     started_at = existing["started_at"] if existing else datetime.now(timezone.utc).isoformat()
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    db_save_reading_session(
+    saved = db_save_reading_session(
         session_id=payload.sessionId,
         username=current_user,
         paper_id=doc_id,
@@ -354,8 +370,8 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
         ended_at=now_iso,
         active_reading_time=int(payload.activeReadingTime),
         version=payload.version,
-        page_sessions_json=json.dumps([ps.dict() for ps in payload.pageSessions]),
-        interaction_summary_json=json.dumps(payload.interactionSummary.dict()),
+        page_sessions_json=json.dumps([ps.model_dump() for ps in payload.pageSessions]),
+        interaction_summary_json=json.dumps(payload.interactionSummary.model_dump()),
         reading_depth=res.readingDepth,
         reading_score=res.readingScore,
         reading_confidence=res.readingConfidence,
@@ -363,9 +379,22 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
         total_pages=res.totalPages,
     )
 
+    if not saved:
+        current = db_get_reading_session(payload.sessionId, current_user)
+        return {"stale": True, "version": current["version"] if current else payload.version}
+
+    if not existing or not existing.get("ended_at"):
+        new_ema, new_count = update_user_ema(
+            user_ema,
+            profile.get("session_count", 0),
+            payload.activeReadingTime,
+            len({ps.page for ps in payload.pageSessions}),
+        )
+        db_save_user_reading_profile(current_user, new_ema, new_count)
+
     update_document_metadata(doc_id, {"last_read_at": now_iso})
 
-    return res.dict()
+    return res.model_dump()
 
 
 @router.get("/library/reading-analytics-summary")
