@@ -1,6 +1,7 @@
 import base64
 import fitz  # PyMuPDF
 import re
+from functools import lru_cache
 from typing import List, Dict, Any, Optional
 
 
@@ -64,7 +65,7 @@ def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
                         "type": 0
                     })
                 pages.append({
-                    "page": page_num,
+                    "page_num": page_num,
                     "text": text,
                     "blocks": blocks,
                     "parser_engine": "pdfplumber"
@@ -78,21 +79,18 @@ def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
 
 def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:
     try:
-        from marker.converters.pdf import PdfConverter
-        from marker.models import create_model_dict
+        from marker.renderers.json import JSONRenderer
 
-        converter = PdfConverter(artifact_dict=create_model_dict())
-        rendered = converter(pdf_path)
-        markdown_text = getattr(rendered, "markdown", "") or str(rendered)
+        document, converter = _build_marker_document(pdf_path)
+        json_output = converter.resolve_dependencies(JSONRenderer)(document)
 
-        raw_pages = markdown_text.split("\n\n---\n\n")
         pages = []
-        for idx, page_str in enumerate(raw_pages):
+        for idx, page_json in enumerate(json_output.children):
+            text_content = clean_text_for_translation(_marker_page_text(page_json))
             pages.append({
-                "page": idx + 1,
-                "text": page_str,
-                "blocks": [{"bbox": (0, 0, 100, 100), "text": page_str, "type": 0}],
-                "markdown": page_str,
+                "page_num": idx + 1,
+                "text": text_content,
+                "blocks": [{"bbox": tuple(page_json.bbox), "text": text_content, "type": 0}],
                 "parser_engine": "marker"
             })
         return pages if pages else _extract_pages_pymupdf(pdf_path)
@@ -104,32 +102,27 @@ def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:
 
 def _extract_pages_mineru(pdf_path: str) -> List[Dict[str, Any]]:
     try:
-        import importlib
-        if not importlib.util.find_spec("magic_pdf"):
-            raise ImportError("magic_pdf 패키지가 설치되어 있지 않습니다.")
+        content_list = _run_mineru(pdf_path)
+        pages_text: Dict[int, List[str]] = {}
+        for item in content_list:
+            text = _mineru_item_text(item)
+            if text:
+                pages_text.setdefault(item.get("page_idx", 0), []).append(text)
 
-        from magic_pdf.data.dataset import PymuDocDataset
-        from magic_pdf.model.doc_analyze_by_custom_model import doc_analyze
+        if not pages_text:
+            return _extract_pages_pymupdf(pdf_path)
 
-        with open(pdf_path, "rb") as f:
-            pdf_bytes = f.read()
-
-        ds = PymuDocDataset(pdf_bytes)
-        infer_result = ds.apply(doc_analyze, ocr=False)
-        pipe_result = infer_result.pipe_txt()
-        markdown_text = pipe_result.get_markdown() if hasattr(pipe_result, "get_markdown") else str(pipe_result)
-
-        raw_pages = markdown_text.split("\n\n---\n\n")
+        max_page_idx = max(pages_text.keys())
         pages = []
-        for idx, page_str in enumerate(raw_pages):
+        for page_idx in range(max_page_idx + 1):
+            text_content = clean_text_for_translation("\n\n".join(pages_text.get(page_idx, [])))
             pages.append({
-                "page": idx + 1,
-                "text": page_str,
-                "blocks": [{"bbox": (0, 0, 100, 100), "text": page_str, "type": 0}],
-                "markdown": page_str,
+                "page_num": page_idx + 1,
+                "text": text_content,
+                "blocks": [{"bbox": (0, 0, 1000, 1000), "text": text_content, "type": 0}],
                 "parser_engine": "mineru"
             })
-        return pages if pages else _extract_pages_pymupdf(pdf_path)
+        return pages
     except Exception as e:
         import logging
         logging.warning(f"MinerU 파서 실행 실패 ({e}). PyMuPDF 파서로 폴백합니다.")
@@ -860,6 +853,219 @@ _CAPTION_RE = re.compile(
 _EQUATION_LINE_RE = re.compile(rf"\((\d{{1,3}}|{_ROMAN_NUMERAL_RE})\)\s*$")
 
 
+# ── Marker 엔진 연동 ──────────────────────────────────────────────────────
+# marker는 build_document()(ML 추론, 무거움)와 렌더러(포맷 변환, 가벼움)가 분리되어
+# 있다. extract_pages()와 extract_pdf_images()가 같은 문서에 대해 각각 호출될 때
+# 추론을 두 번 하지 않도록, 완성된 Document 객체 자체를 경로 기준으로 캐싱한다.
+# ponytail: 프로세스 전역 단순 LRU(경로 문자열 키) - 같은 경로에 다른 내용의 파일이
+# 재업로드되면 과거 결과가 재사용될 수 있다. 세션마다 고유 경로를 쓰는 업로드
+# 흐름에서는 문제되지 않지만, 필요해지면 (경로, mtime) 키로 바꿀 것.
+_marker_artifacts = None
+
+
+def _get_marker_artifacts():
+    global _marker_artifacts
+    if _marker_artifacts is None:
+        from marker.models import create_model_dict
+        _marker_artifacts = create_model_dict()
+    return _marker_artifacts
+
+
+@lru_cache(maxsize=2)
+def _build_marker_document(pdf_path: str):
+    from marker.converters.pdf import PdfConverter
+    converter = PdfConverter(artifact_dict=_get_marker_artifacts())
+    document = converter.build_document(pdf_path)
+    return document, converter
+
+
+# 텍스트 스트림에서 제외할 블록 타입 - 이미지 자체는 텍스트가 아니므로 번역
+# 대상에서 빠지는 게 맞다(pymupdf 경로의 벡터 그림 필터링과 같은 의도).
+_MARKER_SKIP_TEXT_TYPES = {"Figure", "Picture", "Diagram", "FigureGroup", "PictureGroup"}
+# 오버레이 후보로 그대로 쓸 그룹 타입 - marker가 이미지/표와 그 캡션을 하나로
+# 묶어서 감지해주므로, 우리가 직접 캡션-도형 거리 매칭을 할 필요가 없다.
+_MARKER_GROUP_REGION_TYPES = {"FigureGroup", "TableGroup", "PictureGroup"}
+_MARKER_LEAF_REGION_TYPES = {"Table", "Figure", "Picture", "Diagram"}
+
+
+def _marker_html_to_text(block_html: str) -> str:
+    """marker 블록의 html 조각을 일반 텍스트로 변환한다. 볼드(<strong>/<b>)는
+    pymupdf 경로와 동일하게 마크다운(**...**)으로 남겨 서식 정보를 보존한다."""
+    from bs4 import BeautifulSoup
+    marked = re.sub(r"<(strong|b)\b[^>]*>(.*?)</\1>", r"**\2**", block_html or "", flags=re.S | re.I)
+    return BeautifulSoup(marked, "html.parser").get_text(" ", strip=True)
+
+
+def _marker_collect_text(block, parts: List[str]) -> None:
+    if block.block_type in _MARKER_SKIP_TEXT_TYPES:
+        return
+    if block.children:
+        for child in block.children:
+            _marker_collect_text(child, parts)
+        return
+    text = _marker_html_to_text(block.html)
+    if text:
+        parts.append(text)
+
+
+def _marker_page_text(page_json) -> str:
+    parts: List[str] = []
+    for child in page_json.children or []:
+        _marker_collect_text(child, parts)
+    return "\n\n".join(parts)
+
+
+def _marker_find_caption_text(block) -> Optional[str]:
+    for child in block.children or []:
+        if child.block_type == "Caption":
+            return _marker_html_to_text(child.html)
+    return None
+
+
+def _match_label_from_caption_text(caption_text: Optional[str]) -> "tuple[Optional[str], Optional[str]]":
+    if not caption_text:
+        return None, None
+    m = _CAPTION_RE.match(re.sub(r"\*+", "", caption_text))
+    if not m or not m.group(2):
+        return None, None
+    kind = "Figure" if m.group(1).lower().startswith("fig") else "Table"
+    return f"{kind} {m.group(2).upper()}", caption_text[:600]
+
+
+def _marker_page_regions(page_json) -> List[Dict[str, Any]]:
+    """marker의 JSON 블록 트리를 훑어 fig/table/equation 오버레이 후보를 만든다.
+    marker가 이미 정확한 레이아웃 bbox와 (그룹인 경우) 캡션까지 함께 감지해주므로,
+    pymupdf 경로의 벡터-그림 휴리스틱/캡션 거리 매칭이 전혀 필요 없다."""
+    px0, py0, px1, py1 = page_json.bbox
+    page_w, page_h = px1 - px0, py1 - py0
+    if page_w <= 0 or page_h <= 0:
+        return []
+
+    def to_percent(bbox) -> Dict[str, float]:
+        x0, y0, x1, y1 = bbox
+        return {
+            "left": (x0 - px0) / page_w * 100,
+            "top": (y0 - py0) / page_h * 100,
+            "width": (x1 - x0) / page_w * 100,
+            "height": (y1 - y0) / page_h * 100,
+        }
+
+    regions: List[Dict[str, Any]] = []
+
+    def walk(block) -> None:
+        bt = block.block_type
+        if bt in _MARKER_GROUP_REGION_TYPES:
+            label, caption = _match_label_from_caption_text(_marker_find_caption_text(block))
+            pct = to_percent(block.bbox)
+            if pct["width"] >= 2 and pct["height"] >= 2:
+                regions.append({**pct, "label": label, "caption": caption})
+            return
+        if bt in _MARKER_LEAF_REGION_TYPES:
+            pct = to_percent(block.bbox)
+            if pct["width"] >= 2 and pct["height"] >= 2:
+                regions.append({**pct, "label": None, "caption": None})
+            return
+        if bt == "Equation":
+            eq_text = re.sub(r"\*+", "", _marker_html_to_text(block.html))
+            m = _EQUATION_LINE_RE.search(eq_text)
+            label = f"Equation {m.group(1)}" if m and m.group(1) else None
+            pct = to_percent(block.bbox)
+            if pct["width"] >= 1 and pct["height"] >= 1:
+                regions.append({**pct, "label": label, "caption": None})
+            return
+        for child in block.children or []:
+            walk(child)
+
+    for child in page_json.children or []:
+        walk(child)
+    return regions
+
+
+# ── MinerU 엔진 연동 ──────────────────────────────────────────────────────
+@lru_cache(maxsize=2)
+def _run_mineru(pdf_path: str) -> tuple:
+    """MinerU pipeline 백엔드로 파싱해 content_list(블록별 type/bbox/caption 목록)를
+    돌려준다. do_parse()는 결과를 디스크에 파일로만 저장하므로 임시 디렉터리에
+    받아 content_list.json을 읽어들인다. bbox는 0~1000 범위로 정규화되어 있다
+    (MinerU 자체 규격 - 페이지 크기와 무관하게 그대로 퍼센트 변환 가능)."""
+    import json
+    import os
+    import tempfile
+    from mineru.cli.common import do_parse
+
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+
+    pdf_file_name = "doc"
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        do_parse(
+            output_dir=tmp_dir,
+            pdf_file_names=[pdf_file_name],
+            pdf_bytes_list=[pdf_bytes],
+            p_lang_list=["en"],
+            backend="pipeline",
+            f_draw_layout_bbox=False,
+            f_draw_span_bbox=False,
+            f_dump_md=False,
+            f_dump_middle_json=False,
+            f_dump_model_output=False,
+            f_dump_orig_pdf=False,
+            f_dump_content_list=True,
+        )
+        content_list_path = os.path.join(tmp_dir, pdf_file_name, "auto", f"{pdf_file_name}_content_list.json")
+        with open(content_list_path, "r", encoding="utf-8") as f:
+            content_list = json.load(f)
+    return tuple(content_list)
+
+
+def _mineru_item_text(item: Dict[str, Any]) -> str:
+    """content_list 항목 하나를 번역 대상 본문 텍스트로 변환한다. 표/그림 본문은
+    번역 스트림에 넣지 않고 캡션만 포함한다(pymupdf 경로도 그림 내부 텍스트는
+    본문에서 제외하므로 동일한 취급)."""
+    t = item.get("type")
+    if t == "text":
+        return (item.get("text") or "").strip()
+    if t == "image":
+        return " ".join(item.get("image_caption") or []).strip()
+    if t == "table":
+        return " ".join(item.get("table_caption") or []).strip()
+    if t == "equation":
+        return (item.get("text") or "").strip()
+    return ""
+
+
+def _mineru_page_regions(content_list: tuple) -> Dict[int, List[Dict[str, Any]]]:
+    regions_by_page: Dict[int, List[Dict[str, Any]]] = {}
+    for item in content_list:
+        bbox = item.get("bbox")
+        t = item.get("type")
+        if not bbox or t not in ("image", "table", "equation"):
+            continue
+
+        label, caption = None, None
+        if t == "image":
+            label, caption = _match_label_from_caption_text(" ".join(item.get("image_caption") or []).strip() or None)
+        elif t == "table":
+            label, caption = _match_label_from_caption_text(" ".join(item.get("table_caption") or []).strip() or None)
+        else:
+            eq_text = item.get("text") or ""
+            m = _EQUATION_LINE_RE.search(eq_text)
+            label = f"Equation {m.group(1)}" if m and m.group(1) else None
+
+        x0, y0, x1, y1 = bbox
+        left, top = x0 / 10.0, y0 / 10.0
+        width, height = (x1 - x0) / 10.0, (y1 - y0) / 10.0
+        if width < 1 or height < 1:
+            continue
+
+        page_idx = item.get("page_idx", 0)
+        regions_by_page.setdefault(page_idx, []).append({
+            "left": left, "top": top, "width": width, "height": height,
+            "label": label, "caption": caption,
+        })
+    return regions_by_page
+
+
 def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
     """
     페이지에서 "Figure 1", "Table 2" 처럼 캡션으로 시작하는 줄을 찾아
@@ -1514,6 +1720,38 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
             engine = "pymupdf"
 
     engine = (engine or "pymupdf").lower().strip()
+
+    # marker/mineru는 자체 레이아웃 모델이 이미 figure/table/equation 영역과
+    # (그룹인 경우) 캡션까지 감지해준다 - pymupdf 휴리스틱을 돌릴 필요가 없고,
+    # 오히려 marker/mineru가 인식한 실제 텍스트 순서/구조와 무관한 별개의 좌표계라
+    # 섞어 쓰면 안 된다. 실패 시에만 pymupdf 휴리스틱으로 폴백한다.
+    if engine == "marker":
+        try:
+            from marker.renderers.json import JSONRenderer
+            document, converter = _build_marker_document(pdf_path)
+            json_output = converter.resolve_dependencies(JSONRenderer)(document)
+            images_data = []
+            for idx, page_json in enumerate(json_output.children):
+                for region in _marker_page_regions(page_json):
+                    images_data.append({"page": idx + 1, **region})
+            return images_data
+        except Exception as e:
+            import logging
+            logging.warning(f"Marker 레이아웃 추출 실패 ({e}). PyMuPDF 휴리스틱으로 폴백합니다.")
+            engine = "pymupdf"
+    elif engine == "mineru":
+        try:
+            content_list = _run_mineru(pdf_path)
+            regions_by_page = _mineru_page_regions(content_list)
+            images_data = []
+            for page_idx, regions in regions_by_page.items():
+                for region in regions:
+                    images_data.append({"page": page_idx + 1, **region})
+            return images_data
+        except Exception as e:
+            import logging
+            logging.warning(f"MinerU 레이아웃 추출 실패 ({e}). PyMuPDF 휴리스틱으로 폴백합니다.")
+            engine = "pymupdf"
 
     doc = fitz.open(pdf_path)
     images_data = []

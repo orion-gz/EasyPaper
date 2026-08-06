@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Request, Response, HTTPException, status, Depends
 from fastapi.responses import StreamingResponse
 import json
+import os
+import sys
 import httpx
 from pydantic import BaseModel
 from services.auth import (
@@ -39,6 +41,7 @@ from config import (
     set_skip_login,
 )
 from services.llm_client import check_ollama_health
+import venv_manager
 
 
 async def _stream_subprocess_lines(proc):
@@ -283,6 +286,15 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
             detail="올바르지 않은 PDF 파서 엔진입니다."
         )
 
+    # marker(transformers>=5.12.1 필요)와 mineru(transformers<5.0.0 필요)는
+    # 런타임에서 실제로 서로 충돌해 같은 venv에 공존할 수 없다고 확인됐다
+    # (marker는 5 미만에서, mineru는 5 이상에서 각각 다른 이유로 즉시
+    # 크래시함) - 그래서 mineru만 전용 venv(.venv-mineru)에서 돈다. 엔진을
+    # 바꿀 때 필요한 venv가 지금 떠 있는 것과 다르면, 저장 직후 서버를
+    # 재시작해서(시스템 업데이트 때와 동일한 인프라 재사용) 올바른 venv로
+    # 다시 올라오게 한다.
+    restart_needed = venv_manager.restart_required_for_engine(pdf_parser_engine)
+
     update_system_settings(
         ollama_host=data.ollama_host.strip(),
         trans_provider=trans_provider,
@@ -295,11 +307,19 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
         openalex_mailto=data.openalex_mailto.strip(),
         pdf_parser_engine=pdf_parser_engine
     )
-    
+
     # 고급 설정: 번역 프롬프트 템플릿 저장
     update_translation_prompt_template(data.translation_prompt_template)
-    
-    return {"message": "시스템 설정이 성공적으로 변경되었습니다."}
+
+    if restart_needed:
+        import asyncio
+        asyncio.create_task(_restart_server_process(get_project_root()))
+        return {
+            "message": f"'{pdf_parser_engine}' 엔진 적용을 위해 서버가 잠시 후 재시작됩니다. 진행 중인 번역이 중단될 수 있습니다.",
+            "restarting": True,
+        }
+
+    return {"message": "시스템 설정이 성공적으로 변경되었습니다.", "restarting": False}
 
 
 def _is_package_installed(module_name: str) -> bool:
@@ -308,6 +328,22 @@ def _is_package_installed(module_name: str) -> bool:
         return importlib.util.find_spec(module_name) is not None
     except Exception:
         return False
+
+
+def _is_package_installed_in_venv(venv_dir: str, module_name: str) -> bool:
+    """marker/mineru는 이 프로세스가 지금 떠 있는 venv가 아니라 각자 정해진
+    전용 venv에 설치되므로(venv_manager 참고), importlib으로는 확인할 수
+    없다. 그 venv의 site-packages에 실제 패키지 디렉터리가 있는지 직접
+    본다."""
+    import glob
+
+    if not venv_manager.is_venv_available(venv_dir):
+        return False
+    if sys.platform == "win32":
+        site_packages_dirs = [os.path.join(venv_dir, "Lib", "site-packages")]
+    else:
+        site_packages_dirs = glob.glob(os.path.join(venv_dir, "lib", "python3.*", "site-packages"))
+    return any(os.path.isdir(os.path.join(sp, module_name)) for sp in site_packages_dirs)
 
 
 @router.get("/settings/pdf-parsers")
@@ -341,18 +377,18 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
             "pros": "수식을 LaTeX 변환, 정교한 오버레이 크롭",
             "cons": "PyTorch/Vision 포함 (대용량), 처리 속도 느림",
             "size_info": "약 2.5 GB (PyTorch & Vision 모델 포함)",
-            "installed": _is_package_installed("marker"),
+            "installed": _is_package_installed_in_venv(venv_manager.DEFAULT_VENV, "marker"),
             "install_package": "marker-pdf"
         },
         {
             "id": "mineru",
-            "name": "MinerU (Magic-PDF)",
+            "name": "MinerU",
             "description": "대규모 학술 서적 및 논문 레이아웃 분석 AI 파서",
-            "pros": "YOLOv8 기반 레이아웃 핀포인트 세그멘테이션",
-            "cons": "대용량 패키지, 높은 CPU/GPU 및 메모리 소모",
-            "size_info": "약 3.0 GB (YOLO & Layout/Formula 모델 포함)",
-            "installed": _is_package_installed("magic_pdf"),
-            "install_package": "magic-pdf"
+            "pros": "정밀한 레이아웃/표/수식 세그멘테이션",
+            "cons": "대용량 패키지, 높은 CPU/GPU 및 메모리 소모. marker와 의존성이 충돌해 전용 가상환경(.venv-mineru)에 별도 설치되며, 이 엔진으로 전환/이탈 시 서버가 재시작됩니다.",
+            "size_info": "약 3.0 GB (전용 가상환경, Layout/Formula/OCR 모델 포함)",
+            "installed": _is_package_installed_in_venv(venv_manager.MINERU_VENV, "mineru"),
+            "install_package": "mineru[pipeline]"
         }
     ]
     return {
@@ -363,22 +399,54 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
 
 @router.get("/settings/install-pdf-parser")
 async def install_pdf_parser_stream(parser_id: str):
-    import sys
     import asyncio
 
     package_map = {
         "pdfplumber": "pdfplumber",
         "marker": "marker-pdf",
-        "mineru": "magic-pdf"
+        "mineru": "mineru[pipeline]"
     }
 
     pkg_name = package_map.get(parser_id)
     if not pkg_name:
         raise HTTPException(status_code=400, detail="지원되지 않는 파서 엔진입니다.")
 
+    # marker/mineru는 transformers 버전 요구사항이 정반대라 같은 venv에 절대
+    # 공존할 수 없다(런타임에서 실제 크래시로 확인됨) - mineru만 전용
+    # venv(.venv-mineru)에 설치한다. pdfplumber/marker는 기본 venv 그대로.
+    target_venv = venv_manager.MINERU_VENV if parser_id == "mineru" else venv_manager.DEFAULT_VENV
+
     async def event_stream():
-        python_bin = sys.executable
-        yield f"data: {json.dumps({'status': 'progress', 'line': f'백엔드 가상환경({python_bin})에 {pkg_name} 설치를 시작합니다...'})}\n\n"
+        if not venv_manager.is_venv_available(target_venv):
+            yield f"data: {json.dumps({'status': 'progress', 'line': f'전용 가상환경을 새로 만듭니다: {target_venv}'})}\n\n"
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "venv", target_venv,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, stdin=asyncio.subprocess.DEVNULL
+            )
+            async for text in _stream_subprocess_lines(proc):
+                yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
+            await proc.wait()
+            if proc.returncode != 0:
+                yield f"data: {json.dumps({'status': 'error', 'message': '가상환경 생성 실패'})}\n\n"
+                return
+
+            # 이 venv가 나중에 엔진 전환 시 앱 전체를 그대로 구동하게 되므로,
+            # 새 패키지 하나만 있어서는 안 되고 fastapi 등 기본 의존성도 필요하다.
+            requirements_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "requirements.txt")
+            yield f"data: {json.dumps({'status': 'progress', 'line': '기본 의존성(requirements.txt) 설치 중...'})}\n\n"
+            proc = await asyncio.create_subprocess_exec(
+                venv_manager.venv_python(target_venv), "-u", "-m", "pip", "install", "-r", requirements_path,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, stdin=asyncio.subprocess.DEVNULL
+            )
+            async for text in _stream_subprocess_lines(proc):
+                yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
+            await proc.wait()
+            if proc.returncode != 0:
+                yield f"data: {json.dumps({'status': 'error', 'message': '기본 의존성 설치 실패'})}\n\n"
+                return
+
+        python_bin = venv_manager.venv_python(target_venv)
+        yield f"data: {json.dumps({'status': 'progress', 'line': f'가상환경({python_bin})에 {pkg_name} 설치를 시작합니다...'})}\n\n"
         try:
             cmd = [python_bin, "-u", "-m", "pip", "install", pkg_name]
             proc = await asyncio.create_subprocess_exec(
@@ -409,7 +477,7 @@ async def install_pdf_parser_stream(parser_id: str):
 
 @router.post("/settings/uninstall-pdf-parser")
 async def uninstall_pdf_parser(request: Request):
-    import sys, subprocess
+    import subprocess
     import config as cfg
 
     body = await request.json()
@@ -418,14 +486,18 @@ async def uninstall_pdf_parser(request: Request):
     package_map = {
         "pdfplumber": "pdfplumber",
         "marker": "marker-pdf",
-        "mineru": "magic-pdf"
+        "mineru": "mineru"
     }
 
     pkg_name = package_map.get(parser_id)
     if not pkg_name:
         raise HTTPException(status_code=400, detail="지원되지 않는 파서 엔진입니다.")
 
-    python_bin = sys.executable
+    target_venv = venv_manager.MINERU_VENV if parser_id == "mineru" else venv_manager.DEFAULT_VENV
+    if not venv_manager.is_venv_available(target_venv):
+        raise HTTPException(status_code=400, detail="설치되어 있지 않습니다.")
+
+    python_bin = venv_manager.venv_python(target_venv)
     result = subprocess.run(
         [python_bin, "-m", "pip", "uninstall", "-y", pkg_name],
         capture_output=True, text=True
