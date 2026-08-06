@@ -9,7 +9,14 @@ from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-from config import CORS_ORIGINS, UPLOAD_DIR, APP_HOST, APP_PORT
+from config import CORS_ORIGINS, UPLOAD_DIR, APP_HOST, APP_PORT, get_pdf_parser_engine
+
+# mineru 엔진은 marker와 같은 venv에 공존할 수 없어 전용 venv(.venv-mineru)를
+# 쓴다 - 다른 무거운 import보다 먼저, 아직 소켓을 열지 않은 이 시점에 프로세스를
+# 필요한 venv로 교체한다. 자세한 이유는 venv_manager.py 참고.
+from venv_manager import relaunch_into_required_venv
+relaunch_into_required_venv(get_pdf_parser_engine())
+
 from routers import upload, translate, chat
 from routers import library as library_router
 from routers import jobs as jobs_router
