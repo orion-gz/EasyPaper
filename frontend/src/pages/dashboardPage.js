@@ -7,10 +7,11 @@
 // (뷰어/비교 화면이 보이고 포커스된 동안 적립 → 서버 전송)가 쌓은 실측치를
 // fetchReadingTimeStats()로 가져온 것이다.
 import './../styles/dashboard.css'
+import '../styles/reading-history.css'
 import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats, fetchReadingAnalyticsSummary } from '../library.js'
 import { icon } from '../icons.js'
 import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, todayKey, addDaysKey, isWithinDaysLocal } from '../readPages.js'
-import { periodStats, sumSecondsByDayRange, buildDailyActivityStats, formatDuration } from './readingHistoryPage.js'
+import { periodStats, sumSecondsByDayRange, buildDailyActivityStats, formatDuration, deltaDurationHtml, CATEGORY_LABEL, CATEGORY_COLOR_VAR, CATEGORY_ORDER } from './readingHistoryPage.js'
 import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
 
 function renderReadingAnalyticsCard(analyticsData) {
@@ -207,11 +208,47 @@ function renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, 
 }
 
 // ── 연구 성과 & Reading Score ──
-function renderProgressSummaryCard(events, heatmap, weeklySeconds, analyticsSummary) {
+// 정독/스키밍 비율: paper_stats(논문별 최신 세션의 reading_depth)를 근거로 계산한다.
+// determine_reading_depth()가 검증 페이지 비율 20% 이상일 때부터 'Reading' 단계를
+// 부여하므로, 'Opened'/'Browsing'(검증 근거 부족)만 스키밍으로, 그 이상은 정독으로 분류한다.
+function computeDepthRatio(analyticsSummary) {
+  const paperStats = Object.values(analyticsSummary?.paper_stats || {})
+  const total = paperStats.length
+  if (total === 0) return null
+  const skimCount = paperStats.filter(p => p.reading_depth === 'Opened' || p.reading_depth === 'Browsing').length
+  const deepCount = total - skimCount
+  const deepPct = Math.round((deepCount / total) * 100)
+  return { deepCount, skimCount, deepPct, skimPct: 100 - deepPct }
+}
+
+function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySeconds, analyticsSummary, weeklyCategoryStats) {
   const streak = computeStreakDays(events)
   const focusTopic = heatmap[0]
   const score = analyticsSummary?.overall_avg_score || 0.0
   const scorePct = Math.max(0, Math.min(100, score))
+  const depthRatio = computeDepthRatio(analyticsSummary)
+
+  const catTotal = CATEGORY_ORDER.reduce((s, c) => s + (weeklyCategoryStats?.[c] || 0), 0)
+  const categoryMixHtml = catTotal === 0 ? '' : `
+      <div class="dash-category-mix">
+        <div class="dash-category-mix-head">활동 유형별 시간 분포</div>
+        <div class="rh-mix-bar">
+          ${CATEGORY_ORDER.map(c => {
+            const seconds = weeklyCategoryStats[c] || 0
+            const pct = catTotal ? (seconds / catTotal) * 100 : 0
+            if (pct <= 0) return ''
+            return `<div class="rh-mix-seg" style="width:${pct}%;background:var(${CATEGORY_COLOR_VAR[c]})" title="${escapeHtml(CATEGORY_LABEL[c])}: ${formatDuration(seconds)}"></div>`
+          }).join('')}
+        </div>
+        <div class="dash-category-mix-legend">
+          ${CATEGORY_ORDER.map(c => {
+            const seconds = weeklyCategoryStats[c] || 0
+            const pct = catTotal ? Math.round((seconds / catTotal) * 100) : 0
+            return `<span class="dash-category-mix-item"><i class="dash-mix-dot" style="background:var(${CATEGORY_COLOR_VAR[c]})"></i>${escapeHtml(CATEGORY_LABEL[c])} ${pct}%</span>`
+          }).join('')}
+        </div>
+      </div>
+  `
 
   return `
     <div class="dash-card">
@@ -239,6 +276,18 @@ function renderProgressSummaryCard(events, heatmap, weeklySeconds, analyticsSumm
           <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">정독 패턴, verified pages & interaction 종합 평가</div>
         </div>
       </div>
+      ${depthRatio ? `
+      <div class="dash-depth-ratio">
+        <div class="dash-depth-ratio-bar">
+          <div class="dash-depth-ratio-seg is-deep" style="width:${depthRatio.deepPct}%" title="정독 ${depthRatio.deepCount}편"></div>
+          <div class="dash-depth-ratio-seg is-skim" style="width:${depthRatio.skimPct}%" title="스키밍 ${depthRatio.skimCount}편"></div>
+        </div>
+        <div class="dash-depth-ratio-legend">
+          <span><i class="dash-depth-dot is-deep"></i>정독 ${depthRatio.deepPct}% (${formatNumber(depthRatio.deepCount)}편)</span>
+          <span><i class="dash-depth-dot is-skim"></i>스키밍 ${depthRatio.skimPct}% (${formatNumber(depthRatio.skimCount)}편)</span>
+        </div>
+      </div>
+      ` : ''}
       <div class="dash-summary-grid">
         <div class="dash-summary-box">
           <div class="dash-summary-value">${formatNumber(streak)}<span class="dash-summary-unit">일</span></div>
@@ -247,12 +296,14 @@ function renderProgressSummaryCard(events, heatmap, weeklySeconds, analyticsSumm
         <div class="dash-summary-box">
           <div class="dash-summary-value dash-summary-value-text">${formatDuration(weeklySeconds)}</div>
           <div class="dash-summary-label">주간 읽기 시간</div>
+          <div class="dash-summary-delta">${deltaDurationHtml(weeklySeconds, prevWeeklySeconds, '지난주 대비')}</div>
         </div>
         <div class="dash-summary-box">
           <div class="dash-summary-value dash-summary-value-text">${focusTopic ? escapeHtml(truncateLabel(focusTopic.name, 12)) : '—'}</div>
           <div class="dash-summary-label">집중 주제</div>
         </div>
       </div>
+      ${categoryMixHtml}
     </div>
   `
 }
@@ -646,7 +697,7 @@ export async function renderDashboardPage() {
 
   el.innerHTML = `<div class="dash-loading">${icon('refreshCw', 20)}<span>대시보드를 불러오는 중...</span></div>`
 
-  let dashboard, timelineData, libraryData, graphData, readingStats, cachedRecs, analyticsSummary
+  let dashboard, timelineData, libraryData, graphData, readingStats, cachedRecs, analyticsSummary, weeklyReadingStats
   try {
     const results = await Promise.all([
       fetchLibraryDashboard().catch(() => null),
@@ -656,6 +707,7 @@ export async function renderDashboardPage() {
       fetchReadingTimeStats().catch(() => null),
       fetchCachedReadingRecommendations().catch(() => ({ recommendations: null })),
       fetchReadingAnalyticsSummary().catch(() => null),
+      fetchReadingTimeStats(7).catch(() => null),
     ])
     dashboard = results[0]
     timelineData = results[1]
@@ -664,6 +716,7 @@ export async function renderDashboardPage() {
     readingStats = results[4]
     cachedRecs = results[5]
     analyticsSummary = results[6]
+    weeklyReadingStats = results[7]
   } catch (err) {
     console.error('대시보드 데이터 로드 실패:', err)
     el.innerHTML = `<div class="dash-error">${icon('alertTriangle', 20)}<p>대시보드를 불러오지 못했습니다.</p></div>`
@@ -682,9 +735,12 @@ export async function renderDashboardPage() {
     const tKey = todayKey()
     const currStart7 = addDaysKey(tKey, -6)
     const currEnd7 = addDaysKey(tKey, 1)
+    const prevStart7 = addDaysKey(tKey, -13)
+    const prevEnd7 = currStart7
 
     const curr7 = periodStats(events, docsById, currStart7, currEnd7)
     const weeklySeconds = sumSecondsByDayRange(readingStats?.total_seconds_by_day, currStart7, currEnd7)
+    const prevWeeklySeconds = sumSecondsByDayRange(readingStats?.total_seconds_by_day, prevStart7, prevEnd7)
     const dailyStatsMap = buildDailyActivityStats(events, readingStats)
 
     let currEstPages7 = 0
@@ -701,7 +757,7 @@ export async function renderDashboardPage() {
         <div class="dash-row dash-row-3">
           ${renderInsightsCard(insights)}
           ${renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs)}
-          ${renderProgressSummaryCard(events, heatmap, weeklySeconds, analyticsSummary)}
+          ${renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySeconds, analyticsSummary, weeklyReadingStats?.total_seconds_by_category)}
         </div>
         <div class="dash-row dash-row-recent">
           ${renderRecentPapersCard(docs)}
