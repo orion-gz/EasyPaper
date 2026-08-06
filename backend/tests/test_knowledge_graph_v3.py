@@ -141,6 +141,8 @@ def test_timeline_prefers_reading_analytics_verified_pages(test_client, isolated
     assert read_events[0]["reading_score"] == 62.5
     assert read_events[0]["reading_confidence"] == 58.0
     assert read_events[0]["reading_depth"] == "Reading"
+    assert read_events[0]["reading_activity"] == "read"
+    assert read_events[0]["minimum_evidence_time"] == 90.0
 
 
 def test_timeline_skips_accidental_short_open(test_client, isolated_dirs):
@@ -177,8 +179,31 @@ def test_timeline_keeps_long_session_with_zero_verified_pages(test_client, isola
 
     events = test_client.get("/api/library/timeline").json()["events"]
     event = next(item for item in events if item.get("reading_session_id") == "long-browse")
+    assert event["type"] == "browsed"
     assert event["verified_pages"] == 0
     assert event["duration_seconds"] == 30
+
+
+def test_timeline_uses_persisted_reading_activity(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    _create_doc_owned_by(isolated_dirs, "doc-stable-browse", "testuser")
+    db.db_save_reading_session(
+        session_id="stable-browse", username="testuser", paper_id="doc-stable-browse",
+        started_at="2026-02-02T10:00:00+00:00", ended_at=None,
+        active_reading_time=300, version=1,
+        page_sessions_json=json.dumps([{
+            "page": 1, "activeTime": 300, "scrollCoverage": 0.8,
+        }]),
+        interaction_summary_json="{}", reading_depth="Reading",
+        reading_score=60.0, reading_confidence=80.0,
+        verified_pages_count=1, total_pages=10,
+        reading_activity="browsed", minimum_evidence_time=75.0,
+    )
+
+    events = test_client.get("/api/library/timeline").json()["events"]
+    event = next(item for item in events if item.get("reading_session_id") == "stable-browse")
+    assert event["type"] == "browsed"
+    assert event["minimum_evidence_time"] == 75.0
 
 
 def test_timeline_ignores_malformed_memo_ids(test_client, isolated_dirs):

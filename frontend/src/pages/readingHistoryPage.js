@@ -66,12 +66,12 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-const TYPE_LABEL = { uploaded: '업로드', read: '읽음', question: '질문', note: '메모' }
-const TYPE_ICON = { uploaded: 'archive', read: 'bookOpen', question: 'messageCircle', note: 'edit3' }
-// 활동 구성 막대(part-to-whole)의 분류 색 - dataviz 팔레트의 앞 4개 슬롯을
+const TYPE_LABEL = { uploaded: '업로드', read: '읽음', browsed: '열람', question: '질문', note: '메모' }
+const TYPE_ICON = { uploaded: 'archive', read: 'bookOpen', browsed: 'activity', question: 'messageCircle', note: 'edit3' }
+// 활동 구성 막대(part-to-whole)의 분류 색 - dataviz 팔레트 슬롯을
 // 고정 순서(blue→orange→aqua→yellow)로만 사용해 색맹 인접성 검증을 그대로 유지한다.
-const TYPE_COLOR_VAR = { read: '--rh-c1', question: '--rh-c2', note: '--rh-c3', uploaded: '--rh-c4' }
-const TYPE_ORDER = ['read', 'question', 'note', 'uploaded']
+const TYPE_COLOR_VAR = { read: '--rh-c1', browsed: '--rh-c5', question: '--rh-c2', note: '--rh-c3', uploaded: '--rh-c4' }
+const TYPE_ORDER = ['read', 'browsed', 'question', 'note', 'uploaded']
 
 const DAY_MS = 86400000
 const WEEKDAY_LABELS = ['월', '', '수', '', '금', '', '일']
@@ -188,8 +188,8 @@ export function buildDailyActivityStats(events, readingStats) {
     if (e.type === 'question') item.questions += 1
     else if (e.type === 'note') item.notes += 1
     else if (e.type === 'uploaded') item.uploaded += 1
-    else if (e.type === 'read') {
-      item.readEvents += 1
+    else if (e.type === 'read' || e.type === 'browsed') {
+      if (e.type === 'read') item.readEvents += 1
       if (e.verified_pages !== null && e.verified_pages !== undefined) {
         item.hasVerifiedPages = true
         item.verifiedPages += e.verified_pages
@@ -249,7 +249,7 @@ function formatActivityTooltip(dateKey, item) {
   }
 
   const parts = []
-  const pages = item.verifiedPages || item.estPagesRead || 0
+  const pages = item.hasVerifiedPages ? item.verifiedPages : (item.estPagesRead || 0)
   if (item.readingSeconds > 0 || pages > 0) {
     const durStr = formatDuration(item.readingSeconds)
     const pageStr = pages > 0 ? ` [실제 ${pages}페이지 정독]` : ''
@@ -1023,7 +1023,7 @@ export async function renderReadingHistoryPage() {
               let timeLabel = formatTime(e.timestamp)
               let hoverTitle = isDeleted ? '삭제된 논문입니다' : '이 논문 열기'
 
-              if (e.type === 'read') {
+              if (e.type === 'read' || e.type === 'browsed') {
                 const startStr = formatTime(e.timestamp)
                 const endStr = e.end_timestamp ? formatTime(e.end_timestamp) : null
                 if (startStr && endStr && startStr !== endStr) {
@@ -1037,7 +1037,9 @@ export async function renderReadingHistoryPage() {
                 if (e.start_page && e.end_page) {
                   const range = e.start_page === e.end_page ? `${e.start_page}p` : `${e.start_page}p ~ ${e.end_page}p`
                   const verified = e.verified_pages ?? 0
-                  pageMeta = `${range} (${verified}p 정독)`
+                  pageMeta = `${range} (${verified}p 검증)`
+                } else if (e.verified_pages !== null && e.verified_pages !== undefined) {
+                  pageMeta = `${e.verified_pages}p 검증`
                 } else {
                   const p = readPageCount(docsById.get(e.doc_id))
                   if (p) pageMeta = `${p}페이지`

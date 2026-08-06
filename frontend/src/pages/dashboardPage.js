@@ -420,7 +420,7 @@ function renderHeatmapCard(heatmap) {
 
 // ── 연구 타임라인(최근 7일) ── /library/timeline 이벤트를 그대로 시간순
 // 미니 리스트로 보여준다.
-const TIMELINE_TYPE_LABEL = { uploaded: '업로드', read: '읽음', question: '질문', note: '메모' }
+const TIMELINE_TYPE_LABEL = { uploaded: '업로드', read: '읽음', browsed: '열람', question: '질문', note: '메모' }
 
 function renderTimelineCard(events) {
   const safeEvents = Array.isArray(events) ? events : []
