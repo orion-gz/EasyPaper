@@ -481,6 +481,7 @@
 }
 .dash-timeline-uploaded .dash-timeline-dot { background: var(--accent-mid); }
 .dash-timeline-read .dash-timeline-dot { background: var(--success); }
+.dash-timeline-browsed .dash-timeline-dot { background: var(--text-muted); }
 .dash-timeline-question .dash-timeline-dot { background: var(--warning); }
 .dash-timeline-note .dash-timeline-dot { background: var(--control-accent-text); }
 .dash-timeline-body { flex: 1 1 auto; min-width: 0; }

@@ -432,7 +432,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
     반환한다. 삭제된 논문의 활동도 타임라인에 유지되며 holds is_deleted=True."""
     from services.library import list_documents
     from services.db import (
-        db_get_memos, db_get_reading_sessions_for_user,
+        db_get_memos, db_get_reading_sessions_for_user, db_get_user_reading_profile,
         db_get_related_questions_for_doc, get_db,
     )
 
@@ -443,20 +443,42 @@ async def get_activity_timeline(username: str) -> List[dict]:
     doc_ids_seen = set(titles_by_doc.keys())
     events = []
 
+    from services.reading_analytics import PageSession, classify_reading_activity
+
     analytics_rows = db_get_reading_sessions_for_user(username)
+    user_ema = db_get_user_reading_profile(username).get("ema_seconds_per_page", 600.0)
     analytics_doc_ids = {row["paper_id"] for row in analytics_rows}
     for row in analytics_rows:
         try:
             page_sessions = json.loads(row.get("page_sessions_json") or "[]")
         except (TypeError, json.JSONDecodeError):
             page_sessions = []
-        pages = sorted({
-            page.get("page") for page in page_sessions
-            if isinstance(page, dict) and isinstance(page.get("page"), int)
-        })
+        page_models = []
+        for page in page_sessions:
+            if not isinstance(page, dict):
+                continue
+            try:
+                page_models.append(PageSession(**page))
+            except (TypeError, ValueError):
+                continue
+        pages = sorted({page.page for page in page_models})
         active_time = max(0, row.get("active_reading_time") or 0)
         verified_pages = max(0, row.get("verified_pages_count") or 0)
-        if verified_pages == 0 and active_time < 30:
+        stored_activity = row.get("reading_activity")
+        if stored_activity in {"read", "browsed"}:
+            activity_type = stored_activity
+            minimum_evidence_time = max(
+                0.0, row.get("minimum_evidence_time") or 0.0,
+            )
+        else:
+            activity_type, minimum_evidence_time = classify_reading_activity(
+                active_time,
+                verified_pages,
+                max(0.0, row.get("reading_confidence") or 0.0),
+                user_ema,
+                page_models,
+            )
+        if activity_type == "ignored":
             continue
         start_ts = row.get("started_at") or row.get("updated_at")
         end_ts = row.get("ended_at")
@@ -464,7 +486,9 @@ async def get_activity_timeline(username: str) -> List[dict]:
             end_ts = None
         doc_id = row["paper_id"]
         events.append({
-            "type": "read",
+            "type": activity_type,
+            "reading_activity": activity_type,
+            "minimum_evidence_time": minimum_evidence_time,
             "doc_id": doc_id,
             "doc_title": titles_by_doc.get(doc_id) or row.get("doc_title") or "삭제된 논문",
             "timestamp": start_ts,

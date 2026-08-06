@@ -45,6 +45,8 @@ class ReadingAnalyticsResult(BaseModel):
     totalPages: int
     activeReadingTime: float
     pageScores: Dict[int, float] = Field(default_factory=dict)
+    readingActivity: str  # ignored | browsed | read
+    minimumEvidenceTime: float
 
 
 # --- 1. Interaction Quality Calculation ---
@@ -62,6 +64,46 @@ def calculate_interaction_quality(interaction: InteractionSummary) -> float:
         + interaction.tableClick * 2.0
         + interaction.equationClick * 2.0
     )
+
+
+def calculate_minimum_evidence_time(user_ema: float) -> float:
+    """Personalized active-time floor for reliable reading evidence."""
+    return round(max(45.0, min(120.0, user_ema * 0.15)), 1)
+
+
+def has_suspicious_reading_pattern(page_sessions: List[PageSession]) -> bool:
+    """Detect known AFK patterns that must not qualify as reading."""
+    for page_session in page_sessions:
+        interaction_quality = calculate_interaction_quality(page_session.interaction)
+        if (
+            page_session.activeTime > 900.0
+            and interaction_quality == 0.0
+            and page_session.scrollCoverage < 0.3
+        ):
+            return True
+    return False
+
+
+def classify_reading_activity(
+    active_reading_time: float,
+    verified_pages_count: int,
+    reading_confidence: float,
+    user_ema: float,
+    page_sessions: List[PageSession],
+) -> tuple[str, float]:
+    """Classify Timeline activity using multiple independent reading signals."""
+    minimum_time = calculate_minimum_evidence_time(user_ema)
+    qualifies_as_read = (
+        active_reading_time >= minimum_time
+        and verified_pages_count >= 1
+        and reading_confidence >= 50.0
+        and not has_suspicious_reading_pattern(page_sessions)
+    )
+    if qualifies_as_read:
+        return "read", minimum_time
+    if active_reading_time >= 30.0 or verified_pages_count >= 1:
+        return "browsed", minimum_time
+    return "ignored", minimum_time
 
 
 # --- 2. Feature Extraction & Page Analyzer ---
@@ -266,6 +308,9 @@ def process_reading_analytics(
             break
         depth = next_depth
     reading_score = calculate_reading_score(verified_count, total_pages, avg_confidence, depth, total_iq)
+    reading_activity, minimum_evidence_time = classify_reading_activity(
+        payload.activeReadingTime, verified_count, avg_confidence, user_ema, payload.pageSessions,
+    )
 
     return ReadingAnalyticsResult(
         sessionId=payload.sessionId,
@@ -277,4 +322,6 @@ def process_reading_analytics(
         totalPages=total_pages,
         activeReadingTime=payload.activeReadingTime,
         pageScores=page_scores,
+        readingActivity=reading_activity,
+        minimumEvidenceTime=minimum_evidence_time,
     )

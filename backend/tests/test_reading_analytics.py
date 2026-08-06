@@ -8,6 +8,8 @@ from services.reading_analytics import (
     analyze_page_sessions,
     determine_reading_depth,
     calculate_reading_score,
+    calculate_minimum_evidence_time,
+    classify_reading_activity,
     update_user_ema,
 )
 
@@ -100,6 +102,45 @@ class TestReadingAnalytics(unittest.TestCase):
         self.assertEqual(new_ema_fast, 575.0)
         self.assertEqual(count_fast, 3)
 
+    def test_minimum_evidence_time_is_personalized_and_bounded(self):
+        self.assertEqual(calculate_minimum_evidence_time(100.0), 45.0)
+        self.assertEqual(calculate_minimum_evidence_time(600.0), 90.0)
+        self.assertEqual(calculate_minimum_evidence_time(1000.0), 120.0)
+
+    def test_reading_activity_requires_independent_evidence(self):
+        page = PageSession(
+            page=1, activeTime=90.0, scrollCoverage=0.8,
+            interaction=InteractionSummary(scroll=3),
+        )
+        self.assertEqual(
+            classify_reading_activity(29.0, 0, 0.0, 600.0, [page])[0],
+            "ignored",
+        )
+        self.assertEqual(
+            classify_reading_activity(30.0, 0, 0.0, 600.0, [page])[0],
+            "browsed",
+        )
+        self.assertEqual(
+            classify_reading_activity(89.0, 1, 60.0, 600.0, [page])[0],
+            "browsed",
+        )
+        self.assertEqual(
+            classify_reading_activity(90.0, 1, 49.9, 600.0, [page])[0],
+            "browsed",
+        )
+        self.assertEqual(
+            classify_reading_activity(90.0, 1, 50.0, 600.0, [page])[0],
+            "read",
+        )
+
+    def test_suspicious_afk_pattern_does_not_qualify_as_read(self):
+        suspicious_page = PageSession(
+            page=1, activeTime=901.0, scrollCoverage=0.1,
+            interaction=InteractionSummary(),
+        )
+        activity, _ = classify_reading_activity(901.0, 1, 80.0, 600.0, [suspicious_page])
+        self.assertEqual(activity, "browsed")
+
     def test_process_reading_analytics(self):
         payload = ReadingSessionPayload(
             sessionId="test-session-1",
@@ -130,6 +171,8 @@ class TestReadingAnalytics(unittest.TestCase):
         self.assertEqual(res.verifiedPagesCount, 2)
         self.assertIn(res.readingDepth, ["Reading", "Deep Reading"])
         self.assertGreater(res.readingScore, 0.0)
+        self.assertEqual(res.readingActivity, "read")
+        self.assertEqual(res.minimumEvidenceTime, 90.0)
 
 
     def test_duplicate_page_entries_are_consolidated(self):
@@ -196,6 +239,7 @@ def test_reading_session_merge_versioning_and_ema(test_client, isolated_dirs):
         event for event in timeline
         if event.get("reading_session_id") == session_id
     )
+    assert timeline_session["type"] == "browsed"
     assert timeline_session["verified_pages"] == 0
     assert timeline_session["reading_score"] == heartbeat.json()["readingScore"]
 

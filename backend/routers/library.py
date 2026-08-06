@@ -323,6 +323,8 @@ async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessio
         reading_confidence=res.readingConfidence,
         verified_pages_count=res.verifiedPagesCount,
         total_pages=res.totalPages,
+        reading_activity=res.readingActivity,
+        minimum_evidence_time=res.minimumEvidenceTime,
     )
 
     if not saved:
@@ -377,6 +379,8 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
         reading_confidence=res.readingConfidence,
         verified_pages_count=res.verifiedPagesCount,
         total_pages=res.totalPages,
+        reading_activity=res.readingActivity,
+        minimum_evidence_time=res.minimumEvidenceTime,
     )
 
     if not saved:
