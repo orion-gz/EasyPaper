@@ -143,6 +143,44 @@ def test_timeline_prefers_reading_analytics_verified_pages(test_client, isolated
     assert read_events[0]["reading_depth"] == "Reading"
 
 
+def test_timeline_skips_accidental_short_open(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    _create_doc_owned_by(isolated_dirs, "doc-short-open", "testuser")
+    common = {
+        "username": "testuser", "paper_id": "doc-short-open",
+        "started_at": "2026-02-02T10:00:00+00:00", "ended_at": None,
+        "version": 1, "page_sessions_json": json.dumps([{"page": 1}]),
+        "interaction_summary_json": "{}", "reading_depth": "Opened",
+        "reading_score": 0.0, "reading_confidence": 0.0,
+        "verified_pages_count": 0, "total_pages": 10,
+    }
+    db.db_save_reading_session(
+        session_id="short-open", active_reading_time=29, **common,
+    )
+
+    events = test_client.get("/api/library/timeline").json()["events"]
+    assert not any(event.get("reading_session_id") == "short-open" for event in events)
+
+
+def test_timeline_keeps_long_session_with_zero_verified_pages(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    _create_doc_owned_by(isolated_dirs, "doc-long-browse", "testuser")
+    db.db_save_reading_session(
+        session_id="long-browse", username="testuser", paper_id="doc-long-browse",
+        started_at="2026-02-02T10:00:00+00:00", ended_at=None,
+        active_reading_time=30, version=1,
+        page_sessions_json=json.dumps([{"page": 1}]),
+        interaction_summary_json="{}", reading_depth="Browsing",
+        reading_score=5.0, reading_confidence=10.0,
+        verified_pages_count=0, total_pages=10,
+    )
+
+    events = test_client.get("/api/library/timeline").json()["events"]
+    event = next(item for item in events if item.get("reading_session_id") == "long-browse")
+    assert event["verified_pages"] == 0
+    assert event["duration_seconds"] == 30
+
+
 def test_timeline_ignores_malformed_memo_ids(test_client, isolated_dirs):
     db = isolated_dirs["db"]
     _create_doc_owned_by(isolated_dirs, "doc-tl-2", "testuser", {"title": "Bad Memo Id"})
