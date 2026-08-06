@@ -11,6 +11,7 @@ import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendation
 import { icon } from '../icons.js'
 import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, todayKey, addDaysKey, isWithinDaysLocal } from '../readPages.js'
 import { periodStats, sumSecondsByDayRange, buildDailyActivityStats, formatDuration } from './readingHistoryPage.js'
+import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
 
 function renderReadingAnalyticsCard(analyticsData) {
   if (!analyticsData) return ''
@@ -162,7 +163,7 @@ function renderInsightsCard(insights) {
         : `<ul class="dash-insight-list">${items.map(g => `
             <li class="dash-insight-item">
               <span class="dash-insight-icon">${icon(INSIGHT_TYPE_ICON[g.type] || 'lightbulb', 14)}</span>
-              <span>${escapeHtml(g.message)}</span>
+              <span>${formatTranslationHtml(g.message)}</span>
             </li>`).join('')}</ul>`
       }
     </div>
@@ -715,6 +716,7 @@ export async function renderDashboardPage() {
       </div>
     `
 
+    applyKatexToElement(el.querySelector('.dash-insight-list'))
     attachHandlers(el)
   } catch (renderErr) {
     console.error('대시보드 렌더링 예외 발생:', renderErr)
