@@ -299,6 +299,7 @@ def init_db():
             reading_score REAL DEFAULT 0.0,
             reading_confidence REAL DEFAULT 0.0,
             verified_pages_count INTEGER DEFAULT 0,
+            verified_pages_json TEXT,
             total_pages INTEGER DEFAULT 0,
             reading_activity TEXT DEFAULT 'unclassified',
             minimum_evidence_time REAL DEFAULT 90.0,
@@ -335,6 +336,7 @@ def init_db():
         for column_sql in (
             "ALTER TABLE reading_sessions ADD COLUMN reading_activity TEXT DEFAULT 'unclassified'",
             "ALTER TABLE reading_sessions ADD COLUMN minimum_evidence_time REAL DEFAULT 90.0",
+            "ALTER TABLE reading_sessions ADD COLUMN verified_pages_json TEXT",
         ):
             try:
                 cursor.execute(column_sql)
@@ -1397,8 +1399,9 @@ def db_get_latest_reading_session(paper_id: str, username: str) -> Optional[Dict
             """
             SELECT id, paper_id, started_at, ended_at, active_reading_time, version,
                    page_sessions_json, interaction_summary_json, reading_depth,
-                   reading_score, reading_confidence, verified_pages_count, total_pages,
-                   reading_activity, minimum_evidence_time, created_at, updated_at
+                   reading_score, reading_confidence, verified_pages_count,
+                   verified_pages_json, total_pages, reading_activity,
+                   minimum_evidence_time, created_at, updated_at
             FROM reading_sessions
             WHERE username = ? AND paper_id = ?
             ORDER BY updated_at DESC LIMIT 1
@@ -1419,8 +1422,9 @@ def db_get_reading_session(session_id: str, username: str) -> Optional[Dict[str,
             """
             SELECT id, paper_id, started_at, ended_at, active_reading_time, version,
                    page_sessions_json, interaction_summary_json, reading_depth,
-                   reading_score, reading_confidence, verified_pages_count, total_pages,
-                   reading_activity, minimum_evidence_time, created_at, updated_at
+                   reading_score, reading_confidence, verified_pages_count,
+                   verified_pages_json, total_pages, reading_activity,
+                   minimum_evidence_time, created_at, updated_at
             FROM reading_sessions
             WHERE id = ? AND username = ?
             """,
@@ -1449,6 +1453,7 @@ def db_save_reading_session(
     total_pages: int,
     reading_activity: str = "unclassified",
     minimum_evidence_time: float = 90.0,
+    verified_pages_json: Optional[str] = None,
 ) -> bool:
     """Insert a session or replace it only with a newer heartbeat version."""
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -1460,8 +1465,9 @@ def db_save_reading_session(
                 id, username, paper_id, started_at, ended_at, active_reading_time, version,
                 page_sessions_json, interaction_summary_json, reading_depth,
                 reading_score, reading_confidence, verified_pages_count, total_pages,
-                reading_activity, minimum_evidence_time, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                reading_activity, minimum_evidence_time, verified_pages_json,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 ended_at = excluded.ended_at,
                 active_reading_time = excluded.active_reading_time,
@@ -1472,6 +1478,7 @@ def db_save_reading_session(
                 reading_score = excluded.reading_score,
                 reading_confidence = excluded.reading_confidence,
                 verified_pages_count = excluded.verified_pages_count,
+                verified_pages_json = excluded.verified_pages_json,
                 total_pages = excluded.total_pages,
                 reading_activity = excluded.reading_activity,
                 minimum_evidence_time = excluded.minimum_evidence_time,
@@ -1495,6 +1502,7 @@ def db_save_reading_session(
                 total_pages,
                 reading_activity,
                 minimum_evidence_time,
+                verified_pages_json,
                 now_iso,
                 now_iso,
             ),
@@ -1513,7 +1521,8 @@ def db_get_reading_sessions_for_user(username: str) -> List[Dict[str, Any]]:
             SELECT rs.id, rs.paper_id, rs.started_at, rs.ended_at,
                    rs.active_reading_time, rs.version, rs.page_sessions_json,
                    rs.reading_depth, rs.reading_score, rs.reading_confidence,
-                   rs.verified_pages_count, rs.total_pages, rs.reading_activity,
+                   rs.verified_pages_count, rs.verified_pages_json,
+                   rs.total_pages, rs.reading_activity,
                    rs.minimum_evidence_time, rs.updated_at,
                    titles.doc_title
             FROM reading_sessions AS rs

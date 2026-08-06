@@ -11,7 +11,7 @@
 
 import { fetchLibraryTimeline, fetchLibraryDashboard, fetchLibrary, fetchReadingTimeStats, fetchReadingAnalyticsSummary } from '../library.js'
 import { icon } from '../icons.js'
-import { readPageCount, lastActivityIso, hasReadActivity, lastActivityDateKey, isoToLocalDateKey } from '../readPages.js'
+import { countUniqueVerifiedPages, readPageCount, lastActivityIso, lastActivityDateKey, isoToLocalDateKey } from '../readPages.js'
 import '../styles/reading-history.css'
 import '../styles/dashboard.css'
 
@@ -125,39 +125,6 @@ function formatShortDate(dateKey) {
   return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-// ── 개인 맞춤형 읽기 페이스(EMA: Exponential Moving Average) 및 활동 데이터 집계 ──
-// 사용자의 실측 읽기 시간(하트비트)과 이동/완독 이력을 지수이동평균(EMA)으로 학습하여
-// 개인 맞춤형 초/페이지 페이스(Pace)를 산출합니다.
-// - 기본 초기 기준 페이스: 240초 (4분/페이지)
-// - 10초 미만의 스크롤 이동 및 10분(600초) 이상의 자리비움 이상치는 EMA 학습에서 제외
-// - 유효 학습 구간: 60초 ~ 480초 (1분 ~ 8분/페이지)
-const DEFAULT_PACE_SEC = 240 // 초기 기준 4분/페이지
-const ALPHA = 0.2 // EMA 감쇠 비율
-
-function computeUserReadingPace(byDayMap) {
-  let currentEma = DEFAULT_PACE_SEC
-  const sortedEntries = Array.from(byDayMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-
-  for (const [_, item] of sortedEntries) {
-    if (item.readingSeconds <= 0) continue
-
-    let pages = item.readEvents
-    if (pages === 0 && item.readingSeconds >= 60) {
-      pages = Math.max(1, Math.round(item.readingSeconds / currentEma))
-    }
-
-    if (pages > 0) {
-      const dailyPace = item.readingSeconds / pages
-      // 유효 페이스 구간(60초 ~ 600초) 내 데이터만 EMA 업데이트에 포함해 이상치(스크롤/부재) 제거
-      if (dailyPace >= 60 && dailyPace <= 600) {
-        currentEma = ALPHA * dailyPace + (1 - ALPHA) * currentEma
-      }
-    }
-  }
-
-  return Math.max(60, Math.min(480, Math.round(currentEma)))
-}
-
 export function buildDailyActivityStats(events, readingStats) {
   const byDay = new Map()
 
@@ -165,7 +132,6 @@ export function buildDailyActivityStats(events, readingStats) {
     if (!byDay.has(key)) {
       byDay.set(key, {
         readingSeconds: 0,
-        estPagesRead: 0,
         verifiedPages: 0,
         hasVerifiedPages: false,
         questions: 0,
@@ -196,22 +162,23 @@ export function buildDailyActivityStats(events, readingStats) {
     else if (e.type === 'uploaded') item.uploaded += 1
     else if (e.type === 'read' || e.type === 'browsed') {
       if (e.type === 'read') item.readEvents += 1
-      if (e.verified_pages !== null && e.verified_pages !== undefined) {
+      if (Array.isArray(e.verified_page_numbers)) {
         item.hasVerifiedPages = true
-        item.verifiedPages += e.verified_pages
+        item.verifiedPageKeys ||= new Set()
+        for (const page of e.verified_page_numbers) {
+          if (Number.isInteger(page) && page > 0 && e.doc_id) {
+            item.verifiedPageKeys.add(`${e.doc_id}:${page}`)
+          }
+        }
+        item.verifiedPages = item.verifiedPageKeys.size
       }
     }
   }
 
-  // 3. EMA 기반 개인 맞춤형 읽기 페이스(초/페이지) 학습
-  const userPaceSec = computeUserReadingPace(byDay)
-
-  // 4. 일별 활동 점수 및 검증된 실제 읽은 페이지 계산
+  // 3. 일별 활동 점수 계산. 페이지 점수는 시간 추정치가 아니라 실제 검증
+  // 페이지에만 부여한다. 읽은 시간 자체는 별도 점수로 이미 반영된다.
   for (const [_, item] of byDay.entries()) {
-    if (item.readingSeconds > 0) {
-      item.estPagesRead = Math.floor(item.readingSeconds / userPaceSec)
-    }
-    const displayPages = item.hasVerifiedPages ? item.verifiedPages : (item.estPagesRead || 0)
+    const displayPages = item.verifiedPages
 
     const readTimeScore = Math.floor(item.readingSeconds / 60)
     const pageScore = displayPages * 3
@@ -236,7 +203,6 @@ export function buildDailyActivityStats(events, readingStats) {
     item.score = Math.round((readScore + noteScore + uploadScore + questionScore) * 10) / 10
   }
 
-  byDay.userPaceSec = userPaceSec
   return byDay
 }
 
@@ -255,7 +221,7 @@ function formatActivityTooltip(dateKey, item) {
   }
 
   const parts = []
-  const pages = item.hasVerifiedPages ? item.verifiedPages : (item.estPagesRead || 0)
+  const pages = item.verifiedPages
   if (item.readingSeconds > 0 || pages > 0) {
     const durStr = formatDuration(item.readingSeconds)
     const pageStr = pages > 0 ? ` [실제 ${pages}페이지 정독]` : ''
@@ -321,27 +287,9 @@ export function periodStats(events, docsById, startKey, endKeyExclusive) {
     }
   }
 
-  // 해당 기간 실측 세션 또는 읽기 활동이 있던 문서를 기준으로 페이지 수 산정
-  const readDocIds = new Set(inPeriod.filter(e => e.type === 'read').map(e => e.doc_id))
-  const activePageDocIds = new Set()
-  for (const id of readDocIds) {
-    const doc = docsById?.get(id)
-    if (doc) activePageDocIds.add(id)
-  }
-  if (docsById && typeof docsById.values === 'function') {
-    for (const doc of docsById.values()) {
-      if (!doc) continue
-      const meta = doc.metadata || {}
-      if (hasReadActivity(meta)) {
-        const k = isoToLocalDateKey(meta.read_at || meta.last_read_at)
-        if (k && k >= startKey && k < endKeyExclusive) {
-          activePageDocIds.add(doc.id)
-        }
-      }
-    }
-  }
-
-  const pagesRead = Array.from(activePageDocIds).reduce((sum, id) => sum + readPageCount(docsById?.get(id)), 0)
+  // 타임라인 세션의 검증 페이지 번호만 사용한다. 같은 논문의 같은 페이지를
+  // 기간 안에서 여러 번 읽어도 (doc_id, page) 합집합이므로 한 번만 집계된다.
+  const pagesRead = countUniqueVerifiedPages(inPeriod)
   const questions = inPeriod.filter(e => e.type === 'question').length
   const notes = inPeriod.filter(e => e.type === 'note').length
   const uploadedPapers = inPeriod.filter(e => e.type === 'uploaded').length
@@ -501,37 +449,13 @@ export async function renderReadingHistoryPage() {
   const currReadingSeconds = sumSecondsByDayRange(byDay, currStart, currEnd)
   const prevReadingSeconds = sumSecondsByDayRange(byDay, prevStart, prevEnd)
 
-  // 일별 종합 활동 스탯 집계 (질문 편향 보정 + EMA 개인 읽기 페이스 학습)
+  // 일별 종합 활동 스탯 집계 (검증 페이지 + 실측 시간 + 질문 편향 보정)
   const dailyStatsMap = buildDailyActivityStats(events, readingStats)
-  const userPaceSec = dailyStatsMap.userPaceSec
-
-  // EMA 정독 시간 기반 환산 페이지 수 합산
-  const sumEstPagesByDayRange = (startKey, endKeyExclusive) => {
-    let sum = 0
-    for (const [day, item] of dailyStatsMap.entries()) {
-      if (day >= startKey && day < endKeyExclusive) {
-        sum += item.estPagesRead
-      }
-    }
-    return sum
-  }
-
-  const currEstPages7 = sumEstPagesByDayRange(currStart7, currEnd7)
-  const prevEstPages7 = sumEstPagesByDayRange(prevStart7, prevEnd7)
-  const currPagesReadDisplay7 = Math.max(curr7.pagesRead, currEstPages7)
-  const prevPagesReadDisplay7 = Math.max(prev7.pagesRead, prevEstPages7)
-
-  const currEstPages = sumEstPagesByDayRange(currStart, currEnd)
-  const prevEstPages = sumEstPagesByDayRange(prevStart, prevEnd)
-  const currPagesReadDisplay = Math.max(curr.pagesRead, currEstPages)
-  const prevPagesReadDisplay = Math.max(prev.pagesRead, prevEstPages)
-
-  let totalEstPages = 0
-  for (const item of dailyStatsMap.values()) {
-    totalEstPages += item.estPagesRead
-  }
-  const fallbackTotalReadPages = dashboard?.stats?.read_pages ?? Array.from(docsById.values()).reduce((sum, d) => sum + readPageCount(d), 0)
-  const totalReadPagesDisplay = Math.max(fallbackTotalReadPages, totalEstPages)
+  const currPagesReadDisplay7 = curr7.pagesRead
+  const prevPagesReadDisplay7 = prev7.pagesRead
+  const currPagesReadDisplay = curr.pagesRead
+  const prevPagesReadDisplay = prev.pagesRead
+  const totalReadPagesDisplay = countUniqueVerifiedPages(events)
 
   const allActiveKeys = new Set(
     Array.from(dailyStatsMap.entries())
@@ -855,7 +779,7 @@ export async function renderReadingHistoryPage() {
           <div class="rh-card">
             <div class="rh-card-head">
               <span class="rh-card-title">${icon('calendar', 15)} 읽기 활동</span>
-              <div class="rh-cal-legend" title="개인 읽기 페이스(EMA 학습)와 실측 시간, 메모, 질문, 업로드를 종합 반영한 활동 포인트">
+              <div class="rh-cal-legend" title="검증 페이지와 실측 시간, 메모, 질문, 업로드를 종합 반영한 활동 포인트">
                 적음
                 <span class="rh-cal-legend-swatch rh-heat-0" style="background:color-mix(in srgb, var(--accent-mid) 6%, var(--bg-elevated))"></span>
                 <span class="rh-cal-legend-swatch rh-heat-1" style="background:color-mix(in srgb, var(--accent-mid) 28%, var(--bg-elevated))"></span>

@@ -17,6 +17,24 @@ export function readPageCount(doc) {
   return 0
 }
 
+// 타임라인 세션이 내려준 실제 검증 페이지를 (논문, 페이지) 단위로 합친다.
+// 같은 페이지를 여러 세션 또는 여러 날에 다시 읽어도 기간 통계에서는 한 번만 센다.
+export function uniqueVerifiedPageKeys(events) {
+  const keys = new Set()
+  for (const event of events || []) {
+    if (event?.type !== 'read' && event?.type !== 'browsed') continue
+    if (!event.doc_id || !Array.isArray(event.verified_page_numbers)) continue
+    for (const page of event.verified_page_numbers) {
+      if (Number.isInteger(page) && page > 0) keys.add(`${event.doc_id}:${page}`)
+    }
+  }
+  return keys
+}
+
+export function countUniqueVerifiedPages(events) {
+  return uniqueVerifiedPageKeys(events).size
+}
+
 // last_read_at(뷰어를 열거나 페이지를 넘길 때마다 갱신되는 "마지막으로
 // 읽은 시각") / read_at(완독 표시 시각) / createdAt(업로드 시각) 중 가장
 // 최근 값을 고른다. read_at만 보면 완독 표시를 안 하고 읽던 중인 논문은
