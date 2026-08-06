@@ -73,6 +73,12 @@ const TYPE_ICON = { uploaded: 'archive', read: 'bookOpen', browsed: 'activity', 
 const TYPE_COLOR_VAR = { read: '--rh-c1', browsed: '--rh-c5', question: '--rh-c2', note: '--rh-c3', uploaded: '--rh-c4' }
 const TYPE_ORDER = ['read', 'browsed', 'question', 'note', 'uploaded']
 
+// 읽기 시간 하트비트의 카테고리 3종(뷰어 기본/채팅 사이드바/논문 비교) - 대시보드
+// 활동 요약 카드의 "활동 유형별 시간 분포"에서도 동일 팔레트/라벨을 공유한다.
+export const CATEGORY_LABEL = { reading: '논문 읽기', chat: 'AI 채팅', compare: '논문 비교' }
+export const CATEGORY_COLOR_VAR = { reading: '--rh-c1', chat: '--rh-c2', compare: '--rh-c5' }
+export const CATEGORY_ORDER = ['reading', 'chat', 'compare']
+
 const DAY_MS = 86400000
 const WEEKDAY_LABELS = ['월', '', '수', '', '금', '', '일']
 
@@ -342,7 +348,7 @@ export function periodStats(events, docsById, startKey, endKeyExclusive) {
   return { activeDays, papersRead: completedDocIds.size, pagesRead, questions, notes, uploadedPapers }
 }
 
-function deltaHtml(curr, prev, unit = '', compareText = '이전 30일 대비') {
+export function deltaHtml(curr, prev, unit = '', compareText = '이전 30일 대비') {
   const c = curr || 0
   const p = prev || 0
   const diff = c - p
@@ -361,7 +367,7 @@ export function formatDuration(seconds) {
   if (m > 0) return `${m}m`
   return s > 0 ? `${s}s` : '0m'
 }
-function deltaDurationHtml(currSeconds, prevSeconds, compareText = '이전 30일 대비') {
+export function deltaDurationHtml(currSeconds, prevSeconds, compareText = '이전 30일 대비') {
   const diff = Math.round(currSeconds - prevSeconds)
   if (diff === 0) return `<span class="rh-stat-delta">±0m ${compareText}</span>`
   const cls = diff > 0 ? 'up' : 'down'
@@ -533,9 +539,6 @@ export async function renderReadingHistoryPage() {
       .map(([k, _]) => k)
   )
 
-  const CATEGORY_LABEL = { reading: '논문 읽기', chat: 'AI 채팅', compare: '논문 비교' }
-  const CATEGORY_COLOR_VAR = { reading: '--rh-c1', chat: '--rh-c2', compare: '--rh-c5' }
-  const CATEGORY_ORDER = ['reading', 'chat', 'compare']
   const byCategory = readingStats?.total_seconds_by_category || {}
   const mixTotalSeconds = CATEGORY_ORDER.reduce((s, c) => s + (byCategory[c] || 0), 0)
 
