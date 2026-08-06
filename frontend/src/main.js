@@ -682,6 +682,8 @@ async function initScrollViewer() {
     onPageVisible: async (pageNum) => {
       updatePageDisplay(pageNum)
       globalAnalyticsTracker.setCurrentPage(pageNum)
+      const visiblePageEl = viewerScrollContainer.querySelector('.pdf-page-wrapper[data-page="' + pageNum + '"]')
+      globalAnalyticsTracker.trackScroll(pageNum, visiblePageEl, viewerScrollContainer, true, false)
       
       // 페이지가 가시화되었을 때 번역 완료된 페이지인데 캐시가 없는 경우 레이지 로딩 적용
       if (state.translationCache[pageNum]) {
@@ -8182,6 +8184,7 @@ function applyAnnotationToRange(range, type, textLayerDiv, pageNum, color) {
     color: chosenColor
   })
   saveAnnotations(state.sessionId, annotations)
+  globalAnalyticsTracker.trackInteraction(type, pageNum)
   showToast(type === 'highlight' ? '하이라이트가 추가되었습니다 ✓' : '밑줄이 추가되었습니다 ✓', 'success')
 }
 
@@ -9214,6 +9217,7 @@ function createFloatingMemoForSentence(pageNum, sentenceIdx, explicitRange) {
 
   allMemosObj[`page_${pageNum}`].push(newMemo)
   saveMemos(state.sessionId, allMemosObj)
+  globalAnalyticsTracker.trackInteraction('memo', pageNum)
 
   renderPageMemos(pageNum)
 }
@@ -10349,6 +10353,7 @@ function renderImageOverlayLayer(textLayerDiv, pageNum) {
     overlay.addEventListener('click', (e) => {
       e.preventDefault()
       e.stopPropagation()
+      globalAnalyticsTracker.trackInteraction('figureClick', pageNum)
 
       // Clear text selection
       window.getSelection().removeAllRanges()
@@ -10593,6 +10598,7 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
       box.addEventListener('click', (e) => {
         e.preventDefault()
         e.stopPropagation()
+        globalAnalyticsTracker.trackInteraction('citationClick', pageNum)
         showCitationTooltip(docId, validKeys, refMap, box)
       })
       overlay.appendChild(box)
@@ -10845,6 +10851,8 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
         e.preventDefault()
         e.stopPropagation()
         window.getSelection().removeAllRanges()
+        const interactionType = kind === 'Table' ? 'tableClick' : (kind === 'Equation' ? 'equationClick' : 'figureClick')
+        globalAnalyticsTracker.trackInteraction(interactionType, pageNum)
         hideFigurePreviewTooltip()
         scrollToPage(viewerScrollContainer, targets[0].page)
       })
@@ -11706,6 +11714,7 @@ async function sendChatMessage() {
   
   const text = chatInput.value.trim()
   if (!text) return
+  globalAnalyticsTracker.trackInteraction('question', state.currentPage)
   
   chatInput.value = ''
   chatInput.style.height = 'auto'

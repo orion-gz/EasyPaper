@@ -132,5 +132,105 @@ class TestReadingAnalytics(unittest.TestCase):
         self.assertGreater(res.readingScore, 0.0)
 
 
+    def test_duplicate_page_entries_are_consolidated(self):
+        page = PageSession(
+            page=1, activeTime=180.0, scrollCoverage=0.8,
+            interaction=InteractionSummary(highlight=1),
+        )
+        scores, verified, confidence = analyze_page_sessions([page, page], 600.0, 10)
+        self.assertEqual(list(scores), [1])
+        self.assertEqual(verified, 1)
+        self.assertEqual(confidence, scores[1])
+
+    def test_session_and_page_interactions_are_not_double_counted(self):
+        interaction = InteractionSummary(highlight=1)
+        payload = ReadingSessionPayload(
+            sessionId="session", paperId="paper", activeReadingTime=300,
+            pageSessions=[PageSession(
+                page=1, activeTime=300, scrollCoverage=0.8, interaction=interaction,
+            )],
+            interactionSummary=interaction,
+        )
+        result = process_reading_analytics(payload, total_paper_pages=10, user_ema=600)
+        self.assertEqual(result.readingScore, 28.2)
+
+
+def _analytics_payload(session_id, paper_id, version, active_time=60):
+    return {
+        "sessionId": session_id,
+        "paperId": paper_id,
+        "version": version,
+        "currentPage": 1,
+        "activeReadingTime": active_time,
+        "pageSessions": [{
+            "page": 1,
+            "activeTime": active_time,
+            "visibleTime": active_time,
+            "scrollCoverage": 0.8,
+            "interaction": {"highlight": 1},
+        }],
+        "interactionSummary": {"highlight": 1},
+    }
+
+
+def test_reading_session_merge_versioning_and_ema(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_save_document("paper-1", "testuser", "paper.pdf", "/x/paper.pdf", 5, {})
+
+    started = test_client.post(
+        "/api/library/paper-1/reading-session/start", json={"totalPages": 5},
+    )
+    assert started.status_code == 200
+    session_id = started.json()["sessionId"]
+
+    heartbeat = test_client.post(
+        "/api/library/paper-1/reading-session/heartbeat",
+        json=_analytics_payload(session_id, "paper-1", 1),
+    )
+    assert heartbeat.status_code == 200
+    assert db.db_get_user_reading_profile("testuser")["session_count"] == 0
+    assert db.db_get_reading_time_stats("testuser")["total_seconds"] == 0
+
+    stale = test_client.post(
+        "/api/library/paper-1/reading-session/heartbeat",
+        json=_analytics_payload(session_id, "paper-1", 1, active_time=999),
+    )
+    assert stale.json() == {"stale": True, "version": 1}
+    assert db.db_get_reading_session(session_id, "testuser")["active_reading_time"] == 60
+
+    merged = test_client.post(
+        "/api/library/paper-1/reading-session/start", json={"totalPages": 5},
+    ).json()
+    assert merged["merged"] is True
+    assert merged["activeReadingTime"] == 60
+    assert merged["pageSessions"][0]["page"] == 1
+    assert merged["interactionSummary"]["highlight"] == 1
+
+    ended = test_client.post(
+        "/api/library/paper-1/reading-session/end",
+        json=_analytics_payload(session_id, "paper-1", 2),
+    )
+    assert ended.status_code == 200
+    assert db.db_get_user_reading_profile("testuser")["session_count"] == 1
+
+    repeated_end = test_client.post(
+        "/api/library/paper-1/reading-session/end",
+        json=_analytics_payload(session_id, "paper-1", 2),
+    )
+    assert repeated_end.json() == {"stale": True, "version": 2}
+    assert db.db_get_user_reading_profile("testuser")["session_count"] == 1
+
+
+def test_reading_session_rejects_mismatched_paper_id(test_client, isolated_dirs):
+    isolated_dirs["db"].db_save_document(
+        "paper-1", "testuser", "paper.pdf", "/x/paper.pdf", 5, {},
+    )
+    response = test_client.post(
+        "/api/library/paper-1/reading-session/heartbeat",
+        json=_analytics_payload("session", "paper-2", 1),
+    )
+    assert response.status_code == 400
+
+
 if __name__ == "__main__":
     unittest.main()

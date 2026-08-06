@@ -1435,8 +1435,8 @@ def db_save_reading_session(
     reading_confidence: float,
     verified_pages_count: int,
     total_pages: int,
-) -> None:
-    """Inserts or updates a reading session."""
+) -> bool:
+    """Insert a session or replace it only with a newer heartbeat version."""
     now_iso = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         cursor = conn.cursor()
@@ -1460,6 +1460,7 @@ def db_save_reading_session(
                 verified_pages_count = excluded.verified_pages_count,
                 total_pages = excluded.total_pages,
                 updated_at = excluded.updated_at
+            WHERE excluded.version > reading_sessions.version
             """,
             (
                 session_id,
@@ -1480,7 +1481,9 @@ def db_save_reading_session(
                 now_iso,
             ),
         )
+        saved = cursor.rowcount > 0
         conn.commit()
+        return saved
 
 
 def db_get_user_reading_profile(username: str) -> Dict[str, Any]:

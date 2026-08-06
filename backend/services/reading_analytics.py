@@ -1,39 +1,36 @@
-import json
-import math
-from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
+from typing import Dict, List
 
 
 class InteractionSummary(BaseModel):
-    scroll: int = 0
-    selection: int = 0
-    highlight: int = 0
-    underline: int = 0
-    memo: int = 0
-    question: int = 0
-    citationClick: int = 0
-    figureClick: int = 0
-    tableClick: int = 0
-    equationClick: int = 0
+    scroll: int = Field(default=0, ge=0)
+    selection: int = Field(default=0, ge=0)
+    highlight: int = Field(default=0, ge=0)
+    underline: int = Field(default=0, ge=0)
+    memo: int = Field(default=0, ge=0)
+    question: int = Field(default=0, ge=0)
+    citationClick: int = Field(default=0, ge=0)
+    figureClick: int = Field(default=0, ge=0)
+    tableClick: int = Field(default=0, ge=0)
+    equationClick: int = Field(default=0, ge=0)
 
 
 class PageSession(BaseModel):
-    page: int
-    enterTime: float = 0
-    leaveTime: float = 0
-    visibleTime: float = 0
-    activeTime: float = 0
-    scrollCoverage: float = 0.0  # 0.0 ~ 1.0
+    page: int = Field(ge=1)
+    enterTime: float = Field(default=0, ge=0)
+    leaveTime: float = Field(default=0, ge=0)
+    visibleTime: float = Field(default=0, ge=0)
+    activeTime: float = Field(default=0, ge=0)
+    scrollCoverage: float = Field(default=0.0, ge=0.0, le=1.0)
     interaction: InteractionSummary = Field(default_factory=InteractionSummary)
 
 
 class ReadingSessionPayload(BaseModel):
     sessionId: str
     paperId: str
-    version: int = 0
-    currentPage: int = 1
-    activeReadingTime: float = 0.0
+    version: int = Field(default=0, ge=0)
+    currentPage: int = Field(default=1, ge=1)
+    activeReadingTime: float = Field(default=0.0, ge=0)
     pageSessions: List[PageSession] = Field(default_factory=list)
     interactionSummary: InteractionSummary = Field(default_factory=InteractionSummary)
 
@@ -84,7 +81,28 @@ def analyze_page_sessions(
     if not page_sessions:
         return {}, 0, 0.0
 
+    # A client should send one cumulative entry per page, but consolidating here
+    # prevents duplicate page entries from inflating verified-page counts.
+    consolidated: Dict[int, PageSession] = {}
     for ps in page_sessions:
+        previous = consolidated.get(ps.page)
+        if previous is None:
+            consolidated[ps.page] = ps.model_copy(deep=True)
+            continue
+        positive_enter_times = [v for v in (previous.enterTime, ps.enterTime) if v > 0]
+        previous.enterTime = min(positive_enter_times) if positive_enter_times else 0
+        previous.leaveTime = max(previous.leaveTime, ps.leaveTime)
+        previous.visibleTime += ps.visibleTime
+        previous.activeTime += ps.activeTime
+        previous.scrollCoverage = max(previous.scrollCoverage, ps.scrollCoverage)
+        for field_name in InteractionSummary.model_fields:
+            setattr(
+                previous.interaction,
+                field_name,
+                getattr(previous.interaction, field_name) + getattr(ps.interaction, field_name),
+            )
+
+    for ps in consolidated.values():
         page_num = ps.page
         scroll_cov = max(0.0, min(1.0, ps.scrollCoverage))
         active_time = max(0.0, ps.activeTime)
@@ -128,7 +146,7 @@ def analyze_page_sessions(
             verified_count += 1
         total_confidence_sum += final_score
 
-    avg_confidence = round(total_confidence_sum / len(page_sessions), 1) if page_sessions else 0.0
+    avg_confidence = round(total_confidence_sum / len(consolidated), 1) if consolidated else 0.0
     return page_scores, verified_count, avg_confidence
 
 
@@ -235,21 +253,26 @@ def process_reading_analytics(
         total_pages
     )
 
-    total_iq = calculate_interaction_quality(payload.interactionSummary)
-    for ps in payload.pageSessions:
-        total_iq += calculate_interaction_quality(ps.interaction)
+    summary_iq = calculate_interaction_quality(payload.interactionSummary)
+    page_iq = sum(calculate_interaction_quality(ps.interaction) for ps in payload.pageSessions)
+    # Each frontend event is recorded in both representations; do not double count it.
+    total_iq = max(summary_iq, page_iq)
 
-    # Initial score calculation to infer depth
-    temp_depth = determine_reading_depth(payload.activeReadingTime, verified_count, total_pages, 0.0)
-    reading_score = calculate_reading_score(verified_count, total_pages, avg_confidence, temp_depth, total_iq)
-    final_depth = determine_reading_depth(payload.activeReadingTime, verified_count, total_pages, reading_score)
+    depth = determine_reading_depth(payload.activeReadingTime, verified_count, total_pages, 0.0)
+    for _ in range(3):
+        reading_score = calculate_reading_score(verified_count, total_pages, avg_confidence, depth, total_iq)
+        next_depth = determine_reading_depth(payload.activeReadingTime, verified_count, total_pages, reading_score)
+        if next_depth == depth:
+            break
+        depth = next_depth
+    reading_score = calculate_reading_score(verified_count, total_pages, avg_confidence, depth, total_iq)
 
     return ReadingAnalyticsResult(
         sessionId=payload.sessionId,
         paperId=payload.paperId,
         readingScore=reading_score,
         readingConfidence=avg_confidence,
-        readingDepth=final_depth,
+        readingDepth=depth,
         verifiedPagesCount=verified_count,
         totalPages=total_pages,
         activeReadingTime=payload.activeReadingTime,

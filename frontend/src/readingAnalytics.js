@@ -80,6 +80,21 @@ export class ReadingAnalyticsTracker {
         this.version = data.version || 0
         if (data.merged) {
           this.activeReadingTime = data.activeReadingTime || 0
+          this.currentPage = data.currentPage || 1
+          this.interactionSummary = {
+            ...createEmptyInteractionSummary(),
+            ...(data.interactionSummary || {}),
+          }
+          this.pageSessionsMap = {}
+          for (const pageSession of (data.pageSessions || [])) {
+            this.pageSessionsMap[pageSession.page] = {
+              ...pageSession,
+              interaction: {
+                ...createEmptyInteractionSummary(),
+                ...(pageSession.interaction || {}),
+              },
+            }
+          }
         }
       } else {
         this.sessionId = 'local-' + Date.now()
@@ -119,6 +134,10 @@ export class ReadingAnalyticsTracker {
   }
 
   setCurrentPage(pageNumber) {
+    const now = Date.now()
+    if (this.pageSessionsMap[this.currentPage]) {
+      this.pageSessionsMap[this.currentPage].leaveTime = now
+    }
     this.currentPage = pageNumber
     this.ensurePageSession(pageNumber)
   }
@@ -150,11 +169,13 @@ export class ReadingAnalyticsTracker {
     ps.leaveTime = Date.now()
   }
 
-  trackScroll(pageNumber, pageElement = null, containerElement = null, isContinuousView = false) {
+  trackScroll(pageNumber, pageElement = null, containerElement = null, isContinuousView = false, countInteraction = true) {
     if (!this.isTracking) return
     const ps = this.ensurePageSession(pageNumber)
-    ps.interaction.scroll += 1
-    this.interactionSummary.scroll += 1
+    if (countInteraction) {
+      ps.interaction.scroll += 1
+      this.interactionSummary.scroll += 1
+    }
 
     // Calculate Scroll Coverage
     if (pageElement && containerElement) {
@@ -163,12 +184,10 @@ export class ReadingAnalyticsTracker {
         const pageRect = pageElement.getBoundingClientRect()
         const containerRect = containerElement.getBoundingClientRect()
 
-        const visibleTop = Math.max(pageRect.top, containerRect.top)
-        const visibleBottom = Math.min(pageRect.bottom, containerRect.bottom)
-        const visibleHeight = Math.max(0, visibleBottom - visibleTop)
+        const visibleBottom = Math.max(pageRect.top, Math.min(pageRect.bottom, containerRect.bottom))
 
         if (pageRect.height > 0) {
-          coverage = visibleHeight / pageRect.height
+          coverage = (visibleBottom - pageRect.top) / pageRect.height
         }
       } else {
         const scrollTop = containerElement.scrollTop || 0
@@ -217,33 +236,34 @@ export class ReadingAnalyticsTracker {
         body: JSON.stringify(payload),
       })
       if (!res.ok) {
-        this.enqueueOfflinePayload(payload)
+        this.enqueueOfflinePayload(payload, 'heartbeat')
       } else {
         const result = await res.json()
         this.syncOfflineQueue()
         return result
       }
     } catch {
-      this.enqueueOfflinePayload(payload)
+      this.enqueueOfflinePayload(payload, 'heartbeat')
     }
   }
 
   async sendEndSession() {
     const payload = this.buildPayload()
     try {
-      await fetch(`${this.apiBase}/library/${this.paperId}/reading-session/end`, {
+      const res = await fetch(`${this.apiBase}/library/${this.paperId}/reading-session/end`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      if (!res.ok) this.enqueueOfflinePayload(payload, 'end')
     } catch {
-      this.enqueueOfflinePayload(payload)
+      this.enqueueOfflinePayload(payload, 'end')
     }
   }
 
-  enqueueOfflinePayload(payload) {
+  enqueueOfflinePayload(payload, type = 'heartbeat') {
     const queue = getOfflineQueue()
-    queue.push(payload)
+    queue.push({ type, payload })
     saveOfflineQueue(queue)
   }
 
@@ -252,18 +272,19 @@ export class ReadingAnalyticsTracker {
     if (queue.length === 0) return
 
     const remaining = []
-    for (const payload of queue) {
+    for (const queuedItem of queue) {
+      const type = queuedItem.type || 'heartbeat'
+      const payload = queuedItem.payload || queuedItem
       try {
-        const res = await fetch(`${this.apiBase}/library/${payload.paperId}/reading-session/heartbeat`, {
+        const endpoint = type === 'end' ? 'end' : 'heartbeat'
+        const res = await fetch(this.apiBase + '/library/' + payload.paperId + '/reading-session/' + endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         })
-        if (!res.ok) {
-          remaining.push(payload)
-        }
+        if (!res.ok) remaining.push(queuedItem)
       } catch {
-        remaining.push(payload)
+        remaining.push(queuedItem)
       }
     }
     saveOfflineQueue(remaining)
