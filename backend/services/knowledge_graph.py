@@ -455,7 +455,8 @@ async def get_activity_timeline(username: str) -> List[dict]:
             if isinstance(page, dict) and isinstance(page.get("page"), int)
         })
         active_time = max(0, row.get("active_reading_time") or 0)
-        if not pages and active_time <= 0:
+        verified_pages = max(0, row.get("verified_pages_count") or 0)
+        if verified_pages == 0 and active_time < 30:
             continue
         start_ts = row.get("started_at") or row.get("updated_at")
         end_ts = row.get("ended_at")
@@ -471,7 +472,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
             "duration_seconds": active_time,
             "start_page": min(pages) if pages else None,
             "end_page": max(pages) if pages else None,
-            "verified_pages": max(0, row.get("verified_pages_count") or 0),
+            "verified_pages": verified_pages,
             "reading_score": row.get("reading_score") or 0.0,
             "reading_confidence": row.get("reading_confidence") or 0.0,
             "reading_depth": row.get("reading_depth") or "Opened",
