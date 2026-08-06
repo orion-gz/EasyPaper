@@ -2,6 +2,8 @@
 회귀 테스트. 이전 차수와 동일한 fixture 패턴(test_client/isolated_dirs)을
 사용한다.
 """
+import json
+
 import pytest
 
 
@@ -102,6 +104,43 @@ def test_timeline_endpoint_merges_event_types(test_client, isolated_dirs):
     assert types == {"uploaded", "read", "question", "note"}
     assert any(e["type"] == "note" and e["summary"] == "핵심 메모" for e in events)
     assert any(e["type"] == "question" and e["summary"] == "What is this about?" for e in events)
+
+
+def test_timeline_prefers_reading_analytics_verified_pages(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    _create_doc_owned_by(isolated_dirs, "doc-analytics", "testuser", {
+        "title": "Analytics Paper",
+        "read_sessions": [{
+            "timestamp": "2026-02-02T10:00:00+00:00",
+            "start_page": 1, "end_page": 9, "verified_pages": 9,
+        }],
+    })
+    db.db_save_reading_session(
+        session_id="analytics-session", username="testuser", paper_id="doc-analytics",
+        started_at="2026-02-02T10:00:00+00:00",
+        ended_at="2026-02-02T10:05:00+00:00", active_reading_time=300, version=1,
+        page_sessions_json=json.dumps([{
+            "page": 1, "activeTime": 180, "scrollCoverage": 0.8,
+        }, {
+            "page": 3, "activeTime": 120, "scrollCoverage": 0.7,
+        }]),
+        interaction_summary_json="{}", reading_depth="Reading",
+        reading_score=62.5, reading_confidence=58.0,
+        verified_pages_count=2, total_pages=10,
+    )
+
+    events = test_client.get("/api/library/timeline").json()["events"]
+    read_events = [
+        event for event in events
+        if event["type"] == "read" and event["doc_id"] == "doc-analytics"
+    ]
+    assert len(read_events) == 1
+    assert read_events[0]["verified_pages"] == 2
+    assert read_events[0]["start_page"] == 1
+    assert read_events[0]["end_page"] == 3
+    assert read_events[0]["reading_score"] == 62.5
+    assert read_events[0]["reading_confidence"] == 58.0
+    assert read_events[0]["reading_depth"] == "Reading"
 
 
 def test_timeline_ignores_malformed_memo_ids(test_client, isolated_dirs):
