@@ -136,6 +136,7 @@ def test_timeline_prefers_reading_analytics_verified_pages(test_client, isolated
     ]
     assert len(read_events) == 1
     assert read_events[0]["verified_pages"] == 2
+    assert read_events[0]["verified_page_numbers"] == [1, 3]
     assert read_events[0]["start_page"] == 1
     assert read_events[0]["end_page"] == 3
     assert read_events[0]["reading_score"] == 62.5

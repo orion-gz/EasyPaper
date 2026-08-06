@@ -322,6 +322,9 @@ async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessio
         reading_score=res.readingScore,
         reading_confidence=res.readingConfidence,
         verified_pages_count=res.verifiedPagesCount,
+        verified_pages_json=json.dumps(sorted(
+            int(page) for page, score in res.pageScores.items() if score >= 50.0
+        )),
         total_pages=res.totalPages,
         reading_activity=res.readingActivity,
         minimum_evidence_time=res.minimumEvidenceTime,
@@ -378,6 +381,9 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
         reading_score=res.readingScore,
         reading_confidence=res.readingConfidence,
         verified_pages_count=res.verifiedPagesCount,
+        verified_pages_json=json.dumps(sorted(
+            int(page) for page, score in res.pageScores.items() if score >= 50.0
+        )),
         total_pages=res.totalPages,
         reading_activity=res.readingActivity,
         minimum_evidence_time=res.minimumEvidenceTime,

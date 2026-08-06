@@ -443,7 +443,9 @@ async def get_activity_timeline(username: str) -> List[dict]:
     doc_ids_seen = set(titles_by_doc.keys())
     events = []
 
-    from services.reading_analytics import PageSession, classify_reading_activity
+    from services.reading_analytics import (
+        PageSession, analyze_page_sessions, classify_reading_activity,
+    )
 
     analytics_rows = db_get_reading_sessions_for_user(username)
     user_ema = db_get_user_reading_profile(username).get("ema_seconds_per_page", 600.0)
@@ -464,6 +466,25 @@ async def get_activity_timeline(username: str) -> List[dict]:
         pages = sorted({page.page for page in page_models})
         active_time = max(0, row.get("active_reading_time") or 0)
         verified_pages = max(0, row.get("verified_pages_count") or 0)
+        verified_page_numbers = None
+        if row.get("verified_pages_json") is not None:
+            try:
+                stored_verified_pages = json.loads(row["verified_pages_json"])
+                if isinstance(stored_verified_pages, list):
+                    verified_page_numbers = sorted({
+                        int(page) for page in stored_verified_pages
+                        if isinstance(page, int) and page > 0
+                    })
+            except (TypeError, ValueError, json.JSONDecodeError):
+                pass
+        if verified_page_numbers is None:
+            # verified_pages_json 도입 전 세션은 당시 검증 개수를 유지하면서
+            # 저장된 페이지별 근거 점수가 높은 순서로 정확한 페이지 번호를 복원한다.
+            page_scores, _, _ = analyze_page_sessions(
+                page_models, user_ema, max(0, row.get("total_pages") or 0),
+            )
+            ranked_pages = sorted(page_scores, key=lambda page: (-page_scores[page], page))
+            verified_page_numbers = sorted(ranked_pages[:verified_pages])
         stored_activity = row.get("reading_activity")
         if stored_activity in {"read", "browsed"}:
             activity_type = stored_activity
@@ -497,6 +518,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
             "start_page": min(pages) if pages else None,
             "end_page": max(pages) if pages else None,
             "verified_pages": verified_pages,
+            "verified_page_numbers": verified_page_numbers,
             "reading_score": row.get("reading_score") or 0.0,
             "reading_confidence": row.get("reading_confidence") or 0.0,
             "reading_depth": row.get("reading_depth") or "Opened",

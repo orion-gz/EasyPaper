@@ -241,6 +241,8 @@ def test_reading_session_merge_versioning_and_ema(test_client, isolated_dirs):
     )
     assert timeline_session["type"] == "browsed"
     assert timeline_session["verified_pages"] == 0
+    assert timeline_session["verified_page_numbers"] == []
+    assert db.db_get_reading_session(session_id, "testuser")["verified_pages_json"] == "[]"
     assert timeline_session["reading_score"] == heartbeat.json()["readingScore"]
 
     stale = test_client.post(

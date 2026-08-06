@@ -11,7 +11,7 @@ import '../styles/reading-history.css'
 import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats, fetchReadingAnalyticsSummary } from '../library.js'
 import { icon } from '../icons.js'
 import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, todayKey, addDaysKey, isWithinDaysLocal } from '../readPages.js'
-import { periodStats, sumSecondsByDayRange, buildDailyActivityStats, formatDuration, deltaDurationHtml, CATEGORY_LABEL, CATEGORY_COLOR_VAR, CATEGORY_ORDER } from './readingHistoryPage.js'
+import { periodStats, sumSecondsByDayRange, formatDuration, deltaDurationHtml, CATEGORY_LABEL, CATEGORY_COLOR_VAR, CATEGORY_ORDER } from './readingHistoryPage.js'
 import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
 
 function renderReadingAnalyticsCard(analyticsData) {
@@ -741,15 +741,7 @@ export async function renderDashboardPage() {
     const curr7 = periodStats(events, docsById, currStart7, currEnd7)
     const weeklySeconds = sumSecondsByDayRange(readingStats?.total_seconds_by_day, currStart7, currEnd7)
     const prevWeeklySeconds = sumSecondsByDayRange(readingStats?.total_seconds_by_day, prevStart7, prevEnd7)
-    const dailyStatsMap = buildDailyActivityStats(events, readingStats)
-
-    let currEstPages7 = 0
-    for (const [day, item] of dailyStatsMap.entries()) {
-      if (day >= currStart7 && day < currEnd7) {
-        currEstPages7 += item.estPagesRead
-      }
-    }
-    const weeklyPagesRead = Math.max(curr7.pagesRead, currEstPages7)
+    const weeklyPagesRead = curr7.pagesRead
 
     el.innerHTML = `
       <div class="dash-root">
