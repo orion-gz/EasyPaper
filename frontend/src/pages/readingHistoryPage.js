@@ -160,6 +160,8 @@ export function buildDailyActivityStats(events, readingStats) {
       byDay.set(key, {
         readingSeconds: 0,
         estPagesRead: 0,
+        verifiedPages: 0,
+        hasVerifiedPages: false,
         questions: 0,
         notes: 0,
         uploaded: 0,
@@ -188,7 +190,10 @@ export function buildDailyActivityStats(events, readingStats) {
     else if (e.type === 'uploaded') item.uploaded += 1
     else if (e.type === 'read') {
       item.readEvents += 1
-      item.verifiedPages = (item.verifiedPages || 0) + (e.verified_pages || 1)
+      if (e.verified_pages !== null && e.verified_pages !== undefined) {
+        item.hasVerifiedPages = true
+        item.verifiedPages += e.verified_pages
+      }
     }
   }
 
@@ -200,7 +205,7 @@ export function buildDailyActivityStats(events, readingStats) {
     if (item.readingSeconds > 0) {
       item.estPagesRead = Math.floor(item.readingSeconds / userPaceSec)
     }
-    const displayPages = item.verifiedPages || item.estPagesRead || 0
+    const displayPages = item.hasVerifiedPages ? item.verifiedPages : (item.estPagesRead || 0)
 
     const readTimeScore = Math.floor(item.readingSeconds / 60)
     const pageScore = displayPages * 3
@@ -1031,7 +1036,7 @@ export async function renderReadingHistoryPage() {
 
                 if (e.start_page && e.end_page) {
                   const range = e.start_page === e.end_page ? `${e.start_page}p` : `${e.start_page}p ~ ${e.end_page}p`
-                  const verified = e.verified_pages || 1
+                  const verified = e.verified_pages ?? 0
                   pageMeta = `${range} (${verified}p 정독)`
                 } else {
                   const p = readPageCount(docsById.get(e.doc_id))

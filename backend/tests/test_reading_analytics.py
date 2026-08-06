@@ -191,6 +191,14 @@ def test_reading_session_merge_versioning_and_ema(test_client, isolated_dirs):
     assert db.db_get_user_reading_profile("testuser")["session_count"] == 0
     assert db.db_get_reading_time_stats("testuser")["total_seconds"] == 0
 
+    timeline = test_client.get("/api/library/timeline").json()["events"]
+    timeline_session = next(
+        event for event in timeline
+        if event.get("reading_session_id") == session_id
+    )
+    assert timeline_session["verified_pages"] == 0
+    assert timeline_session["reading_score"] == heartbeat.json()["readingScore"]
+
     stale = test_client.post(
         "/api/library/paper-1/reading-session/heartbeat",
         json=_analytics_payload(session_id, "paper-1", 1, active_time=999),

@@ -250,8 +250,9 @@ export class ReadingAnalyticsTracker {
   async sendEndSession() {
     const payload = this.buildPayload()
     try {
-      const res = await fetch(`${this.apiBase}/library/${this.paperId}/reading-session/end`, {
+      const res = await fetch(this.apiBase + "/library/" + this.paperId + "/reading-session/end", {
         method: 'POST',
+        keepalive: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })

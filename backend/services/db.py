@@ -1486,6 +1486,32 @@ def db_save_reading_session(
         return saved
 
 
+def db_get_reading_sessions_for_user(username: str) -> List[Dict[str, Any]]:
+    """Return Reading Analytics sessions for Timeline, newest first."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT rs.id, rs.paper_id, rs.started_at, rs.ended_at,
+                   rs.active_reading_time, rs.version, rs.page_sessions_json,
+                   rs.reading_depth, rs.reading_score, rs.reading_confidence,
+                   rs.verified_pages_count, rs.total_pages, rs.updated_at,
+                   titles.doc_title
+            FROM reading_sessions AS rs
+            LEFT JOIN (
+                SELECT doc_id, MAX(doc_title) AS doc_title
+                FROM reading_time
+                WHERE username = ? AND doc_title IS NOT NULL
+                GROUP BY doc_id
+            ) AS titles ON titles.doc_id = rs.paper_id
+            WHERE rs.username = ?
+            ORDER BY rs.started_at DESC
+            """,
+            (username, username),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
 def db_get_user_reading_profile(username: str) -> Dict[str, Any]:
     """Gets or initializes the user EMA reading profile."""
     with get_db() as conn:

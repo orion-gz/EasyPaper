@@ -431,7 +431,10 @@ async def get_activity_timeline(username: str) -> List[dict]:
     """업로드/읽음/질문/메모를 시간순(최신순)으로 병합한 활동 타임라인을
     반환한다. 삭제된 논문의 활동도 타임라인에 유지되며 holds is_deleted=True."""
     from services.library import list_documents
-    from services.db import db_get_memos, db_get_related_questions_for_doc, get_db
+    from services.db import (
+        db_get_memos, db_get_reading_sessions_for_user,
+        db_get_related_questions_for_doc, get_db,
+    )
 
     docs = list_documents(username=username, include_deleted=True)
     titles_by_doc = {d["id"]: (d.get("metadata") or {}).get("title") or d["filename"] for d in docs}
@@ -439,6 +442,42 @@ async def get_activity_timeline(username: str) -> List[dict]:
 
     doc_ids_seen = set(titles_by_doc.keys())
     events = []
+
+    analytics_rows = db_get_reading_sessions_for_user(username)
+    analytics_doc_ids = {row["paper_id"] for row in analytics_rows}
+    for row in analytics_rows:
+        try:
+            page_sessions = json.loads(row.get("page_sessions_json") or "[]")
+        except (TypeError, json.JSONDecodeError):
+            page_sessions = []
+        pages = sorted({
+            page.get("page") for page in page_sessions
+            if isinstance(page, dict) and isinstance(page.get("page"), int)
+        })
+        active_time = max(0, row.get("active_reading_time") or 0)
+        if not pages and active_time <= 0:
+            continue
+        start_ts = row.get("started_at") or row.get("updated_at")
+        end_ts = row.get("ended_at")
+        if end_ts == start_ts:
+            end_ts = None
+        doc_id = row["paper_id"]
+        events.append({
+            "type": "read",
+            "doc_id": doc_id,
+            "doc_title": titles_by_doc.get(doc_id) or row.get("doc_title") or "삭제된 논문",
+            "timestamp": start_ts,
+            "end_timestamp": end_ts,
+            "duration_seconds": active_time,
+            "start_page": min(pages) if pages else None,
+            "end_page": max(pages) if pages else None,
+            "verified_pages": max(0, row.get("verified_pages_count") or 0),
+            "reading_score": row.get("reading_score") or 0.0,
+            "reading_confidence": row.get("reading_confidence") or 0.0,
+            "reading_depth": row.get("reading_depth") or "Opened",
+            "reading_session_id": row["id"],
+            "is_deleted": doc_id not in doc_ids_seen or deleted_by_doc.get(doc_id, False),
+        })
     for doc in docs:
         doc_id = doc["id"]
         title = titles_by_doc[doc_id]
@@ -452,7 +491,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
 
         meta = doc.get("metadata") or {}
         read_sessions = meta.get("read_sessions") or []
-        if read_sessions:
+        if read_sessions and doc_id not in analytics_doc_ids:
             for s in read_sessions:
                 ts = s.get("timestamp") or s.get("read_at") or meta.get("last_read_at") or doc["created_at"]
                 end_ts = s.get("end_timestamp")
@@ -477,7 +516,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
                     "verified_pages": s.get("verified_pages", 1),
                     "is_deleted": is_deleted,
                 })
-        elif meta.get("read") and meta.get("read_at"):
+        elif doc_id not in analytics_doc_ids and meta.get("read") and meta.get("read_at"):
             events.append({
                 "type": "read", "doc_id": doc_id, "doc_title": title,
                 "timestamp": meta["read_at"],
@@ -486,7 +525,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
                 "verified_pages": meta.get("last_page") or 1,
                 "is_deleted": is_deleted,
             })
-        elif meta.get("last_read_at"):
+        elif doc_id not in analytics_doc_ids and meta.get("last_read_at"):
             events.append({
                 "type": "read", "doc_id": doc_id, "doc_title": title,
                 "timestamp": meta["last_read_at"],
@@ -539,7 +578,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
             for r in rows:
                 r_dict = dict(r)
                 d_id = r_dict["doc_id"]
-                if d_id not in doc_ids_seen:
+                if d_id not in doc_ids_seen and d_id not in analytics_doc_ids:
                     # reading_time에 저장된 제목을 우선 사용, 없으면 "삭제된 논문"
                     stored_title = r_dict.get("stored_title") or "삭제된 논문"
                     events.append({

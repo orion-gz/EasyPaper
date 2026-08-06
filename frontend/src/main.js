@@ -3982,62 +3982,8 @@ function currentReadingContext() {
   return null
 }
 
-let activeViewerSession = null
-
-function updatePageDwellTime() {
-  if (!isReadingTimeActive() || !state.sessionId || !state.currentPage) return
-  if (!activeViewerSession || activeViewerSession.docId !== state.sessionId) {
-    activeViewerSession = {
-      docId: state.sessionId,
-      startPage: state.currentPage,
-      endPage: state.currentPage,
-      startTime: new Date().toISOString(),
-      pageDwellTimes: {},
-    }
-  }
-  const session = activeViewerSession
-  session.endPage = Math.max(session.endPage, state.currentPage)
-  session.startPage = Math.min(session.startPage, state.currentPage)
-  session.pageDwellTimes[state.currentPage] = (session.pageDwellTimes[state.currentPage] || 0) + READING_HEARTBEAT_TICK_SECONDS
-}
-
-async function flushActiveReadingSession(userPaceSec = 240, isFinal = false) {
-  if (!activeViewerSession || !activeViewerSession.docId) return
-  const session = activeViewerSession
-  if (isFinal) {
-    activeViewerSession = null
-  }
-
-  // 개인 EMA 정독 페이스(userPaceSec)의 50% 이상 체류 시에만 해당 페이지 완독 인정
-  const dynamicDwellThreshold = Math.max(1, Math.round(userPaceSec * 0.5))
-  const verifiedPagesCount = Object.values(session.pageDwellTimes).filter(s => s >= dynamicDwellThreshold).length || 1
-
-  try {
-    const docId = session.docId
-    const now = new Date()
-    const startTimeIso = session.startTime || now.toISOString()
-    const endTimeIso = now.toISOString()
-    const durationSec = Math.max(1, Math.round((now - (new Date(startTimeIso).getTime() ? new Date(startTimeIso) : now)) / 1000))
-
-    const newSession = {
-      start_page: session.startPage,
-      end_page: session.endPage,
-      verified_pages: verifiedPagesCount,
-      timestamp: startTimeIso,
-      end_timestamp: endTimeIso,
-      duration_seconds: durationSec,
-    }
-    await updateLibraryDocMetadata(docId, {
-      read_sessions: [newSession],
-      last_page: session.endPage,
-      last_read_at: endTimeIso,
-    }).catch(() => {})
-  } catch {}
-}
-
 function tickReadingHeartbeat() {
   if (!isReadingTimeActive()) return
-  updatePageDwellTime()
   const ctx = currentReadingContext()
   if (!ctx) return
   for (const docId of ctx.docIds) {
@@ -4049,7 +3995,6 @@ function tickReadingHeartbeat() {
 async function flushReadingHeartbeat() {
   const buffers = readingHeartbeatBuffers
   readingHeartbeatBuffers = {}
-  flushActiveReadingSession(240, false).catch(() => {})
   const entries = Object.entries(buffers).filter(([, s]) => s > 0)
   if (entries.length === 0) return
   await Promise.all(entries.map(([key, seconds]) => {
@@ -4062,7 +4007,7 @@ async function flushReadingHeartbeat() {
 
 setInterval(tickReadingHeartbeat, READING_HEARTBEAT_TICK_SECONDS * 1000)
 setInterval(flushReadingHeartbeat, READING_HEARTBEAT_FLUSH_MS)
-window.addEventListener('beforeunload', () => { flushReadingHeartbeat(); flushActiveReadingSession(240, true) })
+window.addEventListener('beforeunload', () => { flushReadingHeartbeat(); globalAnalyticsTracker.stopSession() })
 
 // ── 초기화 ────────────────────────────────────────
 checkAuthentication()
