@@ -541,10 +541,14 @@ body.light-theme .lib-detail-panel {
 
 
 /* ── 라이브러리 내부 폴더 카드와 경로 ── */
-.library-folder-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 10px; }
-.library-breadcrumb { display:flex; align-items:center; min-width:0; gap:6px; overflow:auto; white-space:nowrap; color:var(--text-muted); font-size:13px; }
-.library-breadcrumb button { border:0; padding:4px 6px; background:transparent; color:var(--text-secondary); border-radius:var(--radius-sm); cursor:pointer; }
+.library-folder-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 14px; padding:10px 12px; border:1px solid var(--border-strong); border-left:3px solid var(--control-accent); border-radius:var(--radius-md); background:linear-gradient(90deg, var(--control-accent-soft), var(--bg-elevated) 58%); box-shadow:var(--shadow-sm); }
+.library-breadcrumb { display:flex; align-items:center; min-width:0; gap:5px; overflow:auto; white-space:nowrap; color:var(--text-muted); font-size:13px; font-weight:600; }
+.library-breadcrumb button { display:inline-flex; align-items:center; gap:6px; border:0; padding:6px 9px; background:transparent; color:var(--text-secondary); border-radius:var(--radius-sm); cursor:pointer; font:inherit; }
 .library-breadcrumb button:hover { background:var(--bg-hover); color:var(--text-primary); }
+.library-breadcrumb button[aria-current="page"] { background:var(--bg-surface); color:var(--control-accent-text); box-shadow:var(--shadow-sm); }
+.library-breadcrumb-root { color:var(--text-primary)!important; }
+.library-breadcrumb-separator { color:var(--text-muted); font-size:18px; font-weight:400; }
+.library-breadcrumb.global-filter-active::after { content:'전체 폴더에서 필터링 중'; margin-left:8px; padding:3px 8px; border-radius:999px; background:var(--control-accent); color:#fff; font-size:10.5px; font-weight:700; }
 .library-new-folder-btn { display:inline-flex; align-items:center; gap:6px; flex:0 0 auto; padding:7px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-md); background:var(--bg-elevated); color:var(--text-primary); cursor:pointer; font:inherit; font-size:12.5px; font-weight:600; }
 .library-new-folder-btn:hover { border-color:var(--control-accent); background:var(--control-accent-soft); }
 .library-folder-card { position:relative; min-height:178px; padding:20px; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg-elevated); cursor:pointer; transition:transform .15s ease, border-color .15s ease, background .15s ease; }
