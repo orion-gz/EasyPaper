@@ -549,6 +549,7 @@ body.light-theme .lib-detail-panel {
 .library-new-folder-btn:hover { border-color:var(--control-accent); background:var(--control-accent-soft); }
 .library-folder-card { position:relative; min-height:178px; padding:20px; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg-elevated); cursor:pointer; transition:transform .15s ease, border-color .15s ease, background .15s ease; }
 .library-folder-card:hover { transform:translateY(-2px); border-color:var(--folder-color); background:var(--bg-hover); }
+.library-folder-card:focus-visible { outline:2px solid var(--control-accent); outline-offset:2px; border-color:var(--folder-color); }
 .folder-card-icon { color:var(--folder-color); margin-bottom:22px; }
 .folder-card-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-primary); font-size:14px; font-weight:700; }
 .folder-card-meta { margin-top:6px; color:var(--text-muted); font-size:12px; }
@@ -563,3 +564,9 @@ body.light-theme .lib-detail-panel {
 .folder-color-picker{display:flex;gap:12px;padding:6px}.folder-color-picker .color-dot{width:28px;height:28px;border:2px solid transparent;border-radius:50%;cursor:pointer}.folder-color-picker .color-dot.selected{outline:2px solid var(--text-primary);outline-offset:3px}
 
 .folder-card-actions{position:absolute;right:10px;top:40px;z-index:4;display:grid;padding:5px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md)}.folder-card-actions button{border:0;background:transparent;color:var(--text-primary);padding:7px 10px;text-align:left;cursor:pointer}.folder-card-actions button:hover{background:var(--bg-hover)}
+
+.folder-native-color { position:relative; width:28px; height:28px; border:1px dashed var(--border-strong); border-radius:50%; display:grid; place-items:center; color:var(--text-secondary); cursor:pointer; overflow:hidden; flex:0 0 auto; }
+.folder-native-color:hover { border-color:var(--control-accent); color:var(--control-accent-text); }
+.folder-native-color input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+.folder-native-color span { font-size:18px; line-height:1; }
+.folder-color-picker { align-items:center; }
