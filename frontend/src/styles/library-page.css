@@ -554,7 +554,7 @@ body.light-theme .lib-detail-panel {
 .library-folder-card { position:relative; min-height:178px; padding:20px; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg-elevated); cursor:pointer; transition:transform .15s ease, border-color .15s ease, background .15s ease; }
 .library-folder-card:hover { transform:translateY(-2px); border-color:var(--folder-color); background:var(--bg-hover); }
 .library-folder-card:focus-visible { outline:2px solid var(--control-accent); outline-offset:2px; border-color:var(--folder-color); }
-.folder-card-icon { color:var(--folder-color); margin-bottom:22px; }
+.folder-card-icon { color:var(--folder-color); margin-bottom:22px; filter:drop-shadow(0 3px 7px color-mix(in srgb, var(--folder-color) 30%, transparent)); }
 .folder-card-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-primary); font-size:14px; font-weight:700; }
 .folder-card-meta { margin-top:6px; color:var(--text-muted); font-size:12px; }
 .folder-card-menu { position:absolute; top:12px; right:12px; padding:5px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--text-muted); cursor:pointer; }
@@ -563,7 +563,24 @@ body.light-theme .lib-detail-panel {
 .folder-dialog-label { display:grid; gap:8px; color:var(--text-secondary); font-size:13px; }
 .folder-dialog-input { width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--bg-elevated); color:var(--text-primary); font:inherit; outline:none; }
 .folder-dialog-input:focus { border-color:var(--control-accent); }
-.doc-card[draggable=true] { cursor:grab; }
+.library-grid.list-view .library-folder-card { min-height:0; padding:12px 16px; display:flex; align-items:center; gap:16px; border-radius:14px; }
+.library-grid.list-view .library-folder-card:hover { transform:translateX(2px); }
+.library-grid.list-view .folder-card-icon { display:flex; flex:0 0 auto; margin:0; }
+.library-grid.list-view .folder-card-name { flex:1 1 240px; min-width:120px; font-size:14.5px; }
+.library-grid.list-view .folder-card-meta { flex:0 0 auto; margin:0 44px 0 0; }
+.library-grid.list-view .folder-card-menu { top:50%; right:16px; transform:translateY(-50%); }
+.library-grid.list-view .folder-card-actions { top:calc(50% + 20px); right:16px; }
+
+.doc-card[draggable=true], .doc-list-row[draggable=true] { cursor:grab; }
+.doc-dragging { opacity:.55; cursor:grabbing!important; }
+.library-multi-drag-preview { position:fixed; left:-10000px; top:0; z-index:99999; width:226px; height:74px; pointer-events:none; }
+.library-drag-stack-sheet { position:absolute; inset:0 8px 8px 0; transform:translate(calc(var(--stack-index) * 5px), calc(var(--stack-index) * 5px)); border:1px solid var(--control-accent); border-radius:12px; background:var(--bg-elevated); box-shadow:var(--shadow-sm); opacity:calc(1 - var(--stack-index) * .16); }
+.library-drag-stack-card { position:absolute; inset:0 12px 12px 0; display:flex; align-items:center; gap:10px; padding:12px 14px; border:2px solid var(--control-accent); border-radius:12px; background:var(--bg-surface); color:var(--text-primary); box-shadow:var(--shadow-lg); }
+.library-drag-stack-icon { display:grid; place-items:center; width:34px; height:34px; flex:0 0 auto; border-radius:9px; background:var(--control-accent-soft); color:var(--control-accent-text); }
+.library-drag-stack-copy { display:grid; min-width:0; gap:2px; }
+.library-drag-stack-copy strong { font-size:13px; white-space:nowrap; }
+.library-drag-stack-copy small { color:var(--text-muted); font-size:10.5px; white-space:nowrap; }
+.library-drag-stack-count { display:grid; place-items:center; min-width:27px; height:27px; margin-left:auto; padding:0 7px; border-radius:999px; background:var(--control-accent); color:#fff; font-size:12px; font-weight:800; }
 
 .folder-color-picker{display:flex;gap:12px;padding:6px}.folder-color-picker .color-dot{width:28px;height:28px;border:2px solid transparent;border-radius:50%;cursor:pointer}.folder-color-picker .color-dot.selected{outline:2px solid var(--text-primary);outline-offset:3px}
 
