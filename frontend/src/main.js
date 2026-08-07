@@ -5005,12 +5005,15 @@ if (chatDrawerViewerBtn) {
 document.addEventListener('keydown', async e => {
   if (state.currentWorkspacePage !== 'library' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return
   const mod = e.ctrlKey || e.metaKey
-  if (mod && ['c', 'x'].includes(e.key.toLowerCase()) && selectedDocIds.size) {
+  if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    await undoLastLibraryAction()
+  } else if (mod && ['c', 'x'].includes(e.key.toLowerCase()) && selectedDocIds.size) {
     e.preventDefault(); libraryClipboard = { mode: e.key.toLowerCase() === 'x' ? 'cut' : 'copy', ids: Array.from(selectedDocIds) }; showToast(`${selectedDocIds.size}개 논문을 ${libraryClipboard.mode === 'cut' ? '잘라냈습니다' : '복사했습니다'}.`, 'info')
   } else if (mod && e.key.toLowerCase() === 'v' && libraryClipboard?.ids?.length) {
     e.preventDefault()
     // 논문 파일/캐시를 중복 복제하지 않기 위해 붙여넣기는 이동으로 동작한다.
-    try { await moveLibraryDocuments(libraryClipboard.ids, activeLibraryFolderId); showToast('현재 폴더로 이동했습니다.', 'success'); if (libraryClipboard.mode === 'cut') libraryClipboard = null; await renderLibrary() } catch (err) { showToast(err.message || '붙여넣기 실패', 'error') }
+    try { await moveDocumentsWithUndo(libraryClipboard.ids, activeLibraryFolderId); showToast('현재 폴더로 이동했습니다.', 'success'); if (libraryClipboard.mode === 'cut') libraryClipboard = null; await renderLibrary() } catch (err) { showToast(err.message || '붙여넣기 실패', 'error') }
   } else if (e.key === 'Delete' && selectedDocIds.size) {
     e.preventDefault(); document.querySelector('#lib-select-delete-btn')?.click()
   } else if (e.key === 'Escape') { clearDocSelection(); libraryClipboard = null }
@@ -5128,7 +5131,47 @@ function sortLibraryDocs(docs) {
 let libraryFolders = []
 let activeLibraryFolderId = null
 let libraryClipboard = null
+const libraryUndoStack = []
 const FOLDER_COLORS = ['#6b7280', '#4f8ef7', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981']
+
+
+function pushLibraryUndo(action) {
+  libraryUndoStack.push(action)
+  if (libraryUndoStack.length > 30) libraryUndoStack.shift()
+}
+async function moveDocumentsWithUndo(docIds, folderId) {
+  const entries = docIds.map(id => ({ id, folderId: currentLibraryDocs.find(doc => doc.id === id)?.folder_id || null }))
+  await moveLibraryDocuments(docIds, folderId)
+  if (entries.some(entry => entry.folderId !== folderId)) pushLibraryUndo({ kind: 'documents', entries })
+}
+async function moveFolderWithUndo(folder, parentId) {
+  await updateLibraryFolder(folder.id, { parent_id: parentId, move: true })
+  if ((folder.parent_id || null) !== parentId) pushLibraryUndo({ kind: 'folderMove', id: folder.id, parentId: folder.parent_id || null })
+}
+async function updateFolderWithUndo(folder, payload) {
+  await updateLibraryFolder(folder.id, payload)
+  const previous = {}
+  if (payload.name !== undefined) previous.name = folder.name
+  if (payload.color !== undefined) previous.color = folder.color
+  pushLibraryUndo({ kind: 'folderUpdate', id: folder.id, payload: previous })
+}
+async function undoLastLibraryAction() {
+  const action = libraryUndoStack.pop()
+  if (!action) { showToast('되돌릴 작업이 없습니다.', 'info'); return }
+  try {
+    if (action.kind === 'documents') {
+      const groups = new Map()
+      action.entries.forEach(entry => { const key = entry.folderId || ''; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(entry.id) })
+      for (const [folderId, ids] of groups) await moveLibraryDocuments(ids, folderId || null)
+    } else if (action.kind === 'folderMove') await updateLibraryFolder(action.id, { parent_id: action.parentId, move: true })
+    else if (action.kind === 'folderUpdate') await updateLibraryFolder(action.id, action.payload)
+    showToast('마지막 작업을 되돌렸습니다.', 'success')
+    await renderLibrary()
+  } catch (err) {
+    libraryUndoStack.push(action)
+    showToast(err.message || '실행 취소 실패', 'error')
+  }
+}
 
 function folderPath(folderId) {
   const byId = new Map(libraryFolders.map(f => [f.id, f]))
@@ -5154,10 +5197,12 @@ function setFolderDropTarget(el, folderId) {
         return
       }
       const item = JSON.parse(raw)
-      if (item.kind === 'document') await moveLibraryDocuments(item.ids, folderId)
+      if (item.kind === 'document') await moveDocumentsWithUndo(item.ids, folderId)
       if (item.kind === 'folder') {
         if (item.id === folderId || folderDescendants(item.id).has(folderId)) throw new Error('폴더를 자기 자신 또는 하위 폴더로 옮길 수 없습니다.')
-        await updateLibraryFolder(item.id, { parent_id: folderId, move: true })
+        const folder = libraryFolders.find(candidate => candidate.id === item.id)
+        if (!folder) throw new Error('폴더를 찾을 수 없습니다.')
+        await moveFolderWithUndo(folder, folderId)
       }
       showToast('이동했습니다.', 'success'); await renderLibrary()
     } catch (err) { showToast(err.message || '이동 실패', 'error') }
@@ -5198,15 +5243,32 @@ function showFolderColorDialog(currentColor) {
   return new Promise(resolve => {
     const modal = document.createElement('div')
     modal.className = 'custom-confirm-modal-wrapper'
-    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 색상</span></div><div class="custom-confirm-modal-body"><div class="folder-color-picker">${FOLDER_COLORS.map(color => `<button class="color-dot ${color === currentColor ? 'selected' : ''}" data-color="${color}" style="background:${color}" title="${color}"></button>`).join('')}</div></div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button></div></div>`
+    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 색상</span></div><div class="custom-confirm-modal-body"><div class="folder-color-picker">${FOLDER_COLORS.map(color => `<button class="color-dot ${color === currentColor ? 'selected' : ''}" data-color="${color}" style="background:${color}" title="${color}"></button>`).join('')}<label class="folder-native-color" title="직접 색상 선택"><input type="color" value="${currentColor}"><span>+</span></label></div></div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button></div></div>`
     document.body.appendChild(modal)
     const close = value => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(value) }, 200) }
     modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
     modal.querySelectorAll('[data-color]').forEach(btn => btn.addEventListener('click', () => close(btn.dataset.color)))
+    modal.querySelector('input[type="color"]').addEventListener('change', e => close(e.target.value))
     modal.addEventListener('click', e => { if (e.target === modal) close(null) })
     setTimeout(() => modal.classList.add('active'), 10)
   })
 }
+
+function showFolderContentsDeleteDialog(paperCount) {
+  return new Promise(resolve => {
+    const modal = document.createElement('div')
+    modal.className = 'custom-confirm-modal-wrapper'
+    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 안 논문 처리</span></div><div class="custom-confirm-modal-body">이 폴더에 논문 ${paperCount}개가 있습니다.<br>폴더 삭제 후 논문을 어떻게 처리할까요?</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn keep-btn">루트에 유지</button><button class="custom-confirm-btn confirm-btn">함께 휴지통으로 이동</button></div></div>`
+    document.body.appendChild(modal)
+    const close = value => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(value) }, 200) }
+    modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
+    modal.querySelector('.keep-btn').addEventListener('click', () => close(false))
+    modal.querySelector('.confirm-btn').addEventListener('click', () => close(true))
+    modal.addEventListener('click', e => { if (e.target === modal) close(null) })
+    setTimeout(() => modal.classList.add('active'), 10)
+  })
+}
+
 function createFolderCard(folder) {
   const card = document.createElement('article')
   card.className = 'library-folder-card'
@@ -5222,9 +5284,20 @@ function createFolderCard(folder) {
   menu.addEventListener('click', async e => {
     e.stopPropagation(); const action = e.target.dataset.action; if (!action) return
     try {
-      if (action === 'rename') { const name = await showCustomTextDialog({ title: '폴더 이름 변경', label: '폴더 이름', value: folder.name, confirmText: '저장' }); if (name) await updateLibraryFolder(folder.id, { name }) }
-      if (action === 'color') { const color = await showFolderColorDialog(folder.color); if (color) await updateLibraryFolder(folder.id, { color }) }
-      if (action === 'delete') { const ok = await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요? 내부 논문을 휴지통으로 이동할지 다음 단계에서 선택합니다.`, { title: '폴더 삭제', confirmText: '계속', danger: true }); if (ok) { const deletePapers = await showCustomConfirm('폴더 내부 논문도 휴지통으로 이동할까요?', { title: '논문 처리', confirmText: '휴지통으로 이동', cancelText: '루트에 유지', danger: true }); await deleteLibraryFolder(folder.id, deletePapers) } }
+      if (action === 'rename') { const name = await showCustomTextDialog({ title: '폴더 이름 변경', label: '폴더 이름', value: folder.name, confirmText: '저장' }); if (name && name !== folder.name) await updateFolderWithUndo(folder, { name }) }
+      if (action === 'color') { const color = await showFolderColorDialog(folder.color); if (color && color !== folder.color) await updateFolderWithUndo(folder, { color }) }
+      if (action === 'delete') {
+        const paperCount = currentLibraryDocs.filter(doc => doc.folder_id === folder.id).length
+        const ok = await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요?${paperCount ? '' : '\n비어 있는 폴더이며 논문에는 영향이 없습니다.'}`, { title: '폴더 삭제', confirmText: '삭제', danger: true })
+        if (!ok) return
+        let deletePapers = false
+        if (paperCount > 0) {
+          const choice = await showFolderContentsDeleteDialog(paperCount)
+          if (choice === null) return
+          deletePapers = choice
+        }
+        await deleteLibraryFolder(folder.id, deletePapers)
+      }
       await renderLibrary()
     } catch (err) { showToast(err.message || '폴더 변경 실패', 'error') }
   })
@@ -5232,8 +5305,7 @@ function createFolderCard(folder) {
 }
 function ensureLibraryFolderUI() {
   if ($('library-breadcrumb')) return
-  librarySearchBox?.insertAdjacentHTML('beforebegin', `<div class="library-folder-header"><nav id="library-breadcrumb" class="library-breadcrumb" aria-label="폴더 경로"></nav><button id="library-new-folder-btn" class="library-new-folder-btn">${icon('folderPlus', 15)}<span>폴더 추가</span></button></div>`)
-  $('library-new-folder-btn')?.addEventListener('click', () => openCreateFolderDialog())
+  librarySearchBox?.insertAdjacentHTML('beforebegin', `<div class="library-folder-header"><nav id="library-breadcrumb" class="library-breadcrumb" aria-label="폴더 경로"></nav></div>`)
 }
 let libraryChromeReady = false
 function ensureLibraryChrome() {
