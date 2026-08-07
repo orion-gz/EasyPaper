@@ -4,7 +4,7 @@ import './styles/library-page.css'
 import './styles/research-graph.css'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
@@ -178,6 +178,8 @@ const settingDisableCitationOverlay = $('setting-disable-citation-overlay')
 const settingDisableFigureOverlay = $('setting-disable-figure-overlay')
 const settingDisablePrimer = $('setting-disable-primer')
 const settingToolbarAutoHide = $('setting-toolbar-autohide')
+const settingAutoGenerateKeywords = $('setting-auto-generate-keywords')
+const settingAutoGenerateSummaries = $('setting-auto-generate-summaries')
 const viewerTopbar = $('viewer-topbar')
 const clearCacheBtn       = $('clear-cache-btn')
 const clearPagesCacheBtn  = $('clear-pages-cache-btn')
@@ -383,6 +385,14 @@ function getTranslationOptions() {
   }
 }
 
+function getKeywordMode() {
+  return localStorage.getItem('easypaper_keyword_mode') || 'manual'
+}
+
+function getSummaryMode() {
+  return localStorage.getItem('easypaper_summary_mode') || 'manual'
+}
+
 // 툴바 위치: 'top'(기본) / 'bottom' / 'left' / 'right'. body에 클래스로
 // 반영하고, 나머지는 전부 CSS(.toolbar-pos-*)가 처리한다 - 위치별로
 // .topbar/.panels/.outline-sidebar/.floating-scroll-nav 등의 레이아웃이
@@ -537,7 +547,12 @@ async function handleFiles(files) {
     uploadItemSuccessIcon.classList.add('hidden')
 
     try {
-      const result = await uploadPDF(file, { ...getTranslationOptions(), translationMode: getTranslationMode() }, (pct) => {
+      const result = await uploadPDF(file, {
+        ...getTranslationOptions(),
+        translationMode: getTranslationMode(),
+        keywordMode: getKeywordMode(),
+        summaryMode: getSummaryMode()
+      }, (pct) => {
         uploadItemProgressBar.style.width = `${pct}%`
         uploadItemStatus.textContent = `업로드 중... ${pct}%`
       })
@@ -2950,6 +2965,8 @@ globalSettingsBtn.addEventListener('click', async () => {
   settingDisableFigureOverlay.checked = !state.disableFigureOverlay
   settingDisablePrimer.checked = !state.disablePrimer
   settingToolbarAutoHide.checked = state.toolbarAutoHide
+  settingAutoGenerateKeywords.checked = getKeywordMode() === 'auto'
+  settingAutoGenerateSummaries.checked = getSummaryMode() === 'auto'
   updateAccentSettingsUI(currentAccentColor)
 
   // 3. 시스템 설정값 로드 (백엔드 통신)
@@ -3133,6 +3150,8 @@ function persistGeneralSettingsToStorage() {
   localStorage.setItem('easypaper_target_lang', settingTargetLang.value)
   localStorage.setItem('easypaper_style', settingTransStyle.value)
   localStorage.setItem('easypaper_translation_mode', settingTranslationMode.value)
+  localStorage.setItem('easypaper_keyword_mode', settingAutoGenerateKeywords.checked ? 'auto' : 'manual')
+  localStorage.setItem('easypaper_summary_mode', settingAutoGenerateSummaries.checked ? 'auto' : 'manual')
   localStorage.setItem('easypaper_ignore_math', settingIgnoreMath.checked)
   localStorage.setItem('easypaper_ignore_table', settingIgnoreTable.checked)
   localStorage.setItem('easypaper_ignore_refs', settingIgnoreRefs.checked)
@@ -3298,6 +3317,13 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
 
 ;[settingOllamaHost, settingOpenAIKey, settingGeminiKey, settingClaudeKey, settingOpenAlexMailto].forEach(el => {
   if (el) el.addEventListener('change', () => autoSaveSystemSettings())
+})
+
+;[settingAutoGenerateKeywords, settingAutoGenerateSummaries].forEach(el => {
+  if (el) el.addEventListener('change', () => {
+    persistGeneralSettingsToStorage()
+    showToast('일반 설정이 저장되었습니다.', 'success')
+  })
 })
 
 if (settingChatSameAsTrans) {

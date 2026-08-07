@@ -11,6 +11,7 @@ from config import UPLOAD_DIR, MAX_FILE_SIZE_MB
 from services.pdf_parser import extract_pages, get_pdf_metadata
 from services.library import save_document, get_document, get_pdf_path as lib_pdf_path, list_documents
 from services.translation_job import start_job, resume_incomplete_jobs, get_job_status
+from services.insight_job import start_keyword_job, start_summary_job
 from services.primer import generate_primer
 from models.schemas import UploadResponse
 
@@ -107,6 +108,8 @@ async def upload_pdf(
     ignore_table: bool = True,
     ignore_refs: bool = False,
     translation_mode: str = "auto",
+    keyword_mode: str = "manual",
+    summary_mode: str = "manual",
     current_user: str = Depends(get_current_user)
 ):
     """PDF 파일을 업로드하고 텍스트를 추출합니다."""
@@ -202,6 +205,22 @@ async def upload_pdf(
                 ignore_math=ignore_math,
                 ignore_table=ignore_table,
                 ignore_refs=ignore_refs
+            )
+
+        if keyword_mode == "auto":
+            start_keyword_job(
+                session_id,
+                pages,
+                target_lang,
+                metadata.get("title") or file.filename,
+            )
+
+        if summary_mode == "auto":
+            start_summary_job(
+                session_id,
+                pages,
+                target_lang,
+                metadata.get("title") or file.filename,
             )
 
     asyncio.create_task(_run_primer_then_translate())

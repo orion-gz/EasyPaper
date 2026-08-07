@@ -913,6 +913,23 @@
           </div>
 
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <label>논문 처리 시 자동 생성</label>
+            <div class="toggle-switch-group">
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-auto-generate-keywords" />
+                <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+                <span class="toggle-switch-label">키워드·단어 자동 생성<small>업로드 후 모든 페이지에 대해 백그라운드 생성합니다.</small></span>
+              </label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-auto-generate-summaries" />
+                <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+                <span class="toggle-switch-label">페이지 요약 자동 생성<small>업로드 후 모든 페이지에 대해 백그라운드 생성합니다.</small></span>
+              </label>
+            </div>
+            <p style="font-size: 11px; color: var(--text-secondary); margin: 8px 0 0; line-height: 1.5;">기본값은 꺼짐입니다. 자동 생성은 AI 토큰을 추가로 사용합니다.</p>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
             <label>데이터 및 용량 관리</label>
             <button type="button" id="clear-cache-btn" class="btn btn-secondary" style="width: 100%; color: var(--error); border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.05); font-weight: 600;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>브라우저 번역 캐시 비우기
