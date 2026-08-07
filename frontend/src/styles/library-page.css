@@ -559,3 +559,7 @@ body.light-theme .lib-detail-panel {
 .folder-dialog-input { width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--bg-elevated); color:var(--text-primary); font:inherit; outline:none; }
 .folder-dialog-input:focus { border-color:var(--control-accent); }
 .doc-card[draggable=true] { cursor:grab; }
+
+.folder-color-picker{display:flex;gap:12px;padding:6px}.folder-color-picker .color-dot{width:28px;height:28px;border:2px solid transparent;border-radius:50%;cursor:pointer}.folder-color-picker .color-dot.selected{outline:2px solid var(--text-primary);outline-offset:3px}
+
+.folder-card-actions{position:absolute;right:10px;top:40px;z-index:4;display:grid;padding:5px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md)}.folder-card-actions button{border:0;background:transparent;color:var(--text-primary);padding:7px 10px;text-align:left;cursor:pointer}.folder-card-actions button:hover{background:var(--bg-hover)}

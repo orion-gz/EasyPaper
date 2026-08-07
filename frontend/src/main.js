@@ -5194,24 +5194,38 @@ async function openCreateFolderDialog(parentId = activeLibraryFolderId) {
   if (!name) return
   try { await createLibraryFolder({ name, parent_id: parentId, color: FOLDER_COLORS[0] }); await renderLibrary() } catch (err) { showToast(err.message || '폴더 생성 실패', 'error') }
 }
+function showFolderColorDialog(currentColor) {
+  return new Promise(resolve => {
+    const modal = document.createElement('div')
+    modal.className = 'custom-confirm-modal-wrapper'
+    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 색상</span></div><div class="custom-confirm-modal-body"><div class="folder-color-picker">${FOLDER_COLORS.map(color => `<button class="color-dot ${color === currentColor ? 'selected' : ''}" data-color="${color}" style="background:${color}" title="${color}"></button>`).join('')}</div></div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button></div></div>`
+    document.body.appendChild(modal)
+    const close = value => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(value) }, 200) }
+    modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
+    modal.querySelectorAll('[data-color]').forEach(btn => btn.addEventListener('click', () => close(btn.dataset.color)))
+    modal.addEventListener('click', e => { if (e.target === modal) close(null) })
+    setTimeout(() => modal.classList.add('active'), 10)
+  })
+}
 function createFolderCard(folder) {
   const card = document.createElement('article')
   card.className = 'library-folder-card'
   card.draggable = true
   card.dataset.folderId = folder.id
   card.style.setProperty('--folder-color', folder.color)
-  card.innerHTML = `<div class="folder-card-icon">${icon('folder', 28)}</div><div class="folder-card-name">${escapeHtml(folder.name)}</div><div class="folder-card-meta">폴더 열기</div><button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button>`
+  card.innerHTML = `<div class="folder-card-icon">${icon('folder', 28)}</div><div class="folder-card-name">${escapeHtml(folder.name)}</div><div class="folder-card-meta">폴더 열기</div><button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button><div class="folder-card-actions hidden"><button data-action="rename">이름 변경</button><button data-action="color">폴더 색상</button><button data-action="delete">폴더 삭제</button></div>`
   card.addEventListener('click', e => { if (e.target.closest('.folder-card-menu')) return; activeLibraryFolderId = folder.id; filterLibraryCards(currentLibraryDocs); renderFolderNavigation(currentLibraryDocs) })
   card.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'folder', id: folder.id })); e.dataTransfer.effectAllowed = 'move' })
   setFolderDropTarget(card, folder.id)
-  card.querySelector('.folder-card-menu').addEventListener('click', async e => {
-    e.stopPropagation()
-    const action = await showCustomTextDialog({ title: '폴더 관리', label: 'rename, color 또는 delete 입력', confirmText: '선택' })
+  const menu = card.querySelector('.folder-card-actions')
+  card.querySelector('.folder-card-menu').addEventListener('click', e => { e.stopPropagation(); menu.classList.toggle('hidden') })
+  menu.addEventListener('click', async e => {
+    e.stopPropagation(); const action = e.target.dataset.action; if (!action) return
     try {
       if (action === 'rename') { const name = await showCustomTextDialog({ title: '폴더 이름 변경', label: '폴더 이름', value: folder.name, confirmText: '저장' }); if (name) await updateLibraryFolder(folder.id, { name }) }
-      if (action === 'color') { const color = await showCustomTextDialog({ title: '폴더 색상 변경', label: `색상 코드 (${FOLDER_COLORS.join(', ')})`, value: folder.color, confirmText: '저장' }); if (color) await updateLibraryFolder(folder.id, { color }) }
-      if (action === 'delete' && await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요? 포함 항목은 루트로 이동합니다.`, { title: '폴더 삭제', confirmText: '삭제', danger: true })) await deleteLibraryFolder(folder.id)
-      if (action) await renderLibrary()
+      if (action === 'color') { const color = await showFolderColorDialog(folder.color); if (color) await updateLibraryFolder(folder.id, { color }) }
+      if (action === 'delete') { const ok = await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요? 내부 논문을 휴지통으로 이동할지 다음 단계에서 선택합니다.`, { title: '폴더 삭제', confirmText: '계속', danger: true }); if (ok) { const deletePapers = await showCustomConfirm('폴더 내부 논문도 휴지통으로 이동할까요?', { title: '논문 처리', confirmText: '휴지통으로 이동', cancelText: '루트에 유지', danger: true }); await deleteLibraryFolder(folder.id, deletePapers) } }
+      await renderLibrary()
     } catch (err) { showToast(err.message || '폴더 변경 실패', 'error') }
   })
   return card
@@ -6331,7 +6345,7 @@ function filterLibraryCards(docs) {
   })
 
   // 현재 폴더(루트 포함)와 태그를 함께 적용한다.
-  let filteredDocs = state.currentLibraryTab === 'trash' || !activeLibraryFolderId ? docs : docs.filter(doc => (doc.folder_id || null) === activeLibraryFolderId)
+  let filteredDocs = state.currentLibraryTab === 'trash' ? docs : docs.filter(doc => (doc.folder_id || null) === activeLibraryFolderId)
 
   // Filter docs by category tag
   filteredDocs = activeCategoryFilter === 'ALL'
@@ -8017,7 +8031,9 @@ function sanitizeMarkedHtml(html) {
   return DOMPurify.sanitize(html)
 }
 
-libUploadBtn.addEventListener('click', () => { fileInput.click() })
+libUploadBtn.addEventListener('click', () => { document.querySelector('.lib-add-fab-wrap')?.classList.toggle('open') })
+$('lib-add-paper-btn')?.addEventListener('click', () => fileInput.click())
+$('lib-add-folder-btn')?.addEventListener('click', () => openCreateFolderDialog())
 
 // ── 테마 토글 기능 ──────────────────────────────
 

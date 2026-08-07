@@ -892,9 +892,11 @@ def db_update_folder(folder_id: str, username: str, **updates: Any) -> bool:
         conn.commit()
         return cursor.rowcount == 1
 
-def db_delete_folder(folder_id: str, username: str) -> bool:
+def db_delete_folder(folder_id: str, username: str, delete_papers: bool = False) -> bool:
     with get_db() as conn:
-        # 하위 폴더와 포함 문서는 루트로 올린 뒤 폴더만 제거한다.
+        # 삭제를 선택한 경우 이 폴더의 직접 포함 논문은 휴지통으로 보낸다.
+        if delete_papers:
+            conn.execute("UPDATE documents SET is_deleted = 1 WHERE username = ? AND id IN (SELECT doc_id FROM document_folders WHERE folder_id = ?)", (username, folder_id))
         conn.execute("UPDATE folders SET parent_id = NULL WHERE parent_id = ? AND username = ?", (folder_id, username))
         conn.execute("UPDATE document_folders SET folder_id = NULL WHERE folder_id = ?", (folder_id,))
         cursor = conn.execute("DELETE FROM folders WHERE id = ? AND username = ?", (folder_id, username))
