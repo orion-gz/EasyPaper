@@ -6,7 +6,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
 import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
 import { renderDashboardPage } from './pages/dashboardPage.js'
@@ -495,7 +495,7 @@ if (libraryScreen) {
   libraryScreen.addEventListener('drop', (e) => {
     e.preventDefault(); libraryScreen.classList.remove('drag-over')
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files)
+      handleFiles(e.dataTransfer.files, activeLibraryFolderId)
     }
   })
 }
@@ -506,7 +506,7 @@ fileInput.addEventListener('change', (e) => {
 })
 
 // ── 파일 처리 ─────────────────────────────────────
-async function handleFiles(files) {
+async function handleFiles(files, targetFolderId = null) {
   const pdfFiles = Array.from(files).filter(file => file.name.toLowerCase().endsWith('.pdf'))
   
   if (pdfFiles.length === 0) {
@@ -550,6 +550,7 @@ async function handleFiles(files) {
       lastTotalPages = result.total_pages
       lastTitle = (result.metadata && result.metadata.title) ? result.metadata.title : result.filename
       successCount++
+      if (targetFolderId) await moveLibraryDocuments([result.session_id], targetFolderId)
 
       if (isLibraryActive) {
         await renderLibrary()
@@ -4961,6 +4962,21 @@ if (chatDrawerViewerBtn) {
   })
 }
 
+// 라이브러리 전용 키보드 단축키. 텍스트 입력 중에는 브라우저 기본 동작을 보존한다.
+document.addEventListener('keydown', async e => {
+  if (state.currentWorkspacePage !== 'library' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return
+  const mod = e.ctrlKey || e.metaKey
+  if (mod && ['c', 'x'].includes(e.key.toLowerCase()) && selectedDocIds.size) {
+    e.preventDefault(); libraryClipboard = { mode: e.key.toLowerCase() === 'x' ? 'cut' : 'copy', ids: Array.from(selectedDocIds) }; showToast(`${selectedDocIds.size}개 논문을 ${libraryClipboard.mode === 'cut' ? '잘라냈습니다' : '복사했습니다'}.`, 'info')
+  } else if (mod && e.key.toLowerCase() === 'v' && libraryClipboard?.ids?.length) {
+    e.preventDefault()
+    // 논문 파일/캐시를 중복 복제하지 않기 위해 붙여넣기는 이동으로 동작한다.
+    try { await moveLibraryDocuments(libraryClipboard.ids, activeLibraryFolderId); showToast('현재 폴더로 이동했습니다.', 'success'); if (libraryClipboard.mode === 'cut') libraryClipboard = null; await renderLibrary() } catch (err) { showToast(err.message || '붙여넣기 실패', 'error') }
+  } else if (e.key === 'Delete' && selectedDocIds.size) {
+    e.preventDefault(); document.querySelector('#lib-select-delete-btn')?.click()
+  } else if (e.key === 'Escape') { clearDocSelection(); libraryClipboard = null }
+})
+
 // ── Library 재설계: 상태 필터 탭(전체/읽지 않음/읽는 중/완료/즐겨찾기) + 정렬 + 즐겨찾기 ──
 // 즐겨찾기는 documents.metadata에 아직 star/favorite 개념이 없어(백엔드 스키마에
 // 없음) 새 필드를 추가하지 않고 로컬 전용 편의 기능으로만 제공한다 - localStorage에만
@@ -5069,6 +5085,87 @@ function sortLibraryDocs(docs) {
 // Library 페이지의 새 UI 조각(상태 탭 / 정렬 드롭다운 / 상세 패널)은 index.html을
 // 건드리지 않고 여기서 필요할 때 한 번만 삽입한다. renderLibrary()가 탭 전환/새로고침마다
 // 다시 호출되므로 반드시 멱등이어야 한다(이미 삽입돼 있으면 아무것도 하지 않음).
+// ── 폴더 트리 / Breadcrumb ───────────────────────────────────────────────────
+let libraryFolders = []
+let activeLibraryFolderId = null
+let libraryClipboard = null
+const FOLDER_COLORS = ['#6b7280', '#4f8ef7', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981']
+
+function folderPath(folderId) {
+  const byId = new Map(libraryFolders.map(f => [f.id, f]))
+  const path = []
+  let current = folderId ? byId.get(folderId) : null
+  while (current) { path.unshift(current); current = current.parent_id ? byId.get(current.parent_id) : null }
+  return path
+}
+function folderDescendants(folderId) {
+  const result = new Set([folderId]); let changed = true
+  while (changed) { changed = false; for (const f of libraryFolders) if (f.parent_id && result.has(f.parent_id) && !result.has(f.id)) { result.add(f.id); changed = true } }
+  return result
+}
+function setFolderDropTarget(el, folderId) {
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('folder-drop-target') })
+  el.addEventListener('dragleave', () => el.classList.remove('folder-drop-target'))
+  el.addEventListener('drop', async e => {
+    e.preventDefault(); el.classList.remove('folder-drop-target')
+    try {
+      const raw = e.dataTransfer.getData('application/x-easypaper-item')
+      if (!raw) {
+        if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files, folderId)
+        return
+      }
+      const item = JSON.parse(raw)
+      if (item.kind === 'document') await moveLibraryDocuments(item.ids, folderId)
+      if (item.kind === 'folder') {
+        if (item.id === folderId || folderDescendants(item.id).has(folderId)) throw new Error('폴더를 자기 자신 또는 하위 폴더로 옮길 수 없습니다.')
+        await updateLibraryFolder(item.id, { parent_id: folderId, move: true })
+      }
+      showToast('이동했습니다.', 'success'); await renderLibrary()
+    } catch (err) { showToast(err.message || '이동 실패', 'error') }
+  })
+}
+function renderFolderChrome(docs) {
+  const tree = $('library-folder-tree'), crumb = $('library-breadcrumb')
+  if (!tree || !crumb) return
+  const countByFolder = docs.reduce((m, d) => { const key = d.folder_id || 'root'; m[key] = (m[key] || 0) + 1; return m }, {})
+  const byParent = new Map()
+  libraryFolders.forEach(f => { const k = f.parent_id || 'root'; if (!byParent.has(k)) byParent.set(k, []); byParent.get(k).push(f) })
+  function nodes(parentId, depth = 0) {
+    return (byParent.get(parentId || 'root') || []).map(f => `<button class="library-folder-node ${activeLibraryFolderId === f.id ? 'active' : ''}" data-folder-id="${escapeHtml(f.id)}" draggable="true" style="--folder-depth:${depth};--folder-color:${escapeHtml(f.color)}"><span class="folder-color-dot"></span><span class="folder-node-name">${escapeHtml(f.name)}</span><span class="folder-node-count">${countByFolder[f.id] || 0}</span></button>${nodes(f.id, depth + 1)}`).join('')
+  }
+  tree.innerHTML = `<div class="folder-tree-head"><b>폴더</b><button id="library-new-folder-btn" title="새 폴더">+</button></div><button class="library-folder-node root ${!activeLibraryFolderId ? 'active' : ''}" data-folder-id="" style="--folder-depth:0"><span>전체 논문</span><span class="folder-node-count">${docs.length}</span></button>${nodes(null)}`
+  const path = folderPath(activeLibraryFolderId)
+  crumb.innerHTML = `<button data-folder-id="">전체 논문</button>${path.map(f => `<span>›</span><button data-folder-id="${escapeHtml(f.id)}">${escapeHtml(f.name)}</button>`).join('')}`
+  ;[...tree.querySelectorAll('.library-folder-node'), ...crumb.querySelectorAll('button')].forEach(el => {
+    const id = el.dataset.folderId || null
+    el.addEventListener('click', () => { activeLibraryFolderId = id; filterLibraryCards(currentLibraryDocs); renderFolderChrome(currentLibraryDocs) })
+    setFolderDropTarget(el, id)
+  })
+  tree.querySelectorAll('[draggable="true"]').forEach(el => {
+    el.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'folder', id: el.dataset.folderId })); e.dataTransfer.effectAllowed = 'move' })
+    el.addEventListener('contextmenu', async e => {
+      e.preventDefault()
+      const folder = libraryFolders.find(f => f.id === el.dataset.folderId); if (!folder) return
+      const action = window.prompt('동작을 입력하세요: rename / color / delete')?.toLowerCase()
+      try {
+        if (action === 'rename') { const name = window.prompt('새 폴더 이름', folder.name)?.trim(); if (name) await updateLibraryFolder(folder.id, { name }) }
+        if (action === 'color') { const color = window.prompt(`색상 코드 (${FOLDER_COLORS.join(', ')})`, folder.color)?.trim(); if (color) await updateLibraryFolder(folder.id, { color }) }
+        if (action === 'delete' && window.confirm(`“${folder.name}” 폴더를 삭제할까요? 포함 논문과 하위 폴더는 루트로 이동합니다.`)) await deleteLibraryFolder(folder.id)
+        if (action) await renderLibrary()
+      } catch (err) { showToast(err.message || '폴더 변경 실패', 'error') }
+    })
+  })
+  $('library-new-folder-btn')?.addEventListener('click', async () => {
+    const name = window.prompt('새 폴더 이름')?.trim(); if (!name) return
+    try { await createLibraryFolder({ name, parent_id: activeLibraryFolderId, color: FOLDER_COLORS[0] }); await renderLibrary() } catch (err) { showToast(err.message, 'error') }
+  })
+}
+function ensureLibraryFolderUI() {
+  if ($('library-folder-tree')) return
+  librarySearchBox?.insertAdjacentHTML('beforebegin', `<div class="library-folder-layout"><aside id="library-folder-tree" class="library-folder-tree"></aside><div class="library-folder-main"><nav id="library-breadcrumb" class="library-breadcrumb" aria-label="폴더 경로"></nav></div></div>`)
+  const main = document.querySelector('.library-folder-main')
+  if (main && librarySearchBox) { main.appendChild(librarySearchBox); const status = $('library-search-status'); if (status) main.appendChild(status); const filters = $('library-filter-row'); if (filters) main.appendChild(filters); main.appendChild(libraryGrid) }
+}
 let libraryChromeReady = false
 function ensureLibraryChrome() {
   if (libraryChromeReady) return
@@ -5111,6 +5208,7 @@ function ensureLibraryChrome() {
 async function renderLibrary() {
   // Library 페이지의 새 UI 조각(상태 탭/정렬 드롭다운/상세 패널)이 아직 없으면 삽입한다.
   ensureLibraryChrome()
+  ensureLibraryFolderUI()
   closeLibraryDetailPanel()
   // 상세 패널의 "관련 자료" 탭이 쓰는 지식 그래프 캐시도 목록을 새로 불러올 때 함께 무효화한다.
   libraryGraphCacheForDetail = null
@@ -5137,6 +5235,12 @@ async function renderLibrary() {
       data = await fetchLibrary(getTranslationOptions())
     }
     const allDocs = data.documents || []
+    if (state.currentLibraryTab !== 'trash') {
+      const foldersData = await fetchLibraryFolders()
+      libraryFolders = foldersData.folders || []
+      if (activeLibraryFolderId && !libraryFolders.some(f => f.id === activeLibraryFolderId)) activeLibraryFolderId = null
+      renderFolderChrome(allDocs)
+    }
 
     // 보관함 뱃지에는 안읽은 논문 개수 표시 (휴지통이 아닐 때만 적용하거나, archive 기준 개수 표시)
     updateUnreadBadge(allDocs)
@@ -6171,10 +6275,13 @@ function filterLibraryCards(docs) {
     btn.classList.toggle('active', btn.dataset.category === activeCategoryFilter)
   })
 
+  // 현재 폴더(루트 포함)와 태그를 함께 적용한다.
+  let filteredDocs = state.currentLibraryTab === 'trash' || !activeLibraryFolderId ? docs : docs.filter(doc => (doc.folder_id || null) === activeLibraryFolderId)
+
   // Filter docs by category tag
-  let filteredDocs = activeCategoryFilter === 'ALL'
-    ? docs
-    : docs.filter(doc => (doc.metadata?.categories || []).includes(activeCategoryFilter))
+  filteredDocs = activeCategoryFilter === 'ALL'
+    ? filteredDocs
+    : filteredDocs.filter(doc => (doc.metadata?.categories || []).includes(activeCategoryFilter))
 
   // 상태 필터(전체/읽지 않음/읽는 중/완료/즐겨찾기) 적용 - 휴지통 탭에는 없는 개념이라 건너뛴다.
   if (state.currentLibraryTab !== 'trash' && activeStatusFilter !== 'all') {
@@ -6618,6 +6725,12 @@ function createDocCard(doc) {
   const card = document.createElement('div')
   card.className = 'doc-card'
   card.dataset.id = doc.id
+  card.draggable = state.currentLibraryTab !== 'trash'
+  card.addEventListener('dragstart', e => {
+    const ids = selectedDocIds.has(doc.id) ? Array.from(selectedDocIds) : [doc.id]
+    e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'document', ids }))
+    e.dataTransfer.effectAllowed = 'move'
+  })
   card.innerHTML = `
     ${d.compareCheckHtml}
     <div class="doc-card-zone">

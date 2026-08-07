@@ -323,6 +323,26 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_time_username_day ON reading_time(username, day)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_time_doc ON reading_time(doc_id, username)")
 
+        # UI의 폴더 구조는 실제 PDF 디렉터리와 분리해 관리한다.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS folders (
+            id TEXT PRIMARY KEY, username TEXT NOT NULL, parent_id TEXT,
+            name TEXT NOT NULL, color TEXT NOT NULL DEFAULT '#6b7280',
+            sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
+            FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_folders (
+            doc_id TEXT PRIMARY KEY, folder_id TEXT,
+            FOREIGN KEY (doc_id) REFERENCES documents(id) ON DELETE CASCADE,
+            FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
+        )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_folders_user_parent ON folders(username, parent_id, sort_order)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_folders_folder ON document_folders(folder_id)")
+
         conn.commit()
 
         # reading_time 테이블 동적 스키마 마이그레이션: doc_title 컬럼 추가
@@ -841,6 +861,61 @@ def db_update_document_metadata(doc_id: str, metadata: dict) -> None:
             (meta_str, doc_id)
         )
         conn.commit()
+
+
+# ── 라이브러리 폴더 ───────────────────────────────────────────────────────────
+
+def db_list_folders(username: str) -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        rows = conn.execute("SELECT id, username, parent_id, name, color, sort_order, created_at, updated_at FROM folders WHERE username = ? ORDER BY sort_order, name COLLATE NOCASE", (username,)).fetchall()
+        return [dict(row) for row in rows]
+
+def db_get_folder(folder_id: str, username: str) -> Optional[Dict[str, Any]]:
+    with get_db() as conn:
+        row = conn.execute("SELECT id, username, parent_id, name, color, sort_order, created_at, updated_at FROM folders WHERE id = ? AND username = ?", (folder_id, username)).fetchone()
+        return dict(row) if row else None
+
+def db_create_folder(folder_id: str, username: str, name: str, parent_id: Optional[str], color: str) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        conn.execute("INSERT INTO folders (id, username, parent_id, name, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (folder_id, username, parent_id, name, color, now, now))
+        conn.commit()
+    return {"id": folder_id, "username": username, "parent_id": parent_id, "name": name, "color": color, "created_at": now, "updated_at": now}
+
+def db_update_folder(folder_id: str, username: str, **updates: Any) -> bool:
+    allowed = {key: value for key, value in updates.items() if key in {"name", "color", "parent_id"}}
+    if not allowed: return False
+    allowed["updated_at"] = datetime.now(timezone.utc).isoformat()
+    set_sql = ", ".join(f"{key} = ?" for key in allowed)
+    with get_db() as conn:
+        cursor = conn.execute(f"UPDATE folders SET {set_sql} WHERE id = ? AND username = ?", (*allowed.values(), folder_id, username))
+        conn.commit()
+        return cursor.rowcount == 1
+
+def db_delete_folder(folder_id: str, username: str) -> bool:
+    with get_db() as conn:
+        # 하위 폴더와 포함 문서는 루트로 올린 뒤 폴더만 제거한다.
+        conn.execute("UPDATE folders SET parent_id = NULL WHERE parent_id = ? AND username = ?", (folder_id, username))
+        conn.execute("UPDATE document_folders SET folder_id = NULL WHERE folder_id = ?", (folder_id,))
+        cursor = conn.execute("DELETE FROM folders WHERE id = ? AND username = ?", (folder_id, username))
+        conn.commit()
+        return cursor.rowcount == 1
+
+def db_get_document_folder_map(username: str) -> Dict[str, Optional[str]]:
+    with get_db() as conn:
+        rows = conn.execute("SELECT df.doc_id, df.folder_id FROM document_folders df JOIN documents d ON d.id = df.doc_id WHERE d.username = ?", (username,)).fetchall()
+        return {row["doc_id"]: row["folder_id"] for row in rows}
+
+def db_move_documents_to_folder(doc_ids: List[str], username: str, folder_id: Optional[str]) -> int:
+    if not doc_ids: return 0
+    placeholders = ",".join("?" for _ in doc_ids)
+    with get_db() as conn:
+        rows = conn.execute(f"SELECT id FROM documents WHERE username = ? AND id IN ({placeholders})", (username, *doc_ids)).fetchall()
+        owned_ids = [row["id"] for row in rows]
+        for doc_id in owned_ids:
+            conn.execute("INSERT INTO document_folders (doc_id, folder_id) VALUES (?, ?) ON CONFLICT(doc_id) DO UPDATE SET folder_id = excluded.folder_id", (doc_id, folder_id))
+        conn.commit()
+        return len(owned_ids)
 
 
 # ── 앱 내부 상태 (app_meta) ───────────────────────────────────────────────────

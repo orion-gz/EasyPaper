@@ -538,3 +538,22 @@ body.light-theme .lib-detail-panel {
 @media (max-width: 640px) {
   .lib-detail-panel { width: 100vw; max-width: 100vw; }
 }
+
+
+/* ── 폴더 트리와 경로(Breadcrumb) ── */
+.library-folder-layout { display:grid; grid-template-columns:210px minmax(0,1fr); gap:22px; min-height:0; flex:1; overflow:hidden; }
+.library-folder-tree { padding:10px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:auto; align-self:stretch; }
+.folder-tree-head { display:flex; justify-content:space-between; align-items:center; padding:4px 6px 9px; color:var(--text-secondary); font-size:12px; }
+.folder-tree-head button { width:24px; height:24px; border:0; border-radius:var(--radius-sm); cursor:pointer; background:var(--control-accent-soft); color:var(--control-accent-text); font-size:18px; }
+.library-folder-main { min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+.library-folder-node { width:100%; display:flex; align-items:center; gap:7px; min-height:32px; padding:5px 7px 5px calc(7px + var(--folder-depth) * 14px); border:0; border-radius:var(--radius-sm); background:transparent; color:var(--text-secondary); text-align:left; cursor:pointer; }
+.library-folder-node:hover,.library-folder-node.active { background:var(--bg-hover); color:var(--text-primary); }
+.folder-color-dot { width:9px; height:9px; flex:0 0 9px; border-radius:50%; background:var(--folder-color); }
+.folder-node-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.folder-node-count { margin-left:auto; color:var(--text-muted); font-size:11px; }
+.folder-drop-target { outline:2px solid var(--control-accent); background:var(--control-accent-soft)!important; }
+.library-breadcrumb { display:flex; align-items:center; min-height:34px; gap:6px; margin:0 0 10px; overflow:auto; white-space:nowrap; color:var(--text-muted); font-size:13px; }
+.library-breadcrumb button { border:0; padding:4px 6px; background:transparent; color:var(--text-secondary); border-radius:var(--radius-sm); cursor:pointer; }
+.library-breadcrumb button:hover { background:var(--bg-hover); color:var(--text-primary); }
+.doc-card[draggable=true] { cursor:grab; }
+@media (max-width: 760px) { .library-folder-layout { grid-template-columns:1fr; overflow:visible; } .library-folder-tree { max-height:160px; } .library-folder-main { overflow:visible; } }

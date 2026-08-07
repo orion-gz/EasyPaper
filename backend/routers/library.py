@@ -5,10 +5,11 @@ from services.library import (
     list_documents, search_documents, get_document, permanently_delete_document,
     soft_delete_document, restore_document, empty_trash,
     get_translation, get_pdf_path, get_cover_path, update_document_metadata,
-    get_chat_quote_image_path
+    get_chat_quote_image_path, list_folders, create_folder, update_folder, delete_folder, move_documents_to_folder
 )
 from pydantic import BaseModel
 import json
+import re
 
 router = APIRouter()
 
@@ -28,6 +29,66 @@ def _require_owned_document(doc_id: str, current_user: str, doc: Optional[dict] 
     if not doc or doc.get("username") != current_user:
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
     return doc
+
+class FolderCreateRequest(BaseModel):
+    name: str
+    parent_id: Optional[str] = None
+    color: str = "#6b7280"
+
+class FolderUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    parent_id: Optional[str] = None
+    move: bool = False
+
+class DocumentMoveRequest(BaseModel):
+    doc_ids: list[str]
+    folder_id: Optional[str] = None
+
+@router.get("/library/folders")
+async def get_library_folders(current_user: str = Depends(get_current_user)):
+    return {"folders": list_folders(current_user)}
+
+@router.post("/library/folders")
+async def create_library_folder(body: FolderCreateRequest, current_user: str = Depends(get_current_user)):
+    import uuid
+    name = body.name.strip()
+    if not name or len(name) > 120:
+        raise HTTPException(status_code=400, detail="폴더 이름은 1~120자여야 합니다.")
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", body.color):
+        raise HTTPException(status_code=400, detail="폴더 색상 형식이 올바르지 않습니다.")
+    try:
+        return create_folder(current_user, str(uuid.uuid4()), name, body.parent_id, body.color)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+@router.patch("/library/folders/{folder_id}")
+async def patch_library_folder(folder_id: str, body: FolderUpdateRequest, current_user: str = Depends(get_current_user)):
+    if body.name is not None and (not body.name.strip() or len(body.name.strip()) > 120):
+        raise HTTPException(status_code=400, detail="폴더 이름은 1~120자여야 합니다.")
+    if body.color is not None and not re.fullmatch(r"#[0-9a-fA-F]{6}", body.color):
+        raise HTTPException(status_code=400, detail="폴더 색상 형식이 올바르지 않습니다.")
+    try:
+        ok = update_folder(current_user, folder_id, name=body.name.strip() if body.name is not None else None, color=body.color, parent_id=body.parent_id, move=body.move)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not ok: raise HTTPException(status_code=404, detail="폴더를 찾을 수 없습니다.")
+    return {"ok": True}
+
+@router.delete("/library/folders/{folder_id}")
+async def delete_library_folder(folder_id: str, current_user: str = Depends(get_current_user)):
+    if not delete_folder(current_user, folder_id): raise HTTPException(status_code=404, detail="폴더를 찾을 수 없습니다.")
+    return {"ok": True}
+
+@router.post("/library/documents/move")
+async def move_library_documents(body: DocumentMoveRequest, current_user: str = Depends(get_current_user)):
+    try:
+        moved = move_documents_to_folder(current_user, body.doc_ids, body.folder_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if moved != len(set(body.doc_ids)): raise HTTPException(status_code=404, detail="일부 논문을 찾을 수 없습니다.")
+    return {"moved": moved}
+
 
 @router.get("/library")
 async def get_library(
