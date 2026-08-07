@@ -5006,7 +5006,13 @@ document.addEventListener('keydown', async e => {
   if (state.currentWorkspacePage !== 'library' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return
   const mod = e.ctrlKey || e.metaKey
   const focusedFolder = getFocusedLibraryFolder()
-  if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+  if (mod && e.key === '[') {
+    e.preventDefault()
+    history.back()
+  } else if (mod && e.key === ']') {
+    e.preventDefault()
+    history.forward()
+  } else if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
     e.preventDefault()
     await undoLastLibraryAction()
   } else if (mod && ['c', 'x'].includes(e.key.toLowerCase()) && selectedDocIds.size) {
@@ -5252,14 +5258,31 @@ function showCustomTextDialog({ title, label, value = '', confirmText = '확인'
     setTimeout(() => { modal.classList.add('active'); input.focus(); input.select() }, 10)
   })
 }
+
+function navigateLibraryFolder(folderId, { pushHistory = true } = {}) {
+  const nextFolderId = folderId || null
+  if (nextFolderId === activeLibraryFolderId && activeCategoryFilter === 'ALL') return
+  activeLibraryFolderId = nextFolderId
+  activeCategoryFilter = 'ALL'
+  if (pushHistory) {
+    history.pushState(
+      { ...(history.state || {}), screen: 'library', page: 'library', libraryFolderId: nextFolderId },
+      '',
+      location.href,
+    )
+  }
+  filterLibraryCards(currentLibraryDocs)
+  renderFolderNavigation(currentLibraryDocs)
+}
+
 function renderFolderNavigation(docs) {
   const crumb = $('library-breadcrumb')
   if (!crumb) return
   const path = folderPath(activeLibraryFolderId)
-  crumb.innerHTML = `<button data-folder-id="">전체 논문</button>${path.map(f => `<span>›</span><button data-folder-id="${escapeHtml(f.id)}">${escapeHtml(f.name)}</button>`).join('')}`
+  crumb.innerHTML = `<button data-folder-id="" class="library-breadcrumb-root">${icon('home', 14)}<span>전체 논문</span></button>${path.map((f, index) => `<span class="library-breadcrumb-separator">›</span><button data-folder-id="${escapeHtml(f.id)}" ${index === path.length - 1 ? 'aria-current="page"' : ''}>${icon('folder', 14)}<span>${escapeHtml(f.name)}</span></button>`).join('')}`
   crumb.querySelectorAll('button').forEach(el => {
     const id = el.dataset.folderId || null
-    el.addEventListener('click', () => { activeLibraryFolderId = id; filterLibraryCards(currentLibraryDocs); renderFolderNavigation(currentLibraryDocs) })
+    el.addEventListener('click', () => navigateLibraryFolder(id))
     setFolderDropTarget(el, id)
   })
 }
@@ -5332,7 +5355,7 @@ function createFolderCard(folder) {
   card.dataset.folderId = folder.id
   card.style.setProperty('--folder-color', folder.color)
   card.innerHTML = `<div class="folder-card-icon">${icon('folder', 28)}</div><div class="folder-card-name">${escapeHtml(folder.name)}</div><div class="folder-card-meta">폴더 열기</div><button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button><div class="folder-card-actions hidden"><button data-action="rename">이름 변경</button><button data-action="color">폴더 색상</button><button data-action="delete">폴더 삭제</button></div>`
-  card.addEventListener('click', e => { if (e.target.closest('.folder-card-menu')) return; activeLibraryFolderId = folder.id; filterLibraryCards(currentLibraryDocs); renderFolderNavigation(currentLibraryDocs) })
+  card.addEventListener('click', e => { if (e.target.closest('.folder-card-menu')) return; navigateLibraryFolder(folder.id) })
   card.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'folder', id: folder.id })); e.dataTransfer.effectAllowed = 'move' })
   setFolderDropTarget(card, folder.id)
   const menu = card.querySelector('.folder-card-actions')
@@ -6459,14 +6482,16 @@ function filterLibraryCards(docs) {
   document.querySelectorAll('.category-filter-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.category === activeCategoryFilter)
   })
+  $('library-breadcrumb')?.classList.toggle('global-filter-active', activeCategoryFilter !== 'ALL')
 
-  // 현재 폴더(루트 포함)와 태그를 함께 적용한다.
-  let filteredDocs = state.currentLibraryTab === 'trash' ? docs : docs.filter(doc => (doc.folder_id || null) === activeLibraryFolderId)
+  // 카테고리 칩은 폴더 경계를 무시한 전역 필터다. '전체'일 때만 현재 폴더를 적용한다.
+  let filteredDocs = state.currentLibraryTab === 'trash' || activeCategoryFilter !== 'ALL'
+    ? docs
+    : docs.filter(doc => (doc.folder_id || null) === activeLibraryFolderId)
 
-  // Filter docs by category tag
-  filteredDocs = activeCategoryFilter === 'ALL'
-    ? filteredDocs
-    : filteredDocs.filter(doc => (doc.metadata?.categories || []).includes(activeCategoryFilter))
+  if (activeCategoryFilter !== 'ALL') {
+    filteredDocs = filteredDocs.filter(doc => (doc.metadata?.categories || []).includes(activeCategoryFilter))
+  }
 
   // 상태 필터(전체/읽지 않음/읽는 중/완료/즐겨찾기) 적용 - 휴지통 탭에는 없는 개념이라 건너뛴다.
   if (state.currentLibraryTab !== 'trash' && activeStatusFilter !== 'all') {
@@ -6478,7 +6503,7 @@ function filterLibraryCards(docs) {
 
   filteredDocs = sortLibraryDocs(filteredDocs)
 
-  const childFolders = state.currentLibraryTab === 'trash'
+  const childFolders = state.currentLibraryTab === 'trash' || activeCategoryFilter !== 'ALL'
     ? []
     : libraryFolders.filter(folder => (folder.parent_id || null) === activeLibraryFolderId)
   if (filteredDocs.length === 0 && childFolders.length === 0) {
@@ -14516,6 +14541,10 @@ async function handleRouting() {
         sessionStorage.setItem('easypaper_graph_subview', subviewParam)
       }
       const pageId = rawPage
+      if (pageId === 'library' && history.state?.screen === 'library' && history.state?.page === 'library') {
+        activeLibraryFolderId = history.state.libraryFolderId || null
+        activeCategoryFilter = 'ALL'
+      }
       console.log("[Router] Routing to workspace page:", pageId, "Viewer active:", viewerScreen.classList.contains('active'), "Library active:", libraryScreen.classList.contains('active'))
       if (viewerScreen.classList.contains('active') || !libraryScreen.classList.contains('active')) {
         await showLibraryScreen(false, WORKSPACE_PAGES.includes(pageId) ? pageId : 'dashboard')
@@ -14530,6 +14559,16 @@ async function handleRouting() {
 
 window.addEventListener('popstate', (e) => {
   console.log("[Router] popstate fired. state:", e.state)
+  const isLibraryHistory = e.state?.screen === 'library' && e.state?.page === 'library'
+  const isLegacyLibraryRoot = !e.state && location.hash === '#library'
+  if (isLibraryHistory || isLegacyLibraryRoot) {
+    activeLibraryFolderId = e.state?.libraryFolderId || null
+    activeCategoryFilter = 'ALL'
+    if (state.currentWorkspacePage === 'library' && currentLibraryDocs.length) {
+      filterLibraryCards(currentLibraryDocs)
+      renderFolderNavigation(currentLibraryDocs)
+    }
+  }
   handleRouting()
 })
 
