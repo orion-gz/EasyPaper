@@ -20,8 +20,8 @@ def fake_provider(monkeypatch):
         yield state["response"]
 
     monkeypatch.setattr(llm_client, "stream_antigravity", fake_stream_antigravity)
-    monkeypatch.setattr(llm_client, "get_chat_provider", lambda: "antigravity")
-    monkeypatch.setattr(llm_client, "get_chat_model", lambda: "test-model")
+    monkeypatch.setattr(llm_client, "get_analysis_provider", lambda: "antigravity")
+    monkeypatch.setattr(llm_client, "get_analysis_model", lambda: "test-model")
     return state
 
 

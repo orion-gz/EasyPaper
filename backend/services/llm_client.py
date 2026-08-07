@@ -10,6 +10,10 @@ from config import (
     get_trans_model,
     get_chat_provider,
     get_chat_model,
+    get_analysis_provider,
+    get_analysis_model,
+    get_library_provider,
+    get_library_model,
     get_openai_api_key,
     get_gemini_api_key,
     get_claude_api_key,
@@ -905,7 +909,7 @@ async def stream_page_insight(
 ) -> AsyncGenerator[str, None]:
     """
     페이지 원문에서 키워드/전문용어 설명(kind='keywords') 또는 요약(kind='summary')을
-    생성합니다. 어시스턴트(Chat) 프로바이더/모델 설정을 그대로 재사용한다 - 번역보다는
+    생성합니다. 읽기 분석 프로바이더/모델 설정을 사용한다 - 번역보다는
     "분석/설명" 작업에 가깝고, antigravity/claude_code처럼 세션이 지속되는 provider라면
     이미 채팅에서 쓰고 있는 문서당 공유 세션을 그대로 활용해 별도 세션을 만들지 않는다.
     단, 대화창에 노출되는 채팅 기록(chats 테이블)에는 남기지 않고 사용량 통계도
@@ -942,8 +946,8 @@ async def stream_page_insight(
 
     prompt = f"{instruction}\n\n원문:\n{text}"
 
-    provider = get_chat_provider()
-    model = get_chat_model()
+    provider = get_analysis_provider()
+    model = get_analysis_model()
 
     if provider == "antigravity":
         async for token in stream_antigravity(prompt, model=model, session_id=session_id, usage_label="insight"):
@@ -1101,8 +1105,8 @@ async def generate_reading_primer(
 
     prompt = f"{instruction}\n\n원문 발췌:\n{context_text}{terms_text}"
 
-    provider = get_chat_provider()
-    model = get_chat_model()
+    provider = get_analysis_provider()
+    model = get_analysis_model()
 
     # 브리핑은 계보/파인만/실험 흐름/용어집까지 한 번에 뽑아내느라 항목이 많아,
     # 사용자가 채팅용으로 설정해둔 effort를 그대로 쓰면 CLI가 오래 침묵하다 stall
@@ -2192,7 +2196,14 @@ def _parse_json_array_response(raw: str, required_key: str = "concept") -> list:
     return parsed
 
 
-async def _llm_json_array_with_retry(prompt: str, session_id: str = None, attempts: int = 3, log_label: str = "LLM JSON 배열 응답", required_key: str = "concept") -> list:
+async def _llm_json_array_with_retry(
+    prompt: str,
+    session_id: str = None,
+    attempts: int = 3,
+    log_label: str = "LLM JSON 배열 응답",
+    required_key: str = "concept",
+    config_group: str = "library",
+) -> list:
     """공용: 프롬프트를 보내 JSON 배열 응답을 받아 파싱까지 재시도한다
     (extract_paper_concepts/match_question_to_concepts/find_similar_concepts가
     공유하는 멀티 프로바이더 분기 + 재시도 로직). LLM이 마크다운 펜스를
@@ -2200,8 +2211,14 @@ async def _llm_json_array_with_retry(prompt: str, session_id: str = None, attemp
     재시도하고, 모두 실패해도 예외를 던지지 않고 빈 리스트를 반환한다 -
     이 계열 기능은 전부 부가 정보일 뿐이라 파이프라인 자체를 막아서는 안 된다."""
     messages = [{"role": "user", "content": prompt}]
-    provider = get_trans_provider()
-    model = get_trans_model()
+    if config_group == "analysis":
+        provider, model = get_analysis_provider(), get_analysis_model()
+    elif config_group == "chat":
+        provider, model = get_chat_provider(), get_chat_model()
+    elif config_group == "library":
+        provider, model = get_library_provider(), get_library_model()
+    else:
+        raise ValueError(f"지원하지 않는 LLM 설정 그룹입니다: {config_group}")
 
     for attempt in range(attempts):
         tokens = []
@@ -2262,7 +2279,9 @@ Beginning Text:
 {text[:2000]}
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="논문 개념 추출")
+    return await _llm_json_array_with_retry(
+        prompt, session_id=session_id, log_label="논문 개념 추출", config_group="analysis"
+    )
 
 
 async def match_question_to_concepts(question: str, concept_names: List[str], session_id: str = None) -> List[dict]:
@@ -2283,7 +2302,9 @@ Concept List:
 Question: {question}
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="질문-개념 매칭")
+    return await _llm_json_array_with_retry(
+        prompt, session_id=session_id, log_label="질문-개념 매칭", config_group="chat"
+    )
 
 
 async def find_similar_concepts(new_name: str, existing_names: List[str], session_id: str = None) -> List[dict]:
@@ -2304,7 +2325,9 @@ Existing Concepts:
 {names_list}
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="유사 개념 탐색")
+    return await _llm_json_array_with_retry(
+        prompt, session_id=session_id, log_label="유사 개념 탐색", config_group="library"
+    )
 
 
 async def score_paper_concept_relevance(title: str, text: str, concept_names: List[str], session_id: str = None) -> List[dict]:
@@ -2329,7 +2352,13 @@ Beginning Text:
 {text[:2000]}
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="논문-개념 관련도 채점", required_key="concept")
+    return await _llm_json_array_with_retry(
+        prompt,
+        session_id=session_id,
+        log_label="논문-개념 관련도 채점",
+        required_key="concept",
+        config_group="library",
+    )
 
 
 async def generate_reading_recommendations(titles: List[str], categories: List[str], session_id: str = None) -> List[dict]:
@@ -2349,7 +2378,13 @@ Already Read:
 {titles_list}
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="읽을 논문 추천", required_key="title")
+    return await _llm_json_array_with_retry(
+        prompt,
+        session_id=session_id,
+        log_label="읽을 논문 추천",
+        required_key="title",
+        config_group="library",
+    )
 
 
 async def generate_dashboard_insights(profile: dict, session_id: str = None) -> List[dict]:
@@ -2397,5 +2432,11 @@ Output ONLY a pure JSON array, with no markdown code fences, no explanations, an
 - "message": the insight itself, in Korean, one to three sentences, specific enough that the researcher would recognize exactly what it's referring to.
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="AI 인사이트 생성", required_key="message")
+    return await _llm_json_array_with_retry(
+        prompt,
+        session_id=session_id,
+        log_label="AI 인사이트 생성",
+        required_key="message",
+        config_group="library",
+    )
 

@@ -973,7 +973,7 @@
           </div>
 
           <!-- 참고문헌 링크 조회(OpenAlex) 설정 -->
-          <div style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
+          <div style="border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--bg-surface); padding: 14px; margin-top: 15px;">
             <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 4px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>참고문헌 링크 조회 설정</h4>
             <div class="form-group">
               <label for="setting-openalex-mailto">연락 가능한 이메일 (선택 사항)</label>
@@ -1025,27 +1025,72 @@
             </div>
           </div>
 
-          <!-- 번역 AI 설정 -->
+          <!-- 상위 기본 AI 설정 -->
           <div style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
-            <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 4px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>논문 번역 (Translation) 설정</h4>
+            <h4 style="font-size: 14px; font-weight: 650; color: var(--text-primary); margin-bottom: 5px;">AI 모델 설정</h4>
+            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 0 0 12px;">기본 모델 하나를 선택하고, 필요한 기능만 아래에서 별도 모델로 변경할 수 있습니다.</p>
+            <div class="form-group" style="margin-bottom: 4px;">
+              <label style="font-weight: 600;">기본 AI 모델</label>
+              <div id="setting-default-ai-provider"></div>
+            </div>
+
+          <details style="border-top: 1px solid var(--border); margin-top: 12px; padding-top: 4px;">
+            <summary style="cursor: pointer; padding: 9px 0; color: var(--text-primary); font-size: 13px; font-weight: 600;">세부 설정</summary>
+
+          <!-- 번역 AI 설정 -->
+          <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+            <div style="color: var(--text-primary); font-size: 13px; font-weight: 600; margin-bottom: 8px;">번역 <span style="color: var(--text-muted); font-size: 11.5px; font-weight: 400;">— 논문 번역·카테고리 분류</span></div>
             <div class="form-group">
-              <label>번역 AI 제공업체 및 모델</label>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
+                <span>별도 모델 설정</span>
+                <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;"><input type="checkbox" id="setting-trans-same-as-default" /> 기본 AI 모델과 동일하게 사용</label>
+              </div>
               <div id="setting-trans-provider"></div>
             </div>
           </div>
 
-          <!-- AI 어시스턴트 설정 -->
-          <div style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
-            <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 4px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></svg>AI 어시스턴트 (Chat) 설정</h4>
+          <!-- 읽기 분석 AI 설정 -->
+          <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+            <div style="color: var(--text-primary); font-size: 13px; font-weight: 600; margin-bottom: 8px;">읽기 분석 <span style="color: var(--text-muted); font-size: 11.5px; font-weight: 400;">— 키워드·요약·브리핑·개념 추출</span></div>
             <div class="form-group">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
-                <span>어시스턴트 AI 제공업체 및 모델</span>
+                <span>별도 모델 설정</span>
                 <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;">
-                  <input type="checkbox" id="setting-chat-same-as-trans" /> 번역 모델과 동일한 모델 사용
+                  <input type="checkbox" id="setting-analysis-same-as-default" /> 기본 AI 모델과 동일하게 사용
+                </label>
+              </div>
+              <div id="setting-analysis-provider"></div>
+            </div>
+          </div>
+
+          <!-- AI 어시스턴트 설정 -->
+          <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+            <div style="color: var(--text-primary); font-size: 13px; font-weight: 600; margin-bottom: 8px;">채팅 <span style="color: var(--text-muted); font-size: 11.5px; font-weight: 400;">— AI 채팅·비교·후속 질문</span></div>
+            <div class="form-group">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
+                <span>별도 모델 설정</span>
+                <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;">
+                  <input type="checkbox" id="setting-chat-same-as-default" /> 기본 AI 모델과 동일하게 사용
                 </label>
               </div>
               <div id="setting-chat-provider"></div>
             </div>
+          </div>
+
+          <!-- 라이브러리 AI 설정 -->
+          <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+            <div style="color: var(--text-primary); font-size: 13px; font-weight: 600; margin-bottom: 8px;">라이브러리 <span style="color: var(--text-muted); font-size: 11.5px; font-weight: 400;">— 개념 연결·추천·히트맵·대시보드</span></div>
+            <div class="form-group">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
+                <span>별도 모델 설정</span>
+                <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;">
+                  <input type="checkbox" id="setting-library-same-as-default" /> 기본 AI 모델과 동일하게 사용
+                </label>
+              </div>
+              <div id="setting-library-provider"></div>
+            </div>
+          </div>
+          </details>
           </div>
 
         </form>

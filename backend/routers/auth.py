@@ -25,6 +25,12 @@ from config import (
     get_trans_model,
     get_chat_provider,
     get_chat_model,
+    get_default_ai_provider,
+    get_default_ai_model,
+    get_analysis_provider,
+    get_analysis_model,
+    get_library_provider,
+    get_library_model,
     get_openai_api_key,
     get_gemini_api_key,
     get_claude_api_key,
@@ -239,6 +245,12 @@ class SystemSettingsRequest(BaseModel):
     trans_model: str
     chat_provider: str
     chat_model: str
+    default_ai_provider: str = ""
+    default_ai_model: str = ""
+    analysis_provider: str = ""
+    analysis_model: str = ""
+    library_provider: str = ""
+    library_model: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
     claude_api_key: str = ""
@@ -258,6 +270,12 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
         "trans_model": get_trans_model(),
         "chat_provider": get_chat_provider(),
         "chat_model": get_chat_model(),
+        "default_ai_provider": get_default_ai_provider(),
+        "default_ai_model": get_default_ai_model(),
+        "analysis_provider": get_analysis_provider(),
+        "analysis_model": get_analysis_model(),
+        "library_provider": get_library_provider(),
+        "library_model": get_library_model(),
         "openai_api_key": get_openai_api_key(),
         "gemini_api_key": get_gemini_api_key(),
         "claude_api_key": get_claude_api_key(),
@@ -270,10 +288,17 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
 async def save_system_settings(data: SystemSettingsRequest, current_user: str = Depends(get_current_user)):
     trans_provider = data.trans_provider.strip().lower()
     chat_provider = data.chat_provider.strip().lower()
+    default_ai_provider = data.default_ai_provider.strip().lower()
+    analysis_provider = data.analysis_provider.strip().lower()
+    library_provider = data.library_provider.strip().lower()
     pdf_parser_engine = data.pdf_parser_engine.strip().lower() if data.pdf_parser_engine else "pymupdf"
     
     valid_providers = ["ollama", "openai", "gemini", "claude", "antigravity", "claude_code", "codex"]
-    if trans_provider not in valid_providers or chat_provider not in valid_providers:
+    providers = [trans_provider, chat_provider]
+    optional_providers = [default_ai_provider, analysis_provider, library_provider]
+    if any(provider not in valid_providers for provider in providers) or any(
+        provider and provider not in valid_providers for provider in optional_providers
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="올바르지 않은 AI 제공업체입니다."
@@ -301,6 +326,12 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
         trans_model=data.trans_model.strip(),
         chat_provider=chat_provider,
         chat_model=data.chat_model.strip(),
+        default_ai_provider=default_ai_provider,
+        default_ai_model=data.default_ai_model.strip(),
+        analysis_provider=analysis_provider,
+        analysis_model=data.analysis_model.strip(),
+        library_provider=library_provider,
+        library_model=data.library_model.strip(),
         openai_api_key=data.openai_api_key.strip(),
         gemini_api_key=data.gemini_api_key.strip(),
         claude_api_key=data.claude_api_key.strip(),
@@ -515,6 +546,12 @@ async def uninstall_pdf_parser(request: Request):
             trans_model=cfg.TRANS_MODEL,
             chat_provider=cfg.CHAT_PROVIDER,
             chat_model=cfg.CHAT_MODEL,
+            default_ai_provider=cfg.DEFAULT_AI_PROVIDER,
+            default_ai_model=cfg.DEFAULT_AI_MODEL,
+            analysis_provider=cfg.ANALYSIS_PROVIDER,
+            analysis_model=cfg.ANALYSIS_MODEL,
+            library_provider=cfg.LIBRARY_PROVIDER,
+            library_model=cfg.LIBRARY_MODEL,
             openai_api_key=cfg.OPENAI_API_KEY,
             gemini_api_key=cfg.GEMINI_API_KEY,
             claude_api_key=cfg.CLAUDE_API_KEY,
