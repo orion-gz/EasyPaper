@@ -5005,18 +5005,47 @@ if (chatDrawerViewerBtn) {
 document.addEventListener('keydown', async e => {
   if (state.currentWorkspacePage !== 'library' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return
   const mod = e.ctrlKey || e.metaKey
+  const focusedFolder = getFocusedLibraryFolder()
   if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
     e.preventDefault()
     await undoLastLibraryAction()
   } else if (mod && ['c', 'x'].includes(e.key.toLowerCase()) && selectedDocIds.size) {
-    e.preventDefault(); libraryClipboard = { mode: e.key.toLowerCase() === 'x' ? 'cut' : 'copy', ids: Array.from(selectedDocIds) }; showToast(`${selectedDocIds.size}개 논문을 ${libraryClipboard.mode === 'cut' ? '잘라냈습니다' : '복사했습니다'}.`, 'info')
-  } else if (mod && e.key.toLowerCase() === 'v' && libraryClipboard?.ids?.length) {
     e.preventDefault()
-    // 논문 파일/캐시를 중복 복제하지 않기 위해 붙여넣기는 이동으로 동작한다.
-    try { await moveDocumentsWithUndo(libraryClipboard.ids, activeLibraryFolderId); showToast('현재 폴더로 이동했습니다.', 'success'); if (libraryClipboard.mode === 'cut') libraryClipboard = null; await renderLibrary() } catch (err) { showToast(err.message || '붙여넣기 실패', 'error') }
-  } else if (e.key === 'Delete' && selectedDocIds.size) {
-    e.preventDefault(); document.querySelector('#lib-select-delete-btn')?.click()
-  } else if (e.key === 'Escape') { clearDocSelection(); libraryClipboard = null }
+    libraryClipboard = { kind: 'documents', mode: e.key.toLowerCase() === 'x' ? 'cut' : 'copy', ids: Array.from(selectedDocIds) }
+    showToast(`${selectedDocIds.size}개 논문을 ${libraryClipboard.mode === 'cut' ? '잘라냈습니다' : '복사했습니다'}.`, 'info')
+  } else if (mod && e.key.toLowerCase() === 'x' && focusedFolder) {
+    e.preventDefault()
+    libraryClipboard = { kind: 'folder', mode: 'cut', id: focusedFolder.id }
+    showToast(`“${focusedFolder.name}” 폴더를 잘라냈습니다.`, 'info')
+  } else if (mod && e.key.toLowerCase() === 'v' && libraryClipboard) {
+    e.preventDefault()
+    try {
+      if (libraryClipboard.kind === 'folder') {
+        const folder = libraryFolders.find(candidate => candidate.id === libraryClipboard.id)
+        if (!folder) throw new Error('잘라낸 폴더를 찾을 수 없습니다.')
+        if (folder.id === activeLibraryFolderId || folderDescendants(folder.id).has(activeLibraryFolderId)) throw new Error('폴더를 자기 자신 또는 하위 폴더에 붙여넣을 수 없습니다.')
+        await moveFolderWithUndo(folder, activeLibraryFolderId)
+      } else if (libraryClipboard.ids?.length) {
+        await moveDocumentsWithUndo(libraryClipboard.ids, activeLibraryFolderId)
+      }
+      showToast('현재 폴더로 이동했습니다.', 'success')
+      if (libraryClipboard.mode === 'cut') libraryClipboard = null
+      await renderLibrary()
+    } catch (err) { showToast(err.message || '붙여넣기 실패', 'error') }
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedDocIds.size) {
+    e.preventDefault()
+    document.querySelector('#lib-select-delete-btn')?.click()
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && focusedFolder) {
+    e.preventDefault()
+    await requestDeleteFolder(focusedFolder)
+  } else if ((e.key === 'F2' || e.key === 'Enter') && focusedFolder) {
+    e.preventDefault()
+    await requestRenameFolder(focusedFolder)
+  } else if (e.key === 'Escape') {
+    clearDocSelection()
+    libraryClipboard = null
+    setLibraryAddMenuOpen(false)
+  }
 })
 
 // ── Library 재설계: 상태 필터 탭(전체/읽지 않음/읽는 중/완료/즐겨찾기) + 정렬 + 즐겨찾기 ──
@@ -5269,10 +5298,37 @@ function showFolderContentsDeleteDialog(paperCount) {
   })
 }
 
+
+function getFocusedLibraryFolder() {
+  const card = document.activeElement
+  if (!card?.classList?.contains('library-folder-card')) return null
+  return libraryFolders.find(folder => folder.id === card.dataset.folderId) || null
+}
+async function requestRenameFolder(folder) {
+  const name = await showCustomTextDialog({ title: '폴더 이름 변경', label: '폴더 이름', value: folder.name, confirmText: '저장' })
+  if (name && name !== folder.name) { await updateFolderWithUndo(folder, { name }); await renderLibrary() }
+}
+async function requestDeleteFolder(folder) {
+  const paperCount = currentLibraryDocs.filter(doc => doc.folder_id === folder.id).length
+  const ok = await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요?${paperCount ? '' : '\n비어 있는 폴더이며 논문에는 영향이 없습니다.'}`, { title: '폴더 삭제', confirmText: '삭제', danger: true })
+  if (!ok) return
+  let deletePapers = false
+  if (paperCount > 0) {
+    const choice = await showFolderContentsDeleteDialog(paperCount)
+    if (choice === null) return
+    deletePapers = choice
+  }
+  await deleteLibraryFolder(folder.id, deletePapers)
+  await renderLibrary()
+}
+
 function createFolderCard(folder) {
   const card = document.createElement('article')
   card.className = 'library-folder-card'
   card.draggable = true
+  card.tabIndex = 0
+  card.setAttribute('aria-label', `${folder.name} 폴더`)
+  card.title = 'Enter/F2: 이름 변경 · Delete/Backspace: 삭제 · Ctrl/Cmd+X: 잘라내기'
   card.dataset.folderId = folder.id
   card.style.setProperty('--folder-color', folder.color)
   card.innerHTML = `<div class="folder-card-icon">${icon('folder', 28)}</div><div class="folder-card-name">${escapeHtml(folder.name)}</div><div class="folder-card-meta">폴더 열기</div><button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button><div class="folder-card-actions hidden"><button data-action="rename">이름 변경</button><button data-action="color">폴더 색상</button><button data-action="delete">폴더 삭제</button></div>`
@@ -5284,21 +5340,9 @@ function createFolderCard(folder) {
   menu.addEventListener('click', async e => {
     e.stopPropagation(); const action = e.target.dataset.action; if (!action) return
     try {
-      if (action === 'rename') { const name = await showCustomTextDialog({ title: '폴더 이름 변경', label: '폴더 이름', value: folder.name, confirmText: '저장' }); if (name && name !== folder.name) await updateFolderWithUndo(folder, { name }) }
-      if (action === 'color') { const color = await showFolderColorDialog(folder.color); if (color && color !== folder.color) await updateFolderWithUndo(folder, { color }) }
-      if (action === 'delete') {
-        const paperCount = currentLibraryDocs.filter(doc => doc.folder_id === folder.id).length
-        const ok = await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요?${paperCount ? '' : '\n비어 있는 폴더이며 논문에는 영향이 없습니다.'}`, { title: '폴더 삭제', confirmText: '삭제', danger: true })
-        if (!ok) return
-        let deletePapers = false
-        if (paperCount > 0) {
-          const choice = await showFolderContentsDeleteDialog(paperCount)
-          if (choice === null) return
-          deletePapers = choice
-        }
-        await deleteLibraryFolder(folder.id, deletePapers)
-      }
-      await renderLibrary()
+      if (action === 'rename') await requestRenameFolder(folder)
+      if (action === 'color') { const color = await showFolderColorDialog(folder.color); if (color && color !== folder.color) { await updateFolderWithUndo(folder, { color }); await renderLibrary() } }
+      if (action === 'delete') await requestDeleteFolder(folder)
     } catch (err) { showToast(err.message || '폴더 변경 실패', 'error') }
   })
   return card
@@ -8103,9 +8147,16 @@ function sanitizeMarkedHtml(html) {
   return DOMPurify.sanitize(html)
 }
 
-libUploadBtn.addEventListener('click', () => { document.querySelector('.lib-add-fab-wrap')?.classList.toggle('open') })
-$('lib-add-paper-btn')?.addEventListener('click', () => fileInput.click())
-$('lib-add-folder-btn')?.addEventListener('click', () => openCreateFolderDialog())
+function setLibraryAddMenuOpen(open) {
+  const wrap = document.querySelector('.lib-add-fab-wrap')
+  if (!wrap) return
+  wrap.classList.toggle('open', open)
+  libUploadBtn.setAttribute('aria-expanded', String(open))
+  libUploadBtn.setAttribute('aria-label', open ? '추가 메뉴 닫기' : '추가 메뉴 열기')
+}
+libUploadBtn.addEventListener('click', () => setLibraryAddMenuOpen(!document.querySelector('.lib-add-fab-wrap')?.classList.contains('open')))
+$('lib-add-paper-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); fileInput.click() })
+$('lib-add-folder-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); openCreateFolderDialog() })
 
 // ── 테마 토글 기능 ──────────────────────────────
 
