@@ -76,8 +76,8 @@ async def patch_library_folder(folder_id: str, body: FolderUpdateRequest, curren
     return {"ok": True}
 
 @router.delete("/library/folders/{folder_id}")
-async def delete_library_folder(folder_id: str, current_user: str = Depends(get_current_user)):
-    if not delete_folder(current_user, folder_id): raise HTTPException(status_code=404, detail="폴더를 찾을 수 없습니다.")
+async def delete_library_folder(folder_id: str, delete_papers: bool = False, current_user: str = Depends(get_current_user)):
+    if not delete_folder(current_user, folder_id, delete_papers): raise HTTPException(status_code=404, detail="폴더를 찾을 수 없습니다.")
     return {"ok": True}
 
 @router.post("/library/documents/move")

@@ -28,8 +28,8 @@ export async function updateLibraryFolder(folderId, payload) {
   if (!res.ok) throw new Error((await res.json()).detail || '폴더 수정 실패')
   return res.json()
 }
-export async function deleteLibraryFolder(folderId) {
-  const res = await fetch(`${API_BASE}/library/folders/${encodeURIComponent(folderId)}`, { method: 'DELETE' })
+export async function deleteLibraryFolder(folderId, deletePapers = false) {
+  const res = await fetch(`${API_BASE}/library/folders/${encodeURIComponent(folderId)}?delete_papers=${deletePapers}`, { method: 'DELETE' })
   if (!res.ok) throw new Error((await res.json()).detail || '폴더 삭제 실패')
   return res.json()
 }

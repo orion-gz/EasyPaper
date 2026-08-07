@@ -186,8 +186,8 @@ def update_folder(username: str, folder_id: str, name: Optional[str] = None, col
         updates["parent_id"] = parent_id
     return db_update_folder(folder_id, username, **updates)
 
-def delete_folder(username: str, folder_id: str) -> bool:
-    return db_delete_folder(folder_id, username)
+def delete_folder(username: str, folder_id: str, delete_papers: bool = False) -> bool:
+    return db_delete_folder(folder_id, username, delete_papers)
 
 def move_documents_to_folder(username: str, doc_ids: List[str], folder_id: Optional[str]) -> int:
     if folder_id and not db_get_folder(folder_id, username):
