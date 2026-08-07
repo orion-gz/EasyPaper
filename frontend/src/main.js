@@ -5163,47 +5163,63 @@ function setFolderDropTarget(el, folderId) {
     } catch (err) { showToast(err.message || '이동 실패', 'error') }
   })
 }
-function renderFolderChrome(docs) {
-  const tree = $('library-folder-tree'), crumb = $('library-breadcrumb')
-  if (!tree || !crumb) return
-  const countByFolder = docs.reduce((m, d) => { const key = d.folder_id || 'root'; m[key] = (m[key] || 0) + 1; return m }, {})
-  const byParent = new Map()
-  libraryFolders.forEach(f => { const k = f.parent_id || 'root'; if (!byParent.has(k)) byParent.set(k, []); byParent.get(k).push(f) })
-  function nodes(parentId, depth = 0) {
-    return (byParent.get(parentId || 'root') || []).map(f => `<button class="library-folder-node ${activeLibraryFolderId === f.id ? 'active' : ''}" data-folder-id="${escapeHtml(f.id)}" draggable="true" style="--folder-depth:${depth};--folder-color:${escapeHtml(f.color)}"><span class="folder-color-dot"></span><span class="folder-node-name">${escapeHtml(f.name)}</span><span class="folder-node-count">${countByFolder[f.id] || 0}</span></button>${nodes(f.id, depth + 1)}`).join('')
-  }
-  tree.innerHTML = `<div class="folder-tree-head"><b>폴더</b><button id="library-new-folder-btn" title="새 폴더">+</button></div><button class="library-folder-node root ${!activeLibraryFolderId ? 'active' : ''}" data-folder-id="" style="--folder-depth:0"><span>전체 논문</span><span class="folder-node-count">${docs.length}</span></button>${nodes(null)}`
-  const path = folderPath(activeLibraryFolderId)
-  crumb.innerHTML = `<button data-folder-id="">전체 논문</button>${path.map(f => `<span>›</span><button data-folder-id="${escapeHtml(f.id)}">${escapeHtml(f.name)}</button>`).join('')}`
-  ;[...tree.querySelectorAll('.library-folder-node'), ...crumb.querySelectorAll('button')].forEach(el => {
-    const id = el.dataset.folderId || null
-    el.addEventListener('click', () => { activeLibraryFolderId = id; filterLibraryCards(currentLibraryDocs); renderFolderChrome(currentLibraryDocs) })
-    setFolderDropTarget(el, id)
-  })
-  tree.querySelectorAll('[draggable="true"]').forEach(el => {
-    el.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'folder', id: el.dataset.folderId })); e.dataTransfer.effectAllowed = 'move' })
-    el.addEventListener('contextmenu', async e => {
-      e.preventDefault()
-      const folder = libraryFolders.find(f => f.id === el.dataset.folderId); if (!folder) return
-      const action = window.prompt('동작을 입력하세요: rename / color / delete')?.toLowerCase()
-      try {
-        if (action === 'rename') { const name = window.prompt('새 폴더 이름', folder.name)?.trim(); if (name) await updateLibraryFolder(folder.id, { name }) }
-        if (action === 'color') { const color = window.prompt(`색상 코드 (${FOLDER_COLORS.join(', ')})`, folder.color)?.trim(); if (color) await updateLibraryFolder(folder.id, { color }) }
-        if (action === 'delete' && window.confirm(`“${folder.name}” 폴더를 삭제할까요? 포함 논문과 하위 폴더는 루트로 이동합니다.`)) await deleteLibraryFolder(folder.id)
-        if (action) await renderLibrary()
-      } catch (err) { showToast(err.message || '폴더 변경 실패', 'error') }
-    })
-  })
-  $('library-new-folder-btn')?.addEventListener('click', async () => {
-    const name = window.prompt('새 폴더 이름')?.trim(); if (!name) return
-    try { await createLibraryFolder({ name, parent_id: activeLibraryFolderId, color: FOLDER_COLORS[0] }); await renderLibrary() } catch (err) { showToast(err.message, 'error') }
+function showCustomTextDialog({ title, label, value = '', confirmText = '확인' }) {
+  return new Promise(resolve => {
+    const modal = document.createElement('div')
+    modal.className = 'custom-confirm-modal-wrapper'
+    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">${escapeHtml(title)}</span></div><div class="custom-confirm-modal-body"><label class="folder-dialog-label">${escapeHtml(label)}<input class="folder-dialog-input" value="${escapeHtml(value)}" maxlength="120" /></label></div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn confirm-btn primary-btn">${escapeHtml(confirmText)}</button></div></div>`
+    document.body.appendChild(modal)
+    const input = modal.querySelector('.folder-dialog-input')
+    const close = result => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(result) }, 200) }
+    modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
+    modal.querySelector('.confirm-btn').addEventListener('click', () => close(input.value.trim() || null))
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') close(input.value.trim() || null); if (e.key === 'Escape') close(null) })
+    modal.addEventListener('click', e => { if (e.target === modal) close(null) })
+    setTimeout(() => { modal.classList.add('active'); input.focus(); input.select() }, 10)
   })
 }
+function renderFolderNavigation(docs) {
+  const crumb = $('library-breadcrumb')
+  if (!crumb) return
+  const path = folderPath(activeLibraryFolderId)
+  crumb.innerHTML = `<button data-folder-id="">전체 논문</button>${path.map(f => `<span>›</span><button data-folder-id="${escapeHtml(f.id)}">${escapeHtml(f.name)}</button>`).join('')}`
+  crumb.querySelectorAll('button').forEach(el => {
+    const id = el.dataset.folderId || null
+    el.addEventListener('click', () => { activeLibraryFolderId = id; filterLibraryCards(currentLibraryDocs); renderFolderNavigation(currentLibraryDocs) })
+    setFolderDropTarget(el, id)
+  })
+}
+async function openCreateFolderDialog(parentId = activeLibraryFolderId) {
+  const name = await showCustomTextDialog({ title: '새 폴더', label: '폴더 이름', confirmText: '추가' })
+  if (!name) return
+  try { await createLibraryFolder({ name, parent_id: parentId, color: FOLDER_COLORS[0] }); await renderLibrary() } catch (err) { showToast(err.message || '폴더 생성 실패', 'error') }
+}
+function createFolderCard(folder) {
+  const card = document.createElement('article')
+  card.className = 'library-folder-card'
+  card.draggable = true
+  card.dataset.folderId = folder.id
+  card.style.setProperty('--folder-color', folder.color)
+  card.innerHTML = `<div class="folder-card-icon">${icon('folder', 28)}</div><div class="folder-card-name">${escapeHtml(folder.name)}</div><div class="folder-card-meta">폴더 열기</div><button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button>`
+  card.addEventListener('click', e => { if (e.target.closest('.folder-card-menu')) return; activeLibraryFolderId = folder.id; filterLibraryCards(currentLibraryDocs); renderFolderNavigation(currentLibraryDocs) })
+  card.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'folder', id: folder.id })); e.dataTransfer.effectAllowed = 'move' })
+  setFolderDropTarget(card, folder.id)
+  card.querySelector('.folder-card-menu').addEventListener('click', async e => {
+    e.stopPropagation()
+    const action = await showCustomTextDialog({ title: '폴더 관리', label: 'rename, color 또는 delete 입력', confirmText: '선택' })
+    try {
+      if (action === 'rename') { const name = await showCustomTextDialog({ title: '폴더 이름 변경', label: '폴더 이름', value: folder.name, confirmText: '저장' }); if (name) await updateLibraryFolder(folder.id, { name }) }
+      if (action === 'color') { const color = await showCustomTextDialog({ title: '폴더 색상 변경', label: `색상 코드 (${FOLDER_COLORS.join(', ')})`, value: folder.color, confirmText: '저장' }); if (color) await updateLibraryFolder(folder.id, { color }) }
+      if (action === 'delete' && await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요? 포함 항목은 루트로 이동합니다.`, { title: '폴더 삭제', confirmText: '삭제', danger: true })) await deleteLibraryFolder(folder.id)
+      if (action) await renderLibrary()
+    } catch (err) { showToast(err.message || '폴더 변경 실패', 'error') }
+  })
+  return card
+}
 function ensureLibraryFolderUI() {
-  if ($('library-folder-tree')) return
-  librarySearchBox?.insertAdjacentHTML('beforebegin', `<div class="library-folder-layout"><aside id="library-folder-tree" class="library-folder-tree"></aside><div class="library-folder-main"><nav id="library-breadcrumb" class="library-breadcrumb" aria-label="폴더 경로"></nav></div></div>`)
-  const main = document.querySelector('.library-folder-main')
-  if (main && librarySearchBox) { main.appendChild(librarySearchBox); const status = $('library-search-status'); if (status) main.appendChild(status); const filters = $('library-filter-row'); if (filters) main.appendChild(filters); main.appendChild(libraryGrid) }
+  if ($('library-breadcrumb')) return
+  librarySearchBox?.insertAdjacentHTML('beforebegin', `<div class="library-folder-header"><nav id="library-breadcrumb" class="library-breadcrumb" aria-label="폴더 경로"></nav><button id="library-new-folder-btn" class="library-new-folder-btn">${icon('folderPlus', 15)}<span>폴더 추가</span></button></div>`)
+  $('library-new-folder-btn')?.addEventListener('click', () => openCreateFolderDialog())
 }
 let libraryChromeReady = false
 function ensureLibraryChrome() {
@@ -5278,7 +5294,7 @@ async function renderLibrary() {
       const foldersData = await fetchLibraryFolders()
       libraryFolders = foldersData.folders || []
       if (activeLibraryFolderId && !libraryFolders.some(f => f.id === activeLibraryFolderId)) activeLibraryFolderId = null
-      renderFolderChrome(allDocs)
+      renderFolderNavigation(allDocs)
     }
 
     // 보관함 뱃지에는 안읽은 논문 개수 표시 (휴지통이 아닐 때만 적용하거나, archive 기준 개수 표시)
@@ -6332,13 +6348,17 @@ function filterLibraryCards(docs) {
 
   filteredDocs = sortLibraryDocs(filteredDocs)
 
-  if (filteredDocs.length === 0) {
+  const childFolders = state.currentLibraryTab === 'trash'
+    ? []
+    : libraryFolders.filter(folder => (folder.parent_id || null) === activeLibraryFolderId)
+  if (filteredDocs.length === 0 && childFolders.length === 0) {
     const variant = state.currentLibraryTab === 'trash'
       ? 'trash'
       : (activeStatusFilter !== 'all' ? activeStatusFilter : (docs.length > 0 ? 'filtered' : 'library'))
     libraryGrid.appendChild(createEmptyState(variant)); return
   }
 
+  childFolders.forEach(folder => libraryGrid.appendChild(createFolderCard(folder)))
   const createItem = libraryViewMode === 'list' ? createDocListRow : createDocCard
   filteredDocs.forEach(doc => libraryGrid.appendChild(createItem(doc)))
 }
