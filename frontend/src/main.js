@@ -5178,6 +5178,7 @@ async function moveDocumentsWithUndo(docIds, folderId) {
   const entries = docIds.map(id => ({ id, folderId: currentLibraryDocs.find(doc => doc.id === id)?.folder_id || null }))
   await moveLibraryDocuments(docIds, folderId)
   if (entries.some(entry => entry.folderId !== folderId)) pushLibraryUndo({ kind: 'documents', entries })
+  clearDocSelection()
 }
 async function moveFolderWithUndo(folder, parentId) {
   await updateLibraryFolder(folder.id, { parent_id: parentId, move: true })
@@ -5354,7 +5355,7 @@ function createFolderCard(folder) {
   card.title = 'Enter/F2: 이름 변경 · Delete/Backspace: 삭제 · Ctrl/Cmd+X: 잘라내기'
   card.dataset.folderId = folder.id
   card.style.setProperty('--folder-color', folder.color)
-  card.innerHTML = `<div class="folder-card-icon">${icon('folder', 28)}</div><div class="folder-card-name">${escapeHtml(folder.name)}</div><div class="folder-card-meta">폴더 열기</div><button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button><div class="folder-card-actions hidden"><button data-action="rename">이름 변경</button><button data-action="color">폴더 색상</button><button data-action="delete">폴더 삭제</button></div>`
+  card.innerHTML = `<div class="folder-card-icon">${icon('folder', 32, 'fill="currentColor" stroke="none"')}</div><div class="folder-card-name">${escapeHtml(folder.name)}</div><div class="folder-card-meta">폴더 열기</div><button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button><div class="folder-card-actions hidden"><button data-action="rename">이름 변경</button><button data-action="color">폴더 색상</button><button data-action="delete">폴더 삭제</button></div>`
   card.addEventListener('click', e => { if (e.target.closest('.folder-card-menu')) return; navigateLibraryFolder(folder.id) })
   card.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'folder', id: folder.id })); e.dataTransfer.effectAllowed = 'move' })
   setFolderDropTarget(card, folder.id)
@@ -6717,8 +6718,52 @@ function prepareDocItemHtml(doc) {
 }
 
 // 카드/리스트 뷰 공용: 위임 없이 각 아이템 컨테이너에 직접 붙는 이벤트 리스너를 등록한다.
+let activeLibraryDragPreview = null
+
+function removeLibraryDragPreview() {
+  activeLibraryDragPreview?.remove()
+  activeLibraryDragPreview = null
+}
+
+function createLibraryDragPreview(count) {
+  removeLibraryDragPreview()
+  const preview = document.createElement('div')
+  preview.className = 'library-multi-drag-preview'
+  preview.setAttribute('aria-hidden', 'true')
+  const stackDepth = Math.min(count - 1, 3)
+  preview.innerHTML = `${Array.from({ length: stackDepth }, (_, index) => `<span class="library-drag-stack-sheet" style="--stack-index:${index + 1}"></span>`).join('')}
+    <div class="library-drag-stack-card">
+      <span class="library-drag-stack-icon">${icon('fileText', 22)}</span>
+      <span class="library-drag-stack-copy"><strong>${count}개 논문</strong><small>선택 항목 이동</small></span>
+      <span class="library-drag-stack-count">${count}</span>
+    </div>`
+  document.body.appendChild(preview)
+  activeLibraryDragPreview = preview
+  return preview
+}
+
+function wireDocDragEvents(container, doc) {
+  if (state.currentLibraryTab === 'trash') return
+  container.draggable = true
+  container.addEventListener('dragstart', e => {
+    const ids = selectedDocIds.has(doc.id) ? Array.from(selectedDocIds) : [doc.id]
+    e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'document', ids }))
+    e.dataTransfer.effectAllowed = 'move'
+    container.classList.add('doc-dragging')
+    if (ids.length > 1) {
+      const preview = createLibraryDragPreview(ids.length)
+      e.dataTransfer.setDragImage(preview, 24, 24)
+    }
+  })
+  container.addEventListener('dragend', () => {
+    container.classList.remove('doc-dragging')
+    removeLibraryDragPreview()
+  })
+}
+
 // 클래스명(.doc-card-check-btn, .doc-open-btn 등)만 맞으면 어떤 레이아웃이든 동작한다.
 function wireDocItemEvents(container, doc, displayTitle) {
+  wireDocDragEvents(container, doc)
   if (selectedDocIds.has(doc.id)) {
     container.classList.add('doc-card-selected')
   }
@@ -6939,12 +6984,6 @@ function createDocCard(doc) {
   const card = document.createElement('div')
   card.className = 'doc-card'
   card.dataset.id = doc.id
-  card.draggable = state.currentLibraryTab !== 'trash'
-  card.addEventListener('dragstart', e => {
-    const ids = selectedDocIds.has(doc.id) ? Array.from(selectedDocIds) : [doc.id]
-    e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'document', ids }))
-    e.dataTransfer.effectAllowed = 'move'
-  })
   card.innerHTML = `
     ${d.compareCheckHtml}
     <div class="doc-card-zone">
