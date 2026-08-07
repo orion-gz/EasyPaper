@@ -23,6 +23,8 @@ from services.db import (
     db_delete_page_insight,
     db_update_document_metadata,
     db_bulk_translation_rows,
+    db_list_folders, db_get_folder, db_create_folder, db_update_folder, db_delete_folder,
+    db_get_document_folder_map, db_move_documents_to_folder,
 )
 
 
@@ -124,8 +126,10 @@ def list_documents(
         suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
 
     rows_by_doc = db_bulk_translation_rows([doc["id"] for doc in docs])
+    folder_map = db_get_document_folder_map(username) if username else {}
     for doc in docs:
         doc["translated_pages"] = _resolve_translated_pages(rows_by_doc.get(doc["id"], []), suffix)
+        doc["folder_id"] = folder_map.get(doc["id"])
     return docs
 
 
@@ -140,10 +144,55 @@ def search_documents(username: str, query: str, only_trash: bool = False) -> lis
         return docs
 
     rows_by_doc = db_bulk_translation_rows([doc["id"] for doc in docs])
+    folder_map = db_get_document_folder_map(username) if username else {}
     for doc in docs:
+        doc["folder_id"] = folder_map.get(doc["id"])
         pages = sorted({r[0] for r in rows_by_doc.get(doc["id"], [])})
         doc["translated_pages"] = pages
     return docs
+
+
+# ── 라이브러리 폴더 ───────────────────────────────────────────────────────────
+
+def list_folders(username: str) -> list:
+    return db_list_folders(username)
+
+def create_folder(username: str, folder_id: str, name: str, parent_id: Optional[str], color: str) -> dict:
+    if parent_id and not db_get_folder(parent_id, username):
+        raise ValueError("상위 폴더를 찾을 수 없습니다.")
+    return db_create_folder(folder_id, username, name, parent_id, color)
+
+def _is_descendant(folder_id: str, parent_id: Optional[str], username: str) -> bool:
+    current = parent_id
+    while current:
+        if current == folder_id:
+            return True
+        folder = db_get_folder(current, username)
+        current = folder.get("parent_id") if folder else None
+    return False
+
+def update_folder(username: str, folder_id: str, name: Optional[str] = None, color: Optional[str] = None, parent_id: Optional[str] = None, move: bool = False) -> bool:
+    folder = db_get_folder(folder_id, username)
+    if not folder:
+        raise ValueError("폴더를 찾을 수 없습니다.")
+    updates = {}
+    if name is not None: updates["name"] = name
+    if color is not None: updates["color"] = color
+    if move:
+        if parent_id and not db_get_folder(parent_id, username):
+            raise ValueError("대상 폴더를 찾을 수 없습니다.")
+        if parent_id == folder_id or _is_descendant(folder_id, parent_id, username):
+            raise ValueError("폴더를 자기 자신 또는 하위 폴더로 옮길 수 없습니다.")
+        updates["parent_id"] = parent_id
+    return db_update_folder(folder_id, username, **updates)
+
+def delete_folder(username: str, folder_id: str) -> bool:
+    return db_delete_folder(folder_id, username)
+
+def move_documents_to_folder(username: str, doc_ids: List[str], folder_id: Optional[str]) -> int:
+    if folder_id and not db_get_folder(folder_id, username):
+        raise ValueError("대상 폴더를 찾을 수 없습니다.")
+    return db_move_documents_to_folder(doc_ids, username, folder_id)
 
 
 def delete_chat_sessions(doc_id: str) -> None:

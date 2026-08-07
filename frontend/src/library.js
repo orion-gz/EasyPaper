@@ -12,6 +12,33 @@ export async function fetchLibrary(options = {}) {
   return res.json()
 }
 
+
+export async function fetchLibraryFolders() {
+  const res = await fetch(`${API_BASE}/library/folders`)
+  if (!res.ok) throw new Error('폴더 조회 실패')
+  return res.json()
+}
+export async function createLibraryFolder(payload) {
+  const res = await fetch(`${API_BASE}/library/folders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  if (!res.ok) throw new Error((await res.json()).detail || '폴더 생성 실패')
+  return res.json()
+}
+export async function updateLibraryFolder(folderId, payload) {
+  const res = await fetch(`${API_BASE}/library/folders/${encodeURIComponent(folderId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  if (!res.ok) throw new Error((await res.json()).detail || '폴더 수정 실패')
+  return res.json()
+}
+export async function deleteLibraryFolder(folderId) {
+  const res = await fetch(`${API_BASE}/library/folders/${encodeURIComponent(folderId)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error((await res.json()).detail || '폴더 삭제 실패')
+  return res.json()
+}
+export async function moveLibraryDocuments(docIds, folderId) {
+  const res = await fetch(`${API_BASE}/library/documents/move`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ doc_ids: docIds, folder_id: folderId }) })
+  if (!res.ok) throw new Error((await res.json()).detail || '논문 이동 실패')
+  return res.json()
+}
+
 export async function fetchLibraryDoc(docId, options = {}) {
   const res = await fetch(`${API_BASE}/library/${docId}${buildQuery(options)}`)
   if (!res.ok) throw new Error('문서 조회 실패')
