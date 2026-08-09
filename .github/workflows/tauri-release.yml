@@ -30,7 +30,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # AppImage linuxdeploy가 ubuntu-latest에서 반복 실패하므로 Tauri의
+          # 공식 tauri-action 릴리스 예시와 동일하게 22.04에 고정한다.
+          - os: ubuntu-22.04
             name: linux
           - os: windows-latest
             name: windows
