@@ -581,6 +581,10 @@ body.light-theme .lib-detail-panel {
 .library-drag-stack-copy strong { font-size:13px; white-space:nowrap; }
 .library-drag-stack-copy small { color:var(--text-muted); font-size:10.5px; white-space:nowrap; }
 .library-drag-stack-count { display:grid; place-items:center; min-width:27px; height:27px; margin-left:auto; padding:0 7px; border-radius:999px; background:var(--control-accent); color:#fff; font-size:12px; font-weight:800; }
+.library-grid { cursor:crosshair; }
+.library-selection-marquee { position:fixed; z-index:99998; pointer-events:none; box-sizing:border-box; border:1px solid var(--control-accent); border-radius:5px; background:color-mix(in srgb, var(--control-accent) 14%, transparent); box-shadow:0 0 0 1px color-mix(in srgb, var(--control-accent) 18%, transparent); }
+body.library-marquee-selecting, body.library-marquee-selecting * { user-select:none!important; }
+body.library-marquee-selecting { cursor:crosshair!important; }
 
 .folder-color-picker{display:flex;gap:12px;padding:6px}.folder-color-picker .color-dot{width:28px;height:28px;border:2px solid transparent;border-radius:50%;cursor:pointer}.folder-color-picker .color-dot.selected{outline:2px solid var(--text-primary);outline-offset:3px}
 

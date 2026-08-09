@@ -14,6 +14,7 @@ import { renderReadingHistoryPage } from './pages/readingHistoryPage.js'
 import { renderAiChatsPage } from './pages/aiChatsPage.js'
 import { renderNotesPage } from './pages/notesPage.js'
 import { formatTranslationHtml, applyKatexToElement } from './textFormat.js'
+import { createSelectionRect, resolveDragSelection } from './library-selection.js'
 import { globalAnalyticsTracker } from './readingAnalytics.js'
 
 
@@ -4487,6 +4488,14 @@ function clearDocSelection() {
   updateSelectToolbarUI()
 }
 
+function replaceDocSelection(nextIds) {
+  const affectedIds = new Set([...selectedDocIds, ...nextIds])
+  selectedDocIds.clear()
+  nextIds.forEach(id => selectedDocIds.add(id))
+  affectedIds.forEach(id => updateDocCardSelectionVisuals(id))
+  updateSelectToolbarUI()
+}
+
 function updateSelectToolbarUI() {
   const count = selectedDocIds.size
   const toolbar = $('lib-select-toolbar')
@@ -4606,7 +4615,106 @@ function initSelectToolbarEvents() {
   }
 }
 
+function initLibraryDragSelection() {
+  if (!libraryGrid) return
+  let dragState = null
+  let marquee = null
+
+  const removeMarquee = () => {
+    marquee?.remove()
+    marquee = null
+    document.body.classList.remove('library-marquee-selecting')
+  }
+
+  const finishDragSelection = (event, cancelled = false) => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return
+    if (cancelled) replaceDocSelection(dragState.baseIds)
+    if (libraryGrid.hasPointerCapture?.(event.pointerId)) {
+      libraryGrid.releasePointerCapture(event.pointerId)
+    }
+    dragState = null
+    removeMarquee()
+  }
+
+  libraryGrid.addEventListener('pointerdown', event => {
+    if (
+      event.button !== 0 ||
+      event.isPrimary === false ||
+      (event.pointerType && event.pointerType !== 'mouse') ||
+      state.currentWorkspacePage !== 'library' ||
+      state.currentLibraryTab === 'trash' ||
+      event.target.closest('.doc-card, .doc-list-row, .library-folder-card, button, a, input, textarea, select')
+    ) return
+
+    const toggle = event.ctrlKey || event.metaKey
+    const baseIds = new Set(selectedDocIds)
+    if (!toggle) replaceDocSelection(new Set())
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      baseIds,
+      toggle,
+      active: false,
+    }
+    libraryGrid.setPointerCapture?.(event.pointerId)
+    event.preventDefault()
+  })
+
+  libraryGrid.addEventListener('pointermove', event => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return
+    const distance = Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY)
+    if (!dragState.active && distance < 4) return
+    if (!dragState.active) {
+      dragState.active = true
+      marquee = document.createElement('div')
+      marquee.className = 'library-selection-marquee'
+      marquee.setAttribute('aria-hidden', 'true')
+      document.body.appendChild(marquee)
+      document.body.classList.add('library-marquee-selecting')
+    }
+
+    const selectionRect = createSelectionRect(
+      dragState.startX,
+      dragState.startY,
+      event.clientX,
+      event.clientY,
+    )
+    Object.assign(marquee.style, {
+      left: `${selectionRect.left}px`,
+      top: `${selectionRect.top}px`,
+      width: `${selectionRect.width}px`,
+      height: `${selectionRect.height}px`,
+    })
+
+    const items = Array.from(
+      libraryGrid.querySelectorAll('.doc-card[data-id], .doc-list-row[data-id]'),
+      element => ({ id: element.dataset.id, rect: element.getBoundingClientRect() }),
+    )
+    replaceDocSelection(resolveDragSelection(
+      dragState.baseIds,
+      items,
+      selectionRect,
+      dragState.toggle,
+    ))
+    event.preventDefault()
+  })
+
+  libraryGrid.addEventListener('pointerup', event => finishDragSelection(event))
+  libraryGrid.addEventListener('pointercancel', event => finishDragSelection(event, true))
+  window.addEventListener('blur', () => {
+    if (!dragState) return
+    if (libraryGrid.hasPointerCapture?.(dragState.pointerId)) {
+      libraryGrid.releasePointerCapture(dragState.pointerId)
+    }
+    replaceDocSelection(dragState.baseIds)
+    dragState = null
+    removeMarquee()
+  })
+}
+
 initSelectToolbarEvents()
+initLibraryDragSelection()
 
 
 // ── 여러 논문 비교 채팅 화면 ────────────────────────────
