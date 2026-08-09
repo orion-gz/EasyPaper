@@ -418,19 +418,22 @@ def update_user_credentials(old_username: str, new_username: str, new_password_h
                 "UPDATE users SET username = ?, password_hash = ? WHERE username = ?",
                 (new_username, new_password_hash, old_username)
             )
-            # documents.username은 users.username을 참조하는 외래키로 선언돼
-            # 있지만, SQLite는 연결마다 별도로 PRAGMA foreign_keys를 켜주지
-            # 않는 한 이 외래키 제약(및 ON UPDATE CASCADE)을 전혀 강제하지
-            # 않는다. 이 프로젝트는 그 PRAGMA를 켜지 않으므로, 아이디를
-            # 바꾸면 documents 테이블은 예전 아이디를 그대로 가리킨 채 남아
-            # 라이브러리 목록 조회(WHERE username = 새 아이디)에서 전부
-            # 빠져버려 문서가 사라진 것처럼 보이는 문제가 있었다. 같은
-            # 트랜잭션 안에서 명시적으로 함께 갱신한다.
+            # 사용자별 데이터 테이블은 SQLite의 ON UPDATE CASCADE에 의존하지
+            # 않고 같은 트랜잭션에서 명시적으로 함께 갱신한다. 그렇지 않으면
+            # 아이디 변경 후 문서, 읽기 기록, EMA 프로필, 비교 세션이 예전
+            # 아이디에 남아 새 아이디로 조회되지 않는다.
             if new_username != old_username:
-                cursor.execute(
-                    "UPDATE documents SET username = ? WHERE username = ?",
-                    (new_username, old_username)
-                )
+                for table in (
+                    "documents",
+                    "reading_time",
+                    "reading_sessions",
+                    "user_reading_profiles",
+                    "compare_sessions",
+                ):
+                    cursor.execute(
+                        f"UPDATE {table} SET username = ? WHERE username = ?",
+                        (new_username, old_username),
+                    )
             conn.commit()
             return True
     except Exception:
