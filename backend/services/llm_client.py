@@ -426,12 +426,19 @@ async def stream_translation(
         raise RuntimeError(f"Ollama HTTP 오류: {e.response.status_code}")
 
 
-async def _ensure_provider_response_ok(response: httpx.Response, provider: str) -> None:
+class _ProviderResponseError(RuntimeError):
+    pass
+
+
+async def _ensure_provider_response_ok(
+    response: httpx.Response, provider: str, include_body: bool = True
+) -> None:
     """원격 provider의 비정상 응답을 기존 RuntimeError 계약으로 변환한다."""
     if response.status_code == 200:
         return
     body = await response.aread()
-    raise RuntimeError(f"{provider} API 오류 (HTTP {response.status_code}): {body.decode()[:200]}")
+    detail = f": {body.decode()[:200]}" if include_body else ""
+    raise _ProviderResponseError(f"{provider} API 오류 (HTTP {response.status_code}){detail}")
 
 
 def _raise_provider_transport_error(provider: str, exc: Exception) -> None:
@@ -497,7 +504,8 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
         raise RuntimeError("Gemini API Key가 설정되지 않았습니다. 설정에서 입력해 주세요.")
 
     headers = {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key,
     }
 
     gemini_contents = []
@@ -531,7 +539,7 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
     if system_instruction:
         payload["systemInstruction"] = system_instruction
         
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent"
     
     try:
         async with httpx.AsyncClient(timeout=360.0) as client:
@@ -541,7 +549,7 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
                 headers=headers,
                 json=payload
             ) as response:
-                await _ensure_provider_response_ok(response, "Gemini")
+                await _ensure_provider_response_ok(response, "Gemini", include_body=False)
 
                 # Gemini streamGenerateContent는 JSON 배열을 스트리밍함:
                 # [ {chunk1},\n {chunk2}, ... ]
@@ -602,6 +610,10 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
 
     except (httpx.ConnectError, httpx.TimeoutException) as exc:
         _raise_provider_transport_error("Gemini", exc)
+    except _ProviderResponseError:
+        raise
+    except Exception:
+        raise RuntimeError("Gemini 요청 처리 중 오류가 발생했습니다.")
 
 
 async def stream_claude(messages: list, model: str, temperature: float = 0.5) -> AsyncGenerator[str, None]:
