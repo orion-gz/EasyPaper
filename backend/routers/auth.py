@@ -588,7 +588,7 @@ async def ollama_status(current_user: str = Depends(get_current_user)):
     }
 
 
-@router.get("/settings/install-ollama")
+@router.post("/settings/install-ollama")
 async def install_ollama_stream(current_user: str = Depends(get_current_user)):
     """이 서버의 운영체제에 맞는 방법으로 Ollama를 설치하고 진행 상황을 스트리밍합니다.
     Linux는 공식 설치 스크립트, macOS는 Homebrew(있는 경우), Windows는 공식 설치
@@ -819,7 +819,7 @@ router.add_api_route(
         get_claude_code_path,
         "Claude Code CLI가 이미 설치되어 있습니다.",
     ),
-    methods=["GET"],
+    methods=["POST"],
 )
 
 router.add_api_route(
@@ -830,7 +830,7 @@ router.add_api_route(
         get_codex_path,
         "Codex CLI가 이미 설치되어 있습니다.",
     ),
-    methods=["GET"],
+    methods=["POST"],
 )
 
 
@@ -845,7 +845,7 @@ router.add_api_route(
         path_aliases=("agy",),
         exit_error_message="설치 스크립트가 오류 코드 {returncode}로 종료되었습니다.",
     ),
-    methods=["GET"],
+    methods=["POST"],
 )
 
 
