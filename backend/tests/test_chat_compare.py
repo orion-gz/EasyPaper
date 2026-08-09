@@ -130,3 +130,30 @@ def test_compare_history_rejects_invalid_doc_count(test_client, isolated_dirs):
     _create_doc(isolated_dirs, "cmp-doc-1")
     res = test_client.get("/api/chat/compare/history", params={"doc_ids": "cmp-doc-1"})
     assert res.status_code == 400
+
+
+def test_list_compare_sessions_uses_two_queries_and_preserves_missing_titles(
+    isolated_dirs, monkeypatch
+):
+    db = isolated_dirs["db"]
+    db.db_save_document("batch-doc-1", "testuser", "one.pdf", "/x/one.pdf", 1, {"title": "One"})
+    db.db_save_document("batch-doc-2", "testuser", "two.pdf", "/x/two.pdf", 1, {})
+    db.db_upsert_compare_session("cmp_batch_1", "testuser", ["batch-doc-1", "batch-doc-2"])
+    db.db_upsert_compare_session("cmp_batch_2", "testuser", ["batch-doc-1", "missing-doc"])
+
+    original_get_db = db.get_db
+    statements = []
+
+    def traced_get_db():
+        conn = original_get_db()
+        conn.set_trace_callback(statements.append)
+        return conn
+
+    monkeypatch.setattr(db, "get_db", traced_get_db)
+
+    sessions = db.db_list_compare_chat_sessions("testuser")
+
+    select_statements = [statement for statement in statements if statement.lstrip().upper().startswith("SELECT")]
+    assert len(select_statements) == 2
+    assert sessions[0]["titles"] == ["One", "(삭제된 논문)"]
+    assert sessions[1]["titles"] == ["One", "two.pdf"]
