@@ -56,6 +56,27 @@ _syncing_questions: set = set()
 _QUESTION_BACKFILL_BATCH_SIZE = 20
 
 
+def _build_category_edges(docs: list) -> list:
+    """카테고리별 역색인을 사용해 같은 카테고리의 문서 쌍만 생성한다."""
+    docs_by_category = {}
+    for doc in docs:
+        categories = set((doc.get("metadata", {}) or {}).get("categories", []) or [])
+        for category in categories:
+            docs_by_category.setdefault(category, []).append(doc["id"])
+
+    edges = []
+    for category, category_doc_ids in docs_by_category.items():
+        for index, source_id in enumerate(category_doc_ids):
+            for target_id in category_doc_ids[index + 1:]:
+                edges.append({
+                    "source": f"paper:{source_id}",
+                    "target": f"paper:{target_id}",
+                    "type": "category",
+                    "category": category,
+                })
+    return edges
+
+
 async def sync_document_for_graph(doc_id: str, pages: list, doc_title: str) -> None:
     """번역 완료 직후 호출되어, 해당 문서의 개념을 추출하고 라이브러리 내
     다른 논문과의 인용 관계를 매칭해 DB에 저장한다. 실패해도 번역 파이프라인
@@ -296,25 +317,7 @@ async def get_graph_data(username: str) -> dict:
 
     # 카테고리 엣지: DB에 저장하지 않고 매 요청마다 메모리에서 계산한다
     # (모듈 docstring의 설계 근거 참고).
-    seen_category_pairs = set()
-    for i in range(len(docs)):
-        cats_i = set((docs[i].get("metadata", {}) or {}).get("categories", []) or [])
-        if not cats_i:
-            continue
-        for j in range(i + 1, len(docs)):
-            cats_j = set((docs[j].get("metadata", {}) or {}).get("categories", []) or [])
-            shared = cats_i & cats_j
-            for cat in shared:
-                pair_key = (docs[i]["id"], docs[j]["id"], cat)
-                if pair_key in seen_category_pairs:
-                    continue
-                seen_category_pairs.add(pair_key)
-                edges.append({
-                    "source": f"paper:{docs[i]['id']}",
-                    "target": f"paper:{docs[j]['id']}",
-                    "type": "category",
-                    "category": cat,
-                })
+    edges.extend(_build_category_edges(docs))
 
     # 인용 엣지: sync_document_for_graph가 미리 계산해 저장해둔 것을 그대로 읽는다.
     from services.db import db_get_paper_edges_for_docs
