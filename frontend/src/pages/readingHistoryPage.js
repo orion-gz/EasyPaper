@@ -923,77 +923,100 @@ export async function renderReadingHistoryPage() {
     return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]))
   }
 
-  function renderTimeline() {
+  function getTimelineDayGroups() {
     const periodEvents = getTimelineEvents()
     const sortedEvents = periodEvents.slice().sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
     const filtered = activeType === 'all' ? sortedEvents : sortedEvents.filter(e => e.type === activeType)
-    if (filtered.length === 0) {
+    return groupByDay(filtered)
+  }
+
+  function renderTimelineDay([dateKey, dayEvents]) {
+    const { primary, secondary } = formatDayLabel(dateKey)
+    return `
+      <div class="rh-timeline-day">
+        <div class="rh-timeline-day-header">
+          <span class="rh-timeline-day-date">${escapeHtml(primary)}</span>
+          <span class="rh-timeline-day-weekday">${escapeHtml(secondary)}</span>
+        </div>
+        <div class="rh-timeline-track">
+          ${dayEvents.map(e => {
+            const title = docTitle(e.doc_id, e.doc_title)
+            const isDeleted = Boolean(e.is_deleted)
+            let pageMeta = ''
+            let timeLabel = formatTime(e.timestamp)
+            let hoverTitle = isDeleted ? '삭제된 논문입니다' : '이 논문 열기'
+
+            if (e.type === 'read' || e.type === 'browsed') {
+              const startStr = formatTime(e.timestamp)
+              const endStr = e.end_timestamp ? formatTime(e.end_timestamp) : null
+              if (startStr && endStr && startStr !== endStr) {
+                timeLabel = `${startStr} ~ ${endStr}`
+                hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시간: ${startStr} ~ ${endStr})` : `읽기 시간: ${startStr} 시작 ~ ${endStr} 종료 | 클릭하여 이 논문 열기`
+              } else if (startStr) {
+                timeLabel = startStr
+                hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시각: ${startStr})` : `읽기 시각: ${startStr} | 클릭하여 이 논문 열기`
+              }
+
+              if (e.start_page && e.end_page) {
+                const range = e.start_page === e.end_page ? `${e.start_page}p` : `${e.start_page}p ~ ${e.end_page}p`
+                const verified = e.verified_pages ?? 0
+                pageMeta = `${range} (${verified}p 검증)`
+              } else if (e.verified_pages !== null && e.verified_pages !== undefined) {
+                pageMeta = `${e.verified_pages}p 검증`
+              } else {
+                const p = readPageCount(docsById.get(e.doc_id))
+                if (p) pageMeta = `${p}페이지`
+              }
+            }
+            return `
+              <div class="rh-timeline-entry ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${escapeHtml(hoverTitle)}">
+                <div class="rh-timeline-dot">${icon(TYPE_ICON[e.type] || 'clock', 13)}</div>
+                <div class="rh-timeline-row">
+                  <span class="rh-timeline-time">${escapeHtml(timeLabel)}</span>
+                  <span class="rh-timeline-type">${escapeHtml(TYPE_LABEL[e.type] || e.type)}</span>
+                  <div class="rh-timeline-main">
+                    <div class="rh-timeline-title">
+                      ${escapeHtml(title)}
+                      ${isDeleted ? '<span class="rh-deleted-badge">삭제됨</span>' : ''}
+                    </div>
+                    ${e.summary ? `<div class="rh-timeline-summary">${escapeHtml(e.summary)}</div>` : ''}
+                  </div>
+                  ${pageMeta ? `<span class="rh-timeline-meta">${escapeHtml(pageMeta)}</span>` : ''}
+                </div>
+              </div>`
+          }).join('')}
+        </div>
+      </div>`
+  }
+
+  function updateMoreButton(dayGroups) {
+    moreBtn.classList.toggle('hidden', visibleGroups >= dayGroups.length)
+  }
+
+  function renderTimeline() {
+    const dayGroups = getTimelineDayGroups()
+    if (dayGroups.length === 0) {
       timelineListEl.innerHTML = '<div class="rh-empty">이 기간의 활동이 아직 없습니다.</div>'
       moreBtn.classList.add('hidden')
       return
     }
-    const dayGroups = groupByDay(filtered)
     const shown = dayGroups.slice(0, visibleGroups)
-    timelineListEl.innerHTML = `<div class="rh-timeline">${shown.map(([dateKey, dayEvents]) => {
-      const { primary, secondary } = formatDayLabel(dateKey)
-      return `
-        <div class="rh-timeline-day">
-          <div class="rh-timeline-day-header">
-            <span class="rh-timeline-day-date">${escapeHtml(primary)}</span>
-            <span class="rh-timeline-day-weekday">${escapeHtml(secondary)}</span>
-          </div>
-          <div class="rh-timeline-track">
-            ${dayEvents.map(e => {
-              const title = docTitle(e.doc_id, e.doc_title)
-              const isDeleted = Boolean(e.is_deleted)
-              let pageMeta = ''
-              let timeLabel = formatTime(e.timestamp)
-              let hoverTitle = isDeleted ? '삭제된 논문입니다' : '이 논문 열기'
+    timelineListEl.innerHTML = `<div class="rh-timeline">${shown.map(renderTimelineDay).join('')}</div>`
+    updateMoreButton(dayGroups)
+  }
 
-              if (e.type === 'read' || e.type === 'browsed') {
-                const startStr = formatTime(e.timestamp)
-                const endStr = e.end_timestamp ? formatTime(e.end_timestamp) : null
-                if (startStr && endStr && startStr !== endStr) {
-                  timeLabel = `${startStr} ~ ${endStr}`
-                  hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시간: ${startStr} ~ ${endStr})` : `읽기 시간: ${startStr} 시작 ~ ${endStr} 종료 | 클릭하여 이 논문 열기`
-                } else if (startStr) {
-                  timeLabel = startStr
-                  hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시각: ${startStr})` : `읽기 시각: ${startStr} | 클릭하여 이 논문 열기`
-                }
-
-                if (e.start_page && e.end_page) {
-                  const range = e.start_page === e.end_page ? `${e.start_page}p` : `${e.start_page}p ~ ${e.end_page}p`
-                  const verified = e.verified_pages ?? 0
-                  pageMeta = `${range} (${verified}p 검증)`
-                } else if (e.verified_pages !== null && e.verified_pages !== undefined) {
-                  pageMeta = `${e.verified_pages}p 검증`
-                } else {
-                  const p = readPageCount(docsById.get(e.doc_id))
-                  if (p) pageMeta = `${p}페이지`
-                }
-              }
-              return `
-                <div class="rh-timeline-entry ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${escapeHtml(hoverTitle)}">
-                  <div class="rh-timeline-dot">${icon(TYPE_ICON[e.type] || 'clock', 13)}</div>
-                  <div class="rh-timeline-row">
-                    <span class="rh-timeline-time">${escapeHtml(timeLabel)}</span>
-                    <span class="rh-timeline-type">${escapeHtml(TYPE_LABEL[e.type] || e.type)}</span>
-                    <div class="rh-timeline-main">
-                      <div class="rh-timeline-title">
-                        ${escapeHtml(title)}
-                        ${isDeleted ? '<span class="rh-deleted-badge">삭제됨</span>' : ''}
-                      </div>
-                      ${e.summary ? `<div class="rh-timeline-summary">${escapeHtml(e.summary)}</div>` : ''}
-                    </div>
-                    ${pageMeta ? `<span class="rh-timeline-meta">${escapeHtml(pageMeta)}</span>` : ''}
-                  </div>
-                </div>`
-            }).join('')}
-          </div>
-        </div>`
-    }).join('')}</div>`
-
-    moreBtn.classList.toggle('hidden', shown.length >= dayGroups.length)
+  function appendTimelineGroups() {
+    const dayGroups = getTimelineDayGroups()
+    const timelineEl = timelineListEl.querySelector('.rh-timeline')
+    if (!timelineEl) {
+      renderTimeline()
+      return
+    }
+    const nextVisibleGroups = Math.min(visibleGroups + 6, dayGroups.length)
+    const nextGroups = dayGroups.slice(visibleGroups, nextVisibleGroups)
+    timelineEl.insertAdjacentHTML('beforeend', nextGroups.map(renderTimelineDay).join(''))
+    visibleGroups = nextVisibleGroups
+    updateMoreButton(dayGroups)
   }
 
   const periodChipsEl = el.querySelector('#rh-period-chips')
@@ -1022,8 +1045,7 @@ export async function renderReadingHistoryPage() {
   })
 
   moreBtn?.addEventListener('click', () => {
-    visibleGroups += 6
-    renderTimeline()
+    appendTimelineGroups()
   })
 
   const openDoc = (docId, type) => {
