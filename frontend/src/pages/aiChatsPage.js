@@ -17,6 +17,7 @@ const PAGE_SIZE = 8
 const RECENT_MS = 24 * 60 * 60 * 1000       // "최근 대화" 기준: 24시간 이내
 const ACTIVE_MS = 7 * 24 * 60 * 60 * 1000   // "활성" 기준: 7일 이내
 const PREVIEW_CONCURRENCY = 6
+let renderGeneration = 0
 
 function formatRelativeTime(isoString) {
   if (!isoString) return '-'
@@ -70,6 +71,8 @@ async function mapWithConcurrency(items, limit, fn) {
 export async function renderAiChatsPage() {
   const container = document.getElementById('page-chats')
   if (!container) return
+  const generation = ++renderGeneration
+  const isCurrent = () => generation === renderGeneration && container.classList.contains('active')
 
   container.innerHTML = `
     <div class="aic-page">
@@ -357,10 +360,12 @@ export async function renderAiChatsPage() {
     await mapWithConcurrency(sessions, PREVIEW_CONCURRENCY, async (session) => {
       try {
         const data = await getChatHistoryAPI(session.doc_id)
+        if (!isCurrent()) return
         const history = data.history || []
         const last = history.length ? history[history.length - 1] : null
         state.previews.set(session.doc_id, { text: last ? last.content : '', error: false })
       } catch {
+        if (!isCurrent()) return
         state.previews.set(session.doc_id, { text: '', error: true })
       }
       updatePreviewInDom(session.doc_id)
@@ -374,6 +379,7 @@ export async function renderAiChatsPage() {
     renderPagination()
     try {
       const data = await getChatSessionsAPI()
+      if (!isCurrent()) return
       state.sessions = data.sessions || []
       state.loading = false
       renderTabs()
@@ -383,6 +389,7 @@ export async function renderAiChatsPage() {
       // 표시된 행의 미리보기 텍스트만 점진적으로 채워 넣는다.
       loadPreviews(state.sessions)
     } catch (err) {
+      if (!isCurrent()) return
       console.error('AI 채팅 세션 목록 로드 실패:', err)
       state.loading = false
       state.loadError = err
