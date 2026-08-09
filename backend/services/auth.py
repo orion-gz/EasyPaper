@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import os
 import time
-from fastapi import Request, HTTPException, status
+from fastapi import Depends, Request, HTTPException, status
 from config import get_app_password, get_app_username, get_skip_login, SECRET_KEY
 
 def verify_password(stored_password_hash: str, provided_password: str) -> bool:
@@ -121,3 +121,11 @@ async def get_current_user(request: Request) -> str:
             detail="로그인이 필요합니다.",
         )
     return token.split(':')[0]
+
+
+async def require_admin_user(current_user: str = Depends(get_current_user)) -> str:
+    """현재 단일 관리자 계정과 일치하는 인증 사용자만 반환합니다."""
+    configured_admin = get_app_username()
+    if not hmac.compare_digest(current_user.encode("utf-8"), configured_admin.encode("utf-8")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자 권한이 필요합니다.")
+    return current_user
