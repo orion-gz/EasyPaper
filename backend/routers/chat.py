@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 from routers.upload import sessions, ensure_session, require_session_owner
+from services.ownership import require_owned_documents
 from services.llm_client import stream_chat, generate_suggested_questions
 from services.db import (
     db_save_chat_message,
@@ -15,7 +16,7 @@ from services.db import (
     db_upsert_compare_session,
     db_list_compare_chat_sessions,
 )
-from services.library import get_document as lib_get_document, save_chat_quote_image
+from services.library import save_chat_quote_image
 from services.auth import get_current_user
 
 # 프론트가 이미지 인용 메시지에 붙이는 "[인용된 이미지 (Page N)|quoteId]" 마커에서
@@ -53,19 +54,6 @@ def _build_compare_id(doc_ids: List[str]) -> str:
     순서로 선택하든 동일한 채팅 기록/CLI 대화 세션을 재사용하기 위함."""
     key = ":".join(sorted(doc_ids))
     return "cmp_" + hashlib.sha256(key.encode()).hexdigest()[:20]
-
-
-def _require_owned_documents(doc_ids: List[str], current_user: str) -> List[dict]:
-    """모든 문서가 존재하고 현재 사용자 소유인지 확인한다. 하나라도 아니면
-    (다른 사용자 문서인지, 존재하지 않는지 구분하지 않고) 404로 응답한다."""
-    docs = []
-    for doc_id in doc_ids:
-        doc = lib_get_document(doc_id)
-        if not doc or doc.get("username") != current_user:
-            raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
-        docs.append(doc)
-    return docs
-
 
 def _dedupe_preserve_order(items: List[str]) -> List[str]:
     return list(dict.fromkeys(items))
@@ -209,7 +197,7 @@ async def chat_compare_stream(data: CompareChatRequest, current_user: str = Depe
             detail=f"비교 채팅은 논문을 {MIN_COMPARE_DOCS}~{MAX_COMPARE_DOCS}편 선택해야 합니다.",
         )
 
-    docs = _require_owned_documents(doc_ids, current_user)
+    docs = require_owned_documents(doc_ids, current_user)
 
     per_doc_budget = COMPARE_TOTAL_CONTEXT_CHARS // len(doc_ids)
     paper_blocks = []
@@ -300,7 +288,7 @@ async def get_compare_chat_history(doc_ids: str, current_user: str = Depends(get
             status_code=400,
             detail=f"비교 채팅은 논문을 {MIN_COMPARE_DOCS}~{MAX_COMPARE_DOCS}편 선택해야 합니다.",
         )
-    _require_owned_documents(ids, current_user)
+    require_owned_documents(ids, current_user)
     compare_id = _build_compare_id(ids)
     history = db_get_chat_history(compare_id)
     return {"history": history, "compare_id": compare_id}

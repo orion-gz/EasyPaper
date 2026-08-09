@@ -5,8 +5,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
 
 from routers.upload import require_session_owner
-from routers.library import _require_owned_document
 from services.auth import get_current_user
+from services.ownership import require_owned_document
 from services.primer import get_cached_primer, generate_primer, invalidate_primer_cache
 from services.library import get_primer_figure_path
 
@@ -95,7 +95,7 @@ async def regenerate_primer(doc_id: str, target_lang: str = "한국어", current
 @router.get("/library/{doc_id}/primer-figure")
 async def get_primer_figure(doc_id: str, current_user: str = Depends(get_current_user)):
     """읽기 전 브리핑에 쓰이는 대표 Figure 크롭 이미지를 서빙합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     figure_path = get_primer_figure_path(doc_id)
     if not figure_path:
         raise HTTPException(status_code=404, detail="Figure 이미지가 없습니다.")
