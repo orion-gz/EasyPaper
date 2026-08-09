@@ -429,6 +429,7 @@ def update_user_credentials(old_username: str, new_username: str, new_password_h
                     "reading_sessions",
                     "user_reading_profiles",
                     "compare_sessions",
+                    "folders",
                 ):
                     cursor.execute(
                         f"UPDATE {table} SET username = ? WHERE username = ?",

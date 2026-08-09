@@ -90,6 +90,12 @@ def test_update_user_credentials_propagates_username_to_user_data(isolated_dirs)
                VALUES (?, ?, ?, ?, ?)""",
             ("compare-1", "admin", '["doc-1", "doc-2"]', now, now),
         )
+        conn.execute(
+            """INSERT INTO folders
+               (id, username, name, color, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            ("folder-1", "admin", "읽을 논문", "#64748b", now, now),
+        )
         conn.commit()
 
     assert db.update_user_credentials("admin", "newname", "newhash:abcd") is True
@@ -100,6 +106,7 @@ def test_update_user_credentials_propagates_username_to_user_data(isolated_dirs)
             "reading_sessions",
             "user_reading_profiles",
             "compare_sessions",
+            "folders",
         ):
             assert conn.execute(
                 f"SELECT COUNT(*) FROM {table} WHERE username = ?", ("newname",)
