@@ -625,8 +625,9 @@ export async function renderNotesPage() {
     return
   }
 
-  allPapers = await Promise.all(docs.map(buildPaperEntry))
+  const loadedPapers = await Promise.all(docs.map(buildPaperEntry))
   if (!isCurrent()) return
+  allPapers = loadedPapers
 
   if (!selectedDocId || !allPapers.some(e => e.doc.id === selectedDocId)) {
     selectedDocId = allPapers[0].doc.id
