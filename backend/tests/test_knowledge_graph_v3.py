@@ -355,6 +355,47 @@ async def test_reading_recommendations_filters_implausible_and_duplicate(isolate
     assert any(r["reason"] == "자기지도학습 확장" for r in results)
 
 
+@pytest.mark.asyncio
+async def test_reading_recommendations_resolve_references_with_bounded_concurrency(
+    isolated_dirs, monkeypatch
+):
+    import asyncio
+    import services.llm_client as llm_client
+    import services.reference_linker as reference_linker
+    import services.knowledge_graph as knowledge_graph
+
+    _create_doc_owned_by(isolated_dirs, "doc-rec-concurrent-1", "testuser", {"title": "Read One"})
+    _create_doc_owned_by(isolated_dirs, "doc-rec-concurrent-2", "testuser", {"title": "Read Two"})
+    recommendation_count = knowledge_graph.OPENALEX_RECOMMENDATION_CONCURRENCY + 3
+
+    async def fake_generate(titles, categories, session_id=None):
+        return [
+            {"title": f"Recommended Paper {index}", "reason": f"reason {index}"}
+            for index in range(recommendation_count)
+        ]
+
+    active = 0
+    max_active = 0
+
+    async def fake_resolve(query_text):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return {"title": query_text, "url": f"https://example.com/{query_text}"}
+
+    monkeypatch.setattr(llm_client, "generate_reading_recommendations", fake_generate)
+    monkeypatch.setattr(reference_linker, "resolve_reference", fake_resolve)
+
+    results = await knowledge_graph.get_reading_recommendations("testuser")
+
+    assert max_active == knowledge_graph.OPENALEX_RECOMMENDATION_CONCURRENCY
+    assert [result["title"] for result in results] == [
+        f"Recommended Paper {index}" for index in range(recommendation_count)
+    ]
+
+
 def test_reading_recommendations_endpoint(test_client, isolated_dirs, monkeypatch):
     import services.llm_client as llm_client
     import services.reference_linker as reference_linker
