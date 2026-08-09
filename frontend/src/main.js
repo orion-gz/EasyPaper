@@ -102,16 +102,41 @@ const $ = (id) => document.getElementById(id)
 // 트랜지션 없이 그냥 툭 튀어나오거나 사라지는 깜빡임이 생긴다. display 전환과
 // opacity/transform 전환을 두 단계(reflow 강제 → 다음 프레임에 클래스 적용)로
 // 분리해 트랜지션이 실제로 재생되게 한다.
+const modalTriggerElements = new WeakMap()
+const modalFocusableSelector = [
+  '[autofocus]',
+  'button:not([disabled])',
+  'a[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',')
+
 function openOverlayModal(modal) {
   if (!modal) return
+  const trigger = document.activeElement
+  if (trigger instanceof HTMLElement && trigger !== document.body) {
+    modalTriggerElements.set(modal, trigger)
+  }
   modal.classList.remove('hidden')
   void modal.offsetWidth // 강제 리플로우: display:none 해제를 먼저 확정시킨다
   modal.classList.add('is-visible')
+  window.requestAnimationFrame(() => {
+    if (!modal.classList.contains('is-visible')) return
+    const focusTarget = modal.querySelector(modalFocusableSelector)
+    if (focusTarget instanceof HTMLElement) focusTarget.focus()
+  })
 }
 function closeOverlayModal(modal) {
   if (!modal) return
   modal.classList.remove('is-visible')
-  window.setTimeout(() => { modal.classList.add('hidden') }, 300) // CSS 트랜지션(0.3s) 종료 후 display:none
+  window.setTimeout(() => {
+    modal.classList.add('hidden')
+    const trigger = modalTriggerElements.get(modal)
+    if (trigger?.isConnected) trigger.focus()
+    modalTriggerElements.delete(modal)
+  }, 300) // CSS 트랜지션(0.3s) 종료 후 display:none
 }
 const loginScreen       = $('login-screen')
 const loginForm         = $('login-form')
