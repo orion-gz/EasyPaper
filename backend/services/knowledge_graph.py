@@ -43,6 +43,10 @@ READING_RECOMMENDATIONS_CACHE_DAYS = 7
 # 한 번은 그날의 최신 활동(질문/메모/읽은 논문)을 반영해 새로 생성되게 한다.
 AI_INSIGHTS_CACHE_HOURS = 24
 
+# OpenAlex에 짧은 시간 동안 과도한 요청을 보내지 않으면서 직렬 네트워크
+# 왕복은 피하기 위한 추천 논문 검증 동시성 상한.
+OPENALEX_RECOMMENDATION_CONCURRENCY = 4
+
 # 그래프 조회 시점에 아직 개념/인용 동기화가 안 된(graph_synced_at 없는) 문서를
 # 백그라운드로 백필한다. 같은 문서에 대해 중복으로 백필 태스크가 여러 개
 # 뜨는 것을 막기 위한 in-flight 집합.
@@ -718,20 +722,25 @@ async def get_reading_recommendations(username: str, force: bool = False) -> Lis
     raw = await generate_reading_recommendations(titles, categories, session_id=username)
     exclude_word_sets = [w for w in (_normalize_words(t) for t in titles) if w]
 
-    results = []
-    for r in raw:
+    semaphore = asyncio.Semaphore(OPENALEX_RECOMMENDATION_CONCURRENCY)
+
+    async def resolve_recommendation(r: dict) -> Optional[dict]:
         title = (r.get("title") or "").strip()
         if not title:
-            continue
-        resolved = await resolve_reference(title)
+            return None
+        async with semaphore:
+            resolved = await resolve_reference(title)
         if not resolved or not _is_plausible_match(title, resolved):
-            continue
+            return None
         result_words = _normalize_words(resolved.get("title", ""))
         if not result_words:
-            continue
+            return None
         if any(len(result_words & seen) / len(result_words) >= 0.6 for seen in exclude_word_sets):
-            continue  # 이미 읽은 논문과 같은 논문이면 제외
-        results.append({**resolved, "reason": r.get("reason", "")})
+            return None  # 이미 읽은 논문과 같은 논문이면 제외
+        return {**resolved, "reason": r.get("reason", "")}
+
+    resolved_results = await asyncio.gather(*(resolve_recommendation(r) for r in raw))
+    results = [result for result in resolved_results if result is not None]
 
     db_set_meta(_reading_recommendations_cache_key(username), json.dumps({
         "generated_at": datetime.now(timezone.utc).isoformat(),
