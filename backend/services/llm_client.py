@@ -426,6 +426,23 @@ async def stream_translation(
         raise RuntimeError(f"Ollama HTTP 오류: {e.response.status_code}")
 
 
+async def _ensure_provider_response_ok(response: httpx.Response, provider: str) -> None:
+    """원격 provider의 비정상 응답을 기존 RuntimeError 계약으로 변환한다."""
+    if response.status_code == 200:
+        return
+    body = await response.aread()
+    raise RuntimeError(f"{provider} API 오류 (HTTP {response.status_code}): {body.decode()[:200]}")
+
+
+def _raise_provider_transport_error(provider: str, exc: Exception) -> None:
+    """세 provider가 공유하는 연결/타임아웃 오류 문구를 일관되게 만든다."""
+    if isinstance(exc, httpx.ConnectError):
+        raise RuntimeError(f"{provider} 서버에 연결할 수 없습니다.")
+    if isinstance(exc, httpx.TimeoutException):
+        raise RuntimeError(f"{provider} 요청 시간이 초과되었습니다.")
+    raise exc
+
+
 async def stream_openai(messages: list, model: str, temperature: float = 0.5) -> AsyncGenerator[str, None]:
     api_key = get_openai_api_key()
     if not api_key:
@@ -450,9 +467,7 @@ async def stream_openai(messages: list, model: str, temperature: float = 0.5) ->
                 headers=headers,
                 json=payload
             ) as response:
-                if response.status_code != 200:
-                    body = await response.aread()
-                    raise RuntimeError(f"OpenAI API 오류 (HTTP {response.status_code}): {body.decode()[:200]}")
+                await _ensure_provider_response_ok(response, "OpenAI")
                     
                 async for line in response.aiter_lines():
                     line_str = line.strip()
@@ -472,10 +487,8 @@ async def stream_openai(messages: list, model: str, temperature: float = 0.5) ->
                                     yield token
                         except json.JSONDecodeError:
                             continue
-    except httpx.ConnectError:
-        raise RuntimeError("OpenAI 서버에 연결할 수 없습니다.")
-    except httpx.TimeoutException:
-        raise RuntimeError("OpenAI 요청 시간이 초과되었습니다.")
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        _raise_provider_transport_error("OpenAI", exc)
 
 
 async def stream_gemini(messages: list, model: str, temperature: float = 0.5, image_b64: str = None) -> AsyncGenerator[str, None]:
@@ -528,9 +541,7 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
                 headers=headers,
                 json=payload
             ) as response:
-                if response.status_code != 200:
-                    body = await response.aread()
-                    raise RuntimeError(f"Gemini API 오류 (HTTP {response.status_code}): {body.decode()[:200]}")
+                await _ensure_provider_response_ok(response, "Gemini")
 
                 # Gemini streamGenerateContent는 JSON 배열을 스트리밍함:
                 # [ {chunk1},\n {chunk2}, ... ]
@@ -589,10 +600,8 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
                         except json.JSONDecodeError:
                             continue
 
-    except httpx.ConnectError:
-        raise RuntimeError("Gemini 서버에 연결할 수 없습니다.")
-    except httpx.TimeoutException:
-        raise RuntimeError("Gemini 요청 시간이 초과되었습니다.")
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        _raise_provider_transport_error("Gemini", exc)
 
 
 async def stream_claude(messages: list, model: str, temperature: float = 0.5) -> AsyncGenerator[str, None]:
@@ -635,9 +644,7 @@ async def stream_claude(messages: list, model: str, temperature: float = 0.5) ->
                 headers=headers,
                 json=payload
             ) as response:
-                if response.status_code != 200:
-                    body = await response.aread()
-                    raise RuntimeError(f"Claude API 오류 (HTTP {response.status_code}): {body.decode()[:200]}")
+                await _ensure_provider_response_ok(response, "Claude")
                     
                 async for line in response.aiter_lines():
                     line_str = line.strip()
@@ -653,10 +660,8 @@ async def stream_claude(messages: list, model: str, temperature: float = 0.5) ->
                                 yield token
                         except json.JSONDecodeError:
                             continue
-    except httpx.ConnectError:
-        raise RuntimeError("Claude 서버에 연결할 수 없습니다.")
-    except httpx.TimeoutException:
-        raise RuntimeError("Claude 요청 시간이 초과되었습니다.")
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        _raise_provider_transport_error("Claude", exc)
 
 
 def _save_chat_capture_image(session_id: str, image_b64: str) -> str:
