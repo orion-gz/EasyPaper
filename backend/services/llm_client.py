@@ -426,6 +426,10 @@ async def stream_translation(
         raise RuntimeError(f"Ollama HTTP 오류: {e.response.status_code}")
 
 
+class _ProviderResponseError(RuntimeError):
+    pass
+
+
 async def _ensure_provider_response_ok(
     response: httpx.Response, provider: str, include_body: bool = True
 ) -> None:
@@ -434,7 +438,7 @@ async def _ensure_provider_response_ok(
         return
     body = await response.aread()
     detail = f": {body.decode()[:200]}" if include_body else ""
-    raise RuntimeError(f"{provider} API 오류 (HTTP {response.status_code}){detail}")
+    raise _ProviderResponseError(f"{provider} API 오류 (HTTP {response.status_code}){detail}")
 
 
 def _raise_provider_transport_error(provider: str, exc: Exception) -> None:
@@ -606,7 +610,7 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
 
     except (httpx.ConnectError, httpx.TimeoutException) as exc:
         _raise_provider_transport_error("Gemini", exc)
-    except RuntimeError:
+    except _ProviderResponseError:
         raise
     except Exception:
         raise RuntimeError("Gemini 요청 처리 중 오류가 발생했습니다.")
