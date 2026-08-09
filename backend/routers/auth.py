@@ -695,9 +695,11 @@ def _make_native_cli_install_endpoint(
     windows_install_url: str,
     path_getter,
     already_installed_message: str,
+    windows_installer_filename: str = None,
+    path_aliases: tuple = (),
+    exit_error_message: str = "설치가 오류 코드 {returncode}로 종료되었습니다.",
 ):
-    """claude_code/codex 공식 curl(Unix)/PowerShell(Windows) 네이티브 설치
-    스크립트로 CLI를 설치하는 SSE 스트림을 만듭니다.
+    """공식 Unix/Windows 네이티브 설치 스크립트용 SSE endpoint factory.
 
     예전에는 `npm install -g <package>`를 썼는데, macOS 공식 Node.js
     설치본은 npm 전역 prefix(/usr/local/lib/node_modules)가 root 소유라
@@ -717,13 +719,48 @@ def _make_native_cli_install_endpoint(
         system = platform.system()  # 'Linux' | 'Darwin' | 'Windows'
 
         async def event_stream():
-            cli_path = path_getter()
-            if os.path.exists(cli_path) or shutil.which(cli_path):
+            def is_installed():
+                cli_path = path_getter()
+                return (
+                    os.path.exists(cli_path)
+                    or shutil.which(cli_path)
+                    or any(shutil.which(alias) for alias in path_aliases)
+                )
+
+            if is_installed():
                 yield f"data: {json.dumps({'status': 'error', 'message': already_installed_message})}\n\n"
                 return
 
+            installer_path = None
             try:
-                if system == "Windows":
+                if system == "Windows" and windows_installer_filename:
+                    # Antigravity install.cmd는 셸 문자열로 조립하지 않는다. 파일로
+                    # 직접 받은 뒤 안전한 argv로 실행해야 &, |, 따옴표가 스크립트
+                    # 인자로 새는 과거 Windows escaping 문제가 재발하지 않는다.
+                    import tempfile
+                    from config import windows_safe_exec_args
+
+                    yield f"data: {json.dumps({'status': 'progress', 'line': 'Antigravity 설치 스크립트를 다운로드합니다...'})}\n\n"
+                    installer_path = os.path.join(tempfile.gettempdir(), windows_installer_filename)
+                    try:
+                        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                            async with client.stream("GET", windows_install_url) as resp:
+                                resp.raise_for_status()
+                                with open(installer_path, "wb") as installer_file:
+                                    async for chunk in resp.aiter_bytes():
+                                        installer_file.write(chunk)
+                    except Exception as e:
+                        yield f"data: {json.dumps({'status': 'error', 'message': f'설치 스크립트 다운로드 실패: {e}'})}\n\n"
+                        return
+
+                    yield f"data: {json.dumps({'status': 'progress', 'line': '다운로드 완료. 설치를 진행합니다...'})}\n\n"
+                    proc = await asyncio.create_subprocess_exec(
+                        *windows_safe_exec_args([installer_path]),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.STDOUT,
+                        stdin=asyncio.subprocess.DEVNULL,
+                    )
+                elif system == "Windows":
                     # PowerShell 명령을 별도 argv 원소로 넘겨 create_subprocess_exec로
                     # 실행한다 - 셸 문자열 하나로 조립해 create_subprocess_shell에
                     # 넘기면 Windows에서 cmd /c "..."로 한 번 더 감싸이면서 명령 안의
@@ -747,13 +784,19 @@ def _make_native_cli_install_endpoint(
                     yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
                 await proc.wait()
 
-                installed = os.path.exists(path_getter()) or shutil.which(path_getter())
-                if proc.returncode == 0 and installed:
+                if proc.returncode == 0 and is_installed():
                     yield f"data: {json.dumps({'status': 'success'})}\n\n"
                 else:
-                    yield f"data: {json.dumps({'status': 'error', 'message': f'설치가 오류 코드 {proc.returncode}로 종료되었습니다.'})}\n\n"
+                    message = exit_error_message.format(returncode=proc.returncode)
+                    yield f"data: {json.dumps({'status': 'error', 'message': message})}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+            finally:
+                if installer_path:
+                    try:
+                        os.remove(installer_path)
+                    except OSError:
+                        pass
 
         return StreamingResponse(
             event_stream(),
@@ -791,97 +834,19 @@ router.add_api_route(
 )
 
 
-@router.get("/settings/install-antigravity")
-async def install_antigravity_stream(current_user: str = Depends(get_current_user)):
-    """공식 설치 스크립트(https://antigravity.google/cli)로 이 서버에 Antigravity CLI(agy)를
-    설치하고 진행 상황을 스트리밍합니다."""
-    import asyncio
-    import os
-    import platform
-    import shutil
-
-    system = platform.system()  # 'Linux' | 'Darwin' | 'Windows'
-
-    async def event_stream():
-        agy_path = get_agy_path()
-        if os.path.exists(agy_path) or shutil.which(agy_path) or shutil.which("agy"):
-            yield f"data: {json.dumps({'status': 'error', 'message': 'Antigravity CLI가 이미 설치되어 있습니다.'})}\n\n"
-            return
-
-        try:
-            if system == "Windows":
-                # install.cmd 자체에 "명령줄 인자에 &, |, ; 등 위험한 셸 문자가
-                # 있으면 거부"하는 자체 보안 검증이 있다. 예전에는 `curl -o ... &&
-                # call ... && del ...`를 하나의 문자열로 만들어
-                # create_subprocess_shell에 넘겼는데, Python이 shell=True일 때
-                # 이 문자열 전체를 다시 `cmd /c "..."`로 한 번 더 감싸면서 이미
-                # 문자열 안에 있던 큰따옴표들과 중첩되어 cmd.exe가 명령 경계를
-                # 잘못 해석했다. 그 결과 "&&" 뒤의 내용 일부가 install.cmd
-                # 자신에게 인자로 새어 들어가 그 자체 검증에 걸려
-                # "Fatal: Illegal shell characters detected in command line
-                # arguments"로 실패했다(위 Ollama Windows 설치와 동일하게 셸
-                # 문자열 조립 없이 httpx로 직접 받고 create_subprocess_exec로
-                # 실행하면 이 문제가 원천적으로 생기지 않는다).
-                import tempfile
-                from config import windows_safe_exec_args
-
-                yield f"data: {json.dumps({'status': 'progress', 'line': 'Antigravity 설치 스크립트를 다운로드합니다...'})}\n\n"
-                installer_path = os.path.join(tempfile.gettempdir(), "antigravity_install.cmd")
-                try:
-                    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-                        async with client.stream("GET", "https://antigravity.google/cli/install.cmd") as resp:
-                            resp.raise_for_status()
-                            with open(installer_path, "wb") as f:
-                                async for chunk in resp.aiter_bytes():
-                                    f.write(chunk)
-                except Exception as e:
-                    yield f"data: {json.dumps({'status': 'error', 'message': f'설치 스크립트 다운로드 실패: {e}'})}\n\n"
-                    return
-
-                yield f"data: {json.dumps({'status': 'progress', 'line': '다운로드 완료. 설치를 진행합니다...'})}\n\n"
-                proc = await asyncio.create_subprocess_exec(
-                    *windows_safe_exec_args([installer_path]),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                    stdin=asyncio.subprocess.DEVNULL,
-                )
-                async for text in _stream_subprocess_lines(proc):
-                    yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
-                await proc.wait()
-                try:
-                    os.remove(installer_path)
-                except OSError:
-                    pass
-            else:
-                # macOS와 Linux는 동일한 공식 셸 스크립트를 사용한다.
-                proc = await asyncio.create_subprocess_shell(
-                    "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                    stdin=asyncio.subprocess.DEVNULL,
-                )
-                async for text in _stream_subprocess_lines(proc):
-                    yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
-                await proc.wait()
-
-            agy_path_after = get_agy_path()
-            installed = os.path.exists(agy_path_after) or shutil.which(agy_path_after) or shutil.which("agy")
-            if proc.returncode == 0 and installed:
-                yield f"data: {json.dumps({'status': 'success'})}\n\n"
-            else:
-                yield f"data: {json.dumps({'status': 'error', 'message': f'설치 스크립트가 오류 코드 {proc.returncode}로 종료되었습니다.'})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        }
-    )
+router.add_api_route(
+    "/settings/install-antigravity",
+    _make_native_cli_install_endpoint(
+        "https://antigravity.google/cli/install.sh",
+        "https://antigravity.google/cli/install.cmd",
+        get_agy_path,
+        "Antigravity CLI가 이미 설치되어 있습니다.",
+        windows_installer_filename="antigravity_install.cmd",
+        path_aliases=("agy",),
+        exit_error_message="설치 스크립트가 오류 코드 {returncode}로 종료되었습니다.",
+    ),
+    methods=["GET"],
+)
 
 
 @router.get("/settings/pull-model")
