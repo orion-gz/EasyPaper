@@ -41,21 +41,25 @@ export async function fetchLibraryFolders() {
 export async function createLibraryFolder(payload) {
   const res = await fetch(`${API_BASE}/library/folders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error((await res.json()).detail || '폴더 생성 실패')
+  invalidateLibraryGetCache()
   return res.json()
 }
 export async function updateLibraryFolder(folderId, payload) {
   const res = await fetch(`${API_BASE}/library/folders/${encodeURIComponent(folderId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error((await res.json()).detail || '폴더 수정 실패')
+  invalidateLibraryGetCache()
   return res.json()
 }
 export async function deleteLibraryFolder(folderId, deletePapers = false) {
   const res = await fetch(`${API_BASE}/library/folders/${encodeURIComponent(folderId)}?delete_papers=${deletePapers}`, { method: 'DELETE' })
   if (!res.ok) throw new Error((await res.json()).detail || '폴더 삭제 실패')
+  invalidateLibraryGetCache()
   return res.json()
 }
 export async function moveLibraryDocuments(docIds, folderId) {
   const res = await fetch(`${API_BASE}/library/documents/move`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ doc_ids: docIds, folder_id: folderId }) })
   if (!res.ok) throw new Error((await res.json()).detail || '논문 이동 실패')
+  invalidateLibraryGetCache()
   return res.json()
 }
 
@@ -74,6 +78,7 @@ export async function fetchLibraryTranslation(docId, pageNum, options = {}) {
 export async function deleteLibraryDoc(docId) {
   const res = await fetch(`${API_BASE}/library/${docId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('삭제 실패')
+  invalidateLibraryGetCache()
   return res.json()
 }
 
@@ -92,6 +97,7 @@ export async function updateLibraryDocMetadata(docId, payload) {
     body: JSON.stringify(payload)
   })
   if (!res.ok) throw new Error('메타데이터 업데이트 실패')
+  invalidateLibraryGetCache()
   return res.json()
 }
 
@@ -104,6 +110,7 @@ export async function updateLibraryTranslation(docId, pageNum, payload, options 
     body: JSON.stringify(payload)
   })
   if (!res.ok) throw new Error('번역 수정 저장 실패')
+  invalidateLibraryGetCache()
   return res.json()
 }
 export async function exportAnnotatedPdf(docId, payload) {
@@ -158,6 +165,7 @@ export async function putLibraryAnnotations(docId, data) {
     }
     throw new Error(message)
   }
+  invalidateLibraryGetCache()
   return res.json()
 }
 
@@ -192,6 +200,7 @@ export async function putLibraryMemos(docId, data) {
     }
     throw new Error(message)
   }
+  invalidateLibraryGetCache()
   return res.json()
 }
 
@@ -269,6 +278,7 @@ export async function sendReadingHeartbeat(docId, seconds, category = 'reading')
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ seconds, category }),
     })
+    if (res.ok) invalidateLibraryGetCache()
     return res.ok
   } catch {
     return false
@@ -317,18 +327,21 @@ export async function fetchLibraryTrash(options = {}) {
 export async function restoreLibraryDoc(docId) {
   const res = await fetch(`${API_BASE}/library/${docId}/restore`, { method: 'POST' })
   if (!res.ok) throw new Error('복원 실패')
+  invalidateLibraryGetCache()
   return res.json()
 }
 
 export async function emptyLibraryTrash() {
   const res = await fetch(`${API_BASE}/library/trash/empty`, { method: 'DELETE' })
   if (!res.ok) throw new Error('휴지통 비우기 실패')
+  invalidateLibraryGetCache()
   return res.json()
 }
 
 export async function deleteLibraryDocPermanently(docId) {
   const res = await fetch(`${API_BASE}/library/${docId}/permanent`, { method: 'DELETE' })
   if (!res.ok) throw new Error('영구 삭제 실패')
+  invalidateLibraryGetCache()
   return res.json()
 }
 
