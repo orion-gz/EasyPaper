@@ -22,6 +22,20 @@ def test_sliding_window_rate_limiter_returns_retry_after_and_isolates_users():
     limiter.check("chat", "alice")
 
 
+def test_sliding_window_rate_limiter_evicts_retired_identities():
+    now = [100.0]
+    limiter = SlidingWindowRateLimiter({"chat": (2, 10.0)}, clock=lambda: now[0])
+
+    limiter.check("chat", "old-name")
+    limiter.check("chat", "other-user")
+    assert len(limiter._requests) == 2
+
+    now[0] = 110.0
+    limiter.check("chat", "active-user")
+
+    assert set(limiter._requests) == {("chat", "active-user")}
+
+
 def test_upload_endpoint_enforces_configured_limit(test_client, monkeypatch):
     import services.rate_limiter as rate_limiter
 

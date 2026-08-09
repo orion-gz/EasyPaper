@@ -38,6 +38,20 @@ class SlidingWindowRateLimiter:
         self._clock = clock
         self._requests = defaultdict(deque)
         self._lock = threading.Lock()
+        self._cleanup_interval = min(window for _, window in policies.values())
+        self._next_cleanup_at = 0.0
+
+    def _evict_stale_identities(self, now: float) -> None:
+        if now < self._next_cleanup_at:
+            return
+        for key, timestamps in list(self._requests.items()):
+            _, window_seconds = self._policies[key[0]]
+            cutoff = now - window_seconds
+            while timestamps and timestamps[0] <= cutoff:
+                timestamps.popleft()
+            if not timestamps:
+                del self._requests[key]
+        self._next_cleanup_at = now + self._cleanup_interval
 
     def check(self, scope: str, identity: str) -> None:
         limit, window_seconds = self._policies[scope]
@@ -46,6 +60,7 @@ class SlidingWindowRateLimiter:
         key = (scope, identity)
 
         with self._lock:
+            self._evict_stale_identities(now)
             timestamps = self._requests[key]
             while timestamps and timestamps[0] <= cutoff:
                 timestamps.popleft()
