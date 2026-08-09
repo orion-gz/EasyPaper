@@ -28,7 +28,7 @@ async def test_gemini_uses_header_for_api_key(monkeypatch):
 async def test_gemini_redacts_unexpected_exception(monkeypatch):
     class FailingClient:
         async def __aenter__(self):
-            raise ValueError("secret-key https://example.test/?key=secret-key")
+            raise RuntimeError("secret-key https://example.test/?key=secret-key")
         async def __aexit__(self, *args):
             return False
     monkeypatch.setattr(llm_client, "get_gemini_api_key", lambda: "secret-key")
