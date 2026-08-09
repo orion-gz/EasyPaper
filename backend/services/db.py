@@ -765,7 +765,11 @@ def db_get_compare_doc_ids(compare_id: str) -> List[str]:
 
 def db_list_compare_chat_sessions(username: str) -> List[Dict[str, Any]]:
     """사용자가 논문 비교 기능으로 대화한 채팅 세션 목록을, 최근 대화 시각
-    역순으로 반환합니다. 각 세션의 doc_ids에 연결된 문서 제목도 함께 담습니다."""
+    역순으로 반환합니다. 각 세션의 doc_ids에 연결된 문서 제목도 함께 담습니다.
+
+    compare_sessions와 사용자의 documents를 각각 한 번씩만 조회해, 세션별·문서별
+    SELECT가 반복되던 N+1 패턴을 피합니다.
+    """
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -774,6 +778,12 @@ def db_list_compare_chat_sessions(username: str) -> List[Dict[str, Any]]:
         )
         rows = cursor.fetchall()
 
+        cursor.execute(
+            "SELECT id, filename, metadata FROM documents WHERE username = ?",
+            (username,),
+        )
+        documents_by_id = {row["id"]: dict(row) for row in cursor.fetchall()}
+
         sessions = []
         for r in rows:
             row = dict(r)
@@ -781,15 +791,10 @@ def db_list_compare_chat_sessions(username: str) -> List[Dict[str, Any]]:
 
             titles = []
             for doc_id in doc_ids:
-                cursor.execute(
-                    "SELECT filename, metadata FROM documents WHERE id = ? AND username = ?",
-                    (doc_id, username)
-                )
-                doc_row = cursor.fetchone()
-                if not doc_row:
+                doc = documents_by_id.get(doc_id)
+                if not doc:
                     titles.append("(삭제된 논문)")
                     continue
-                doc = dict(doc_row)
                 metadata = json.loads(doc["metadata"]) if doc["metadata"] else {}
                 titles.append(metadata.get("title") or doc["filename"])
 
@@ -1709,4 +1714,3 @@ def db_get_all_reading_analytics_summary(username: str, since_days: Optional[int
         "total_active_reading_time": total_active_time,
         "paper_stats": paper_stats,
     }
-
