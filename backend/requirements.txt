@@ -1,6 +1,6 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
-python-multipart==0.0.9
+python-multipart>=0.0.18
 pymupdf==1.24.10
 httpx==0.27.2
 pydantic==2.8.2
