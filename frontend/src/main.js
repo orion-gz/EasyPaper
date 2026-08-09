@@ -539,7 +539,8 @@ if (libraryScreen) {
 }
 fileInput.addEventListener('change', (e) => {
   if (e.target.files && e.target.files.length > 0) {
-    handleFiles(e.target.files)
+    const targetFolderId = state.currentWorkspacePage === 'library' ? activeLibraryFolderId : null
+    handleFiles(e.target.files, targetFolderId)
   }
 })
 
@@ -4449,7 +4450,8 @@ let activeCategoryFilter = 'ALL'
 const selectedDocIds = new Set()
 
 function getVisibleDocIds() {
-  return currentLibraryDocs.map(d => d.id)
+  if (!libraryGrid) return []
+  return Array.from(libraryGrid.querySelectorAll('.doc-card[data-id], .doc-list-row[data-id]'), el => el.dataset.id)
 }
 
 function toggleDocSelection(docId) {
@@ -5146,10 +5148,14 @@ document.addEventListener('keydown', async e => {
   } else if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
     e.preventDefault()
     await undoLastLibraryAction()
-  } else if (mod && ['c', 'x'].includes(e.key.toLowerCase()) && selectedDocIds.size) {
+  } else if (mod && e.key.toLowerCase() === 'x' && selectedDocIds.size) {
     e.preventDefault()
-    libraryClipboard = { kind: 'documents', mode: e.key.toLowerCase() === 'x' ? 'cut' : 'copy', ids: Array.from(selectedDocIds) }
-    showToast(`${selectedDocIds.size}개 논문을 ${libraryClipboard.mode === 'cut' ? '잘라냈습니다' : '복사했습니다'}.`, 'info')
+    libraryClipboard = { kind: 'documents', mode: 'cut', ids: Array.from(selectedDocIds) }
+    showToast(`${selectedDocIds.size}개 논문을 잘라냈습니다.`, 'info')
+  } else if (mod && e.key.toLowerCase() === 'c' && selectedDocIds.size) {
+    e.preventDefault()
+    libraryClipboard = null
+    showToast('논문은 한 폴더에만 둘 수 있습니다. 이동하려면 Ctrl/Cmd+X를 사용하세요.', 'info')
   } else if (mod && e.key.toLowerCase() === 'x' && focusedFolder) {
     e.preventDefault()
     libraryClipboard = { kind: 'folder', mode: 'cut', id: focusedFolder.id }
@@ -5157,6 +5163,7 @@ document.addEventListener('keydown', async e => {
   } else if (mod && e.key.toLowerCase() === 'v' && libraryClipboard) {
     e.preventDefault()
     try {
+      if (libraryClipboard.mode === 'copy') throw new Error('논문 복사는 지원되지 않습니다. 이동하려면 잘라내기를 사용하세요.')
       if (libraryClipboard.kind === 'folder') {
         const folder = libraryFolders.find(candidate => candidate.id === libraryClipboard.id)
         if (!folder) throw new Error('잘라낸 폴더를 찾을 수 없습니다.')
@@ -5305,6 +5312,24 @@ function pushLibraryUndo(action) {
   libraryUndoStack.push(action)
   if (libraryUndoStack.length > 30) libraryUndoStack.shift()
 }
+
+function discardUndoActionsForDeletedItems(folderIds, paperIds) {
+  for (let index = libraryUndoStack.length - 1; index >= 0; index--) {
+    const action = libraryUndoStack[index]
+    if (action.kind === 'documents') {
+      action.entries = action.entries.filter(entry => (
+        !paperIds.has(entry.id) && !folderIds.has(entry.folderId)
+      ))
+      if (action.entries.length === 0) libraryUndoStack.splice(index, 1)
+    } else if (
+      (action.kind === 'folderMove' && (folderIds.has(action.id) || folderIds.has(action.parentId))) ||
+      (action.kind === 'folderUpdate' && folderIds.has(action.id))
+    ) {
+      libraryUndoStack.splice(index, 1)
+    }
+  }
+}
+
 async function moveDocumentsWithUndo(docIds, folderId) {
   const entries = docIds.map(id => ({ id, folderId: currentLibraryDocs.find(doc => doc.id === id)?.folder_id || null }))
   await moveLibraryDocuments(docIds, folderId)
@@ -5335,8 +5360,13 @@ async function undoLastLibraryAction() {
     showToast('마지막 작업을 되돌렸습니다.', 'success')
     await renderLibrary()
   } catch (err) {
-    libraryUndoStack.push(action)
-    showToast(err.message || '실행 취소 실패', 'error')
+    const message = err.message || '실행 취소 실패'
+    if (/찾을 수 없습니다/.test(message)) {
+      showToast('삭제된 항목을 참조하는 실행 취소 기록을 건너뛰었습니다.', 'warning')
+    } else {
+      libraryUndoStack.push(action)
+      showToast(message, 'error')
+    }
   }
 }
 
@@ -5394,6 +5424,7 @@ function showCustomTextDialog({ title, label, value = '', confirmText = '확인'
 function navigateLibraryFolder(folderId, { pushHistory = true } = {}) {
   const nextFolderId = folderId || null
   if (nextFolderId === activeLibraryFolderId && activeCategoryFilter === 'ALL') return
+  clearDocSelection()
   activeLibraryFolderId = nextFolderId
   activeCategoryFilter = 'ALL'
   if (pushHistory) {
@@ -5465,8 +5496,9 @@ async function requestRenameFolder(folder) {
 }
 async function requestDeleteFolder(folder) {
   const folderIds = folderDescendants(folder.id)
+  const papersInTree = currentLibraryDocs.filter(doc => folderIds.has(doc.folder_id))
   const childFolderCount = folderIds.size - 1
-  const paperCount = currentLibraryDocs.filter(doc => folderIds.has(doc.folder_id)).length
+  const paperCount = papersInTree.length
   const childFolderNotice = childFolderCount > 0 ? `\n하위 폴더 ${childFolderCount}개도 함께 삭제됩니다.` : ''
   const paperNotice = paperCount ? '' : '\n포함된 논문은 없으며 논문에는 영향이 없습니다.'
   const ok = await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요?${childFolderNotice}${paperNotice}`, { title: '폴더 삭제', confirmText: '삭제', danger: true })
@@ -5478,6 +5510,7 @@ async function requestDeleteFolder(folder) {
     deletePapers = choice
   }
   await deleteLibraryFolder(folder.id, deletePapers)
+  discardUndoActionsForDeletedItems(folderIds, deletePapers ? new Set(papersInTree.map(doc => doc.id)) : new Set())
   await renderLibrary()
 }
 
@@ -5582,7 +5615,12 @@ async function renderLibrary() {
     if (state.currentLibraryTab !== 'trash') {
       const foldersData = await fetchLibraryFolders()
       libraryFolders = foldersData.folders || []
-      if (activeLibraryFolderId && !libraryFolders.some(f => f.id === activeLibraryFolderId)) activeLibraryFolderId = null
+      if (activeLibraryFolderId && !libraryFolders.some(f => f.id === activeLibraryFolderId)) {
+        activeLibraryFolderId = null
+        if (history.state?.screen === 'library' && history.state?.page === 'library') {
+          history.replaceState({ ...history.state, libraryFolderId: null }, '', location.href)
+        }
+      }
       renderFolderNavigation(allDocs)
     }
 
@@ -14736,9 +14774,16 @@ window.addEventListener('popstate', (e) => {
   const isLibraryHistory = e.state?.screen === 'library' && e.state?.page === 'library'
   const isLegacyLibraryRoot = !e.state && location.hash === '#library'
   if (isLibraryHistory || isLegacyLibraryRoot) {
-    activeLibraryFolderId = e.state?.libraryFolderId || null
+    const requestedFolderId = e.state?.libraryFolderId || null
+    const canValidateFolder = state.currentWorkspacePage === 'library'
+    const folderExists = !requestedFolderId || !canValidateFolder || libraryFolders.some(folder => folder.id === requestedFolderId)
+    activeLibraryFolderId = folderExists ? requestedFolderId : null
+    if (requestedFolderId && !folderExists) {
+      history.replaceState({ ...(e.state || {}), screen: 'library', page: 'library', libraryFolderId: null }, '', location.href)
+    }
     activeCategoryFilter = 'ALL'
-    if (state.currentWorkspacePage === 'library' && currentLibraryDocs.length) {
+    clearDocSelection()
+    if (state.currentWorkspacePage === 'library') {
       filterLibraryCards(currentLibraryDocs)
       renderFolderNavigation(currentLibraryDocs)
     }
