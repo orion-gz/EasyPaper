@@ -1,4 +1,26 @@
 const API_BASE = '/api'
+const SHARED_GET_TTL_MS = 5000
+const sharedGetCache = new Map()
+
+async function fetchJsonWithSharedTtl(url, errorMessage) {
+  const now = Date.now()
+  const cached = sharedGetCache.get(url)
+  if (cached && now - cached.createdAt < SHARED_GET_TTL_MS) return cached.promise
+
+  const promise = fetch(url).then(async res => {
+    if (!res.ok) throw new Error(errorMessage)
+    return res.json()
+  })
+  sharedGetCache.set(url, { createdAt: now, promise })
+  promise.catch(() => {
+    if (sharedGetCache.get(url)?.promise === promise) sharedGetCache.delete(url)
+  })
+  return promise
+}
+
+export function invalidateLibraryGetCache() {
+  sharedGetCache.clear()
+}
 
 function buildQuery(options) {
   if (!options || !options.targetLang) return ''
@@ -7,9 +29,7 @@ function buildQuery(options) {
 }
 
 export async function fetchLibrary(options = {}) {
-  const res = await fetch(`${API_BASE}/library${buildQuery(options)}`)
-  if (!res.ok) throw new Error('라이브러리 조회 실패')
-  return res.json()
+  return fetchJsonWithSharedTtl(`${API_BASE}/library${buildQuery(options)}`, '라이브러리 조회 실패')
 }
 
 
@@ -197,9 +217,7 @@ export async function resolveLibraryReference(docId, refNum) {
 }
 
 export async function fetchLibraryGraph() {
-  const res = await fetch(`${API_BASE}/library/graph`)
-  if (!res.ok) throw new Error('지식 그래프 조회 실패')
-  return res.json()
+  return fetchJsonWithSharedTtl(`${API_BASE}/library/graph`, '지식 그래프 조회 실패')
 }
 
 export async function fetchGraphNodeQuestions(nodeId) {
@@ -215,9 +233,7 @@ export async function searchGraphNodes(query) {
 }
 
 export async function fetchLibraryTimeline() {
-  const res = await fetch(`${API_BASE}/library/timeline`)
-  if (!res.ok) throw new Error('타임라인 조회 실패')
-  return res.json()
+  return fetchJsonWithSharedTtl(`${API_BASE}/library/timeline`, '타임라인 조회 실패')
 }
 
 export async function fetchLibraryHeatmap() {
@@ -240,9 +256,7 @@ export async function fetchLibraryGaps() {
 }
 
 export async function fetchLibraryDashboard() {
-  const res = await fetch(`${API_BASE}/library/dashboard`)
-  if (!res.ok) throw new Error('대시보드 조회 실패')
-  return res.json()
+  return fetchJsonWithSharedTtl(`${API_BASE}/library/dashboard`, '대시보드 조회 실패')
 }
 
 // 뷰어/비교 화면이 보이고 포커스된 동안 주기적으로 경과 초를 보고한다(main.js의
@@ -265,16 +279,12 @@ export async function sendReadingHeartbeat(docId, seconds, category = 'reading')
 // 랭킹에 쓰이는 실측 집계. sinceDays를 주면 최근 N일로 제한한다.
 export async function fetchReadingTimeStats(sinceDays) {
   const query = sinceDays ? `?since_days=${sinceDays}` : ''
-  const res = await fetch(`${API_BASE}/library/reading-stats${query}`)
-  if (!res.ok) throw new Error('읽기 시간 통계 조회 실패')
-  return res.json()
+  return fetchJsonWithSharedTtl(`${API_BASE}/library/reading-stats${query}`, '읽기 시간 통계 조회 실패')
 }
 
 export async function fetchReadingAnalyticsSummary(sinceDays) {
   const query = sinceDays ? `?since_days=${sinceDays}` : ''
-  const res = await fetch(`${API_BASE}/library/reading-analytics-summary${query}`)
-  if (!res.ok) throw new Error('Reading Analytics summary fetch failed')
-  return res.json()
+  return fetchJsonWithSharedTtl(`${API_BASE}/library/reading-analytics-summary${query}`, 'Reading Analytics summary fetch failed')
 }
 
 export async function fetchPaperReadingAnalytics(docId) {
