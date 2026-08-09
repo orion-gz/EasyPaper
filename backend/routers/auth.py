@@ -13,6 +13,7 @@ from services.auth import (
     get_login_lockout_remaining,
     record_failed_login,
     reset_login_attempts,
+    require_admin_user,
 )
 from config import (
     get_app_username,
@@ -999,7 +1000,7 @@ async def _restart_server_process(project_dir: str):
 
 
 @router.post("/settings/update")
-async def system_update(current_user: str = Depends(get_current_user)):
+async def system_update(current_user: str = Depends(require_admin_user)):
     """깃허브 최신 커밋을 풀(pull) 받고, 프론트엔드를 빌드한 뒤 서버를 재기동합니다."""
     import subprocess
     import asyncio

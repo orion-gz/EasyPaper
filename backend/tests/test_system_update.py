@@ -20,6 +20,12 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import config
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def configured_admin_matches_test_user(monkeypatch):
+    monkeypatch.setattr("services.auth.get_app_username", lambda: "testuser")
 
 
 def _make_subprocess_mock(returncode=0, stdout=b"", stderr=b""):
@@ -48,6 +54,15 @@ def test_system_update_runs_git_pull_in_actual_project_root(test_client):
     assert git_call["cwd"] == config.get_project_root()
     # 회귀 확인: cwd가 backend/backend나 backend/frontend처럼 backend가 중첩되면 안 된다
     assert not git_call["cwd"].rstrip(os.sep).endswith(f"backend{os.sep}backend")
+
+
+def test_system_update_rejects_non_admin_user(test_client, monkeypatch):
+    monkeypatch.setattr("services.auth.get_app_username", lambda: "admin")
+    with patch("asyncio.create_subprocess_exec", new=AsyncMock()) as subprocess_mock:
+        res = test_client.post("/api/settings/update")
+    assert res.status_code == 403
+    assert res.json()["detail"] == "관리자 권한이 필요합니다."
+    subprocess_mock.assert_not_awaited()
 
 
 def test_system_update_builds_frontend_in_actual_frontend_dir_when_pull_has_changes(test_client):
