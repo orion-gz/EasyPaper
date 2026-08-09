@@ -15,6 +15,8 @@ import { countUniqueVerifiedPages, readPageCount, lastActivityIso, lastActivityD
 import '../styles/reading-history.css'
 import '../styles/dashboard.css'
 
+let renderGeneration = 0
+
 function renderReadingAnalyticsSummaryCard(analyticsSummary) {
   if (!analyticsSummary) return ''
 
@@ -367,6 +369,8 @@ function hideRhTooltip() {
 export async function renderReadingHistoryPage() {
   const el = document.getElementById('page-history')
   if (!el) return
+  const generation = ++renderGeneration
+  const isCurrent = () => generation === renderGeneration && el.classList.contains('active')
 
   hideRhTooltip() // 다른 페이지로 이동한 뒤에도 뜬 채로 남아있지 않도록
   el.innerHTML = '<div class="rh-page"><div class="rh-empty">읽기 기록을 불러오는 중...</div></div>'
@@ -391,11 +395,13 @@ export async function renderReadingHistoryPage() {
     analyticsSummary = analyticsSummaryRes
   } catch (err) {
     console.error('Reading History 로드 실패:', err)
-    el.innerHTML = '<div class="rh-page"><div class="rh-empty" style="color:var(--error)">읽기 기록을 불러오지 못했습니다.</div></div>'
+    if (isCurrent()) {
+      el.innerHTML = '<div class="rh-page"><div class="rh-empty" style="color:var(--error)">읽기 기록을 불러오지 못했습니다.</div></div>'
+    }
     return
   }
 
-  if (document.getElementById('page-history') !== el) return // 페이지 전환됨
+  if (!isCurrent()) return
 
   const docsById = new Map(libraryDocs.map(d => [d.id, d]))
   // readingStats.title_by_doc: 하트비트 시 스냅샷된 doc별 제목 (영구 삭제 후에도 복원 가능)

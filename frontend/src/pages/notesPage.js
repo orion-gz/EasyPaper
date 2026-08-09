@@ -17,6 +17,8 @@ import { fetchLibrary, fetchLibraryAnnotations, fetchLibraryMemos, fetchPrimer }
 import { icon } from '../icons.js'
 import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
 
+let renderGeneration = 0
+
 // 즐겨찾기는 서버에 저장되는 필드가 아니라 Library 페이지가 이미 쓰고 있는
 // 로컬 전용 상태다(백엔드에 star/favorite 필드가 없음 - Library 리스킨 때 같은
 // 이유로 로컬로 구현됨). 같은 localStorage 키를 그대로 읽고 써서 Library와
@@ -594,6 +596,8 @@ function shellHtml() {
 export async function renderNotesPage() {
   const root = document.getElementById('page-notes')
   if (!root) return
+  const generation = ++renderGeneration
+  const isCurrent = () => generation === renderGeneration && root.classList.contains('active')
 
   root.innerHTML = shellHtml()
   attachListeners(root)
@@ -604,10 +608,14 @@ export async function renderNotesPage() {
     docs = data.documents || []
   } catch (err) {
     console.error('Notes 페이지: 라이브러리 조회 실패:', err)
-    const listEl = root.querySelector('.notes-paper-list-items')
-    if (listEl) listEl.innerHTML = `<div class="notes-empty"><p style="color:var(--error)">논문 목록을 불러오지 못했습니다</p></div>`
+    if (isCurrent()) {
+      const listEl = root.querySelector('.notes-paper-list-items')
+      if (listEl) listEl.innerHTML = `<div class="notes-empty"><p style="color:var(--error)">논문 목록을 불러오지 못했습니다</p></div>`
+    }
     return
   }
+
+  if (!isCurrent()) return
 
   if (docs.length === 0) {
     allPapers = []
@@ -617,7 +625,9 @@ export async function renderNotesPage() {
     return
   }
 
-  allPapers = await Promise.all(docs.map(buildPaperEntry))
+  const loadedPapers = await Promise.all(docs.map(buildPaperEntry))
+  if (!isCurrent()) return
+  allPapers = loadedPapers
 
   if (!selectedDocId || !allPapers.some(e => e.doc.id === selectedDocId)) {
     selectedDocId = allPapers[0].doc.id

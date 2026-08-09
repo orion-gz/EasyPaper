@@ -14,6 +14,8 @@ import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, tod
 import { periodStats, sumSecondsByDayRange, formatDuration, deltaDurationHtml, CATEGORY_LABEL, CATEGORY_COLOR_VAR, CATEGORY_ORDER } from './readingHistoryPage.js'
 import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
 
+let renderGeneration = 0
+
 function renderReadingAnalyticsCard(analyticsData) {
   if (!analyticsData) return ''
 
@@ -694,6 +696,8 @@ function attachHandlers(root) {
 export async function renderDashboardPage() {
   const el = document.getElementById('page-dashboard')
   if (!el) return
+  const generation = ++renderGeneration
+  const isCurrent = () => generation === renderGeneration && el.classList.contains('active')
 
   el.innerHTML = `<div class="dash-loading">${icon('refreshCw', 20)}<span>대시보드를 불러오는 중...</span></div>`
 
@@ -719,9 +723,13 @@ export async function renderDashboardPage() {
     weeklyReadingStats = results[7]
   } catch (err) {
     console.error('대시보드 데이터 로드 실패:', err)
-    el.innerHTML = `<div class="dash-error">${icon('alertTriangle', 20)}<p>대시보드를 불러오지 못했습니다.</p></div>`
+    if (isCurrent()) {
+      el.innerHTML = `<div class="dash-error">${icon('alertTriangle', 20)}<p>대시보드를 불러오지 못했습니다.</p></div>`
+    }
     return
   }
+
+  if (!isCurrent()) return
 
   try {
     const events = (timelineData && Array.isArray(timelineData.events)) ? timelineData.events : []
@@ -768,6 +776,8 @@ export async function renderDashboardPage() {
     attachHandlers(el)
   } catch (renderErr) {
     console.error('대시보드 렌더링 예외 발생:', renderErr)
-    el.innerHTML = `<div class="dash-error">${icon('alertTriangle', 20)}<p>대시보드를 불러오지 못했습니다.</p></div>`
+    if (isCurrent()) {
+      el.innerHTML = `<div class="dash-error">${icon('alertTriangle', 20)}<p>대시보드를 불러오지 못했습니다.</p></div>`
+    }
   }
 }
