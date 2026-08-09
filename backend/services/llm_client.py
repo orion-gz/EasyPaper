@@ -1,15 +1,22 @@
 import asyncio
+import functools
 import httpx
 import json
 import logging
 import re
+import threading
 from typing import AsyncGenerator
+from services.atomic_io import atomic_write_text
 from config import (
     get_ollama_host,
     get_trans_provider,
     get_trans_model,
     get_chat_provider,
     get_chat_model,
+    get_analysis_provider,
+    get_analysis_model,
+    get_library_provider,
+    get_library_model,
     get_openai_api_key,
     get_gemini_api_key,
     get_claude_api_key,
@@ -905,7 +912,7 @@ async def stream_page_insight(
 ) -> AsyncGenerator[str, None]:
     """
     페이지 원문에서 키워드/전문용어 설명(kind='keywords') 또는 요약(kind='summary')을
-    생성합니다. 어시스턴트(Chat) 프로바이더/모델 설정을 그대로 재사용한다 - 번역보다는
+    생성합니다. 읽기 분석 프로바이더/모델 설정을 사용한다 - 번역보다는
     "분석/설명" 작업에 가깝고, antigravity/claude_code처럼 세션이 지속되는 provider라면
     이미 채팅에서 쓰고 있는 문서당 공유 세션을 그대로 활용해 별도 세션을 만들지 않는다.
     단, 대화창에 노출되는 채팅 기록(chats 테이블)에는 남기지 않고 사용량 통계도
@@ -942,8 +949,8 @@ async def stream_page_insight(
 
     prompt = f"{instruction}\n\n원문:\n{text}"
 
-    provider = get_chat_provider()
-    model = get_chat_model()
+    provider = get_analysis_provider()
+    model = get_analysis_model()
 
     if provider == "antigravity":
         async for token in stream_antigravity(prompt, model=model, session_id=session_id, usage_label="insight"):
@@ -1101,8 +1108,8 @@ async def generate_reading_primer(
 
     prompt = f"{instruction}\n\n원문 발췌:\n{context_text}{terms_text}"
 
-    provider = get_chat_provider()
-    model = get_chat_model()
+    provider = get_analysis_provider()
+    model = get_analysis_model()
 
     # 브리핑은 계보/파인만/실험 흐름/용어집까지 한 번에 뽑아내느라 항목이 많아,
     # 사용자가 채팅용으로 설정해둔 effort를 그대로 쓰면 CLI가 오래 침묵하다 stall
@@ -1436,25 +1443,6 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
     if effort_level:
         base_cmd.extend(["--effort", effort_level])
 
-    # 이 문서를 마지막으로 쓴 provider가 claude_code가 아니면(예: antigravity로
-    # 갔다가 다시 돌아온 경우), --resume은 어차피 그 세션을 이어받지 못하므로
-    # (claude code 쪽에 해당 session_id로 만든 세션이 없다면) 새로 생성될 텐데,
-    # 이때 우리 DB 채팅 이력으로 캐치업 문맥을 붙여 대화가 이어지는 것처럼 만든다.
-    session_meta = _get_effective_session_meta(session_id)
-    provider_switched = session_meta is not None and session_meta.get("provider") != "claude_code"
-    catchup_prefix = _build_catchup_prefix(session_id) if (is_chat and provider_switched) else ""
-
-    # 프롬프트에 직접 출력 포맷 지시 추가 (뷰어가 markdown+LaTeX를 렌더링하므로 그대로 출력 허용)
-    guided_prompt = (
-        "You are a direct-output translation/QA assistant. "
-        "Output ONLY the result — no preambles, no explanations, no commentary. "
-        "You MAY use markdown and LaTeX ($...$, $$...$$) in your output since the viewer renders them. "
-        "Do NOT wrap math variables in placeholder tokens — preserve them as-is or wrap in $...$. "
-        "Start the output immediately.\n\n"
-        f"{catchup_prefix}{prompt}"
-    )
-    encoded_prompt = guided_prompt.encode("utf-8")
-
     try:
         from services.usage_tracker import record_call
         record_call(usage_label or ("translate" if not is_chat else "chat"))
@@ -1471,6 +1459,23 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
 
     lock = _get_claude_code_session_lock(session_id)
     async with lock:
+        # 락을 기다리는 동안 앞선 호출이 last_provider를 갱신했을 수 있으므로,
+        # 실제 요청 직전에 전환 여부와 캐치업 문맥을 계산한다.
+        last_provider = get_last_provider(session_id)
+        provider_switched = last_provider is not None and last_provider != "claude_code"
+        catchup_prefix = _build_catchup_prefix(session_id) if (is_chat and provider_switched) else ""
+
+        # 프롬프트에 직접 출력 포맷 지시 추가 (뷰어가 markdown+LaTeX를 렌더링하므로 그대로 출력 허용)
+        guided_prompt = (
+            "You are a direct-output translation/QA assistant. "
+            "Output ONLY the result — no preambles, no explanations, no commentary. "
+            "You MAY use markdown and LaTeX ($...$, $$...$$) in your output since the viewer renders them. "
+            "Do NOT wrap math variables in placeholder tokens — preserve them as-is or wrap in $...$. "
+            "Start the output immediately.\n\n"
+            f"{catchup_prefix}{prompt}"
+        )
+        encoded_prompt = guided_prompt.encode("utf-8")
+
         for attempt in range(2):
             cmd = base_cmd + session_flag
             try:
@@ -1514,7 +1519,7 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
                     # 기록이 남아, 나중에 antigravity로 바꿨을 때 그 전환을
                     # 올바르게 감지해 캐치업 문맥을 붙일 수 있다.
                     if session_id:
-                        save_ai_session_meta(session_id, provider="claude_code")
+                        save_provider_session_meta(session_id, provider="claude_code")
                     return
 
                 stderr_out = await _finish_stderr_drain(stderr_task)
@@ -1619,25 +1624,6 @@ async def stream_codex(prompt: str, model: str = None, session_id: str = None, i
     if effort_override:
         effort_level = effort_override
 
-    # 이 문서를 마지막으로 쓴 provider가 codex가 아니면(예: antigravity/claude_code로
-    # 갔다가 다시 돌아온 경우) 그 세션은 이 provider에서 재사용할 수 없으므로 새로
-    # 만들어야 하고, 대신 우리 DB 채팅 이력으로 캐치업 문맥을 붙여준다.
-    session_meta = _get_effective_session_meta(session_id)
-    provider_switched = session_meta is not None and session_meta.get("provider") != "codex"
-    thread_id = None if provider_switched else (session_meta.get("conversation_id") if session_meta else None)
-    catchup_prefix = _build_catchup_prefix(session_id) if (is_chat and provider_switched) else ""
-
-    # 프롬프트에 직접 출력 포맷 지시 추가 (뷰어가 markdown+LaTeX를 렌더링하므로 그대로 출력 허용)
-    guided_prompt = (
-        "You are a direct-output translation/QA assistant. "
-        "Output ONLY the result — no preambles, no explanations, no commentary. "
-        "You MAY use markdown and LaTeX ($...$, $$...$$) in your output since the viewer renders them. "
-        "Do NOT wrap math variables in placeholder tokens — preserve them as-is or wrap in $...$. "
-        "Start the output immediately.\n\n"
-        f"{catchup_prefix}{prompt}"
-    )
-    encoded_prompt = guided_prompt.encode("utf-8")
-
     try:
         from services.usage_tracker import record_call
         record_call(usage_label or ("translate" if not is_chat else "chat"))
@@ -1670,6 +1656,25 @@ async def stream_codex(prompt: str, model: str = None, session_id: str = None, i
     # thread가 더 이상 존재하지 않으면(세션 파일 소실 등) 새 세션으로 1회 재시도한다.
     lock = _get_codex_session_lock(session_id)
     async with lock:
+        # 락을 기다리는 동안 앞선 호출이 새 thread를 만들었을 수 있으므로,
+        # 실제 요청 직전에 provider별 메타데이터를 조회한다.
+        last_provider = get_last_provider(session_id)
+        provider_switched = last_provider is not None and last_provider != "codex"
+        provider_meta = get_provider_session_meta(session_id, "codex")
+        thread_id = provider_meta.get("conversation_id") if provider_meta else None
+        catchup_prefix = _build_catchup_prefix(session_id) if (is_chat and provider_switched) else ""
+
+        # 프롬프트에 직접 출력 포맷 지시 추가 (뷰어가 markdown+LaTeX를 렌더링하므로 그대로 출력 허용)
+        guided_prompt = (
+            "You are a direct-output translation/QA assistant. "
+            "Output ONLY the result — no preambles, no explanations, no commentary. "
+            "You MAY use markdown and LaTeX ($...$, $$...$$) in your output since the viewer renders them. "
+            "Do NOT wrap math variables in placeholder tokens — preserve them as-is or wrap in $...$. "
+            "Start the output immediately.\n\n"
+            f"{catchup_prefix}{prompt}"
+        )
+        encoded_prompt = guided_prompt.encode("utf-8")
+
         for attempt in range(2):
             cmd = build_cmd(thread_id)
             try:
@@ -1720,8 +1725,10 @@ async def stream_codex(prompt: str, model: str = None, session_id: str = None, i
                         yield final_text[i:i + CHUNK_SIZE]
                         await asyncio.sleep(0.012)
 
-                    if session_id and new_thread_id:
-                        save_ai_session_meta(session_id, provider="codex", conversation_id=new_thread_id)
+                    if session_id:
+                        # resume한 기존 thread는 new_thread_id 이벤트가 없을 수 있어도,
+                        # 이 provider가 마지막으로 사용됐다는 정보는 갱신해야 한다.
+                        save_provider_session_meta(session_id, provider="codex", conversation_id=new_thread_id)
                     return
 
                 stderr_out = await _finish_stderr_drain(stderr_task)
@@ -1755,82 +1762,117 @@ def _ai_session_meta_path(session_id: str) -> str:
     from config import LIBRARY_DIR
     return os.path.join(LIBRARY_DIR, session_id, "ai_session.json")
 
-def get_ai_session_meta(session_id: str) -> dict:
-    """이 문서(session_id)를 마지막으로 사용한 AI provider와, antigravity라면 그
-    대화(conversation) ID를 함께 반환합니다. 파일이 없으면 None."""
+_session_meta_locks: dict = {}
+_session_meta_locks_guard = threading.Lock()
+
+
+def _get_session_meta_lock(session_id: str) -> threading.RLock:
+    """한 논문의 ai_session.json read-modify-write를 보호합니다."""
+    with _session_meta_locks_guard:
+        if session_id not in _session_meta_locks:
+            _session_meta_locks[session_id] = threading.RLock()
+        return _session_meta_locks[session_id]
+
+
+def _normalize_session_meta(meta: dict) -> dict:
+    """기존 단일-provider 형식을 새 provider별 형식으로 해석합니다."""
+    if not isinstance(meta, dict):
+        return {"providers": {}}
+    if isinstance(meta.get("providers"), dict):
+        result = {
+            "providers": {
+                name: dict(value) if isinstance(value, dict) else {}
+                for name, value in meta["providers"].items()
+                if isinstance(name, str)
+            }
+        }
+        if meta.get("last_provider"):
+            result["last_provider"] = meta["last_provider"]
+        return result
+
+    provider = meta.get("provider")
+    if not provider:
+        return {"providers": {}}
+    provider_meta = {}
+    if meta.get("conversation_id"):
+        provider_meta["conversation_id"] = meta["conversation_id"]
+    if meta.get("chat_context_sent"):
+        provider_meta["chat_context_sent"] = True
+    return {"last_provider": provider, "providers": {provider: provider_meta}}
+
+
+def _load_session_meta(session_id: str) -> dict | None:
+    import os
+    path = _ai_session_meta_path(session_id)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return _normalize_session_meta(json.load(f))
+    except Exception:
+        return None
+
+
+def get_ai_session_meta(session_id: str) -> dict | None:
+    """논문의 provider별 AI 세션 메타데이터를 반환합니다."""
     if not session_id:
         return None
-    import os, json
-    path = _ai_session_meta_path(session_id)
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return None
+    with _get_session_meta_lock(session_id):
+        return _load_session_meta(session_id)
 
-def save_ai_session_meta(session_id: str, provider: str, conversation_id: str = None) -> None:
+
+def get_provider_session_meta(session_id: str, provider: str) -> dict | None:
+    """provider가 실제 resume에 사용할 세션 메타데이터를 반환합니다."""
+    if not session_id or not provider:
+        return None
+    meta = get_ai_session_meta(session_id)
+    provider_meta = (meta or {}).get("providers", {}).get(provider)
+    return dict(provider_meta) if isinstance(provider_meta, dict) else None
+
+
+def get_last_provider(session_id: str) -> str | None:
+    """가장 최근에 이 논문을 사용한 provider를 반환합니다."""
+    return (get_ai_session_meta(session_id) or {}).get("last_provider")
+
+
+def _write_session_meta(path: str, data: dict) -> None:
+    """완성된 파일만 보이도록 원자적으로 메타데이터 파일을 교체합니다."""
+    atomic_write_text(path, json.dumps(data))
+
+
+def save_provider_session_meta(session_id: str, provider: str, conversation_id: str = None) -> None:
+    """특정 provider의 세션만 갱신하고 다른 provider 항목은 보존합니다."""
     if not session_id or not provider:
         return
-    import os, json
-    path = _ai_session_meta_path(session_id)
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        existing = {}
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    existing = json.load(f)
-            except Exception:
-                existing = {}
-        provider_changed = existing.get("provider") != provider
-
-        data = {"provider": provider}
-        if conversation_id:
-            data["conversation_id"] = conversation_id
-        elif not provider_changed and existing.get("conversation_id"):
-            data["conversation_id"] = existing["conversation_id"]
-
-        # provider가 바뀌면 새 네이티브 세션은 컨텍스트가 비어있으므로 채팅
-        # 풀 컨텍스트(논문 원문+가이드라인)를 다시 보내야 한다는 표시로 초기화한다.
-        # provider가 안 바뀌었으면(예: 번역 호출이 매번 이 함수를 호출) 기존
-        # chat_context_sent 값을 그대로 보존해야 채팅 쪽 최적화가 유지된다.
-        data["chat_context_sent"] = False if provider_changed else existing.get("chat_context_sent", False)
-
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f)
+        with _get_session_meta_lock(session_id):
+            existing = _load_session_meta(session_id) or {"providers": {}}
+            provider_meta = existing.setdefault("providers", {}).setdefault(provider, {})
+            if conversation_id:
+                provider_meta["conversation_id"] = conversation_id
+            existing["last_provider"] = provider
+            _write_session_meta(_ai_session_meta_path(session_id), existing)
     except Exception as e:
-        logger.error(f"save_ai_session_meta 실패: {e}")
+        logger.error(f"save_provider_session_meta 실패: {e}")
 
 def _chat_context_already_sent(session_id: str, provider: str) -> bool:
     """이 문서(session_id)의 현재 provider 네이티브 세션에 이미 채팅 풀 컨텍스트
     (논문 원문+답변 가이드라인)를 보낸 적이 있는지 확인한다."""
-    meta = get_ai_session_meta(session_id)
-    if not meta or meta.get("provider") != provider:
-        return False
-    return bool(meta.get("chat_context_sent"))
+    meta = get_provider_session_meta(session_id, provider)
+    return bool(meta and meta.get("chat_context_sent"))
 
 def _mark_chat_context_sent(session_id: str, provider: str) -> None:
     """방금 이 provider 세션에 채팅 풀 컨텍스트를 보냈음을 기록한다. 기존
     provider/conversation_id는 그대로 보존한다."""
     if not session_id or not provider:
         return
-    import os, json
-    path = _ai_session_meta_path(session_id)
     try:
-        existing = {}
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    existing = json.load(f)
-            except Exception:
-                existing = {}
-        existing["provider"] = provider
-        existing["chat_context_sent"] = True
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(existing, f)
+        with _get_session_meta_lock(session_id):
+            existing = _load_session_meta(session_id) or {"providers": {}}
+            provider_meta = existing.setdefault("providers", {}).setdefault(provider, {})
+            provider_meta["chat_context_sent"] = True
+            existing["last_provider"] = provider
+            _write_session_meta(_ai_session_meta_path(session_id), existing)
     except Exception as e:
         logger.error(f"_mark_chat_context_sent 실패: {e}")
 
@@ -1849,18 +1891,13 @@ def get_mapped_conversation_id(session_id: str) -> str:
             pass
     return None
 
-def _get_effective_session_meta(session_id: str) -> dict:
-    """ai_session.json을 우선 읽고, 없으면 이 파일이 생기기 전(예전) antigravity
-    전용 conversation_id.txt를 antigravity 메타로 간주해 폴백한다."""
-    if not session_id:
-        return None
-    meta = get_ai_session_meta(session_id)
+def get_antigravity_session_meta(session_id: str) -> dict | None:
+    """Antigravity 메타를 반환하고, 더 오래된 conversation_id.txt도 지원합니다."""
+    meta = get_provider_session_meta(session_id, "antigravity")
     if meta is not None:
         return meta
     legacy_id = get_mapped_conversation_id(session_id)
-    if legacy_id:
-        return {"provider": "antigravity", "conversation_id": legacy_id}
-    return None
+    return {"conversation_id": legacy_id} if legacy_id else None
 
 def _build_catchup_prefix(session_id: str) -> str:
     """AI provider가 방금 바뀌어 새 세션으로 넘어갈 때, 예전 provider 세션이
@@ -1902,6 +1939,26 @@ def _get_antigravity_lock(session_id: str) -> asyncio.Lock:
         _antigravity_session_locks[session_id] = asyncio.Lock()
     return _antigravity_session_locks[session_id]
 
+
+def _serialize_antigravity_session(func):
+    """같은 문서의 Antigravity 대화는 응답 스트림 종료까지 한 번에 처리합니다."""
+    @functools.wraps(func)
+    async def wrapped(*args, **kwargs):
+        session_id = kwargs.get("session_id")
+        if session_id is None and len(args) >= 3:
+            session_id = args[2]
+        lock = _get_antigravity_lock(session_id)
+        if lock is None:
+            async for token in func(*args, **kwargs):
+                yield token
+            return
+        async with lock:
+            async for token in func(*args, **kwargs):
+                yield token
+    return wrapped
+
+
+@_serialize_antigravity_session
 async def stream_antigravity(
     prompt: str,
     model: str = None,
@@ -1940,94 +1997,95 @@ async def stream_antigravity(
     # 내부적으로 새 임시 세션을 만들어버려서(우리가 추적만 안 할 뿐 실제로는
     # 매번 새로 생김), 번역이 아직 세션을 못 만든 상태에서 채팅을 여러 번 쓰면
     # 매 메시지가 새 세션을 낭비하는 문제가 실제로 있었다(실측: 채팅 3번에
-    # 새 세션 3개). 그래서 번역/채팅 둘 다 매핑이 없을 때 만들 수 있게 하되,
-    # 두 호출이 동시에 만들려는 경합만 짧게(워밍업 호출 동안만) 잠가서 막는다.
-    session_meta = _get_effective_session_meta(session_id)
+    # 새 세션 3개). stream_antigravity 전체가 문서별 락으로 보호되므로,
+    # 초기화와 실제 요청 사이에 다른 요청이 같은 대화에 끼어들 수 없다.
+    session_meta = get_antigravity_session_meta(session_id)
 
     # 이 문서를 마지막으로 쓴 provider가 antigravity가 아니면(예: claude code로
-    # 갔다가 다시 돌아온 경우), 그 세션은 이 provider에서 재사용할 수 없다 -
-    # 새로 만들어야 하고, 대신 우리 DB 채팅 이력으로 캐치업 문맥을 붙여준다.
-    provider_switched = session_meta is not None and session_meta.get("provider") != "antigravity"
-    target_conv_id = None if provider_switched else (session_meta.get("conversation_id") if session_meta else None)
+    # 갔다가 다시 돌아온 경우), 캐치업 문맥은 붙이되 provider별로 보존한 기존
+    # 대화 ID를 실제 resume 대상으로 계속 사용한다.
+    last_provider = get_last_provider(session_id)
+    provider_switched = last_provider is not None and last_provider != "antigravity"
+    target_conv_id = session_meta.get("conversation_id") if session_meta else None
 
     catchup_prefix = _build_catchup_prefix(session_id) if (is_chat and provider_switched) else ""
 
     if session_id and not target_conv_id:
-        lock = _get_antigravity_lock(session_id)
-        async with lock:
-            # 락을 기다리는 동안 다른 호출이 먼저 만들었을 수 있으므로 재확인
-            session_meta = _get_effective_session_meta(session_id)
-            provider_switched = session_meta is not None and session_meta.get("provider") != "antigravity"
-            target_conv_id = None if provider_switched else (session_meta.get("conversation_id") if session_meta else None)
+        # 함수 데코레이터가 이미 동일한 세션 락을 보유한다. 락을 기다리는 동안
+        # 다른 호출이 먼저 만들었을 수 있으므로 실제 초기화 직전에 재확인한다.
+        session_meta = get_antigravity_session_meta(session_id)
+        last_provider = get_last_provider(session_id)
+        provider_switched = last_provider is not None and last_provider != "antigravity"
+        target_conv_id = session_meta.get("conversation_id") if session_meta else None
 
-            if not target_conv_id:
-                # session_cwd는 이미 절대경로다(위에서 os.path.abspath로 계산).
-                # 예전에는 LIBRARY_DIR("./library") 상대경로를 그대로 써서, 우리
-                # 프로세스의 cwd(backend/) 기준과 agy 서브프로세스의 cwd(당시
-                # project root) 기준이 서로 달라 로그 파일을 엉뚱한 위치에서
-                # 찾는 버그가 있었다 - 지금은 서브프로세스 cwd 자체가 session_cwd라
-                # 이 문제가 구조적으로 사라졌지만, 명시성을 위해 그대로 절대경로로 둔다.
-                temp_log_path = os.path.join(session_cwd, f"agy_init_{os.urandom(4).hex()}.log")
+        if not target_conv_id:
+            # session_cwd는 이미 절대경로다(위에서 os.path.abspath로 계산).
+            # 예전에는 LIBRARY_DIR("./library") 상대경로를 그대로 써서, 우리
+            # 프로세스의 cwd(backend/) 기준과 agy 서브프로세스의 cwd(당시
+            # project root) 기준이 서로 달라 로그 파일을 엉뚱한 위치에서
+            # 찾는 버그가 있었다 - 지금은 서브프로세스 cwd 자체가 session_cwd라
+            # 이 문제가 구조적으로 사라졌지만, 명시성을 위해 그대로 절대경로로 둔다.
+            temp_log_path = os.path.join(session_cwd, f"agy_init_{os.urandom(4).hex()}.log")
 
-                # --dangerously-skip-permissions는 비대화형 실행에 필수(TTY 없이
-                # 승인 프롬프트를 띄우면 그냥 멈춘다)이지만, 이것만 있으면 세션이
-                # 터미널 명령/파일 조작을 승인 없이 실제로 실행할 수 있게 된다.
-                # --sandbox로 터미널 사용에 제약을 걸어, 세션 초기화 프롬프트에
-                # 프롬프트 인젝션이 섞여도(우리가 직접 만든 고정 문자열이라 이
-                # 지점 자체는 안전하지만, 아래 실제 번역/채팅 호출과 동일한
-                # 세션·설정을 공유하므로 일관되게 적용) 영향 범위를 최소화한다.
-                init_cmd = [agy_path, "--dangerously-skip-permissions", "--sandbox"]
-                if model and model.strip() and model.strip().lower() != "custom":
-                    init_cmd.extend(["--model", model.strip()])
-                if effort_override:
-                    init_cmd.extend(["--effort", effort_override])
-                init_cmd.extend(["--log-file", temp_log_path])
-                init_prompt = (
-                    "You are a direct-output assistant. Output ONLY 'OK'.\n\n"
-                    "Initialize session."
+            # --dangerously-skip-permissions는 비대화형 실행에 필수(TTY 없이
+            # 승인 프롬프트를 띄우면 그냥 멈춘다)이지만, 이것만 있으면 세션이
+            # 터미널 명령/파일 조작을 승인 없이 실제로 실행할 수 있게 된다.
+            # --sandbox로 터미널 사용에 제약을 걸어, 세션 초기화 프롬프트에
+            # 프롬프트 인젝션이 섞여도(우리가 직접 만든 고정 문자열이라 이
+            # 지점 자체는 안전하지만, 아래 실제 번역/채팅 호출과 동일한
+            # 세션·설정을 공유하므로 일관되게 적용) 영향 범위를 최소화한다.
+            init_cmd = [agy_path, "--dangerously-skip-permissions", "--sandbox"]
+            if model and model.strip() and model.strip().lower() != "custom":
+                init_cmd.extend(["--model", model.strip()])
+            if effort_override:
+                init_cmd.extend(["--effort", effort_override])
+            init_cmd.extend(["--log-file", temp_log_path])
+            init_prompt = (
+                "You are a direct-output assistant. Output ONLY 'OK'.\n\n"
+                "Initialize session."
+            )
+            init_cmd.extend(["--print", init_prompt])
+
+            try:
+                init_proc = await asyncio.create_subprocess_exec(
+                    *_exec_args(init_cmd),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=get_agy_env(),
+                    cwd=session_cwd
                 )
-                init_cmd.extend(["--print", init_prompt])
-
+                # 출력을 계속 읽어서 소비해야 한다 - 읽지 않으면 파이프 버퍼가
+                # 가득 차서 프로세스가 멈출 수 있다(communicate가 자동으로 처리).
+                # 이 호출은 문서(session_id)당 락 아래서 실행되므로, agy가 멈추면
+                # (예: 인증 프롬프트 대기) 타임아웃 없이는 그 문서의 세션 초기화가
+                # 서버 재시작 전까지 영원히 막히게 된다.
                 try:
-                    init_proc = await asyncio.create_subprocess_exec(
-                        *_exec_args(init_cmd),
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                        env=get_agy_env(),
-                        cwd=session_cwd
-                    )
-                    # 출력을 계속 읽어서 소비해야 한다 - 읽지 않으면 파이프 버퍼가
-                    # 가득 차서 프로세스가 멈출 수 있다(communicate가 자동으로 처리).
-                    # 이 호출은 문서(session_id)당 락 아래서 실행되므로, agy가 멈추면
-                    # (예: 인증 프롬프트 대기) 타임아웃 없이는 그 문서의 세션 초기화가
-                    # 서버 재시작 전까지 영원히 막히게 된다.
-                    try:
-                        await asyncio.wait_for(init_proc.communicate(), timeout=CLI_STALL_TIMEOUT_SECONDS)
-                    except asyncio.TimeoutError:
-                        await _kill_process_safely(init_proc)
-                        raise RuntimeError(f"Antigravity 세션 초기화가 {CLI_STALL_TIMEOUT_SECONDS}초 이상 응답이 없어 중단했습니다.")
+                    await asyncio.wait_for(init_proc.communicate(), timeout=CLI_STALL_TIMEOUT_SECONDS)
+                except asyncio.TimeoutError:
+                    await _kill_process_safely(init_proc)
+                    raise RuntimeError(f"Antigravity 세션 초기화가 {CLI_STALL_TIMEOUT_SECONDS}초 이상 응답이 없어 중단했습니다.")
 
-                    if os.path.exists(temp_log_path):
-                        with open(temp_log_path, "r", encoding="utf-8") as lf:
-                            log_content = lf.read()
-                        match = re.search(r"Created conversation\s+([a-f0-9\-]{36})", log_content)
-                        if match:
-                            new_conv_id = match.group(1)
-                            save_ai_session_meta(session_id, provider="antigravity", conversation_id=new_conv_id)
-                            logger.info(f"[stream_antigravity] 세션 {session_id} -> Antigravity 대화 {new_conv_id} 초기화 완료")
-                            target_conv_id = new_conv_id
-                        else:
-                            logger.warning("[stream_antigravity] 초기화 로그에서 대화 ID를 찾지 못함")
+                if os.path.exists(temp_log_path):
+                    with open(temp_log_path, "r", encoding="utf-8") as lf:
+                        log_content = lf.read()
+                    match = re.search(r"Created conversation\s+([a-f0-9\-]{36})", log_content)
+                    if match:
+                        new_conv_id = match.group(1)
+                        save_provider_session_meta(session_id, provider="antigravity", conversation_id=new_conv_id)
+                        logger.info(f"[stream_antigravity] 세션 {session_id} -> Antigravity 대화 {new_conv_id} 초기화 완료")
+                        target_conv_id = new_conv_id
                     else:
-                        logger.warning(f"[stream_antigravity] 로그 파일이 생성되지 않음: {temp_log_path}")
-                except Exception as ie:
-                    logger.warning(f"[stream_antigravity] 세션 초기화 오류: {ie}")
-                finally:
-                    if os.path.exists(temp_log_path):
-                        try:
-                            os.remove(temp_log_path)
-                        except Exception:
-                            pass
+                        logger.warning("[stream_antigravity] 초기화 로그에서 대화 ID를 찾지 못함")
+                else:
+                    logger.warning(f"[stream_antigravity] 로그 파일이 생성되지 않음: {temp_log_path}")
+            except Exception as ie:
+                logger.warning(f"[stream_antigravity] 세션 초기화 오류: {ie}")
+            finally:
+                if os.path.exists(temp_log_path):
+                    try:
+                        os.remove(temp_log_path)
+                    except Exception:
+                        pass
 
     # PDF에서 추출한 텍스트를 그대로 프롬프트에 담아 보내는 순수 번역/채팅
     # 용도라 터미널/파일 조작 권한이 전혀 필요 없다(codex 경로의
@@ -2095,6 +2153,14 @@ async def stream_antigravity(
             raise RuntimeError(
                 f"Antigravity CLI 실행 실패 (code={process.returncode}): "
                 f"{stderr_out.strip()[:500] or '알 수 없는 오류'}"
+            )
+        if session_id:
+            # 이미 존재하던 conversation을 resume한 호출도 마지막 provider를
+            # 갱신해야 이후 다른 provider로 전환할 때 캐치업 문맥을 붙일 수 있다.
+            save_provider_session_meta(
+                session_id,
+                provider="antigravity",
+                conversation_id=target_conv_id,
             )
 
     except Exception as e:
@@ -2192,7 +2258,14 @@ def _parse_json_array_response(raw: str, required_key: str = "concept") -> list:
     return parsed
 
 
-async def _llm_json_array_with_retry(prompt: str, session_id: str = None, attempts: int = 3, log_label: str = "LLM JSON 배열 응답", required_key: str = "concept") -> list:
+async def _llm_json_array_with_retry(
+    prompt: str,
+    session_id: str = None,
+    attempts: int = 3,
+    log_label: str = "LLM JSON 배열 응답",
+    required_key: str = "concept",
+    config_group: str = "library",
+) -> list:
     """공용: 프롬프트를 보내 JSON 배열 응답을 받아 파싱까지 재시도한다
     (extract_paper_concepts/match_question_to_concepts/find_similar_concepts가
     공유하는 멀티 프로바이더 분기 + 재시도 로직). LLM이 마크다운 펜스를
@@ -2200,8 +2273,14 @@ async def _llm_json_array_with_retry(prompt: str, session_id: str = None, attemp
     재시도하고, 모두 실패해도 예외를 던지지 않고 빈 리스트를 반환한다 -
     이 계열 기능은 전부 부가 정보일 뿐이라 파이프라인 자체를 막아서는 안 된다."""
     messages = [{"role": "user", "content": prompt}]
-    provider = get_trans_provider()
-    model = get_trans_model()
+    if config_group == "analysis":
+        provider, model = get_analysis_provider(), get_analysis_model()
+    elif config_group == "chat":
+        provider, model = get_chat_provider(), get_chat_model()
+    elif config_group == "library":
+        provider, model = get_library_provider(), get_library_model()
+    else:
+        raise ValueError(f"지원하지 않는 LLM 설정 그룹입니다: {config_group}")
 
     for attempt in range(attempts):
         tokens = []
@@ -2262,7 +2341,9 @@ Beginning Text:
 {text[:2000]}
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="논문 개념 추출")
+    return await _llm_json_array_with_retry(
+        prompt, session_id=session_id, log_label="논문 개념 추출", config_group="analysis"
+    )
 
 
 async def match_question_to_concepts(question: str, concept_names: List[str], session_id: str = None) -> List[dict]:
@@ -2283,7 +2364,9 @@ Concept List:
 Question: {question}
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="질문-개념 매칭")
+    return await _llm_json_array_with_retry(
+        prompt, session_id=session_id, log_label="질문-개념 매칭", config_group="chat"
+    )
 
 
 async def find_similar_concepts(new_name: str, existing_names: List[str], session_id: str = None) -> List[dict]:
@@ -2304,7 +2387,9 @@ Existing Concepts:
 {names_list}
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="유사 개념 탐색")
+    return await _llm_json_array_with_retry(
+        prompt, session_id=session_id, log_label="유사 개념 탐색", config_group="library"
+    )
 
 
 async def score_paper_concept_relevance(title: str, text: str, concept_names: List[str], session_id: str = None) -> List[dict]:
@@ -2329,7 +2414,13 @@ Beginning Text:
 {text[:2000]}
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="논문-개념 관련도 채점", required_key="concept")
+    return await _llm_json_array_with_retry(
+        prompt,
+        session_id=session_id,
+        log_label="논문-개념 관련도 채점",
+        required_key="concept",
+        config_group="library",
+    )
 
 
 async def generate_reading_recommendations(titles: List[str], categories: List[str], session_id: str = None) -> List[dict]:
@@ -2349,7 +2440,13 @@ Already Read:
 {titles_list}
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="읽을 논문 추천", required_key="title")
+    return await _llm_json_array_with_retry(
+        prompt,
+        session_id=session_id,
+        log_label="읽을 논문 추천",
+        required_key="title",
+        config_group="library",
+    )
 
 
 async def generate_dashboard_insights(profile: dict, session_id: str = None) -> List[dict]:
@@ -2397,5 +2494,11 @@ Output ONLY a pure JSON array, with no markdown code fences, no explanations, an
 - "message": the insight itself, in Korean, one to three sentences, specific enough that the researcher would recognize exactly what it's referring to.
 
 JSON Array:"""
-    return await _llm_json_array_with_retry(prompt, session_id=session_id, log_label="AI 인사이트 생성", required_key="message")
+    return await _llm_json_array_with_retry(
+        prompt,
+        session_id=session_id,
+        log_label="AI 인사이트 생성",
+        required_key="message",
+        config_group="library",
+    )
 

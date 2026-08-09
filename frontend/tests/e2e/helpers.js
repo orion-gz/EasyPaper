@@ -28,7 +28,9 @@ export async function mockBaseRoutes(page, { documents = [] } = {}) {
         status: 200, contentType: 'application/json',
         body: JSON.stringify({
           ollama_host: 'http://localhost:11434', available_models: [],
+          default_ai_provider: 'ollama', default_ai_model: '',
           trans_provider: 'ollama', trans_model: '', chat_provider: 'ollama', chat_model: '',
+          analysis_provider: 'ollama', analysis_model: '', library_provider: 'ollama', library_model: '',
           openai_api_key: '', gemini_api_key: '', claude_api_key: '', translation_prompt_template: '',
         }),
       })

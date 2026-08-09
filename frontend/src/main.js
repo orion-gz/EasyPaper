@@ -4,7 +4,7 @@ import './styles/library-page.css'
 import './styles/research-graph.css'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
@@ -178,6 +178,8 @@ const settingDisableCitationOverlay = $('setting-disable-citation-overlay')
 const settingDisableFigureOverlay = $('setting-disable-figure-overlay')
 const settingDisablePrimer = $('setting-disable-primer')
 const settingToolbarAutoHide = $('setting-toolbar-autohide')
+const settingAutoGenerateKeywords = $('setting-auto-generate-keywords')
+const settingAutoGenerateSummaries = $('setting-auto-generate-summaries')
 const viewerTopbar = $('viewer-topbar')
 const clearCacheBtn       = $('clear-cache-btn')
 const clearPagesCacheBtn  = $('clear-pages-cache-btn')
@@ -191,7 +193,10 @@ const settingOpenAIKey     = $('setting-openai-key')
 const settingGeminiKey     = $('setting-gemini-key')
 const settingClaudeKey     = $('setting-claude-key')
 const settingOpenAlexMailto = $('setting-openalex-mailto')
-const settingChatSameAsTrans = $('setting-chat-same-as-trans')
+const settingTransSameAsDefault = $('setting-trans-same-as-default')
+const settingAnalysisSameAsDefault = $('setting-analysis-same-as-default')
+const settingChatSameAsDefault = $('setting-chat-same-as-default')
+const settingLibrarySameAsDefault = $('setting-library-same-as-default')
 
 // (provider/model selects are now custom ProviderModelPicker instances – see below)
 
@@ -383,6 +388,14 @@ function getTranslationOptions() {
   }
 }
 
+function getKeywordMode() {
+  return localStorage.getItem('easypaper_keyword_mode') || 'manual'
+}
+
+function getSummaryMode() {
+  return localStorage.getItem('easypaper_summary_mode') || 'manual'
+}
+
 // 툴바 위치: 'top'(기본) / 'bottom' / 'left' / 'right'. body에 클래스로
 // 반영하고, 나머지는 전부 CSS(.toolbar-pos-*)가 처리한다 - 위치별로
 // .topbar/.panels/.outline-sidebar/.floating-scroll-nav 등의 레이아웃이
@@ -537,7 +550,12 @@ async function handleFiles(files, targetFolderId = null) {
     uploadItemSuccessIcon.classList.add('hidden')
 
     try {
-      const result = await uploadPDF(file, { ...getTranslationOptions(), translationMode: getTranslationMode() }, (pct) => {
+      const result = await uploadPDF(file, {
+        ...getTranslationOptions(),
+        translationMode: getTranslationMode(),
+        keywordMode: getKeywordMode(),
+        summaryMode: getSummaryMode()
+      }, (pct) => {
         uploadItemProgressBar.style.width = `${pct}%`
         uploadItemStatus.textContent = `업로드 중... ${pct}%`
       })
@@ -2222,7 +2240,7 @@ class ProviderModelPicker {
   }
 }
 
-// Instantiate the 4 provider pickers
+// 뷰어용 2개와 설정 화면용 계층형 모델 선택기를 초기화한다.
 const viewerTransPicker = new ProviderModelPicker($('viewer-trans-provider'), {
   compact: true,
   onChange: (provider, model) => changeProviderAndModel('trans', provider, model)
@@ -2343,12 +2361,27 @@ class PdfParserPicker {
   }
 }
 
+const settingDefaultAiPicker = new ProviderModelPicker($('setting-default-ai-provider'), {
+  compact: false,
+  onChange: () => { applyDefaultModelToChildren(); autoSaveSystemSettings() }
+})
+
 const settingTransPicker = new ProviderModelPicker($('setting-trans-provider'), {
   compact: false,
-  onChange: () => { applyChatSameAsTransUI(); autoSaveSystemSettings() }
+  onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
 })
 
 const settingChatPicker = new ProviderModelPicker($('setting-chat-provider'), {
+  compact: false,
+  onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
+})
+
+const settingAnalysisPicker = new ProviderModelPicker($('setting-analysis-provider'), {
+  compact: false,
+  onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
+})
+
+const settingLibraryPicker = new ProviderModelPicker($('setting-library-provider'), {
   compact: false,
   onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
 })
@@ -2398,25 +2431,39 @@ const settingPdfParserPicker = new PdfParserPicker($('setting-pdf-parser-picker'
   }
 })
 
-// "번역 모델과 동일한 모델 사용" 체크박스: 켜져 있으면 어시스턴트 선택기를
-// 잠그고 번역 모델 값을 그대로 따라가게 한다.
-function applyChatSameAsTransUI() {
-  const chatProviderEl = $('setting-chat-provider')
-  const checked = !!(settingChatSameAsTrans && settingChatSameAsTrans.checked)
+const modelSettingChildren = [
+  { checkbox: settingTransSameAsDefault, picker: settingTransPicker, containerId: 'setting-trans-provider' },
+  { checkbox: settingAnalysisSameAsDefault, picker: settingAnalysisPicker, containerId: 'setting-analysis-provider' },
+  { checkbox: settingChatSameAsDefault, picker: settingChatPicker, containerId: 'setting-chat-provider' },
+  { checkbox: settingLibrarySameAsDefault, picker: settingLibraryPicker, containerId: 'setting-library-provider' },
+]
+
+function applyDefaultModelToChild(child) {
+  const checked = !!(child.checkbox && child.checkbox.checked)
   if (checked) {
-    const { provider, model } = settingTransPicker.getValue()
-    settingChatPicker.setValue(provider, model)
+    const { provider, model } = settingDefaultAiPicker.getValue()
+    child.picker.setValue(provider, model)
   }
-  if (chatProviderEl) {
-    chatProviderEl.style.opacity = checked ? '0.5' : ''
-    chatProviderEl.style.pointerEvents = checked ? 'none' : ''
+  const container = $(child.containerId)
+  if (container) {
+    container.style.opacity = checked ? '0.5' : ''
+    container.style.pointerEvents = checked ? 'none' : ''
   }
+}
+
+function applyDefaultModelToChildren() {
+  modelSettingChildren.forEach(applyDefaultModelToChild)
   updateSettingsUIVisibility()
 }
 
-if (settingChatSameAsTrans) {
-  settingChatSameAsTrans.addEventListener('change', applyChatSameAsTransUI)
-}
+modelSettingChildren.forEach(child => {
+  if (child.checkbox) {
+    child.checkbox.addEventListener('change', () => {
+      applyDefaultModelToChild(child)
+      updateSettingsUIVisibility()
+    })
+  }
+})
 
 const POPULAR_MODELS = {} // kept for backward compat
 
@@ -2467,10 +2514,13 @@ function updateModelDropdown(provider, selectEl, customGroupEl, customInputEl, c
 }
 
 function updateSettingsUIVisibility() {
+  const defaultVal = settingDefaultAiPicker ? settingDefaultAiPicker.getValue() : { provider: 'antigravity' }
   const transVal = settingTransPicker ? settingTransPicker.getValue() : { provider: 'antigravity' }
   const chatVal = settingChatPicker ? settingChatPicker.getValue() : { provider: 'antigravity' }
+  const analysisVal = settingAnalysisPicker ? settingAnalysisPicker.getValue() : chatVal
+  const libraryVal = settingLibraryPicker ? settingLibraryPicker.getValue() : analysisVal
   
-  const providers = new Set([transVal.provider, chatVal.provider])
+  const providers = new Set([defaultVal.provider, transVal.provider, chatVal.provider, analysisVal.provider, libraryVal.provider])
   
   // 1. Ollama 주소 (로컬 AI 사용 시) 표시 여부
   const hostGroup = $('setting-ollama-host-group')
@@ -2546,16 +2596,26 @@ async function refreshSystemSettings() {
     settingClaudeKey.value = sys.claude_api_key || ''
     settingOpenAlexMailto.value = sys.openalex_mailto || ''
     
-    viewerTransPicker.setValue(sys.trans_provider || 'antigravity', sys.trans_model)
+    const defaultProvider = sys.default_ai_provider || sys.trans_provider || 'antigravity'
+    const defaultModel = sys.default_ai_model || sys.trans_model
+    settingDefaultAiPicker.setValue(defaultProvider, defaultModel)
+    viewerTransPicker.setValue(sys.trans_provider || defaultProvider, sys.trans_model || defaultModel)
     settingTransPicker.setValue(sys.trans_provider || 'antigravity', sys.trans_model)
     chatSidebarPicker.setValue(sys.chat_provider || 'antigravity', sys.chat_model)
     settingChatPicker.setValue(sys.chat_provider || 'antigravity', sys.chat_model)
+    settingAnalysisPicker.setValue(sys.analysis_provider || sys.chat_provider || 'antigravity', sys.analysis_model || sys.chat_model)
+    settingLibraryPicker.setValue(
+      sys.library_provider || sys.analysis_provider || sys.chat_provider || 'antigravity',
+      sys.library_model || sys.analysis_model || sys.chat_model
+    )
 
-    if (settingChatSameAsTrans) {
-      settingChatSameAsTrans.checked = !!sys.trans_model &&
-        sys.chat_provider === sys.trans_provider && sys.chat_model === sys.trans_model
-    }
-    applyChatSameAsTransUI()
+    const sameAsDefault = (provider, model) =>
+      !!defaultModel && provider === defaultProvider && model === defaultModel
+    settingTransSameAsDefault.checked = sameAsDefault(sys.trans_provider, sys.trans_model)
+    settingAnalysisSameAsDefault.checked = sameAsDefault(sys.analysis_provider, sys.analysis_model)
+    settingChatSameAsDefault.checked = sameAsDefault(sys.chat_provider, sys.chat_model)
+    settingLibrarySameAsDefault.checked = sameAsDefault(sys.library_provider, sys.library_model)
+    applyDefaultModelToChildren()
 
     const promptTemplate = $('setting-prompt-template')
     if (promptTemplate) {
@@ -2583,24 +2643,28 @@ function renderOllamaInstalledModels() {
     return
   }
 
+  const defaultVal = settingDefaultAiPicker ? settingDefaultAiPicker.getValue() : {}
   const transVal = settingTransPicker ? settingTransPicker.getValue() : {}
   const chatVal = settingChatPicker ? settingChatPicker.getValue() : {}
+  const analysisVal = settingAnalysisPicker ? settingAnalysisPicker.getValue() : {}
+  const libraryVal = settingLibraryPicker ? settingLibraryPicker.getValue() : {}
 
   container.innerHTML = ''
   actualModels.forEach(modelName => {
     const row = document.createElement('div')
     row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12.5px; gap: 8px;'
 
-    const isTransActive = transVal.provider === 'ollama' && transVal.model === modelName
-    const isChatActive = chatVal.provider === 'ollama' && chatVal.model === modelName
-    let inUseBadge = ''
-    if (isTransActive && isChatActive) {
-      inUseBadge = `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(번역/어시스턴트 사용 중)</span>`
-    } else if (isTransActive) {
-      inUseBadge = `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(번역 사용 중)</span>`
-    } else if (isChatActive) {
-      inUseBadge = `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(어시스턴트 사용 중)</span>`
-    }
+    const activeGroups = [
+      ['기본', defaultVal],
+      ['번역', transVal],
+      ['채팅', chatVal],
+      ['분석', analysisVal],
+      ['라이브러리', libraryVal],
+    ].filter(([, value]) => value.provider === 'ollama' && value.model === modelName)
+      .map(([label]) => label)
+    const inUseBadge = activeGroups.length
+      ? `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(${activeGroups.join('/')} 사용 중)</span>`
+      : ''
 
     const left = document.createElement('div')
     left.style.cssText = 'display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; flex: 1;'
@@ -2881,31 +2945,41 @@ if (parserInstallDoneBtn) {
 async function changeProviderAndModel(type, newProvider, newModel) {
   try {
     const sys = await getSystemSettingsAPI()
-    // "번역 모델과 동일한 모델 사용"이 켜져 있으면 번역 모델을 바꿀 때
-    // 어시스턴트 모델도 함께 따라가게 한다.
-    const syncChatToTrans = type === 'trans' && !!(settingChatSameAsTrans && settingChatSameAsTrans.checked)
+    const nextTrans = {
+      provider: type === 'trans' ? newProvider : (sys.trans_provider || 'antigravity'),
+      model: type === 'trans' ? newModel : (sys.trans_model || '')
+    }
+    const nextChat = {
+      provider: type === 'chat' ? newProvider : (sys.chat_provider || 'antigravity'),
+      model: type === 'chat' ? newModel : (sys.chat_model || '')
+    }
     const payload = {
       ollama_host: sys.ollama_host || '',
-      trans_provider: type === 'trans' ? newProvider : (sys.trans_provider || 'antigravity'),
-      trans_model: type === 'trans' ? newModel : (sys.trans_model || ''),
-      chat_provider: (type === 'chat' || syncChatToTrans) ? newProvider : (sys.chat_provider || 'antigravity'),
-      chat_model: (type === 'chat' || syncChatToTrans) ? newModel : (sys.chat_model || ''),
+      default_ai_provider: sys.default_ai_provider || sys.trans_provider || 'antigravity',
+      default_ai_model: sys.default_ai_model || sys.trans_model || '',
+      trans_provider: nextTrans.provider,
+      trans_model: nextTrans.model,
+      chat_provider: nextChat.provider,
+      chat_model: nextChat.model,
+      analysis_provider: sys.analysis_provider || sys.chat_provider || 'antigravity',
+      analysis_model: sys.analysis_model || sys.chat_model || '',
+      library_provider: sys.library_provider || sys.analysis_provider || sys.chat_provider || 'antigravity',
+      library_model: sys.library_model || sys.analysis_model || sys.chat_model || '',
       openai_api_key: sys.openai_api_key || '',
       gemini_api_key: sys.gemini_api_key || '',
       claude_api_key: sys.claude_api_key || '',
       openalex_mailto: sys.openalex_mailto || '',
-      translation_prompt_template: sys.translation_prompt_template || ''
+      translation_prompt_template: sys.translation_prompt_template || '',
+      pdf_parser_engine: sys.pdf_parser_engine || 'pymupdf'
     }
     await saveSystemSettingsAPI(payload)
     // sync settings pickers
     if (type === 'trans') {
       settingTransPicker.setValue(newProvider, newModel)
-      if (syncChatToTrans) {
-        settingChatPicker.setValue(newProvider, newModel)
-        chatSidebarPicker.setValue(newProvider, newModel)
-      }
+      if (settingTransSameAsDefault) settingTransSameAsDefault.checked = false
     } else {
       settingChatPicker.setValue(newProvider, newModel)
+      if (settingChatSameAsDefault) settingChatSameAsDefault.checked = false
     }
     updateSettingsUIVisibility()
     await checkAIStatus()
@@ -2951,6 +3025,8 @@ globalSettingsBtn.addEventListener('click', async () => {
   settingDisableFigureOverlay.checked = !state.disableFigureOverlay
   settingDisablePrimer.checked = !state.disablePrimer
   settingToolbarAutoHide.checked = state.toolbarAutoHide
+  settingAutoGenerateKeywords.checked = getKeywordMode() === 'auto'
+  settingAutoGenerateSummaries.checked = getSummaryMode() === 'auto'
   updateAccentSettingsUI(currentAccentColor)
 
   // 3. 시스템 설정값 로드 (백엔드 통신)
@@ -3134,6 +3210,8 @@ function persistGeneralSettingsToStorage() {
   localStorage.setItem('easypaper_target_lang', settingTargetLang.value)
   localStorage.setItem('easypaper_style', settingTransStyle.value)
   localStorage.setItem('easypaper_translation_mode', settingTranslationMode.value)
+  localStorage.setItem('easypaper_keyword_mode', settingAutoGenerateKeywords.checked ? 'auto' : 'manual')
+  localStorage.setItem('easypaper_summary_mode', settingAutoGenerateSummaries.checked ? 'auto' : 'manual')
   localStorage.setItem('easypaper_ignore_math', settingIgnoreMath.checked)
   localStorage.setItem('easypaper_ignore_table', settingIgnoreTable.checked)
   localStorage.setItem('easypaper_ignore_refs', settingIgnoreRefs.checked)
@@ -3260,21 +3338,42 @@ settingToolbarAutoHide.addEventListener('change', () => {
 // 통합 함수로 전체 설정을 다시 저장한다. 모델이 아직 선택되지 않은 초기
 // 로딩 상태에서는 조용히 건너뛴다(에러 토스트 없이).
 async function autoSaveSystemSettings({ silent = false } = {}) {
-  const { provider: transProvider, model: transModel } = settingTransPicker.getValue()
+  const { provider: defaultProvider, model: defaultModel } = settingDefaultAiPicker.getValue()
+  let { provider: transProvider, model: transModel } = settingTransPicker.getValue()
+  if (settingTransSameAsDefault && settingTransSameAsDefault.checked) {
+    transProvider = defaultProvider
+    transModel = defaultModel
+  }
   let { provider: chatProvider, model: chatModel } = settingChatPicker.getValue()
-  if (settingChatSameAsTrans && settingChatSameAsTrans.checked) {
-    chatProvider = transProvider
-    chatModel = transModel
+  if (settingChatSameAsDefault && settingChatSameAsDefault.checked) {
+    chatProvider = defaultProvider
+    chatModel = defaultModel
+  }
+  let { provider: analysisProvider, model: analysisModel } = settingAnalysisPicker.getValue()
+  if (settingAnalysisSameAsDefault && settingAnalysisSameAsDefault.checked) {
+    analysisProvider = defaultProvider
+    analysisModel = defaultModel
+  }
+  let { provider: libraryProvider, model: libraryModel } = settingLibraryPicker.getValue()
+  if (settingLibrarySameAsDefault && settingLibrarySameAsDefault.checked) {
+    libraryProvider = defaultProvider
+    libraryModel = defaultModel
   }
 
   const pdfParserEngine = (typeof settingPdfParserPicker !== 'undefined' && settingPdfParserPicker) ? settingPdfParserPicker.getValue() : 'pymupdf'
 
   const settings = {
     ollama_host: settingOllamaHost ? settingOllamaHost.value.trim() : '',
+    default_ai_provider: defaultProvider || 'antigravity',
+    default_ai_model: defaultModel || '',
     trans_provider: transProvider || 'antigravity',
     trans_model: transModel || '',
     chat_provider: chatProvider || 'antigravity',
     chat_model: chatModel || '',
+    analysis_provider: analysisProvider || chatProvider || 'antigravity',
+    analysis_model: analysisModel || chatModel || '',
+    library_provider: libraryProvider || analysisProvider || chatProvider || 'antigravity',
+    library_model: libraryModel || analysisModel || chatModel || '',
     openai_api_key: settingOpenAIKey ? settingOpenAIKey.value.trim() : '',
     gemini_api_key: settingGeminiKey ? settingGeminiKey.value.trim() : '',
     claude_api_key: settingClaudeKey ? settingClaudeKey.value.trim() : '',
@@ -3301,9 +3400,16 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
   if (el) el.addEventListener('change', () => autoSaveSystemSettings())
 })
 
-if (settingChatSameAsTrans) {
-  settingChatSameAsTrans.addEventListener('change', () => autoSaveSystemSettings())
-}
+;[settingAutoGenerateKeywords, settingAutoGenerateSummaries].forEach(el => {
+  if (el) el.addEventListener('change', () => {
+    persistGeneralSettingsToStorage()
+    showToast('일반 설정이 저장되었습니다.', 'success')
+  })
+})
+
+modelSettingChildren.forEach(child => {
+  if (child.checkbox) child.checkbox.addEventListener('change', () => autoSaveSystemSettings())
+})
 
 const settingPromptTemplate = $('setting-prompt-template')
 if (settingPromptTemplate) {
@@ -15026,10 +15132,16 @@ if (onboardingConfirmBtn) {
     try {
       await saveSystemSettingsAPI({
         ollama_host: sys.ollama_host,
+        default_ai_provider: entry.provider,
+        default_ai_model: model,
         trans_provider: entry.provider,
         trans_model: model,
         chat_provider: entry.provider,
         chat_model: model,
+        analysis_provider: entry.provider,
+        analysis_model: model,
+        library_provider: entry.provider,
+        library_model: model,
         openai_api_key: sys.openai_api_key,
         gemini_api_key: sys.gemini_api_key,
         claude_api_key: sys.claude_api_key,
@@ -15037,9 +15149,12 @@ if (onboardingConfirmBtn) {
       })
       // sync compact pickers so the viewer/chat UI reflects the newly selected engine immediately
       viewerTransPicker.setValue(entry.provider, model)
+      settingDefaultAiPicker.setValue(entry.provider, model)
       settingTransPicker.setValue(entry.provider, model)
       chatSidebarPicker.setValue(entry.provider, model)
       settingChatPicker.setValue(entry.provider, model)
+      settingAnalysisPicker.setValue(entry.provider, model)
+      settingLibraryPicker.setValue(entry.provider, model)
       showToast(`${entry.label}을(를) 기본 AI 엔진으로 설정했습니다.`, 'success')
       closeOnboarding()
     } catch (err) {

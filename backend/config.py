@@ -30,6 +30,14 @@ TRANS_PROVIDER = os.getenv("TRANS_PROVIDER", "ollama")
 TRANS_MODEL = os.getenv("TRANS_MODEL", "gemma4:e4b")
 CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "ollama")
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gemma4:e4b")
+DEFAULT_AI_PROVIDER = os.getenv("DEFAULT_AI_PROVIDER", "")
+DEFAULT_AI_MODEL = os.getenv("DEFAULT_AI_MODEL", "")
+# 새 그룹은 비어 있으면 기존 설정으로 폴백한다. 기존 .env에는 이 키가 없으므로
+# 업그레이드 직후에도 키워드/요약/브리핑은 종전처럼 채팅 모델을 사용한다.
+ANALYSIS_PROVIDER = os.getenv("ANALYSIS_PROVIDER", "")
+ANALYSIS_MODEL = os.getenv("ANALYSIS_MODEL", "")
+LIBRARY_PROVIDER = os.getenv("LIBRARY_PROVIDER", "")
+LIBRARY_MODEL = os.getenv("LIBRARY_MODEL", "")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -152,6 +160,24 @@ def get_chat_provider() -> str:
 def get_chat_model() -> str:
     return CHAT_MODEL
 
+def get_default_ai_provider() -> str:
+    return DEFAULT_AI_PROVIDER or get_trans_provider()
+
+def get_default_ai_model() -> str:
+    return DEFAULT_AI_MODEL or get_trans_model()
+
+def get_analysis_provider() -> str:
+    return ANALYSIS_PROVIDER or get_chat_provider()
+
+def get_analysis_model() -> str:
+    return ANALYSIS_MODEL or get_chat_model()
+
+def get_library_provider() -> str:
+    return LIBRARY_PROVIDER or get_analysis_provider()
+
+def get_library_model() -> str:
+    return LIBRARY_MODEL or get_analysis_model()
+
 def get_openai_api_key() -> str:
     return OPENAI_API_KEY
 
@@ -177,15 +203,27 @@ def update_system_settings(
     gemini_api_key: str = "",
     claude_api_key: str = "",
     openalex_mailto: str = "",
-    pdf_parser_engine: str = "pymupdf"
+    pdf_parser_engine: str = "pymupdf",
+    analysis_provider: str = "",
+    analysis_model: str = "",
+    library_provider: str = "",
+    library_model: str = "",
+    default_ai_provider: str = "",
+    default_ai_model: str = ""
 ):
-    global OLLAMA_HOST, TRANS_PROVIDER, TRANS_MODEL, CHAT_PROVIDER, CHAT_MODEL, OPENAI_API_KEY, GEMINI_API_KEY, CLAUDE_API_KEY, OPENALEX_MAILTO, PDF_PARSER_ENGINE
+    global OLLAMA_HOST, TRANS_PROVIDER, TRANS_MODEL, CHAT_PROVIDER, CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_MODEL, ANALYSIS_PROVIDER, ANALYSIS_MODEL, LIBRARY_PROVIDER, LIBRARY_MODEL, OPENAI_API_KEY, GEMINI_API_KEY, CLAUDE_API_KEY, OPENALEX_MAILTO, PDF_PARSER_ENGINE
 
     OLLAMA_HOST = ollama_host
     TRANS_PROVIDER = trans_provider
     TRANS_MODEL = trans_model
     CHAT_PROVIDER = chat_provider
     CHAT_MODEL = chat_model
+    DEFAULT_AI_PROVIDER = default_ai_provider
+    DEFAULT_AI_MODEL = default_ai_model
+    ANALYSIS_PROVIDER = analysis_provider
+    ANALYSIS_MODEL = analysis_model
+    LIBRARY_PROVIDER = library_provider
+    LIBRARY_MODEL = library_model
     OPENAI_API_KEY = openai_api_key
     GEMINI_API_KEY = gemini_api_key
     CLAUDE_API_KEY = claude_api_key
@@ -199,6 +237,12 @@ def update_system_settings(
         "TRANS_MODEL": trans_model,
         "CHAT_PROVIDER": chat_provider,
         "CHAT_MODEL": chat_model,
+        "DEFAULT_AI_PROVIDER": default_ai_provider,
+        "DEFAULT_AI_MODEL": default_ai_model,
+        "ANALYSIS_PROVIDER": analysis_provider,
+        "ANALYSIS_MODEL": analysis_model,
+        "LIBRARY_PROVIDER": library_provider,
+        "LIBRARY_MODEL": library_model,
         "OPENAI_API_KEY": openai_api_key,
         "GEMINI_API_KEY": gemini_api_key,
         "CLAUDE_API_KEY": claude_api_key,

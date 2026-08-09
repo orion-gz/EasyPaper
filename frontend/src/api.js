@@ -4,8 +4,8 @@ export async function uploadPDF(file, options, onProgress) {
   const formData = new FormData()
   formData.append('file', file)
 
-  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs, translationMode } = options
-  const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}`
+  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode } = options
+  const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}&keyword_mode=${encodeURIComponent(keywordMode || 'manual')}&summary_mode=${encodeURIComponent(summaryMode || 'manual')}`
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()

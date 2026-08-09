@@ -214,7 +214,13 @@ def delete_chat_sessions(doc_id: str) -> None:
         try:
             with open(meta_path, "r", encoding="utf-8") as f:
                 meta = json.load(f)
-            if meta.get("provider") == "antigravity":
+            providers = meta.get("providers")
+            if isinstance(providers, dict):
+                antigravity_meta = providers.get("antigravity")
+                if isinstance(antigravity_meta, dict):
+                    conv_id = antigravity_meta.get("conversation_id")
+            elif meta.get("provider") == "antigravity":
+                # ai_session.json provider별 구조 전환 전의 기존 파일 지원
                 conv_id = meta.get("conversation_id")
         except Exception as e:
             print(f"[delete_chat_sessions Antigravity Error] {e}")
