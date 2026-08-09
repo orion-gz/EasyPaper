@@ -1460,12 +1460,6 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
     if effort_level:
         base_cmd.extend(["--effort", effort_level])
 
-    try:
-        from services.usage_tracker import record_call
-        record_call(usage_label or ("translate" if not is_chat else "chat"))
-    except Exception:
-        pass
-
     # 한 문서(session_id)는 하나의 Claude Code 세션만 사용한다:
     # 처음에는 --resume으로 기존 세션 이어붙이기를 시도하고, 세션이 아직 없으면(최초 호출)
     # "No conversation found" 에러를 받고 --session-id로 새로 생성한다.
@@ -1530,6 +1524,11 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
                 await _wait_with_timeout(process, label="Claude Code CLI")
 
                 if process.returncode == 0:
+                    try:
+                        from services.usage_tracker import record_call
+                        record_call(usage_label or ("translate" if not is_chat else "chat"))
+                    except Exception:
+                        pass
                     # provider_switched였을 때만이 아니라 매번 기록해야 한다 - 그래야
                     # antigravity를 한 번도 안 써서 ai_session.json이 아예 없던
                     # claude_code 전용 문서도 "claude_code가 마지막으로 썼다"는
@@ -1641,12 +1640,6 @@ async def stream_codex(prompt: str, model: str = None, session_id: str = None, i
     if effort_override:
         effort_level = effort_override
 
-    try:
-        from services.usage_tracker import record_call
-        record_call(usage_label or ("translate" if not is_chat else "chat"))
-    except Exception:
-        pass
-
     def build_cmd(resume_id):
         cmd = [codex_path, "exec"]
         if resume_id:
@@ -1737,6 +1730,11 @@ async def stream_codex(prompt: str, model: str = None, session_id: str = None, i
                 final_text = "".join(message_parts)
 
                 if process.returncode == 0 and final_text:
+                    try:
+                        from services.usage_tracker import record_call
+                        record_call(usage_label or ("translate" if not is_chat else "chat"))
+                    except Exception:
+                        pass
                     CHUNK_SIZE = 24
                     for i in range(0, len(final_text), CHUNK_SIZE):
                         yield final_text[i:i + CHUNK_SIZE]
@@ -2124,13 +2122,6 @@ async def stream_antigravity(
         "Start the output immediately with the translated/answered content.\n\n"
         f"{catchup_prefix}{prompt}"
     )
-    # 사용량 기록
-    try:
-        from services.usage_tracker import record_call
-        record_call(usage_label or ("translate" if not is_chat else "chat"))
-    except Exception:
-        pass
-
     cmd.extend(["--print", guided_prompt])
 
     try:
@@ -2179,6 +2170,12 @@ async def stream_antigravity(
                 provider="antigravity",
                 conversation_id=target_conv_id,
             )
+
+        try:
+            from services.usage_tracker import record_call
+            record_call(usage_label or ("translate" if not is_chat else "chat"))
+        except Exception:
+            pass
 
     except Exception as e:
         # 에러 문자열을 그대로 yield하면 그 문자열 자체가 번역/분류 결과인 것처럼
@@ -2518,4 +2515,3 @@ JSON Array:"""
         required_key="message",
         config_group="library",
     )
-
