@@ -497,7 +497,8 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
         raise RuntimeError("Gemini API Key가 설정되지 않았습니다. 설정에서 입력해 주세요.")
 
     headers = {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key,
     }
 
     gemini_contents = []
@@ -531,7 +532,7 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
     if system_instruction:
         payload["systemInstruction"] = system_instruction
         
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent"
     
     try:
         async with httpx.AsyncClient(timeout=360.0) as client:
@@ -541,7 +542,13 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
                 headers=headers,
                 json=payload
             ) as response:
+<<<<<<< HEAD
                 await _ensure_provider_response_ok(response, "Gemini")
+=======
+                if response.status_code != 200:
+                    await response.aread()
+                    raise RuntimeError(f"Gemini API 오류 (HTTP {response.status_code})")
+>>>>>>> f151740 (fix(llm): protect Gemini API key)
 
                 # Gemini streamGenerateContent는 JSON 배열을 스트리밍함:
                 # [ {chunk1},\n {chunk2}, ... ]
@@ -600,8 +607,19 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
                         except json.JSONDecodeError:
                             continue
 
+<<<<<<< HEAD
     except (httpx.ConnectError, httpx.TimeoutException) as exc:
         _raise_provider_transport_error("Gemini", exc)
+=======
+    except httpx.ConnectError:
+        raise RuntimeError("Gemini 서버에 연결할 수 없습니다.")
+    except httpx.TimeoutException:
+        raise RuntimeError("Gemini 요청 시간이 초과되었습니다.")
+    except RuntimeError:
+        raise
+    except Exception:
+        raise RuntimeError("Gemini 요청 처리 중 오류가 발생했습니다.")
+>>>>>>> f151740 (fix(llm): protect Gemini API key)
 
 
 async def stream_claude(messages: list, model: str, temperature: float = 0.5) -> AsyncGenerator[str, None]:
