@@ -903,14 +903,35 @@ def db_update_folder(folder_id: str, username: str, **updates: Any) -> bool:
 
 def db_delete_folder(folder_id: str, username: str, delete_papers: bool = False) -> bool:
     with get_db() as conn:
-        # 삭제를 선택한 경우 이 폴더의 직접 포함 논문은 휴지통으로 보낸다.
+        rows = conn.execute(
+            """
+            WITH RECURSIVE folder_tree(id) AS (
+                SELECT id FROM folders WHERE id = ? AND username = ?
+                UNION ALL
+                SELECT child.id
+                FROM folders child
+                JOIN folder_tree parent ON child.parent_id = parent.id
+                WHERE child.username = ?
+            )
+            SELECT id FROM folder_tree
+            """,
+            (folder_id, username, username),
+        ).fetchall()
+        folder_ids = [row["id"] for row in rows]
+        if not folder_ids:
+            return False
+
+        placeholders = ",".join("?" for _ in folder_ids)
+        # 삭제를 선택한 경우 하위 폴더를 포함한 트리 전체의 논문을 휴지통으로 보낸다.
         if delete_papers:
-            conn.execute("UPDATE documents SET is_deleted = 1 WHERE username = ? AND id IN (SELECT doc_id FROM document_folders WHERE folder_id = ?)", (username, folder_id))
-        conn.execute("UPDATE folders SET parent_id = NULL WHERE parent_id = ? AND username = ?", (folder_id, username))
-        conn.execute("UPDATE document_folders SET folder_id = NULL WHERE folder_id = ?", (folder_id,))
-        cursor = conn.execute("DELETE FROM folders WHERE id = ? AND username = ?", (folder_id, username))
+            conn.execute(
+                f"UPDATE documents SET is_deleted = 1 WHERE username = ? AND id IN (SELECT doc_id FROM document_folders WHERE folder_id IN ({placeholders}))",
+                (username, *folder_ids),
+            )
+        conn.execute(f"UPDATE document_folders SET folder_id = NULL WHERE folder_id IN ({placeholders})", folder_ids)
+        conn.execute(f"DELETE FROM folders WHERE username = ? AND id IN ({placeholders})", (username, *folder_ids))
         conn.commit()
-        return cursor.rowcount == 1
+        return True
 
 def db_get_document_folder_map(username: str) -> Dict[str, Optional[str]]:
     with get_db() as conn:

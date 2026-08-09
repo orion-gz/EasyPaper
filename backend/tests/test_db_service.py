@@ -137,6 +137,41 @@ def test_app_meta_get_set_round_trip(isolated_dirs):
     assert db.db_get_meta("some_key") == "value2"
 
 
+def test_delete_folder_removes_nested_folders_and_keeps_their_documents(isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_create_folder("parent", "admin", "Parent", None, "#64748b")
+    db.db_create_folder("child", "admin", "Child", "parent", "#64748b")
+    db.db_create_folder("grandchild", "admin", "Grandchild", "child", "#64748b")
+    db.db_create_folder("sibling", "admin", "Sibling", None, "#64748b")
+    db.db_save_document("nested-doc", "admin", "nested.pdf", "/x", 1, {})
+    db.db_move_documents_to_folder(["nested-doc"], "admin", "grandchild")
+
+    assert db.db_delete_folder("parent", "admin", delete_papers=False) is True
+
+    assert {folder["id"] for folder in db.db_list_folders("admin")} == {"sibling"}
+    assert db.db_get_document_folder_map("admin")["nested-doc"] is None
+    assert {doc["id"] for doc in db.db_list_documents("admin")} == {"nested-doc"}
+
+
+def test_delete_folder_trashes_documents_in_nested_folders(isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_create_folder("parent", "admin", "Parent", None, "#64748b")
+    db.db_create_folder("child", "admin", "Child", "parent", "#64748b")
+    db.db_save_document("parent-doc", "admin", "parent.pdf", "/x", 1, {})
+    db.db_save_document("child-doc", "admin", "child.pdf", "/x", 1, {})
+    db.db_move_documents_to_folder(["parent-doc"], "admin", "parent")
+    db.db_move_documents_to_folder(["child-doc"], "admin", "child")
+
+    assert db.db_delete_folder("parent", "admin", delete_papers=True) is True
+
+    assert db.db_list_folders("admin") == []
+    assert db.db_list_documents("admin") == []
+    assert {doc["id"] for doc in db.db_list_documents("admin", only_trash=True)} == {
+        "parent-doc",
+        "child-doc",
+    }
+
+
 def test_bulk_translation_rows_groups_by_doc_id(isolated_dirs):
     """list_documents()의 N+1 쿼리를 대체하는 벌크 조회 함수 - 문서마다 새
     커넥션을 여는 대신 한 번의 커넥션으로 여러 문서의 번역 행을 모아온다."""

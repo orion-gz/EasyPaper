@@ -5442,7 +5442,7 @@ function showFolderContentsDeleteDialog(paperCount) {
   return new Promise(resolve => {
     const modal = document.createElement('div')
     modal.className = 'custom-confirm-modal-wrapper'
-    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 안 논문 처리</span></div><div class="custom-confirm-modal-body">이 폴더에 논문 ${paperCount}개가 있습니다.<br>폴더 삭제 후 논문을 어떻게 처리할까요?</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn keep-btn">루트에 유지</button><button class="custom-confirm-btn confirm-btn">함께 휴지통으로 이동</button></div></div>`
+    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 안 논문 처리</span></div><div class="custom-confirm-modal-body">이 폴더와 하위 폴더에 논문 ${paperCount}개가 있습니다.<br>폴더 트리 삭제 후 논문을 어떻게 처리할까요?</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn keep-btn">루트에 유지</button><button class="custom-confirm-btn confirm-btn">함께 휴지통으로 이동</button></div></div>`
     document.body.appendChild(modal)
     const close = value => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(value) }, 200) }
     modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
@@ -5464,8 +5464,12 @@ async function requestRenameFolder(folder) {
   if (name && name !== folder.name) { await updateFolderWithUndo(folder, { name }); await renderLibrary() }
 }
 async function requestDeleteFolder(folder) {
-  const paperCount = currentLibraryDocs.filter(doc => doc.folder_id === folder.id).length
-  const ok = await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요?${paperCount ? '' : '\n비어 있는 폴더이며 논문에는 영향이 없습니다.'}`, { title: '폴더 삭제', confirmText: '삭제', danger: true })
+  const folderIds = folderDescendants(folder.id)
+  const childFolderCount = folderIds.size - 1
+  const paperCount = currentLibraryDocs.filter(doc => folderIds.has(doc.folder_id)).length
+  const childFolderNotice = childFolderCount > 0 ? `\n하위 폴더 ${childFolderCount}개도 함께 삭제됩니다.` : ''
+  const paperNotice = paperCount ? '' : '\n포함된 논문은 없으며 논문에는 영향이 없습니다.'
+  const ok = await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요?${childFolderNotice}${paperNotice}`, { title: '폴더 삭제', confirmText: '삭제', danger: true })
   if (!ok) return
   let deletePapers = false
   if (paperCount > 0) {
