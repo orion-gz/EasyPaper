@@ -13,6 +13,7 @@ from services.library import save_document, get_document, get_pdf_path as lib_pd
 from services.translation_job import start_job, resume_incomplete_jobs, get_job_status
 from services.insight_job import start_keyword_job, start_summary_job
 from services.primer import generate_primer
+from services.rate_limiter import enforce_rate_limit
 from models.schemas import UploadResponse
 
 router = APIRouter()
@@ -113,6 +114,8 @@ async def upload_pdf(
     current_user: str = Depends(get_current_user)
 ):
     """PDF 파일을 업로드하고 텍스트를 추출합니다."""
+    enforce_rate_limit("upload", current_user)
+
     # 파일 검증
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="PDF 파일만 업로드 가능합니다.")

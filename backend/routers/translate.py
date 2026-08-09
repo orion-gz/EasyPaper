@@ -11,6 +11,7 @@ from services.llm_client import stream_translation, check_ollama_health
 from services.cache import get_cached_translation, save_translation_cache, get_cached_translation_full
 from services.library import save_translation as lib_save_translation, get_translation as lib_get_translation, get_translation_full as lib_get_translation_full, clear_translations as lib_clear_translations
 from services.pdf_parser import render_page_image_base64
+from services.rate_limiter import enforce_rate_limit
 
 # 수식(LaTeX) 번역 정확도를 위해 페이지 이미지를 함께 첨부할 수 있는 provider
 # (translation_job.py의 배치 번역 잡과 동일한 기준).
@@ -34,6 +35,7 @@ async def translate_page(
     특정 페이지를 번역하고 SSE 스트리밍으로 반환합니다.
     이미 동일한 옵션으로 번역된 페이지는 캐시에서 즉시 반환합니다.
     """
+    enforce_rate_limit("translate", current_user)
     session = require_session_owner(session_id, current_user)
     total_pages = session["total_pages"]
 
@@ -305,4 +307,3 @@ async def clear_translation_cache(session_id: str, current_user: str = Depends(g
             pass
             
     return {"message": "번역 캐시와 잡이 성공적으로 초기화되었습니다."}
-

@@ -18,6 +18,7 @@ from services.db import (
 )
 from services.library import save_chat_quote_image
 from services.auth import get_current_user
+from services.rate_limiter import enforce_rate_limit
 
 # 프론트가 이미지 인용 메시지에 붙이는 "[인용된 이미지 (Page N)|quoteId]" 마커에서
 # quoteId만 뽑아낸다 - main.js의 sendChatMessage()가 만드는 placeholder 형식과 맞춰야 한다.
@@ -63,6 +64,7 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
     """
     논문 내용을 기반으로 AI 전문가와 챗을 진행하고 실시간 스트리밍 답변을 반환합니다.
     """
+    enforce_rate_limit("chat", current_user)
     session_id = data.session_id
     session = require_session_owner(session_id, current_user)
 
@@ -157,6 +159,7 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
 async def chat_suggestions(data: ChatRequest, current_user: str = Depends(get_current_user)):
     """직전 어시스턴트 답변과 논문 본문을 참고해 후속 질문 3개를 추천합니다. 채팅
     기록(chats 테이블)에는 남기지 않는 보조 UI(추천 질문 칩) 전용 엔드포인트입니다."""
+    enforce_rate_limit("chat", current_user)
     session_id = data.session_id
     session = require_session_owner(session_id, current_user)
 
@@ -190,6 +193,7 @@ async def chat_compare_stream(data: CompareChatRequest, current_user: str = Depe
     """여러 논문을 함께 컨텍스트로 제공해, 논문 간 비교/종합 질문에 답하는
     스트리밍 채팅입니다.
     """
+    enforce_rate_limit("chat", current_user)
     doc_ids = _dedupe_preserve_order(data.doc_ids)
     if len(doc_ids) < MIN_COMPARE_DOCS or len(doc_ids) > MAX_COMPARE_DOCS:
         raise HTTPException(
