@@ -57,7 +57,10 @@ export function renderKnowledgeGraph(container, graphData, { onNodeClick } = {})
         },
       },
     ],
-    layout: { name: 'fcose', quality: 'proof', animate: true },
+    // 페이지 진입 때마다 그래프를 새로 구성하므로 고비용 proof 품질을 자동 실행하지
+    // 않는다. 기본 품질은 큰 그래프의 초기 표시를 빠르게 하고, 사용자가 툴바의
+    // "다시 정렬"을 누른 경우에만 main.js에서 proof 레이아웃을 명시적으로 실행한다.
+    layout: { name: 'fcose', quality: 'default', animate: true },
   })
   cy.on('tap', 'node', evt => {
     const node = evt.target
