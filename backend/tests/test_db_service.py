@@ -59,6 +59,63 @@ def test_update_user_credentials_propagates_username_to_documents(isolated_dirs)
         "예전 아이디로는 더 이상 문서가 조회되지 않아야 한다"
 
 
+def test_update_user_credentials_propagates_username_to_user_data(isolated_dirs):
+    """아이디 변경 시 사용자별 리딩/비교 데이터도 함께 이전한다."""
+    db = isolated_dirs["db"]
+    now = "2026-08-09T00:00:00+00:00"
+
+    with db.get_db() as conn:
+        conn.execute(
+            """INSERT INTO reading_time
+               (doc_id, username, day, category, seconds, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            ("doc-1", "admin", "2026-08-09", "reading", 120, now),
+        )
+        conn.execute(
+            """INSERT INTO reading_sessions
+               (id, username, paper_id, started_at, active_reading_time,
+                created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            ("session-1", "admin", "doc-1", now, 120, now, now),
+        )
+        conn.execute(
+            """INSERT INTO user_reading_profiles
+               (username, ema_seconds_per_page, session_count, updated_at)
+               VALUES (?, ?, ?, ?)""",
+            ("admin", 300.0, 1, now),
+        )
+        conn.execute(
+            """INSERT INTO compare_sessions
+               (id, username, doc_ids, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            ("compare-1", "admin", '["doc-1", "doc-2"]', now, now),
+        )
+        conn.execute(
+            """INSERT INTO folders
+               (id, username, name, color, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            ("folder-1", "admin", "읽을 논문", "#64748b", now, now),
+        )
+        conn.commit()
+
+    assert db.update_user_credentials("admin", "newname", "newhash:abcd") is True
+
+    with db.get_db() as conn:
+        for table in (
+            "reading_time",
+            "reading_sessions",
+            "user_reading_profiles",
+            "compare_sessions",
+            "folders",
+        ):
+            assert conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE username = ?", ("newname",)
+            ).fetchone()[0] == 1
+            assert conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE username = ?", ("admin",)
+            ).fetchone()[0] == 0
+
+
 def test_update_user_credentials_same_username_is_noop_for_documents(isolated_dirs):
     """비밀번호만 바꾸고 아이디는 그대로인 경우, 불필요한 UPDATE가 안전하게 스킵된다."""
     db = isolated_dirs["db"]
