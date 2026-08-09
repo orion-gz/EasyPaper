@@ -342,6 +342,18 @@ def init_db():
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_folders_user_parent ON folders(username, parent_id, sort_order)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_folders_folder ON document_folders(folder_id)")
+        # foreign_keys 설정이 꺼진 기존 설치에서 영구 삭제된 논문이나 폴더를
+        # 가리키는 매핑이 남을 수 있으므로 시작 시 기존 데이터도 정리한다.
+        cursor.execute("DELETE FROM document_folders WHERE doc_id NOT IN (SELECT id FROM documents)")
+        cursor.execute(
+            "UPDATE document_folders SET folder_id = NULL "
+            "WHERE folder_id IS NOT NULL AND folder_id NOT IN (SELECT id FROM folders)"
+        )
+        cursor.execute(
+            "UPDATE folders AS child SET parent_id = NULL WHERE parent_id IS NOT NULL "
+            "AND NOT EXISTS (SELECT 1 FROM folders AS parent "
+            "WHERE parent.id = child.parent_id AND parent.username = child.username)"
+        )
 
         conn.commit()
 
@@ -564,6 +576,7 @@ def db_delete_document(doc_id: str) -> bool:
         if not cursor.fetchone():
             return False
         cursor.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+        cursor.execute("DELETE FROM document_folders WHERE doc_id = ?", (doc_id,))
         conn.commit()
         return True
 
