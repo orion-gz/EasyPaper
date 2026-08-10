@@ -15,7 +15,8 @@
         "resizable": true,
         "fullscreen": false,
         "theme": "Dark",
-        "backgroundColor": "#06050a"
+        "backgroundColor": "#06050a",
+        "dragDropEnabled": false
       }
     ],
     "security": {
