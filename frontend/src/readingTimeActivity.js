@@ -29,3 +29,5 @@ export function createReadingTimeActivityTracker({
 
   return { record, reset, getCategory }
 }
+
+export const globalReadingTimeActivityTracker = createReadingTimeActivityTracker()

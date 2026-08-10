@@ -16,7 +16,7 @@ import { renderNotesPage } from './pages/notesPage.js'
 import { formatTranslationHtml, applyKatexToElement } from './textFormat.js'
 import { createSelectionRect, resolveDragSelection } from './library-selection.js'
 import { globalAnalyticsTracker } from './readingAnalytics.js'
-import { createReadingTimeActivityTracker } from './readingTimeActivity.js'
+import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -700,6 +700,7 @@ async function initScrollViewer() {
   viewerScrollContainer.innerHTML = ''
 
   if (state.sessionId) {
+    readingTimeActivityTracker.reset('reading')
     globalAnalyticsTracker.startSession(state.sessionId, state.totalPages || 0)
   }
 
@@ -709,9 +710,19 @@ async function initScrollViewer() {
     viewerScrollContainer.addEventListener('scroll', () => {
       if (state.currentPage) {
         const curPageEl = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${state.currentPage}"]`)
-        globalAnalyticsTracker.trackScroll(state.currentPage, curPageEl, viewerScrollContainer, true)
+        globalAnalyticsTracker.trackScroll(state.currentPage, curPageEl, viewerScrollContainer, true, false)
       }
     }, { passive: true })
+
+    let lastAnalyticsScrollInteractionAt = 0
+    const trackUserScrollInteraction = () => {
+      const now = Date.now()
+      if (now - lastAnalyticsScrollInteractionAt < 1000 || !state.currentPage) return
+      lastAnalyticsScrollInteractionAt = now
+      globalAnalyticsTracker.trackInteraction('scroll', state.currentPage)
+    }
+    viewerScrollContainer.addEventListener('wheel', trackUserScrollInteraction, { passive: true })
+    viewerScrollContainer.addEventListener('touchmove', trackUserScrollInteraction, { passive: true })
 
     viewerScrollContainer.addEventListener('mouseup', () => {
       const sel = window.getSelection()
@@ -4138,7 +4149,7 @@ const READING_HEARTBEAT_TICK_SECONDS = 5
 const READING_HEARTBEAT_FLUSH_MS = 20000
 let readingHeartbeatBuffers = {} // `${docId}|${category}` -> 적립된 초
 let readingHeartbeatContextKey = null
-const readingTimeActivityTracker = createReadingTimeActivityTracker()
+const readingTimeActivityTracker = globalReadingTimeActivityTracker
 
 function recordReadingTimeInteraction(event) {
   if (!viewerScreen?.classList.contains('active')) return
@@ -4197,22 +4208,28 @@ function tickReadingHeartbeat() {
   }
 }
 
-async function flushReadingHeartbeat() {
+async function flushReadingHeartbeat({ keepalive = false } = {}) {
   const buffers = readingHeartbeatBuffers
   readingHeartbeatBuffers = {}
-  const entries = Object.entries(buffers).filter(([, s]) => s > 0)
+  const entries = Object.entries(buffers).filter(([, seconds]) => seconds > 0)
   if (entries.length === 0) return
-  await Promise.all(entries.map(([key, seconds]) => {
+
+  const results = await Promise.all(entries.map(async ([key, seconds]) => {
     const sep = key.lastIndexOf('|')
     const docId = key.slice(0, sep)
     const category = key.slice(sep + 1)
-    return sendReadingHeartbeat(docId, seconds, category)
+    const sent = await sendReadingHeartbeat(docId, seconds, category, { keepalive })
+    return { key, seconds, sent }
   }))
+
+  for (const { key, seconds, sent } of results) {
+    if (!sent) readingHeartbeatBuffers[key] = (readingHeartbeatBuffers[key] || 0) + seconds
+  }
 }
 
 setInterval(tickReadingHeartbeat, READING_HEARTBEAT_TICK_SECONDS * 1000)
 setInterval(flushReadingHeartbeat, READING_HEARTBEAT_FLUSH_MS)
-window.addEventListener('beforeunload', () => { flushReadingHeartbeat(); globalAnalyticsTracker.stopSession() })
+window.addEventListener('beforeunload', () => { flushReadingHeartbeat({ keepalive: true }); globalAnalyticsTracker.stopSession() })
 
 // ── 초기화 ────────────────────────────────────────
 checkAuthentication()

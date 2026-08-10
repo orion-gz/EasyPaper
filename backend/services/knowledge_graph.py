@@ -446,17 +446,22 @@ async def get_activity_timeline(username: str) -> List[dict]:
     docs = list_documents(username=username, include_deleted=True)
     titles_by_doc = {d["id"]: (d.get("metadata") or {}).get("title") or d["filename"] for d in docs}
     deleted_by_doc = {d["id"]: bool(d.get("is_deleted")) for d in docs}
+    manually_read_by_doc = {d["id"]: bool((d.get("metadata") or {}).get("read")) for d in docs}
 
     doc_ids_seen = set(titles_by_doc.keys())
     events = []
 
     from services.reading_analytics import (
         PageSession, analyze_page_sessions, classify_reading_activity,
+        is_meaningful_page_session,
     )
 
     analytics_rows = db_get_reading_sessions_for_user(username)
     user_ema = db_get_user_reading_profile(username).get("ema_seconds_per_page", 600.0)
     analytics_doc_ids = {row["paper_id"] for row in analytics_rows}
+    latest_session_by_doc = {}
+    for row in analytics_rows:
+        latest_session_by_doc.setdefault(row["paper_id"], row["id"])
     for row in analytics_rows:
         try:
             page_sessions = json.loads(row.get("page_sessions_json") or "[]")
@@ -470,7 +475,9 @@ async def get_activity_timeline(username: str) -> List[dict]:
                 page_models.append(PageSession(**page))
             except (TypeError, ValueError):
                 continue
-        pages = sorted({page.page for page in page_models})
+        pages = sorted({
+            page.page for page in page_models if is_meaningful_page_session(page)
+        })
         active_time = max(0, row.get("active_reading_time") or 0)
         verified_pages = max(0, row.get("verified_pages_count") or 0)
         verified_page_numbers = None
@@ -506,13 +513,15 @@ async def get_activity_timeline(username: str) -> List[dict]:
                 user_ema,
                 page_models,
             )
+        doc_id = row["paper_id"]
+        if manually_read_by_doc.get(doc_id) and latest_session_by_doc.get(doc_id) == row["id"]:
+            activity_type = "read"
         if activity_type == "ignored":
             continue
         start_ts = row.get("started_at") or row.get("updated_at")
         end_ts = row.get("ended_at")
         if end_ts == start_ts:
             end_ts = None
-        doc_id = row["paper_id"]
         events.append({
             "type": activity_type,
             "reading_activity": activity_type,

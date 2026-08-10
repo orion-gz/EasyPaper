@@ -271,12 +271,13 @@ export async function fetchLibraryDashboard() {
 // 뷰어/비교 화면이 보이고 포커스된 동안 주기적으로 경과 초를 보고한다(main.js의
 // 읽기 시간 하트비트 타이머가 호출). 실패해도 다음 하트비트에서 다시 시도되므로
 // 조용히 무시한다 - 토스트 등으로 사용자에게 알릴 만한 오류가 아니다.
-export async function sendReadingHeartbeat(docId, seconds, category = 'reading') {
+export async function sendReadingHeartbeat(docId, seconds, category = 'reading', { keepalive = false } = {}) {
   try {
     const res = await fetch(`${API_BASE}/library/${docId}/reading-heartbeat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ seconds, category }),
+      keepalive,
     })
     if (res.ok) invalidateLibraryGetCache()
     return res.ok

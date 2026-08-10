@@ -273,7 +273,7 @@ async def start_reading_session_api(doc_id: str, body: Optional[StartSessionRequ
     latest = db_get_latest_reading_session(doc_id, current_user)
     now = datetime.now(timezone.utc)
 
-    if latest and latest.get("updated_at"):
+    if latest and latest.get("updated_at") and not latest.get("ended_at"):
         try:
             last_updated = datetime.fromisoformat(latest["updated_at"])
             diff_sec = (now - last_updated).total_seconds()
@@ -399,7 +399,9 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
         db_save_reading_session,
         db_save_user_reading_profile,
     )
-    from services.reading_analytics import process_reading_analytics, update_user_ema
+    from services.reading_analytics import (
+        count_meaningful_page_sessions, process_reading_analytics, update_user_ema,
+    )
 
     doc = get_document(doc_id)
     doc_total_pages = doc.get("total_pages", 0) if doc else 0
@@ -446,11 +448,13 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
             user_ema,
             profile.get("session_count", 0),
             payload.activeReadingTime,
-            len({ps.page for ps in payload.pageSessions}),
+            count_meaningful_page_sessions(payload.pageSessions),
         )
         db_save_user_reading_profile(current_user, new_ema, new_count)
 
-    update_document_metadata(doc_id, {"last_read_at": now_iso})
+    metadata = dict((doc or {}).get("metadata") or {})
+    metadata["last_read_at"] = now_iso
+    update_document_metadata(doc_id, metadata)
 
     return res.model_dump()
 
