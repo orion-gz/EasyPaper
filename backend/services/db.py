@@ -247,7 +247,7 @@ def init_db():
         # 13. reading_time 테이블 (Reading History의 "읽은 시간" 실측치). 뷰어/비교
         #     화면이 화면에 보이고 포커스된 동안 프런트가 일정 간격(하트비트)으로
         #     경과 초를 보내오면 (doc_id, username, day, category) 단위로 누적한다.
-        #     category는 'reading'(뷰어 기본)/'chat'(채팅 사이드바가 열려있는 동안)/
+        #     category는 'reading'(PDF 영역 상호작용)/'chat'(채팅 영역 상호작용)/
         #     'compare'(논문 비교 채팅 화면) 중 하나 - 실제로 구분 가능한 화면
         #     상태만 카테고리로 쓰고, 근거 없는 세부 항목(예: "메모 작성 시간")은
         #     만들지 않는다.
