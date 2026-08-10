@@ -1,5 +1,7 @@
 """services/db.py CRUD 및 app_meta 테스트 (격리된 임시 DB 사용)."""
 
+import json
+
 
 def test_document_crud_round_trip(isolated_dirs):
     db = isolated_dirs["db"]
@@ -214,3 +216,68 @@ def test_bulk_translation_rows_returns_empty_list_for_doc_without_translations(i
 def test_bulk_translation_rows_empty_doc_ids_returns_empty_dict(isolated_dirs):
     db = isolated_dirs["db"]
     assert db.db_bulk_translation_rows([]) == {}
+
+
+def test_reading_analytics_v2_migrates_legacy_sessions(isolated_dirs):
+    db = isolated_dirs["db"]
+    pages = [
+        {"page": page, "activeTime": 1, "scrollCoverage": 0.05, "interaction": {}}
+        for page in range(1, 7)
+    ] + [
+        {
+            "page": page, "activeTime": 600, "scrollCoverage": 0.8,
+            "interaction": {"scroll": 10, "highlight": 1},
+        }
+        for page in range(7, 10)
+    ]
+    db.db_save_reading_session(
+        session_id="legacy", username="admin", paper_id="paper",
+        started_at="2026-08-10T01:00:00+00:00",
+        ended_at="2026-08-10T02:00:00+00:00", active_reading_time=1806,
+        version=1, page_sessions_json=json.dumps(pages),
+        interaction_summary_json=json.dumps({"scroll": 30, "highlight": 3}),
+        reading_depth="Browsing", reading_score=37.9, reading_confidence=42.2,
+        verified_pages_count=3, total_pages=19, reading_activity="browsed",
+        analytics_version=1,
+    )
+
+    db.db_migrate_reading_analytics_v2()
+
+    migrated = db.db_get_reading_session("legacy", "admin")
+    assert migrated["analytics_version"] == 2
+    assert migrated["reading_activity"] == "read"
+    assert migrated["reading_confidence"] >= 90
+    assert migrated["reading_score"] >= 70
+    assert db.db_get_user_reading_profile("admin")["session_count"] == 1
+
+
+def test_backfill_document_title_preserves_metadata_and_snapshot(
+    isolated_dirs, tmp_path, monkeypatch,
+):
+    db = isolated_dirs["db"]
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"placeholder")
+    db.db_save_document(
+        "paper-title", "admin", "uploaded-name.pdf", str(pdf_path), 5,
+        {"last_read_at": "2026-08-10T00:00:00+00:00"},
+    )
+    db.db_add_reading_time("paper-title", "admin", "reading", 10)
+
+    import services.pdf_parser as pdf_parser
+    monkeypatch.setattr(
+        pdf_parser, "get_pdf_metadata",
+        lambda _path: {"title": "Extracted Research Title"},
+    )
+
+    db.db_backfill_document_titles()
+
+    metadata = db.db_get_document("paper-title")["metadata"]
+    assert metadata == {
+        "last_read_at": "2026-08-10T00:00:00+00:00",
+        "title": "Extracted Research Title",
+    }
+    with db.get_db() as conn:
+        snapshot = conn.execute(
+            "SELECT doc_title FROM reading_time WHERE doc_id = ?", ("paper-title",),
+        ).fetchone()["doc_title"]
+    assert snapshot == "Extracted Research Title"

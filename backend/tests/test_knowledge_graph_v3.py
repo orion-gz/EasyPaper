@@ -477,3 +477,35 @@ def test_reading_recommendations_endpoint_force_query_param(test_client, isolate
     res = test_client.get("/api/library/graph/recommendations?force=true")
     assert res.status_code == 200
     assert call_count["n"] == 2
+
+
+def test_timeline_manual_read_uses_meaningful_page_range(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    _create_doc_owned_by(
+        isolated_dirs, "doc-manual-read", "testuser",
+        {"title": "Extracted Timeline Title", "read": True},
+    )
+    db.db_save_reading_session(
+        session_id="manual-read", username="testuser", paper_id="doc-manual-read",
+        started_at="2026-08-10T01:00:00+00:00", ended_at=None,
+        active_reading_time=31, version=1,
+        page_sessions_json=json.dumps([
+            {"page": 1, "activeTime": 1, "scrollCoverage": 0.05},
+            {"page": 5, "activeTime": 30, "scrollCoverage": 0.4},
+            {
+                "page": 9, "activeTime": 2, "scrollCoverage": 0.1,
+                "interaction": {"figureClick": 1},
+            },
+        ]),
+        interaction_summary_json="{}", reading_depth="Browsing",
+        reading_score=20, reading_confidence=20, verified_pages_count=0,
+        total_pages=10, reading_activity="browsed",
+    )
+
+    events = test_client.get("/api/library/timeline").json()["events"]
+    event = next(item for item in events if item.get("reading_session_id") == "manual-read")
+
+    assert event["type"] == "read"
+    assert event["doc_title"] == "Extracted Timeline Title"
+    assert event["start_page"] == 5
+    assert event["end_page"] == 9

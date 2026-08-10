@@ -1,3 +1,5 @@
+import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
+
 // Reading Analytics Tracker (Frontend)
 
 const HEARTBEAT_INTERVAL_MS = 20000 // 20 seconds
@@ -159,8 +161,11 @@ export class ReadingAnalyticsTracker {
 
   tickActiveReadingTime() {
     if (!this.isTracking || !this.paperId) return
-    // Active Reading Condition: tab visible & window focused
+    // Use the same PDF-vs-chat and idle state as Reading History heartbeats.
     if (document.visibilityState !== 'visible' || !document.hasFocus()) return
+    if (globalReadingTimeActivityTracker.getCategory({
+      chatAvailable: !document.getElementById('chat-sidebar')?.classList.contains('hidden'),
+    }) !== 'reading') return
 
     this.activeReadingTime += 1
     const ps = this.ensurePageSession(this.currentPage)

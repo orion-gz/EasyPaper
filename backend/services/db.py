@@ -303,6 +303,7 @@ def init_db():
             total_pages INTEGER DEFAULT 0,
             reading_activity TEXT DEFAULT 'unclassified',
             minimum_evidence_time REAL DEFAULT 90.0,
+            analytics_version INTEGER NOT NULL DEFAULT 2,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
@@ -369,6 +370,7 @@ def init_db():
             "ALTER TABLE reading_sessions ADD COLUMN reading_activity TEXT DEFAULT 'unclassified'",
             "ALTER TABLE reading_sessions ADD COLUMN minimum_evidence_time REAL DEFAULT 90.0",
             "ALTER TABLE reading_sessions ADD COLUMN verified_pages_json TEXT",
+            "ALTER TABLE reading_sessions ADD COLUMN analytics_version INTEGER NOT NULL DEFAULT 1",
         ):
             try:
                 cursor.execute(column_sql)
@@ -396,6 +398,9 @@ def init_db():
             )
             conn.commit()
             print(f"Default user '{default_user}' created in SQLite database.")
+
+    db_migrate_reading_analytics_v2()
+    db_backfill_document_titles()
 
 
 # ── 사용자 (Users) ───────────────────────────────────────────────────────────
@@ -1521,7 +1526,7 @@ def db_get_latest_reading_session(paper_id: str, username: str) -> Optional[Dict
                    page_sessions_json, interaction_summary_json, reading_depth,
                    reading_score, reading_confidence, verified_pages_count,
                    verified_pages_json, total_pages, reading_activity,
-                   minimum_evidence_time, created_at, updated_at
+                   minimum_evidence_time, analytics_version, created_at, updated_at
             FROM reading_sessions
             WHERE username = ? AND paper_id = ?
             ORDER BY updated_at DESC LIMIT 1
@@ -1544,7 +1549,7 @@ def db_get_reading_session(session_id: str, username: str) -> Optional[Dict[str,
                    page_sessions_json, interaction_summary_json, reading_depth,
                    reading_score, reading_confidence, verified_pages_count,
                    verified_pages_json, total_pages, reading_activity,
-                   minimum_evidence_time, created_at, updated_at
+                   minimum_evidence_time, analytics_version, created_at, updated_at
             FROM reading_sessions
             WHERE id = ? AND username = ?
             """,
@@ -1574,6 +1579,7 @@ def db_save_reading_session(
     reading_activity: str = "unclassified",
     minimum_evidence_time: float = 90.0,
     verified_pages_json: Optional[str] = None,
+    analytics_version: int = 2,
 ) -> bool:
     """Insert a session or replace it only with a newer heartbeat version."""
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -1586,8 +1592,8 @@ def db_save_reading_session(
                 page_sessions_json, interaction_summary_json, reading_depth,
                 reading_score, reading_confidence, verified_pages_count, total_pages,
                 reading_activity, minimum_evidence_time, verified_pages_json,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                analytics_version, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 ended_at = excluded.ended_at,
                 active_reading_time = excluded.active_reading_time,
@@ -1602,6 +1608,7 @@ def db_save_reading_session(
                 total_pages = excluded.total_pages,
                 reading_activity = excluded.reading_activity,
                 minimum_evidence_time = excluded.minimum_evidence_time,
+                analytics_version = excluded.analytics_version,
                 updated_at = excluded.updated_at
             WHERE excluded.version > reading_sessions.version
             """,
@@ -1623,6 +1630,7 @@ def db_save_reading_session(
                 reading_activity,
                 minimum_evidence_time,
                 verified_pages_json,
+                analytics_version,
                 now_iso,
                 now_iso,
             ),
@@ -1643,7 +1651,7 @@ def db_get_reading_sessions_for_user(username: str) -> List[Dict[str, Any]]:
                    rs.reading_depth, rs.reading_score, rs.reading_confidence,
                    rs.verified_pages_count, rs.verified_pages_json,
                    rs.total_pages, rs.reading_activity,
-                   rs.minimum_evidence_time, rs.updated_at,
+                   rs.minimum_evidence_time, rs.analytics_version, rs.updated_at,
                    titles.doc_title
             FROM reading_sessions AS rs
             LEFT JOIN (
@@ -1691,6 +1699,143 @@ def db_save_user_reading_profile(username: str, ema_seconds_per_page: float, ses
             (username, ema_seconds_per_page, session_count, now_iso),
         )
         conn.commit()
+
+
+def db_migrate_reading_analytics_v2() -> None:
+    """Recalculate legacy sessions and rebuild EMA from meaningful page visits."""
+    from services.reading_analytics import (
+        READING_ANALYTICS_VERSION, InteractionSummary, PageSession,
+        ReadingSessionPayload, count_meaningful_page_sessions,
+        process_reading_analytics, update_user_ema,
+    )
+
+    with get_db() as conn:
+        affected_rows = conn.execute(
+            "SELECT DISTINCT username FROM reading_sessions WHERE analytics_version < ?",
+            (READING_ANALYTICS_VERSION,),
+        ).fetchall()
+        affected_users = [row["username"] for row in affected_rows]
+        if not affected_users:
+            return
+
+        placeholders = ",".join("?" for _ in affected_users)
+        rows = conn.execute(
+            f"""
+            SELECT id, username, paper_id, version, active_reading_time, ended_at,
+                   page_sessions_json, interaction_summary_json, total_pages, analytics_version
+            FROM reading_sessions
+            WHERE username IN ({placeholders})
+            ORDER BY username, started_at, created_at
+            """,
+            affected_users,
+        ).fetchall()
+
+        profiles = {username: (600.0, 0) for username in affected_users}
+        for row in rows:
+            username = row["username"]
+            user_ema, session_count = profiles[username]
+            try:
+                raw_pages = json.loads(row["page_sessions_json"] or "[]")
+                raw_interaction = json.loads(row["interaction_summary_json"] or "{}")
+                page_sessions = [
+                    PageSession(**page) for page in raw_pages if isinstance(page, dict)
+                ]
+                interaction = InteractionSummary(**raw_interaction)
+                payload = ReadingSessionPayload(
+                    sessionId=row["id"],
+                    paperId=row["paper_id"],
+                    version=max(0, row["version"] or 0),
+                    currentPage=max([page.page for page in page_sessions], default=1),
+                    activeReadingTime=max(0, row["active_reading_time"] or 0),
+                    pageSessions=page_sessions,
+                    interactionSummary=interaction,
+                )
+            except (TypeError, ValueError, json.JSONDecodeError):
+                conn.execute(
+                    "UPDATE reading_sessions SET analytics_version = ? WHERE id = ?",
+                    (READING_ANALYTICS_VERSION, row["id"]),
+                )
+                continue
+
+            if (row["analytics_version"] < READING_ANALYTICS_VERSION):
+                result = process_reading_analytics(
+                    payload, max(0, row["total_pages"] or 0), user_ema,
+                )
+                verified_pages = sorted(
+                    page for page, score in result.pageScores.items() if score >= 50.0
+                )
+                conn.execute(
+                    """
+                    UPDATE reading_sessions
+                    SET reading_depth = ?, reading_score = ?, reading_confidence = ?,
+                        verified_pages_count = ?, verified_pages_json = ?, total_pages = ?,
+                        reading_activity = ?, minimum_evidence_time = ?, analytics_version = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        result.readingDepth, result.readingScore, result.readingConfidence,
+                        result.verifiedPagesCount, json.dumps(verified_pages), result.totalPages,
+                        result.readingActivity, result.minimumEvidenceTime,
+                        READING_ANALYTICS_VERSION, row["id"],
+                    ),
+                )
+
+            meaningful_pages = count_meaningful_page_sessions(page_sessions)
+            if row["ended_at"] and meaningful_pages > 0:
+                profiles[username] = update_user_ema(
+                    user_ema, session_count, payload.activeReadingTime, meaningful_pages,
+                )
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for username, (ema_seconds, session_count) in profiles.items():
+            conn.execute(
+                """
+                INSERT INTO user_reading_profiles
+                    (username, ema_seconds_per_page, session_count, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(username) DO UPDATE SET
+                    ema_seconds_per_page = excluded.ema_seconds_per_page,
+                    session_count = excluded.session_count,
+                    updated_at = excluded.updated_at
+                """,
+                (username, ema_seconds, session_count, now_iso),
+            )
+        conn.commit()
+
+
+def db_backfill_document_titles() -> None:
+    """Restore extracted paper titles lost by legacy metadata replacement."""
+    from services.pdf_parser import get_pdf_metadata
+
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, pdf_path, metadata FROM documents WHERE is_deleted = 0"
+        ).fetchall()
+
+    for row in rows:
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            metadata = {}
+        if (metadata.get("title") or not os.path.isfile(row["pdf_path"] or "")):
+            continue
+        try:
+            title = (get_pdf_metadata(row["pdf_path"]).get("title") or "").strip()
+        except Exception:
+            continue
+        if not title:
+            continue
+        metadata["title"] = title
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE documents SET metadata = ? WHERE id = ?",
+                (json.dumps(metadata, ensure_ascii=False), row["id"]),
+            )
+            conn.execute(
+                "UPDATE reading_time SET doc_title = ? WHERE doc_id = ?",
+                (title, row["id"]),
+            )
+            conn.commit()
 
 
 def db_get_all_reading_analytics_summary(username: str, since_days: Optional[int] = None) -> Dict[str, Any]:
