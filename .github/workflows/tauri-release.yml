@@ -30,14 +30,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # AppImage linuxdeploy가 ubuntu-latest에서 반복 실패하므로 Tauri의
-          # 공식 tauri-action 릴리스 예시와 동일하게 22.04에 고정한다.
+          # AppImage linuxdeploy가 ubuntu-22.04에서도 반복 실패하므로
+          # Linux는 정상 생성되는 deb와 rpm만 릴리스한다.
           - os: ubuntu-22.04
             name: linux
+            args: "--bundles deb,rpm"
           - os: windows-latest
             name: windows
+            args: ""
           - os: macos-14
             name: macos-arm64
+            args: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -142,6 +145,7 @@ jobs:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v0.0.0-manual{0}', github.run_number) }}
           releaseName: "EasyPaper Desktop ${{ github.ref_type == 'tag' && github.ref_name || 'manual build' }}"
           releaseBody: ${{ steps.relnotes.outputs.notes }}
+          args: ${{ matrix.args }}
           # 태그 push만 즉시 게시하고, workflow_dispatch 수동 빌드는 검토 전
           # 실수로 공개되지 않도록 초안으로 남긴다.
           releaseDraft: ${{ github.ref_type != 'tag' }}
