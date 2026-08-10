@@ -4,7 +4,7 @@
 // 동안 5초 tick으로 현재 문서+카테고리에 적립 → 20초마다 서버로 flush,
 // POST /library/{doc_id}/reading-heartbeat)가 쌓은 실측치를
 // fetchReadingTimeStats()로 집계해서 쓴다. 카테고리는 실제로 구분 가능한 화면
-// 상태 3가지뿐이다: reading(뷰어 기본) / chat(채팅 사이드바 열림) /
+// 상태 3가지뿐이다: reading(최근 PDF 상호작용) / chat(최근 채팅 상호작용) /
 // compare(논문 비교 채팅). 이 기능을 도입하기 전에 만든 페이지라 이 시점
 // 이전의 활동에는 시간 데이터가 없을 수 있다 - 그런 경우 위젯은 "아직 기록된
 // 읽기 시간이 없습니다"로 정직하게 표시한다.
@@ -75,7 +75,7 @@ const TYPE_ICON = { uploaded: 'archive', read: 'bookOpen', browsed: 'activity', 
 const TYPE_COLOR_VAR = { read: '--rh-c1', browsed: '--rh-c5', question: '--rh-c2', note: '--rh-c3', uploaded: '--rh-c4' }
 const TYPE_ORDER = ['read', 'browsed', 'question', 'note', 'uploaded']
 
-// 읽기 시간 하트비트의 카테고리 3종(뷰어 기본/채팅 사이드바/논문 비교) - 대시보드
+// 읽기 시간 하트비트의 카테고리 3종(PDF 상호작용/채팅 상호작용/논문 비교) - 대시보드
 // 활동 요약 카드의 "활동 유형별 시간 분포"에서도 동일 팔레트/라벨을 공유한다.
 export const CATEGORY_LABEL = { reading: '논문 읽기', chat: 'AI 채팅', compare: '논문 비교' }
 export const CATEGORY_COLOR_VAR = { reading: '--rh-c1', chat: '--rh-c2', compare: '--rh-c5' }
@@ -670,7 +670,7 @@ export async function renderReadingHistoryPage() {
 
   // ── Reading Time Distribution (part-to-whole, 전체 기간 실측치) ──
   // 카테고리는 main.js 하트비트가 실제로 구분하는 화면 상태 3가지뿐이다:
-  // reading(뷰어에서 읽는 중) / chat(채팅 사이드바 사용 중) / compare(논문 비교).
+  // reading(최근 PDF 상호작용) / chat(최근 채팅 상호작용) / compare(논문 비교).
   const mixBarHtml = CATEGORY_ORDER.map(c => {
     const seconds = byCategory[c] || 0
     const pct = mixTotalSeconds ? (seconds / mixTotalSeconds) * 100 : 0

@@ -16,6 +16,7 @@ import { renderNotesPage } from './pages/notesPage.js'
 import { formatTranslationHtml, applyKatexToElement } from './textFormat.js'
 import { createSelectionRect, resolveDragSelection } from './library-selection.js'
 import { globalAnalyticsTracker } from './readingAnalytics.js'
+import { createReadingTimeActivityTracker } from './readingTimeActivity.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -4130,12 +4131,31 @@ if (settingSkipLoginCheckbox) {
 // ── 읽기 시간 하트비트 (Reading History의 "읽은 시간" 실측) ──────────────
 // 뷰어/비교 화면이 화면에 보이고(Page Visibility) 창이 포커스된 동안만 5초
 // 간격으로 "현재 컨텍스트"(문서 id + reading/chat/compare 카테고리)에 초를
-// 적립하고, 20초마다 적립분을 서버로 보낸다. 5초 tick 시점의 컨텍스트를 그때
-// 그때 버킷에 더하므로, 20초 사이에 채팅 사이드바를 열고 닫는 등 컨텍스트가
-// 바뀌어도 각 구간이 올바른 카테고리로 집계된다.
+// 적립하고, 20초마다 적립분을 서버로 보낸다. 단일 논문 뷰어에서는 사이드바의
+// 열림 여부가 아니라 PDF/채팅 영역 중 사용자가 마지막으로 상호작용한 영역으로
+// 분류하며, 60초 동안 상호작용이 없으면 유휴 상태로 보고 적립하지 않는다.
 const READING_HEARTBEAT_TICK_SECONDS = 5
 const READING_HEARTBEAT_FLUSH_MS = 20000
 let readingHeartbeatBuffers = {} // `${docId}|${category}` -> 적립된 초
+let readingHeartbeatContextKey = null
+const readingTimeActivityTracker = createReadingTimeActivityTracker()
+
+function recordReadingTimeInteraction(event) {
+  if (!viewerScreen?.classList.contains('active')) return
+  const target = event.target
+  const isChatInteraction = chatSidebar
+    && !chatSidebar.classList.contains('hidden')
+    && chatSidebar.contains(target)
+    && !target.closest?.('#chat-close-btn')
+  readingTimeActivityTracker.record(isChatInteraction ? 'chat' : 'reading')
+}
+
+// pointerdown은 클릭·선택·스크롤바 드래그·터치를, wheel/keydown/input은 각각
+// 휠 스크롤·키보드 탐색·채팅 입력을 포착한다. scroll 이벤트는 답변 렌더링이나
+// 페이지 복원 코드가 일으킨 자동 스크롤도 포함하므로 활동 근거로 사용하지 않는다.
+for (const eventName of ['pointerdown', 'wheel', 'keydown', 'input']) {
+  viewerScreen?.addEventListener(eventName, recordReadingTimeInteraction, { capture: true, passive: eventName === 'wheel' })
+}
 
 function isReadingTimeActive() {
   if (document.visibilityState !== 'visible' || !document.hasFocus()) return false
@@ -4146,17 +4166,29 @@ function isReadingTimeActive() {
 
 function currentReadingContext() {
   if (viewerScreen && viewerScreen.classList.contains('active') && state.sessionId) {
-    const category = (chatSidebar && !chatSidebar.classList.contains('hidden')) ? 'chat' : 'reading'
+    const contextKey = `viewer|${state.sessionId}`
+    if (readingHeartbeatContextKey !== contextKey) {
+      readingHeartbeatContextKey = contextKey
+      readingTimeActivityTracker.reset('reading')
+    }
+    const category = readingTimeActivityTracker.getCategory({
+      chatAvailable: Boolean(chatSidebar && !chatSidebar.classList.contains('hidden')),
+    })
+    if (!category) return null
     return { docIds: [state.sessionId], category }
   }
   if (compareScreen && compareScreen.classList.contains('active') && compareChatState.docIds.length > 0) {
+    readingHeartbeatContextKey = `compare|${compareChatState.docIds.join(',')}`
     return { docIds: compareChatState.docIds, category: 'compare' }
   }
   return null
 }
 
 function tickReadingHeartbeat() {
-  if (!isReadingTimeActive()) return
+  if (!isReadingTimeActive()) {
+    readingHeartbeatContextKey = null
+    return
+  }
   const ctx = currentReadingContext()
   if (!ctx) return
   for (const docId of ctx.docIds) {

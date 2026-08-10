@@ -698,8 +698,8 @@ async def delete_library_document(doc_id: str, current_user: str = Depends(get_c
 @router.post("/library/{doc_id}/reading-heartbeat")
 async def post_reading_heartbeat(doc_id: str, body: ReadingHeartbeatRequest, current_user: str = Depends(get_current_user)):
     """뷰어/비교 화면이 보이고 포커스된 동안 프론트가 주기적으로 보내는 경과
-    시간(초)을 누적합니다. category는 'reading'(뷰어 기본) / 'chat'(채팅
-    사이드바가 열려있는 동안) / 'compare'(논문 비교 채팅 화면) 중 하나입니다.
+    시간(초)을 누적합니다. category는 'reading'(PDF 영역 상호작용) / 'chat'(채팅
+    영역 상호작용) / 'compare'(논문 비교 채팅 화면) 중 하나입니다.
     한 번의 하트비트 간격(예: 20초) 이상을 보내는 조작을 막기 위해 상한을 둡니다."""
     require_owned_document(doc_id, current_user)
     if body.category not in ("reading", "chat", "compare"):
