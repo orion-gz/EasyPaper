@@ -468,6 +468,11 @@ def _extract_paper_title(doc: fitz.Document) -> str:
             r'\b(doi\s*:|issn\b|volume\s+\d|vol\.\s*\d|copyright|©|all rights reserved)\b',
             re.IGNORECASE,
         )
+        editor_watermark_re = re.compile(
+            r'\b(?:created|edited|generated)\s+(?:in|with|using|by)\s+'
+            r'(?:the\s+)?master\s+pdf\s+editor\b',
+            re.IGNORECASE,
+        )
 
         lines = []
         for line_spans in group_spans_into_lines(spans_info):
@@ -510,6 +515,11 @@ def _extract_paper_title(doc: fitz.Document) -> str:
             if section_header_re.match(line_text) or author_hint_re.search(line_text):
                 return False
             if publication_header_re.match(line_text) or bibliographic_header_re.search(line_text):
+                return False
+            # Master PDF Editor 등이 삽입한 대형 워터마크는 본문과 같은
+            # y 좌표의 한 행으로 합쳐지기도 한다. 글꼴 크기만 보면 이 행이
+            # 실제 제목보다 긴 제목 후보로 선택되므로 후보에서 제외한다.
+            if editor_watermark_re.search(line_text):
                 return False
             return line["size"] >= min_prominent_size
 

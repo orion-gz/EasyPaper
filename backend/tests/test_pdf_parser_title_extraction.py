@@ -4,7 +4,7 @@
 
 import fitz
 
-from services.pdf_parser import _extract_paper_title
+from services.pdf_parser import _extract_paper_title, get_pdf_metadata
 
 
 def test_numbered_section_header_not_included_in_title(tmp_path):
@@ -127,3 +127,35 @@ def test_large_journal_masthead_does_not_become_title(tmp_path):
 
     assert extracted_title == title
     assert "JOURNAL" not in extracted_title
+
+
+def test_pdf_editor_watermark_does_not_become_title(tmp_path):
+    """PDF 편집기 워터마크가 본문 문장과 한 행으로 합쳐져도
+    실제 제목 후보를 대신하지 않아야 한다."""
+    doc = fitz.open()
+    page = doc.new_page(width=700, height=842)
+
+    title = "Muon Optimizer Accelerates Grokking"
+    page.insert_text((50, 80), title, fontsize=18)
+    page.insert_text(
+        (25, 300),
+        "Created in Master PDF Editor checkpoints to support future research.",
+        fontsize=15,
+    )
+    page.insert_textbox(
+        fitz.Rect(50, 360, 650, 650),
+        "This paper investigates optimizer behavior and generalization. " * 20,
+        fontsize=10,
+    )
+    doc.set_metadata({"title": title})
+
+    path = tmp_path / "master_pdf_editor_watermark.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    result_doc = fitz.open(str(path))
+    extracted_title = _extract_paper_title(result_doc)
+    result_doc.close()
+
+    assert extracted_title == title
+    assert get_pdf_metadata(str(path))["title"] == title
