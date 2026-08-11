@@ -60,6 +60,11 @@ def test_update_metadata_owned_by_self_succeeds(test_client, isolated_dirs):
     res = test_client.put("/api/library/doc-mine-2/metadata", json={"title": "My New Title"})
     assert res.status_code == 200
     assert res.json()["metadata"]["title"] == "My New Title"
+    assert isolated_dirs["db"].db_get_document("doc-mine-2")["metadata"]["title"] == "My New Title"
+
+    reloaded = test_client.get("/api/library/doc-mine-2")
+    assert reloaded.status_code == 200
+    assert reloaded.json()["metadata"]["title"] == "My New Title"
 
 
 def test_library_list_only_returns_own_documents(test_client, isolated_dirs):

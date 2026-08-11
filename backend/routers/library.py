@@ -5,7 +5,8 @@ from services.auth import get_current_user
 from services.library import (
     list_documents, search_documents, get_document, permanently_delete_document,
     soft_delete_document, restore_document, empty_trash,
-    get_translation, get_pdf_path, get_cover_path, update_document_metadata,
+    get_translation, get_pdf_path, get_cover_path,
+    patch_document_metadata,
     get_chat_quote_image_path, list_folders, create_folder, update_folder, delete_folder, move_documents_to_folder
 )
 from pydantic import BaseModel
@@ -462,9 +463,7 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
         )
         db_save_user_reading_profile(current_user, new_ema, new_count)
 
-    metadata = dict((doc or {}).get("metadata") or {})
-    metadata["last_read_at"] = now_iso
-    update_document_metadata(doc_id, metadata)
+    patch_document_metadata(doc_id, {"last_read_at": now_iso})
 
     return res.model_dump()
 
@@ -961,8 +960,7 @@ async def get_library_bibliography(
     result = await resolve_paper_metadata(title)
 
     bibliography = result or {"venue": None, "doi": None, "arxiv_id": None, "citation_count": None}
-    meta["bibliography"] = bibliography
-    update_document_metadata(doc_id, meta)
+    patch_document_metadata(doc_id, {"bibliography": bibliography})
     return bibliography
 
 
@@ -1018,22 +1016,23 @@ async def update_doc_metadata(
             if not updated and ns not in combined:
                 combined.append(ns)
 
-        meta["read_sessions"] = combined[-100:]
         payload_copy = dict(payload)
-        payload_copy.pop("read_sessions")
-        meta.update(payload_copy)
+        payload_copy["read_sessions"] = combined[-100:]
+        updates = payload_copy
     else:
-        meta.update(payload)
-    
-    if "title" in payload and payload["title"] != old_title:
-        meta.pop("bibliography", None)
+        updates = payload
 
-    update_document_metadata(doc_id, meta)
-    
+    if "title" in payload and payload["title"] != old_title:
+        remove_keys = ("bibliography",)
+    else:
+        remove_keys = ()
+
+    persisted_meta = patch_document_metadata(doc_id, updates, remove_keys)
+
     # 활성 메모리 세션도 업데이트하여 정합성 유지
     from routers.upload import sessions
     if doc_id in sessions:
-        sessions[doc_id]["metadata"] = meta
-        
-    return {"status": "success", "metadata": meta}
+        sessions[doc_id]["metadata"] = persisted_meta
+
+    return {"status": "success", "metadata": persisted_meta}
 

@@ -15,6 +15,30 @@ def test_document_crud_round_trip(isolated_dirs):
     assert db.db_get_document("nonexistent") is None
 
 
+def test_patch_document_metadata_preserves_unrelated_fields(isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_save_document(
+        "doc-patch",
+        "admin",
+        "paper.pdf",
+        "/x/paper.pdf",
+        10,
+        {"title": "Original", "bibliography": {"doi": "old"}, "read": True},
+    )
+
+    updated = db.db_patch_document_metadata(
+        "doc-patch", {"title": "Renamed"}, ("bibliography",),
+    )
+    assert updated == {"title": "Renamed", "read": True}
+
+    # A later background update must merge into the current metadata instead of
+    # restoring the title snapshot it started with.
+    db.db_patch_document_metadata("doc-patch", {"graph_synced_at": "now"})
+    assert db.db_get_document("doc-patch")["metadata"] == {
+        "title": "Renamed", "read": True, "graph_synced_at": "now",
+    }
+
+
 def test_list_documents_filters_by_username(isolated_dirs):
     db = isolated_dirs["db"]
     db.db_save_document("doc-a1", "alice", "a1.pdf", "/x", 1, {})

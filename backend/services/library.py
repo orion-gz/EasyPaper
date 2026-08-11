@@ -22,6 +22,7 @@ from services.db import (
     db_clear_page_insights,
     db_delete_page_insight,
     db_update_document_metadata,
+    db_patch_document_metadata,
     db_bulk_translation_rows,
     db_list_folders, db_get_folder, db_create_folder, db_update_folder, db_delete_folder,
     db_get_document_folder_map, db_move_documents_to_folder,
@@ -420,6 +421,15 @@ def update_document_metadata(doc_id: str, metadata: dict) -> None:
     db_update_document_metadata(doc_id, metadata)
 
 
+def patch_document_metadata(
+    doc_id: str,
+    updates: dict,
+    remove_keys: tuple[str, ...] = (),
+) -> Optional[dict]:
+    """Atomically merge metadata fields and return the persisted metadata."""
+    return db_patch_document_metadata(doc_id, updates, remove_keys)
+
+
 def get_reference_start_page(doc: dict) -> Optional[int]:
     """문서에서 참고문헌 섹션이 시작하는 페이지 번호(1-based)를 반환합니다
     ("읽은 페이지 수"를 계산할 때 참고문헌 페이지를 본문에서 제외하는 데
@@ -451,7 +461,7 @@ def get_reference_start_page(doc: dict) -> Optional[int]:
     start_page = (idx + 1) if idx is not None else None  # 0-based 인덱스 -> 1-based 페이지 번호
 
     meta["reference_start_page"] = start_page
-    update_document_metadata(doc["id"], meta)
+    patch_document_metadata(doc["id"], {"reference_start_page": start_page})
     return start_page
 
 

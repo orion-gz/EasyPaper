@@ -264,15 +264,13 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                 combined_text += p.get("text", "") + "\n"
             
             from services.llm_client import classify_paper_category
-            from services.library import update_document_metadata
+            from services.library import patch_document_metadata
             
             tags = await classify_paper_category(doc_title, combined_text, session_id=session_id)
             if tags:
                 doc = get_document(session_id)
                 if doc:
-                    meta = doc.get("metadata", {})
-                    meta["categories"] = tags
-                    update_document_metadata(session_id, meta)
+                    patch_document_metadata(session_id, {"categories": tags})
                     print(f"[Job {session_id}] Classified categories: {tags}")
         except Exception as ex:
             print(f"[Job {session_id}] Category classification failed: {ex}")
