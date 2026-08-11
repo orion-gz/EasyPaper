@@ -86,7 +86,7 @@ async def sync_document_for_graph(doc_id: str, pages: list, doc_title: str) -> N
     """번역 완료 직후 호출되어, 해당 문서의 개념을 추출하고 라이브러리 내
     다른 논문과의 인용 관계를 매칭해 DB에 저장한다. 실패해도 번역 파이프라인
     자체는 영향받지 않도록 호출부(translation_job.py)에서 try/except로 감싼다."""
-    from services.library import get_document, update_document_metadata
+    from services.library import get_document, patch_document_metadata
     doc = get_document(doc_id)
     if not doc:
         return
@@ -139,9 +139,7 @@ async def sync_document_for_graph(doc_id: str, pages: list, doc_title: str) -> N
     except Exception:
         pass  # 참고문헌 파싱/매칭 실패는 조용히 무시한다 (primer.py와 동일한 철학)
 
-    meta = doc.get("metadata", {})
-    meta["graph_synced_at"] = datetime.now(timezone.utc).isoformat()
-    update_document_metadata(doc_id, meta)
+    patch_document_metadata(doc_id, {"graph_synced_at": datetime.now(timezone.utc).isoformat()})
 
 
 async def sync_question_for_graph(chat_id: int, doc_id_or_compare_id: str, question_text: str) -> None:
@@ -1046,10 +1044,10 @@ def _resolve_ai_insight_title(doc: dict) -> str:
             filename.casefold(),
             filename_stem.casefold(),
         }:
-            from services.library import update_document_metadata
+            from services.library import patch_document_metadata
             updated_metadata = dict(metadata)
             updated_metadata["title"] = extracted_title
-            update_document_metadata(doc["id"], updated_metadata)
+            patch_document_metadata(doc["id"], {"title": extracted_title})
             doc["metadata"] = updated_metadata
             return extracted_title
 

@@ -890,6 +890,40 @@ def db_update_document_metadata(doc_id: str, metadata: dict) -> None:
         conn.commit()
 
 
+def db_patch_document_metadata(
+    doc_id: str,
+    updates: dict,
+    remove_keys: tuple[str, ...] = (),
+) -> Optional[dict]:
+    """Merge individual metadata fields without overwriting concurrent changes."""
+    with get_db() as conn:
+        # Keep the read/merge/write sequence inside one write transaction. Long
+        # running jobs often hold an old metadata snapshot, so callers that only
+        # changed one field must not replace the whole JSON document with it.
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT metadata FROM documents WHERE id = ?",
+            (doc_id,),
+        ).fetchone()
+        if row is None:
+            return None
+
+        try:
+            metadata = json.loads(row["metadata"]) if row["metadata"] else {}
+        except (TypeError, json.JSONDecodeError):
+            metadata = {}
+        metadata.update(updates)
+        for key in remove_keys:
+            metadata.pop(key, None)
+
+        conn.execute(
+            "UPDATE documents SET metadata = ? WHERE id = ?",
+            (json.dumps(metadata, ensure_ascii=False), doc_id),
+        )
+        conn.commit()
+        return metadata
+
+
 # ── 라이브러리 폴더 ───────────────────────────────────────────────────────────
 
 def db_list_folders(username: str) -> List[Dict[str, Any]]:
