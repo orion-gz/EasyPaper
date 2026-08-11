@@ -30,6 +30,7 @@
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -1015,6 +1016,46 @@ def _ai_insights_cache_key(username: str) -> str:
     return f"ai_insights:{username}"
 
 
+def _resolve_ai_insight_title(doc: dict) -> str:
+    """AI 인사이트에 전달할 논문 제목을 반환한다.
+
+    과거 데이터에는 metadata.title이 비어 있거나 업로드 파일명 자체로 저장된
+    경우가 있다. 이 값을 그대로 LLM에 넘기면 인사이트에도 파일명이 논문
+    제목처럼 노출되므로, 그런 경우 PDF 본문에서 제목을 다시 추출해 저장한다.
+    """
+    metadata = doc.get("metadata") or {}
+    title = (metadata.get("title") or "").strip()
+    filename = (doc.get("filename") or "").strip()
+    filename_stem = os.path.splitext(filename)[0]
+    title_is_filename = bool(title and filename) and title.casefold() in {
+        filename.casefold(),
+        filename_stem.casefold(),
+    }
+
+    if title and not title_is_filename:
+        return title
+
+    pdf_path = doc.get("pdf_path") or ""
+    if pdf_path and os.path.isfile(pdf_path):
+        try:
+            from services.pdf_parser import get_pdf_metadata
+            extracted_title = (get_pdf_metadata(pdf_path).get("title") or "").strip()
+        except Exception:
+            extracted_title = ""
+        if extracted_title and extracted_title.casefold() not in {
+            filename.casefold(),
+            filename_stem.casefold(),
+        }:
+            from services.library import update_document_metadata
+            updated_metadata = dict(metadata)
+            updated_metadata["title"] = extracted_title
+            update_document_metadata(doc["id"], updated_metadata)
+            doc["metadata"] = updated_metadata
+            return extracted_title
+
+    return title or filename or "제목 없음"
+
+
 async def get_ai_insights(username: str) -> List[dict]:
     """대시보드 "AI 인사이트" 카드의 내용을 생성한다. 예전에는 get_knowledge_gaps의
     규칙 기반 격차 문구를 그대로 노출했지만, 그건 매번 같은 두 패턴("질문이
@@ -1031,6 +1072,11 @@ async def get_ai_insights(username: str) -> List[dict]:
     카드가 비지 않게 한다."""
     from services.db import db_get_meta, db_set_meta
 
+    from services.library import list_documents
+    docs = list_documents(username=username)
+    titles_by_doc = {d["id"]: _resolve_ai_insight_title(d) for d in docs}
+    title_signature = [[doc_id, title] for doc_id, title in sorted(titles_by_doc.items())]
+
     cache_key = _ai_insights_cache_key(username)
     cached_raw = db_get_meta(cache_key)
     if cached_raw:
@@ -1038,13 +1084,14 @@ async def get_ai_insights(username: str) -> List[dict]:
             cached = json.loads(cached_raw)
             generated_at = datetime.fromisoformat(cached["generated_at"])
             age = datetime.now(timezone.utc) - generated_at
-            if age < timedelta(hours=AI_INSIGHTS_CACHE_HOURS):
+            if (
+                age < timedelta(hours=AI_INSIGHTS_CACHE_HOURS)
+                and cached.get("title_signature") == title_signature
+            ):
                 return cached["insights"]
         except Exception:
             pass  # 캐시가 손상됐으면 무시하고 새로 생성
 
-    from services.library import list_documents
-    docs = list_documents(username=username)
     rule_based_gaps = await get_knowledge_gaps(username)
     if not docs:
         return rule_based_gaps
@@ -1053,7 +1100,6 @@ async def get_ai_insights(username: str) -> List[dict]:
     # 이해 부족/개념 공백을 실제로 진단하기엔 근거가 너무 짧다. 여기서는 같은
     # 원본(memos/questions)을 직접 조회해 더 긴 내용(최대 200자)을 LLM에 넘긴다.
     from services.db import db_get_memos, db_get_related_questions_for_doc
-    titles_by_doc = {d["id"]: (d.get("metadata") or {}).get("title") or d["filename"] for d in docs}
     note_entries = []
     question_entries = []
     for doc in docs:
@@ -1108,6 +1154,7 @@ async def get_ai_insights(username: str) -> List[dict]:
 
     db_set_meta(cache_key, json.dumps({
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "title_signature": title_signature,
         "insights": insights,
     }, ensure_ascii=False))
     return insights
