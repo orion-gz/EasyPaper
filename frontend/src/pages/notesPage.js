@@ -19,6 +19,15 @@ import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
 
 let renderGeneration = 0
 
+// 뷰어의 플로팅 메모 색상 이름을 Notes 카드에서 사용하는 실제 accent 색상으로
+// 맞춘다. default는 사용자가 설정한 앱 accent를 그대로 사용한다.
+const MEMO_ACCENT_COLORS = {
+  yellow: '#eab308',
+  green: '#10b981',
+  blue: '#3b82f6',
+  red: '#f43f5e',
+}
+
 // 즐겨찾기는 서버에 저장되는 필드가 아니라 Library 페이지가 이미 쓰고 있는
 // 로컬 전용 상태다(백엔드에 star/favorite 필드가 없음 - Library 리스킨 때 같은
 // 이유로 로컬로 구현됨). 같은 localStorage 키를 그대로 읽고 써서 Library와
@@ -133,7 +142,8 @@ async function buildPaperEntry(doc) {
     ;(memosByPage[pageKey] || []).forEach(memo => {
       const ts = memoTimestamp(memo)
       const text = (memo.content && memo.content.trim()) || memo.sentenceText || '(내용 없음)'
-      memoItems.push({ kind: 'memo', docId: doc.id, page: pageNum, ts, text, color: null })
+      const color = MEMO_ACCENT_COLORS[memo.color] || null
+      memoItems.push({ kind: 'memo', docId: doc.id, page: pageNum, ts, text, color })
     })
   })
 
