@@ -222,7 +222,7 @@ export async function renderAiChatsPage() {
                     <div class="aic-paper-title" title="${escapeHtml(session.title)}">${escapeHtml(session.title)}</div>
                   </div>
                 </td>
-                <td class="aic-col-message"><span class="aic-preview" data-preview-doc="${escapeHtml(session.doc_id)}">${previewCellHtml(session)}</span></td>
+                <td class="aic-col-message"><div class="aic-preview" data-preview-doc="${escapeHtml(session.doc_id)}">${previewCellHtml(session)}</div></td>
                 <td class="aic-col-updated" title="${escapeHtml(formatFullTime(session.last_message_at))}">${formatRelativeTime(session.last_message_at)}</td>
                 <td class="aic-col-actions"><div class="aic-actions">${actionsHtml(session)}</div></td>
               </tr>
