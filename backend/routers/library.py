@@ -33,6 +33,10 @@ class DocumentMoveRequest(BaseModel):
     doc_ids: list[str]
     folder_id: Optional[str] = None
 
+class DocumentTitleUpdateRequest(BaseModel):
+    title: str
+
+
 @router.get("/library/folders")
 async def get_library_folders(current_user: str = Depends(get_current_user)):
     return {"folders": list_folders(current_user)}
@@ -962,6 +966,31 @@ async def get_library_bibliography(
     bibliography = result or {"venue": None, "doi": None, "arxiv_id": None, "citation_count": None}
     patch_document_metadata(doc_id, {"bibliography": bibliography})
     return bibliography
+
+
+@router.put("/library/{doc_id}/title")
+async def update_doc_title(
+    doc_id: str,
+    body: DocumentTitleUpdateRequest,
+    current_user: str = Depends(get_current_user),
+):
+    """Update a document title through an explicit, persistent write path."""
+    require_owned_document(doc_id, current_user)
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="제목을 입력해주세요.")
+    if len(title) > 500:
+        raise HTTPException(status_code=400, detail="제목은 500자 이하여야 합니다.")
+
+    persisted_meta = patch_document_metadata(
+        doc_id, {"title": title}, remove_keys=("bibliography",),
+    )
+
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id]["metadata"] = persisted_meta
+
+    return {"status": "success", "title": title, "metadata": persisted_meta}
 
 
 @router.put("/library/{doc_id}/metadata")

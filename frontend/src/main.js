@@ -6,7 +6,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
 import { icon } from './icons.js'
 import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
 import { renderDashboardPage } from './pages/dashboardPage.js'
@@ -1705,9 +1705,10 @@ if (docTitleEditBtn) {
       const newTitle = input.value.trim()
       if (newTitle && newTitle !== oldTitle) {
         try {
-          await updateLibraryDocMetadata(state.sessionId, { title: newTitle })
+          await updateLibraryDocTitle(state.sessionId, newTitle)
           state.title = newTitle
           docTitle.textContent = newTitle
+          state.currentDocMetadata.title = newTitle
           showToast('제목이 변경되었습니다.', 'success')
         } catch (err) {
           showToast('제목 변경 실패: ' + err.message, 'error')
@@ -7400,7 +7401,7 @@ function wireDocItemEvents(container, doc, displayTitle) {
       const newTitle = input.value.trim()
       if (newTitle && newTitle !== oldTitle) {
         try {
-          await updateLibraryDocMetadata(doc.id, { title: newTitle })
+          await updateLibraryDocTitle(doc.id, newTitle)
           showToast('제목이 변경되었습니다.', 'success')
           await renderLibrary()
         } catch (err) {
@@ -7788,7 +7789,7 @@ function startLibraryDetailTitleEdit(doc) {
     const newTitle = input.value.trim()
     if (newTitle && newTitle !== oldTitle) {
       try {
-        await updateLibraryDocMetadata(doc.id, { title: newTitle })
+        await updateLibraryDocTitle(doc.id, newTitle)
         showToast('제목이 변경되었습니다.', 'success')
         titleEl.textContent = newTitle
         await renderLibrary()
