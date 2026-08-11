@@ -88,6 +88,28 @@ export async function fetchLibraryDocImages(docId) {
   return res.json()
 }
 
+export async function fetchPaperTagOntology() {
+  const res = await fetch(`${API_BASE}/library/tags/ontology`)
+  if (!res.ok) throw new Error('태그 분류표 조회 실패')
+  return res.json()
+}
+
+export async function updatePaperTags(docId, payload) {
+  const res = await fetch(`${API_BASE}/library/${docId}/tags`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error((await res.json()).detail || '태그 저장 실패')
+  invalidateLibraryGetCache()
+  return res.json()
+}
+
+export async function reclassifyPaperTags(docId) {
+  const res = await fetch(`${API_BASE}/library/${docId}/tags/reclassify`, { method: 'POST' })
+  if (!res.ok) throw new Error((await res.json()).detail || '태그 재분류 실패')
+  invalidateLibraryGetCache()
+  return res.json()
+}
+
 export async function updateLibraryDocMetadata(docId, payload) {
   const res = await fetch(`${API_BASE}/library/${docId}/metadata`, {
     method: 'PUT',
