@@ -107,6 +107,56 @@ def test_graph_endpoint_marks_unsynced_docs_as_pending(test_client, isolated_dir
     assert "doc-mine-graph-5" in data["pending_docs"]
 
 
+def test_tag_ontology_and_manual_edit_are_closed_and_versioned(test_client, isolated_dirs):
+    _create_doc_owned_by(isolated_dirs, "doc-tags-edit", "testuser", {"title": "Meta-Harness"})
+
+    ontology = test_client.get("/api/library/tags/ontology")
+    assert ontology.status_code == 200
+    assert "Harness Engineering" in ontology.json()["roles"]["primary_topic"]
+    assert "Optimizer" not in ontology.json()["roles"]["primary_topic"]
+
+    response = test_client.put("/api/library/doc-tags-edit/tags", json={
+        "primary_topics": ["Harness Engineering"],
+        "domains": ["LLM Applications"],
+        "methods": ["Agentic Code Search"],
+    })
+    assert response.status_code == 200
+    metadata = response.json()["metadata"]
+    assert metadata["categories"] == ["Harness Engineering", "LLM Applications", "Agentic Code Search"]
+    assert metadata["paper_tags"]["source"] == "user"
+    assert metadata["paper_tags"]["user_edited"] is True
+
+
+def test_manual_tag_edit_rejects_free_form_ambiguous_optimizer(test_client, isolated_dirs):
+    _create_doc_owned_by(isolated_dirs, "doc-tags-invalid", "testuser", {"title": "Meta-Harness"})
+    response = test_client.put("/api/library/doc-tags-invalid/tags", json={
+        "primary_topics": ["Optimizer"], "domains": ["LLM"], "methods": [],
+    })
+    assert response.status_code == 400
+
+
+def test_graph_exposes_tag_nodes_but_domain_only_does_not_link_papers(test_client, isolated_dirs):
+    meta_a = {
+        "title": "Harness A", "graph_synced_at": "done",
+        "categories": ["Harness Engineering", "LLM Applications"],
+        "paper_tags": {"version": 2, "source": "user", "user_edited": True,
+            "primary_topics": [{"name": "Harness Engineering"}],
+            "domains": [{"name": "LLM Applications"}], "methods": []},
+    }
+    meta_b = {
+        "title": "Agent B", "graph_synced_at": "done",
+        "categories": ["Agent Systems", "LLM Applications"],
+        "paper_tags": {"version": 2, "source": "user", "user_edited": True,
+            "primary_topics": [{"name": "Agent Systems"}],
+            "domains": [{"name": "LLM Applications"}], "methods": []},
+    }
+    _create_doc_owned_by(isolated_dirs, "doc-tags-a", "testuser", meta_a)
+    _create_doc_owned_by(isolated_dirs, "doc-tags-b", "testuser", meta_b)
+    data = test_client.get("/api/library/graph").json()
+    assert any(node["type"] == "tag" and node["label"] == "LLM Applications" for node in data["nodes"])
+    assert not any(edge["type"] == "category" for edge in data["edges"])
+
+
 class TestParseJsonArrayResponse:
     def test_clean_json(self):
         result = _parse_json_array_response(

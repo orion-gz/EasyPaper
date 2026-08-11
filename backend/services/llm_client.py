@@ -2187,67 +2187,28 @@ async def stream_antigravity(
 
 from typing import List
 
+async def classify_paper_tags(title: str, abstract: str, session_id: str = None) -> dict:
+    """Classify a paper into the versioned, role-aware closed tag ontology."""
+    from services.paper_tags import build_paper_tag_prompt, normalize_tag_items
+
+    items = await _llm_json_array_with_retry(
+        build_paper_tag_prompt(title, abstract[:5000]),
+        session_id=session_id,
+        log_label="논문 구조화 태그 분류",
+        required_key="name",
+        config_group="analysis",
+    )
+    paper_tags = normalize_tag_items(items, source="ai")
+    if not paper_tags.get("primary_topics"):
+        return {}
+    return paper_tags
+
+
 async def classify_paper_category(title: str, text: str, session_id: str = None) -> List[str]:
-    prompt = f"""You are an academic paper classifier. Analyze the following paper title and beginning text (abstract) and classify it into one or two specific sub-categories of computer science / artificial intelligence (e.g. LLM, VLM, VLA, VAE, GAN, Diffusion, Optimizer, Object Detection, Segmentation, Speech Synthesis, RL, GNN, Transformer, etc.).
-Output ONLY the category name(s) as a comma-separated list of words (e.g., "LLM" or "LLM, VLM" or "GAN, VAE" or "Optimizer"). Do not include any explanations, introduction, punctuation (other than commas), or markdown formatting. Keep the tags concise and uppercase if appropriate.
+    """Backward-compatible flattened view for older callers."""
+    from services.paper_tags import flatten_categories
 
-Title: {title}
-Beginning Text:
-{text[:2000]}
-
-Category Tags:"""
-
-    messages = [
-        {"role": "user", "content": prompt}
-    ]
-    
-    provider = get_trans_provider()
-    model = get_trans_model()
-    
-    tokens = []
-    try:
-        if provider == "openai":
-            async for token in stream_openai(messages, model=model, temperature=0.1):
-                tokens.append(token)
-        elif provider == "gemini":
-            async for token in stream_gemini(messages, model=model, temperature=0.1):
-                tokens.append(token)
-        elif provider == "claude":
-            async for token in stream_claude(messages, model=model, temperature=0.1):
-                tokens.append(token)
-        elif provider == "antigravity":
-            async for token in stream_antigravity(prompt, model=model, session_id=session_id):
-                tokens.append(token)
-        elif provider == "claude_code":
-            async for token in stream_claude_code(prompt, model=model, session_id=session_id):
-                tokens.append(token)
-        elif provider == "codex":
-            async for token in stream_codex(prompt, model=model, session_id=session_id):
-                tokens.append(token)
-        else:
-            # Fallback to Ollama chat api
-            payload = {
-                "model": model,
-                "messages": messages,
-                "stream": False,
-                "options": {"temperature": 0.1}
-            }
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(f"{get_ollama_host()}/api/chat", json=payload)
-                if response.status_code == 200:
-                    data = response.json()
-                    tokens.append(data.get("message", {}).get("content", ""))
-    except Exception as e:
-        logger.warning(f"논문 카테고리 분류 실패: {e}")
-        return []
-
-    result = "".join(tokens).strip()
-    result = result.replace("`", "").replace('"', "").replace("'", "")
-    if result.endswith("."):
-        result = result[:-1]
-        
-    tags = [t.strip() for t in result.split(",") if t.strip()]
-    return tags
+    return flatten_categories(await classify_paper_tags(title, text, session_id=session_id))
 
 
 def _parse_json_array_response(raw: str, required_key: str = "concept") -> list:

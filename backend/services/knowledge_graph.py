@@ -17,19 +17,19 @@
   _match_library_references 재사용)으로 계산해 paper_edges에 영구 저장한다.
   라이브러리 전체를 스캔하는 매칭이라 요청마다 다시 돌리기엔 비용이 있고,
   결과가 자주 바뀌지 않아 캐싱 가치가 크다.
-- 카테고리 엣지: metadata.categories가 겹치는 문서끼리 매 요청마다 메모리에서
-  즉석으로 계산한다(get_graph_data) - DB에 저장하지 않는다. LLM 호출 없이
-  카테고리 리스트만 비교하면 되는 저렴한 연산인 반면, 저장해두면 논문이
-  나중에 재분류될 때마다 이전 엣지를 무효화하는 로직이 추가로 필요해진다.
-  "비용 대비 정합성 유지 부담"을 저울질했을 때 인용 엣지와는 반대 선택.
+- 연구 태그: 역할별 태그를 Tag 노드로 노출하고, 논문 간 직접 엣지는 같은
+  primary topic을 공유할 때만 요청 시 계산한다. broad domain만 겹치는 논문은
+  Tag 노드를 통해 간접적으로만 보이므로 직접 관련성이 있다고 과장하지 않는다.
 - 질문-개념 연결: 채팅 응답이 저장된 직후(chat.py) 해당 질문이 그 논문(들)의
   기존 개념 중 무엇과 관련 있는지 폐쇄형으로 분류한다(새 개념을 만들지 않음).
 - Note 노드: 이미 서버 DB에 미러링된 memos 테이블을 그대로 노출한다(LLM
   호출 불필요 - 순수 데이터 노출).
 """
 import asyncio
+import hashlib
 import json
 import logging
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
@@ -56,30 +56,56 @@ _syncing: set = set()
 # 질문(chats.role='user') 배치 백필용 in-flight 집합(chat_id 단위).
 _syncing_questions: set = set()
 
+# 구버전 태그 재분류용 in-flight 집합.
+_syncing_tags: set = set()
+
 # 그래프 조회 시점에 한 번에 처리할 미동기화 질문 상한 - 오래된 질문이 아주
 # 많이 쌓여도 그래프 조회 한 번에 LLM 호출이 무한정 늘어나지 않도록 방지.
 _QUESTION_BACKFILL_BATCH_SIZE = 20
+_TAG_BACKFILL_CONCURRENCY = 3
 
 
 def _build_category_edges(docs: list) -> list:
-    """카테고리별 역색인을 사용해 같은 카테고리의 문서 쌍만 생성한다."""
-    docs_by_category = {}
+    """Connect papers only when a versioned primary topic overlaps."""
+    from services.paper_tags import iter_tag_records
+    docs_by_topic = {}
     for doc in docs:
-        categories = set((doc.get("metadata", {}) or {}).get("categories", []) or [])
-        for category in categories:
-            docs_by_category.setdefault(category, []).append(doc["id"])
-
+        names = {
+            item["name"] for item in iter_tag_records(doc.get("metadata") or {})
+            if item["role"] == "primary_topic" and item["name"] != "Other"
+        }
+        for name in names:
+            docs_by_topic.setdefault(name, []).append(doc["id"])
     edges = []
-    for category, category_doc_ids in docs_by_category.items():
-        for index, source_id in enumerate(category_doc_ids):
-            for target_id in category_doc_ids[index + 1:]:
+    total_docs = max(1, len(docs))
+    for topic, doc_ids in docs_by_topic.items():
+        weight = math.log((total_docs + 1) / (len(doc_ids) + 1)) + 1.0
+        for index, source_id in enumerate(doc_ids):
+            for target_id in doc_ids[index + 1:]:
                 edges.append({
-                    "source": f"paper:{source_id}",
-                    "target": f"paper:{target_id}",
-                    "type": "category",
-                    "category": category,
+                    "source": f"paper:{source_id}", "target": f"paper:{target_id}",
+                    "type": "category", "category": topic,
+                    "relation": "shared_primary_topic", "weight": round(weight, 4),
                 })
     return edges
+
+
+def _queue_tag_nodes(docs: list, nodes: list, edges: list) -> None:
+    """Expose every tag role as a node without making domain-only paper edges."""
+    from services.paper_tags import iter_tag_records
+    seen = set()
+    for doc in docs:
+        for item in iter_tag_records(doc.get("metadata") or {}):
+            role, name = item["role"], item["name"]
+            tag_id = "tag:" + hashlib.sha1(f"{role}:{name}".encode()).hexdigest()[:16]
+            if tag_id not in seen:
+                seen.add(tag_id)
+                nodes.append({"id": tag_id, "type": "tag", "label": name, "role": role})
+            edges.append({
+                "source": f"paper:{doc['id']}", "target": tag_id,
+                "type": "tagged_with", "role": role,
+                "confidence": item.get("confidence", 0.0),
+            })
 
 
 async def sync_document_for_graph(doc_id: str, pages: list, doc_title: str) -> None:
@@ -220,6 +246,28 @@ async def _backfill_one(doc_id: str) -> None:
         _syncing.discard(doc_id)
 
 
+async def _backfill_paper_tags(doc_id: str) -> None:
+    try:
+        from services.library import get_document, get_pdf_path
+        from services.cache import get_cached_pages, save_pages_cache
+        from services.pdf_parser import extract_pages
+        from services.paper_tags import classify_and_store_paper_tags
+        doc = get_document(doc_id)
+        pdf_path = get_pdf_path(doc_id)
+        if not doc or not pdf_path:
+            return
+        pages = get_cached_pages(doc_id, pdf_path)
+        if pages is None:
+            pages = await asyncio.to_thread(extract_pages, pdf_path)
+            save_pages_cache(doc_id, pdf_path, pages)
+        title = (doc.get("metadata") or {}).get("title") or doc.get("filename") or ""
+        await classify_and_store_paper_tags(doc_id, pages, title, force=False)
+    except Exception as e:
+        logger.warning(f"논문 태그 백필 실패 (doc_id={doc_id}): {e}")
+    finally:
+        _syncing_tags.discard(doc_id)
+
+
 async def _backfill_question(chat_id: int, doc_id: str, content: str) -> None:
     try:
         await sync_question_for_graph(chat_id, doc_id, content)
@@ -314,13 +362,15 @@ async def get_graph_data(username: str) -> dict:
             "label": meta.get("title") or doc["filename"],
             "doc_id": doc["id"],
             "categories": meta.get("categories", []),
+            "paper_tags": meta.get("paper_tags"),
         })
 
     edges = []
 
-    # 카테고리 엣지: DB에 저장하지 않고 매 요청마다 메모리에서 계산한다
-    # (모듈 docstring의 설계 근거 참고).
+    # 직접 논문 엣지는 공유 primary topic에만 생성한다. 모든 역할의 태그는
+    # 별도 노드로 노출해 넓은 domain 공유를 직접 관련성으로 오해하지 않게 한다.
     edges.extend(_build_category_edges(docs))
+    _queue_tag_nodes(docs, nodes, edges)
 
     # 인용 엣지: sync_document_for_graph가 미리 계산해 저장해둔 것을 그대로 읽는다.
     from services.db import db_get_paper_edges_for_docs
@@ -372,6 +422,19 @@ async def get_graph_data(username: str) -> dict:
     # Figure 노드: LLM 호출 불필요, 이미 캐시된 것만 노출(강제 파싱 트리거 안 함).
     _queue_figure_nodes(doc_ids, nodes, edges)
 
+    # 구버전 자동 태그는 요청을 막지 않고 백그라운드 재분류한다.
+    from services.paper_tags import needs_ai_reclassification
+    pending_tag_docs = []
+    available_tag_slots = max(0, _TAG_BACKFILL_CONCURRENCY - len(_syncing_tags))
+    for doc in docs:
+        if not needs_ai_reclassification(doc.get("metadata") or {}):
+            continue
+        pending_tag_docs.append(doc["id"])
+        if doc["id"] not in _syncing_tags and available_tag_slots > 0:
+            _syncing_tags.add(doc["id"])
+            available_tag_slots -= 1
+            asyncio.create_task(_backfill_paper_tags(doc["id"]))
+
     # 아직 개념/인용 동기화가 안 된(graph_synced_at 없는) 문서는 pending으로
     # 표시하고, 백그라운드로 백필을 걸어둔다(fire-and-forget - 이번 응답에는
     # 반영되지 않고, 클라이언트가 잠시 뒤 다시 조회하면 반영된다).
@@ -397,6 +460,7 @@ async def get_graph_data(username: str) -> dict:
         "nodes": nodes,
         "edges": edges,
         "pending_docs": pending_docs,
+        "pending_tag_docs": pending_tag_docs,
     }
 
 

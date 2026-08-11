@@ -508,6 +508,9 @@ body.light-theme .lib-detail-panel {
 .lib-detail-quickinfo dt { font-size: 12px; color: var(--text-tertiary); font-weight: 600; }
 .lib-detail-quickinfo dd { margin: 0; font-size: 12.5px; color: var(--text-primary); font-weight: 600; }
 
+.lib-detail-tags-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.lib-detail-tags-heading h3 { margin: 0; }
+.lib-detail-tag-action { border: 0; background: transparent; color: var(--control-accent-text); font: 700 11px var(--font-body); cursor: pointer; padding: 3px 6px; }
 .lib-detail-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .lib-detail-tag {
   font-size: 11px;
@@ -517,6 +520,16 @@ body.light-theme .lib-detail-panel {
   background: var(--control-accent-soft);
   color: var(--control-accent-text);
 }
+.lib-detail-tag small { opacity: .68; margin-right: 4px; font-size: 9px; text-transform: uppercase; }
+.paper-tag-editor { width: min(680px, calc(100vw - 32px)); }
+.paper-tag-editor-body { max-height: 65vh; overflow: auto; }
+.paper-tag-fieldset { border: 1px solid var(--border); border-radius: var(--radius-md); margin: 0 0 12px; padding: 10px; }
+.paper-tag-fieldset legend { font-size: 11px; font-weight: 800; color: var(--text-secondary); padding: 0 5px; }
+.paper-tag-options { display: flex; flex-wrap: wrap; gap: 7px; }
+.paper-tag-options label { cursor: pointer; }
+.paper-tag-options input { position: absolute; opacity: 0; pointer-events: none; }
+.paper-tag-options span { display: block; border: 1px solid var(--border); border-radius: 100px; padding: 5px 9px; font-size: 11px; color: var(--text-secondary); }
+.paper-tag-options input:checked + span { border-color: var(--control-accent); background: var(--control-accent-soft); color: var(--control-accent-text); font-weight: 700; }
 
 .lib-detail-list-item {
   display: flex;

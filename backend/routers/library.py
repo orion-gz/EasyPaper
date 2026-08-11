@@ -942,6 +942,76 @@ async def put_library_memos(doc_id: str, payload: dict, current_user: str = Depe
     return {"status": "ok"}
 
 
+@router.get("/library/tags/ontology")
+async def get_paper_tag_ontology(current_user: str = Depends(get_current_user)):
+    """Return the closed tag ontology used by both AI and manual editing."""
+    from services.paper_tags import PAPER_TAG_SCHEMA_VERSION, TAG_ONTOLOGY
+    return {"version": PAPER_TAG_SCHEMA_VERSION, "roles": TAG_ONTOLOGY}
+
+
+@router.put("/library/{doc_id}/tags")
+async def update_paper_tags(
+    doc_id: str,
+    payload: dict,
+    current_user: str = Depends(get_current_user),
+):
+    """Persist an explicit user tag decision and protect it from AI backfills."""
+    require_owned_document(doc_id, current_user)
+    from services.paper_tags import flatten_categories, normalize_tag_items
+
+    items = []
+    for field, role in (("primary_topics", "primary_topic"), ("domains", "domain"), ("methods", "method")):
+        values = payload.get(field, [])
+        if not isinstance(values, list):
+            raise HTTPException(status_code=400, detail=f"{field}는 배열이어야 합니다.")
+        items.extend({"name": name, "role": role, "confidence": 1.0, "evidence": "사용자 지정"} for name in values)
+    paper_tags = normalize_tag_items(items, source="user")
+    if not paper_tags.get("primary_topics"):
+        raise HTTPException(status_code=400, detail="핵심 주제를 하나 이상 선택해 주세요.")
+    requested_count = sum(len(payload.get(field, [])) for field in ("primary_topics", "domains", "methods"))
+    if len(flatten_categories(paper_tags)) != requested_count:
+        raise HTTPException(status_code=400, detail="허용되지 않거나 중복된 태그가 포함되어 있습니다.")
+    metadata = patch_document_metadata(doc_id, {
+        "paper_tags": paper_tags,
+        "categories": flatten_categories(paper_tags),
+    })
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id]["metadata"] = metadata
+    return {"status": "success", "metadata": metadata}
+
+
+@router.post("/library/{doc_id}/tags/reclassify")
+async def reclassify_paper_tags(
+    doc_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """Explicitly replace current tags using the latest classifier schema."""
+    doc = require_owned_document(doc_id, current_user)
+    from services.library import get_pdf_path
+    from services.cache import get_cached_pages, save_pages_cache
+    from services.pdf_parser import extract_pages
+    from services.paper_tags import classify_and_store_paper_tags
+    import asyncio
+
+    pdf_path = get_pdf_path(doc_id)
+    if not pdf_path:
+        raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
+    pages = get_cached_pages(doc_id, pdf_path)
+    if pages is None:
+        pages = await asyncio.to_thread(extract_pages, pdf_path)
+        save_pages_cache(doc_id, pdf_path, pages)
+    title = (doc.get("metadata") or {}).get("title") or doc.get("filename") or ""
+    paper_tags = await classify_and_store_paper_tags(doc_id, pages, title, force=True)
+    if not paper_tags:
+        raise HTTPException(status_code=502, detail="태그를 분류하지 못했습니다.")
+    refreshed = require_owned_document(doc_id, current_user)
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id]["metadata"] = refreshed.get("metadata") or {}
+    return {"status": "success", "metadata": refreshed.get("metadata") or {}}
+
+
 @router.get("/library/{doc_id}/bibliography")
 async def get_library_bibliography(
     doc_id: str,

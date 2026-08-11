@@ -6,7 +6,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { icon } from './icons.js'
 import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
 import { renderDashboardPage } from './pages/dashboardPage.js'
@@ -6194,6 +6194,7 @@ const GRAPH_NODE_TYPE_META = {
   concept: { label: '개념',          color: '#f7b34f', icon: 'lightbulb' },
   note:    { label: '메모',          color: '#8b5cf6', icon: 'edit3' },
   figure:  { label: 'Figure/Table',  color: '#10b981', icon: 'image' },
+  tag:     { label: '연구 태그',       color: '#ec4899', icon: 'tag' },
 }
 
 const RG_ZOOM_IN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
@@ -6223,7 +6224,7 @@ function relativeTimeShortKo(date) {
 function renderGraphLegend(nodes, edges) {
   const legendEl = $('rg-legend-panel')
   if (!legendEl) return
-  const counts = { paper: 0, concept: 0, note: 0, figure: 0 }
+  const counts = { paper: 0, concept: 0, note: 0, figure: 0, tag: 0 }
   for (const n of nodes || []) {
     if (counts[n.type] !== undefined) counts[n.type]++
   }
@@ -6526,7 +6527,7 @@ function renderGraphDetailHeader(nodeData, titleOverride) {
 // 않기로 했으므로, 대신 이웃 노드의 타입(논문/개념/메모/Figure)별 개수로
 // 보여준다.
 function renderGraphConnectionsSummary(neighborNodes) {
-  const counts = { paper: 0, concept: 0, note: 0, figure: 0 }
+  const counts = { paper: 0, concept: 0, note: 0, figure: 0, tag: 0 }
   for (const n of neighborNodes || []) {
     if (counts[n.type] !== undefined) counts[n.type]++
   }
@@ -6656,7 +6657,7 @@ async function renderLibraryGraphTab() {
         sorted.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')
     }
 
-    const pending = data.pending_docs || []
+    const pending = [...new Set([...(data.pending_docs || []), ...(data.pending_tag_docs || [])])]
     if (libraryGraphPendingBanner) {
       libraryGraphPendingBanner.classList.toggle('hidden', pending.length === 0)
     }
@@ -6771,6 +6772,13 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
         summaryEl.innerHTML = `<p class="rg-detail-error">AI 요약을 불러오지 못했습니다.</p>`
       }
     })()
+  } else if (nodeData.type === 'tag') {
+    const roleLabel = { primary_topic: '핵심 주제', domain: '적용 분야', method: '방법', legacy: '이전 태그' }[nodeData.role] || nodeData.role
+    libraryGraphDetailPanel.innerHTML = `
+      ${renderGraphDetailHeader(nodeData)}
+      <p class="rg-detail-subtitle">역할: ${escapeHtml(roleLabel || '미상')}</p>
+      <div class="rg-detail-section"><h5 class="rg-detail-section-title">이 태그가 지정된 논문</h5>${renderGraphRelatedNodesList((neighborNodes || []).filter(n => n.type === 'paper'), '연결된 논문이 없습니다.')}</div>
+    `
   } else if (nodeData.type === 'concept') {
     const questionCount = nodeData.question_count || 0
     libraryGraphDetailPanel.innerHTML = `
@@ -7618,7 +7626,7 @@ function ensureLibraryDetailPanel() {
             <dl id="lib-detail-quickinfo" class="lib-detail-quickinfo"></dl>
           </div>
           <div class="lib-detail-tags-block">
-            <h3>태그</h3>
+            <div class="lib-detail-tags-heading"><h3>태그</h3><div><button id="lib-detail-tags-edit-btn" class="lib-detail-tag-action">편집</button><button id="lib-detail-tags-ai-btn" class="lib-detail-tag-action">AI 재분류</button></div></div>
             <div id="lib-detail-tags" class="lib-detail-tags"></div>
           </div>
         </section>
@@ -7828,6 +7836,53 @@ function startLibraryDetailTitleEdit(doc) {
 // 읽기 전 브리핑(primer)의 hook 텍스트를 재사용한다(백엔드에 별도 "요약" 필드는 없음).
 // 아직 캐시가 없으면 생성에 시간이 걸릴 수 있어(fetchPrimer가 내부적으로 폴링), 패널을
 // 닫거나 다른 논문으로 바꾼 뒤 응답이 와도 화면에 반영되지 않도록 요청 토큰으로 막는다.
+async function openPaperTagEditor(doc) {
+  const ontology = await fetchPaperTagOntology()
+  const roles = ontology.roles || {}
+  const current = doc.metadata?.paper_tags || {}
+  const selected = {
+    primary_topic: new Set((current.primary_topics || []).map(item => item.name || item)),
+    domain: new Set((current.domains || []).map(item => item.name || item)),
+    method: new Set((current.methods || []).map(item => item.name || item)),
+  }
+  const labels = { primary_topic: '핵심 주제', domain: '적용 분야', method: '방법' }
+  const modal = document.createElement('div')
+  modal.className = 'custom-confirm-modal-wrapper paper-tag-editor-wrap'
+  modal.innerHTML = `<div class="custom-confirm-modal paper-tag-editor"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">논문 태그 편집</span></div><div class="custom-confirm-modal-body paper-tag-editor-body">${Object.entries(roles).map(([role, names]) => `<fieldset class="paper-tag-fieldset"><legend>${labels[role] || role}</legend><div class="paper-tag-options">${names.map((name, index) => `<label><input type="checkbox" data-role="${role}" value="${escapeHtml(name)}" ${selected[role]?.has(name) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label>`).join('')}</div></fieldset>`).join('')}</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn confirm-btn primary-btn">저장</button></div></div>`
+  document.body.appendChild(modal)
+  return new Promise(resolve => {
+    const close = result => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(result) }, 200) }
+    modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
+    modal.addEventListener('click', e => { if (e.target === modal) close(null) })
+    modal.querySelector('.confirm-btn').addEventListener('click', async () => {
+      const payload = { primary_topics: [], domains: [], methods: [] }
+      modal.querySelectorAll('input:checked').forEach(input => {
+        const field = input.dataset.role === 'primary_topic' ? 'primary_topics' : input.dataset.role === 'domain' ? 'domains' : 'methods'
+        payload[field].push(input.value)
+      })
+      if (!payload.primary_topics.length) { showToast('핵심 주제를 하나 이상 선택해 주세요.', 'warning'); return }
+      try {
+        const result = await updatePaperTags(doc.id, payload)
+        close(result)
+      } catch (err) { showToast(err.message || '태그 저장 실패', 'error') }
+    })
+    setTimeout(() => modal.classList.add('active'), 10)
+  })
+}
+
+function renderStructuredPaperTags(metadata) {
+  const tags = metadata?.paper_tags
+  if (!tags) return (metadata?.categories || []).map(name => `<span class="lib-detail-tag">${escapeHtml(name)}</span>`).join('')
+  const groups = [
+    ['핵심', tags.primary_topics || []], ['분야', tags.domains || []], ['방법', tags.methods || []],
+  ]
+  return groups.flatMap(([label, items]) => items.map(item => {
+    const name = item.name || item
+    const evidence = item.evidence ? ` title="${escapeHtml(item.evidence)}"` : ''
+    return `<span class="lib-detail-tag"${evidence}><small>${label}</small>${escapeHtml(name)}</span>`
+  })).join('')
+}
+
 async function loadLibraryDetailOverview(doc) {
   const total = doc.total_pages || 1
   const translated = doc.translated_pages?.length || 0
@@ -7875,10 +7930,32 @@ async function loadLibraryDetailOverview(doc) {
 
   const tagsEl = $('lib-detail-tags')
   if (tagsEl) {
-    const categories = doc.metadata?.categories || []
-    tagsEl.innerHTML = categories.length
-      ? categories.map(c => `<span class="lib-detail-tag">${escapeHtml(c)}</span>`).join('')
-      : `<p class="lib-detail-empty" style="padding:0">지정된 태그가 없습니다.</p>`
+    tagsEl.innerHTML = renderStructuredPaperTags(doc.metadata) || `<p class="lib-detail-empty" style="padding:0">지정된 태그가 없습니다.</p>`
+  }
+  const tagsEditBtn = $('lib-detail-tags-edit-btn')
+  if (tagsEditBtn) tagsEditBtn.onclick = async () => {
+    try {
+      const result = await openPaperTagEditor(doc)
+      if (!result) return
+      doc.metadata = result.metadata
+      libraryDetailDoc = doc
+      loadLibraryDetailOverview(doc)
+      showToast('태그를 저장했습니다.', 'success')
+      await renderLibrary()
+    } catch (err) { showToast(err.message || '태그 편집기를 열지 못했습니다.', 'error') }
+  }
+  const tagsAiBtn = $('lib-detail-tags-ai-btn')
+  if (tagsAiBtn) tagsAiBtn.onclick = async () => {
+    const ok = await showCustomConfirm('사용자 지정 태그를 최신 AI 분류 결과로 교체할까요?', { title: 'AI 태그 재분류', confirmText: '재분류', danger: false })
+    if (!ok) return
+    try {
+      const result = await reclassifyPaperTags(doc.id)
+      doc.metadata = result.metadata
+      libraryDetailDoc = doc
+      loadLibraryDetailOverview(doc)
+      showToast('태그를 다시 분류했습니다.', 'success')
+      await renderLibrary()
+    } catch (err) { showToast(err.message || '태그 재분류 실패', 'error') }
   }
 
   const myToken = ++libraryDetailSummaryReqToken

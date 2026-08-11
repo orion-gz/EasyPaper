@@ -257,23 +257,16 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
         # 전체 MD 파일 생성
         _build_full_md(session_id, pages, suffix)
 
-        # 카테고리 분석 실행 (번역 완료 후)
+        # 역할별 폐쇄형 태그 분석. 사용자 수정 태그는 자동 작업이 덮어쓰지 않는다.
         try:
-            combined_text = ""
-            for p in pages[:2]:
-                combined_text += p.get("text", "") + "\n"
-            
-            from services.llm_client import classify_paper_category
-            from services.library import patch_document_metadata
-            
-            tags = await classify_paper_category(doc_title, combined_text, session_id=session_id)
-            if tags:
-                doc = get_document(session_id)
-                if doc:
-                    patch_document_metadata(session_id, {"categories": tags})
-                    print(f"[Job {session_id}] Classified categories: {tags}")
+            from services.paper_tags import classify_and_store_paper_tags
+            paper_tags = await classify_and_store_paper_tags(
+                session_id, pages, doc_title, force=False
+            )
+            if paper_tags:
+                print(f"[Job {session_id}] Classified structured paper tags")
         except Exception as ex:
-            print(f"[Job {session_id}] Category classification failed: {ex}")
+            print(f"[Job {session_id}] Structured tag classification failed: {ex}")
 
         # 지식 그래프 동기화 (개념 추출 + 인용 엣지 매칭, 번역 완료 후)
         try:
