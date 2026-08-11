@@ -15,7 +15,7 @@
 import '../styles/notes.css'
 import { fetchLibrary, fetchLibraryAnnotations, fetchLibraryMemos, fetchPrimer } from '../library.js'
 import { icon } from '../icons.js'
-import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
+import { formatTranslationHtml, formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
 
 let renderGeneration = 0
 
@@ -38,12 +38,6 @@ function toggleFavoriteDoc(docId) {
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-function truncate(text, maxLen) {
-  if (!text) return ''
-  const trimmed = text.trim()
-  return trimmed.length > maxLen ? trimmed.substring(0, maxLen) + '...' : trimmed
 }
 
 // ── 모듈 상태 (페이지를 재방문해도 마지막 선택/탭/검색어를 기억한다) ──
@@ -396,17 +390,16 @@ function ensureSummaryLoaded(root, docId) {
 
 function renderAnnotationCard(item) {
   const iconName = item.kind === 'memo' ? 'edit3' : item.kind === 'highlight' ? 'highlighter' : 'underline'
-  const shortText = truncate(item.text, 220)
-  const canExpand = item.text.trim().length > shortText.replace(/\.\.\.$/, '').length
+  const canExpand = item.text.trim().length > 220
   const tsHtml = item.ts ? `<span class="notes-card-ts">${escapeHtml(formatTs(item.ts))}</span>` : ''
   const style = item.color ? ` style="--notes-item-accent:${escapeHtml(item.color)}"` : ''
   return `
-    <div class="notes-annotation-card notes-card-${item.kind}"${style} data-doc-id="${escapeHtml(item.docId)}">
+    <div class="notes-annotation-card notes-card-${item.kind} ${canExpand ? 'notes-card-collapsible' : ''}"${style} data-doc-id="${escapeHtml(item.docId)}">
       <div class="notes-card-top">
         <span class="notes-card-badge">${icon(iconName, 12)}p. ${item.page}</span>
         ${tsHtml}
       </div>
-      <p class="notes-card-text" data-full="${escapeHtml(item.text)}" data-short="${escapeHtml(shortText)}">${escapeHtml(shortText)}</p>
+      <div class="notes-card-text">${formatMarkdownLatexHtml(item.text)}</div>
       ${canExpand ? `<button type="button" class="notes-card-expand-btn">${icon('chevronDown', 12)}<span>더보기</span></button>` : ''}
     </div>
   `
@@ -468,6 +461,7 @@ function renderDetail(root) {
     <div class="notes-tab-content">${renderTabContent(entry)}</div>
   `
   bindThumbFallback(detailEl)
+  applyKatexToElement(detailEl)
 
   if (activeSubtab === 'summary') ensureSummaryLoaded(root, entry.doc.id)
 }
@@ -536,10 +530,8 @@ function attachListeners(root) {
     const expandBtn = e.target.closest('.notes-card-expand-btn')
     if (expandBtn) {
       const card = expandBtn.closest('.notes-annotation-card')
-      const textEl = card && card.querySelector('.notes-card-text')
-      if (!card || !textEl) return
+      if (!card) return
       const expanded = card.classList.toggle('expanded')
-      textEl.textContent = expanded ? textEl.dataset.full : textEl.dataset.short
       expandBtn.innerHTML = `${icon(expanded ? 'chevronUp' : 'chevronDown', 12)}<span>${expanded ? '접기' : '더보기'}</span>`
       return
     }

@@ -346,9 +346,23 @@
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-primary);
-  white-space: pre-wrap;
   word-break: break-word;
 }
+.notes-card-collapsible:not(.expanded) .notes-card-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.notes-card-text > :first-child { margin-top: 0; }
+.notes-card-text > :last-child { margin-bottom: 0; }
+.notes-card-text p,
+.notes-card-text ul,
+.notes-card-text ol,
+.notes-card-text pre,
+.notes-card-text blockquote { margin: 0 0 0.55em; }
+.notes-card-text .katex-display { margin: 0.45em 0; overflow-x: auto; overflow-y: hidden; }
+.notes-card-text pre { overflow-x: auto; }
 .notes-card-expand-btn {
   display: inline-flex;
   align-items: center;
