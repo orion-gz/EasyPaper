@@ -983,7 +983,9 @@ async def update_doc_title(
         raise HTTPException(status_code=400, detail="제목은 500자 이하여야 합니다.")
 
     persisted_meta = patch_document_metadata(
-        doc_id, {"title": title}, remove_keys=("bibliography",),
+        doc_id,
+        {"title": title, "title_source": "manual"},
+        remove_keys=("bibliography",),
     )
 
     from routers.upload import sessions
@@ -1050,6 +1052,10 @@ async def update_doc_metadata(
         updates = payload_copy
     else:
         updates = payload
+
+    if "title" in payload:
+        updates = dict(updates)
+        updates["title_source"] = "manual"
 
     if "title" in payload and payload["title"] != old_title:
         remove_keys = ("bibliography",)
