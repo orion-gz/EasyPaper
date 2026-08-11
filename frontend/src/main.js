@@ -7133,8 +7133,11 @@ function prepareDocItemHtml(doc) {
   const categories = doc.metadata?.categories || []
   let tagsHtml = ''
   if (categories.length > 0) {
+    const shownCategories = categories.slice(0, 2)
+    const hiddenCategoryCount = categories.length - shownCategories.length
     tagsHtml = `<div class="doc-card-tags">` +
-      categories.map(cat => `<span class="doc-card-tag">${escapeHtml(cat)}</span>`).join('') +
+      shownCategories.map(cat => `<span class="doc-card-tag" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>`).join('') +
+      (hiddenCategoryCount > 0 ? `<span class="doc-card-tag doc-card-tag-count" title="태그 ${hiddenCategoryCount}개 더 보기">+${hiddenCategoryCount}</span>` : '') +
       `</div>`
   }
 
@@ -8118,8 +8121,7 @@ async function loadLibraryDetailRelated(doc) {
 function createDocListRow(doc) {
   const d = prepareDocItemHtml(doc)
 
-  // 리스트 뷰는 한 줄에 담아야 하므로, 태그가 CSS로 중간에 잘려 보이는 것을 막기 위해
-  // 최대 2개만 보여주고 나머지는 "+N"으로 요약한다 (카드 뷰의 전체 태그와는 별도로 계산).
+  // 리스트 뷰도 카드 뷰와 마찬가지로 최대 2개만 보여주고 나머지는 "+N"으로 요약한다.
   let listTagsHtml = ''
   if (d.categories.length > 0) {
     const shown = d.categories.slice(0, 2)

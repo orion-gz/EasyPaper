@@ -1227,6 +1227,9 @@ body.light-theme .toast.error { color: #dc2626; }
 .library-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(265px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  min-height: 0;
   gap: 16px;
   overflow-y: auto;
   padding-bottom: 30px;
@@ -1310,6 +1313,7 @@ body.light-theme .toast.error { color: #dc2626; }
   align-items: center;
   gap: 8px;
   margin-top: auto;
+  flex-shrink: 0;
 }
 
 .doc-card-meta {
@@ -3534,6 +3538,11 @@ body.light-theme .provider-picker-panel {
   gap: 6px;
   flex-wrap: wrap;
 }
+.doc-card .doc-card-tags {
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
 .doc-card-tag {
   font-size: 10.5px;
   font-weight: 700;
@@ -3542,6 +3551,15 @@ body.light-theme .provider-picker-panel {
   background: var(--control-accent-soft);
   color: var(--control-accent-text);
   border: 1px solid transparent;
+}
+.doc-card .doc-card-tag {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-card .doc-card-tag-count {
+  flex-shrink: 0;
 }
 
 /* ── Google Drive Style Upload Popup ── */
