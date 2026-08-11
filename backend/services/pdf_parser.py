@@ -390,175 +390,190 @@ def clean_text_for_translation(text: str) -> str:
 
 
 def _extract_paper_title(doc: fitz.Document) -> str:
-    """PDF 첫 페이지의 텍스트와 폰트 크기를 분석하여 논문의 실제 제목을 추출합니다."""
+    """첫 페이지의 행 위치와 글꼴 크기를 분석해 실제 논문 제목을 추출합니다.
+
+    가장 큰 글꼴 하나만 기준으로 삼으면 저널 masthead나 ``Research Article`` 같은
+    문서 유형 라벨이 실제 제목보다 큰 PDF에서 제목을 놓친다. 물리적인 행을 먼저
+    만들고, 본문보다 눈에 띄는 연속 행들을 각각 제목 후보로 평가한다.
+    """
     if len(doc) == 0:
         return ""
-    
+
     try:
         page = doc[0]
+        height = page.rect.height
         blocks = page.get_text("dict")["blocks"]
-        
         spans_info = []
-        for b in blocks:
-            if "lines" not in b:
-                continue
-            for line in b["lines"]:
-                for span in line["spans"]:
-                    text = span["text"]
+        for block in blocks:
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    text = span.get("text", "")
                     stripped = text.strip()
-                    if not stripped:
+                    if not stripped or stripped.isdigit():
                         continue
-                    # 단일 문자이면서 폰트 크기가 작은 경우(노이즈) 무시
                     if len(stripped) < 2 and span["size"] < 12:
                         continue
-                    # 숫자로만 이루어진 스팬은 무시
-                    if stripped.isdigit():
-                        continue
-                    
-                    # arXiv 스탬프 및 학회/저널 프리프린트 헤더 필터링
-                    lower_text = text.lower()
+                    lower_text = stripped.lower()
                     if "arxiv" in lower_text:
                         continue
-                    if any(kw in lower_text for kw in ["preprint", "under review", "submitted to", "accepted as"]):
+                    if any(keyword in lower_text for keyword in (
+                        "preprint", "under review", "submitted to", "accepted as"
+                    )):
                         continue
-                    
-                    bbox = span["bbox"]
-                    y0 = bbox[1]
-                    height = page.rect.height
-                    
-                    # 상단 8% 미만 또는 하단 15% 초과 영역에 있으면서 폰트가 작은 경우(헤더/푸터) 무시
+                    y0 = span["bbox"][1]
                     if (y0 < height * 0.08 or y0 > height * 0.85) and span["size"] < 12:
                         continue
-                        
                     spans_info.append({
                         "text": text,
                         "size": span["size"],
                         "font": span["font"],
-                        "bbox": bbox
+                        "bbox": span["bbox"],
                     })
-        
+
         if not spans_info:
             return ""
-            
-        # 가장 큰 폰트 크기 찾기
-        max_size = max(s["size"] for s in spans_info)
-        
-        # 최상위 폰트 크기(최대 크기의 78% 이상인 것들 - Small Caps 지원용)에 해당하는 스팬 수집
-        title_spans = []
-        for s in spans_info:
-            if s["size"] >= max_size * 0.78:
-                title_spans.append(s)
-                
-        if not title_spans:
-            return ""
-            
-        # 1. y좌표 기준으로 1차 정렬한 뒤, 동적으로 같은 행(Line)에 있는 스팬들을 묶어서 그룹화합니다.
-        #    이렇게 하면 PDF 렌더링 시 y좌표가 소수점 단위로 미세하게 다른 스팬들이 엉뚱하게 정렬되는 문제를 방지합니다.
-        def group_spans_into_lines(spans_list):
-            if not spans_list:
-                return []
-            sorted_by_y = sorted(spans_list, key=lambda s: s["bbox"][1])
-            lines_list = []
-            current_line = []
-            current_y = None
-            for s in sorted_by_y:
-                y0 = s["bbox"][1]
-                y1 = s["bbox"][3]
-                h = y1 - y0
-                if current_y is None:
-                    current_line.append(s)
-                    current_y = y0
+
+        def group_spans_into_lines(spans):
+            lines = []
+            for span in sorted(spans, key=lambda item: (item["bbox"][1], item["bbox"][0])):
+                y0, y1 = span["bbox"][1], span["bbox"][3]
+                span_height = y1 - y0
+                if not lines or abs(y0 - lines[-1]["anchor_y"]) >= max(span_height * 0.5, 8.0):
+                    lines.append({"anchor_y": y0, "spans": [span]})
                 else:
-                    # y0 차이가 글자 높이의 50% 미만이거나 8픽셀 미만이면 같은 행으로 간주
-                    if abs(y0 - current_y) < max(h * 0.5, 8.0):
-                        current_line.append(s)
-                    else:
-                        current_line.sort(key=lambda x: x["bbox"][0])
-                        lines_list.append(current_line)
-                        current_line = [s]
-                        current_y = y0
-            if current_line:
-                current_line.sort(key=lambda x: x["bbox"][0])
-                lines_list.append(current_line)
-            return lines_list
+                    lines[-1]["spans"].append(span)
+            for line in lines:
+                line["spans"].sort(key=lambda item: item["bbox"][0])
+            return [line["spans"] for line in lines]
 
-        line_groups = group_spans_into_lines(title_spans)
-
-        # 1-1. 제목 폰트 크기가 우연히 저자명/소속 또는 "1. Introduction" 같은 번호 매겨진
-        #      섹션 헤더와 비슷한 경우, 이런 줄들이 제목 후보에 섞여 들어올 수 있습니다.
-        #      제목은 항상 페이지 최상단의 "하나의 연속된 블록"이므로, 아래 패턴에 걸리는 줄이나
-        #      비정상적으로 큰 줄 간격(제목-저자 블록 사이의 여백)이 나타나면 그 지점에서 수집을 중단합니다.
-        SECTION_HEADER_RE = re.compile(
+        section_header_re = re.compile(
             r'^\(?[ivxlc\d]{1,4}\)?[\.\:\)]?\s+(introduction|abstract|related\s+work|background|'
             r'method(ology)?|conclusion|references|experiments?|results?|discussion|acknowledg|'
             r'appendix|approach|overview|preliminaries|evaluation|analysis|motivation)\b',
             re.IGNORECASE,
         )
-        AUTHOR_HINT_RE = re.compile(
+        author_hint_re = re.compile(
             r'(@|university|institute|department|school of|college of|laborator|corporation|\bltd\.?\b|\binc\.?\b)',
             re.IGNORECASE,
         )
+        publication_header_re = re.compile(
+            r'^(research|original|review|survey|brief|regular|feature|perspective|'
+            r'editorial|methodology|case)\s+(article|paper|report|communication)$|'
+            r'^(open\s+access|letter\s+to\s+the\s+editor)$|'
+            r'^(the\s+)?(international\s+)?journal\s+of\b|'
+            r'^.+\s+(journal|transactions|proceedings)\s+(of|on)\b',
+            re.IGNORECASE,
+        )
+        bibliographic_header_re = re.compile(
+            r'\b(doi\s*:|issn\b|volume\s+\d|vol\.\s*\d|copyright|©|all rights reserved)\b',
+            re.IGNORECASE,
+        )
 
-        kept_lines = []
-        prev_line_bottom = None
-        prev_line_height = None
-        for line_spans in line_groups:
-            line_text_norm = re.sub(r'\s+', ' ', "".join(s["text"] for s in line_spans)).strip()
-
-            if SECTION_HEADER_RE.match(line_text_norm) or AUTHOR_HINT_RE.search(line_text_norm):
-                break
-
-            line_top = min(s["bbox"][1] for s in line_spans)
-            line_bottom = max(s["bbox"][3] for s in line_spans)
-            line_height = line_bottom - line_top
-
-            # 이전 줄과의 간격이 줄 높이의 2배를 넘으면 제목 블록과 분리된 다른 블록(저자/소속 등)으로 간주
-            if prev_line_bottom is not None and prev_line_height and (line_top - prev_line_bottom) > prev_line_height * 2.0:
-                break
-
-            kept_lines.append(line_spans)
-            prev_line_bottom = line_bottom
-            prev_line_height = line_height
-
-        sorted_spans = [s for line_spans in kept_lines for s in line_spans]
-        
-        # 2. 정렬된 스팬들을 결합할 때, 단어 중간에 폰트 크기 변경으로 쪼개진 스팬(gap < 2.5px)은 공백 없이 결합하고,
-        #    일반적인 띄어쓰기는 공백을 유지하여 자연스러운 문장으로 결합합니다.
-        title_parts = []
-        for i, s in enumerate(sorted_spans):
-            text = s["text"]
-            lower_text = text.strip().lower()
-            if lower_text in ["abstract", "introduction", "keywords", "key words"]:
+        lines = []
+        for line_spans in group_spans_into_lines(spans_info):
+            line_text = re.sub(r'\s+', ' ', "".join(span["text"] for span in line_spans)).strip()
+            if not line_text:
                 continue
-            if i == 0:
-                title_parts.append(text)
+            top = min(span["bbox"][1] for span in line_spans)
+            bottom = max(span["bbox"][3] for span in line_spans)
+            char_count = sum(max(len(span["text"].strip()), 1) for span in line_spans)
+            font_size = sum(
+                span["size"] * max(len(span["text"].strip()), 1) for span in line_spans
+            ) / char_count
+            lines.append({
+                "spans": line_spans,
+                "text": line_text,
+                "top": top,
+                "bottom": bottom,
+                "height": bottom - top,
+                "size": font_size,
+            })
+
+        if not lines:
+            return ""
+
+        # 가장 많은 글자에 사용된 글꼴 크기를 첫 페이지의 본문 크기로 간주한다.
+        size_weights = {}
+        for span in spans_info:
+            rounded_size = round(span["size"] * 2) / 2
+            size_weights[rounded_size] = size_weights.get(rounded_size, 0) + len(span["text"].strip())
+        body_size = max(size_weights, key=size_weights.get)
+        max_size = max(line["size"] for line in lines)
+        min_prominent_size = max(11.5, min(body_size * 1.18, max_size * 0.72))
+
+        def is_title_line(line):
+            line_text = line["text"]
+            if line["top"] > height * 0.60:
+                return False
+            if len(line_text) < 3 or not re.search(r'[A-Za-zÀ-ÖØ-öø-ÿ가-힣]', line_text):
+                return False
+            if section_header_re.match(line_text) or author_hint_re.search(line_text):
+                return False
+            if publication_header_re.match(line_text) or bibliographic_header_re.search(line_text):
+                return False
+            return line["size"] >= min_prominent_size
+
+        candidates = []
+        current = []
+        for line in lines:
+            if not is_title_line(line):
+                if current:
+                    candidates.append(current)
+                    current = []
+                continue
+            if current:
+                gap = line["top"] - current[-1]["bottom"]
+                allowed_gap = max(current[-1]["height"], line["height"]) * 1.35
+                if gap > allowed_gap:
+                    candidates.append(current)
+                    current = []
+            current.append(line)
+        if current:
+            candidates.append(current)
+        if not candidates:
+            return ""
+
+        def candidate_score(candidate):
+            candidate_text = " ".join(line["text"] for line in candidate)
+            weighted_size = sum(
+                line["size"] * len(line["text"]) for line in candidate
+            ) / len(candidate_text)
+            length_score = min(len(candidate_text), 120) / 20.0
+            position_penalty = candidate[0]["top"] / height * 3.0
+            short_all_caps_penalty = 3.0 if len(candidate_text) < 35 and candidate_text.isupper() else 0.0
+            return (
+                weighted_size / max(body_size, 1) * 3.0
+                + length_score
+                - position_penalty
+                - short_all_caps_penalty
+            )
+
+        title_lines = max(candidates, key=candidate_score)
+        title_spans = [span for line in title_lines for span in line["spans"]]
+        title_parts = []
+        for index, span in enumerate(title_spans):
+            span_text = span["text"]
+            if span_text.strip().lower() in ("abstract", "introduction", "keywords", "key words"):
+                continue
+            if index == 0:
+                title_parts.append(span_text)
+                continue
+            previous = title_spans[index - 1]
+            is_same_line = abs(span["bbox"][1] - previous["bbox"][1]) < 5.0
+            gap = span["bbox"][0] - previous["bbox"][2]
+            if is_same_line and gap < 2.5:
+                title_parts.append(span_text)
+            elif title_parts[-1].endswith(" ") or span_text.startswith(" "):
+                title_parts.append(span_text)
             else:
-                prev_s = sorted_spans[i - 1]
-                prev_y0 = prev_s["bbox"][1]
-                curr_y0 = s["bbox"][1]
-                prev_x1 = prev_s["bbox"][2]
-                curr_x0 = s["bbox"][0]
-                
-                is_same_line = abs(curr_y0 - prev_y0) < 5.0
-                gap = curr_x0 - prev_x1
-                
-                if is_same_line and gap < 2.5:
-                    title_parts.append(text)
-                else:
-                    if title_parts[-1].endswith(" ") or text.startswith(" "):
-                        title_parts.append(text)
-                    else:
-                        title_parts.append(" " + text)
-            
-        title_text = "".join(title_parts).strip()
-        title_text = re.sub(r'\s+', ' ', title_text)
-        
-        # 유효한 제목 길이 제한
+                title_parts.append(" " + span_text)
+
+        title_text = re.sub(r'\s+', ' ', "".join(title_parts)).strip()
         if 5 <= len(title_text) <= 250:
             return title_text
-    except Exception as e:
-        print(f"Failed to extract title from PDF content: {e}")
-        
+    except Exception as error:
+        print(f"Failed to extract title from PDF content: {error}")
+
     return ""
 
 
