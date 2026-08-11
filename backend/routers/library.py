@@ -352,7 +352,12 @@ async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessio
     profile = db_get_user_reading_profile(current_user)
     user_ema = profile.get("ema_seconds_per_page", 600.0)
 
-    res = process_reading_analytics(payload, doc_total_pages, user_ema)
+    res = process_reading_analytics(
+        payload,
+        doc_total_pages,
+        user_ema,
+        previous_reading_score=existing["reading_score"] if existing else 0.0,
+    )
 
     started_at = existing["started_at"] if existing else datetime.now(timezone.utc).isoformat()
 
@@ -413,7 +418,12 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
 
     profile = db_get_user_reading_profile(current_user)
     user_ema = profile.get("ema_seconds_per_page", 600.0)
-    res = process_reading_analytics(payload, doc_total_pages, user_ema)
+    res = process_reading_analytics(
+        payload,
+        doc_total_pages,
+        user_ema,
+        previous_reading_score=existing["reading_score"] if existing else 0.0,
+    )
     started_at = existing["started_at"] if existing else datetime.now(timezone.utc).isoformat()
     now_iso = datetime.now(timezone.utc).isoformat()
 

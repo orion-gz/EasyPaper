@@ -325,7 +325,8 @@ def update_user_ema(
 def process_reading_analytics(
     payload: ReadingSessionPayload,
     total_paper_pages: int,
-    user_ema: float
+    user_ema: float,
+    previous_reading_score: float = 0.0,
 ) -> ReadingAnalyticsResult:
     total_pages = max(total_paper_pages, max([ps.page for ps in payload.pageSessions], default=1))
 
@@ -360,6 +361,10 @@ def process_reading_analytics(
     reading_score = calculate_reading_score(
         verified_count, total_pages, avg_confidence, depth, total_iq, meaningful_pages_count,
     )
+    # Reading Score represents cumulative achievement within a session. A newly
+    # opened page can temporarily lower confidence while it is still being read,
+    # but it must not erase evidence already earned earlier in the same session.
+    reading_score = round(max(previous_reading_score, reading_score), 1)
     reading_activity, minimum_evidence_time = classify_reading_activity(
         payload.activeReadingTime, verified_count, avg_confidence, user_ema, payload.pageSessions,
     )
