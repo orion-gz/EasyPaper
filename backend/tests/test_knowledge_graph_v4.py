@@ -307,6 +307,50 @@ async def test_ai_insights_uses_llm_result_when_available(isolated_dirs, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_ai_insights_reextracts_filename_title_for_prompt(isolated_dirs, monkeypatch, tmp_path):
+    import services.llm_client as llm_client
+    import services.pdf_parser as pdf_parser
+    import services.knowledge_graph as knowledge_graph
+
+    db = isolated_dirs["db"]
+    pdf_path = tmp_path / "uploaded_file.pdf"
+    pdf_path.write_bytes(b"%PDF-test")
+    db.db_save_document(
+        "doc-insight-title",
+        "testuser",
+        "uploaded_file.pdf",
+        str(pdf_path),
+        1,
+        {"title": "uploaded_file.pdf"},
+    )
+    db.db_put_memos("doc-insight-title", {
+        "page_1": [{"id": "memo_1700000000000", "content": "핵심 메모"}],
+    })
+
+    monkeypatch.setattr(
+        pdf_parser,
+        "get_pdf_metadata",
+        lambda _path: {"title": "Automatically Extracted Paper Title"},
+    )
+    captured = {}
+
+    async def fake_generate_insights(profile, session_id=None):
+        captured["profile"] = profile
+        return [{"type": "summary", "message": "제목 테스트"}]
+
+    monkeypatch.setattr(llm_client, "generate_dashboard_insights", fake_generate_insights)
+
+    await knowledge_graph.get_ai_insights("testuser")
+
+    assert captured["profile"]["notes"] == [
+        "[Automatically Extracted Paper Title] 핵심 메모",
+    ]
+    assert db.db_get_document("doc-insight-title")["metadata"]["title"] == (
+        "Automatically Extracted Paper Title"
+    )
+
+
+@pytest.mark.asyncio
 async def test_ai_insights_falls_back_to_rule_based_gaps_when_llm_empty(isolated_dirs, monkeypatch):
     import services.llm_client as llm_client
     import services.knowledge_graph as knowledge_graph
@@ -344,3 +388,30 @@ async def test_ai_insights_caches_result_for_a_day(isolated_dirs, monkeypatch):
     second = await knowledge_graph.get_ai_insights("testuser")
     assert first == second
     assert call_count["n"] == 1  # 캐시가 있으면 LLM을 다시 호출하지 않는다
+
+
+@pytest.mark.asyncio
+async def test_ai_insights_invalidates_cache_when_extracted_title_changes(isolated_dirs, monkeypatch):
+    import services.llm_client as llm_client
+    import services.knowledge_graph as knowledge_graph
+
+    db = isolated_dirs["db"]
+    _create_doc_owned_by(isolated_dirs, "doc-insight-retitle", "testuser", {"title": "Old Title"})
+
+    call_count = {"n": 0}
+
+    async def fake_generate_insights(profile, session_id=None):
+        call_count["n"] += 1
+        return [{"type": "summary", "message": f"호출 {call_count['n']}회"}]
+
+    monkeypatch.setattr(llm_client, "generate_dashboard_insights", fake_generate_insights)
+
+    first = await knowledge_graph.get_ai_insights("testuser")
+    doc = db.db_get_document("doc-insight-retitle")
+    metadata = doc["metadata"]
+    metadata["title"] = "Automatically Extracted New Title"
+    db.db_update_document_metadata("doc-insight-retitle", metadata)
+    second = await knowledge_graph.get_ai_insights("testuser")
+
+    assert first != second
+    assert call_count["n"] == 2
