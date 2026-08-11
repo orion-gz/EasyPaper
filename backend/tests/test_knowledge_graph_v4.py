@@ -351,6 +351,49 @@ async def test_ai_insights_reextracts_filename_title_for_prompt(isolated_dirs, m
 
 
 @pytest.mark.asyncio
+async def test_ai_insights_preserves_manual_title_matching_filename(
+    test_client, isolated_dirs, monkeypatch, tmp_path,
+):
+    import services.llm_client as llm_client
+    import services.pdf_parser as pdf_parser
+    import services.knowledge_graph as knowledge_graph
+
+    db = isolated_dirs["db"]
+    pdf_path = tmp_path / "Muon is Scalable for LLM Training.pdf"
+    pdf_path.write_bytes(b"%PDF-test")
+    db.db_save_document(
+        "doc-manual-title",
+        "testuser",
+        pdf_path.name,
+        str(pdf_path),
+        1,
+        {"title": "Wrong Embedded PDF Title"},
+    )
+    res = test_client.put(
+        "/api/library/doc-manual-title/title",
+        json={"title": "Muon is Scalable for LLM Training"},
+    )
+    assert res.status_code == 200
+
+    monkeypatch.setattr(
+        pdf_parser,
+        "get_pdf_metadata",
+        lambda _path: {"title": "Wrong Embedded PDF Title"},
+    )
+
+    async def fake_generate_insights(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(llm_client, "generate_dashboard_insights", fake_generate_insights)
+
+    await knowledge_graph.get_ai_insights("testuser")
+
+    metadata = db.db_get_document("doc-manual-title")["metadata"]
+    assert metadata["title"] == "Muon is Scalable for LLM Training"
+    assert metadata["title_source"] == "manual"
+
+
+@pytest.mark.asyncio
 async def test_ai_insights_falls_back_to_rule_based_gaps_when_llm_empty(isolated_dirs, monkeypatch):
     import services.llm_client as llm_client
     import services.knowledge_graph as knowledge_graph

@@ -60,6 +60,7 @@ def test_update_metadata_owned_by_self_succeeds(test_client, isolated_dirs):
     res = test_client.put("/api/library/doc-mine-2/metadata", json={"title": "My New Title"})
     assert res.status_code == 200
     assert res.json()["metadata"]["title"] == "My New Title"
+    assert res.json()["metadata"]["title_source"] == "manual"
     assert isolated_dirs["db"].db_get_document("doc-mine-2")["metadata"]["title"] == "My New Title"
 
     reloaded = test_client.get("/api/library/doc-mine-2")
@@ -81,11 +82,15 @@ def test_update_title_persists_and_preserves_metadata(test_client, isolated_dirs
     res = test_client.put("/api/library/doc-title/title", json={"title": "  Persisted title  "})
     assert res.status_code == 200
     assert res.json()["title"] == "Persisted title"
-    assert res.json()["metadata"] == {"title": "Persisted title", "read": True}
+    assert res.json()["metadata"] == {
+        "title": "Persisted title", "title_source": "manual", "read": True,
+    }
 
     reloaded = test_client.get("/api/library/doc-title")
     assert reloaded.status_code == 200
-    assert reloaded.json()["metadata"] == {"title": "Persisted title", "read": True}
+    assert reloaded.json()["metadata"] == {
+        "title": "Persisted title", "title_source": "manual", "read": True,
+    }
 
 
 def test_update_title_rejects_empty_title(test_client, isolated_dirs):

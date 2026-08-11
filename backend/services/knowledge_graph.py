@@ -1087,6 +1087,9 @@ def _resolve_ai_insight_title(doc: dict) -> str:
     """
     metadata = doc.get("metadata") or {}
     title = (metadata.get("title") or "").strip()
+    if title and metadata.get("title_source") == "manual":
+        return title
+
     filename = (doc.get("filename") or "").strip()
     filename_stem = os.path.splitext(filename)[0]
     title_is_filename = bool(title and filename) and title.casefold() in {
