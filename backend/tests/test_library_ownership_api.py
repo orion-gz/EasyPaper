@@ -67,6 +67,39 @@ def test_update_metadata_owned_by_self_succeeds(test_client, isolated_dirs):
     assert reloaded.json()["metadata"]["title"] == "My New Title"
 
 
+def test_update_title_persists_and_preserves_metadata(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_save_document(
+        "doc-title",
+        "testuser",
+        "paper.pdf",
+        "/x/paper.pdf",
+        3,
+        {"title": "Original", "read": True, "bibliography": {"doi": "old"}},
+    )
+
+    res = test_client.put("/api/library/doc-title/title", json={"title": "  Persisted title  "})
+    assert res.status_code == 200
+    assert res.json()["title"] == "Persisted title"
+    assert res.json()["metadata"] == {"title": "Persisted title", "read": True}
+
+    reloaded = test_client.get("/api/library/doc-title")
+    assert reloaded.status_code == 200
+    assert reloaded.json()["metadata"] == {"title": "Persisted title", "read": True}
+
+
+def test_update_title_rejects_empty_title(test_client, isolated_dirs):
+    _create_doc_owned_by(isolated_dirs, "doc-title-empty", "testuser")
+    res = test_client.put("/api/library/doc-title-empty/title", json={"title": "   "})
+    assert res.status_code == 400
+
+
+def test_update_title_owned_by_other_user_returns_404(test_client, isolated_dirs):
+    _create_doc_owned_by(isolated_dirs, "doc-title-other", "otheruser")
+    res = test_client.put("/api/library/doc-title-other/title", json={"title": "Hijacked"})
+    assert res.status_code == 404
+
+
 def test_library_list_only_returns_own_documents(test_client, isolated_dirs):
     _create_doc_owned_by(isolated_dirs, "doc-mine-3", "testuser")
     _create_doc_owned_by(isolated_dirs, "doc-other-6", "otheruser")

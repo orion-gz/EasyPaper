@@ -44,6 +44,9 @@ export async function mockBaseRoutes(page, { documents = [] } = {}) {
     if (url.includes('/api/settings/post-update-notice')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ show: false, version: 'test0000', version_date: '2026-01-01', changelog: [] }) })
     }
+    if (url.includes('/api/library/folders')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ folders: [] }) })
+    }
     if (url.includes('/api/library/trash')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ documents: [], total: 0 }) })
     }

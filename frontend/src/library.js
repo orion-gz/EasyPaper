@@ -101,6 +101,22 @@ export async function updateLibraryDocMetadata(docId, payload) {
   return res.json()
 }
 
+export async function updateLibraryDocTitle(docId, title) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/title`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ title })
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || '제목 변경 실패')
+  }
+  invalidateLibraryGetCache()
+  return res.json()
+}
+
 export async function updateLibraryTranslation(docId, pageNum, payload, options = {}) {
   const res = await fetch(`${API_BASE}/library/${docId}/translation/${pageNum}${buildQuery(options)}`, {
     method: 'PUT',
