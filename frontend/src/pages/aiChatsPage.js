@@ -7,6 +7,7 @@
 import '../styles/ai-chats.css'
 import { icon } from '../icons.js'
 import { getChatSessionsAPI, getChatHistoryAPI } from '../api.js'
+import { formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
@@ -40,12 +41,6 @@ function formatFullTime(isoString) {
   const date = new Date(isoString)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-function truncate(text, max) {
-  if (!text) return ''
-  const trimmed = text.replace(/\s+/g, ' ').trim()
-  return trimmed.length > max ? trimmed.slice(0, max) + '…' : trimmed
 }
 
 // items를 limit개씩 동시 실행하며 fn(item)을 적용한다 (세션이 많을 때 서버에 한 번에
@@ -177,7 +172,7 @@ export async function renderAiChatsPage() {
     const p = state.previews.get(session.doc_id)
     if (!p) return `<span class="aic-preview-loading">불러오는 중...</span>`
     if (p.error || !p.text) return `<span class="aic-preview-empty">-</span>`
-    return escapeHtml(truncate(p.text, 72))
+    return formatMarkdownLatexHtml(p.text)
   }
 
   function actionsHtml(session) {
@@ -302,6 +297,7 @@ export async function renderAiChatsPage() {
 
     bodyEl.innerHTML = state.viewMode === 'table' ? renderTable(pageItems) : renderCards(pageItems)
     bindActionButtons(bodyEl)
+    applyKatexToElement(bodyEl)
   }
 
   function renderPagination() {
@@ -353,6 +349,7 @@ export async function renderAiChatsPage() {
   function updatePreviewInDom(docId) {
     container.querySelectorAll(`[data-preview-doc="${CSS.escape(docId)}"]`).forEach(el => {
       el.innerHTML = previewCellHtml({ doc_id: docId })
+      applyKatexToElement(el)
     })
   }
 

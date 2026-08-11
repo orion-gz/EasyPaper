@@ -12993,7 +12993,7 @@ document.addEventListener('mouseup', () => {
 // KaTeX 로드 완료 후 페이지 내 pending 수식 전부 재처리
 document.addEventListener('katex-ready', () => {
   // 번역 패널의 모든 .math-pending 요소 처리
-  document.querySelectorAll('.trans-text, .message-bubble').forEach(el => {
+  document.querySelectorAll('.trans-text, .message-bubble, .notes-card-text, .aic-preview, .aic-card-preview').forEach(el => {
     applyKatexToElement(el)
   })
 })
