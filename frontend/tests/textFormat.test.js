@@ -47,3 +47,15 @@ test('Markdown 결과를 수식 삽입 전에 sanitizer로 정제한다', () => 
   assert.doesNotMatch(html, /onerror/)
   assert.match(html, /<strong>safe<\/strong>/)
 })
+
+test('미리보기에 쓰이는 블록 Markdown도 누락 없이 렌더링한다', () => {
+  const html = formatMarkdownLatexHtml(
+    '# 결론\n\n- **정확도** 향상\n- `지연시간` 감소',
+    { katex: null, sanitize: passthrough },
+  )
+
+  assert.match(html, /<h1>결론<\/h1>/)
+  assert.match(html, /<ul>/)
+  assert.match(html, /<strong>정확도<\/strong>/)
+  assert.match(html, /<code>지연시간<\/code>/)
+})
