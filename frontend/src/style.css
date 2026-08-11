@@ -6815,4 +6815,8 @@ body.light-theme .chat-drawer {
 .lib-add-fab-wrap.open .lib-add-sub-btn { opacity:1; visibility:visible; transform:translateY(0) scale(1); }
 .lib-add-label { padding:5px 9px; border-radius:7px; background:var(--bg-surface); box-shadow:var(--shadow-sm); font-size:12.5px; font-weight:650; white-space:nowrap; }
 .lib-add-circle { width:50px; height:50px; border-radius:50%; display:grid; place-items:center; background:var(--bg-surface); color:var(--text-primary); box-shadow:0 5px 16px rgba(0,0,0,.18); }
-.lib-add-sub-btn:hover .lib-add-circle { color:var(--control-accent-text); transform:translateY(-1px); }
+.lib-add-sub-btn:hover .lib-add-circle { transform:translateY(-1px); filter:brightness(1.06); }
+#lib-add-paper-btn .lib-add-circle { background:#4f8ef7; color:#fff; }
+#lib-add-folder-btn .lib-add-circle { background:#f59e0b; color:#fff; }
+#lib-add-paper-btn .lib-add-label { color:#4f8ef7; }
+#lib-add-folder-btn .lib-add-label { color:#d97706; }

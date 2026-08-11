@@ -4665,7 +4665,9 @@ function initSelectToolbarEvents() {
 }
 
 function initLibraryDragSelection() {
-  if (!libraryGrid) return
+  const dragSurface = $('page-outlet')
+  const filterRow = $('library-filter-row')
+  if (!libraryGrid || !dragSurface || !filterRow) return
   let dragState = null
   let marquee = null
 
@@ -4678,20 +4680,22 @@ function initLibraryDragSelection() {
   const finishDragSelection = (event, cancelled = false) => {
     if (!dragState || event.pointerId !== dragState.pointerId) return
     if (cancelled) replaceDocSelection(dragState.baseIds)
-    if (libraryGrid.hasPointerCapture?.(event.pointerId)) {
-      libraryGrid.releasePointerCapture(event.pointerId)
+    if (dragSurface.hasPointerCapture?.(event.pointerId)) {
+      dragSurface.releasePointerCapture(event.pointerId)
     }
     dragState = null
     removeMarquee()
   }
 
-  libraryGrid.addEventListener('pointerdown', event => {
+  dragSurface.addEventListener('pointerdown', event => {
+    const selectionTop = filterRow.getBoundingClientRect().bottom
     if (
       event.button !== 0 ||
       event.isPrimary === false ||
       (event.pointerType && event.pointerType !== 'mouse') ||
       state.currentWorkspacePage !== 'library' ||
       state.currentLibraryTab === 'trash' ||
+      event.clientY < selectionTop ||
       event.target.closest('.doc-card, .doc-list-row, .library-folder-card, button, a, input, textarea, select')
     ) return
 
@@ -4706,11 +4710,11 @@ function initLibraryDragSelection() {
       toggle,
       active: false,
     }
-    libraryGrid.setPointerCapture?.(event.pointerId)
+    dragSurface.setPointerCapture?.(event.pointerId)
     event.preventDefault()
   })
 
-  libraryGrid.addEventListener('pointermove', event => {
+  dragSurface.addEventListener('pointermove', event => {
     if (!dragState || event.pointerId !== dragState.pointerId) return
     const distance = Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY)
     if (!dragState.active && distance < 4) return
@@ -4749,12 +4753,12 @@ function initLibraryDragSelection() {
     event.preventDefault()
   })
 
-  libraryGrid.addEventListener('pointerup', event => finishDragSelection(event))
-  libraryGrid.addEventListener('pointercancel', event => finishDragSelection(event, true))
+  dragSurface.addEventListener('pointerup', event => finishDragSelection(event))
+  dragSurface.addEventListener('pointercancel', event => finishDragSelection(event, true))
   window.addEventListener('blur', () => {
     if (!dragState) return
-    if (libraryGrid.hasPointerCapture?.(dragState.pointerId)) {
-      libraryGrid.releasePointerCapture(dragState.pointerId)
+    if (dragSurface.hasPointerCapture?.(dragState.pointerId)) {
+      dragSurface.releasePointerCapture(dragState.pointerId)
     }
     replaceDocSelection(dragState.baseIds)
     dragState = null
@@ -5696,6 +5700,167 @@ function createFolderCard(folder) {
   })
   return card
 }
+// ── 라이브러리 우클릭 메뉴 ────────────────────────────────────────────────
+let libraryContextMenu = null
+
+function closeLibraryContextMenu() {
+  libraryContextMenu?.remove()
+  libraryContextMenu = null
+}
+
+function libraryContextMenuItem(action, label, iconName, { danger = false } = {}) {
+  return `<button type="button" class="library-context-menu-item${danger ? ' danger' : ''}" role="menuitem" data-action="${action}">${icon(iconName, 15)}<span>${label}</span></button>`
+}
+
+function positionLibraryContextMenu(menu, clientX, clientY) {
+  const margin = 8
+  const rect = menu.getBoundingClientRect()
+  menu.style.left = `${Math.max(margin, Math.min(clientX, window.innerWidth - rect.width - margin))}px`
+  menu.style.top = `${Math.max(margin, Math.min(clientY, window.innerHeight - rect.height - margin))}px`
+}
+
+async function deleteDocFromContextMenu(doc) {
+  const displayTitle = doc.metadata?.title || doc.filename
+  const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요? (휴지통으로 이동합니다)`, { title: '논문 삭제', confirmText: '삭제', danger: true })
+  if (!ok) return
+  await deleteLibraryDoc(doc.id)
+  showToast('휴지통으로 이동되었습니다.', 'success')
+  await renderLibrary()
+}
+
+async function clearDocCacheFromContextMenu(doc) {
+  const displayTitle = doc.metadata?.title || doc.filename
+  const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+  if (!ok) return
+  await clearSingleDocCacheAPI(doc.id)
+  showToast('PDF 추출 캐시가 삭제되었습니다.', 'success')
+}
+
+function showLibraryContextMenu(event, { doc = null, folder = null } = {}) {
+  closeLibraryContextMenu()
+  const menu = document.createElement('div')
+  menu.className = 'library-context-menu'
+  menu.setAttribute('role', 'menu')
+
+  if (doc && state.currentLibraryTab === 'trash') {
+    menu.innerHTML = [
+      libraryContextMenuItem('restore', '복원', 'refreshCw'),
+      '<div class="library-context-menu-separator" role="separator"></div>',
+      libraryContextMenuItem('permanent-delete', '영구 삭제', 'trash2', { danger: true }),
+    ].join('')
+  } else if (doc) {
+    menu.innerHTML = [
+      libraryContextMenuItem('open', '논문 열기', 'externalLink'),
+      libraryContextMenuItem('details', '상세 정보', 'info'),
+      '<div class="library-context-menu-separator" role="separator"></div>',
+      libraryContextMenuItem('select', selectedDocIds.has(doc.id) ? '선택 해제' : '선택', 'checkCircle'),
+      libraryContextMenuItem('read', doc.metadata?.read === true ? '읽음 표시 해제' : '읽음으로 표시', 'bookOpen'),
+      libraryContextMenuItem('favorite', isFavoriteDoc(doc.id) ? '즐겨찾기 해제' : '즐겨찾기', 'star'),
+      '<div class="library-context-menu-separator" role="separator"></div>',
+      libraryContextMenuItem('clear-cache', 'PDF 캐시 삭제', 'refreshCw'),
+      libraryContextMenuItem('delete', '휴지통으로 이동', 'trash2', { danger: true }),
+    ].join('')
+  } else if (folder) {
+    menu.innerHTML = [
+      libraryContextMenuItem('open-folder', '폴더 열기', 'folder'),
+      '<div class="library-context-menu-separator" role="separator"></div>',
+      libraryContextMenuItem('rename-folder', '이름 변경', 'edit3'),
+      libraryContextMenuItem('color-folder', '폴더 색상', 'edit3'),
+      libraryContextMenuItem('delete-folder', '폴더 삭제', 'trash2', { danger: true }),
+    ].join('')
+  } else if (state.currentLibraryTab === 'trash') {
+    menu.innerHTML = libraryContextMenuItem('empty-trash', '휴지통 비우기', 'trash2', { danger: true })
+  } else {
+    menu.innerHTML = [
+      libraryContextMenuItem('add-paper', '논문 추가', 'fileText'),
+      libraryContextMenuItem('add-folder', '폴더 추가', 'folder'),
+      '<div class="library-context-menu-separator" role="separator"></div>',
+      libraryContextMenuItem('select-all', '전체 선택', 'checkCircle'),
+    ].join('')
+  }
+
+  document.body.appendChild(menu)
+  libraryContextMenu = menu
+  positionLibraryContextMenu(menu, event.clientX, event.clientY)
+  menu.querySelector('[role="menuitem"]')?.focus()
+
+  menu.addEventListener('click', async clickEvent => {
+    const action = clickEvent.target.closest('[data-action]')?.dataset.action
+    if (!action) return
+    closeLibraryContextMenu()
+    try {
+      if (action === 'open') await openFromLibrary(doc)
+      else if (action === 'details') openLibraryDetailPanel(doc)
+      else if (action === 'select') toggleDocSelection(doc.id)
+      else if (action === 'read') {
+        const nextRead = doc.metadata?.read !== true
+        await updateLibraryDocMetadata(doc.id, { read: nextRead, read_at: nextRead ? new Date().toISOString() : null })
+        await renderLibrary()
+      } else if (action === 'favorite') {
+        toggleFavoriteDoc(doc.id)
+        await renderLibrary()
+      } else if (action === 'clear-cache') await clearDocCacheFromContextMenu(doc)
+      else if (action === 'delete') await deleteDocFromContextMenu(doc)
+      else if (action === 'restore') {
+        await restoreLibraryDoc(doc.id)
+        showToast('논문을 복원했습니다.', 'success')
+        await renderLibrary()
+      } else if (action === 'permanent-delete') {
+        const ok = await showCustomConfirm('이 논문을 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.', { title: '논문 영구 삭제', confirmText: '영구 삭제', danger: true })
+        if (ok) {
+          await deleteLibraryDocPermanently(doc.id)
+          await renderLibrary()
+        }
+      } else if (action === 'open-folder') navigateLibraryFolder(folder.id)
+      else if (action === 'rename-folder') await requestRenameFolder(folder)
+      else if (action === 'color-folder') {
+        const color = await showFolderColorDialog(folder.color)
+        if (color && color !== folder.color) {
+          await updateFolderWithUndo(folder, { color })
+          await renderLibrary()
+        }
+      } else if (action === 'delete-folder') await requestDeleteFolder(folder)
+      else if (action === 'add-paper') fileInput.click()
+      else if (action === 'add-folder') await openCreateFolderDialog()
+      else if (action === 'select-all') {
+        const visibleIds = getVisibleDocIds()
+        visibleIds.forEach(id => selectedDocIds.add(id))
+        visibleIds.forEach(id => updateDocCardSelectionVisuals(id))
+        updateSelectToolbarUI()
+      } else if (action === 'empty-trash') $('lib-empty-trash-btn')?.click()
+    } catch (err) {
+      showToast(err.message || '작업에 실패했습니다.', 'error')
+    }
+  })
+}
+
+function initLibraryContextMenu() {
+  const surface = $('page-outlet')
+  if (!surface) return
+  surface.addEventListener('contextmenu', event => {
+    if (state.currentWorkspacePage !== 'library') return
+    const docElement = event.target.closest('.doc-card[data-id], .doc-list-row[data-id]')
+    const folderElement = event.target.closest('.library-folder-card[data-folder-id]')
+    const isLibraryArea = event.target === surface || event.target.closest('#page-library')
+    if (!docElement && !folderElement && (!isLibraryArea || event.target.closest('input, textarea, select'))) return
+
+    const doc = docElement ? currentLibraryDocs.find(item => item.id === docElement.dataset.id) : null
+    const folder = folderElement ? libraryFolders.find(item => item.id === folderElement.dataset.folderId) : null
+    event.preventDefault()
+    showLibraryContextMenu(event, { doc, folder })
+  })
+  document.addEventListener('pointerdown', event => {
+    if (libraryContextMenu && !event.target.closest('.library-context-menu')) closeLibraryContextMenu()
+  })
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeLibraryContextMenu()
+  })
+  surface.addEventListener('scroll', closeLibraryContextMenu)
+  window.addEventListener('resize', closeLibraryContextMenu)
+}
+
+initLibraryContextMenu()
+
 function ensureLibraryFolderUI() {
   if ($('library-breadcrumb')) return
   librarySearchBox?.insertAdjacentHTML('beforebegin', `<div class="library-folder-header"><nav id="library-breadcrumb" class="library-breadcrumb" aria-label="폴더 경로"></nav></div>`)
