@@ -357,8 +357,9 @@ async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessio
         db_get_user_reading_profile,
         db_save_reading_session,
         db_get_reading_session,
+        db_upsert_reading_page_evidence,
     )
-    from services.reading_analytics import process_reading_analytics
+    from services.reading_analytics import build_page_evidence, process_reading_analytics
 
     doc = get_document(doc_id)
     doc_total_pages = doc.get("total_pages", 0) if doc else 0
@@ -406,6 +407,15 @@ async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessio
     if not saved:
         current = db_get_reading_session(payload.sessionId, current_user)
         return {"stale": True, "version": current["version"] if current else payload.version}
+
+    if res.readingActivity != "ignored":
+        db_upsert_reading_page_evidence(
+            current_user,
+            doc_id,
+            payload.sessionId,
+            build_page_evidence(payload.pageSessions, user_ema, res.totalPages),
+            res.totalPages,
+        )
     return res.model_dump()
 
 
@@ -423,9 +433,11 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
         db_get_user_reading_profile,
         db_save_reading_session,
         db_save_user_reading_profile,
+        db_upsert_reading_page_evidence,
     )
     from services.reading_analytics import (
-        count_meaningful_page_sessions, process_reading_analytics, update_user_ema,
+        build_page_evidence, count_meaningful_page_sessions,
+        process_reading_analytics, update_user_ema,
     )
 
     doc = get_document(doc_id)
@@ -473,6 +485,15 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
         current = db_get_reading_session(payload.sessionId, current_user)
         return {"stale": True, "version": current["version"] if current else payload.version}
 
+    if res.readingActivity != "ignored":
+        db_upsert_reading_page_evidence(
+            current_user,
+            doc_id,
+            payload.sessionId,
+            build_page_evidence(payload.pageSessions, user_ema, res.totalPages),
+            res.totalPages,
+        )
+
     if not existing or not existing.get("ended_at"):
         new_ema, new_count = update_user_ema(
             user_ema,
@@ -499,41 +520,25 @@ async def get_reading_analytics_summary_api(since_days: Optional[int] = None, cu
 
 @router.get("/library/{doc_id}/reading-analytics")
 async def get_paper_reading_analytics_api(doc_id: str, current_user: str = Depends(get_current_user)):
-    """특정 논문의 Reading Analytics (Page Score, Reading Score, Depth, Confidence) 정보를 반환합니다."""
+    """Return cumulative per-page Reading Analytics for one paper."""
     require_owned_document(doc_id, current_user)
-    import json
-    from services.db import db_get_latest_reading_session
-    session = db_get_latest_reading_session(doc_id, current_user)
-    if not session:
+    from services.db import db_get_paper_reading_stats
+
+    stats = db_get_paper_reading_stats(doc_id, current_user)
+    if not stats:
         return {
             "reading_score": 0.0,
             "reading_confidence": 0.0,
             "reading_depth": "Opened",
             "verified_pages_count": 0,
+            "meaningful_pages_count": 0,
             "total_pages": 0,
             "active_reading_time": 0,
             "page_scores": {},
         }
-    page_scores = {}
-    if session.get("page_sessions_json"):
-        try:
-            ps_list = json.loads(session["page_sessions_json"])
-            from services.reading_analytics import analyze_page_sessions, PageSession
-            ps_objs = [PageSession(**p) for p in ps_list]
-            page_scores, _, _ = analyze_page_sessions(ps_objs, 600.0, session.get("total_pages", 0))
-        except Exception:
-            pass
-
     return {
-        "sessionId": session["id"],
         "paperId": doc_id,
-        "reading_score": session["reading_score"],
-        "reading_confidence": session["reading_confidence"],
-        "reading_depth": session["reading_depth"],
-        "verified_pages_count": session["verified_pages_count"],
-        "total_pages": session["total_pages"],
-        "active_reading_time": session["active_reading_time"],
-        "page_scores": page_scores,
+        **stats,
     }
 
 

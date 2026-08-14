@@ -303,7 +303,7 @@ def init_db():
             total_pages INTEGER DEFAULT 0,
             reading_activity TEXT DEFAULT 'unclassified',
             minimum_evidence_time REAL DEFAULT 90.0,
-            analytics_version INTEGER NOT NULL DEFAULT 2,
+            analytics_version INTEGER NOT NULL DEFAULT 3,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
@@ -318,6 +318,39 @@ def init_db():
             updated_at TEXT NOT NULL
         )
         """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reading_page_evidence (
+            username TEXT NOT NULL,
+            paper_id TEXT NOT NULL,
+            page_number INTEGER NOT NULL,
+            best_score REAL NOT NULL,
+            evidence_time REAL NOT NULL,
+            interaction_quality REAL NOT NULL,
+            source_session_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (username, paper_id, page_number)
+        )
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS paper_reading_stats (
+            username TEXT NOT NULL,
+            paper_id TEXT NOT NULL,
+            reading_score REAL NOT NULL DEFAULT 0.0,
+            reading_confidence REAL NOT NULL DEFAULT 0.0,
+            reading_depth TEXT NOT NULL DEFAULT 'Opened',
+            verified_pages_count INTEGER NOT NULL DEFAULT 0,
+            meaningful_pages_count INTEGER NOT NULL DEFAULT 0,
+            total_pages INTEGER NOT NULL DEFAULT 0,
+            active_reading_time INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (username, paper_id)
+        )
+        """)
+
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_page_evidence_user_paper ON reading_page_evidence(username, paper_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_paper_reading_stats_user_updated ON paper_reading_stats(username, updated_at)")
 
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_sessions_user_paper ON reading_sessions(username, paper_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_sessions_user_updated ON reading_sessions(username, updated_at)")
@@ -400,6 +433,7 @@ def init_db():
             print(f"Default user '{default_user}' created in SQLite database.")
 
     db_migrate_reading_analytics_v2()
+    db_migrate_reading_analytics_v3()
     db_backfill_document_titles()
 
 
@@ -444,6 +478,8 @@ def update_user_credentials(old_username: str, new_username: str, new_password_h
                     "documents",
                     "reading_time",
                     "reading_sessions",
+                    "reading_page_evidence",
+                    "paper_reading_stats",
                     "user_reading_profiles",
                     "compare_sessions",
                     "folders",
@@ -1645,7 +1681,7 @@ def db_save_reading_session(
     reading_activity: str = "unclassified",
     minimum_evidence_time: float = 90.0,
     verified_pages_json: Optional[str] = None,
-    analytics_version: int = 2,
+    analytics_version: int = 3,
 ) -> bool:
     """Insert a session or replace it only with a newer heartbeat version."""
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -1767,18 +1803,164 @@ def db_save_user_reading_profile(username: str, ema_seconds_per_page: float, ses
         conn.commit()
 
 
+
+def db_upsert_reading_page_evidence(
+    username: str,
+    paper_id: str,
+    source_session_id: str,
+    page_evidence: Dict[int, Dict[str, float]],
+    total_pages: int,
+) -> Optional[Dict[str, Any]]:
+    """Keep the strongest evidence per page and refresh cumulative paper stats."""
+    if not page_evidence:
+        return db_get_paper_reading_stats(paper_id, username)
+
+    from services.reading_analytics import calculate_paper_reading_analytics
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        for page, evidence in page_evidence.items():
+            conn.execute(
+                """
+                INSERT INTO reading_page_evidence (
+                    username, paper_id, page_number, best_score, evidence_time,
+                    interaction_quality, source_session_id, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(username, paper_id, page_number) DO UPDATE SET
+                    best_score = excluded.best_score,
+                    evidence_time = excluded.evidence_time,
+                    interaction_quality = excluded.interaction_quality,
+                    source_session_id = excluded.source_session_id,
+                    updated_at = excluded.updated_at
+                WHERE excluded.best_score > reading_page_evidence.best_score
+                   OR (
+                        excluded.best_score = reading_page_evidence.best_score
+                        AND excluded.evidence_time > reading_page_evidence.evidence_time
+                   )
+                """,
+                (
+                    username, paper_id, int(page), float(evidence.get("score", 0.0)),
+                    float(evidence.get("evidence_time", 0.0)),
+                    float(evidence.get("interaction_quality", 0.0)),
+                    source_session_id, now_iso,
+                ),
+            )
+
+        rows = conn.execute(
+            """
+            SELECT page_number, best_score, evidence_time, interaction_quality
+            FROM reading_page_evidence
+            WHERE username = ? AND paper_id = ?
+            ORDER BY page_number
+            """,
+            (username, paper_id),
+        ).fetchall()
+        cumulative_evidence = {
+            row["page_number"]: {
+                "score": row["best_score"],
+                "evidence_time": row["evidence_time"],
+                "interaction_quality": row["interaction_quality"],
+            }
+            for row in rows
+        }
+        previous = conn.execute(
+            """
+            SELECT reading_score, reading_depth
+            FROM paper_reading_stats
+            WHERE username = ? AND paper_id = ?
+            """,
+            (username, paper_id),
+        ).fetchone()
+        session_totals = conn.execute(
+            """
+            SELECT COALESCE(SUM(active_reading_time), 0) AS active_time,
+                   COALESCE(MAX(total_pages), 0) AS total_pages
+            FROM reading_sessions
+            WHERE username = ? AND paper_id = ?
+              AND reading_activity IN ('browsed', 'read')
+            """,
+            (username, paper_id),
+        ).fetchone()
+        aggregate = calculate_paper_reading_analytics(
+            cumulative_evidence,
+            total_pages=max(total_pages, session_totals["total_pages"] or 0),
+            active_reading_time=session_totals["active_time"] or 0,
+            previous_reading_score=previous["reading_score"] if previous else 0.0,
+            previous_reading_depth=previous["reading_depth"] if previous else "Opened",
+        )
+        conn.execute(
+            """
+            INSERT INTO paper_reading_stats (
+                username, paper_id, reading_score, reading_confidence, reading_depth,
+                verified_pages_count, meaningful_pages_count, total_pages,
+                active_reading_time, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(username, paper_id) DO UPDATE SET
+                reading_score = excluded.reading_score,
+                reading_confidence = excluded.reading_confidence,
+                reading_depth = excluded.reading_depth,
+                verified_pages_count = excluded.verified_pages_count,
+                meaningful_pages_count = excluded.meaningful_pages_count,
+                total_pages = excluded.total_pages,
+                active_reading_time = excluded.active_reading_time,
+                updated_at = excluded.updated_at
+            """,
+            (
+                username, paper_id, aggregate.readingScore, aggregate.readingConfidence,
+                aggregate.readingDepth, aggregate.verifiedPagesCount,
+                aggregate.meaningfulPagesCount, aggregate.totalPages,
+                int(aggregate.activeReadingTime), now_iso,
+            ),
+        )
+        conn.commit()
+
+    return db_get_paper_reading_stats(paper_id, username)
+
+
+def db_get_paper_reading_stats(paper_id: str, username: str) -> Optional[Dict[str, Any]]:
+    """Return cumulative paper analytics and strongest page scores."""
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT paper_id, reading_score, reading_confidence, reading_depth,
+                   verified_pages_count, meaningful_pages_count, total_pages,
+                   active_reading_time, updated_at
+            FROM paper_reading_stats
+            WHERE username = ? AND paper_id = ?
+            """,
+            (username, paper_id),
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        page_rows = conn.execute(
+            """
+            SELECT page_number, best_score
+            FROM reading_page_evidence
+            WHERE username = ? AND paper_id = ?
+            ORDER BY page_number
+            """,
+            (username, paper_id),
+        ).fetchall()
+        result["page_scores"] = {
+            row["page_number"]: row["best_score"] for row in page_rows
+        }
+        return result
+
 def db_migrate_reading_analytics_v2() -> None:
     """Recalculate legacy sessions and rebuild EMA from meaningful page visits."""
     from services.reading_analytics import (
-        READING_ANALYTICS_VERSION, InteractionSummary, PageSession,
+        InteractionSummary, PageSession,
         ReadingSessionPayload, count_meaningful_page_sessions,
         process_reading_analytics, update_user_ema,
     )
 
+    target_version = 2
+
     with get_db() as conn:
         affected_rows = conn.execute(
             "SELECT DISTINCT username FROM reading_sessions WHERE analytics_version < ?",
-            (READING_ANALYTICS_VERSION,),
+            (target_version,),
         ).fetchall()
         affected_users = [row["username"] for row in affected_rows]
         if not affected_users:
@@ -1819,11 +2001,11 @@ def db_migrate_reading_analytics_v2() -> None:
             except (TypeError, ValueError, json.JSONDecodeError):
                 conn.execute(
                     "UPDATE reading_sessions SET analytics_version = ? WHERE id = ?",
-                    (READING_ANALYTICS_VERSION, row["id"]),
+                    (target_version, row["id"]),
                 )
                 continue
 
-            if (row["analytics_version"] < READING_ANALYTICS_VERSION):
+            if (row["analytics_version"] < target_version):
                 result = process_reading_analytics(
                     payload, max(0, row["total_pages"] or 0), user_ema,
                 )
@@ -1842,7 +2024,7 @@ def db_migrate_reading_analytics_v2() -> None:
                         result.readingDepth, result.readingScore, result.readingConfidence,
                         result.verifiedPagesCount, json.dumps(verified_pages), result.totalPages,
                         result.readingActivity, result.minimumEvidenceTime,
-                        READING_ANALYTICS_VERSION, row["id"],
+                        target_version, row["id"],
                     ),
                 )
 
@@ -1868,6 +2050,88 @@ def db_migrate_reading_analytics_v2() -> None:
             )
         conn.commit()
 
+
+
+def db_migrate_reading_analytics_v3() -> None:
+    """Build cumulative per-page evidence for installations upgrading to v3."""
+    from services.reading_analytics import (
+        READING_ANALYTICS_VERSION, PageSession, build_page_evidence,
+    )
+
+    with get_db() as conn:
+        affected = conn.execute(
+            """
+            SELECT DISTINCT username
+            FROM reading_sessions
+            WHERE analytics_version < ?
+            """,
+            (READING_ANALYTICS_VERSION,),
+        ).fetchall()
+        affected_users = [row["username"] for row in affected]
+        if not affected_users:
+            return
+        placeholders = ",".join("?" for _ in affected_users)
+        rows = conn.execute(
+            f"""
+            SELECT id, username, paper_id, page_sessions_json, total_pages,
+                   reading_activity
+            FROM reading_sessions
+            WHERE username IN ({placeholders})
+            ORDER BY started_at, created_at
+            """,
+            affected_users,
+        ).fetchall()
+        profile_rows = conn.execute(
+            f"""
+            SELECT username, ema_seconds_per_page
+            FROM user_reading_profiles
+            WHERE username IN ({placeholders})
+            """,
+            affected_users,
+        ).fetchall()
+        profiles = {
+            row["username"]: row["ema_seconds_per_page"] for row in profile_rows
+        }
+        conn.execute(
+            f"DELETE FROM reading_page_evidence WHERE username IN ({placeholders})",
+            affected_users,
+        )
+        conn.execute(
+            f"DELETE FROM paper_reading_stats WHERE username IN ({placeholders})",
+            affected_users,
+        )
+        conn.commit()
+
+    for row in rows:
+        if row["reading_activity"] not in ("browsed", "read"):
+            continue
+        try:
+            raw_pages = json.loads(row["page_sessions_json"] or "[]")
+            page_sessions = [
+                PageSession(**page) for page in raw_pages if isinstance(page, dict)
+            ]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        user_ema = profiles.get(row["username"], 600.0)
+        evidence = build_page_evidence(
+            page_sessions, user_ema, max(0, row["total_pages"] or 0),
+        )
+        if evidence:
+            db_upsert_reading_page_evidence(
+                row["username"], row["paper_id"], row["id"], evidence,
+                max(0, row["total_pages"] or 0),
+            )
+
+    with get_db() as conn:
+        conn.execute(
+            f"""
+            UPDATE reading_sessions
+            SET analytics_version = ?
+            WHERE username IN ({placeholders})
+            """,
+            [READING_ANALYTICS_VERSION, *affected_users],
+        )
+        conn.commit()
 
 def db_backfill_document_titles() -> None:
     """Restore extracted paper titles lost by legacy metadata replacement."""
@@ -1905,9 +2169,8 @@ def db_backfill_document_titles() -> None:
 
 
 def db_get_all_reading_analytics_summary(username: str, since_days: Optional[int] = None) -> Dict[str, Any]:
-    """Aggregates reading analytics metrics per paper and overall for dashboard and history."""
+    """Aggregate cumulative paper achievements for dashboard and history."""
     with get_db() as conn:
-        cursor = conn.cursor()
         params: List[Any] = [username]
         day_filter = ""
         if since_days is not None:
@@ -1915,51 +2178,25 @@ def db_get_all_reading_analytics_summary(username: str, since_days: Optional[int
             day_filter = " AND updated_at >= ?"
             params.append(cutoff)
 
-        cursor.execute(
+        rows = conn.execute(
             f"""
             SELECT paper_id, reading_score, reading_confidence, reading_depth,
-                   verified_pages_count, total_pages, active_reading_time, updated_at
-            FROM reading_sessions
+                   verified_pages_count, meaningful_pages_count, total_pages,
+                   active_reading_time, updated_at
+            FROM paper_reading_stats
             WHERE username = ?{day_filter}
             ORDER BY updated_at DESC
             """,
             params,
-        )
-        rows = cursor.fetchall()
+        ).fetchall()
 
-    paper_stats: Dict[str, Dict[str, Any]] = {}
-    total_active_time = 0
-    scores = []
-    confidences = []
-    verified_sum = 0
-
-    for r in rows:
-        pid = r["paper_id"]
-        # Keep latest session info per paper
-        if pid not in paper_stats:
-            paper_stats[pid] = {
-                "paper_id": pid,
-                "reading_score": r["reading_score"],
-                "reading_confidence": r["reading_confidence"],
-                "reading_depth": r["reading_depth"],
-                "verified_pages_count": r["verified_pages_count"],
-                "total_pages": r["total_pages"],
-                "active_reading_time": r["active_reading_time"],
-                "updated_at": r["updated_at"],
-            }
-            scores.append(r["reading_score"])
-            confidences.append(r["reading_confidence"])
-            verified_sum += r["verified_pages_count"]
-
-        total_active_time += r["active_reading_time"]
-
-    avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
-    avg_confidence = round(sum(confidences) / len(confidences), 1) if confidences else 0.0
-
+    paper_stats = {row["paper_id"]: dict(row) for row in rows}
+    scores = [row["reading_score"] for row in rows]
+    confidences = [row["reading_confidence"] for row in rows]
     return {
-        "overall_avg_score": avg_score,
-        "overall_avg_confidence": avg_confidence,
-        "overall_verified_pages": verified_sum,
-        "total_active_reading_time": total_active_time,
+        "overall_avg_score": round(sum(scores) / len(scores), 1) if scores else 0.0,
+        "overall_avg_confidence": round(sum(confidences) / len(confidences), 1) if confidences else 0.0,
+        "overall_verified_pages": sum(row["verified_pages_count"] for row in rows),
+        "total_active_reading_time": sum(row["active_reading_time"] for row in rows),
         "paper_stats": paper_stats,
     }

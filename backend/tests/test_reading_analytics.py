@@ -9,6 +9,8 @@ from services.reading_analytics import (
     determine_reading_depth,
     calculate_reading_score,
     calculate_minimum_evidence_time,
+    build_page_evidence,
+    calculate_paper_reading_analytics,
     classify_reading_activity,
     count_meaningful_page_sessions,
     update_user_ema,
@@ -240,6 +242,66 @@ class TestReadingAnalytics(unittest.TestCase):
         result = process_reading_analytics(payload, total_paper_pages=10, user_ema=600)
         self.assertEqual(result.readingScore, 55.0)
 
+    def test_page_evidence_only_contains_meaningful_pages(self):
+        pages = [
+            PageSession(page=1, activeTime=1, scrollCoverage=1.0),
+            PageSession(
+                page=2, activeTime=300, scrollCoverage=0.8,
+                interaction=InteractionSummary(highlight=1),
+            ),
+        ]
+
+        evidence = build_page_evidence(pages, expected_page_time=600, total_pages=10)
+
+        self.assertNotIn(1, evidence)
+        self.assertIn(2, evidence)
+        self.assertGreaterEqual(evidence[2]["score"], 50.0)
+        self.assertEqual(evidence[2]["evidence_time"], 300)
+
+    def test_paper_analytics_accumulates_unique_page_evidence(self):
+        first = calculate_paper_reading_analytics(
+            {
+                1: {"score": 95.0, "evidence_time": 600, "interaction_quality": 3.0},
+            },
+            total_pages=10,
+            active_reading_time=600,
+        )
+        accumulated = calculate_paper_reading_analytics(
+            {
+                1: {"score": 95.0, "evidence_time": 600, "interaction_quality": 3.0},
+                2: {"score": 90.0, "evidence_time": 600, "interaction_quality": 4.0},
+            },
+            total_pages=10,
+            active_reading_time=1200,
+            previous_reading_score=first.readingScore,
+            previous_reading_depth=first.readingDepth,
+        )
+
+        self.assertEqual(accumulated.verifiedPagesCount, 2)
+        self.assertEqual(accumulated.meaningfulPagesCount, 2)
+        self.assertGreaterEqual(accumulated.readingScore, first.readingScore)
+        self.assertEqual(accumulated.pageScores, {1: 95.0, 2: 90.0})
+
+    def test_weaker_new_page_cannot_reduce_paper_achievement(self):
+        established = calculate_paper_reading_analytics(
+            {1: {"score": 100.0, "evidence_time": 600, "interaction_quality": 5.0}},
+            total_pages=10,
+            active_reading_time=600,
+        )
+        with_weak_page = calculate_paper_reading_analytics(
+            {
+                1: {"score": 100.0, "evidence_time": 600, "interaction_quality": 5.0},
+                2: {"score": 20.0, "evidence_time": 10, "interaction_quality": 0.0},
+            },
+            total_pages=10,
+            active_reading_time=610,
+            previous_reading_score=established.readingScore,
+            previous_reading_depth=established.readingDepth,
+        )
+
+        self.assertEqual(with_weak_page.readingScore, established.readingScore)
+        self.assertEqual(with_weak_page.readingDepth, established.readingDepth)
+
     def test_previous_score_is_preserved_while_new_page_is_in_progress(self):
         established_payload = ReadingSessionPayload(
             sessionId="session", paperId="paper", activeReadingTime=600,
@@ -393,6 +455,81 @@ def test_heartbeat_preserves_the_session_high_score(test_client, isolated_dirs):
     assert db.db_get_reading_session(
         session_id, "testuser",
     )["reading_score"] == first.json()["readingScore"]
+
+
+def test_paper_analytics_accumulates_pages_across_sessions_and_ignores_brief_reopen(
+    test_client, isolated_dirs,
+):
+    db = isolated_dirs["db"]
+    db.db_save_document("paper-1", "testuser", "paper.pdf", "/x/paper.pdf", 5, {})
+
+    first_id = test_client.post(
+        "/api/library/paper-1/reading-session/start", json={"totalPages": 5},
+    ).json()["sessionId"]
+    first_payload = _analytics_payload(first_id, "paper-1", 1, active_time=600)
+    assert test_client.post(
+        "/api/library/paper-1/reading-session/heartbeat", json=first_payload,
+    ).status_code == 200
+    first_payload["version"] = 2
+    assert test_client.post(
+        "/api/library/paper-1/reading-session/end", json=first_payload,
+    ).status_code == 200
+
+    first_stats = db.db_get_paper_reading_stats("paper-1", "testuser")
+    assert first_stats["verified_pages_count"] == 1
+    first_score = first_stats["reading_score"]
+
+    ignored_id = test_client.post(
+        "/api/library/paper-1/reading-session/start", json={"totalPages": 5},
+    ).json()["sessionId"]
+    ignored = _analytics_payload(ignored_id, "paper-1", 1, active_time=20)
+    ignored_response = test_client.post(
+        "/api/library/paper-1/reading-session/heartbeat", json=ignored,
+    )
+    assert ignored_response.json()["readingActivity"] == "ignored"
+    assert db.db_get_paper_reading_stats(
+        "paper-1", "testuser",
+    )["reading_score"] == first_score
+
+    ignored["version"] = 2
+    test_client.post("/api/library/paper-1/reading-session/end", json=ignored)
+    second_id = test_client.post(
+        "/api/library/paper-1/reading-session/start", json={"totalPages": 5},
+    ).json()["sessionId"]
+    second = _analytics_payload(second_id, "paper-1", 1, active_time=600)
+    second["currentPage"] = 2
+    second["pageSessions"][0]["page"] = 2
+    assert test_client.post(
+        "/api/library/paper-1/reading-session/heartbeat", json=second,
+    ).status_code == 200
+
+    cumulative = db.db_get_paper_reading_stats("paper-1", "testuser")
+    assert cumulative["verified_pages_count"] == 2
+    assert cumulative["page_scores"].keys() == {1, 2}
+    assert cumulative["reading_score"] >= first_score
+
+    summary = test_client.get("/api/library/reading-analytics-summary").json()
+    assert summary["paper_stats"]["paper-1"]["reading_score"] == cumulative["reading_score"]
+    detail = test_client.get("/api/library/paper-1/reading-analytics").json()
+    assert detail["verified_pages_count"] == 2
+    assert detail["page_scores"].keys() == {"1", "2"}
+
+
+def test_weaker_page_evidence_does_not_replace_best_record(isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_upsert_reading_page_evidence(
+        "testuser", "paper", "strong", {
+            1: {"score": 90.0, "evidence_time": 300, "interaction_quality": 3.0},
+        }, 5,
+    )
+    db.db_upsert_reading_page_evidence(
+        "testuser", "paper", "weak", {
+            1: {"score": 40.0, "evidence_time": 600, "interaction_quality": 10.0},
+        }, 5,
+    )
+
+    stats = db.db_get_paper_reading_stats("paper", "testuser")
+    assert stats["page_scores"] == {1: 90.0}
 
 
 def test_reading_session_rejects_mismatched_paper_id(test_client, isolated_dirs):

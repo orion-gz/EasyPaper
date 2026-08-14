@@ -111,6 +111,21 @@ def test_update_user_credentials_propagates_username_to_user_data(isolated_dirs)
             ("admin", 300.0, 1, now),
         )
         conn.execute(
+            """INSERT INTO reading_page_evidence
+               (username, paper_id, page_number, best_score, evidence_time,
+                interaction_quality, source_session_id, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            ("admin", "doc-1", 1, 80.0, 120.0, 3.0, "session-1", now),
+        )
+        conn.execute(
+            """INSERT INTO paper_reading_stats
+               (username, paper_id, reading_score, reading_confidence,
+                reading_depth, verified_pages_count, meaningful_pages_count,
+                total_pages, active_reading_time, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ("admin", "doc-1", 70.0, 80.0, "Reading", 1, 1, 5, 120, now),
+        )
+        conn.execute(
             """INSERT INTO compare_sessions
                (id, username, doc_ids, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?)""",
@@ -130,6 +145,8 @@ def test_update_user_credentials_propagates_username_to_user_data(isolated_dirs)
         for table in (
             "reading_time",
             "reading_sessions",
+            "reading_page_evidence",
+            "paper_reading_stats",
             "user_reading_profiles",
             "compare_sessions",
             "folders",
@@ -287,6 +304,36 @@ def test_reading_analytics_v2_migrates_legacy_sessions(isolated_dirs):
     assert migrated["reading_confidence"] >= 90
     assert migrated["reading_score"] >= 70
     assert db.db_get_user_reading_profile("admin")["session_count"] == 1
+
+
+def test_reading_analytics_v3_builds_cumulative_page_evidence(isolated_dirs):
+    db = isolated_dirs["db"]
+    pages = [{
+        "page": 3,
+        "activeTime": 600,
+        "visibleTime": 600,
+        "scrollCoverage": 0.8,
+        "interaction": {"highlight": 1},
+    }]
+    db.db_save_reading_session(
+        session_id="v2-session", username="admin", paper_id="paper",
+        started_at="2026-08-10T01:00:00+00:00",
+        ended_at="2026-08-10T02:00:00+00:00", active_reading_time=600,
+        version=1, page_sessions_json=json.dumps(pages),
+        interaction_summary_json=json.dumps({"highlight": 1}),
+        reading_depth="Reading", reading_score=60.0, reading_confidence=80.0,
+        verified_pages_count=1, verified_pages_json="[3]", total_pages=10,
+        reading_activity="read", analytics_version=2,
+    )
+
+    db.db_migrate_reading_analytics_v3()
+
+    migrated = db.db_get_reading_session("v2-session", "admin")
+    stats = db.db_get_paper_reading_stats("paper", "admin")
+    assert migrated["analytics_version"] == 3
+    assert stats["verified_pages_count"] == 1
+    assert stats["meaningful_pages_count"] == 1
+    assert stats["page_scores"][3] >= 50.0
 
 
 def test_backfill_document_title_preserves_metadata_and_snapshot(
