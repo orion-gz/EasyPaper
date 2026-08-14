@@ -670,6 +670,19 @@ body.light-theme .lib-detail-panel {
 .folder-card-meta { margin-top:6px; color:var(--text-muted); font-size:12px; }
 .folder-card-menu { position:absolute; top:12px; right:12px; padding:5px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--text-muted); cursor:pointer; }
 .folder-card-menu:hover { color:var(--text-primary); background:var(--bg-surface); }
+.library-grid.compact-view .library-folder-card { min-height:0; padding:12px 13px; border-radius:14px; }
+.library-grid.compact-view .folder-card-icon { margin-bottom:10px; filter:none; }
+.library-grid.compact-view .folder-card-icon svg { width:26px; height:26px; }
+.library-grid.compact-view .folder-card-name { font-size:12.5px; }
+.library-grid.compact-view .folder-card-meta { margin-top:4px; font-size:11px; }
+.library-grid.compact-view .folder-card-menu {
+  top:8px;
+  right:8px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
 .folder-drop-target { outline:2px solid var(--control-accent); background:var(--control-accent-soft)!important; }
 .folder-dialog-label { display:grid; gap:8px; color:var(--text-secondary); font-size:13px; }
 .folder-dialog-input { width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--bg-elevated); color:var(--text-primary); font:inherit; outline:none; }
