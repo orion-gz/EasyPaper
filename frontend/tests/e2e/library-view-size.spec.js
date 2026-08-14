@@ -28,6 +28,7 @@ test('큰 카드, 작은 카드, 리스트 보기를 전환하고 마지막 선�
   await expect(grid.locator('.doc-card-tags')).toBeHidden()
   await expect(grid.locator('.doc-card-meta')).toBeHidden()
   await expect(grid.locator('.lib-card-progress')).toBeVisible()
+  await expect(grid.locator('.lib-card-progress-pct')).toBeHidden()
   await expect.poll(() => page.evaluate(() => localStorage.getItem('easypaper_library_view'))).toBe('compact')
 
   await page.reload()

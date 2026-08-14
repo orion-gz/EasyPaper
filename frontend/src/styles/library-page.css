@@ -290,7 +290,9 @@
 .library-grid.compact-view .lib-card-progress-bar-wrap {
   height: 3px;
 }
-.library-grid.compact-view .lib-card-progress-pct,
+.library-grid.compact-view .lib-card-progress-pct {
+  display: none;
+}
 .library-grid.compact-view .lib-card-progress-done .doc-meta-chip {
   font-size: 10px;
 }
