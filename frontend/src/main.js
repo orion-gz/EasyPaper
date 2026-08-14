@@ -4346,11 +4346,14 @@ if (libTabTrash) {
   })
 }
 
-// 라이브러리 카드/리스트 보기 전환 - 마지막 선택을 기억해 다음 방문에도 유지
-let libraryViewMode = localStorage.getItem('easypaper_library_view') === 'list' ? 'list' : 'card'
+// 라이브러리 큰 카드/작은 카드/리스트 보기 전환 - 마지막 선택을 기억해 다음 방문에도 유지
+const savedLibraryViewMode = localStorage.getItem('easypaper_library_view')
+let libraryViewMode = ['card', 'compact', 'list'].includes(savedLibraryViewMode) ? savedLibraryViewMode : 'card'
 function updateViewToggleUI() {
   document.querySelectorAll('.view-toggle-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === libraryViewMode)
+    const isActive = btn.dataset.view === libraryViewMode
+    btn.classList.toggle('active', isActive)
+    btn.setAttribute('aria-pressed', String(isActive))
   })
 }
 document.querySelectorAll('.view-toggle-btn').forEach(btn => {
@@ -6987,6 +6990,7 @@ function filterLibraryCards(docs) {
   libraryGrid.innerHTML = ''
   libraryGrid.classList.toggle('list-view', libraryViewMode === 'list')
 
+  libraryGrid.classList.toggle('compact-view', libraryViewMode === 'compact')
   // Update filter buttons active class
   document.querySelectorAll('.category-filter-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.category === activeCategoryFilter)
@@ -7034,6 +7038,7 @@ let librarySearchDebounceTimer = null
 function renderLibrarySearchResults(docs, query) {
   libraryGrid.innerHTML = ''
   libraryGrid.classList.toggle('list-view', libraryViewMode === 'list')
+  libraryGrid.classList.toggle('compact-view', libraryViewMode === 'compact')
 
   if (docs.length === 0) {
     const el = document.createElement('div')

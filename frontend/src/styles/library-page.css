@@ -215,6 +215,74 @@
   font-size: 11.5px;
 }
 
+/* ── 작은 카드 보기 ──
+   제목과 읽기 진행 상태는 유지하고 태그/등록일/페이지 수처럼 탐색에 덜 중요한
+   정보는 숨긴다. 카드 액션은 축소된 푸터에 그대로 남겨 기능 손실을 막는다. */
+.library-grid.compact-view {
+  grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
+  gap: 12px;
+}
+.library-grid.compact-view .doc-card {
+  border-radius: 14px;
+}
+.library-grid.compact-view .doc-card-zone {
+  padding: 12px 13px 9px;
+  gap: 7px;
+}
+.library-grid.compact-view .lib-card-top {
+  gap: 9px;
+}
+.library-grid.compact-view .lib-card-thumb {
+  width: 38px;
+  height: 50px;
+}
+.library-grid.compact-view .lib-card-top-body .doc-card-title {
+  padding-right: 22px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.library-grid.compact-view .doc-card-tags,
+.library-grid.compact-view .doc-card-meta {
+  display: none;
+}
+.library-grid.compact-view .lib-card-progress {
+  gap: 6px;
+}
+.library-grid.compact-view .lib-card-progress-bar-wrap {
+  height: 3px;
+}
+.library-grid.compact-view .lib-card-progress-pct,
+.library-grid.compact-view .lib-card-progress-done .doc-meta-chip {
+  font-size: 10px;
+}
+.library-grid.compact-view .doc-card-footer {
+  padding: 0 13px 11px;
+  gap: 6px;
+}
+.library-grid.compact-view .doc-open-btn,
+.library-grid.compact-view .doc-restore-btn {
+  min-height: 28px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  font-size: 11.5px;
+}
+.library-grid.compact-view .doc-edit-btn,
+.library-grid.compact-view .doc-permanent-delete-btn,
+.library-grid.compact-view .doc-card-kebab-btn {
+  width: 26px;
+  height: 26px;
+}
+.library-grid.compact-view .doc-card-zone-actions {
+  top: 8px;
+  right: 8px;
+}
+
+@media (max-width: 640px) {
+  .library-grid.compact-view {
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+  }
+}
+
 /* ============================================================
    상세 패널 (우측 드로어) — 카드를 클릭하면 열리며, 표지/제목/저자,
    "논문 열기" 버튼, 개요(AI 요약+기본 정보+태그)/메모/AI 대화/관련 자료 탭을 보여준다.
