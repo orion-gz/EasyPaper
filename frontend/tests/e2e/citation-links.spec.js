@@ -88,7 +88,7 @@ test('원문 링크를 찾지 못하면 안내 문구가 뜨고, Google Scholar 
     page.click('.citation-tooltip-scholar-btn'),
   ])
   await popup.waitForLoadState('domcontentloaded')
-  expect(decodeURIComponent(popup.url())).toBe('https://scholar.google.com/scholar?q=Vaswani et al. Attention Is All You Need. 2017.')
+  expect(decodeURIComponent(popup.url())).toBe('https://scholar.google.com/scholar?q="Attention Is All You Need"')
 })
 
 test('인용 표기가 아닌 다른 곳을 클릭하면(예: 스크롤) 열려 있던 툴팁이 닫힌다', async ({ page }) => {
@@ -111,4 +111,33 @@ test('인용 표기가 아닌 다른 곳을 클릭하면(예: 스크롤) 열려 
 
   await page.evaluate(() => document.querySelector('#viewer-scroll-container')?.dispatchEvent(new Event('scroll', { bubbles: true })))
   await expect(page.locator('.citation-tooltip')).toHaveClass(/hidden/)
+})
+
+test('참고문헌이 길어 툴팁 내부를 스크롤해도 툴팁이 닫히지 않는다', async ({ page }) => {
+  const docC = { id: 'doc-C', filename: 'Citation.pdf', total_pages: 1, metadata: { title: 'Citation Sample Paper' }, translated_pages: [] }
+  await mockBaseRoutes(page, { documents: [docC] })
+  await page.route('**/api/library/doc-C/pdf', route =>
+    route.fulfill({ status: 200, contentType: 'application/pdf', body: SAMPLE_PDF_CITATION }))
+  await page.route('**/api/library/doc-C/references', route =>
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ references: { '1': 'Vaswani et al. ' + 'A long citation entry '.repeat(80) + ' Attention Is All You Need. 2017.' } }),
+    }))
+
+  await gotoApp(page)
+  await page.evaluate(() => { location.hash = '#viewer?id=doc-C' })
+  await page.waitForTimeout(1500)
+
+  await page.locator('.citation-marker-box').first().dispatchEvent('mouseenter')
+  const tooltip = page.locator('.citation-tooltip')
+  await expect(tooltip).not.toHaveClass(/hidden/)
+  await expect.poll(() => tooltip.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true)
+
+  await tooltip.evaluate(el => {
+    el.scrollTop = 100
+    el.dispatchEvent(new Event('scroll'))
+  })
+
+  await expect(tooltip).not.toHaveClass(/hidden/)
+  await expect.poll(() => tooltip.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
 })
