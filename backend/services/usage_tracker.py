@@ -7,7 +7,7 @@ Antigravity CLI 사용량 트래킹
 
 import os
 import sqlite3
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 
 # DB_PATH 환경변수가 있으면 그대로 쓰고(Docker/데스크탑 앱 등에서 데이터 볼륨/
@@ -44,7 +44,7 @@ def init_usage_table():
 
 def record_call(call_type: str = "translate"):
     """agy 호출 한 건 기록"""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     day = now.strftime("%Y-%m-%d")
     week = now.strftime("%Y-W%W")
     month = now.strftime("%Y-%m")
@@ -123,7 +123,7 @@ def _get_antigravity_cloud_quota(retry=True) -> dict:
             daily_pct = round((1.0 - min_fraction) * 100, 1)
 
             # Get database totals for this week/month/total as context
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             this_week = now.strftime("%Y-W%W")
             this_month = now.strftime("%Y-%m")
             try:
@@ -186,7 +186,7 @@ def get_usage_stats() -> dict:
         return real_stats
 
     # Fallback to local DB stats
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     today = now.strftime("%Y-%m-%d")
     this_week = now.strftime("%Y-W%W")
     this_month = now.strftime("%Y-%m")
