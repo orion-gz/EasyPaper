@@ -575,11 +575,41 @@ def db_search_documents(username: str, query: str, only_trash: bool = False) -> 
 
 
 def db_delete_document(doc_id: str) -> bool:
+    # documents FK들은 전부 ON DELETE CASCADE로 선언돼 있지만, SQLite는
+    # 커넥션마다 PRAGMA foreign_keys=ON을 켜야 실제로 CASCADE가 동작하는데
+    # 이 프로젝트는 그 PRAGMA를 켜지 않는다(update_user_credentials 참고).
+    # 그래서 documents 삭제만으로는 연관 레코드가 전혀 지워지지 않아
+    # translations/chats/... 가 고아로 영구히 남는다. 여기서 명시적으로
+    # 정리한다. reading_time/reading_sessions/compare_sessions은 "삭제된
+    # 논문도 제목/기록을 보존해서 보여준다"는 의도된 설계라 대상에서
+    # 제외한다(reading_time.doc_title 컬럼 참고). concepts/concept_edges는
+    # 문서가 아니라 개념 간 전역 관계라 문서 삭제와 무관하다.
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM documents WHERE id = ?", (doc_id,))
         if not cursor.fetchone():
             return False
+
+        cursor.execute("SELECT id FROM chats WHERE doc_id = ?", (doc_id,))
+        chat_ids = [row["id"] for row in cursor.fetchall()]
+        if chat_ids:
+            placeholders = ",".join("?" for _ in chat_ids)
+            cursor.execute(
+                f"DELETE FROM question_concepts WHERE chat_id IN ({placeholders})",
+                chat_ids,
+            )
+
+        cursor.execute("DELETE FROM question_papers WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM paper_concepts WHERE doc_id = ?", (doc_id,))
+        cursor.execute(
+            "DELETE FROM paper_edges WHERE doc_id_a = ? OR doc_id_b = ?",
+            (doc_id, doc_id),
+        )
+        cursor.execute("DELETE FROM annotations WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM memos WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM page_insights WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM translations WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM chats WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
         cursor.execute("DELETE FROM document_folders WHERE doc_id = ?", (doc_id,))
         conn.commit()
