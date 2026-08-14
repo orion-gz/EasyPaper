@@ -3,11 +3,69 @@
 // 옮겨온 것이다. 원래는 main.js 안에 있었는데, 읽기 전 브리핑(primer)
 // 텍스트도 같은 서식(LLM이 **볼드**나 $...$ 수식을 섞어 반환)을 쓰는
 // Notes 요약 탭에서도 그대로 재사용하려고 별도 모듈로 뺐다.
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+
 const INDENT_MARK = String.fromCharCode(0xE000)
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+/** Markdown과 LaTeX를 안전하게 렌더링한다. */
+export function formatMarkdownLatexHtml(text, options = {}) {
+  if (!text) return ''
+
+  const mathBlocks = []
+  let source = String(text)
+    .replace(/\$\$([\s\S]*?)\$\$/g, (_, formula) => {
+      const id = mathBlocks.push({ formula: formula.trim(), display: true }) - 1
+      return `EASYPAPERMATHBLOCK${id}END`
+    })
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, formula) => {
+      const id = mathBlocks.push({ formula: formula.trim(), display: true }) - 1
+      return `EASYPAPERMATHBLOCK${id}END`
+    })
+    .replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (_, formula) => {
+      const id = mathBlocks.push({ formula: formula.trim(), display: false }) - 1
+      return `EASYPAPERMATHBLOCK${id}END`
+    })
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, formula) => {
+      const id = mathBlocks.push({ formula: formula.trim(), display: false }) - 1
+      return `EASYPAPERMATHBLOCK${id}END`
+    })
+
+  source = source.replace(/\\+\*\*/g, '**').replace(/\\+__/g, '__')
+  let html = marked.parse(source)
+  const sanitize = options.sanitize || (value => {
+    if (typeof DOMPurify.sanitize === 'function') return DOMPurify.sanitize(value)
+    return escapeHtml(value)
+  })
+  html = sanitize(html)
+
+  const katex = options.katex === undefined ? globalThis.window?.katex : options.katex
+  return html.replace(/EASYPAPERMATHBLOCK(\d+)END/g, (placeholder, idText) => {
+    const item = mathBlocks[Number(idText)]
+    if (!item) return placeholder
+    const encodedFormula = encodeURIComponent(item.formula)
+    if (katex) {
+      try {
+        const rendered = katex.renderToString(item.formula, {
+          displayMode: item.display,
+          throwOnError: false,
+          output: 'htmlAndMathml',
+        })
+        const tag = item.display ? 'div' : 'span'
+        const className = item.display ? 'katex-display-wrap' : 'katex-inline-wrap'
+        return `<${tag} class="${className}" data-formula="${encodedFormula}" data-display="${item.display}">${rendered}</${tag}>`
+      } catch {
+        return `<code class="math-error" data-formula="${encodedFormula}" data-display="${item.display}">${escapeHtml(item.formula)}</code>`
+      }
+    }
+    const delimiter = item.display ? '$$' : '$'
+    return `<code class="math-pending" data-formula="${encodedFormula}" data-display="${item.display}">${escapeHtml(delimiter + item.formula + delimiter)}</code>`
+  })
 }
 
 export function formatTranslationHtml(text) {

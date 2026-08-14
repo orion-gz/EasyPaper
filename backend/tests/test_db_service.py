@@ -1,5 +1,7 @@
 """services/db.py CRUD 및 app_meta 테스트 (격리된 임시 DB 사용)."""
 
+import json
+
 
 def test_document_crud_round_trip(isolated_dirs):
     db = isolated_dirs["db"]
@@ -11,6 +13,30 @@ def test_document_crud_round_trip(isolated_dirs):
     assert fetched["metadata"]["title"] == "T"
 
     assert db.db_get_document("nonexistent") is None
+
+
+def test_patch_document_metadata_preserves_unrelated_fields(isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_save_document(
+        "doc-patch",
+        "admin",
+        "paper.pdf",
+        "/x/paper.pdf",
+        10,
+        {"title": "Original", "bibliography": {"doi": "old"}, "read": True},
+    )
+
+    updated = db.db_patch_document_metadata(
+        "doc-patch", {"title": "Renamed"}, ("bibliography",),
+    )
+    assert updated == {"title": "Renamed", "read": True}
+
+    # A later background update must merge into the current metadata instead of
+    # restoring the title snapshot it started with.
+    db.db_patch_document_metadata("doc-patch", {"graph_synced_at": "now"})
+    assert db.db_get_document("doc-patch")["metadata"] == {
+        "title": "Renamed", "read": True, "graph_synced_at": "now",
+    }
 
 
 def test_list_documents_filters_by_username(isolated_dirs):
@@ -59,6 +85,63 @@ def test_update_user_credentials_propagates_username_to_documents(isolated_dirs)
         "예전 아이디로는 더 이상 문서가 조회되지 않아야 한다"
 
 
+def test_update_user_credentials_propagates_username_to_user_data(isolated_dirs):
+    """아이디 변경 시 사용자별 리딩/비교 데이터도 함께 이전한다."""
+    db = isolated_dirs["db"]
+    now = "2026-08-09T00:00:00+00:00"
+
+    with db.get_db() as conn:
+        conn.execute(
+            """INSERT INTO reading_time
+               (doc_id, username, day, category, seconds, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            ("doc-1", "admin", "2026-08-09", "reading", 120, now),
+        )
+        conn.execute(
+            """INSERT INTO reading_sessions
+               (id, username, paper_id, started_at, active_reading_time,
+                created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            ("session-1", "admin", "doc-1", now, 120, now, now),
+        )
+        conn.execute(
+            """INSERT INTO user_reading_profiles
+               (username, ema_seconds_per_page, session_count, updated_at)
+               VALUES (?, ?, ?, ?)""",
+            ("admin", 300.0, 1, now),
+        )
+        conn.execute(
+            """INSERT INTO compare_sessions
+               (id, username, doc_ids, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            ("compare-1", "admin", '["doc-1", "doc-2"]', now, now),
+        )
+        conn.execute(
+            """INSERT INTO folders
+               (id, username, name, color, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            ("folder-1", "admin", "읽을 논문", "#64748b", now, now),
+        )
+        conn.commit()
+
+    assert db.update_user_credentials("admin", "newname", "newhash:abcd") is True
+
+    with db.get_db() as conn:
+        for table in (
+            "reading_time",
+            "reading_sessions",
+            "user_reading_profiles",
+            "compare_sessions",
+            "folders",
+        ):
+            assert conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE username = ?", ("newname",)
+            ).fetchone()[0] == 1
+            assert conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE username = ?", ("admin",)
+            ).fetchone()[0] == 0
+
+
 def test_update_user_credentials_same_username_is_noop_for_documents(isolated_dirs):
     """비밀번호만 바꾸고 아이디는 그대로인 경우, 불필요한 UPDATE가 안전하게 스킵된다."""
     db = isolated_dirs["db"]
@@ -78,6 +161,56 @@ def test_app_meta_get_set_round_trip(isolated_dirs):
     # 같은 키를 다시 쓰면 덮어써야 한다 (INSERT가 아니라 upsert)
     db.db_set_meta("some_key", "value2")
     assert db.db_get_meta("some_key") == "value2"
+
+
+def test_delete_folder_removes_nested_folders_and_keeps_their_documents(isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_create_folder("parent", "admin", "Parent", None, "#64748b")
+    db.db_create_folder("child", "admin", "Child", "parent", "#64748b")
+    db.db_create_folder("grandchild", "admin", "Grandchild", "child", "#64748b")
+    db.db_create_folder("sibling", "admin", "Sibling", None, "#64748b")
+    db.db_save_document("nested-doc", "admin", "nested.pdf", "/x", 1, {})
+    db.db_move_documents_to_folder(["nested-doc"], "admin", "grandchild")
+
+    assert db.db_delete_folder("parent", "admin", delete_papers=False) is True
+
+    assert {folder["id"] for folder in db.db_list_folders("admin")} == {"sibling"}
+    assert db.db_get_document_folder_map("admin")["nested-doc"] is None
+    assert {doc["id"] for doc in db.db_list_documents("admin")} == {"nested-doc"}
+
+
+def test_delete_folder_trashes_documents_in_nested_folders(isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_create_folder("parent", "admin", "Parent", None, "#64748b")
+    db.db_create_folder("child", "admin", "Child", "parent", "#64748b")
+    db.db_save_document("parent-doc", "admin", "parent.pdf", "/x", 1, {})
+    db.db_save_document("child-doc", "admin", "child.pdf", "/x", 1, {})
+    db.db_move_documents_to_folder(["parent-doc"], "admin", "parent")
+    db.db_move_documents_to_folder(["child-doc"], "admin", "child")
+
+    assert db.db_delete_folder("parent", "admin", delete_papers=True) is True
+
+    assert db.db_list_folders("admin") == []
+    assert db.db_list_documents("admin") == []
+    assert {doc["id"] for doc in db.db_list_documents("admin", only_trash=True)} == {
+        "parent-doc",
+        "child-doc",
+    }
+
+
+def test_permanent_document_delete_removes_folder_mapping(isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_create_folder("folder", "admin", "Folder", None, "#64748b")
+    db.db_save_document("doc", "admin", "paper.pdf", "/x", 1, {})
+    db.db_move_documents_to_folder(["doc"], "admin", "folder")
+
+    assert db.db_delete_document("doc") is True
+
+    with db.get_db() as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM document_folders WHERE doc_id = ?",
+            ("doc",),
+        ).fetchone()[0] == 0
 
 
 def test_bulk_translation_rows_groups_by_doc_id(isolated_dirs):
@@ -121,3 +254,68 @@ def test_assistant_chat_sessions_include_document_upload_time(isolated_dirs):
     assert sessions[0]["title"] == "Paper"
     assert sessions[0]["created_at"] == doc["created_at"]
     assert sessions[0]["last_message_at"]
+
+
+def test_reading_analytics_v2_migrates_legacy_sessions(isolated_dirs):
+    db = isolated_dirs["db"]
+    pages = [
+        {"page": page, "activeTime": 1, "scrollCoverage": 0.05, "interaction": {}}
+        for page in range(1, 7)
+    ] + [
+        {
+            "page": page, "activeTime": 600, "scrollCoverage": 0.8,
+            "interaction": {"scroll": 10, "highlight": 1},
+        }
+        for page in range(7, 10)
+    ]
+    db.db_save_reading_session(
+        session_id="legacy", username="admin", paper_id="paper",
+        started_at="2026-08-10T01:00:00+00:00",
+        ended_at="2026-08-10T02:00:00+00:00", active_reading_time=1806,
+        version=1, page_sessions_json=json.dumps(pages),
+        interaction_summary_json=json.dumps({"scroll": 30, "highlight": 3}),
+        reading_depth="Browsing", reading_score=37.9, reading_confidence=42.2,
+        verified_pages_count=3, total_pages=19, reading_activity="browsed",
+        analytics_version=1,
+    )
+
+    db.db_migrate_reading_analytics_v2()
+
+    migrated = db.db_get_reading_session("legacy", "admin")
+    assert migrated["analytics_version"] == 2
+    assert migrated["reading_activity"] == "read"
+    assert migrated["reading_confidence"] >= 90
+    assert migrated["reading_score"] >= 70
+    assert db.db_get_user_reading_profile("admin")["session_count"] == 1
+
+
+def test_backfill_document_title_preserves_metadata_and_snapshot(
+    isolated_dirs, tmp_path, monkeypatch,
+):
+    db = isolated_dirs["db"]
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"placeholder")
+    db.db_save_document(
+        "paper-title", "admin", "uploaded-name.pdf", str(pdf_path), 5,
+        {"last_read_at": "2026-08-10T00:00:00+00:00"},
+    )
+    db.db_add_reading_time("paper-title", "admin", "reading", 10)
+
+    import services.pdf_parser as pdf_parser
+    monkeypatch.setattr(
+        pdf_parser, "get_pdf_metadata",
+        lambda _path: {"title": "Extracted Research Title"},
+    )
+
+    db.db_backfill_document_titles()
+
+    metadata = db.db_get_document("paper-title")["metadata"]
+    assert metadata == {
+        "last_read_at": "2026-08-10T00:00:00+00:00",
+        "title": "Extracted Research Title",
+    }
+    with db.get_db() as conn:
+        snapshot = conn.execute(
+            "SELECT doc_title FROM reading_time WHERE doc_id = ?", ("paper-title",),
+        ).fetchone()["doc_title"]
+    assert snapshot == "Extracted Research Title"

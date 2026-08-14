@@ -7,6 +7,7 @@
 import '../styles/ai-chats.css'
 import { icon } from '../icons.js'
 import { getChatSessionsAPI, getChatHistoryAPI } from '../api.js'
+import { formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
@@ -17,6 +18,7 @@ const PAGE_SIZE = 8
 const RECENT_MS = 24 * 60 * 60 * 1000       // "최근 대화" 기준: 24시간 이내
 const ACTIVE_MS = 7 * 24 * 60 * 60 * 1000   // "활성" 기준: 7일 이내
 const PREVIEW_CONCURRENCY = 6
+let renderGeneration = 0
 
 function formatRelativeTime(isoString) {
   if (!isoString) return '-'
@@ -39,12 +41,6 @@ function formatFullTime(isoString) {
   const date = new Date(isoString)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-function truncate(text, max) {
-  if (!text) return ''
-  const trimmed = text.replace(/\s+/g, ' ').trim()
-  return trimmed.length > max ? trimmed.slice(0, max) + '…' : trimmed
 }
 
 // items를 limit개씩 동시 실행하며 fn(item)을 적용한다 (세션이 많을 때 서버에 한 번에
@@ -70,6 +66,8 @@ async function mapWithConcurrency(items, limit, fn) {
 export async function renderAiChatsPage() {
   const container = document.getElementById('page-chats')
   if (!container) return
+  const generation = ++renderGeneration
+  const isCurrent = () => generation === renderGeneration && container.classList.contains('active')
 
   container.innerHTML = `
     <div class="aic-page">
@@ -177,7 +175,7 @@ export async function renderAiChatsPage() {
     const p = state.previews.get(session.doc_id)
     if (!p) return `<span class="aic-preview-loading">불러오는 중...</span>`
     if (p.error || !p.text) return `<span class="aic-preview-empty">-</span>`
-    return escapeHtml(truncate(p.text, 72))
+    return formatMarkdownLatexHtml(p.text)
   }
 
   function actionsHtml(session) {
@@ -227,7 +225,7 @@ export async function renderAiChatsPage() {
                     <div class="aic-paper-title" title="${escapeHtml(session.title)}">${escapeHtml(session.title)}</div>
                   </div>
                 </td>
-                <td class="aic-col-message"><span class="aic-preview" data-preview-doc="${escapeHtml(session.doc_id)}">${previewCellHtml(session)}</span></td>
+                <td class="aic-col-message"><div class="aic-preview" data-preview-doc="${escapeHtml(session.doc_id)}">${previewCellHtml(session)}</div></td>
                 <td class="aic-col-updated" title="${escapeHtml(formatFullTime(session.last_message_at))}">${formatRelativeTime(session.last_message_at)}</td>
                 <td class="aic-col-actions"><div class="aic-actions">${actionsHtml(session)}</div></td>
               </tr>
@@ -302,6 +300,7 @@ export async function renderAiChatsPage() {
 
     bodyEl.innerHTML = state.viewMode === 'table' ? renderTable(pageItems) : renderCards(pageItems)
     bindActionButtons(bodyEl)
+    applyKatexToElement(bodyEl)
   }
 
   function renderPagination() {
@@ -353,6 +352,7 @@ export async function renderAiChatsPage() {
   function updatePreviewInDom(docId) {
     container.querySelectorAll(`[data-preview-doc="${CSS.escape(docId)}"]`).forEach(el => {
       el.innerHTML = previewCellHtml({ doc_id: docId })
+      applyKatexToElement(el)
     })
   }
 
@@ -360,10 +360,12 @@ export async function renderAiChatsPage() {
     await mapWithConcurrency(sessions, PREVIEW_CONCURRENCY, async (session) => {
       try {
         const data = await getChatHistoryAPI(session.doc_id)
+        if (!isCurrent()) return
         const history = data.history || []
         const last = history.length ? history[history.length - 1] : null
         state.previews.set(session.doc_id, { text: last ? last.content : '', error: false })
       } catch {
+        if (!isCurrent()) return
         state.previews.set(session.doc_id, { text: '', error: true })
       }
       updatePreviewInDom(session.doc_id)
@@ -377,6 +379,7 @@ export async function renderAiChatsPage() {
     renderPagination()
     try {
       const data = await getChatSessionsAPI()
+      if (!isCurrent()) return
       state.sessions = data.sessions || []
       state.loading = false
       renderTabs()
@@ -386,6 +389,7 @@ export async function renderAiChatsPage() {
       // 표시된 행의 미리보기 텍스트만 점진적으로 채워 넣는다.
       loadPreviews(state.sessions)
     } catch (err) {
+      if (!isCurrent()) return
       console.error('AI 채팅 세션 목록 로드 실패:', err)
       state.loading = false
       state.loadError = err

@@ -14,9 +14,9 @@ export const SAMPLE_PDF_CITATION = fs.readFileSync(path.join(__dirname, 'fixture
  * page.route()를 추가로 덮어써서 시나리오별 응답을 얹는다.
  *
  * @param {import('@playwright/test').Page} page
- * @param {object} [overrides] - { documents, onRoute } 등 확장 옵션
+ * @param {object} [overrides] - { documents, folders } 등 확장 옵션
  */
-export async function mockBaseRoutes(page, { documents = [] } = {}) {
+export async function mockBaseRoutes(page, { documents = [], folders = [] } = {}) {
   await page.route('**/api/**', async route => {
     const url = route.request().url()
 
@@ -28,7 +28,9 @@ export async function mockBaseRoutes(page, { documents = [] } = {}) {
         status: 200, contentType: 'application/json',
         body: JSON.stringify({
           ollama_host: 'http://localhost:11434', available_models: [],
+          default_ai_provider: 'ollama', default_ai_model: '',
           trans_provider: 'ollama', trans_model: '', chat_provider: 'ollama', chat_model: '',
+          analysis_provider: 'ollama', analysis_model: '', library_provider: 'ollama', library_model: '',
           openai_api_key: '', gemini_api_key: '', claude_api_key: '', translation_prompt_template: '',
         }),
       })
@@ -41,6 +43,20 @@ export async function mockBaseRoutes(page, { documents = [] } = {}) {
     }
     if (url.includes('/api/settings/post-update-notice')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ show: false, version: 'test0000', version_date: '2026-01-01', changelog: [] }) })
+    }
+    const emptyLibraryViews = {
+      '/api/library/dashboard': { stats: {}, recent_papers: [] },
+      '/api/library/graph': { nodes: [], edges: [] },
+      '/api/library/timeline': { events: [] },
+      '/api/library/reading-stats': { total_seconds: 0, total_seconds_by_day: {}, paper_stats: [] },
+      '/api/library/reading-analytics-summary': { paper_stats: {} },
+    }
+    const emptyLibraryView = emptyLibraryViews[new URL(url).pathname]
+    if (emptyLibraryView) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(emptyLibraryView) })
+    }
+    if (url.includes('/api/library/folders')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ folders }) })
     }
     if (url.includes('/api/library/trash')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ documents: [], total: 0 }) })
@@ -68,9 +84,17 @@ export async function mockBaseRoutes(page, { documents = [] } = {}) {
 }
 
 /** 로그인 상태로 앱을 열고(온보딩은 건너뜀) 라이브러리 화면이 뜰 때까지 기다린다. */
-export async function gotoApp(page) {
+export async function gotoApp(page, { navigateToLibrary = true } = {}) {
   await page.goto('/index.html')
-  await page.evaluate(() => localStorage.setItem('easypaper_onboarding_seen', '1'))
+  await page.evaluate(() => {
+    localStorage.setItem('easypaper_onboarding_seen', '1')
+    localStorage.setItem('easypaper_disable_primer', 'true')
+  })
   await page.reload()
-  await page.waitForTimeout(600)
+  if (navigateToLibrary) {
+    const libraryNav = page.locator('.sidebar-nav-item[data-page="library"]')
+    await libraryNav.waitFor({ state: 'visible' })
+    await libraryNav.click()
+    await page.locator('#library-screen.active').waitFor()
+  }
 }

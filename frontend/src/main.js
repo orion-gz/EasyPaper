@@ -4,17 +4,16 @@ import './styles/library-page.css'
 import './styles/research-graph.css'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, checkForUpdateAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { icon } from './icons.js'
-import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
-import { renderDashboardPage } from './pages/dashboardPage.js'
-import { renderReadingHistoryPage } from './pages/readingHistoryPage.js'
-import { renderAiChatsPage } from './pages/aiChatsPage.js'
-import { renderNotesPage } from './pages/notesPage.js'
 import { formatTranslationHtml, applyKatexToElement } from './textFormat.js'
+import { createSelectionRect, resolveDragSelection } from './library-selection.js'
 import { globalAnalyticsTracker } from './readingAnalytics.js'
+import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
+import { compareDocsByLastRead } from './readPages.js'
+import { buildScholarSearchUrl, extractCitationTitle } from './citationSearch.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -33,6 +32,9 @@ window.fetch = async function (...args) {
 }
 
 // ── 상태 ──────────────────────────────────────────
+const COMPARE_MIN_DOCS = 2
+const COMPARE_MAX_DOCS = 5
+
 const state = {
   currentLibraryTab: 'archive', // 'archive'(보관함) / 'trash'(휴지통) - Library 페이지 내부 상태
   previousLibraryTab: 'archive', // 휴지통 진입 전 이전 탭 기억용
@@ -102,16 +104,41 @@ const $ = (id) => document.getElementById(id)
 // 트랜지션 없이 그냥 툭 튀어나오거나 사라지는 깜빡임이 생긴다. display 전환과
 // opacity/transform 전환을 두 단계(reflow 강제 → 다음 프레임에 클래스 적용)로
 // 분리해 트랜지션이 실제로 재생되게 한다.
+const modalTriggerElements = new WeakMap()
+const modalFocusableSelector = [
+  '[autofocus]',
+  'button:not([disabled])',
+  'a[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',')
+
 function openOverlayModal(modal) {
   if (!modal) return
+  const trigger = document.activeElement
+  if (trigger instanceof HTMLElement && trigger !== document.body) {
+    modalTriggerElements.set(modal, trigger)
+  }
   modal.classList.remove('hidden')
   void modal.offsetWidth // 강제 리플로우: display:none 해제를 먼저 확정시킨다
   modal.classList.add('is-visible')
+  window.requestAnimationFrame(() => {
+    if (!modal.classList.contains('is-visible')) return
+    const focusTarget = modal.querySelector(modalFocusableSelector)
+    if (focusTarget instanceof HTMLElement) focusTarget.focus()
+  })
 }
 function closeOverlayModal(modal) {
   if (!modal) return
   modal.classList.remove('is-visible')
-  window.setTimeout(() => { modal.classList.add('hidden') }, 300) // CSS 트랜지션(0.3s) 종료 후 display:none
+  window.setTimeout(() => {
+    modal.classList.add('hidden')
+    const trigger = modalTriggerElements.get(modal)
+    if (trigger?.isConnected) trigger.focus()
+    modalTriggerElements.delete(modal)
+  }, 300) // CSS 트랜지션(0.3s) 종료 후 display:none
 }
 const loginScreen       = $('login-screen')
 const loginForm         = $('login-form')
@@ -130,33 +157,23 @@ const changeNewPassword     = $('change-new-password')
 const changeNewPasswordConfirm = $('change-new-password-confirm')
 const settingSkipLoginCheckbox = $('setting-skip-login-checkbox')
 
-// 첫 실행 온보딩 모달
-const onboardingModal        = $('onboarding-modal')
-const onboardingCloseBtn     = $('onboarding-close-btn')
-const onboardingSkipBtn      = $('onboarding-skip-btn')
-const onboardingDetecting    = $('onboarding-detecting')
-const onboardingDetected     = $('onboarding-detected')
-const onboardingDetectedList = $('onboarding-detected-list')
-const onboardingNextBtn      = $('onboarding-next-btn')
-const onboardingModelSelect  = $('onboarding-model-select')
-const onboardingBackBtn      = $('onboarding-back-btn')
-const onboardingModelSelectProvider = $('onboarding-model-select-provider')
-const onboardingModelList    = $('onboarding-model-list')
-const onboardingModelPullSection    = $('onboarding-model-pull-section')
-const onboardingConfirmBtn   = $('onboarding-confirm-btn')
-const onboardingInstall      = $('onboarding-install')
-const onboardingInstallIntro = $('onboarding-install-intro')
-const onboardingInstallOllamaBtn     = $('onboarding-install-ollama-btn')
-const onboardingInstallClaudeCodeBtn = $('onboarding-install-claude-code-btn')
-const onboardingInstallCodexBtn      = $('onboarding-install-codex-btn')
-const onboardingInstallAntigravityBtn = $('onboarding-install-antigravity-btn')
-const onboardingInstallProgressArea  = $('onboarding-install-progress-area')
-const onboardingInstallStatus        = $('onboarding-install-status')
-const onboardingInstallLog           = $('onboarding-install-log')
-const onboardingPullProgressArea     = $('onboarding-pull-progress-area')
-const onboardingPullStatusText       = $('onboarding-pull-status-text')
-const onboardingPullPctText          = $('onboarding-pull-pct-text')
-const onboardingPullProgressBar      = $('onboarding-pull-progress-bar')
+// 첫 실행 온보딩은 완료하지 않은 사용자에게만 별도 청크로 로드한다.
+const ONBOARDING_SEEN_KEY = 'easypaper_onboarding_seen'
+let onboardingController = null
+
+async function maybeShowOnboarding() {
+  if (localStorage.getItem(ONBOARDING_SEEN_KEY) === '1') return
+  if (!onboardingController) {
+    const { createOnboarding } = await import('./onboarding.js')
+    onboardingController = createOnboarding({
+      openOverlayModal, closeOverlayModal, showToast, escapeHtml,
+      providerConfig: PROVIDER_CONFIG,
+      viewerTransPicker, settingDefaultAiPicker, settingTransPicker,
+      chatSidebarPicker, settingChatPicker, settingAnalysisPicker, settingLibraryPicker,
+    })
+  }
+  onboardingController.maybeShowOnboarding()
+}
 
 // 탭 버튼 및 컨텐츠 영역
 const tabBtns           = document.querySelectorAll('.tab-btn')
@@ -178,6 +195,8 @@ const settingDisableCitationOverlay = $('setting-disable-citation-overlay')
 const settingDisableFigureOverlay = $('setting-disable-figure-overlay')
 const settingDisablePrimer = $('setting-disable-primer')
 const settingToolbarAutoHide = $('setting-toolbar-autohide')
+const settingAutoGenerateKeywords = $('setting-auto-generate-keywords')
+const settingAutoGenerateSummaries = $('setting-auto-generate-summaries')
 const viewerTopbar = $('viewer-topbar')
 const clearCacheBtn       = $('clear-cache-btn')
 const clearPagesCacheBtn  = $('clear-pages-cache-btn')
@@ -191,7 +210,10 @@ const settingOpenAIKey     = $('setting-openai-key')
 const settingGeminiKey     = $('setting-gemini-key')
 const settingClaudeKey     = $('setting-claude-key')
 const settingOpenAlexMailto = $('setting-openalex-mailto')
-const settingChatSameAsTrans = $('setting-chat-same-as-trans')
+const settingTransSameAsDefault = $('setting-trans-same-as-default')
+const settingAnalysisSameAsDefault = $('setting-analysis-same-as-default')
+const settingChatSameAsDefault = $('setting-chat-same-as-default')
+const settingLibrarySameAsDefault = $('setting-library-same-as-default')
 
 // (provider/model selects are now custom ProviderModelPicker instances – see below)
 
@@ -216,6 +238,7 @@ const fileInput         = $('file-input')
 const libUploadBtn      = $('lib-upload-btn')
 const libraryGrid       = $('library-grid')
 const libraryCategoryFilters = $('library-category-filters')
+const libraryCategoryFilterToggle = $('library-category-filter-toggle')
 const librarySearchInput = $('library-search-input')
 const librarySearchClearBtn = $('library-search-clear-btn')
 const librarySearchStatus = $('library-search-status')
@@ -383,6 +406,14 @@ function getTranslationOptions() {
   }
 }
 
+function getKeywordMode() {
+  return localStorage.getItem('easypaper_keyword_mode') || 'manual'
+}
+
+function getSummaryMode() {
+  return localStorage.getItem('easypaper_summary_mode') || 'manual'
+}
+
 // 툴바 위치: 'top'(기본) / 'bottom' / 'left' / 'right'. body에 클래스로
 // 반영하고, 나머지는 전부 CSS(.toolbar-pos-*)가 처리한다 - 위치별로
 // .topbar/.panels/.outline-sidebar/.floating-scroll-nav 등의 레이아웃이
@@ -495,18 +526,19 @@ if (libraryScreen) {
   libraryScreen.addEventListener('drop', (e) => {
     e.preventDefault(); libraryScreen.classList.remove('drag-over')
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files)
+      handleFiles(e.dataTransfer.files, activeLibraryFolderId)
     }
   })
 }
 fileInput.addEventListener('change', (e) => {
   if (e.target.files && e.target.files.length > 0) {
-    handleFiles(e.target.files)
+    const targetFolderId = state.currentWorkspacePage === 'library' ? activeLibraryFolderId : null
+    handleFiles(e.target.files, targetFolderId)
   }
 })
 
 // ── 파일 처리 ─────────────────────────────────────
-async function handleFiles(files) {
+async function handleFiles(files, targetFolderId = null) {
   const pdfFiles = Array.from(files).filter(file => file.name.toLowerCase().endsWith('.pdf'))
   
   if (pdfFiles.length === 0) {
@@ -537,7 +569,12 @@ async function handleFiles(files) {
     uploadItemSuccessIcon.classList.add('hidden')
 
     try {
-      const result = await uploadPDF(file, { ...getTranslationOptions(), translationMode: getTranslationMode() }, (pct) => {
+      const result = await uploadPDF(file, {
+        ...getTranslationOptions(),
+        translationMode: getTranslationMode(),
+        keywordMode: getKeywordMode(),
+        summaryMode: getSummaryMode()
+      }, (pct) => {
         uploadItemProgressBar.style.width = `${pct}%`
         uploadItemStatus.textContent = `업로드 중... ${pct}%`
       })
@@ -550,6 +587,7 @@ async function handleFiles(files) {
       lastTotalPages = result.total_pages
       lastTitle = (result.metadata && result.metadata.title) ? result.metadata.title : result.filename
       successCount++
+      if (targetFolderId) await moveLibraryDocuments([result.session_id], targetFolderId)
 
       if (isLibraryActive) {
         await renderLibrary()
@@ -653,6 +691,7 @@ async function initScrollViewer() {
   viewerScrollContainer.innerHTML = ''
 
   if (state.sessionId) {
+    readingTimeActivityTracker.reset('reading')
     globalAnalyticsTracker.startSession(state.sessionId, state.totalPages || 0)
   }
 
@@ -662,9 +701,19 @@ async function initScrollViewer() {
     viewerScrollContainer.addEventListener('scroll', () => {
       if (state.currentPage) {
         const curPageEl = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${state.currentPage}"]`)
-        globalAnalyticsTracker.trackScroll(state.currentPage, curPageEl, viewerScrollContainer, true)
+        globalAnalyticsTracker.trackScroll(state.currentPage, curPageEl, viewerScrollContainer, true, false)
       }
     }, { passive: true })
+
+    let lastAnalyticsScrollInteractionAt = 0
+    const trackUserScrollInteraction = () => {
+      const now = Date.now()
+      if (now - lastAnalyticsScrollInteractionAt < 1000 || !state.currentPage) return
+      lastAnalyticsScrollInteractionAt = now
+      globalAnalyticsTracker.trackInteraction('scroll', state.currentPage)
+    }
+    viewerScrollContainer.addEventListener('wheel', trackUserScrollInteraction, { passive: true })
+    viewerScrollContainer.addEventListener('touchmove', trackUserScrollInteraction, { passive: true })
 
     viewerScrollContainer.addEventListener('mouseup', () => {
       const sel = window.getSelection()
@@ -1647,9 +1696,10 @@ if (docTitleEditBtn) {
       const newTitle = input.value.trim()
       if (newTitle && newTitle !== oldTitle) {
         try {
-          await updateLibraryDocMetadata(state.sessionId, { title: newTitle })
+          await updateLibraryDocTitle(state.sessionId, newTitle)
           state.title = newTitle
           docTitle.textContent = newTitle
+          state.currentDocMetadata.title = newTitle
           showToast('제목이 변경되었습니다.', 'success')
         } catch (err) {
           showToast('제목 변경 실패: ' + err.message, 'error')
@@ -1738,7 +1788,7 @@ async function checkAuthentication() {
       await showLibraryScreen()
     }
     await refreshSystemSettings()
-    maybeShowOnboarding()
+    await maybeShowOnboarding()
     // 업데이트 직후(방금 재시작됨) 안내가 있으면 그것부터 먼저 보여주고, 없을
     // 때만 "새 업데이트가 있는지" 확인 - 두 팝업이 동시에 겹쳐 뜨지 않도록 함.
     // git pull 기반이라 git 저장소 없이 배포되는 Tauri 데스크탑 빌드에서는
@@ -1814,6 +1864,10 @@ const PROVIDER_CONFIG = [
   {
     id: 'antigravity', label: 'Antigravity', icon: icon('zap', 13),
     models: [
+      // Gemini 3.7 Flash
+      { value: 'Gemini 3.7 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.7 Flash' },
+      { value: 'Gemini 3.7 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.7 Flash' },
+      { value: 'Gemini 3.7 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.7 Flash' },
       // Gemini 3.6 Flash
       { value: 'Gemini 3.6 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.6 Flash' },
       { value: 'Gemini 3.6 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.6 Flash' },
@@ -2221,7 +2275,7 @@ class ProviderModelPicker {
   }
 }
 
-// Instantiate the 4 provider pickers
+// 뷰어용 2개와 설정 화면용 계층형 모델 선택기를 초기화한다.
 const viewerTransPicker = new ProviderModelPicker($('viewer-trans-provider'), {
   compact: true,
   onChange: (provider, model) => changeProviderAndModel('trans', provider, model)
@@ -2342,9 +2396,14 @@ class PdfParserPicker {
   }
 }
 
+const settingDefaultAiPicker = new ProviderModelPicker($('setting-default-ai-provider'), {
+  compact: false,
+  onChange: () => { applyDefaultModelToChildren(); autoSaveSystemSettings() }
+})
+
 const settingTransPicker = new ProviderModelPicker($('setting-trans-provider'), {
   compact: false,
-  onChange: () => { applyChatSameAsTransUI(); autoSaveSystemSettings() }
+  onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
 })
 
 const settingChatPicker = new ProviderModelPicker($('setting-chat-provider'), {
@@ -2352,37 +2411,104 @@ const settingChatPicker = new ProviderModelPicker($('setting-chat-provider'), {
   onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
 })
 
+const settingAnalysisPicker = new ProviderModelPicker($('setting-analysis-provider'), {
+  compact: false,
+  onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
+})
+
+const settingLibraryPicker = new ProviderModelPicker($('setting-library-provider'), {
+  compact: false,
+  onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
+})
+
+// marker와 mineru는 상충하는 transformers 버전이 필요하다. 서버 배포는 venv,
+// Tauri 배포는 앱 데이터의 엔진별 패키지 폴더로 격리한다. Tauri에서는
+// 어떤 엔진 전환도 앱을 재실행해 선택 엔진의 의존성만 로드한다.
+let currentSavedPdfEngine = 'pymupdf'
+
+// autoSaveSystemSettings 결과에 restarting이 담겨 있으면(설정 저장 API가
+// 재시작이 트리거됐음을 알려준 것) 재시작 완료를 기다렸다가 새로고침한다.
+async function maybeHandlePdfEngineRestart(res) {
+  if (!res || !res.restarting) return false
+
+  showToast(res.message || 'PDF 파서 엔진 적용을 위해 재시작합니다...', 'info')
+  if (res.restart_mode === 'desktop_app' && isTauriDesktop) {
+    try {
+      // 앱 종료 이벤트에서 현재 sidecar를 정리한 뒤 새 프로세스를 시작한다.
+      const { relaunch } = await import('@tauri-apps/plugin-process')
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await relaunch()
+      return true
+    } catch (err) {
+      showToast('앱 재시작 실패: ' + (err.message || err), 'error')
+      return false
+    }
+  }
+
+  await waitForServerRestartAndReload()
+  return true
+}
+
 const settingPdfParserPicker = new PdfParserPicker($('setting-pdf-parser-picker'), {
   onChange: async (selectedId) => {
     updateParserCardInfo(selectedId)
     const parser = pdfParsersData.find(p => p.id === selectedId) || PARSER_FALLBACK_META[selectedId]
     // 설치된 파서만 즉시 엔진 변경 저장. 미설치 파서는 카드의 [패키지 설치] 버튼을 눌러야 함.
     if (parser && parser.installed) {
-      await autoSaveSystemSettings({ silent: false })
-      showToast(`PDF 파서 엔진이 [${parser.name}]로 설정되었습니다.`, 'success')
+      const needsRestartWarning = selectedId !== currentSavedPdfEngine &&
+        (isTauriDesktop || selectedId === 'mineru' || currentSavedPdfEngine === 'mineru')
+      if (needsRestartWarning) {
+        const ok = await showCustomConfirm(
+          `[${parser.name}](으)로 전환하면 ${isTauriDesktop ? '앱' : '서버'}이 재시작됩니다(약 3~5초 소요). 지금 진행 중인 번역이 있다면 중단될 수 있습니다. 계속할까요?`,
+          { title: 'PDF 파서 엔진 전환', confirmText: '전환 및 재시작', danger: true }
+        )
+        if (!ok) {
+          settingPdfParserPicker.setParsersData(pdfParsersData, currentSavedPdfEngine)
+          updateParserCardInfo(currentSavedPdfEngine)
+          return
+        }
+      }
+      const res = await autoSaveSystemSettings({ silent: needsRestartWarning })
+      currentSavedPdfEngine = selectedId
+      const restarting = await maybeHandlePdfEngineRestart(res)
+      if (!restarting) showToast(`PDF 파서 엔진이 [${parser.name}]로 설정되었습니다.`, 'success')
     }
   }
 })
 
-// "번역 모델과 동일한 모델 사용" 체크박스: 켜져 있으면 어시스턴트 선택기를
-// 잠그고 번역 모델 값을 그대로 따라가게 한다.
-function applyChatSameAsTransUI() {
-  const chatProviderEl = $('setting-chat-provider')
-  const checked = !!(settingChatSameAsTrans && settingChatSameAsTrans.checked)
+const modelSettingChildren = [
+  { checkbox: settingTransSameAsDefault, picker: settingTransPicker, containerId: 'setting-trans-provider' },
+  { checkbox: settingAnalysisSameAsDefault, picker: settingAnalysisPicker, containerId: 'setting-analysis-provider' },
+  { checkbox: settingChatSameAsDefault, picker: settingChatPicker, containerId: 'setting-chat-provider' },
+  { checkbox: settingLibrarySameAsDefault, picker: settingLibraryPicker, containerId: 'setting-library-provider' },
+]
+
+function applyDefaultModelToChild(child) {
+  const checked = !!(child.checkbox && child.checkbox.checked)
   if (checked) {
-    const { provider, model } = settingTransPicker.getValue()
-    settingChatPicker.setValue(provider, model)
+    const { provider, model } = settingDefaultAiPicker.getValue()
+    child.picker.setValue(provider, model)
   }
-  if (chatProviderEl) {
-    chatProviderEl.style.opacity = checked ? '0.5' : ''
-    chatProviderEl.style.pointerEvents = checked ? 'none' : ''
+  const container = $(child.containerId)
+  if (container) {
+    container.style.opacity = checked ? '0.5' : ''
+    container.style.pointerEvents = checked ? 'none' : ''
   }
+}
+
+function applyDefaultModelToChildren() {
+  modelSettingChildren.forEach(applyDefaultModelToChild)
   updateSettingsUIVisibility()
 }
 
-if (settingChatSameAsTrans) {
-  settingChatSameAsTrans.addEventListener('change', applyChatSameAsTransUI)
-}
+modelSettingChildren.forEach(child => {
+  if (child.checkbox) {
+    child.checkbox.addEventListener('change', () => {
+      applyDefaultModelToChild(child)
+      updateSettingsUIVisibility()
+    })
+  }
+})
 
 const POPULAR_MODELS = {} // kept for backward compat
 
@@ -2433,10 +2559,13 @@ function updateModelDropdown(provider, selectEl, customGroupEl, customInputEl, c
 }
 
 function updateSettingsUIVisibility() {
+  const defaultVal = settingDefaultAiPicker ? settingDefaultAiPicker.getValue() : { provider: 'antigravity' }
   const transVal = settingTransPicker ? settingTransPicker.getValue() : { provider: 'antigravity' }
   const chatVal = settingChatPicker ? settingChatPicker.getValue() : { provider: 'antigravity' }
+  const analysisVal = settingAnalysisPicker ? settingAnalysisPicker.getValue() : chatVal
+  const libraryVal = settingLibraryPicker ? settingLibraryPicker.getValue() : analysisVal
   
-  const providers = new Set([transVal.provider, chatVal.provider])
+  const providers = new Set([defaultVal.provider, transVal.provider, chatVal.provider, analysisVal.provider, libraryVal.provider])
   
   // 1. Ollama 주소 (로컬 AI 사용 시) 표시 여부
   const hostGroup = $('setting-ollama-host-group')
@@ -2512,16 +2641,26 @@ async function refreshSystemSettings() {
     settingClaudeKey.value = sys.claude_api_key || ''
     settingOpenAlexMailto.value = sys.openalex_mailto || ''
     
-    viewerTransPicker.setValue(sys.trans_provider || 'antigravity', sys.trans_model)
+    const defaultProvider = sys.default_ai_provider || sys.trans_provider || 'antigravity'
+    const defaultModel = sys.default_ai_model || sys.trans_model
+    settingDefaultAiPicker.setValue(defaultProvider, defaultModel)
+    viewerTransPicker.setValue(sys.trans_provider || defaultProvider, sys.trans_model || defaultModel)
     settingTransPicker.setValue(sys.trans_provider || 'antigravity', sys.trans_model)
     chatSidebarPicker.setValue(sys.chat_provider || 'antigravity', sys.chat_model)
     settingChatPicker.setValue(sys.chat_provider || 'antigravity', sys.chat_model)
+    settingAnalysisPicker.setValue(sys.analysis_provider || sys.chat_provider || 'antigravity', sys.analysis_model || sys.chat_model)
+    settingLibraryPicker.setValue(
+      sys.library_provider || sys.analysis_provider || sys.chat_provider || 'antigravity',
+      sys.library_model || sys.analysis_model || sys.chat_model
+    )
 
-    if (settingChatSameAsTrans) {
-      settingChatSameAsTrans.checked = !!sys.trans_model &&
-        sys.chat_provider === sys.trans_provider && sys.chat_model === sys.trans_model
-    }
-    applyChatSameAsTransUI()
+    const sameAsDefault = (provider, model) =>
+      !!defaultModel && provider === defaultProvider && model === defaultModel
+    settingTransSameAsDefault.checked = sameAsDefault(sys.trans_provider, sys.trans_model)
+    settingAnalysisSameAsDefault.checked = sameAsDefault(sys.analysis_provider, sys.analysis_model)
+    settingChatSameAsDefault.checked = sameAsDefault(sys.chat_provider, sys.chat_model)
+    settingLibrarySameAsDefault.checked = sameAsDefault(sys.library_provider, sys.library_model)
+    applyDefaultModelToChildren()
 
     const promptTemplate = $('setting-prompt-template')
     if (promptTemplate) {
@@ -2549,24 +2688,28 @@ function renderOllamaInstalledModels() {
     return
   }
 
+  const defaultVal = settingDefaultAiPicker ? settingDefaultAiPicker.getValue() : {}
   const transVal = settingTransPicker ? settingTransPicker.getValue() : {}
   const chatVal = settingChatPicker ? settingChatPicker.getValue() : {}
+  const analysisVal = settingAnalysisPicker ? settingAnalysisPicker.getValue() : {}
+  const libraryVal = settingLibraryPicker ? settingLibraryPicker.getValue() : {}
 
   container.innerHTML = ''
   actualModels.forEach(modelName => {
     const row = document.createElement('div')
     row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12.5px; gap: 8px;'
 
-    const isTransActive = transVal.provider === 'ollama' && transVal.model === modelName
-    const isChatActive = chatVal.provider === 'ollama' && chatVal.model === modelName
-    let inUseBadge = ''
-    if (isTransActive && isChatActive) {
-      inUseBadge = `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(번역/어시스턴트 사용 중)</span>`
-    } else if (isTransActive) {
-      inUseBadge = `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(번역 사용 중)</span>`
-    } else if (isChatActive) {
-      inUseBadge = `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(어시스턴트 사용 중)</span>`
-    }
+    const activeGroups = [
+      ['기본', defaultVal],
+      ['번역', transVal],
+      ['채팅', chatVal],
+      ['분석', analysisVal],
+      ['라이브러리', libraryVal],
+    ].filter(([, value]) => value.provider === 'ollama' && value.model === modelName)
+      .map(([label]) => label)
+    const inUseBadge = activeGroups.length
+      ? `<span style="font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(74, 135, 181, 0.15); color: var(--accent-mid); margin-left: 6px; white-space: nowrap;">(${activeGroups.join('/')} 사용 중)</span>`
+      : ''
 
     const left = document.createElement('div')
     left.style.cssText = 'display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; flex: 1;'
@@ -2662,6 +2805,7 @@ async function refreshPdfParsersUI(savedEngine) {
     const data = await fetchPdfParsersInfoAPI()
     pdfParsersData = data.parsers || []
     const currentEngine = savedEngine || data.current_engine || 'pymupdf'
+    currentSavedPdfEngine = currentEngine
 
     if (typeof settingPdfParserPicker !== 'undefined' && settingPdfParserPicker) {
       settingPdfParserPicker.setParsersData(pdfParsersData, currentEngine)
@@ -2670,6 +2814,7 @@ async function refreshPdfParsersUI(savedEngine) {
     updateParserCardInfo(currentEngine)
   } catch (err) {
     console.warn('PDF 파서 목록 로드 실패:', err)
+    currentSavedPdfEngine = savedEngine || 'pymupdf'
     if (typeof settingPdfParserPicker !== 'undefined' && settingPdfParserPicker) {
       settingPdfParserPicker.setParsersData(Object.values(PARSER_FALLBACK_META), savedEngine || 'pymupdf')
     }
@@ -2800,8 +2945,10 @@ function openPdfParserInstallModal(parser) {
       if (statusText) statusText.innerHTML = succMsg
       if (inlineStatusText) inlineStatusText.innerHTML = succMsg
       if (doneBtn) doneBtn.classList.remove('hidden')
-      await autoSaveSystemSettings({ silent: true })
-      await refreshSystemSettings()
+      const res = await autoSaveSystemSettings({ silent: true })
+      currentSavedPdfEngine = parser.id
+      const restarting = await maybeHandlePdfEngineRestart(res)
+      if (!restarting) await refreshSystemSettings()
     },
     async (err) => {
       const errMsg = `<span style="color: var(--danger, #ef4444); font-weight:600;">✕ 설치 중 오류 발생: ${err.message}</span>`
@@ -2843,31 +2990,41 @@ if (parserInstallDoneBtn) {
 async function changeProviderAndModel(type, newProvider, newModel) {
   try {
     const sys = await getSystemSettingsAPI()
-    // "번역 모델과 동일한 모델 사용"이 켜져 있으면 번역 모델을 바꿀 때
-    // 어시스턴트 모델도 함께 따라가게 한다.
-    const syncChatToTrans = type === 'trans' && !!(settingChatSameAsTrans && settingChatSameAsTrans.checked)
+    const nextTrans = {
+      provider: type === 'trans' ? newProvider : (sys.trans_provider || 'antigravity'),
+      model: type === 'trans' ? newModel : (sys.trans_model || '')
+    }
+    const nextChat = {
+      provider: type === 'chat' ? newProvider : (sys.chat_provider || 'antigravity'),
+      model: type === 'chat' ? newModel : (sys.chat_model || '')
+    }
     const payload = {
       ollama_host: sys.ollama_host || '',
-      trans_provider: type === 'trans' ? newProvider : (sys.trans_provider || 'antigravity'),
-      trans_model: type === 'trans' ? newModel : (sys.trans_model || ''),
-      chat_provider: (type === 'chat' || syncChatToTrans) ? newProvider : (sys.chat_provider || 'antigravity'),
-      chat_model: (type === 'chat' || syncChatToTrans) ? newModel : (sys.chat_model || ''),
+      default_ai_provider: sys.default_ai_provider || sys.trans_provider || 'antigravity',
+      default_ai_model: sys.default_ai_model || sys.trans_model || '',
+      trans_provider: nextTrans.provider,
+      trans_model: nextTrans.model,
+      chat_provider: nextChat.provider,
+      chat_model: nextChat.model,
+      analysis_provider: sys.analysis_provider || sys.chat_provider || 'antigravity',
+      analysis_model: sys.analysis_model || sys.chat_model || '',
+      library_provider: sys.library_provider || sys.analysis_provider || sys.chat_provider || 'antigravity',
+      library_model: sys.library_model || sys.analysis_model || sys.chat_model || '',
       openai_api_key: sys.openai_api_key || '',
       gemini_api_key: sys.gemini_api_key || '',
       claude_api_key: sys.claude_api_key || '',
       openalex_mailto: sys.openalex_mailto || '',
-      translation_prompt_template: sys.translation_prompt_template || ''
+      translation_prompt_template: sys.translation_prompt_template || '',
+      pdf_parser_engine: sys.pdf_parser_engine || 'pymupdf'
     }
     await saveSystemSettingsAPI(payload)
     // sync settings pickers
     if (type === 'trans') {
       settingTransPicker.setValue(newProvider, newModel)
-      if (syncChatToTrans) {
-        settingChatPicker.setValue(newProvider, newModel)
-        chatSidebarPicker.setValue(newProvider, newModel)
-      }
+      if (settingTransSameAsDefault) settingTransSameAsDefault.checked = false
     } else {
       settingChatPicker.setValue(newProvider, newModel)
+      if (settingChatSameAsDefault) settingChatSameAsDefault.checked = false
     }
     updateSettingsUIVisibility()
     await checkAIStatus()
@@ -2913,6 +3070,8 @@ globalSettingsBtn.addEventListener('click', async () => {
   settingDisableFigureOverlay.checked = !state.disableFigureOverlay
   settingDisablePrimer.checked = !state.disablePrimer
   settingToolbarAutoHide.checked = state.toolbarAutoHide
+  settingAutoGenerateKeywords.checked = getKeywordMode() === 'auto'
+  settingAutoGenerateSummaries.checked = getSummaryMode() === 'auto'
   updateAccentSettingsUI(currentAccentColor)
 
   // 3. 시스템 설정값 로드 (백엔드 통신)
@@ -3096,6 +3255,8 @@ function persistGeneralSettingsToStorage() {
   localStorage.setItem('easypaper_target_lang', settingTargetLang.value)
   localStorage.setItem('easypaper_style', settingTransStyle.value)
   localStorage.setItem('easypaper_translation_mode', settingTranslationMode.value)
+  localStorage.setItem('easypaper_keyword_mode', settingAutoGenerateKeywords.checked ? 'auto' : 'manual')
+  localStorage.setItem('easypaper_summary_mode', settingAutoGenerateSummaries.checked ? 'auto' : 'manual')
   localStorage.setItem('easypaper_ignore_math', settingIgnoreMath.checked)
   localStorage.setItem('easypaper_ignore_table', settingIgnoreTable.checked)
   localStorage.setItem('easypaper_ignore_refs', settingIgnoreRefs.checked)
@@ -3222,21 +3383,42 @@ settingToolbarAutoHide.addEventListener('change', () => {
 // 통합 함수로 전체 설정을 다시 저장한다. 모델이 아직 선택되지 않은 초기
 // 로딩 상태에서는 조용히 건너뛴다(에러 토스트 없이).
 async function autoSaveSystemSettings({ silent = false } = {}) {
-  const { provider: transProvider, model: transModel } = settingTransPicker.getValue()
+  const { provider: defaultProvider, model: defaultModel } = settingDefaultAiPicker.getValue()
+  let { provider: transProvider, model: transModel } = settingTransPicker.getValue()
+  if (settingTransSameAsDefault && settingTransSameAsDefault.checked) {
+    transProvider = defaultProvider
+    transModel = defaultModel
+  }
   let { provider: chatProvider, model: chatModel } = settingChatPicker.getValue()
-  if (settingChatSameAsTrans && settingChatSameAsTrans.checked) {
-    chatProvider = transProvider
-    chatModel = transModel
+  if (settingChatSameAsDefault && settingChatSameAsDefault.checked) {
+    chatProvider = defaultProvider
+    chatModel = defaultModel
+  }
+  let { provider: analysisProvider, model: analysisModel } = settingAnalysisPicker.getValue()
+  if (settingAnalysisSameAsDefault && settingAnalysisSameAsDefault.checked) {
+    analysisProvider = defaultProvider
+    analysisModel = defaultModel
+  }
+  let { provider: libraryProvider, model: libraryModel } = settingLibraryPicker.getValue()
+  if (settingLibrarySameAsDefault && settingLibrarySameAsDefault.checked) {
+    libraryProvider = defaultProvider
+    libraryModel = defaultModel
   }
 
   const pdfParserEngine = (typeof settingPdfParserPicker !== 'undefined' && settingPdfParserPicker) ? settingPdfParserPicker.getValue() : 'pymupdf'
 
   const settings = {
     ollama_host: settingOllamaHost ? settingOllamaHost.value.trim() : '',
+    default_ai_provider: defaultProvider || 'antigravity',
+    default_ai_model: defaultModel || '',
     trans_provider: transProvider || 'antigravity',
     trans_model: transModel || '',
     chat_provider: chatProvider || 'antigravity',
     chat_model: chatModel || '',
+    analysis_provider: analysisProvider || chatProvider || 'antigravity',
+    analysis_model: analysisModel || chatModel || '',
+    library_provider: libraryProvider || analysisProvider || chatProvider || 'antigravity',
+    library_model: libraryModel || analysisModel || chatModel || '',
     openai_api_key: settingOpenAIKey ? settingOpenAIKey.value.trim() : '',
     gemini_api_key: settingGeminiKey ? settingGeminiKey.value.trim() : '',
     claude_api_key: settingClaudeKey ? settingClaudeKey.value.trim() : '',
@@ -3246,14 +3428,16 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
   }
 
   try {
-    await saveSystemSettingsAPI(settings)
+    const res = await saveSystemSettingsAPI(settings)
     // sync compact pickers
     if (transProvider && transModel) viewerTransPicker.setValue(transProvider, transModel)
     if (chatProvider && chatModel) chatSidebarPicker.setValue(chatProvider, chatModel)
     if (!silent) showToast('설정이 저장되었습니다.', 'success')
     checkAIStatus()
+    return res
   } catch (err) {
     showToast(err.message, 'error')
+    return null
   }
 }
 
@@ -3261,9 +3445,16 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
   if (el) el.addEventListener('change', () => autoSaveSystemSettings())
 })
 
-if (settingChatSameAsTrans) {
-  settingChatSameAsTrans.addEventListener('change', () => autoSaveSystemSettings())
-}
+;[settingAutoGenerateKeywords, settingAutoGenerateSummaries].forEach(el => {
+  if (el) el.addEventListener('change', () => {
+    persistGeneralSettingsToStorage()
+    showToast('일반 설정이 저장되었습니다.', 'success')
+  })
+})
+
+modelSettingChildren.forEach(child => {
+  if (child.checkbox) child.checkbox.addEventListener('change', () => autoSaveSystemSettings())
+})
 
 const settingPromptTemplate = $('setting-prompt-template')
 if (settingPromptTemplate) {
@@ -3957,12 +4148,31 @@ if (settingSkipLoginCheckbox) {
 // ── 읽기 시간 하트비트 (Reading History의 "읽은 시간" 실측) ──────────────
 // 뷰어/비교 화면이 화면에 보이고(Page Visibility) 창이 포커스된 동안만 5초
 // 간격으로 "현재 컨텍스트"(문서 id + reading/chat/compare 카테고리)에 초를
-// 적립하고, 20초마다 적립분을 서버로 보낸다. 5초 tick 시점의 컨텍스트를 그때
-// 그때 버킷에 더하므로, 20초 사이에 채팅 사이드바를 열고 닫는 등 컨텍스트가
-// 바뀌어도 각 구간이 올바른 카테고리로 집계된다.
+// 적립하고, 20초마다 적립분을 서버로 보낸다. 단일 논문 뷰어에서는 사이드바의
+// 열림 여부가 아니라 PDF/채팅 영역 중 사용자가 마지막으로 상호작용한 영역으로
+// 분류하며, 60초 동안 상호작용이 없으면 유휴 상태로 보고 적립하지 않는다.
 const READING_HEARTBEAT_TICK_SECONDS = 5
 const READING_HEARTBEAT_FLUSH_MS = 20000
 let readingHeartbeatBuffers = {} // `${docId}|${category}` -> 적립된 초
+let readingHeartbeatContextKey = null
+const readingTimeActivityTracker = globalReadingTimeActivityTracker
+
+function recordReadingTimeInteraction(event) {
+  if (!viewerScreen?.classList.contains('active')) return
+  const target = event.target
+  const isChatInteraction = chatSidebar
+    && !chatSidebar.classList.contains('hidden')
+    && chatSidebar.contains(target)
+    && !target.closest?.('#chat-close-btn')
+  readingTimeActivityTracker.record(isChatInteraction ? 'chat' : 'reading')
+}
+
+// pointerdown은 클릭·선택·스크롤바 드래그·터치를, wheel/keydown/input은 각각
+// 휠 스크롤·키보드 탐색·채팅 입력을 포착한다. scroll 이벤트는 답변 렌더링이나
+// 페이지 복원 코드가 일으킨 자동 스크롤도 포함하므로 활동 근거로 사용하지 않는다.
+for (const eventName of ['pointerdown', 'wheel', 'keydown', 'input']) {
+  viewerScreen?.addEventListener(eventName, recordReadingTimeInteraction, { capture: true, passive: eventName === 'wheel' })
+}
 
 function isReadingTimeActive() {
   if (document.visibilityState !== 'visible' || !document.hasFocus()) return false
@@ -3973,17 +4183,29 @@ function isReadingTimeActive() {
 
 function currentReadingContext() {
   if (viewerScreen && viewerScreen.classList.contains('active') && state.sessionId) {
-    const category = (chatSidebar && !chatSidebar.classList.contains('hidden')) ? 'chat' : 'reading'
+    const contextKey = `viewer|${state.sessionId}`
+    if (readingHeartbeatContextKey !== contextKey) {
+      readingHeartbeatContextKey = contextKey
+      readingTimeActivityTracker.reset('reading')
+    }
+    const category = readingTimeActivityTracker.getCategory({
+      chatAvailable: Boolean(chatSidebar && !chatSidebar.classList.contains('hidden')),
+    })
+    if (!category) return null
     return { docIds: [state.sessionId], category }
   }
   if (compareScreen && compareScreen.classList.contains('active') && compareChatState.docIds.length > 0) {
+    readingHeartbeatContextKey = `compare|${compareChatState.docIds.join(',')}`
     return { docIds: compareChatState.docIds, category: 'compare' }
   }
   return null
 }
 
 function tickReadingHeartbeat() {
-  if (!isReadingTimeActive()) return
+  if (!isReadingTimeActive()) {
+    readingHeartbeatContextKey = null
+    return
+  }
   const ctx = currentReadingContext()
   if (!ctx) return
   for (const docId of ctx.docIds) {
@@ -3992,22 +4214,28 @@ function tickReadingHeartbeat() {
   }
 }
 
-async function flushReadingHeartbeat() {
+async function flushReadingHeartbeat({ keepalive = false } = {}) {
   const buffers = readingHeartbeatBuffers
   readingHeartbeatBuffers = {}
-  const entries = Object.entries(buffers).filter(([, s]) => s > 0)
+  const entries = Object.entries(buffers).filter(([, seconds]) => seconds > 0)
   if (entries.length === 0) return
-  await Promise.all(entries.map(([key, seconds]) => {
+
+  const results = await Promise.all(entries.map(async ([key, seconds]) => {
     const sep = key.lastIndexOf('|')
     const docId = key.slice(0, sep)
     const category = key.slice(sep + 1)
-    return sendReadingHeartbeat(docId, seconds, category)
+    const sent = await sendReadingHeartbeat(docId, seconds, category, { keepalive })
+    return { key, seconds, sent }
   }))
+
+  for (const { key, seconds, sent } of results) {
+    if (!sent) readingHeartbeatBuffers[key] = (readingHeartbeatBuffers[key] || 0) + seconds
+  }
 }
 
 setInterval(tickReadingHeartbeat, READING_HEARTBEAT_TICK_SECONDS * 1000)
 setInterval(flushReadingHeartbeat, READING_HEARTBEAT_FLUSH_MS)
-window.addEventListener('beforeunload', () => { flushReadingHeartbeat(); globalAnalyticsTracker.stopSession() })
+window.addEventListener('beforeunload', () => { flushReadingHeartbeat({ keepalive: true }); globalAnalyticsTracker.stopSession() })
 
 // ── 초기화 ────────────────────────────────────────
 checkAuthentication()
@@ -4119,11 +4347,14 @@ if (libTabTrash) {
   })
 }
 
-// 라이브러리 카드/리스트 보기 전환 - 마지막 선택을 기억해 다음 방문에도 유지
-let libraryViewMode = localStorage.getItem('easypaper_library_view') === 'list' ? 'list' : 'card'
+// 라이브러리 큰 카드/작은 카드/리스트 보기 전환 - 마지막 선택을 기억해 다음 방문에도 유지
+const savedLibraryViewMode = localStorage.getItem('easypaper_library_view')
+let libraryViewMode = ['card', 'compact', 'list'].includes(savedLibraryViewMode) ? savedLibraryViewMode : 'card'
 function updateViewToggleUI() {
   document.querySelectorAll('.view-toggle-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === libraryViewMode)
+    const isActive = btn.dataset.view === libraryViewMode
+    btn.classList.toggle('active', isActive)
+    btn.setAttribute('aria-pressed', String(isActive))
   })
 }
 document.querySelectorAll('.view-toggle-btn').forEach(btn => {
@@ -4201,14 +4432,18 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
     syncLibraryTabUI('archive')
     await renderLibrary()
   } else if (pageId === 'chats') {
+    const { renderAiChatsPage } = await import('./pages/aiChatsPage.js')
     await renderAiChatsPage()
   } else if (pageId === 'notes') {
+    const { renderNotesPage } = await import('./pages/notesPage.js')
     await renderNotesPage()
   } else if (pageId === 'graph') {
     await renderLibraryGraphTab()
   } else if (pageId === 'dashboard') {
+    const { renderDashboardPage } = await import('./pages/dashboardPage.js')
     await renderDashboardPage()
   } else if (pageId === 'history') {
+    const { renderReadingHistoryPage } = await import('./pages/readingHistoryPage.js')
     await renderReadingHistoryPage()
   }
 }
@@ -4270,15 +4505,28 @@ if (workspaceSearchInput) {
   })
 }
 
-
 let activeCategoryFilter = 'ALL'
+const LIBRARY_FILTERS_COLLAPSED_KEY = 'easypaper_library_category_filters_collapsed'
+let libraryCategoryFiltersCollapsed = localStorage.getItem(LIBRARY_FILTERS_COLLAPSED_KEY) === 'true'
+
+function updateLibraryCategoryFilterVisibility(hasCategories = libraryCategoryFilters?.childElementCount > 0) {
+  if (!libraryCategoryFilters || !libraryCategoryFilterToggle) return
+  libraryCategoryFilterToggle.classList.toggle('hidden', !hasCategories)
+  libraryCategoryFilters.classList.toggle('hidden', hasCategories && libraryCategoryFiltersCollapsed)
+  libraryCategoryFilterToggle.closest('.library-category-filter-group')?.classList.toggle('collapsed', hasCategories && libraryCategoryFiltersCollapsed)
+  libraryCategoryFilterToggle.setAttribute('aria-expanded', String(!libraryCategoryFiltersCollapsed))
+  libraryCategoryFilterToggle.setAttribute('aria-label', libraryCategoryFiltersCollapsed ? '카테고리 필터 펼치기' : '카테고리 필터 접기')
+  libraryCategoryFilterToggle.title = libraryCategoryFiltersCollapsed ? '카테고리 필터 펼치기' : '카테고리 필터 접기'
+  libraryCategoryFilterToggle.innerHTML = `${icon(libraryCategoryFiltersCollapsed ? 'chevronDown' : 'chevronUp', 13)}<span>${libraryCategoryFiltersCollapsed ? '필터 펼치기' : '필터 접기'}</span>`
+}
 
 // ── 여러 논문 비교 채팅: 라이브러리 선택 모드 ──────────────
 // ── 라이브러리 논문 선택 모드 & 하단 플로팅 알약 툴바 ──
 const selectedDocIds = new Set()
 
 function getVisibleDocIds() {
-  return currentLibraryDocs.map(d => d.id)
+  if (!libraryGrid) return []
+  return Array.from(libraryGrid.querySelectorAll('.doc-card[data-id], .doc-list-row[data-id]'), el => el.dataset.id)
 }
 
 function toggleDocSelection(docId) {
@@ -4311,6 +4559,14 @@ function clearDocSelection() {
     el.classList.remove('checked')
     el.title = '선택'
   })
+  updateSelectToolbarUI()
+}
+
+function replaceDocSelection(nextIds) {
+  const affectedIds = new Set([...selectedDocIds, ...nextIds])
+  selectedDocIds.clear()
+  nextIds.forEach(id => selectedDocIds.add(id))
+  affectedIds.forEach(id => updateDocCardSelectionVisuals(id))
   updateSelectToolbarUI()
 }
 
@@ -4433,7 +4689,110 @@ function initSelectToolbarEvents() {
   }
 }
 
+function initLibraryDragSelection() {
+  const dragSurface = $('page-outlet')
+  const filterRow = $('library-filter-row')
+  if (!libraryGrid || !dragSurface || !filterRow) return
+  let dragState = null
+  let marquee = null
+
+  const removeMarquee = () => {
+    marquee?.remove()
+    marquee = null
+    document.body.classList.remove('library-marquee-selecting')
+  }
+
+  const finishDragSelection = (event, cancelled = false) => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return
+    if (cancelled) replaceDocSelection(dragState.baseIds)
+    if (dragSurface.hasPointerCapture?.(event.pointerId)) {
+      dragSurface.releasePointerCapture(event.pointerId)
+    }
+    dragState = null
+    removeMarquee()
+  }
+
+  dragSurface.addEventListener('pointerdown', event => {
+    const selectionTop = filterRow.getBoundingClientRect().bottom
+    if (
+      event.button !== 0 ||
+      event.isPrimary === false ||
+      (event.pointerType && event.pointerType !== 'mouse') ||
+      state.currentWorkspacePage !== 'library' ||
+      state.currentLibraryTab === 'trash' ||
+      event.clientY < selectionTop ||
+      event.target.closest('.doc-card, .doc-list-row, .library-folder-card, button, a, input, textarea, select')
+    ) return
+
+    const toggle = event.ctrlKey || event.metaKey
+    const baseIds = new Set(selectedDocIds)
+    if (!toggle) replaceDocSelection(new Set())
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      baseIds,
+      toggle,
+      active: false,
+    }
+    dragSurface.setPointerCapture?.(event.pointerId)
+    event.preventDefault()
+  })
+
+  dragSurface.addEventListener('pointermove', event => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return
+    const distance = Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY)
+    if (!dragState.active && distance < 4) return
+    if (!dragState.active) {
+      dragState.active = true
+      marquee = document.createElement('div')
+      marquee.className = 'library-selection-marquee'
+      marquee.setAttribute('aria-hidden', 'true')
+      document.body.appendChild(marquee)
+      document.body.classList.add('library-marquee-selecting')
+    }
+
+    const selectionRect = createSelectionRect(
+      dragState.startX,
+      dragState.startY,
+      event.clientX,
+      event.clientY,
+    )
+    Object.assign(marquee.style, {
+      left: `${selectionRect.left}px`,
+      top: `${selectionRect.top}px`,
+      width: `${selectionRect.width}px`,
+      height: `${selectionRect.height}px`,
+    })
+
+    const items = Array.from(
+      libraryGrid.querySelectorAll('.doc-card[data-id], .doc-list-row[data-id]'),
+      element => ({ id: element.dataset.id, rect: element.getBoundingClientRect() }),
+    )
+    replaceDocSelection(resolveDragSelection(
+      dragState.baseIds,
+      items,
+      selectionRect,
+      dragState.toggle,
+    ))
+    event.preventDefault()
+  })
+
+  dragSurface.addEventListener('pointerup', event => finishDragSelection(event))
+  dragSurface.addEventListener('pointercancel', event => finishDragSelection(event, true))
+  window.addEventListener('blur', () => {
+    if (!dragState) return
+    if (dragSurface.hasPointerCapture?.(dragState.pointerId)) {
+      dragSurface.releasePointerCapture(dragState.pointerId)
+    }
+    replaceDocSelection(dragState.baseIds)
+    dragState = null
+    removeMarquee()
+  })
+}
+
 initSelectToolbarEvents()
+initLibraryDragSelection()
 
 
 // ── 여러 논문 비교 채팅 화면 ────────────────────────────
@@ -4961,12 +5320,70 @@ if (chatDrawerViewerBtn) {
   })
 }
 
+// 라이브러리 전용 키보드 단축키. 텍스트 입력 중에는 브라우저 기본 동작을 보존한다.
+document.addEventListener('keydown', async e => {
+  if (state.currentWorkspacePage !== 'library' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return
+  const mod = e.ctrlKey || e.metaKey
+  const focusedFolder = getFocusedLibraryFolder()
+  if (mod && e.key === '[') {
+    e.preventDefault()
+    history.back()
+  } else if (mod && e.key === ']') {
+    e.preventDefault()
+    history.forward()
+  } else if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    await undoLastLibraryAction()
+  } else if (mod && e.key.toLowerCase() === 'x' && selectedDocIds.size) {
+    e.preventDefault()
+    libraryClipboard = { kind: 'documents', mode: 'cut', ids: Array.from(selectedDocIds) }
+    showToast(`${selectedDocIds.size}개 논문을 잘라냈습니다.`, 'info')
+  } else if (mod && e.key.toLowerCase() === 'c' && selectedDocIds.size) {
+    e.preventDefault()
+    libraryClipboard = null
+    showToast('논문은 한 폴더에만 둘 수 있습니다. 이동하려면 Ctrl/Cmd+X를 사용하세요.', 'info')
+  } else if (mod && e.key.toLowerCase() === 'x' && focusedFolder) {
+    e.preventDefault()
+    libraryClipboard = { kind: 'folder', mode: 'cut', id: focusedFolder.id }
+    showToast(`“${focusedFolder.name}” 폴더를 잘라냈습니다.`, 'info')
+  } else if (mod && e.key.toLowerCase() === 'v' && libraryClipboard) {
+    e.preventDefault()
+    try {
+      if (libraryClipboard.mode === 'copy') throw new Error('논문 복사는 지원되지 않습니다. 이동하려면 잘라내기를 사용하세요.')
+      if (libraryClipboard.kind === 'folder') {
+        const folder = libraryFolders.find(candidate => candidate.id === libraryClipboard.id)
+        if (!folder) throw new Error('잘라낸 폴더를 찾을 수 없습니다.')
+        if (folder.id === activeLibraryFolderId || folderDescendants(folder.id).has(activeLibraryFolderId)) throw new Error('폴더를 자기 자신 또는 하위 폴더에 붙여넣을 수 없습니다.')
+        await moveFolderWithUndo(folder, activeLibraryFolderId)
+      } else if (libraryClipboard.ids?.length) {
+        await moveDocumentsWithUndo(libraryClipboard.ids, activeLibraryFolderId)
+      }
+      showToast('현재 폴더로 이동했습니다.', 'success')
+      if (libraryClipboard.mode === 'cut') libraryClipboard = null
+      await renderLibrary()
+    } catch (err) { showToast(err.message || '붙여넣기 실패', 'error') }
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedDocIds.size) {
+    e.preventDefault()
+    document.querySelector('#lib-select-delete-btn')?.click()
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && focusedFolder) {
+    e.preventDefault()
+    await requestDeleteFolder(focusedFolder)
+  } else if ((e.key === 'F2' || e.key === 'Enter') && focusedFolder) {
+    e.preventDefault()
+    await requestRenameFolder(focusedFolder)
+  } else if (e.key === 'Escape') {
+    clearDocSelection()
+    libraryClipboard = null
+    setLibraryAddMenuOpen(false)
+  }
+})
+
 // ── Library 재설계: 상태 필터 탭(전체/읽지 않음/읽는 중/완료/즐겨찾기) + 정렬 + 즐겨찾기 ──
 // 즐겨찾기는 documents.metadata에 아직 star/favorite 개념이 없어(백엔드 스키마에
 // 없음) 새 필드를 추가하지 않고 로컬 전용 편의 기능으로만 제공한다 - localStorage에만
 // 저장되며 기기 간 동기화되거나 서버에 반영되지 않는다.
 let activeStatusFilter = 'all' // 'all' | 'unread' | 'reading' | 'finished' | 'favorites'
-let librarySortMode = localStorage.getItem('easypaper_library_sort') || 'recent' // 'recent' | 'title' | 'progress'
+let librarySortMode = localStorage.getItem('easypaper_library_sort') || 'recent' // 'recent' | 'last-read' | 'title' | 'progress'
 
 const LIBRARY_FAVORITES_KEY = 'easypaper_library_favorites'
 function getFavoriteIds() {
@@ -5047,6 +5464,8 @@ function sortDocsByMode(docs) {
     })
   } else if (librarySortMode === 'progress') {
     sorted.sort((a, b) => getLibraryReadProgress(b) - getLibraryReadProgress(a))
+  } else if (librarySortMode === 'last-read') {
+    sorted.sort(compareDocsByLastRead)
   } else {
     sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   }
@@ -5069,10 +5488,497 @@ function sortLibraryDocs(docs) {
 // Library 페이지의 새 UI 조각(상태 탭 / 정렬 드롭다운 / 상세 패널)은 index.html을
 // 건드리지 않고 여기서 필요할 때 한 번만 삽입한다. renderLibrary()가 탭 전환/새로고침마다
 // 다시 호출되므로 반드시 멱등이어야 한다(이미 삽입돼 있으면 아무것도 하지 않음).
+// ── 폴더 트리 / Breadcrumb ───────────────────────────────────────────────────
+let libraryFolders = []
+let activeLibraryFolderId = null
+let libraryClipboard = null
+const libraryUndoStack = []
+const FOLDER_COLORS = ['#6b7280', '#4f8ef7', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981']
+
+
+function pushLibraryUndo(action) {
+  libraryUndoStack.push(action)
+  if (libraryUndoStack.length > 30) libraryUndoStack.shift()
+}
+
+function discardUndoActionsForDeletedItems(folderIds, paperIds) {
+  for (let index = libraryUndoStack.length - 1; index >= 0; index--) {
+    const action = libraryUndoStack[index]
+    if (action.kind === 'documents') {
+      action.entries = action.entries.filter(entry => (
+        !paperIds.has(entry.id) && !folderIds.has(entry.folderId)
+      ))
+      if (action.entries.length === 0) libraryUndoStack.splice(index, 1)
+    } else if (
+      (action.kind === 'folderMove' && (folderIds.has(action.id) || folderIds.has(action.parentId))) ||
+      (action.kind === 'folderUpdate' && folderIds.has(action.id))
+    ) {
+      libraryUndoStack.splice(index, 1)
+    }
+  }
+}
+
+async function moveDocumentsWithUndo(docIds, folderId) {
+  const entries = docIds.map(id => ({ id, folderId: currentLibraryDocs.find(doc => doc.id === id)?.folder_id || null }))
+  await moveLibraryDocuments(docIds, folderId)
+  if (entries.some(entry => entry.folderId !== folderId)) pushLibraryUndo({ kind: 'documents', entries })
+  clearDocSelection()
+}
+async function moveFolderWithUndo(folder, parentId) {
+  await updateLibraryFolder(folder.id, { parent_id: parentId, move: true })
+  if ((folder.parent_id || null) !== parentId) pushLibraryUndo({ kind: 'folderMove', id: folder.id, parentId: folder.parent_id || null })
+}
+async function updateFolderWithUndo(folder, payload) {
+  await updateLibraryFolder(folder.id, payload)
+  const previous = {}
+  if (payload.name !== undefined) previous.name = folder.name
+  if (payload.color !== undefined) previous.color = folder.color
+  pushLibraryUndo({ kind: 'folderUpdate', id: folder.id, payload: previous })
+}
+async function undoLastLibraryAction() {
+  const action = libraryUndoStack.pop()
+  if (!action) { showToast('되돌릴 작업이 없습니다.', 'info'); return }
+  try {
+    if (action.kind === 'documents') {
+      const groups = new Map()
+      action.entries.forEach(entry => { const key = entry.folderId || ''; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(entry.id) })
+      for (const [folderId, ids] of groups) await moveLibraryDocuments(ids, folderId || null)
+    } else if (action.kind === 'folderMove') await updateLibraryFolder(action.id, { parent_id: action.parentId, move: true })
+    else if (action.kind === 'folderUpdate') await updateLibraryFolder(action.id, action.payload)
+    showToast('마지막 작업을 되돌렸습니다.', 'success')
+    await renderLibrary()
+  } catch (err) {
+    const message = err.message || '실행 취소 실패'
+    if (/찾을 수 없습니다/.test(message)) {
+      showToast('삭제된 항목을 참조하는 실행 취소 기록을 건너뛰었습니다.', 'warning')
+    } else {
+      libraryUndoStack.push(action)
+      showToast(message, 'error')
+    }
+  }
+}
+
+function folderPath(folderId) {
+  const byId = new Map(libraryFolders.map(f => [f.id, f]))
+  const path = []
+  let current = folderId ? byId.get(folderId) : null
+  while (current) { path.unshift(current); current = current.parent_id ? byId.get(current.parent_id) : null }
+  return path
+}
+function folderDescendants(folderId) {
+  const result = new Set([folderId]); let changed = true
+  while (changed) { changed = false; for (const f of libraryFolders) if (f.parent_id && result.has(f.parent_id) && !result.has(f.id)) { result.add(f.id); changed = true } }
+  return result
+}
+function setFolderDropTarget(el, folderId) {
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('folder-drop-target') })
+  el.addEventListener('dragleave', () => el.classList.remove('folder-drop-target'))
+  el.addEventListener('drop', async e => {
+    e.preventDefault(); el.classList.remove('folder-drop-target')
+    try {
+      const raw = e.dataTransfer.getData('application/x-easypaper-item')
+      if (!raw) {
+        if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files, folderId)
+        return
+      }
+      const item = JSON.parse(raw)
+      if (item.kind === 'document') await moveDocumentsWithUndo(item.ids, folderId)
+      if (item.kind === 'folder') {
+        if (item.id === folderId || folderDescendants(item.id).has(folderId)) throw new Error('폴더를 자기 자신 또는 하위 폴더로 옮길 수 없습니다.')
+        const folder = libraryFolders.find(candidate => candidate.id === item.id)
+        if (!folder) throw new Error('폴더를 찾을 수 없습니다.')
+        await moveFolderWithUndo(folder, folderId)
+      }
+      showToast('이동했습니다.', 'success'); await renderLibrary()
+    } catch (err) { showToast(err.message || '이동 실패', 'error') }
+  })
+}
+function showCustomTextDialog({ title, label, value = '', confirmText = '확인' }) {
+  return new Promise(resolve => {
+    const modal = document.createElement('div')
+    modal.className = 'custom-confirm-modal-wrapper'
+    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">${escapeHtml(title)}</span></div><div class="custom-confirm-modal-body"><label class="folder-dialog-label">${escapeHtml(label)}<input class="folder-dialog-input" value="${escapeHtml(value)}" maxlength="120" /></label></div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn confirm-btn primary-btn">${escapeHtml(confirmText)}</button></div></div>`
+    document.body.appendChild(modal)
+    const input = modal.querySelector('.folder-dialog-input')
+    const close = result => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(result) }, 200) }
+    modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
+    modal.querySelector('.confirm-btn').addEventListener('click', () => close(input.value.trim() || null))
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') close(input.value.trim() || null); if (e.key === 'Escape') close(null) })
+    modal.addEventListener('click', e => { if (e.target === modal) close(null) })
+    setTimeout(() => { modal.classList.add('active'); input.focus(); input.select() }, 10)
+  })
+}
+
+function navigateLibraryFolder(folderId, { pushHistory = true } = {}) {
+  const nextFolderId = folderId || null
+  if (nextFolderId === activeLibraryFolderId && activeCategoryFilter === 'ALL') return
+  clearDocSelection()
+  activeLibraryFolderId = nextFolderId
+  activeCategoryFilter = 'ALL'
+  if (pushHistory) {
+    history.pushState(
+      { ...(history.state || {}), screen: 'library', page: 'library', libraryFolderId: nextFolderId },
+      '',
+      location.href,
+    )
+  }
+  filterLibraryCards(currentLibraryDocs)
+  renderFolderNavigation(currentLibraryDocs)
+}
+
+function renderFolderNavigation(docs) {
+  const crumb = $('library-breadcrumb')
+  if (!crumb) return
+  const path = folderPath(activeLibraryFolderId)
+  crumb.innerHTML = `<button data-folder-id="" class="library-breadcrumb-root">${icon('home', 14)}<span>전체 논문</span></button>${path.map((f, index) => `<span class="library-breadcrumb-separator">›</span><button data-folder-id="${escapeHtml(f.id)}" ${index === path.length - 1 ? 'aria-current="page"' : ''}>${icon('folder', 14)}<span>${escapeHtml(f.name)}</span></button>`).join('')}`
+  crumb.querySelectorAll('button').forEach(el => {
+    const id = el.dataset.folderId || null
+    el.addEventListener('click', () => navigateLibraryFolder(id))
+    setFolderDropTarget(el, id)
+  })
+}
+async function openCreateFolderDialog(parentId = activeLibraryFolderId) {
+  const name = await showCustomTextDialog({ title: '새 폴더', label: '폴더 이름', confirmText: '추가' })
+  if (!name) return
+  try { await createLibraryFolder({ name, parent_id: parentId, color: FOLDER_COLORS[0] }); await renderLibrary() } catch (err) { showToast(err.message || '폴더 생성 실패', 'error') }
+}
+function showFolderColorDialog(currentColor) {
+  return new Promise(resolve => {
+    const modal = document.createElement('div')
+    modal.className = 'custom-confirm-modal-wrapper'
+    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 색상</span></div><div class="custom-confirm-modal-body"><div class="folder-color-picker">${FOLDER_COLORS.map(color => `<button class="color-dot ${color === currentColor ? 'selected' : ''}" data-color="${color}" style="background:${color}" title="${color}"></button>`).join('')}<label class="folder-native-color" title="직접 색상 선택"><input type="color" value="${currentColor}"><span>+</span></label></div></div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button></div></div>`
+    document.body.appendChild(modal)
+    const close = value => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(value) }, 200) }
+    modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
+    modal.querySelectorAll('[data-color]').forEach(btn => btn.addEventListener('click', () => close(btn.dataset.color)))
+    modal.querySelector('input[type="color"]').addEventListener('change', e => close(e.target.value))
+    modal.addEventListener('click', e => { if (e.target === modal) close(null) })
+    setTimeout(() => modal.classList.add('active'), 10)
+  })
+}
+
+function showFolderContentsDeleteDialog(paperCount) {
+  return new Promise(resolve => {
+    const modal = document.createElement('div')
+    modal.className = 'custom-confirm-modal-wrapper'
+    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 안 논문 처리</span></div><div class="custom-confirm-modal-body">이 폴더와 하위 폴더에 논문 ${paperCount}개가 있습니다.<br>폴더 트리 삭제 후 논문을 어떻게 처리할까요?</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn keep-btn">루트에 유지</button><button class="custom-confirm-btn confirm-btn">함께 휴지통으로 이동</button></div></div>`
+    document.body.appendChild(modal)
+    const close = value => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(value) }, 200) }
+    modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
+    modal.querySelector('.keep-btn').addEventListener('click', () => close(false))
+    modal.querySelector('.confirm-btn').addEventListener('click', () => close(true))
+    modal.addEventListener('click', e => { if (e.target === modal) close(null) })
+    setTimeout(() => modal.classList.add('active'), 10)
+  })
+}
+
+
+function getFocusedLibraryFolder() {
+  const card = document.activeElement
+  if (!card?.classList?.contains('library-folder-card')) return null
+  return libraryFolders.find(folder => folder.id === card.dataset.folderId) || null
+}
+async function requestRenameFolder(folder) {
+  const name = await showCustomTextDialog({ title: '폴더 이름 변경', label: '폴더 이름', value: folder.name, confirmText: '저장' })
+  if (name && name !== folder.name) { await updateFolderWithUndo(folder, { name }); await renderLibrary() }
+}
+async function requestDeleteFolder(folder) {
+  const folderIds = folderDescendants(folder.id)
+  const papersInTree = currentLibraryDocs.filter(doc => folderIds.has(doc.folder_id))
+  const childFolderCount = folderIds.size - 1
+  const paperCount = papersInTree.length
+  const childFolderNotice = childFolderCount > 0 ? `\n하위 폴더 ${childFolderCount}개도 함께 삭제됩니다.` : ''
+  const paperNotice = paperCount ? '' : '\n포함된 논문은 없으며 논문에는 영향이 없습니다.'
+  const ok = await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요?${childFolderNotice}${paperNotice}`, { title: '폴더 삭제', confirmText: '삭제', danger: true })
+  if (!ok) return
+  let deletePapers = false
+  if (paperCount > 0) {
+    const choice = await showFolderContentsDeleteDialog(paperCount)
+    if (choice === null) return
+    deletePapers = choice
+  }
+  await deleteLibraryFolder(folder.id, deletePapers)
+  discardUndoActionsForDeletedItems(folderIds, deletePapers ? new Set(papersInTree.map(doc => doc.id)) : new Set())
+  await renderLibrary()
+}
+
+function closeFolderCardMenus() {
+  document.querySelectorAll('.folder-card-actions').forEach(menu => {
+    menu.classList.add('hidden')
+    const folderId = menu.dataset.folderId
+    const ownerCard = folderId ? document.querySelector(`.library-folder-card[data-folder-id="${CSS.escape(folderId)}"]`) : null
+    const actionGroup = ownerCard?.querySelector('.folder-card-cta')
+    if (actionGroup && menu.parentElement !== actionGroup) {
+      const openButton = actionGroup.querySelector('.folder-card-open-btn')
+      actionGroup.insertBefore(menu, openButton)
+    }
+    menu.removeAttribute('style')
+  })
+}
+
+function positionFolderCardMenu(menu, trigger) {
+  document.body.appendChild(menu)
+  menu.classList.remove('hidden')
+  const triggerRect = trigger.getBoundingClientRect()
+  const menuWidth = menu.offsetWidth
+  const menuHeight = menu.offsetHeight
+  const left = Math.max(8, Math.min(triggerRect.right - menuWidth, window.innerWidth - menuWidth - 8))
+  const belowTop = triggerRect.bottom + 6
+  const top = belowTop + menuHeight <= window.innerHeight - 8 ? belowTop : Math.max(8, triggerRect.top - menuHeight - 6)
+  menu.style.position = 'fixed'
+  menu.style.left = `${left}px`
+  menu.style.top = `${top}px`
+  menu.style.right = 'auto'
+  menu.style.zIndex = '100001'
+}
+
+function createFolderCard(folder) {
+  const card = document.createElement('article')
+  card.className = 'library-folder-card'
+  card.draggable = true
+  card.tabIndex = 0
+  card.setAttribute('aria-label', `${folder.name} 폴더`)
+  card.title = 'Enter/F2: 이름 변경 · Delete/Backspace: 삭제 · Ctrl/Cmd+X: 잘라내기'
+  card.dataset.folderId = folder.id
+  card.style.setProperty('--folder-color', folder.color)
+  const isListView = libraryViewMode === 'list'
+  const paperCount = currentLibraryDocs.filter(doc => (doc.folder_id || null) === folder.id).length
+  const childFolderCount = libraryFolders.filter(candidate => (candidate.parent_id || null) === folder.id).length
+  const menuHtml = `<button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button><div class="folder-card-actions hidden"><button data-action="rename">이름 변경</button><button data-action="color">폴더 색상</button><button data-action="delete">폴더 삭제</button></div>`
+
+  card.innerHTML = isListView
+    ? `<div class="folder-card-icon">${icon('folder', 18, 'fill="currentColor" stroke="none"')}</div>
+      <div class="folder-card-name" title="${escapeHtml(folder.name)}">${escapeHtml(folder.name)}</div>
+      <div class="folder-card-meta">
+        <span>${icon('fileText', 12)}논문 ${paperCount}편</span>
+        <span class="meta-dot"></span>
+        <span>${icon('folder', 12)}하위 폴더 ${childFolderCount}개</span>
+      </div>
+      <div class="folder-card-cta">
+        <button class="folder-card-rename-btn" title="이름 변경">${icon('edit3', 14)}</button>
+        ${menuHtml}
+        <button class="folder-card-open-btn" title="폴더 열기">${icon('externalLink', 14)}</button>
+      </div>`
+    : `<div class="folder-card-icon">${icon('folder', 32, 'fill="currentColor" stroke="none"')}</div><div class="folder-card-name">${escapeHtml(folder.name)}</div><div class="folder-card-meta">폴더 열기</div>${menuHtml}`
+  card.addEventListener('click', e => {
+    if (e.target.closest('.folder-card-menu, .folder-card-rename-btn, .folder-card-open-btn')) return
+    navigateLibraryFolder(folder.id)
+  })
+  card.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'folder', id: folder.id })); e.dataTransfer.effectAllowed = 'move' })
+  setFolderDropTarget(card, folder.id)
+  const menu = card.querySelector('.folder-card-actions')
+  menu.dataset.folderId = folder.id
+  const menuTrigger = card.querySelector('.folder-card-menu')
+  menuTrigger.addEventListener('click', e => {
+    e.stopPropagation()
+    const shouldOpen = menu.classList.contains('hidden')
+    closeFolderCardMenus()
+    if (!shouldOpen) return
+    if (isListView) positionFolderCardMenu(menu, menuTrigger)
+    else menu.classList.remove('hidden')
+  })
+  card.querySelector('.folder-card-rename-btn')?.addEventListener('click', async e => {
+    e.stopPropagation()
+    try { await requestRenameFolder(folder) } catch (err) { showToast(err.message || '폴더 이름 변경 실패', 'error') }
+  })
+  card.querySelector('.folder-card-open-btn')?.addEventListener('click', e => {
+    e.stopPropagation()
+    navigateLibraryFolder(folder.id)
+  })
+  menu.addEventListener('click', async e => {
+    e.stopPropagation()
+    const action = e.target.dataset.action
+    if (!action) return
+    closeFolderCardMenus()
+    try {
+      if (action === 'rename') await requestRenameFolder(folder)
+      if (action === 'color') { const color = await showFolderColorDialog(folder.color); if (color && color !== folder.color) { await updateFolderWithUndo(folder, { color }); await renderLibrary() } }
+      if (action === 'delete') await requestDeleteFolder(folder)
+    } catch (err) { showToast(err.message || '폴더 변경 실패', 'error') }
+  })
+  return card
+}
+// ── 라이브러리 우클릭 메뉴 ────────────────────────────────────────────────
+let libraryContextMenu = null
+
+function closeLibraryContextMenu() {
+  libraryContextMenu?.remove()
+  libraryContextMenu = null
+}
+
+function libraryContextMenuItem(action, label, iconName, { danger = false } = {}) {
+  return `<button type="button" class="library-context-menu-item${danger ? ' danger' : ''}" role="menuitem" data-action="${action}">${icon(iconName, 15)}<span>${label}</span></button>`
+}
+
+function positionLibraryContextMenu(menu, clientX, clientY) {
+  const margin = 8
+  const rect = menu.getBoundingClientRect()
+  menu.style.left = `${Math.max(margin, Math.min(clientX, window.innerWidth - rect.width - margin))}px`
+  menu.style.top = `${Math.max(margin, Math.min(clientY, window.innerHeight - rect.height - margin))}px`
+}
+
+async function deleteDocFromContextMenu(doc) {
+  const displayTitle = doc.metadata?.title || doc.filename
+  const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요? (휴지통으로 이동합니다)`, { title: '논문 삭제', confirmText: '삭제', danger: true })
+  if (!ok) return
+  await deleteLibraryDoc(doc.id)
+  showToast('휴지통으로 이동되었습니다.', 'success')
+  await renderLibrary()
+}
+
+async function clearDocCacheFromContextMenu(doc) {
+  const displayTitle = doc.metadata?.title || doc.filename
+  const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+  if (!ok) return
+  await clearSingleDocCacheAPI(doc.id)
+  showToast('PDF 추출 캐시가 삭제되었습니다.', 'success')
+}
+
+function showLibraryContextMenu(event, { doc = null, folder = null } = {}) {
+  closeLibraryContextMenu()
+  const menu = document.createElement('div')
+  menu.className = 'library-context-menu'
+  menu.setAttribute('role', 'menu')
+
+  if (doc && state.currentLibraryTab === 'trash') {
+    menu.innerHTML = [
+      libraryContextMenuItem('restore', '복원', 'refreshCw'),
+      '<div class="library-context-menu-separator" role="separator"></div>',
+      libraryContextMenuItem('permanent-delete', '영구 삭제', 'trash2', { danger: true }),
+    ].join('')
+  } else if (doc) {
+    menu.innerHTML = [
+      libraryContextMenuItem('open', '논문 열기', 'externalLink'),
+      libraryContextMenuItem('details', '상세 정보', 'info'),
+      '<div class="library-context-menu-separator" role="separator"></div>',
+      libraryContextMenuItem('select', selectedDocIds.has(doc.id) ? '선택 해제' : '선택', 'checkCircle'),
+      libraryContextMenuItem('read', doc.metadata?.read === true ? '읽음 표시 해제' : '읽음으로 표시', 'bookOpen'),
+      libraryContextMenuItem('favorite', isFavoriteDoc(doc.id) ? '즐겨찾기 해제' : '즐겨찾기', 'star'),
+      '<div class="library-context-menu-separator" role="separator"></div>',
+      libraryContextMenuItem('clear-cache', 'PDF 캐시 삭제', 'refreshCw'),
+      libraryContextMenuItem('delete', '휴지통으로 이동', 'trash2', { danger: true }),
+    ].join('')
+  } else if (folder) {
+    menu.innerHTML = [
+      libraryContextMenuItem('open-folder', '폴더 열기', 'folder'),
+      '<div class="library-context-menu-separator" role="separator"></div>',
+      libraryContextMenuItem('rename-folder', '이름 변경', 'edit3'),
+      libraryContextMenuItem('color-folder', '폴더 색상', 'edit3'),
+      libraryContextMenuItem('delete-folder', '폴더 삭제', 'trash2', { danger: true }),
+    ].join('')
+  } else if (state.currentLibraryTab === 'trash') {
+    menu.innerHTML = libraryContextMenuItem('empty-trash', '휴지통 비우기', 'trash2', { danger: true })
+  } else {
+    menu.innerHTML = [
+      libraryContextMenuItem('add-paper', '논문 추가', 'fileText'),
+      libraryContextMenuItem('add-folder', '폴더 추가', 'folder'),
+      '<div class="library-context-menu-separator" role="separator"></div>',
+      libraryContextMenuItem('select-all', '전체 선택', 'checkCircle'),
+    ].join('')
+  }
+
+  document.body.appendChild(menu)
+  libraryContextMenu = menu
+  positionLibraryContextMenu(menu, event.clientX, event.clientY)
+  menu.querySelector('[role="menuitem"]')?.focus()
+
+  menu.addEventListener('click', async clickEvent => {
+    const action = clickEvent.target.closest('[data-action]')?.dataset.action
+    if (!action) return
+    closeLibraryContextMenu()
+    try {
+      if (action === 'open') await openFromLibrary(doc)
+      else if (action === 'details') openLibraryDetailPanel(doc)
+      else if (action === 'select') toggleDocSelection(doc.id)
+      else if (action === 'read') {
+        const nextRead = doc.metadata?.read !== true
+        await updateLibraryDocMetadata(doc.id, { read: nextRead, read_at: nextRead ? new Date().toISOString() : null })
+        await renderLibrary()
+      } else if (action === 'favorite') {
+        toggleFavoriteDoc(doc.id)
+        await renderLibrary()
+      } else if (action === 'clear-cache') await clearDocCacheFromContextMenu(doc)
+      else if (action === 'delete') await deleteDocFromContextMenu(doc)
+      else if (action === 'restore') {
+        await restoreLibraryDoc(doc.id)
+        showToast('논문을 복원했습니다.', 'success')
+        await renderLibrary()
+      } else if (action === 'permanent-delete') {
+        const ok = await showCustomConfirm('이 논문을 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.', { title: '논문 영구 삭제', confirmText: '영구 삭제', danger: true })
+        if (ok) {
+          await deleteLibraryDocPermanently(doc.id)
+          await renderLibrary()
+        }
+      } else if (action === 'open-folder') navigateLibraryFolder(folder.id)
+      else if (action === 'rename-folder') await requestRenameFolder(folder)
+      else if (action === 'color-folder') {
+        const color = await showFolderColorDialog(folder.color)
+        if (color && color !== folder.color) {
+          await updateFolderWithUndo(folder, { color })
+          await renderLibrary()
+        }
+      } else if (action === 'delete-folder') await requestDeleteFolder(folder)
+      else if (action === 'add-paper') fileInput.click()
+      else if (action === 'add-folder') await openCreateFolderDialog()
+      else if (action === 'select-all') {
+        const visibleIds = getVisibleDocIds()
+        visibleIds.forEach(id => selectedDocIds.add(id))
+        visibleIds.forEach(id => updateDocCardSelectionVisuals(id))
+        updateSelectToolbarUI()
+      } else if (action === 'empty-trash') $('lib-empty-trash-btn')?.click()
+    } catch (err) {
+      showToast(err.message || '작업에 실패했습니다.', 'error')
+    }
+  })
+}
+
+function initLibraryContextMenu() {
+  const surface = $('page-outlet')
+  if (!surface) return
+  surface.addEventListener('contextmenu', event => {
+    if (state.currentWorkspacePage !== 'library') return
+    const docElement = event.target.closest('.doc-card[data-id], .doc-list-row[data-id]')
+    const folderElement = event.target.closest('.library-folder-card[data-folder-id]')
+    const isLibraryArea = event.target === surface || event.target.closest('#page-library')
+    if (!docElement && !folderElement && (!isLibraryArea || event.target.closest('input, textarea, select'))) return
+
+    const doc = docElement ? currentLibraryDocs.find(item => item.id === docElement.dataset.id) : null
+    const folder = folderElement ? libraryFolders.find(item => item.id === folderElement.dataset.folderId) : null
+    event.preventDefault()
+    showLibraryContextMenu(event, { doc, folder })
+  })
+  document.addEventListener('pointerdown', event => {
+    if (libraryContextMenu && !event.target.closest('.library-context-menu')) closeLibraryContextMenu()
+    if (!event.target.closest('.folder-card-menu, .folder-card-actions')) closeFolderCardMenus()
+  })
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      closeLibraryContextMenu()
+      closeFolderCardMenus()
+    }
+  })
+  surface.addEventListener('scroll', closeLibraryContextMenu)
+  document.addEventListener('scroll', closeFolderCardMenus, true)
+  window.addEventListener('resize', closeLibraryContextMenu)
+  window.addEventListener('resize', closeFolderCardMenus)
+}
+
+initLibraryContextMenu()
+
+function ensureLibraryFolderUI() {
+  if ($('library-breadcrumb')) return
+  librarySearchBox?.insertAdjacentHTML('beforebegin', `<div class="library-folder-header"><nav id="library-breadcrumb" class="library-breadcrumb" aria-label="폴더 경로"></nav></div>`)
+}
 let libraryChromeReady = false
 function ensureLibraryChrome() {
   if (libraryChromeReady) return
   libraryChromeReady = true
+
+  libraryCategoryFilterToggle?.addEventListener('click', () => {
+    libraryCategoryFiltersCollapsed = !libraryCategoryFiltersCollapsed
+    localStorage.setItem(LIBRARY_FILTERS_COLLAPSED_KEY, String(libraryCategoryFiltersCollapsed))
+    updateLibraryCategoryFilterVisibility()
+  })
 
   if (librarySearchBox && !$('library-status-tabs')) {
     librarySearchBox.insertAdjacentHTML('beforebegin', `
@@ -5088,6 +5994,7 @@ function ensureLibraryChrome() {
       <div class="lib-sort-dropdown">
         <select id="library-sort-select" class="lib-sort-select" title="정렬 기준">
           <option value="recent">최근 추가순</option>
+          <option value="last-read">최근 읽은 순</option>
           <option value="title">제목순</option>
           <option value="progress">번역 진행률순</option>
         </select>
@@ -5111,6 +6018,7 @@ function ensureLibraryChrome() {
 async function renderLibrary() {
   // Library 페이지의 새 UI 조각(상태 탭/정렬 드롭다운/상세 패널)이 아직 없으면 삽입한다.
   ensureLibraryChrome()
+  ensureLibraryFolderUI()
   closeLibraryDetailPanel()
   // 상세 패널의 "관련 자료" 탭이 쓰는 지식 그래프 캐시도 목록을 새로 불러올 때 함께 무효화한다.
   libraryGraphCacheForDetail = null
@@ -5129,6 +6037,7 @@ async function renderLibrary() {
 
   libraryGrid.innerHTML = ''
   libraryCategoryFilters.innerHTML = ''
+  updateLibraryCategoryFilterVisibility(false)
   try {
     let data
     if (state.currentLibraryTab === 'trash') {
@@ -5137,6 +6046,17 @@ async function renderLibrary() {
       data = await fetchLibrary(getTranslationOptions())
     }
     const allDocs = data.documents || []
+    if (state.currentLibraryTab !== 'trash') {
+      const foldersData = await fetchLibraryFolders()
+      libraryFolders = foldersData.folders || []
+      if (activeLibraryFolderId && !libraryFolders.some(f => f.id === activeLibraryFolderId)) {
+        activeLibraryFolderId = null
+        if (history.state?.screen === 'library' && history.state?.page === 'library') {
+          history.replaceState({ ...history.state, libraryFolderId: null }, '', location.href)
+        }
+      }
+      renderFolderNavigation(allDocs)
+    }
 
     // 보관함 뱃지에는 안읽은 논문 개수 표시 (휴지통이 아닐 때만 적용하거나, archive 기준 개수 표시)
     updateUnreadBadge(allDocs)
@@ -5197,6 +6117,7 @@ async function renderLibrary() {
         libraryCategoryFilters.appendChild(btn)
       })
     }
+    updateLibraryCategoryFilterVisibility(uniqueCategories.length > 0)
 
     // Initial card rendering
     filterLibraryCards(docs)
@@ -5385,6 +6306,7 @@ const GRAPH_NODE_TYPE_META = {
   concept: { label: '개념',          color: '#f7b34f', icon: 'lightbulb' },
   note:    { label: '메모',          color: '#8b5cf6', icon: 'edit3' },
   figure:  { label: 'Figure/Table',  color: '#10b981', icon: 'image' },
+  tag:     { label: '연구 태그',       color: '#ec4899', icon: 'tag' },
 }
 
 const RG_ZOOM_IN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
@@ -5414,7 +6336,7 @@ function relativeTimeShortKo(date) {
 function renderGraphLegend(nodes, edges) {
   const legendEl = $('rg-legend-panel')
   if (!legendEl) return
-  const counts = { paper: 0, concept: 0, note: 0, figure: 0 }
+  const counts = { paper: 0, concept: 0, note: 0, figure: 0, tag: 0 }
   for (const n of nodes || []) {
     if (counts[n.type] !== undefined) counts[n.type]++
   }
@@ -5717,7 +6639,7 @@ function renderGraphDetailHeader(nodeData, titleOverride) {
 // 않기로 했으므로, 대신 이웃 노드의 타입(논문/개념/메모/Figure)별 개수로
 // 보여준다.
 function renderGraphConnectionsSummary(neighborNodes) {
-  const counts = { paper: 0, concept: 0, note: 0, figure: 0 }
+  const counts = { paper: 0, concept: 0, note: 0, figure: 0, tag: 0 }
   for (const n of neighborNodes || []) {
     if (counts[n.type] !== undefined) counts[n.type]++
   }
@@ -5813,6 +6735,7 @@ async function renderLibraryGraphTab() {
       libraryGraphCyInstance = null
     }
     libraryGraphCanvas.innerHTML = ''
+    const { renderKnowledgeGraph } = await import('./knowledgeGraph.js')
     libraryGraphCyInstance = renderKnowledgeGraph(libraryGraphCanvas, data, { onNodeClick: showGraphDetailPanel })
 
     rgGraphLoadedAt = new Date()
@@ -5847,7 +6770,7 @@ async function renderLibraryGraphTab() {
         sorted.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')
     }
 
-    const pending = data.pending_docs || []
+    const pending = [...new Set([...(data.pending_docs || []), ...(data.pending_tag_docs || [])])]
     if (libraryGraphPendingBanner) {
       libraryGraphPendingBanner.classList.toggle('hidden', pending.length === 0)
     }
@@ -5962,6 +6885,13 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
         summaryEl.innerHTML = `<p class="rg-detail-error">AI 요약을 불러오지 못했습니다.</p>`
       }
     })()
+  } else if (nodeData.type === 'tag') {
+    const roleLabel = { primary_topic: '핵심 주제', domain: '적용 분야', method: '방법', legacy: '이전 태그' }[nodeData.role] || nodeData.role
+    libraryGraphDetailPanel.innerHTML = `
+      ${renderGraphDetailHeader(nodeData)}
+      <p class="rg-detail-subtitle">역할: ${escapeHtml(roleLabel || '미상')}</p>
+      <div class="rg-detail-section"><h5 class="rg-detail-section-title">이 태그가 지정된 논문</h5>${renderGraphRelatedNodesList((neighborNodes || []).filter(n => n.type === 'paper'), '연결된 논문이 없습니다.')}</div>
+    `
   } else if (nodeData.type === 'concept') {
     const questionCount = nodeData.question_count || 0
     libraryGraphDetailPanel.innerHTML = `
@@ -6059,6 +6989,7 @@ if (libraryGraphSearchInput) {
     const query = libraryGraphSearchInput.value.trim()
     libraryGraphSearchTimer = setTimeout(async () => {
       if (!libraryGraphCyInstance) return
+      const { highlightSearchMatches } = await import('./knowledgeGraph.js')
       if (!query) {
         highlightSearchMatches(libraryGraphCyInstance, [])
         return
@@ -6166,15 +7097,21 @@ function filterLibraryCards(docs) {
   libraryGrid.innerHTML = ''
   libraryGrid.classList.toggle('list-view', libraryViewMode === 'list')
 
+  libraryGrid.classList.toggle('compact-view', libraryViewMode === 'compact')
   // Update filter buttons active class
   document.querySelectorAll('.category-filter-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.category === activeCategoryFilter)
   })
+  $('library-breadcrumb')?.classList.toggle('global-filter-active', activeCategoryFilter !== 'ALL')
 
-  // Filter docs by category tag
-  let filteredDocs = activeCategoryFilter === 'ALL'
+  // 카테고리 칩은 폴더 경계를 무시한 전역 필터다. '전체'일 때만 현재 폴더를 적용한다.
+  let filteredDocs = state.currentLibraryTab === 'trash' || activeCategoryFilter !== 'ALL'
     ? docs
-    : docs.filter(doc => (doc.metadata?.categories || []).includes(activeCategoryFilter))
+    : docs.filter(doc => (doc.folder_id || null) === activeLibraryFolderId)
+
+  if (activeCategoryFilter !== 'ALL') {
+    filteredDocs = filteredDocs.filter(doc => (doc.metadata?.categories || []).includes(activeCategoryFilter))
+  }
 
   // 상태 필터(전체/읽지 않음/읽는 중/완료/즐겨찾기) 적용 - 휴지통 탭에는 없는 개념이라 건너뛴다.
   if (state.currentLibraryTab !== 'trash' && activeStatusFilter !== 'all') {
@@ -6186,13 +7123,17 @@ function filterLibraryCards(docs) {
 
   filteredDocs = sortLibraryDocs(filteredDocs)
 
-  if (filteredDocs.length === 0) {
+  const childFolders = state.currentLibraryTab === 'trash' || activeCategoryFilter !== 'ALL'
+    ? []
+    : libraryFolders.filter(folder => (folder.parent_id || null) === activeLibraryFolderId)
+  if (filteredDocs.length === 0 && childFolders.length === 0) {
     const variant = state.currentLibraryTab === 'trash'
       ? 'trash'
       : (activeStatusFilter !== 'all' ? activeStatusFilter : (docs.length > 0 ? 'filtered' : 'library'))
     libraryGrid.appendChild(createEmptyState(variant)); return
   }
 
+  childFolders.forEach(folder => libraryGrid.appendChild(createFolderCard(folder)))
   const createItem = libraryViewMode === 'list' ? createDocListRow : createDocCard
   filteredDocs.forEach(doc => libraryGrid.appendChild(createItem(doc)))
 }
@@ -6204,6 +7145,7 @@ let librarySearchDebounceTimer = null
 function renderLibrarySearchResults(docs, query) {
   libraryGrid.innerHTML = ''
   libraryGrid.classList.toggle('list-view', libraryViewMode === 'list')
+  libraryGrid.classList.toggle('compact-view', libraryViewMode === 'compact')
 
   if (docs.length === 0) {
     const el = document.createElement('div')
@@ -6307,8 +7249,11 @@ function prepareDocItemHtml(doc) {
   const categories = doc.metadata?.categories || []
   let tagsHtml = ''
   if (categories.length > 0) {
+    const shownCategories = categories.slice(0, 2)
+    const hiddenCategoryCount = categories.length - shownCategories.length
     tagsHtml = `<div class="doc-card-tags">` +
-      categories.map(cat => `<span class="doc-card-tag">${escapeHtml(cat)}</span>`).join('') +
+      shownCategories.map(cat => `<span class="doc-card-tag" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>`).join('') +
+      (hiddenCategoryCount > 0 ? `<span class="doc-card-tag doc-card-tag-count" title="태그 ${hiddenCategoryCount}개 더 보기">+${hiddenCategoryCount}</span>` : '') +
       `</div>`
   }
 
@@ -6396,8 +7341,52 @@ function prepareDocItemHtml(doc) {
 }
 
 // 카드/리스트 뷰 공용: 위임 없이 각 아이템 컨테이너에 직접 붙는 이벤트 리스너를 등록한다.
+let activeLibraryDragPreview = null
+
+function removeLibraryDragPreview() {
+  activeLibraryDragPreview?.remove()
+  activeLibraryDragPreview = null
+}
+
+function createLibraryDragPreview(count) {
+  removeLibraryDragPreview()
+  const preview = document.createElement('div')
+  preview.className = 'library-multi-drag-preview'
+  preview.setAttribute('aria-hidden', 'true')
+  const stackDepth = Math.min(count - 1, 3)
+  preview.innerHTML = `${Array.from({ length: stackDepth }, (_, index) => `<span class="library-drag-stack-sheet" style="--stack-index:${index + 1}"></span>`).join('')}
+    <div class="library-drag-stack-card">
+      <span class="library-drag-stack-icon">${icon('fileText', 22)}</span>
+      <span class="library-drag-stack-copy"><strong>${count}개 논문</strong><small>선택 항목 이동</small></span>
+      <span class="library-drag-stack-count">${count}</span>
+    </div>`
+  document.body.appendChild(preview)
+  activeLibraryDragPreview = preview
+  return preview
+}
+
+function wireDocDragEvents(container, doc) {
+  if (state.currentLibraryTab === 'trash') return
+  container.draggable = true
+  container.addEventListener('dragstart', e => {
+    const ids = selectedDocIds.has(doc.id) ? Array.from(selectedDocIds) : [doc.id]
+    e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'document', ids }))
+    e.dataTransfer.effectAllowed = 'move'
+    container.classList.add('doc-dragging')
+    if (ids.length > 1) {
+      const preview = createLibraryDragPreview(ids.length)
+      e.dataTransfer.setDragImage(preview, 24, 24)
+    }
+  })
+  container.addEventListener('dragend', () => {
+    container.classList.remove('doc-dragging')
+    removeLibraryDragPreview()
+  })
+}
+
 // 클래스명(.doc-card-check-btn, .doc-open-btn 등)만 맞으면 어떤 레이아웃이든 동작한다.
 function wireDocItemEvents(container, doc, displayTitle) {
+  wireDocDragEvents(container, doc)
   if (selectedDocIds.has(doc.id)) {
     container.classList.add('doc-card-selected')
   }
@@ -6539,7 +7528,7 @@ function wireDocItemEvents(container, doc, displayTitle) {
       const newTitle = input.value.trim()
       if (newTitle && newTitle !== oldTitle) {
         try {
-          await updateLibraryDocMetadata(doc.id, { title: newTitle })
+          await updateLibraryDocTitle(doc.id, newTitle)
           showToast('제목이 변경되었습니다.', 'success')
           await renderLibrary()
         } catch (err) {
@@ -6756,7 +7745,7 @@ function ensureLibraryDetailPanel() {
             <dl id="lib-detail-quickinfo" class="lib-detail-quickinfo"></dl>
           </div>
           <div class="lib-detail-tags-block">
-            <h3>태그</h3>
+            <div class="lib-detail-tags-heading"><h3>태그</h3><div><button id="lib-detail-tags-edit-btn" class="lib-detail-tag-action">편집</button><button id="lib-detail-tags-ai-btn" class="lib-detail-tag-action">AI 재분류</button></div></div>
             <div id="lib-detail-tags" class="lib-detail-tags"></div>
           </div>
         </section>
@@ -6927,7 +7916,7 @@ function startLibraryDetailTitleEdit(doc) {
     const newTitle = input.value.trim()
     if (newTitle && newTitle !== oldTitle) {
       try {
-        await updateLibraryDocMetadata(doc.id, { title: newTitle })
+        await updateLibraryDocTitle(doc.id, newTitle)
         showToast('제목이 변경되었습니다.', 'success')
         titleEl.textContent = newTitle
         await renderLibrary()
@@ -6966,6 +7955,53 @@ function startLibraryDetailTitleEdit(doc) {
 // 읽기 전 브리핑(primer)의 hook 텍스트를 재사용한다(백엔드에 별도 "요약" 필드는 없음).
 // 아직 캐시가 없으면 생성에 시간이 걸릴 수 있어(fetchPrimer가 내부적으로 폴링), 패널을
 // 닫거나 다른 논문으로 바꾼 뒤 응답이 와도 화면에 반영되지 않도록 요청 토큰으로 막는다.
+async function openPaperTagEditor(doc) {
+  const ontology = await fetchPaperTagOntology()
+  const roles = ontology.roles || {}
+  const current = doc.metadata?.paper_tags || {}
+  const selected = {
+    primary_topic: new Set((current.primary_topics || []).map(item => item.name || item)),
+    domain: new Set((current.domains || []).map(item => item.name || item)),
+    method: new Set((current.methods || []).map(item => item.name || item)),
+  }
+  const labels = { primary_topic: '핵심 주제', domain: '적용 분야', method: '방법' }
+  const modal = document.createElement('div')
+  modal.className = 'custom-confirm-modal-wrapper paper-tag-editor-wrap'
+  modal.innerHTML = `<div class="custom-confirm-modal paper-tag-editor"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">논문 태그 편집</span></div><div class="custom-confirm-modal-body paper-tag-editor-body">${Object.entries(roles).map(([role, names]) => `<fieldset class="paper-tag-fieldset"><legend>${labels[role] || role}</legend><div class="paper-tag-options">${names.map((name, index) => `<label><input type="checkbox" data-role="${role}" value="${escapeHtml(name)}" ${selected[role]?.has(name) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label>`).join('')}</div></fieldset>`).join('')}</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn confirm-btn primary-btn">저장</button></div></div>`
+  document.body.appendChild(modal)
+  return new Promise(resolve => {
+    const close = result => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(result) }, 200) }
+    modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
+    modal.addEventListener('click', e => { if (e.target === modal) close(null) })
+    modal.querySelector('.confirm-btn').addEventListener('click', async () => {
+      const payload = { primary_topics: [], domains: [], methods: [] }
+      modal.querySelectorAll('input:checked').forEach(input => {
+        const field = input.dataset.role === 'primary_topic' ? 'primary_topics' : input.dataset.role === 'domain' ? 'domains' : 'methods'
+        payload[field].push(input.value)
+      })
+      if (!payload.primary_topics.length) { showToast('핵심 주제를 하나 이상 선택해 주세요.', 'warning'); return }
+      try {
+        const result = await updatePaperTags(doc.id, payload)
+        close(result)
+      } catch (err) { showToast(err.message || '태그 저장 실패', 'error') }
+    })
+    setTimeout(() => modal.classList.add('active'), 10)
+  })
+}
+
+function renderStructuredPaperTags(metadata) {
+  const tags = metadata?.paper_tags
+  if (!tags) return (metadata?.categories || []).map(name => `<span class="lib-detail-tag">${escapeHtml(name)}</span>`).join('')
+  const groups = [
+    ['핵심', tags.primary_topics || []], ['분야', tags.domains || []], ['방법', tags.methods || []],
+  ]
+  return groups.flatMap(([label, items]) => items.map(item => {
+    const name = item.name || item
+    const evidence = item.evidence ? ` title="${escapeHtml(item.evidence)}"` : ''
+    return `<span class="lib-detail-tag"${evidence}><small>${label}</small>${escapeHtml(name)}</span>`
+  })).join('')
+}
+
 async function loadLibraryDetailOverview(doc) {
   const total = doc.total_pages || 1
   const translated = doc.translated_pages?.length || 0
@@ -7013,10 +8049,32 @@ async function loadLibraryDetailOverview(doc) {
 
   const tagsEl = $('lib-detail-tags')
   if (tagsEl) {
-    const categories = doc.metadata?.categories || []
-    tagsEl.innerHTML = categories.length
-      ? categories.map(c => `<span class="lib-detail-tag">${escapeHtml(c)}</span>`).join('')
-      : `<p class="lib-detail-empty" style="padding:0">지정된 태그가 없습니다.</p>`
+    tagsEl.innerHTML = renderStructuredPaperTags(doc.metadata) || `<p class="lib-detail-empty" style="padding:0">지정된 태그가 없습니다.</p>`
+  }
+  const tagsEditBtn = $('lib-detail-tags-edit-btn')
+  if (tagsEditBtn) tagsEditBtn.onclick = async () => {
+    try {
+      const result = await openPaperTagEditor(doc)
+      if (!result) return
+      doc.metadata = result.metadata
+      libraryDetailDoc = doc
+      loadLibraryDetailOverview(doc)
+      showToast('태그를 저장했습니다.', 'success')
+      await renderLibrary()
+    } catch (err) { showToast(err.message || '태그 편집기를 열지 못했습니다.', 'error') }
+  }
+  const tagsAiBtn = $('lib-detail-tags-ai-btn')
+  if (tagsAiBtn) tagsAiBtn.onclick = async () => {
+    const ok = await showCustomConfirm('사용자 지정 태그를 최신 AI 분류 결과로 교체할까요?', { title: 'AI 태그 재분류', confirmText: '재분류', danger: false })
+    if (!ok) return
+    try {
+      const result = await reclassifyPaperTags(doc.id)
+      doc.metadata = result.metadata
+      libraryDetailDoc = doc
+      loadLibraryDetailOverview(doc)
+      showToast('태그를 다시 분류했습니다.', 'success')
+      await renderLibrary()
+    } catch (err) { showToast(err.message || '태그 재분류 실패', 'error') }
   }
 
   const myToken = ++libraryDetailSummaryReqToken
@@ -7179,8 +8237,7 @@ async function loadLibraryDetailRelated(doc) {
 function createDocListRow(doc) {
   const d = prepareDocItemHtml(doc)
 
-  // 리스트 뷰는 한 줄에 담아야 하므로, 태그가 CSS로 중간에 잘려 보이는 것을 막기 위해
-  // 최대 2개만 보여주고 나머지는 "+N"으로 요약한다 (카드 뷰의 전체 태그와는 별도로 계산).
+  // 리스트 뷰도 카드 뷰와 마찬가지로 최대 2개만 보여주고 나머지는 "+N"으로 요약한다.
   let listTagsHtml = ''
   if (d.categories.length > 0) {
     const shown = d.categories.slice(0, 2)
@@ -7845,7 +8902,16 @@ function sanitizeMarkedHtml(html) {
   return DOMPurify.sanitize(html)
 }
 
-libUploadBtn.addEventListener('click', () => { fileInput.click() })
+function setLibraryAddMenuOpen(open) {
+  const wrap = document.querySelector('.lib-add-fab-wrap')
+  if (!wrap) return
+  wrap.classList.toggle('open', open)
+  libUploadBtn.setAttribute('aria-expanded', String(open))
+  libUploadBtn.setAttribute('aria-label', open ? '추가 메뉴 닫기' : '추가 메뉴 열기')
+}
+libUploadBtn.addEventListener('click', () => setLibraryAddMenuOpen(!document.querySelector('.lib-add-fab-wrap')?.classList.contains('open')))
+$('lib-add-paper-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); fileInput.click() })
+$('lib-add-folder-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); openCreateFolderDialog() })
 
 // ── 테마 토글 기능 ──────────────────────────────
 
@@ -10519,8 +11585,7 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
 
   // refKeys(여러 개일 수 있음)를 받아 하나의 오버레이 박스를 그린다. 툴팁에는
   // refMap에 실제로 존재하는 키의 원문을 전부 이어붙여 보여준다("[66-69]"
-  // 같은 범위 인용이 여러 참고문헌을 한 번에 가리키는 경우를 위함). "원문
-  // 링크 찾기"/Google Scholar 검색은 첫 번째 키를 기준으로 동작한다.
+  // 같은 범위 인용이 여러 참고문헌을 한 번에 가리키는 경우를 위함).
   const addCitationBox = (charStart, charEnd, refKeys) => {
     const validKeys = refKeys.filter(k => refMap[k])
     if (validKeys.length === 0) return
@@ -10997,12 +12062,8 @@ document.addEventListener('scroll', () => {
 let citationTooltipEl = null
 let citationTooltipHideTimer = null
 let citationTooltipDocId = null
-let citationTooltipRefNum = null
+let citationTooltipReferences = []
 let citationTooltipBoxEl = null
-
-function buildScholarSearchUrl(refText) {
-  return `https://scholar.google.com/scholar?q=${encodeURIComponent((refText || '').slice(0, 300))}`
-}
 
 // Tauri 데스크탑 webview는 보안상 window.open()/target="_blank"로 외부
 // URL을 새 탭으로 열어주지 않는다(웹 브라우저와 달리 시스템 기본 브라우저를
@@ -11030,6 +12091,7 @@ function getOrCreateCitationTooltip() {
   el.innerHTML = `
     <div class="citation-tooltip-text"></div>
     <div class="citation-tooltip-result hidden"></div>
+    <div class="citation-tooltip-scholar-results hidden"></div>
     <div class="citation-tooltip-actions">
       <button type="button" class="citation-tooltip-action-btn citation-tooltip-resolve-btn">${icon('search', 12, 'style="vertical-align:-2px;margin-right:4px"')}원문 링크 찾기</button>
       <button type="button" class="citation-tooltip-action-btn citation-tooltip-scholar-btn">${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px"')}Google Scholar 검색</button>
@@ -11047,8 +12109,20 @@ function getOrCreateCitationTooltip() {
   })
   el.querySelector('.citation-tooltip-scholar-btn').addEventListener('click', (e) => {
     e.stopPropagation()
-    const text = el.querySelector('.citation-tooltip-text').textContent
-    openExternalUrl(buildScholarSearchUrl(text))
+    const searchableRefs = citationTooltipReferences
+      .map(ref => ({ ...ref, title: extractCitationTitle(ref.text) }))
+      .filter(ref => ref.title)
+    if (searchableRefs.length <= 1) {
+      if (searchableRefs.length) openExternalUrl(buildScholarSearchUrl(searchableRefs[0].text))
+      return
+    }
+
+    const scholarResultsEl = el.querySelector('.citation-tooltip-scholar-results')
+    scholarResultsEl.className = 'citation-tooltip-scholar-results'
+    scholarResultsEl.innerHTML = searchableRefs.map(ref =>
+      `<div class="citation-tooltip-result-item"><span class="citation-tooltip-multi-key">[${escapeHtml(ref.key)}]</span><a href="${escapeHtml(buildScholarSearchUrl(ref.text))}" target="_blank" rel="noopener">${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px;flex-shrink:0"')}<span>${escapeHtml(ref.title)}</span></a></div>`
+    ).join('')
+    positionCitationTooltip()
   })
   // resolveCitationTooltip()이 innerHTML로 채워 넣는 "원문 링크 찾기" 결과의
   // <a> 태그는 그때그때 새로 생기므로, 매번 리스너를 다는 대신 이 안정적인
@@ -11074,14 +12148,13 @@ function positionCitationTooltip() {
   left = Math.max(8, Math.min(left, window.innerWidth - tw - 8))
   let top = rect.top - th - 10
   if (top < 8) top = rect.bottom + 10
+  top = Math.max(8, Math.min(top, window.innerHeight - th - 8))
   citationTooltipEl.style.left = `${left}px`
   citationTooltipEl.style.top = `${top}px`
 }
 
 // refKeys가 여러 개면(예: "[66-69]" 범위 인용, "(A, 2020; B, 2019)" 나열)
-// 각 항목을 "[키] 원문" 형태로 구분해 전부 보여준다. "원문 링크 찾기"/
-// Google Scholar 검색용 textContent에서도 항목 사이가 구분되도록 줄바꿈으로
-// 이어붙인다.
+// 각 항목을 "[키] 원문" 형태로 구분해 전부 보여준다.
 function buildCitationTooltipHtml(refKeys, refMap) {
   if (refKeys.length === 1) return renderBoldText(refMap[refKeys[0]] || '')
   return refKeys
@@ -11095,8 +12168,7 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl) {
   if (state.isSelectionDragging) return
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   citationTooltipDocId = docId
-  // "원문 링크 찾기"/Google Scholar 검색은 여러 키 중 첫 번째를 기준으로 동작한다.
-  citationTooltipRefNum = refKeys[0]
+  citationTooltipReferences = refKeys.map(key => ({ key, text: refMap[key] || '' }))
   citationTooltipBoxEl = boxEl
 
   const tooltip = getOrCreateCitationTooltip()
@@ -11104,9 +12176,15 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl) {
   const resultEl = tooltip.querySelector('.citation-tooltip-result')
   resultEl.className = 'citation-tooltip-result hidden'
   resultEl.innerHTML = ''
+  const scholarResultsEl = tooltip.querySelector('.citation-tooltip-scholar-results')
+  scholarResultsEl.className = 'citation-tooltip-scholar-results hidden'
+  scholarResultsEl.innerHTML = ''
   const resolveBtn = tooltip.querySelector('.citation-tooltip-resolve-btn')
   resolveBtn.disabled = false
   resolveBtn.innerHTML = `${icon('search', 12, 'style="vertical-align:-2px;margin-right:4px"')}원문 링크 찾기`
+  const scholarBtn = tooltip.querySelector('.citation-tooltip-scholar-btn')
+  const scholarLabel = refKeys.length > 1 ? 'Google Scholar 개별 검색' : 'Google Scholar 검색'
+  scholarBtn.innerHTML = `${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px"')}${scholarLabel}`
 
   tooltip.classList.remove('hidden')
   positionCitationTooltip()
@@ -11124,20 +12202,47 @@ function scheduleCitationTooltipHide() {
 }
 
 async function resolveCitationTooltip() {
-  if (!citationTooltipEl || !citationTooltipDocId || !citationTooltipRefNum) return
+  if (!citationTooltipEl || !citationTooltipDocId || !citationTooltipReferences.length) return
   const resolveBtn = citationTooltipEl.querySelector('.citation-tooltip-resolve-btn')
   const resultEl = citationTooltipEl.querySelector('.citation-tooltip-result')
   if (resolveBtn.disabled) return
+
+  const requestedDocId = citationTooltipDocId
+  const requestedRefs = citationTooltipReferences.map(ref => ({ ...ref }))
+  const isCurrentRequest = () => citationTooltipDocId === requestedDocId &&
+    citationTooltipReferences.map(ref => ref.key).join('\u0000') === requestedRefs.map(ref => ref.key).join('\u0000')
 
   resolveBtn.disabled = true
   resolveBtn.innerHTML = `${icon('refreshCw', 12, 'style="vertical-align:-2px;margin-right:4px"')}찾는 중...`
 
   try {
-    const result = await resolveLibraryReference(citationTooltipDocId, citationTooltipRefNum)
-    if (result && result.url) {
+    const results = await Promise.all(requestedRefs.map(async ref => {
+      try {
+        return { ...ref, result: await resolveLibraryReference(requestedDocId, ref.key) }
+      } catch (error) {
+        console.warn(`참고문헌 [${ref.key}] 조회 실패:`, error)
+        return { ...ref, result: null, error: true }
+      }
+    }))
+
+    if (!isCurrentRequest()) return
+
+    const successes = results.filter(item => item.result && item.result.url)
+    if (requestedRefs.length === 1 && successes.length) {
+      const result = successes[0].result
       resultEl.className = 'citation-tooltip-result'
       const label = result.title ? `${result.title}${result.year ? ` (${result.year})` : ''}` : result.url
       resultEl.innerHTML = `<a href="${escapeHtml(result.url)}" target="_blank" rel="noopener">${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px;flex-shrink:0"')}<span>${escapeHtml(label)}</span></a>`
+    } else if (requestedRefs.length > 1) {
+      resultEl.className = `citation-tooltip-result${successes.length ? '' : ' citation-tooltip-result-empty'}`
+      resultEl.innerHTML = results.map(({ key, result, error }) => {
+        if (result && result.url) {
+          const label = result.title ? `${result.title}${result.year ? ` (${result.year})` : ''}` : result.url
+          return `<div class="citation-tooltip-result-item"><span class="citation-tooltip-multi-key">[${escapeHtml(key)}]</span><a href="${escapeHtml(result.url)}" target="_blank" rel="noopener">${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px;flex-shrink:0"')}<span>${escapeHtml(label)}</span></a></div>`
+        }
+        const message = error ? '조회 중 오류가 발생했습니다.' : '원문 링크를 찾지 못했습니다.'
+        return `<div class="citation-tooltip-result-item citation-tooltip-result-empty"><span class="citation-tooltip-multi-key">[${escapeHtml(key)}]</span><span>${message}</span></div>`
+      }).join('')
     } else {
       resultEl.className = 'citation-tooltip-result citation-tooltip-result-empty'
       resultEl.textContent = '원문 링크를 찾지 못했습니다. Google Scholar 검색을 이용해보세요.'
@@ -11147,6 +12252,7 @@ async function resolveCitationTooltip() {
     resultEl.className = 'citation-tooltip-result citation-tooltip-result-empty'
     resultEl.textContent = '조회 중 오류가 발생했습니다.'
   } finally {
+    if (!isCurrentRequest()) return
     resolveBtn.disabled = false
     resolveBtn.innerHTML = `${icon('search', 12, 'style="vertical-align:-2px;margin-right:4px"')}다시 찾기`
     positionCitationTooltip()
@@ -11155,7 +12261,9 @@ async function resolveCitationTooltip() {
 
 // PDF 스크롤 중에는 인용 박스와 툴팁의 상대 위치가 계속 바뀌므로, 스크롤이
 // 시작되면 곧바로 닫는다(매 스크롤 이벤트마다 재계산하는 것보다 훨씬 가볍다).
-document.addEventListener('scroll', () => {
+document.addEventListener('scroll', (event) => {
+  // 참고문헌이 많아 툴팁 자체를 스크롤한 경우에는 열린 상태를 유지한다.
+  if (citationTooltipEl && event.target && citationTooltipEl.contains(event.target)) return
   if (citationTooltipEl && !citationTooltipEl.classList.contains('hidden')) hideCitationTooltip()
 }, true)
 
@@ -12288,7 +13396,7 @@ document.addEventListener('mouseup', () => {
 // KaTeX 로드 완료 후 페이지 내 pending 수식 전부 재처리
 document.addEventListener('katex-ready', () => {
   // 번역 패널의 모든 .math-pending 요소 처리
-  document.querySelectorAll('.trans-text, .message-bubble').forEach(el => {
+  document.querySelectorAll('.trans-text, .message-bubble, .notes-card-text, .aic-preview, .aic-card-preview').forEach(el => {
     applyKatexToElement(el)
   })
 })
@@ -14205,6 +15313,10 @@ async function handleRouting() {
         sessionStorage.setItem('easypaper_graph_subview', subviewParam)
       }
       const pageId = rawPage
+      if (pageId === 'library' && history.state?.screen === 'library' && history.state?.page === 'library') {
+        activeLibraryFolderId = history.state.libraryFolderId || null
+        activeCategoryFilter = 'ALL'
+      }
       console.log("[Router] Routing to workspace page:", pageId, "Viewer active:", viewerScreen.classList.contains('active'), "Library active:", libraryScreen.classList.contains('active'))
       if (viewerScreen.classList.contains('active') || !libraryScreen.classList.contains('active')) {
         await showLibraryScreen(false, WORKSPACE_PAGES.includes(pageId) ? pageId : 'dashboard')
@@ -14219,6 +15331,23 @@ async function handleRouting() {
 
 window.addEventListener('popstate', (e) => {
   console.log("[Router] popstate fired. state:", e.state)
+  const isLibraryHistory = e.state?.screen === 'library' && e.state?.page === 'library'
+  const isLegacyLibraryRoot = !e.state && location.hash === '#library'
+  if (isLibraryHistory || isLegacyLibraryRoot) {
+    const requestedFolderId = e.state?.libraryFolderId || null
+    const canValidateFolder = state.currentWorkspacePage === 'library'
+    const folderExists = !requestedFolderId || !canValidateFolder || libraryFolders.some(folder => folder.id === requestedFolderId)
+    activeLibraryFolderId = folderExists ? requestedFolderId : null
+    if (requestedFolderId && !folderExists) {
+      history.replaceState({ ...(e.state || {}), screen: 'library', page: 'library', libraryFolderId: null }, '', location.href)
+    }
+    activeCategoryFilter = 'ALL'
+    clearDocSelection()
+    if (state.currentWorkspacePage === 'library') {
+      filterLibraryCards(currentLibraryDocs)
+      renderFolderNavigation(currentLibraryDocs)
+    }
+  }
   handleRouting()
 })
 
@@ -14405,352 +15534,3 @@ if (viewerScrollContainer) {
     })
   })
 }
-
-// ── 첫 실행 시 AI 엔진 자동 감지 / 설치 안내 온보딩 ──────────────────
-const ONBOARDING_SEEN_KEY = 'easypaper_onboarding_seen'
-
-function maybeShowOnboarding() {
-  if (!onboardingModal) return
-  if (localStorage.getItem(ONBOARDING_SEEN_KEY) === '1') return
-  openOnboarding()
-}
-
-// 감지 결과와 마법사 진행 상태(감지됨 선택 → 모델 선택 → 확인)를 함께 보관
-const onboardingState = {
-  sys: null, cli: null, ollamaStatus: null,
-  detected: [], selectedDetectedIdx: null,
-  currentEntry: null, selectedModel: null,
-  step: 'detecting',
-}
-
-// 온보딩 4단계(감지 중 / 감지됨 선택 / 모델 선택 / 설치 안내) 중 하나로 전환.
-// 감지됨·설치 섹션은 "모델 선택" 단계에서는 별도 화면처럼 숨겨 선택에 집중하게 함
-function showOnboardingStep(step) {
-  onboardingState.step = step
-  onboardingDetecting.classList.toggle('hidden', step !== 'detecting')
-  onboardingDetected.classList.toggle('hidden', !(step === 'detected' && onboardingState.detected.length > 0))
-  if (onboardingModelSelect) onboardingModelSelect.classList.toggle('hidden', step !== 'model-select')
-  onboardingInstall.classList.toggle('hidden', step === 'detecting' || step === 'model-select')
-}
-
-function openOnboarding() {
-  openOverlayModal(onboardingModal)
-  showOnboardingStep('detecting')
-  detectAndRenderOnboarding()
-}
-
-function closeOnboarding() {
-  closeOverlayModal(onboardingModal)
-  localStorage.setItem(ONBOARDING_SEEN_KEY, '1')
-}
-
-if (onboardingCloseBtn) onboardingCloseBtn.addEventListener('click', closeOnboarding)
-if (onboardingSkipBtn) onboardingSkipBtn.addEventListener('click', closeOnboarding)
-if (onboardingModal) {
-  onboardingModal.addEventListener('click', (e) => {
-    if (e.target === onboardingModal) closeOnboarding()
-  })
-}
-
-// 설치 버튼 하나를 "설치 가능" 또는 "✓ 설치됨" 상태로 표시.
-// 방금 설치 액션이 성공해 이미 "설치됨" 표시 중인 버튼은, 재감지 결과가 아직 그 사실을
-// 못 따라잡았더라도(예: Ollama 모델 감지 전) 되돌리지 않는다.
-function setOnboardingRowInstalledState(btn, isInstalled) {
-  if (!btn) return
-  if (isInstalled) {
-    btn.disabled = true
-    btn.textContent = '✓ 설치됨'
-    btn.classList.add('onboarding-install-done')
-  } else if (!btn.classList.contains('onboarding-install-done')) {
-    btn.disabled = false
-    btn.textContent = '설치'
-  }
-}
-
-async function detectAndRenderOnboarding() {
-  let sys, cli, ollamaStatus
-  try {
-    [sys, cli, ollamaStatus] = await Promise.all([
-      getSystemSettingsAPI(),
-      fetchCliAvailability().catch(() => ({ antigravity: false, claude_code: false, codex: false })),
-      getOllamaStatusAPI().catch(() => ({ installed: false })),
-    ])
-  } catch (err) {
-    console.warn('온보딩 감지 실패:', err)
-    closeOnboarding()
-    return
-  }
-
-  onboardingState.sys = sys
-  onboardingState.cli = cli
-  onboardingState.ollamaStatus = ollamaStatus
-
-  const detected = []
-  // Ollama는 바이너리만 설치되어 있어도(아직 모델이 없어도) 감지 목록에 넣어,
-  // "다음" 버튼으로 이어지는 모델 선택 단계에서 바로 모델을 받게 함
-  if (ollamaStatus.installed) {
-    const models = sys.available_models || []
-    detected.push({
-      provider: 'ollama',
-      label: 'Ollama (로컬)',
-      sub: models.length > 0 ? `${models[0]}${models.length > 1 ? ` 외 ${models.length - 1}개` : ''}` : '설치됨 · 모델 다운로드 필요',
-    })
-  }
-  if (cli.claude_code) {
-    detected.push({ provider: 'claude_code', label: 'Claude Code', sub: 'CLI 감지됨' })
-  }
-  if (cli.codex) {
-    detected.push({ provider: 'codex', label: 'Codex', sub: 'CLI 감지됨' })
-  }
-  if (cli.antigravity) {
-    detected.push({ provider: 'antigravity', label: 'Antigravity', sub: 'CLI 감지됨' })
-  }
-  if (sys.openai_api_key) {
-    detected.push({ provider: 'openai', label: 'OpenAI', sub: 'API 키 설정됨' })
-  }
-  if (sys.gemini_api_key) {
-    detected.push({ provider: 'gemini', label: 'Gemini', sub: 'API 키 설정됨' })
-  }
-  if (sys.claude_api_key) {
-    detected.push({ provider: 'claude', label: 'Anthropic Claude', sub: 'API 키 설정됨' })
-  }
-  onboardingState.detected = detected
-  onboardingState.selectedDetectedIdx = null
-  if (onboardingNextBtn) onboardingNextBtn.disabled = true
-
-  // 1. 감지된 엔진은 바로 저장하지 않고, 선택 → "다음"으로 모델 선택 단계로 이동
-  if (detected.length > 0) {
-    onboardingDetectedList.innerHTML = detected.map((d, i) => `
-      <button type="button" class="onboarding-detected-btn" data-idx="${i}">
-        <span>${escapeHtml(d.label)}</span>
-        <span class="onboarding-detected-sub">${escapeHtml(d.sub)}</span>
-      </button>
-    `).join('')
-    onboardingDetectedList.querySelectorAll('.onboarding-detected-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        onboardingDetectedList.querySelectorAll('.onboarding-detected-btn').forEach(b => b.classList.remove('selected'))
-        btn.classList.add('selected')
-        onboardingState.selectedDetectedIdx = Number(btn.dataset.idx)
-        if (onboardingNextBtn) onboardingNextBtn.disabled = false
-      })
-    })
-  }
-
-  // 2. 설치 목록에서는 이미 감지된 엔진의 행을 제거 - Ollama가 감지됐어도
-  //    Claude Code 등 다른 CLI는 여전히 추가로 설치할 수 있어야 함
-  if (onboardingInstallIntro) {
-    onboardingInstallIntro.textContent = detected.length > 0
-      ? '추가로 설치할 수 있는 AI 엔진입니다.'
-      : '사용 가능한 AI 엔진이 감지되지 않았습니다. 아래에서 하나를 설치해주세요.'
-  }
-  const detectedProviders = new Set(detected.map(d => d.provider))
-  onboardingInstall.querySelectorAll('.onboarding-install-row').forEach((row) => {
-    row.classList.toggle('hidden', detectedProviders.has(row.dataset.provider))
-  })
-  setOnboardingRowInstalledState(onboardingInstallOllamaBtn, !!ollamaStatus.installed)
-  setOnboardingRowInstalledState(onboardingInstallClaudeCodeBtn, !!cli.claude_code)
-  setOnboardingRowInstalledState(onboardingInstallCodexBtn, !!cli.codex)
-  setOnboardingRowInstalledState(onboardingInstallAntigravityBtn, !!cli.antigravity)
-
-  showOnboardingStep('detected')
-}
-
-// 새로 선택 가능해진 엔진 목록으로 시선을 유도 (스크롤 + 잠깐 테두리 강조)
-function highlightOnboardingDetected() {
-  if (!onboardingDetected || onboardingDetected.classList.contains('hidden')) return
-  onboardingDetected.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  onboardingDetected.classList.add('onboarding-attention-pulse')
-  setTimeout(() => onboardingDetected.classList.remove('onboarding-attention-pulse'), 1600)
-}
-
-// "다음" 팝업: 선택한 프로바이더에서 사용할 모델을 고르는 단계.
-// Ollama는 이미 받아둔 모델 목록 + 새 모델 다운로드 섹션을, 나머지 CLI/API 프로바이더는
-// PROVIDER_CONFIG에 정의된 모델 목록을 보여준다.
-function renderModelSelectStep(entry) {
-  onboardingState.currentEntry = entry
-  onboardingState.selectedModel = null
-  if (onboardingConfirmBtn) onboardingConfirmBtn.disabled = true
-  if (onboardingModelSelectProvider) onboardingModelSelectProvider.textContent = entry.label
-
-  let models = []
-  if (entry.provider === 'ollama') {
-    models = (onboardingState.sys?.available_models || []).map(m => ({ value: m, label: m }))
-  } else {
-    const cfg = PROVIDER_CONFIG.find(p => p.id === entry.provider)
-    models = cfg ? cfg.models : []
-  }
-
-  if (onboardingModelList) {
-    if (models.length === 0) {
-      onboardingModelList.innerHTML = `<div style="font-size: 12.5px; color: var(--text-secondary); padding: 10px 2px; line-height: 1.6;">아직 다운로드된 모델이 없습니다. 아래에서 모델을 다운로드해주세요.</div>`
-    } else {
-      let lastGroup = null
-      onboardingModelList.innerHTML = models.map((m, i) => {
-        let groupHtml = ''
-        if (m.group && m.group !== lastGroup) {
-          lastGroup = m.group
-          groupHtml = `<div style="font-size: 11px; font-weight: 700; color: var(--text-tertiary); margin: ${i === 0 ? '0' : '10px'} 0 2px 2px;">${escapeHtml(m.group)}</div>`
-        }
-        return `${groupHtml}<button type="button" class="onboarding-detected-btn onboarding-model-btn" data-value="${escapeHtml(m.value)}"><span>${escapeHtml(m.label)}</span></button>`
-      }).join('')
-    }
-    onboardingModelList.querySelectorAll('.onboarding-model-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        onboardingModelList.querySelectorAll('.onboarding-model-btn').forEach(b => b.classList.remove('selected'))
-        btn.classList.add('selected')
-        onboardingState.selectedModel = btn.dataset.value
-        if (onboardingConfirmBtn) onboardingConfirmBtn.disabled = false
-      })
-    })
-    const firstBtn = onboardingModelList.querySelector('.onboarding-model-btn')
-    if (firstBtn) firstBtn.click()
-  }
-
-  if (onboardingModelPullSection) {
-    onboardingModelPullSection.classList.toggle('hidden', entry.provider !== 'ollama')
-  }
-}
-
-if (onboardingNextBtn) {
-  onboardingNextBtn.addEventListener('click', () => {
-    if (onboardingState.selectedDetectedIdx === null) return
-    const entry = onboardingState.detected[onboardingState.selectedDetectedIdx]
-    if (!entry) return
-    renderModelSelectStep(entry)
-    showOnboardingStep('model-select')
-  })
-}
-
-if (onboardingBackBtn) {
-  onboardingBackBtn.addEventListener('click', () => {
-    showOnboardingStep('detected')
-  })
-}
-
-if (onboardingConfirmBtn) {
-  onboardingConfirmBtn.addEventListener('click', async () => {
-    const entry = onboardingState.currentEntry
-    const model = onboardingState.selectedModel
-    if (!entry || !model) return
-    const sys = onboardingState.sys
-    onboardingConfirmBtn.disabled = true
-    try {
-      await saveSystemSettingsAPI({
-        ollama_host: sys.ollama_host,
-        trans_provider: entry.provider,
-        trans_model: model,
-        chat_provider: entry.provider,
-        chat_model: model,
-        openai_api_key: sys.openai_api_key,
-        gemini_api_key: sys.gemini_api_key,
-        claude_api_key: sys.claude_api_key,
-        translation_prompt_template: sys.translation_prompt_template,
-      })
-      // sync compact pickers so the viewer/chat UI reflects the newly selected engine immediately
-      viewerTransPicker.setValue(entry.provider, model)
-      settingTransPicker.setValue(entry.provider, model)
-      chatSidebarPicker.setValue(entry.provider, model)
-      settingChatPicker.setValue(entry.provider, model)
-      showToast(`${entry.label}을(를) 기본 AI 엔진으로 설정했습니다.`, 'success')
-      closeOnboarding()
-    } catch (err) {
-      showToast(err.message || '설정 저장 실패', 'error')
-      onboardingConfirmBtn.disabled = false
-    }
-  })
-}
-
-function wireOnboardingInstallBtn(btn, streamFn, label) {
-  if (!btn) return
-  const originalText = btn.textContent
-  btn.addEventListener('click', () => {
-    btn.disabled = true
-    btn.textContent = '설치 중...'
-    btn.classList.remove('onboarding-install-done')
-    onboardingInstallProgressArea.classList.remove('hidden')
-    onboardingInstallStatus.textContent = `${label} 설치 진행 중...`
-    onboardingInstallLog.textContent = ''
-
-    streamFn(
-      (data) => {
-        if (data.line) {
-          onboardingInstallLog.textContent += data.line + '\n'
-          onboardingInstallLog.scrollTop = onboardingInstallLog.scrollHeight
-        }
-      },
-      async () => {
-        // 버튼에 "설치됨" 상태를 영구적으로 남겨 완료 여부를 눈으로 바로 확인할 수 있게 함
-        // (예전에는 원래 텍스트로 바로 되돌려버려서 설치가 끝나도 아무 표시가 남지 않았음)
-        btn.textContent = '✓ 설치됨'
-        btn.classList.add('onboarding-install-done')
-        onboardingInstallStatus.textContent = label === 'Ollama'
-          ? 'Ollama 설치 완료! 위 목록에서 Ollama를 선택하고 "다음"을 눌러 모델을 다운로드해주세요.'
-          : `${label} 설치 완료! 터미널에서 로그인을 마치면 위에서 바로 선택할 수 있습니다.`
-        showToast(`${label} 설치가 완료되었습니다! 다음 단계를 확인해주세요.`, 'success')
-        // 방금 완료된 상태를 잠깐 보여준 뒤, 새로 감지된 엔진 선택 화면으로 시선을 유도
-        await new Promise(resolve => setTimeout(resolve, 900))
-        await detectAndRenderOnboarding()
-        highlightOnboardingDetected()
-      },
-      (err) => {
-        showToast(`${label} 설치 실패: ${err.message}`, 'error')
-        onboardingInstallStatus.textContent = err.message
-        btn.disabled = false
-        btn.textContent = originalText
-      }
-    )
-  })
-}
-
-wireOnboardingInstallBtn(onboardingInstallOllamaBtn, streamInstallOllamaAPI, 'Ollama')
-wireOnboardingInstallBtn(onboardingInstallClaudeCodeBtn, streamInstallClaudeCodeAPI, 'Claude Code CLI')
-wireOnboardingInstallBtn(onboardingInstallCodexBtn, streamInstallCodexAPI, 'Codex CLI')
-wireOnboardingInstallBtn(onboardingInstallAntigravityBtn, streamInstallAntigravityAPI, 'Antigravity CLI')
-
-// Ollama "다음 단계" 추천 모델 원클릭 다운로드
-document.querySelectorAll('.onboarding-pull-model-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const modelName = btn.dataset.model
-    document.querySelectorAll('.onboarding-pull-model-btn').forEach(b => { b.disabled = true })
-    onboardingPullProgressArea.classList.remove('hidden')
-    onboardingPullStatusText.textContent = '다운로드 준비 중...'
-    onboardingPullPctText.textContent = '0%'
-    onboardingPullProgressBar.style.width = '0%'
-    showToast(`${modelName} 모델 다운로드를 시작합니다. 시간이 걸릴 수 있습니다.`, 'info')
-
-    streamPullModelAPI(
-      modelName,
-      (data) => {
-        if (data.status) onboardingPullStatusText.textContent = data.status
-        if (data.total && data.completed) {
-          const pct = Math.round((data.completed / data.total) * 100) || 0
-          onboardingPullProgressBar.style.width = `${pct}%`
-          onboardingPullPctText.textContent = `${pct}%`
-        }
-      },
-      async () => {
-        showToast(`${modelName} 모델 다운로드가 완료되었습니다!`, 'success')
-        document.querySelectorAll('.onboarding-pull-model-btn').forEach(b => { b.disabled = false })
-        onboardingPullProgressArea.classList.add('hidden')
-        const wasModelSelect = onboardingState.step === 'model-select'
-        await detectAndRenderOnboarding()
-        // 모델 선택 화면에서 다운로드한 경우, 감지됨 목록으로 돌아가지 않고
-        // 그 자리에서 방금 받은 모델이 바로 보이도록 모델 선택 화면을 유지/갱신
-        if (wasModelSelect) {
-          const entry = onboardingState.detected.find(d => d.provider === 'ollama')
-          if (entry) {
-            renderModelSelectStep(entry)
-            showOnboardingStep('model-select')
-          }
-        } else {
-          highlightOnboardingDetected()
-        }
-      },
-      (err) => {
-        showToast(`${modelName} 모델 다운로드 실패: ${err.message}`, 'error')
-        document.querySelectorAll('.onboarding-pull-model-btn').forEach(b => { b.disabled = false })
-        onboardingPullStatusText.textContent = err.message
-      }
-    )
-  })
-})

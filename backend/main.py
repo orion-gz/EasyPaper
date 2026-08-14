@@ -1,8 +1,22 @@
+import sys
+
+# PyInstaller sidecar는 일반 Python 인터프리터가 아니어서 ``-m pip``를
+# 실행할 수 없다. 설치용으로 자신을 다시 띄운 경우 서버 import 전에 분기한다.
+if len(sys.argv) > 1 and sys.argv[1] == "--easypaper-install-pdf-parser":
+    from venv_manager import run_packaged_parser_installer
+    raise SystemExit(run_packaged_parser_installer())
+
+# 선택 파서의 격리 환경을 FastAPI 등 다른 패키지보다 먼저 활성화한다.
+from config import get_pdf_parser_engine
+from venv_manager import relaunch_into_required_venv
+relaunch_into_required_venv(get_pdf_parser_engine())
+
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
+from contextlib import asynccontextmanager
 import logging
 
 from logging_config import setup_logging
@@ -10,6 +24,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 from config import CORS_ORIGINS, UPLOAD_DIR, APP_HOST, APP_PORT
+
 from routers import upload, translate, chat
 from routers import library as library_router
 from routers import jobs as jobs_router
@@ -19,10 +34,23 @@ from routers import insight as insight_router
 from routers import primer as primer_router
 from services.auth import get_current_user
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Initialize persistent state and restore library sessions at startup."""
+    from services.db import init_db
+    from services.usage_tracker import init_usage_table
+
+    init_db()
+    init_usage_table()
+    upload.restore_sessions_from_library()
+    yield
+
+
 app = FastAPI(
     title="EasyPaper API",
     description="PDF 논문 번역 서비스 (Gemma 4 E4B + Ollama)",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS 설정 (모든 오리진 허용 — NPM/리버스 프록시 환경)
@@ -46,14 +74,6 @@ app.include_router(insight_router.router, prefix="/api", dependencies=[Depends(g
 app.include_router(primer_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Primer"])
 
 
-@app.on_event("startup")
-async def startup_event():
-    """서버 시작 시 데이터베이스 초기화 및 라이브러리의 문서들을 세션으로 복원합니다."""
-    from services.db import init_db
-    from services.usage_tracker import init_usage_table
-    init_db()
-    init_usage_table()
-    upload.restore_sessions_from_library()
 
 
 @app.get("/api/pdf-file/{session_id}")
@@ -72,6 +92,17 @@ async def serve_pdf(session_id: str, username: str = Depends(get_current_user)):
 # 상대경로로 찾는 위치)에 둘 수 없다. 대신 dist를 _internal/frontend/dist에
 # 두고 이 env var로 실제 위치를 알려준다. 미설정 시(서버/Docker 배포)에는
 # 기존과 동일하게 상대경로로 계산한다.
+FRONTEND_CSP = (
+    "default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; "
+    "img-src 'self' data: blob: http://127.0.0.1:*; style-src 'self' 'unsafe-inline' "
+    "https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+    "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+    "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+    "worker-src 'self' blob: https://cdnjs.cloudflare.com; object-src 'none'; "
+    "base-uri 'self'; frame-ancestors 'none'"
+)
+
+
 FRONTEND_DIST = os.getenv("EASYPAPER_FRONTEND_DIST") or os.path.join(os.path.dirname(__file__), "../frontend/dist")
 if os.path.exists(FRONTEND_DIST):
     # /assets 등 정적 자산
@@ -102,7 +133,8 @@ if os.path.exists(FRONTEND_DIST):
             headers={
                 "Cache-Control": "no-cache, no-store, must-revalidate",
                 "Pragma": "no-cache",
-                "Expires": "0"
+                "Expires": "0",
+                "Content-Security-Policy": FRONTEND_CSP,
             }
         )
 else:

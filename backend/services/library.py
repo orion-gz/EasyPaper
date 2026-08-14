@@ -22,7 +22,10 @@ from services.db import (
     db_clear_page_insights,
     db_delete_page_insight,
     db_update_document_metadata,
+    db_patch_document_metadata,
     db_bulk_translation_rows,
+    db_list_folders, db_get_folder, db_create_folder, db_update_folder, db_delete_folder,
+    db_get_document_folder_map, db_move_documents_to_folder,
 )
 
 
@@ -124,8 +127,10 @@ def list_documents(
         suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
 
     rows_by_doc = db_bulk_translation_rows([doc["id"] for doc in docs])
+    folder_map = db_get_document_folder_map(username) if username else {}
     for doc in docs:
         doc["translated_pages"] = _resolve_translated_pages(rows_by_doc.get(doc["id"], []), suffix)
+        doc["folder_id"] = folder_map.get(doc["id"])
     return docs
 
 
@@ -140,10 +145,55 @@ def search_documents(username: str, query: str, only_trash: bool = False) -> lis
         return docs
 
     rows_by_doc = db_bulk_translation_rows([doc["id"] for doc in docs])
+    folder_map = db_get_document_folder_map(username) if username else {}
     for doc in docs:
+        doc["folder_id"] = folder_map.get(doc["id"])
         pages = sorted({r[0] for r in rows_by_doc.get(doc["id"], [])})
         doc["translated_pages"] = pages
     return docs
+
+
+# ── 라이브러리 폴더 ───────────────────────────────────────────────────────────
+
+def list_folders(username: str) -> list:
+    return db_list_folders(username)
+
+def create_folder(username: str, folder_id: str, name: str, parent_id: Optional[str], color: str) -> dict:
+    if parent_id and not db_get_folder(parent_id, username):
+        raise ValueError("상위 폴더를 찾을 수 없습니다.")
+    return db_create_folder(folder_id, username, name, parent_id, color)
+
+def _is_descendant(folder_id: str, parent_id: Optional[str], username: str) -> bool:
+    current = parent_id
+    while current:
+        if current == folder_id:
+            return True
+        folder = db_get_folder(current, username)
+        current = folder.get("parent_id") if folder else None
+    return False
+
+def update_folder(username: str, folder_id: str, name: Optional[str] = None, color: Optional[str] = None, parent_id: Optional[str] = None, move: bool = False) -> bool:
+    folder = db_get_folder(folder_id, username)
+    if not folder:
+        raise ValueError("폴더를 찾을 수 없습니다.")
+    updates = {}
+    if name is not None: updates["name"] = name
+    if color is not None: updates["color"] = color
+    if move:
+        if parent_id and not db_get_folder(parent_id, username):
+            raise ValueError("대상 폴더를 찾을 수 없습니다.")
+        if parent_id == folder_id or _is_descendant(folder_id, parent_id, username):
+            raise ValueError("폴더를 자기 자신 또는 하위 폴더로 옮길 수 없습니다.")
+        updates["parent_id"] = parent_id
+    return db_update_folder(folder_id, username, **updates)
+
+def delete_folder(username: str, folder_id: str, delete_papers: bool = False) -> bool:
+    return db_delete_folder(folder_id, username, delete_papers)
+
+def move_documents_to_folder(username: str, doc_ids: List[str], folder_id: Optional[str]) -> int:
+    if folder_id and not db_get_folder(folder_id, username):
+        raise ValueError("대상 폴더를 찾을 수 없습니다.")
+    return db_move_documents_to_folder(doc_ids, username, folder_id)
 
 
 def delete_chat_sessions(doc_id: str) -> None:
@@ -165,7 +215,13 @@ def delete_chat_sessions(doc_id: str) -> None:
         try:
             with open(meta_path, "r", encoding="utf-8") as f:
                 meta = json.load(f)
-            if meta.get("provider") == "antigravity":
+            providers = meta.get("providers")
+            if isinstance(providers, dict):
+                antigravity_meta = providers.get("antigravity")
+                if isinstance(antigravity_meta, dict):
+                    conv_id = antigravity_meta.get("conversation_id")
+            elif meta.get("provider") == "antigravity":
+                # ai_session.json provider별 구조 전환 전의 기존 파일 지원
                 conv_id = meta.get("conversation_id")
         except Exception as e:
             print(f"[delete_chat_sessions Antigravity Error] {e}")
@@ -365,6 +421,15 @@ def update_document_metadata(doc_id: str, metadata: dict) -> None:
     db_update_document_metadata(doc_id, metadata)
 
 
+def patch_document_metadata(
+    doc_id: str,
+    updates: dict,
+    remove_keys: tuple[str, ...] = (),
+) -> Optional[dict]:
+    """Atomically merge metadata fields and return the persisted metadata."""
+    return db_patch_document_metadata(doc_id, updates, remove_keys)
+
+
 def get_reference_start_page(doc: dict) -> Optional[int]:
     """문서에서 참고문헌 섹션이 시작하는 페이지 번호(1-based)를 반환합니다
     ("읽은 페이지 수"를 계산할 때 참고문헌 페이지를 본문에서 제외하는 데
@@ -396,7 +461,7 @@ def get_reference_start_page(doc: dict) -> Optional[int]:
     start_page = (idx + 1) if idx is not None else None  # 0-based 인덱스 -> 1-based 페이지 번호
 
     meta["reference_start_page"] = start_page
-    update_document_metadata(doc["id"], meta)
+    patch_document_metadata(doc["id"], {"reference_start_page": start_page})
     return start_page
 
 

@@ -158,9 +158,11 @@
                 <p class="library-header-subtitle">보관함에 저장된 모든 논문을 한 곳에서 관리하세요</p>
               </div>
               <div>
-                <button id="lib-upload-btn" class="file-btn">
-                  + 새 논문 추가
-                </button>
+                <div class="lib-add-fab-wrap">
+                  <button id="lib-upload-btn" class="file-btn lib-add-main-btn" aria-expanded="false" aria-label="추가 메뉴 열기"><span aria-hidden="true">+</span></button>
+                  <button id="lib-add-paper-btn" class="lib-add-sub-btn"><span class="lib-add-label">논문 추가</span><span class="lib-add-circle" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z"/><path d="M14 2v6h6"/></svg></span></button>
+                  <button id="lib-add-folder-btn" class="lib-add-sub-btn"><span class="lib-add-label">폴더 추가</span><span class="lib-add-circle" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/><path d="M12 11v6M9 14h6"/></svg></span></button>
+                </div>
               </div>
             </div>
 
@@ -191,10 +193,14 @@
 
             <!-- 카테고리 필터 + 보기 방식 전환 영역 -->
             <div id="library-filter-row" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px;">
-              <div id="library-category-filters" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;"></div>
-              <div id="library-view-toggle" class="library-view-toggle">
-                <button class="view-toggle-btn" data-view="card" title="카드 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
-                <button class="view-toggle-btn" data-view="list" title="리스트 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg></button>
+              <div class="library-category-filter-group">
+                <div id="library-category-filters" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;"></div>
+                <button type="button" id="library-category-filter-toggle" class="library-category-filter-toggle hidden" aria-controls="library-category-filters" aria-expanded="true"></button>
+              </div>
+              <div id="library-view-toggle" class="library-view-toggle" role="group" aria-label="논문 보기 방식">
+                <button type="button" class="view-toggle-btn" data-view="card" title="큰 카드 보기" aria-label="큰 카드 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
+                <button type="button" class="view-toggle-btn" data-view="compact" title="작은 카드 보기" aria-label="작은 카드 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="10" y="3" rx="1"/><rect width="5" height="5" x="17" y="3" rx="1"/><rect width="5" height="5" x="3" y="10" rx="1"/><rect width="5" height="5" x="10" y="10" rx="1"/><rect width="5" height="5" x="17" y="10" rx="1"/><rect width="5" height="5" x="3" y="17" rx="1"/><rect width="5" height="5" x="10" y="17" rx="1"/><rect width="5" height="5" x="17" y="17" rx="1"/></svg></button>
+                <button type="button" class="view-toggle-btn" data-view="list" title="리스트 보기" aria-label="리스트 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg></button>
               </div>
             </div>
 
@@ -585,7 +591,7 @@
   </div>
 
   <!-- 토스트 알림 -->
-  <div id="toast" class="toast"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <!-- 공통 테마 토글/설정/로그아웃 버튼 (로그인 & 비교 화면용 - 라이브러리/워크스페이스 화면은
        상단 탑네비의 아바타 버튼 및 사이드바 Settings/로그아웃이 같은 핸들러를 대신 호출한다) -->
@@ -913,6 +919,23 @@
           </div>
 
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <label>논문 처리 시 자동 생성</label>
+            <div class="toggle-switch-group">
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-auto-generate-keywords" />
+                <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+                <span class="toggle-switch-label">키워드·단어 자동 생성<small>업로드 후 모든 페이지에 대해 백그라운드 생성합니다.</small></span>
+              </label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-auto-generate-summaries" />
+                <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+                <span class="toggle-switch-label">페이지 요약 자동 생성<small>업로드 후 모든 페이지에 대해 백그라운드 생성합니다.</small></span>
+              </label>
+            </div>
+            <p style="font-size: 11px; color: var(--text-secondary); margin: 8px 0 0; line-height: 1.5;">기본값은 꺼짐입니다. 자동 생성은 AI 토큰을 추가로 사용합니다.</p>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
             <label>데이터 및 용량 관리</label>
             <button type="button" id="clear-cache-btn" class="btn btn-secondary" style="width: 100%; color: var(--error); border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.05); font-weight: 600;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>브라우저 번역 캐시 비우기
@@ -956,7 +979,7 @@
           </div>
 
           <!-- 참고문헌 링크 조회(OpenAlex) 설정 -->
-          <div style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
+          <div style="border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--bg-surface); padding: 14px; margin-top: 15px;">
             <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 4px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>참고문헌 링크 조회 설정</h4>
             <div class="form-group">
               <label for="setting-openalex-mailto">연락 가능한 이메일 (선택 사항)</label>
@@ -1008,27 +1031,72 @@
             </div>
           </div>
 
-          <!-- 번역 AI 설정 -->
+          <!-- 상위 기본 AI 설정 -->
           <div style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
-            <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 4px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>논문 번역 (Translation) 설정</h4>
+            <h4 style="font-size: 14px; font-weight: 650; color: var(--text-primary); margin-bottom: 5px;">AI 모델 설정</h4>
+            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 0 0 12px;">기본 모델 하나를 선택하고, 필요한 기능만 아래에서 별도 모델로 변경할 수 있습니다.</p>
+            <div class="form-group" style="margin-bottom: 4px;">
+              <label style="font-weight: 600;">기본 AI 모델</label>
+              <div id="setting-default-ai-provider"></div>
+            </div>
+
+          <details style="border-top: 1px solid var(--border); margin-top: 12px; padding-top: 4px;">
+            <summary style="cursor: pointer; padding: 9px 0; color: var(--text-primary); font-size: 13px; font-weight: 600;">세부 설정</summary>
+
+          <!-- 번역 AI 설정 -->
+          <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+            <div style="color: var(--text-primary); font-size: 13px; font-weight: 600; margin-bottom: 8px;">번역 <span style="color: var(--text-muted); font-size: 11.5px; font-weight: 400;">— 논문 번역·카테고리 분류</span></div>
             <div class="form-group">
-              <label>번역 AI 제공업체 및 모델</label>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
+                <span>별도 모델 설정</span>
+                <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;"><input type="checkbox" id="setting-trans-same-as-default" /> 기본 AI 모델과 동일하게 사용</label>
+              </div>
               <div id="setting-trans-provider"></div>
             </div>
           </div>
 
-          <!-- AI 어시스턴트 설정 -->
-          <div style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
-            <h4 style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 4px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></svg>AI 어시스턴트 (Chat) 설정</h4>
+          <!-- 읽기 분석 AI 설정 -->
+          <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+            <div style="color: var(--text-primary); font-size: 13px; font-weight: 600; margin-bottom: 8px;">읽기 분석 <span style="color: var(--text-muted); font-size: 11.5px; font-weight: 400;">— 키워드·요약·브리핑·개념 추출</span></div>
             <div class="form-group">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
-                <span>어시스턴트 AI 제공업체 및 모델</span>
+                <span>별도 모델 설정</span>
                 <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;">
-                  <input type="checkbox" id="setting-chat-same-as-trans" /> 번역 모델과 동일한 모델 사용
+                  <input type="checkbox" id="setting-analysis-same-as-default" /> 기본 AI 모델과 동일하게 사용
+                </label>
+              </div>
+              <div id="setting-analysis-provider"></div>
+            </div>
+          </div>
+
+          <!-- AI 어시스턴트 설정 -->
+          <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+            <div style="color: var(--text-primary); font-size: 13px; font-weight: 600; margin-bottom: 8px;">채팅 <span style="color: var(--text-muted); font-size: 11.5px; font-weight: 400;">— AI 채팅·비교·후속 질문</span></div>
+            <div class="form-group">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
+                <span>별도 모델 설정</span>
+                <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;">
+                  <input type="checkbox" id="setting-chat-same-as-default" /> 기본 AI 모델과 동일하게 사용
                 </label>
               </div>
               <div id="setting-chat-provider"></div>
             </div>
+          </div>
+
+          <!-- 라이브러리 AI 설정 -->
+          <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+            <div style="color: var(--text-primary); font-size: 13px; font-weight: 600; margin-bottom: 8px;">라이브러리 <span style="color: var(--text-muted); font-size: 11.5px; font-weight: 400;">— 개념 연결·추천·히트맵·대시보드</span></div>
+            <div class="form-group">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
+                <span>별도 모델 설정</span>
+                <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;">
+                  <input type="checkbox" id="setting-library-same-as-default" /> 기본 AI 모델과 동일하게 사용
+                </label>
+              </div>
+              <div id="setting-library-provider"></div>
+            </div>
+          </div>
+          </details>
           </div>
 
         </form>

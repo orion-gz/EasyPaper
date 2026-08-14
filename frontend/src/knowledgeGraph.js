@@ -24,12 +24,14 @@ export function renderKnowledgeGraph(container, graphData, { onNodeClick } = {})
       { selector: 'node[type="concept"]', style: { shape: 'diamond', 'background-color': '#f7b34f', width: 24, height: 24 } },
       { selector: 'node[type="note"]', style: { shape: 'round-rectangle', 'background-color': '#8b5cf6', width: 16, height: 16 } },
       { selector: 'node[type="figure"]', style: { shape: 'triangle', 'background-color': '#10b981', width: 16, height: 16 } },
+      { selector: 'node[type="tag"]', style: { shape: 'round-rectangle', 'background-color': '#ec4899', width: 20, height: 14 } },
       { selector: 'edge[type="citation"]', style: { 'line-style': 'solid', 'target-arrow-shape': 'triangle', width: 1.5 } },
-      { selector: 'edge[type="category"]', style: { 'line-style': 'dashed', width: 1, 'line-color': '#ccc' } },
+      { selector: 'edge[type="category"]', style: { 'line-style': 'dashed', width: 'mapData(weight, 1, 4, 1, 3)', 'line-color': '#ccc' } },
       { selector: 'edge[type="has_concept"]', style: { 'line-style': 'dotted', width: 1 } },
       { selector: 'edge[type="notes_on"]', style: { 'line-style': 'dotted', width: 1, 'line-color': '#8b5cf6' } },
       { selector: 'edge[type="shows_figure"]', style: { 'line-style': 'dotted', width: 1, 'line-color': '#10b981' } },
       { selector: 'edge[type="similar_to"]', style: { 'line-style': 'dashed', width: 1.5, 'line-color': '#f7b34f', 'curve-style': 'bezier' } },
+      { selector: 'edge[type="tagged_with"]', style: { 'line-style': 'dotted', width: 1, 'line-color': '#ec4899' } },
       // 노드 클릭 시 직접 연결된 이웃만 부각하고 나머지는 흐리게 처리한다.
       { selector: '.kg-dimmed', style: { opacity: 0.2 } },
       { selector: 'node.kg-selected', style: { 'border-width': 3, 'border-color': '#2563eb' } },
@@ -57,7 +59,10 @@ export function renderKnowledgeGraph(container, graphData, { onNodeClick } = {})
         },
       },
     ],
-    layout: { name: 'fcose', quality: 'proof', animate: true },
+    // 페이지 진입 때마다 그래프를 새로 구성하므로 고비용 proof 품질을 자동 실행하지
+    // 않는다. 기본 품질은 큰 그래프의 초기 표시를 빠르게 하고, 사용자가 툴바의
+    // "다시 정렬"을 누른 경우에만 main.js에서 proof 레이아웃을 명시적으로 실행한다.
+    layout: { name: 'fcose', quality: 'default', animate: true },
   })
   cy.on('tap', 'node', evt => {
     const node = evt.target

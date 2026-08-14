@@ -2,6 +2,14 @@ from pydantic import BaseModel, Field
 from typing import Dict, List
 
 
+READING_ANALYTICS_VERSION = 2
+MIN_MEANINGFUL_PAGE_SECONDS = 10.0
+SEMANTIC_INTERACTION_FIELDS = (
+    "selection", "highlight", "underline", "memo", "question",
+    "citationClick", "figureClick", "tableClick", "equationClick",
+)
+
+
 class InteractionSummary(BaseModel):
     scroll: int = Field(default=0, ge=0)
     selection: int = Field(default=0, ge=0)
@@ -51,9 +59,9 @@ class ReadingAnalyticsResult(BaseModel):
 
 # --- 1. Interaction Quality Calculation ---
 def calculate_interaction_quality(interaction: InteractionSummary) -> float:
-    """Calculates weighted interaction quality score from raw counts."""
+    """Calculate interaction evidence without letting raw scroll events dominate."""
     return (
-        interaction.scroll * 0.1
+        min(interaction.scroll, 10) * 0.1
         + interaction.selection * 0.5
         + interaction.highlight * 3.0
         + interaction.underline * 3.0
@@ -64,6 +72,23 @@ def calculate_interaction_quality(interaction: InteractionSummary) -> float:
         + interaction.tableClick * 2.0
         + interaction.equationClick * 2.0
     )
+
+
+def has_semantic_interaction(interaction: InteractionSummary) -> bool:
+    """Return whether a page has an intentional research interaction."""
+    return any(getattr(interaction, field_name) > 0 for field_name in SEMANTIC_INTERACTION_FIELDS)
+
+
+def is_meaningful_page_session(page_session: PageSession) -> bool:
+    """Exclude pass-through pages while preserving short figure/reference visits."""
+    return (
+        page_session.activeTime >= MIN_MEANINGFUL_PAGE_SECONDS
+        or has_semantic_interaction(page_session.interaction)
+    )
+
+
+def count_meaningful_page_sessions(page_sessions: List[PageSession]) -> int:
+    return len({ps.page for ps in page_sessions if is_meaningful_page_session(ps)})
 
 
 def calculate_minimum_evidence_time(user_ema: float) -> float:
@@ -118,7 +143,8 @@ def analyze_page_sessions(
     """
     page_scores: Dict[int, float] = {}
     verified_count = 0
-    total_confidence_sum = 0.0
+    weighted_confidence_sum = 0.0
+    confidence_weight_sum = 0.0
 
     if not page_sessions:
         return {}, 0, 0.0
@@ -173,8 +199,9 @@ def analyze_page_sessions(
         if scroll_cov < 0.2 and iq < 1.0:
             final_score = min(final_score, 25.0)
 
-        # 2) Very short active time
-        if active_time < 10.0:
+        # 2) Retain pass-through pages for diagnostics without treating an
+        # intentional figure/table/reference visit as failed reading evidence.
+        if active_time < MIN_MEANINGFUL_PAGE_SECONDS and not has_semantic_interaction(ps.interaction):
             final_score = min(final_score, 15.0)
 
         # 3) AFK long time without interaction or scroll
@@ -186,9 +213,15 @@ def analyze_page_sessions(
 
         if final_score >= 50.0:
             verified_count += 1
-        total_confidence_sum += final_score
+        if is_meaningful_page_session(ps):
+            weight = max(
+                MIN_MEANINGFUL_PAGE_SECONDS,
+                min(active_time, max(MIN_MEANINGFUL_PAGE_SECONDS, expected_page_time)),
+            )
+            weighted_confidence_sum += final_score * weight
+            confidence_weight_sum += weight
 
-    avg_confidence = round(total_confidence_sum / len(consolidated), 1) if consolidated else 0.0
+    avg_confidence = round(weighted_confidence_sum / confidence_weight_sum, 1) if confidence_weight_sum else 0.0
     return page_scores, verified_count, avg_confidence
 
 
@@ -197,21 +230,24 @@ def determine_reading_depth(
     active_reading_time: float,
     verified_pages_count: int,
     total_pages: int,
-    reading_score: float
+    reading_score: float,
+    meaningful_pages_count: int | None = None,
 ) -> str:
     """
     Determines Reading Depth state: Opened -> Browsing -> Reading -> Deep Reading -> Completed
     """
     total_content = max(1, total_pages)
     verified_ratio = verified_pages_count / total_content
+    meaningful_total = max(1, meaningful_pages_count if meaningful_pages_count is not None else total_pages)
+    evidence_ratio = verified_pages_count / meaningful_total
 
     if active_reading_time < 30.0 and verified_pages_count == 0:
         return "Opened"
-    if verified_ratio >= 0.8 or reading_score >= 85.0:
+    if verified_ratio >= 0.8:
         return "Completed"
-    if verified_ratio >= 0.5 or (verified_pages_count >= 3 and reading_score >= 60.0):
+    if verified_ratio >= 0.5 or (verified_pages_count >= 3 and evidence_ratio >= 0.5):
         return "Deep Reading"
-    if verified_ratio >= 0.2 or (verified_pages_count >= 2 and reading_score >= 40.0):
+    if verified_ratio >= 0.2 or evidence_ratio >= 0.5 or (verified_pages_count >= 2 and reading_score >= 40.0):
         return "Reading"
     return "Browsing"
 
@@ -222,13 +258,16 @@ def calculate_reading_score(
     total_pages: int,
     reading_confidence: float,
     reading_depth: str,
-    total_interaction_quality: float
+    total_interaction_quality: float,
+    meaningful_pages_count: int | None = None,
 ) -> float:
     """
     Calculates final overall Reading Score (0~100) using rule-based feature weighting.
     """
     total_content = max(1, total_pages)
     verified_ratio = min(1.0, verified_pages_count / total_content)
+    meaningful_total = max(1, meaningful_pages_count if meaningful_pages_count is not None else total_pages)
+    evidence_ratio = min(1.0, verified_pages_count / meaningful_total)
 
     depth_weights = {
         "Opened": 10.0,
@@ -239,10 +278,11 @@ def calculate_reading_score(
     }
     depth_score = depth_weights.get(reading_depth, 10.0)
 
-    # 40% Verified ratio + 25% Confidence + 20% Depth + 15% Interaction Quality
+    # Whole-paper coverage and evidence quality are separate signals.
     score = (
-        0.40 * (verified_ratio * 100.0)
-        + 0.25 * reading_confidence
+        0.15 * (verified_ratio * 100.0)
+        + 0.20 * (evidence_ratio * 100.0)
+        + 0.30 * reading_confidence
         + 0.20 * depth_score
         + 0.15 * min(100.0, total_interaction_quality * 5.0)
     )
@@ -285,7 +325,8 @@ def update_user_ema(
 def process_reading_analytics(
     payload: ReadingSessionPayload,
     total_paper_pages: int,
-    user_ema: float
+    user_ema: float,
+    previous_reading_score: float = 0.0,
 ) -> ReadingAnalyticsResult:
     total_pages = max(total_paper_pages, max([ps.page for ps in payload.pageSessions], default=1))
 
@@ -294,20 +335,36 @@ def process_reading_analytics(
         user_ema,
         total_pages
     )
+    meaningful_pages_count = count_meaningful_page_sessions(payload.pageSessions)
 
     summary_iq = calculate_interaction_quality(payload.interactionSummary)
-    page_iq = sum(calculate_interaction_quality(ps.interaction) for ps in payload.pageSessions)
+    page_iq = sum(
+        calculate_interaction_quality(ps.interaction)
+        for ps in payload.pageSessions if is_meaningful_page_session(ps)
+    )
     # Each frontend event is recorded in both representations; do not double count it.
     total_iq = max(summary_iq, page_iq)
 
-    depth = determine_reading_depth(payload.activeReadingTime, verified_count, total_pages, 0.0)
+    depth = determine_reading_depth(
+        payload.activeReadingTime, verified_count, total_pages, 0.0, meaningful_pages_count,
+    )
     for _ in range(3):
-        reading_score = calculate_reading_score(verified_count, total_pages, avg_confidence, depth, total_iq)
-        next_depth = determine_reading_depth(payload.activeReadingTime, verified_count, total_pages, reading_score)
+        reading_score = calculate_reading_score(
+            verified_count, total_pages, avg_confidence, depth, total_iq, meaningful_pages_count,
+        )
+        next_depth = determine_reading_depth(
+            payload.activeReadingTime, verified_count, total_pages, reading_score, meaningful_pages_count,
+        )
         if next_depth == depth:
             break
         depth = next_depth
-    reading_score = calculate_reading_score(verified_count, total_pages, avg_confidence, depth, total_iq)
+    reading_score = calculate_reading_score(
+        verified_count, total_pages, avg_confidence, depth, total_iq, meaningful_pages_count,
+    )
+    # Reading Score represents cumulative achievement within a session. A newly
+    # opened page can temporarily lower confidence while it is still being read,
+    # but it must not erase evidence already earned earlier in the same session.
+    reading_score = round(max(previous_reading_score, reading_score), 1)
     reading_activity, minimum_evidence_time = classify_reading_activity(
         payload.activeReadingTime, verified_count, avg_confidence, user_ema, payload.pageSessions,
     )

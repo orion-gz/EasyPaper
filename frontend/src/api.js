@@ -4,8 +4,8 @@ export async function uploadPDF(file, options, onProgress) {
   const formData = new FormData()
   formData.append('file', file)
 
-  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs, translationMode } = options
-  const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}`
+  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode } = options
+  const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}&keyword_mode=${encodeURIComponent(keywordMode || 'manual')}&summary_mode=${encodeURIComponent(summaryMode || 'manual')}`
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -389,17 +389,16 @@ export async function getOllamaStatusAPI() {
  * CLI 엔진 설치 SSE 스트림을 구독하는 공통 헬퍼.
  */
 function _streamInstallCliAPI(endpoint, defaultErrorMessage, onProgress, onDone, onError) {
-  const eventSource = new EventSource(`${API_BASE}${endpoint}`)
-
-  eventSource.onmessage = (event) => {
+  const controller = new AbortController()
+  const handleMessage = (rawData) => {
     try {
-      const data = JSON.parse(event.data)
+      const data = JSON.parse(rawData)
       if (data.status === 'error') {
         onError(new Error(data.message || defaultErrorMessage))
-        eventSource.close()
+        controller.abort()
       } else if (data.status === 'success') {
         onDone()
-        eventSource.close()
+        controller.abort()
       } else {
         onProgress(data)
       }
@@ -408,12 +407,39 @@ function _streamInstallCliAPI(endpoint, defaultErrorMessage, onProgress, onDone,
     }
   }
 
-  eventSource.onerror = () => {
-    onError(new Error('네트워크 연결 끊김 또는 설치 실패'))
-    eventSource.close()
-  }
+  ;(async () => {
+    try {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        signal: controller.signal,
+      })
+      if (!response.ok || !response.body) throw new Error(defaultErrorMessage)
 
-  return () => eventSource.close()
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { value, done } = await reader.read()
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+        const events = buffer.split(/\r?\n\r?\n/)
+        buffer = events.pop() || ''
+        for (const event of events) {
+          const data = event.split(/\r?\n/)
+            .filter(line => line.startsWith('data:'))
+            .map(line => line.slice(5).trimStart())
+            .join('\n')
+          if (data) handleMessage(data)
+        }
+        if (done) break
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        onError(err instanceof Error ? err : new Error('네트워크 연결 끊김 또는 설치 실패'))
+      }
+    }
+  })()
+
+  return () => controller.abort()
 }
 
 /**

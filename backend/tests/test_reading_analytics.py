@@ -10,6 +10,7 @@ from services.reading_analytics import (
     calculate_reading_score,
     calculate_minimum_evidence_time,
     classify_reading_activity,
+    count_meaningful_page_sessions,
     update_user_ema,
 )
 
@@ -175,6 +176,48 @@ class TestReadingAnalytics(unittest.TestCase):
         self.assertEqual(res.minimumEvidenceTime, 90.0)
 
 
+    def test_brief_pass_through_pages_do_not_poison_confidence(self):
+        pages = [
+            PageSession(page=page, activeTime=1, scrollCoverage=0.05)
+            for page in range(1, 7)
+        ] + [
+            PageSession(
+                page=page, activeTime=600, scrollCoverage=0.8,
+                interaction=InteractionSummary(scroll=10, highlight=1),
+            )
+            for page in range(7, 10)
+        ]
+        payload = ReadingSessionPayload(
+            sessionId="targeted", paperId="paper", activeReadingTime=1806,
+            pageSessions=pages,
+            interactionSummary=InteractionSummary(scroll=30, highlight=3),
+        )
+
+        result = process_reading_analytics(payload, total_paper_pages=19, user_ema=600)
+
+        self.assertEqual(count_meaningful_page_sessions(pages), 3)
+        self.assertGreaterEqual(result.readingConfidence, 90.0)
+        self.assertEqual(result.readingActivity, "read")
+        self.assertEqual(result.readingDepth, "Deep Reading")
+        self.assertGreaterEqual(result.readingScore, 70.0)
+
+    def test_short_semantic_visit_remains_meaningful(self):
+        page = PageSession(
+            page=4, activeTime=3, scrollCoverage=0.1,
+            interaction=InteractionSummary(figureClick=2),
+        )
+        scores, _, confidence = analyze_page_sessions([page], 600, 10)
+
+        self.assertEqual(count_meaningful_page_sessions([page]), 1)
+        self.assertEqual(confidence, scores[4])
+        self.assertGreater(scores[4], 15.0)
+
+    def test_scroll_interaction_is_capped(self):
+        self.assertEqual(
+            calculate_interaction_quality(InteractionSummary(scroll=1000)),
+            calculate_interaction_quality(InteractionSummary(scroll=10)),
+        )
+
     def test_duplicate_page_entries_are_consolidated(self):
         page = PageSession(
             page=1, activeTime=180.0, scrollCoverage=0.8,
@@ -195,7 +238,38 @@ class TestReadingAnalytics(unittest.TestCase):
             interactionSummary=interaction,
         )
         result = process_reading_analytics(payload, total_paper_pages=10, user_ema=600)
-        self.assertEqual(result.readingScore, 28.2)
+        self.assertEqual(result.readingScore, 55.0)
+
+    def test_previous_score_is_preserved_while_new_page_is_in_progress(self):
+        established_payload = ReadingSessionPayload(
+            sessionId="session", paperId="paper", activeReadingTime=600,
+            pageSessions=[PageSession(
+                page=1,
+                activeTime=600,
+                scrollCoverage=0.8,
+                interaction=InteractionSummary(highlight=1),
+            )],
+            interactionSummary=InteractionSummary(highlight=1),
+        )
+        established = process_reading_analytics(
+            established_payload, total_paper_pages=10, user_ema=600,
+        )
+
+        in_progress_payload = established_payload.model_copy(deep=True)
+        in_progress_payload.activeReadingTime += 10
+        in_progress_payload.pageSessions.append(PageSession(page=2, activeTime=10))
+        recalculated = process_reading_analytics(
+            in_progress_payload, total_paper_pages=10, user_ema=600,
+        )
+        preserved = process_reading_analytics(
+            in_progress_payload,
+            total_paper_pages=10,
+            user_ema=600,
+            previous_reading_score=established.readingScore,
+        )
+
+        self.assertLess(recalculated.readingScore, established.readingScore)
+        self.assertEqual(preserved.readingScore, established.readingScore)
 
 
 def _analytics_payload(session_id, paper_id, version, active_time=60):
@@ -218,7 +292,10 @@ def _analytics_payload(session_id, paper_id, version, active_time=60):
 
 def test_reading_session_merge_versioning_and_ema(test_client, isolated_dirs):
     db = isolated_dirs["db"]
-    db.db_save_document("paper-1", "testuser", "paper.pdf", "/x/paper.pdf", 5, {})
+    db.db_save_document(
+        "paper-1", "testuser", "paper.pdf", "/x/paper.pdf", 5,
+        {"title": "Extracted Paper Title"},
+    )
 
     started = test_client.post(
         "/api/library/paper-1/reading-session/start", json={"totalPages": 5},
@@ -266,6 +343,7 @@ def test_reading_session_merge_versioning_and_ema(test_client, isolated_dirs):
     )
     assert ended.status_code == 200
     assert db.db_get_user_reading_profile("testuser")["session_count"] == 1
+    assert db.db_get_document("paper-1")["metadata"]["title"] == "Extracted Paper Title"
 
     repeated_end = test_client.post(
         "/api/library/paper-1/reading-session/end",
@@ -273,6 +351,48 @@ def test_reading_session_merge_versioning_and_ema(test_client, isolated_dirs):
     )
     assert repeated_end.json() == {"stale": True, "version": 2}
     assert db.db_get_user_reading_profile("testuser")["session_count"] == 1
+
+    restarted = test_client.post(
+        "/api/library/paper-1/reading-session/start", json={"totalPages": 5},
+    ).json()
+    assert restarted["merged"] is False
+    assert restarted["sessionId"] != session_id
+
+
+def test_heartbeat_preserves_the_session_high_score(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_save_document(
+        "paper-1", "testuser", "paper.pdf", "/x/paper.pdf", 5, {},
+    )
+    started = test_client.post(
+        "/api/library/paper-1/reading-session/start", json={"totalPages": 5},
+    )
+    session_id = started.json()["sessionId"]
+
+    established = _analytics_payload(session_id, "paper-1", 1, active_time=600)
+    first = test_client.post(
+        "/api/library/paper-1/reading-session/heartbeat", json=established,
+    )
+    assert first.status_code == 200
+
+    in_progress = _analytics_payload(session_id, "paper-1", 2, active_time=610)
+    in_progress["currentPage"] = 2
+    in_progress["pageSessions"].append({
+        "page": 2,
+        "activeTime": 10,
+        "visibleTime": 10,
+        "scrollCoverage": 0.0,
+        "interaction": {},
+    })
+    second = test_client.post(
+        "/api/library/paper-1/reading-session/heartbeat", json=in_progress,
+    )
+
+    assert second.status_code == 200
+    assert second.json()["readingScore"] == first.json()["readingScore"]
+    assert db.db_get_reading_session(
+        session_id, "testuser",
+    )["reading_score"] == first.json()["readingScore"]
 
 
 def test_reading_session_rejects_mismatched_paper_id(test_client, isolated_dirs):

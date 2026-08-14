@@ -11,7 +11,9 @@ from config import UPLOAD_DIR, MAX_FILE_SIZE_MB
 from services.pdf_parser import extract_pages, get_pdf_metadata
 from services.library import save_document, get_document, get_pdf_path as lib_pdf_path, list_documents
 from services.translation_job import start_job, resume_incomplete_jobs, get_job_status
+from services.insight_job import start_keyword_job, start_summary_job
 from services.primer import generate_primer
+from services.rate_limiter import enforce_rate_limit
 from models.schemas import UploadResponse
 
 router = APIRouter()
@@ -107,9 +109,13 @@ async def upload_pdf(
     ignore_table: bool = True,
     ignore_refs: bool = False,
     translation_mode: str = "auto",
+    keyword_mode: str = "manual",
+    summary_mode: str = "manual",
     current_user: str = Depends(get_current_user)
 ):
     """PDF 파일을 업로드하고 텍스트를 추출합니다."""
+    enforce_rate_limit("upload", current_user)
+
     # 파일 검증
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="PDF 파일만 업로드 가능합니다.")
@@ -169,18 +175,29 @@ async def upload_pdf(
         "username": current_user,
     }
 
-    # 읽기 전 브리핑을 먼저 생성한 뒤 번역 잡을 시작한다. CLI(antigravity/claude_code/
-    # codex) provider는 문서(session_id)당 세션이 하나뿐이라 primer 생성과 번역이 그
-    # 세션을 동시에 쓸 수 없다 - primer를 완료한 뒤에만 번역이 세션을 점유하도록
-    # 순차 실행한다 (API 기반 provider는 세션 개념이 없어 이 순서가 지연을 조금
-    # 더할 뿐 문제가 되지 않는다).
-    #
     # translation_mode가 "auto"(기본값)가 아니면 - 번역 창을 펼칠 때(pane) 또는
     # 스크롤로 페이지를 볼 때(scroll)만 번역하길 원하는 사용자이므로 - 업로드
     # 직후 전체 문서를 자동으로 번역하는 백그라운드 잡을 시작하지 않는다. 이후
     # 번역은 프런트엔드가 상황에 맞춰 /jobs/{id}/restart(pane) 또는
     # /translate/{id}/{page}(scroll) 를 호출해 트리거한다.
-    async def _run_primer_then_translate():
+    #
+    # auto 번역 잡은 선택 기능인 읽기 전 브리핑에 의존하지 않도록
+    # 업로드 응답 전에 즉시 등록한다. 이렇게 해야 primer LLM이 느리거나
+    # 멈춰도 job status가 404로 남지 않고 번역이 진행된다. 문서당 세션을
+    # 재사용하는 CLI provider의 실제 LLM 호출은 llm_client의 세션 락이
+    # 직렬화하므로 동시에 같은 세션을 쓰지 않는다.
+    if translation_mode == "auto":
+        start_job(
+            session_id,
+            pages,
+            target_lang=target_lang,
+            style=style,
+            ignore_math=ignore_math,
+            ignore_table=ignore_table,
+            ignore_refs=ignore_refs
+        )
+
+    async def _run_post_upload_insights():
         try:
             await generate_primer(
                 session_id,
@@ -193,18 +210,24 @@ async def upload_pdf(
             )
         except Exception as e:
             print(f"[Upload {session_id}] Primer 생성 실패: {e}")
-        if translation_mode == "auto":
-            start_job(
+
+        if keyword_mode == "auto":
+            start_keyword_job(
                 session_id,
                 pages,
-                target_lang=target_lang,
-                style=style,
-                ignore_math=ignore_math,
-                ignore_table=ignore_table,
-                ignore_refs=ignore_refs
+                target_lang,
+                metadata.get("title") or file.filename,
             )
 
-    asyncio.create_task(_run_primer_then_translate())
+        if summary_mode == "auto":
+            start_summary_job(
+                session_id,
+                pages,
+                target_lang,
+                metadata.get("title") or file.filename,
+            )
+
+    asyncio.create_task(_run_post_upload_insights())
 
     return UploadResponse(
         session_id=session_id,

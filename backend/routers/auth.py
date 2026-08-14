@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Request, Response, HTTPException, status, Depends
 from fastapi.responses import StreamingResponse
 import json
+import os
+import sys
 import httpx
 from pydantic import BaseModel
 from services.auth import (
@@ -11,6 +13,7 @@ from services.auth import (
     get_login_lockout_remaining,
     record_failed_login,
     reset_login_attempts,
+    require_admin_user,
 )
 from config import (
     get_app_username,
@@ -23,6 +26,12 @@ from config import (
     get_trans_model,
     get_chat_provider,
     get_chat_model,
+    get_default_ai_provider,
+    get_default_ai_model,
+    get_analysis_provider,
+    get_analysis_model,
+    get_library_provider,
+    get_library_model,
     get_openai_api_key,
     get_gemini_api_key,
     get_claude_api_key,
@@ -39,6 +48,7 @@ from config import (
     set_skip_login,
 )
 from services.llm_client import check_ollama_health
+import venv_manager
 
 
 async def _stream_subprocess_lines(proc):
@@ -236,6 +246,12 @@ class SystemSettingsRequest(BaseModel):
     trans_model: str
     chat_provider: str
     chat_model: str
+    default_ai_provider: str = ""
+    default_ai_model: str = ""
+    analysis_provider: str = ""
+    analysis_model: str = ""
+    library_provider: str = ""
+    library_model: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
     claude_api_key: str = ""
@@ -255,6 +271,12 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
         "trans_model": get_trans_model(),
         "chat_provider": get_chat_provider(),
         "chat_model": get_chat_model(),
+        "default_ai_provider": get_default_ai_provider(),
+        "default_ai_model": get_default_ai_model(),
+        "analysis_provider": get_analysis_provider(),
+        "analysis_model": get_analysis_model(),
+        "library_provider": get_library_provider(),
+        "library_model": get_library_model(),
         "openai_api_key": get_openai_api_key(),
         "gemini_api_key": get_gemini_api_key(),
         "claude_api_key": get_claude_api_key(),
@@ -267,10 +289,17 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
 async def save_system_settings(data: SystemSettingsRequest, current_user: str = Depends(get_current_user)):
     trans_provider = data.trans_provider.strip().lower()
     chat_provider = data.chat_provider.strip().lower()
+    default_ai_provider = data.default_ai_provider.strip().lower()
+    analysis_provider = data.analysis_provider.strip().lower()
+    library_provider = data.library_provider.strip().lower()
     pdf_parser_engine = data.pdf_parser_engine.strip().lower() if data.pdf_parser_engine else "pymupdf"
     
     valid_providers = ["ollama", "openai", "gemini", "claude", "antigravity", "claude_code", "codex"]
-    if trans_provider not in valid_providers or chat_provider not in valid_providers:
+    providers = [trans_provider, chat_provider]
+    optional_providers = [default_ai_provider, analysis_provider, library_provider]
+    if any(provider not in valid_providers for provider in providers) or any(
+        provider and provider not in valid_providers for provider in optional_providers
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="올바르지 않은 AI 제공업체입니다."
@@ -283,23 +312,54 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
             detail="올바르지 않은 PDF 파서 엔진입니다."
         )
 
+    # marker(transformers>=5.12.1 필요)와 mineru(transformers<5.0.0 필요)는
+    # 런타임에서 실제로 서로 충돌해 같은 venv에 공존할 수 없다고 확인됐다
+    # (marker는 5 미만에서, mineru는 5 이상에서 각각 다른 이유로 즉시
+    # 크래시함) - 그래서 mineru만 전용 venv(.venv-mineru)에서 돈다. 엔진을
+    # 바꿀 때 필요한 venv가 지금 떠 있는 것과 다르면, 저장 직후 서버를
+    # 재시작해서(시스템 업데이트 때와 동일한 인프라 재사용) 올바른 venv로
+    # 다시 올라오게 한다.
+    restart_needed = venv_manager.restart_required_for_engine(pdf_parser_engine)
+
     update_system_settings(
         ollama_host=data.ollama_host.strip(),
         trans_provider=trans_provider,
         trans_model=data.trans_model.strip(),
         chat_provider=chat_provider,
         chat_model=data.chat_model.strip(),
+        default_ai_provider=default_ai_provider,
+        default_ai_model=data.default_ai_model.strip(),
+        analysis_provider=analysis_provider,
+        analysis_model=data.analysis_model.strip(),
+        library_provider=library_provider,
+        library_model=data.library_model.strip(),
         openai_api_key=data.openai_api_key.strip(),
         gemini_api_key=data.gemini_api_key.strip(),
         claude_api_key=data.claude_api_key.strip(),
         openalex_mailto=data.openalex_mailto.strip(),
         pdf_parser_engine=pdf_parser_engine
     )
-    
+
     # 고급 설정: 번역 프롬프트 템플릿 저장
     update_translation_prompt_template(data.translation_prompt_template)
-    
-    return {"message": "시스템 설정이 성공적으로 변경되었습니다."}
+
+    if restart_needed:
+        if venv_manager.is_packaged_desktop():
+            return {
+                "message": f"'{pdf_parser_engine}' 엔진 적용을 위해 앱을 재시작합니다. 진행 중인 번역이 중단될 수 있습니다.",
+                "restarting": True,
+                "restart_mode": "desktop_app",
+            }
+
+        import asyncio
+        asyncio.create_task(_restart_server_process(get_project_root()))
+        return {
+            "message": f"'{pdf_parser_engine}' 엔진 적용을 위해 서버가 잠시 후 재시작됩니다. 진행 중인 번역이 중단될 수 있습니다.",
+            "restarting": True,
+            "restart_mode": "server",
+        }
+
+    return {"message": "시스템 설정이 성공적으로 변경되었습니다.", "restarting": False}
 
 
 def _is_package_installed(module_name: str) -> bool:
@@ -308,6 +368,34 @@ def _is_package_installed(module_name: str) -> bool:
         return importlib.util.find_spec(module_name) is not None
     except Exception:
         return False
+
+
+def _is_package_installed_in_venv(venv_dir: str, module_name: str) -> bool:
+    """marker/mineru는 이 프로세스가 지금 떠 있는 venv가 아니라 각자 정해진
+    전용 venv에 설치되므로(venv_manager 참고), importlib으로는 확인할 수
+    없다. 그 venv의 site-packages에 실제 패키지 디렉터리가 있는지 직접
+    본다."""
+    import glob
+
+    if not venv_manager.is_venv_available(venv_dir):
+        return False
+    if sys.platform == "win32":
+        site_packages_dirs = [os.path.join(venv_dir, "Lib", "site-packages")]
+    else:
+        site_packages_dirs = glob.glob(os.path.join(venv_dir, "lib", "python3.*", "site-packages"))
+    return any(os.path.isdir(os.path.join(sp, module_name)) for sp in site_packages_dirs)
+
+
+def _is_pdf_parser_installed(engine: str) -> bool:
+    if venv_manager.is_packaged_desktop():
+        return venv_manager.is_parser_installed(engine)
+    if engine == "pdfplumber":
+        return _is_package_installed("pdfplumber")
+    venv_dir = (
+        venv_manager.MINERU_VENV if engine == "mineru"
+        else venv_manager.DEFAULT_VENV
+    )
+    return _is_package_installed_in_venv(venv_dir, engine)
 
 
 @router.get("/settings/pdf-parsers")
@@ -331,7 +419,7 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
             "pros": "표 구조 및 그래픽 좌표 추적 우수",
             "cons": "PyMuPDF보다 약간 느림",
             "size_info": "약 15 MB",
-            "installed": _is_package_installed("pdfplumber"),
+            "installed": _is_pdf_parser_installed("pdfplumber"),
             "install_package": "pdfplumber"
         },
         {
@@ -341,18 +429,18 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
             "pros": "수식을 LaTeX 변환, 정교한 오버레이 크롭",
             "cons": "PyTorch/Vision 포함 (대용량), 처리 속도 느림",
             "size_info": "약 2.5 GB (PyTorch & Vision 모델 포함)",
-            "installed": _is_package_installed("marker"),
+            "installed": _is_pdf_parser_installed("marker"),
             "install_package": "marker-pdf"
         },
         {
             "id": "mineru",
-            "name": "MinerU (Magic-PDF)",
+            "name": "MinerU",
             "description": "대규모 학술 서적 및 논문 레이아웃 분석 AI 파서",
-            "pros": "YOLOv8 기반 레이아웃 핀포인트 세그멘테이션",
-            "cons": "대용량 패키지, 높은 CPU/GPU 및 메모리 소모",
-            "size_info": "약 3.0 GB (YOLO & Layout/Formula 모델 포함)",
-            "installed": _is_package_installed("magic_pdf"),
-            "install_package": "magic-pdf"
+            "pros": "정밀한 레이아웃/표/수식 세그멘테이션",
+            "cons": "대용량 패키지, 높은 CPU/GPU 및 메모리 소모. marker와 의존성이 충돌해 격리된 환경에 별도 설치되며, 이 엔진으로 전환/이탈 시 서버 또는 데스크탑 앱이 재시작됩니다.",
+            "size_info": "약 3.0 GB (전용 가상환경, Layout/Formula/OCR 모델 포함)",
+            "installed": _is_pdf_parser_installed("mineru"),
+            "install_package": "mineru[pipeline]"
         }
     ]
     return {
@@ -362,36 +450,87 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
 
 
 @router.get("/settings/install-pdf-parser")
-async def install_pdf_parser_stream(parser_id: str):
-    import sys
+async def install_pdf_parser_stream(
+    parser_id: str,
+    current_user: str = Depends(get_current_user),
+):
     import asyncio
 
-    package_map = {
-        "pdfplumber": "pdfplumber",
-        "marker": "marker-pdf",
-        "mineru": "magic-pdf"
-    }
-
-    pkg_name = package_map.get(parser_id)
-    if not pkg_name:
+    package = venv_manager.PARSER_PACKAGES.get(parser_id)
+    if not package:
         raise HTTPException(status_code=400, detail="지원되지 않는 파서 엔진입니다.")
+    pkg_name = package[0]
+
+    # PyInstaller sidecar는 Python 인터프리터가 아니므로 -m venv/-m pip를
+    # 실행할 수 없고, 앱 번들 내부 경로는 macOS/Windows에서 읽기 전용이다.
+    # 데스크탑에서는 번들 pip 전용 모드로 sidecar를 다시 실행해 사용자 앱
+    # 데이터 폴더에 엔진별 패키지를 설치한다. 일반 서버는 기존 venv를 쓴다.
+    packaged_desktop = venv_manager.is_packaged_desktop()
+    target_venv = (
+        venv_manager.MINERU_VENV if parser_id == "mineru"
+        else venv_manager.DEFAULT_VENV
+    )
 
     async def event_stream():
-        python_bin = sys.executable
-        yield f"data: {json.dumps({'status': 'progress', 'line': f'백엔드 가상환경({python_bin})에 {pkg_name} 설치를 시작합니다...'})}\n\n"
-        try:
+        if packaged_desktop:
+            install_dir = venv_manager.parser_packages_dir(parser_id)
+            yield f"data: {json.dumps({'status': 'progress', 'line': f'사용자 앱 데이터 폴더에 {pkg_name} 설치를 시작합니다: {install_dir}'})}\n\n"
+            cmd = venv_manager.parser_install_command(parser_id)
+        else:
+            if not venv_manager.is_venv_available(target_venv):
+                yield f"data: {json.dumps({'status': 'progress', 'line': f'전용 가상환경을 새로 만듭니다: {target_venv}'})}\n\n"
+                proc = await asyncio.create_subprocess_exec(
+                    sys.executable, "-m", "venv", target_venv,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    stdin=asyncio.subprocess.DEVNULL,
+                )
+                async for text in _stream_subprocess_lines(proc):
+                    yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
+                await proc.wait()
+                if proc.returncode != 0:
+                    yield f"data: {json.dumps({'status': 'error', 'message': '가상환경 생성 실패'})}\n\n"
+                    return
+
+                requirements_path = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "requirements.txt",
+                )
+                yield f"data: {json.dumps({'status': 'progress', 'line': '기본 의존성(requirements.txt) 설치 중...'})}\n\n"
+                proc = await asyncio.create_subprocess_exec(
+                    venv_manager.venv_python(target_venv), "-u", "-m", "pip",
+                    "install", "-r", requirements_path,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    stdin=asyncio.subprocess.DEVNULL,
+                )
+                async for text in _stream_subprocess_lines(proc):
+                    yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
+                await proc.wait()
+                if proc.returncode != 0:
+                    yield f"data: {json.dumps({'status': 'error', 'message': '기본 의존성 설치 실패'})}\n\n"
+                    return
+
+            python_bin = venv_manager.venv_python(target_venv)
+            yield f"data: {json.dumps({'status': 'progress', 'line': f'가상환경({python_bin})에 {pkg_name} 설치를 시작합니다...'})}\n\n"
             cmd = [python_bin, "-u", "-m", "pip", "install", pkg_name]
+
+        try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
-                stdin=asyncio.subprocess.DEVNULL
+                stdin=asyncio.subprocess.DEVNULL,
             )
             async for text in _stream_subprocess_lines(proc):
                 yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
             await proc.wait()
-            if proc.returncode == 0:
+            if proc.returncode == 0 and (
+                not packaged_desktop or venv_manager.is_parser_installed(parser_id)
+            ):
                 yield f"data: {json.dumps({'status': 'success', 'message': f'{pkg_name} 설치가 정상적으로 완료되었습니다.'})}\n\n"
+            elif proc.returncode == 0:
+                yield f"data: {json.dumps({'status': 'error', 'message': '설치 프로세스는 완료됐지만 패키지 검증에 실패했습니다.'})}\n\n"
             else:
                 yield f"data: {json.dumps({'status': 'error', 'message': f'설치가 오류 코드 {proc.returncode}로 종료되었습니다.'})}\n\n"
         except Exception as e:
@@ -404,35 +543,50 @@ async def install_pdf_parser_stream(parser_id: str):
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
-        }
+        },
     )
 
 @router.post("/settings/uninstall-pdf-parser")
-async def uninstall_pdf_parser(request: Request):
-    import sys, subprocess
+async def uninstall_pdf_parser(
+    request: Request,
+    current_user: str = Depends(get_current_user),
+):
+    import subprocess
     import config as cfg
 
     body = await request.json()
     parser_id = body.get("parser_id", "")
-
-    package_map = {
-        "pdfplumber": "pdfplumber",
-        "marker": "marker-pdf",
-        "mineru": "magic-pdf"
-    }
-
-    pkg_name = package_map.get(parser_id)
-    if not pkg_name:
+    package = venv_manager.PARSER_PACKAGES.get(parser_id)
+    if not package:
         raise HTTPException(status_code=400, detail="지원되지 않는 파서 엔진입니다.")
+    # pip install에는 extras가 필요하지만 uninstall은 배포 패키지 이름만
+    # 받아야 한다 (예: mineru[pipeline] 설치, mineru 삭제).
+    pkg_name = package[0].split("[", 1)[0]
 
-    python_bin = sys.executable
-    result = subprocess.run(
-        [python_bin, "-m", "pip", "uninstall", "-y", pkg_name],
-        capture_output=True, text=True
-    )
+    if venv_manager.is_packaged_desktop():
+        try:
+            venv_manager.uninstall_packaged_parser(parser_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=400, detail="설치되어 있지 않습니다.")
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"삭제 실패: {exc}")
+    else:
+        target_venv = (
+            venv_manager.MINERU_VENV if parser_id == "mineru"
+            else venv_manager.DEFAULT_VENV
+        )
+        if not venv_manager.is_venv_available(target_venv):
+            raise HTTPException(status_code=400, detail="설치되어 있지 않습니다.")
 
-    if result.returncode != 0:
-        raise HTTPException(status_code=500, detail=f"삭제 실패: {result.stderr.strip() or result.stdout.strip()}")
+        python_bin = venv_manager.venv_python(target_venv)
+        result = subprocess.run(
+            [python_bin, "-m", "pip", "uninstall", "-y", pkg_name],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise HTTPException(status_code=500, detail=f"삭제 실패: {detail}")
 
     # 삭제한 파서가 현재 엔진이면 pymupdf로 복귀
     from config import update_system_settings
@@ -443,15 +597,20 @@ async def uninstall_pdf_parser(request: Request):
             trans_model=cfg.TRANS_MODEL,
             chat_provider=cfg.CHAT_PROVIDER,
             chat_model=cfg.CHAT_MODEL,
+            default_ai_provider=cfg.DEFAULT_AI_PROVIDER,
+            default_ai_model=cfg.DEFAULT_AI_MODEL,
+            analysis_provider=cfg.ANALYSIS_PROVIDER,
+            analysis_model=cfg.ANALYSIS_MODEL,
+            library_provider=cfg.LIBRARY_PROVIDER,
+            library_model=cfg.LIBRARY_MODEL,
             openai_api_key=cfg.OPENAI_API_KEY,
             gemini_api_key=cfg.GEMINI_API_KEY,
             claude_api_key=cfg.CLAUDE_API_KEY,
             openalex_mailto=cfg.OPENALEX_MAILTO,
-            pdf_parser_engine="pymupdf"
+            pdf_parser_engine="pymupdf",
         )
 
     return {"status": "success", "message": f"{pkg_name} 패키지가 삭제되었습니다."}
-
 
 
 @router.post("/settings/clear-pages-cache")
@@ -479,7 +638,7 @@ async def ollama_status(current_user: str = Depends(get_current_user)):
     }
 
 
-@router.get("/settings/install-ollama")
+@router.post("/settings/install-ollama")
 async def install_ollama_stream(current_user: str = Depends(get_current_user)):
     """이 서버의 운영체제에 맞는 방법으로 Ollama를 설치하고 진행 상황을 스트리밍합니다.
     Linux는 공식 설치 스크립트, macOS는 Homebrew(있는 경우), Windows는 공식 설치
@@ -586,9 +745,11 @@ def _make_native_cli_install_endpoint(
     windows_install_url: str,
     path_getter,
     already_installed_message: str,
+    windows_installer_filename: str = None,
+    path_aliases: tuple = (),
+    exit_error_message: str = "설치가 오류 코드 {returncode}로 종료되었습니다.",
 ):
-    """claude_code/codex 공식 curl(Unix)/PowerShell(Windows) 네이티브 설치
-    스크립트로 CLI를 설치하는 SSE 스트림을 만듭니다.
+    """공식 Unix/Windows 네이티브 설치 스크립트용 SSE endpoint factory.
 
     예전에는 `npm install -g <package>`를 썼는데, macOS 공식 Node.js
     설치본은 npm 전역 prefix(/usr/local/lib/node_modules)가 root 소유라
@@ -608,13 +769,48 @@ def _make_native_cli_install_endpoint(
         system = platform.system()  # 'Linux' | 'Darwin' | 'Windows'
 
         async def event_stream():
-            cli_path = path_getter()
-            if os.path.exists(cli_path) or shutil.which(cli_path):
+            def is_installed():
+                cli_path = path_getter()
+                return (
+                    os.path.exists(cli_path)
+                    or shutil.which(cli_path)
+                    or any(shutil.which(alias) for alias in path_aliases)
+                )
+
+            if is_installed():
                 yield f"data: {json.dumps({'status': 'error', 'message': already_installed_message})}\n\n"
                 return
 
+            installer_path = None
             try:
-                if system == "Windows":
+                if system == "Windows" and windows_installer_filename:
+                    # Antigravity install.cmd는 셸 문자열로 조립하지 않는다. 파일로
+                    # 직접 받은 뒤 안전한 argv로 실행해야 &, |, 따옴표가 스크립트
+                    # 인자로 새는 과거 Windows escaping 문제가 재발하지 않는다.
+                    import tempfile
+                    from config import windows_safe_exec_args
+
+                    yield f"data: {json.dumps({'status': 'progress', 'line': 'Antigravity 설치 스크립트를 다운로드합니다...'})}\n\n"
+                    installer_path = os.path.join(tempfile.gettempdir(), windows_installer_filename)
+                    try:
+                        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                            async with client.stream("GET", windows_install_url) as resp:
+                                resp.raise_for_status()
+                                with open(installer_path, "wb") as installer_file:
+                                    async for chunk in resp.aiter_bytes():
+                                        installer_file.write(chunk)
+                    except Exception as e:
+                        yield f"data: {json.dumps({'status': 'error', 'message': f'설치 스크립트 다운로드 실패: {e}'})}\n\n"
+                        return
+
+                    yield f"data: {json.dumps({'status': 'progress', 'line': '다운로드 완료. 설치를 진행합니다...'})}\n\n"
+                    proc = await asyncio.create_subprocess_exec(
+                        *windows_safe_exec_args([installer_path]),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.STDOUT,
+                        stdin=asyncio.subprocess.DEVNULL,
+                    )
+                elif system == "Windows":
                     # PowerShell 명령을 별도 argv 원소로 넘겨 create_subprocess_exec로
                     # 실행한다 - 셸 문자열 하나로 조립해 create_subprocess_shell에
                     # 넘기면 Windows에서 cmd /c "..."로 한 번 더 감싸이면서 명령 안의
@@ -638,13 +834,19 @@ def _make_native_cli_install_endpoint(
                     yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
                 await proc.wait()
 
-                installed = os.path.exists(path_getter()) or shutil.which(path_getter())
-                if proc.returncode == 0 and installed:
+                if proc.returncode == 0 and is_installed():
                     yield f"data: {json.dumps({'status': 'success'})}\n\n"
                 else:
-                    yield f"data: {json.dumps({'status': 'error', 'message': f'설치가 오류 코드 {proc.returncode}로 종료되었습니다.'})}\n\n"
+                    message = exit_error_message.format(returncode=proc.returncode)
+                    yield f"data: {json.dumps({'status': 'error', 'message': message})}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+            finally:
+                if installer_path:
+                    try:
+                        os.remove(installer_path)
+                    except OSError:
+                        pass
 
         return StreamingResponse(
             event_stream(),
@@ -667,7 +869,7 @@ router.add_api_route(
         get_claude_code_path,
         "Claude Code CLI가 이미 설치되어 있습니다.",
     ),
-    methods=["GET"],
+    methods=["POST"],
 )
 
 router.add_api_route(
@@ -678,101 +880,23 @@ router.add_api_route(
         get_codex_path,
         "Codex CLI가 이미 설치되어 있습니다.",
     ),
-    methods=["GET"],
+    methods=["POST"],
 )
 
 
-@router.get("/settings/install-antigravity")
-async def install_antigravity_stream(current_user: str = Depends(get_current_user)):
-    """공식 설치 스크립트(https://antigravity.google/cli)로 이 서버에 Antigravity CLI(agy)를
-    설치하고 진행 상황을 스트리밍합니다."""
-    import asyncio
-    import os
-    import platform
-    import shutil
-
-    system = platform.system()  # 'Linux' | 'Darwin' | 'Windows'
-
-    async def event_stream():
-        agy_path = get_agy_path()
-        if os.path.exists(agy_path) or shutil.which(agy_path) or shutil.which("agy"):
-            yield f"data: {json.dumps({'status': 'error', 'message': 'Antigravity CLI가 이미 설치되어 있습니다.'})}\n\n"
-            return
-
-        try:
-            if system == "Windows":
-                # install.cmd 자체에 "명령줄 인자에 &, |, ; 등 위험한 셸 문자가
-                # 있으면 거부"하는 자체 보안 검증이 있다. 예전에는 `curl -o ... &&
-                # call ... && del ...`를 하나의 문자열로 만들어
-                # create_subprocess_shell에 넘겼는데, Python이 shell=True일 때
-                # 이 문자열 전체를 다시 `cmd /c "..."`로 한 번 더 감싸면서 이미
-                # 문자열 안에 있던 큰따옴표들과 중첩되어 cmd.exe가 명령 경계를
-                # 잘못 해석했다. 그 결과 "&&" 뒤의 내용 일부가 install.cmd
-                # 자신에게 인자로 새어 들어가 그 자체 검증에 걸려
-                # "Fatal: Illegal shell characters detected in command line
-                # arguments"로 실패했다(위 Ollama Windows 설치와 동일하게 셸
-                # 문자열 조립 없이 httpx로 직접 받고 create_subprocess_exec로
-                # 실행하면 이 문제가 원천적으로 생기지 않는다).
-                import tempfile
-                from config import windows_safe_exec_args
-
-                yield f"data: {json.dumps({'status': 'progress', 'line': 'Antigravity 설치 스크립트를 다운로드합니다...'})}\n\n"
-                installer_path = os.path.join(tempfile.gettempdir(), "antigravity_install.cmd")
-                try:
-                    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-                        async with client.stream("GET", "https://antigravity.google/cli/install.cmd") as resp:
-                            resp.raise_for_status()
-                            with open(installer_path, "wb") as f:
-                                async for chunk in resp.aiter_bytes():
-                                    f.write(chunk)
-                except Exception as e:
-                    yield f"data: {json.dumps({'status': 'error', 'message': f'설치 스크립트 다운로드 실패: {e}'})}\n\n"
-                    return
-
-                yield f"data: {json.dumps({'status': 'progress', 'line': '다운로드 완료. 설치를 진행합니다...'})}\n\n"
-                proc = await asyncio.create_subprocess_exec(
-                    *windows_safe_exec_args([installer_path]),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                    stdin=asyncio.subprocess.DEVNULL,
-                )
-                async for text in _stream_subprocess_lines(proc):
-                    yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
-                await proc.wait()
-                try:
-                    os.remove(installer_path)
-                except OSError:
-                    pass
-            else:
-                # macOS와 Linux는 동일한 공식 셸 스크립트를 사용한다.
-                proc = await asyncio.create_subprocess_shell(
-                    "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                    stdin=asyncio.subprocess.DEVNULL,
-                )
-                async for text in _stream_subprocess_lines(proc):
-                    yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
-                await proc.wait()
-
-            agy_path_after = get_agy_path()
-            installed = os.path.exists(agy_path_after) or shutil.which(agy_path_after) or shutil.which("agy")
-            if proc.returncode == 0 and installed:
-                yield f"data: {json.dumps({'status': 'success'})}\n\n"
-            else:
-                yield f"data: {json.dumps({'status': 'error', 'message': f'설치 스크립트가 오류 코드 {proc.returncode}로 종료되었습니다.'})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        }
-    )
+router.add_api_route(
+    "/settings/install-antigravity",
+    _make_native_cli_install_endpoint(
+        "https://antigravity.google/cli/install.sh",
+        "https://antigravity.google/cli/install.cmd",
+        get_agy_path,
+        "Antigravity CLI가 이미 설치되어 있습니다.",
+        windows_installer_filename="antigravity_install.cmd",
+        path_aliases=("agy",),
+        exit_error_message="설치 스크립트가 오류 코드 {returncode}로 종료되었습니다.",
+    ),
+    methods=["POST"],
+)
 
 
 @router.get("/settings/pull-model")
@@ -925,7 +1049,7 @@ async def _restart_server_process(project_dir: str):
 
 
 @router.post("/settings/update")
-async def system_update(current_user: str = Depends(get_current_user)):
+async def system_update(current_user: str = Depends(require_admin_user)):
     """깃허브 최신 커밋을 풀(pull) 받고, 프론트엔드를 빌드한 뒤 서버를 재기동합니다."""
     import subprocess
     import asyncio

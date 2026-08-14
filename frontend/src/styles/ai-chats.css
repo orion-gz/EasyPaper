@@ -261,12 +261,41 @@
   white-space: nowrap;
   min-width: 0;
 }
-.aic-preview {
+.aic-preview,
+.aic-card-preview {
   display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 1.5em;
+  line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.aic-preview :is(p, h1, h2, h3, h4, h5, h6, blockquote, pre, ul, ol, li),
+.aic-card-preview :is(p, h1, h2, h3, h4, h5, h6, blockquote, pre, ul, ol, li),
+.aic-preview .katex-display-wrap,
+.aic-preview .katex-display,
+.aic-card-preview .katex-display-wrap,
+.aic-card-preview .katex-display {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  white-space: nowrap;
+}
+.aic-preview :is(ul, ol),
+.aic-card-preview :is(ul, ol) { list-style: none; }
+.aic-preview :is(p, li, blockquote) + :is(p, li, blockquote)::before,
+.aic-card-preview :is(p, li, blockquote) + :is(p, li, blockquote)::before { content: ' · '; }
+.aic-preview br,
+.aic-card-preview br { display: none; }
+.aic-preview code,
+.aic-card-preview code { white-space: nowrap; }
+.aic-preview img,
+.aic-card-preview img { width: auto; max-width: 2em; height: 1em; vertical-align: -0.1em; }
+
 .aic-preview-loading { color: var(--text-muted); font-style: italic; }
 .aic-preview-empty { color: var(--text-muted); }
 
@@ -336,10 +365,8 @@
 .aic-card-preview {
   font-size: 12.5px;
   color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
+
 .aic-card-actions { margin-top: 4px; }
 .aic-card-actions .aic-action-btn { flex: 1 1 auto; justify-content: center; }
 

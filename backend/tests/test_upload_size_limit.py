@@ -40,7 +40,7 @@ def test_upload_accepts_file_within_size_limit(test_client, isolated_dirs, monke
     monkeypatch.setattr(upload_module, "MAX_FILE_SIZE_MB", 50)
 
     res = test_client.post(
-        "/api/upload",
+        "/api/upload?translation_mode=scroll",
         files={"file": ("small.pdf", _minimal_pdf_bytes(), "application/pdf")},
     )
 
@@ -48,3 +48,33 @@ def test_upload_accepts_file_within_size_limit(test_client, isolated_dirs, monke
     body = res.json()
     assert body["filename"] == "small.pdf"
     assert body["session_id"] in upload_module.sessions
+
+
+def test_auto_translation_job_starts_before_primer(test_client, isolated_dirs, monkeypatch):
+    """선택 기능인 primer가 느려도 auto 번역 job은 먼저 등록되어야 한다."""
+    upload_dir = isolated_dirs["upload_dir"]
+    monkeypatch.setattr(upload_module, "UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(upload_module, "MAX_FILE_SIZE_MB", 50)
+
+    events = []
+
+    def fake_start_job(*args, **kwargs):
+        events.append("translation")
+        return {"status": "running"}
+
+    async def fake_generate_primer(*args, **kwargs):
+        events.append("primer")
+        assert events[0] == "translation"
+        return {}
+
+    monkeypatch.setattr(upload_module, "start_job", fake_start_job)
+    monkeypatch.setattr(upload_module, "generate_primer", fake_generate_primer)
+
+    res = test_client.post(
+        "/api/upload?translation_mode=auto",
+        files={"file": ("paper.pdf", _minimal_pdf_bytes(), "application/pdf")},
+    )
+
+    assert res.status_code == 200
+    assert events
+    assert events[0] == "translation"

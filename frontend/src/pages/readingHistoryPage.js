@@ -4,7 +4,7 @@
 // 동안 5초 tick으로 현재 문서+카테고리에 적립 → 20초마다 서버로 flush,
 // POST /library/{doc_id}/reading-heartbeat)가 쌓은 실측치를
 // fetchReadingTimeStats()로 집계해서 쓴다. 카테고리는 실제로 구분 가능한 화면
-// 상태 3가지뿐이다: reading(뷰어 기본) / chat(채팅 사이드바 열림) /
+// 상태 3가지뿐이다: reading(최근 PDF 상호작용) / chat(최근 채팅 상호작용) /
 // compare(논문 비교 채팅). 이 기능을 도입하기 전에 만든 페이지라 이 시점
 // 이전의 활동에는 시간 데이터가 없을 수 있다 - 그런 경우 위젯은 "아직 기록된
 // 읽기 시간이 없습니다"로 정직하게 표시한다.
@@ -14,6 +14,8 @@ import { icon } from '../icons.js'
 import { countUniqueVerifiedPages, readPageCount, lastActivityIso, lastActivityDateKey, isoToLocalDateKey } from '../readPages.js'
 import '../styles/reading-history.css'
 import '../styles/dashboard.css'
+
+let renderGeneration = 0
 
 function renderReadingAnalyticsSummaryCard(analyticsSummary) {
   if (!analyticsSummary) return ''
@@ -73,7 +75,7 @@ const TYPE_ICON = { uploaded: 'archive', read: 'bookOpen', browsed: 'activity', 
 const TYPE_COLOR_VAR = { read: '--rh-c1', browsed: '--rh-c5', question: '--rh-c2', note: '--rh-c3', uploaded: '--rh-c4' }
 const TYPE_ORDER = ['read', 'browsed', 'question', 'note', 'uploaded']
 
-// 읽기 시간 하트비트의 카테고리 3종(뷰어 기본/채팅 사이드바/논문 비교) - 대시보드
+// 읽기 시간 하트비트의 카테고리 3종(PDF 상호작용/채팅 상호작용/논문 비교) - 대시보드
 // 활동 요약 카드의 "활동 유형별 시간 분포"에서도 동일 팔레트/라벨을 공유한다.
 export const CATEGORY_LABEL = { reading: '논문 읽기', chat: 'AI 채팅', compare: '논문 비교' }
 export const CATEGORY_COLOR_VAR = { reading: '--rh-c1', chat: '--rh-c2', compare: '--rh-c5' }
@@ -367,6 +369,8 @@ function hideRhTooltip() {
 export async function renderReadingHistoryPage() {
   const el = document.getElementById('page-history')
   if (!el) return
+  const generation = ++renderGeneration
+  const isCurrent = () => generation === renderGeneration && el.classList.contains('active')
 
   hideRhTooltip() // 다른 페이지로 이동한 뒤에도 뜬 채로 남아있지 않도록
   el.innerHTML = '<div class="rh-page"><div class="rh-empty">읽기 기록을 불러오는 중...</div></div>'
@@ -391,11 +395,13 @@ export async function renderReadingHistoryPage() {
     analyticsSummary = analyticsSummaryRes
   } catch (err) {
     console.error('Reading History 로드 실패:', err)
-    el.innerHTML = '<div class="rh-page"><div class="rh-empty" style="color:var(--error)">읽기 기록을 불러오지 못했습니다.</div></div>'
+    if (isCurrent()) {
+      el.innerHTML = '<div class="rh-page"><div class="rh-empty" style="color:var(--error)">읽기 기록을 불러오지 못했습니다.</div></div>'
+    }
     return
   }
 
-  if (document.getElementById('page-history') !== el) return // 페이지 전환됨
+  if (!isCurrent()) return
 
   const docsById = new Map(libraryDocs.map(d => [d.id, d]))
   // readingStats.title_by_doc: 하트비트 시 스냅샷된 doc별 제목 (영구 삭제 후에도 복원 가능)
@@ -664,7 +670,7 @@ export async function renderReadingHistoryPage() {
 
   // ── Reading Time Distribution (part-to-whole, 전체 기간 실측치) ──
   // 카테고리는 main.js 하트비트가 실제로 구분하는 화면 상태 3가지뿐이다:
-  // reading(뷰어에서 읽는 중) / chat(채팅 사이드바 사용 중) / compare(논문 비교).
+  // reading(최근 PDF 상호작용) / chat(최근 채팅 상호작용) / compare(논문 비교).
   const mixBarHtml = CATEGORY_ORDER.map(c => {
     const seconds = byCategory[c] || 0
     const pct = mixTotalSeconds ? (seconds / mixTotalSeconds) * 100 : 0
@@ -923,77 +929,100 @@ export async function renderReadingHistoryPage() {
     return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]))
   }
 
-  function renderTimeline() {
+  function getTimelineDayGroups() {
     const periodEvents = getTimelineEvents()
     const sortedEvents = periodEvents.slice().sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
     const filtered = activeType === 'all' ? sortedEvents : sortedEvents.filter(e => e.type === activeType)
-    if (filtered.length === 0) {
+    return groupByDay(filtered)
+  }
+
+  function renderTimelineDay([dateKey, dayEvents]) {
+    const { primary, secondary } = formatDayLabel(dateKey)
+    return `
+      <div class="rh-timeline-day">
+        <div class="rh-timeline-day-header">
+          <span class="rh-timeline-day-date">${escapeHtml(primary)}</span>
+          <span class="rh-timeline-day-weekday">${escapeHtml(secondary)}</span>
+        </div>
+        <div class="rh-timeline-track">
+          ${dayEvents.map(e => {
+            const title = docTitle(e.doc_id, e.doc_title)
+            const isDeleted = Boolean(e.is_deleted)
+            let pageMeta = ''
+            let timeLabel = formatTime(e.timestamp)
+            let hoverTitle = isDeleted ? '삭제된 논문입니다' : '이 논문 열기'
+
+            if (e.type === 'read' || e.type === 'browsed') {
+              const startStr = formatTime(e.timestamp)
+              const endStr = e.end_timestamp ? formatTime(e.end_timestamp) : null
+              if (startStr && endStr && startStr !== endStr) {
+                timeLabel = `${startStr} ~ ${endStr}`
+                hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시간: ${startStr} ~ ${endStr})` : `읽기 시간: ${startStr} 시작 ~ ${endStr} 종료 | 클릭하여 이 논문 열기`
+              } else if (startStr) {
+                timeLabel = startStr
+                hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시각: ${startStr})` : `읽기 시각: ${startStr} | 클릭하여 이 논문 열기`
+              }
+
+              if (e.start_page && e.end_page) {
+                const range = e.start_page === e.end_page ? `${e.start_page}p` : `${e.start_page}p ~ ${e.end_page}p`
+                const verified = e.verified_pages ?? 0
+                pageMeta = `${range} (${verified}p 검증)`
+              } else if (e.verified_pages !== null && e.verified_pages !== undefined) {
+                pageMeta = `${e.verified_pages}p 검증`
+              } else {
+                const p = readPageCount(docsById.get(e.doc_id))
+                if (p) pageMeta = `${p}페이지`
+              }
+            }
+            return `
+              <div class="rh-timeline-entry ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${escapeHtml(hoverTitle)}">
+                <div class="rh-timeline-dot">${icon(TYPE_ICON[e.type] || 'clock', 13)}</div>
+                <div class="rh-timeline-row">
+                  <span class="rh-timeline-time">${escapeHtml(timeLabel)}</span>
+                  <span class="rh-timeline-type">${escapeHtml(TYPE_LABEL[e.type] || e.type)}</span>
+                  <div class="rh-timeline-main">
+                    <div class="rh-timeline-title">
+                      ${escapeHtml(title)}
+                      ${isDeleted ? '<span class="rh-deleted-badge">삭제됨</span>' : ''}
+                    </div>
+                    ${e.summary ? `<div class="rh-timeline-summary">${escapeHtml(e.summary)}</div>` : ''}
+                  </div>
+                  ${pageMeta ? `<span class="rh-timeline-meta">${escapeHtml(pageMeta)}</span>` : ''}
+                </div>
+              </div>`
+          }).join('')}
+        </div>
+      </div>`
+  }
+
+  function updateMoreButton(dayGroups) {
+    moreBtn.classList.toggle('hidden', visibleGroups >= dayGroups.length)
+  }
+
+  function renderTimeline() {
+    const dayGroups = getTimelineDayGroups()
+    if (dayGroups.length === 0) {
       timelineListEl.innerHTML = '<div class="rh-empty">이 기간의 활동이 아직 없습니다.</div>'
       moreBtn.classList.add('hidden')
       return
     }
-    const dayGroups = groupByDay(filtered)
     const shown = dayGroups.slice(0, visibleGroups)
-    timelineListEl.innerHTML = `<div class="rh-timeline">${shown.map(([dateKey, dayEvents]) => {
-      const { primary, secondary } = formatDayLabel(dateKey)
-      return `
-        <div class="rh-timeline-day">
-          <div class="rh-timeline-day-header">
-            <span class="rh-timeline-day-date">${escapeHtml(primary)}</span>
-            <span class="rh-timeline-day-weekday">${escapeHtml(secondary)}</span>
-          </div>
-          <div class="rh-timeline-track">
-            ${dayEvents.map(e => {
-              const title = docTitle(e.doc_id, e.doc_title)
-              const isDeleted = Boolean(e.is_deleted)
-              let pageMeta = ''
-              let timeLabel = formatTime(e.timestamp)
-              let hoverTitle = isDeleted ? '삭제된 논문입니다' : '이 논문 열기'
+    timelineListEl.innerHTML = `<div class="rh-timeline">${shown.map(renderTimelineDay).join('')}</div>`
+    updateMoreButton(dayGroups)
+  }
 
-              if (e.type === 'read' || e.type === 'browsed') {
-                const startStr = formatTime(e.timestamp)
-                const endStr = e.end_timestamp ? formatTime(e.end_timestamp) : null
-                if (startStr && endStr && startStr !== endStr) {
-                  timeLabel = `${startStr} ~ ${endStr}`
-                  hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시간: ${startStr} ~ ${endStr})` : `읽기 시간: ${startStr} 시작 ~ ${endStr} 종료 | 클릭하여 이 논문 열기`
-                } else if (startStr) {
-                  timeLabel = startStr
-                  hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시각: ${startStr})` : `읽기 시각: ${startStr} | 클릭하여 이 논문 열기`
-                }
-
-                if (e.start_page && e.end_page) {
-                  const range = e.start_page === e.end_page ? `${e.start_page}p` : `${e.start_page}p ~ ${e.end_page}p`
-                  const verified = e.verified_pages ?? 0
-                  pageMeta = `${range} (${verified}p 검증)`
-                } else if (e.verified_pages !== null && e.verified_pages !== undefined) {
-                  pageMeta = `${e.verified_pages}p 검증`
-                } else {
-                  const p = readPageCount(docsById.get(e.doc_id))
-                  if (p) pageMeta = `${p}페이지`
-                }
-              }
-              return `
-                <div class="rh-timeline-entry ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${escapeHtml(hoverTitle)}">
-                  <div class="rh-timeline-dot">${icon(TYPE_ICON[e.type] || 'clock', 13)}</div>
-                  <div class="rh-timeline-row">
-                    <span class="rh-timeline-time">${escapeHtml(timeLabel)}</span>
-                    <span class="rh-timeline-type">${escapeHtml(TYPE_LABEL[e.type] || e.type)}</span>
-                    <div class="rh-timeline-main">
-                      <div class="rh-timeline-title">
-                        ${escapeHtml(title)}
-                        ${isDeleted ? '<span class="rh-deleted-badge">삭제됨</span>' : ''}
-                      </div>
-                      ${e.summary ? `<div class="rh-timeline-summary">${escapeHtml(e.summary)}</div>` : ''}
-                    </div>
-                    ${pageMeta ? `<span class="rh-timeline-meta">${escapeHtml(pageMeta)}</span>` : ''}
-                  </div>
-                </div>`
-            }).join('')}
-          </div>
-        </div>`
-    }).join('')}</div>`
-
-    moreBtn.classList.toggle('hidden', shown.length >= dayGroups.length)
+  function appendTimelineGroups() {
+    const dayGroups = getTimelineDayGroups()
+    const timelineEl = timelineListEl.querySelector('.rh-timeline')
+    if (!timelineEl) {
+      renderTimeline()
+      return
+    }
+    const nextVisibleGroups = Math.min(visibleGroups + 6, dayGroups.length)
+    const nextGroups = dayGroups.slice(visibleGroups, nextVisibleGroups)
+    timelineEl.insertAdjacentHTML('beforeend', nextGroups.map(renderTimelineDay).join(''))
+    visibleGroups = nextVisibleGroups
+    updateMoreButton(dayGroups)
   }
 
   const periodChipsEl = el.querySelector('#rh-period-chips')
@@ -1022,8 +1051,7 @@ export async function renderReadingHistoryPage() {
   })
 
   moreBtn?.addEventListener('click', () => {
-    visibleGroups += 6
-    renderTimeline()
+    appendTimelineGroups()
   })
 
   const openDoc = (docId, type) => {

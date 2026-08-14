@@ -342,13 +342,15 @@
   position: relative;
   padding: 12px 14px 12px 16px;
   border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--notes-item-accent) 10%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--notes-item-accent) 35%, var(--border));
   border-left: 3px solid var(--notes-item-accent);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
-.notes-annotation-card:hover { background: var(--bg-hover); }
+.notes-annotation-card:hover {
+  background: color-mix(in srgb, var(--notes-item-accent) 16%, var(--bg-elevated));
+}
 .notes-card-memo { --notes-item-accent: var(--control-accent); }
 .notes-card-highlight { --notes-item-accent: #eab308; }
 .notes-card-underline { --notes-item-accent: #22c55e; }
@@ -377,9 +379,23 @@
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-primary);
-  white-space: pre-wrap;
   word-break: break-word;
 }
+.notes-card-collapsible:not(.expanded) .notes-card-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.notes-card-text > :first-child { margin-top: 0; }
+.notes-card-text > :last-child { margin-bottom: 0; }
+.notes-card-text p,
+.notes-card-text ul,
+.notes-card-text ol,
+.notes-card-text pre,
+.notes-card-text blockquote { margin: 0 0 0.55em; }
+.notes-card-text .katex-display { margin: 0.45em 0; overflow-x: auto; overflow-y: hidden; }
+.notes-card-text pre { overflow-x: auto; }
 .notes-card-expand-btn {
   display: inline-flex;
   align-items: center;

@@ -82,7 +82,7 @@ body.light-theme {
   --text-primary:   #0f172a;
   --text-secondary: #475569;
   --text-tertiary:  #64748b;
-  --text-muted:     #94a3b8;
+  --text-muted:     #64748b;
 
   --control-accent-text: #1e40af;
 
@@ -323,7 +323,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  z-index: 100;
+  z-index: 120;
   gap: 16px;
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
   transform: translateY(0);
@@ -1227,6 +1227,9 @@ body.light-theme .toast.error { color: #dc2626; }
 .library-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(265px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  min-height: 0;
   gap: 16px;
   overflow-y: auto;
   padding-bottom: 30px;
@@ -1310,6 +1313,7 @@ body.light-theme .toast.error { color: #dc2626; }
   align-items: center;
   gap: 8px;
   margin-top: auto;
+  flex-shrink: 0;
 }
 
 .doc-card-meta {
@@ -3534,6 +3538,11 @@ body.light-theme .provider-picker-panel {
   gap: 6px;
   flex-wrap: wrap;
 }
+.doc-card .doc-card-tags {
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
 .doc-card-tag {
   font-size: 10.5px;
   font-weight: 700;
@@ -3542,6 +3551,15 @@ body.light-theme .provider-picker-panel {
   background: var(--control-accent-soft);
   color: var(--control-accent-text);
   border: 1px solid transparent;
+}
+.doc-card .doc-card-tag {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-card .doc-card-tag-count {
+  flex-shrink: 0;
 }
 
 /* ── Google Drive Style Upload Popup ── */
@@ -5889,6 +5907,9 @@ body.light-theme .citation-marker-box:hover {
   z-index: 200;
   width: 300px;
   max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(23, 20, 38, 0.97);
   color: var(--text-primary);
   border: 1px solid var(--border-strong);
@@ -5911,8 +5932,6 @@ body.light-theme .citation-tooltip {
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--text-secondary);
-  max-height: 110px;
-  overflow-y: auto;
   margin-bottom: 10px;
 }
 .citation-tooltip-multi-item + .citation-tooltip-multi-item {
@@ -5923,17 +5942,20 @@ body.light-theme .citation-tooltip {
   color: var(--text-primary);
   margin-right: 2px;
 }
-.citation-tooltip-result {
+.citation-tooltip-result,
+.citation-tooltip-scholar-results {
   font-size: 12.5px;
   line-height: 1.5;
   margin-bottom: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
-.citation-tooltip-result.hidden {
+.citation-tooltip-result.hidden,
+.citation-tooltip-scholar-results.hidden {
   display: none;
 }
-.citation-tooltip-result a {
+.citation-tooltip-result a,
+.citation-tooltip-scholar-results a {
   display: flex;
   align-items: flex-start;
   gap: 4px;
@@ -5941,8 +5963,20 @@ body.light-theme .citation-tooltip {
   font-weight: 600;
   text-decoration: none;
 }
-.citation-tooltip-result a:hover {
+.citation-tooltip-result a:hover,
+.citation-tooltip-scholar-results a:hover {
   text-decoration: underline;
+}
+.citation-tooltip-result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.citation-tooltip-result-item + .citation-tooltip-result-item {
+  margin-top: 7px;
+}
+.citation-tooltip-result-item > .citation-tooltip-multi-key {
+  flex-shrink: 0;
 }
 .citation-tooltip-result-empty {
   color: var(--text-muted);
@@ -6806,3 +6840,17 @@ body.light-theme .chat-drawer {
   color: #ffffff !important;
 }
 
+
+.lib-add-fab-wrap { position:fixed; bottom:40px; right:40px; z-index:999; display:flex; flex-direction:column-reverse; align-items:flex-end; gap:12px; }
+.lib-add-fab-wrap #lib-upload-btn.lib-add-main-btn { position:static; width:58px; height:58px; padding:0; border-radius:50%; display:grid; place-items:center; background:var(--control-accent); box-shadow:0 8px 24px rgba(0,0,0,.22); }
+.lib-add-main-btn > span { font-size:30px; line-height:1; font-weight:300; transition:transform .2s ease; }
+.lib-add-fab-wrap.open .lib-add-main-btn > span { transform:rotate(45deg); }
+.lib-add-sub-btn { display:flex; align-items:center; justify-content:flex-end; gap:12px; padding:0; border:0; background:transparent; color:var(--text-primary); cursor:pointer; opacity:0; visibility:hidden; transform:translateY(12px) scale(.94); transition:opacity .18s ease, transform .18s ease, visibility .18s; }
+.lib-add-fab-wrap.open .lib-add-sub-btn { opacity:1; visibility:visible; transform:translateY(0) scale(1); }
+.lib-add-label { padding:5px 9px; border-radius:7px; background:var(--bg-surface); box-shadow:var(--shadow-sm); font-size:12.5px; font-weight:650; white-space:nowrap; }
+.lib-add-circle { width:50px; height:50px; border-radius:50%; display:grid; place-items:center; background:var(--bg-surface); color:var(--text-primary); box-shadow:0 5px 16px rgba(0,0,0,.18); }
+.lib-add-sub-btn:hover .lib-add-circle { transform:translateY(-1px); filter:brightness(1.06); }
+#lib-add-paper-btn .lib-add-circle { background:#4f8ef7; color:#fff; }
+#lib-add-folder-btn .lib-add-circle { background:#f59e0b; color:#fff; }
+#lib-add-paper-btn .lib-add-label { color:#4f8ef7; }
+#lib-add-folder-btn .lib-add-label { color:#d97706; }

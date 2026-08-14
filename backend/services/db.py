@@ -247,7 +247,7 @@ def init_db():
         # 13. reading_time 테이블 (Reading History의 "읽은 시간" 실측치). 뷰어/비교
         #     화면이 화면에 보이고 포커스된 동안 프런트가 일정 간격(하트비트)으로
         #     경과 초를 보내오면 (doc_id, username, day, category) 단위로 누적한다.
-        #     category는 'reading'(뷰어 기본)/'chat'(채팅 사이드바가 열려있는 동안)/
+        #     category는 'reading'(PDF 영역 상호작용)/'chat'(채팅 영역 상호작용)/
         #     'compare'(논문 비교 채팅 화면) 중 하나 - 실제로 구분 가능한 화면
         #     상태만 카테고리로 쓰고, 근거 없는 세부 항목(예: "메모 작성 시간")은
         #     만들지 않는다.
@@ -303,6 +303,7 @@ def init_db():
             total_pages INTEGER DEFAULT 0,
             reading_activity TEXT DEFAULT 'unclassified',
             minimum_evidence_time REAL DEFAULT 90.0,
+            analytics_version INTEGER NOT NULL DEFAULT 2,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
@@ -323,6 +324,38 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_time_username_day ON reading_time(username, day)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reading_time_doc ON reading_time(doc_id, username)")
 
+        # UI의 폴더 구조는 실제 PDF 디렉터리와 분리해 관리한다.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS folders (
+            id TEXT PRIMARY KEY, username TEXT NOT NULL, parent_id TEXT,
+            name TEXT NOT NULL, color TEXT NOT NULL DEFAULT '#6b7280',
+            sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
+            FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_folders (
+            doc_id TEXT PRIMARY KEY, folder_id TEXT,
+            FOREIGN KEY (doc_id) REFERENCES documents(id) ON DELETE CASCADE,
+            FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
+        )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_folders_user_parent ON folders(username, parent_id, sort_order)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_folders_folder ON document_folders(folder_id)")
+        # foreign_keys 설정이 꺼진 기존 설치에서 영구 삭제된 논문이나 폴더를
+        # 가리키는 매핑이 남을 수 있으므로 시작 시 기존 데이터도 정리한다.
+        cursor.execute("DELETE FROM document_folders WHERE doc_id NOT IN (SELECT id FROM documents)")
+        cursor.execute(
+            "UPDATE document_folders SET folder_id = NULL "
+            "WHERE folder_id IS NOT NULL AND folder_id NOT IN (SELECT id FROM folders)"
+        )
+        cursor.execute(
+            "UPDATE folders AS child SET parent_id = NULL WHERE parent_id IS NOT NULL "
+            "AND NOT EXISTS (SELECT 1 FROM folders AS parent "
+            "WHERE parent.id = child.parent_id AND parent.username = child.username)"
+        )
+
         conn.commit()
 
         # reading_time 테이블 동적 스키마 마이그레이션: doc_title 컬럼 추가
@@ -337,6 +370,7 @@ def init_db():
             "ALTER TABLE reading_sessions ADD COLUMN reading_activity TEXT DEFAULT 'unclassified'",
             "ALTER TABLE reading_sessions ADD COLUMN minimum_evidence_time REAL DEFAULT 90.0",
             "ALTER TABLE reading_sessions ADD COLUMN verified_pages_json TEXT",
+            "ALTER TABLE reading_sessions ADD COLUMN analytics_version INTEGER NOT NULL DEFAULT 1",
         ):
             try:
                 cursor.execute(column_sql)
@@ -364,6 +398,9 @@ def init_db():
             )
             conn.commit()
             print(f"Default user '{default_user}' created in SQLite database.")
+
+    db_migrate_reading_analytics_v2()
+    db_backfill_document_titles()
 
 
 # ── 사용자 (Users) ───────────────────────────────────────────────────────────
@@ -398,19 +435,23 @@ def update_user_credentials(old_username: str, new_username: str, new_password_h
                 "UPDATE users SET username = ?, password_hash = ? WHERE username = ?",
                 (new_username, new_password_hash, old_username)
             )
-            # documents.username은 users.username을 참조하는 외래키로 선언돼
-            # 있지만, SQLite는 연결마다 별도로 PRAGMA foreign_keys를 켜주지
-            # 않는 한 이 외래키 제약(및 ON UPDATE CASCADE)을 전혀 강제하지
-            # 않는다. 이 프로젝트는 그 PRAGMA를 켜지 않으므로, 아이디를
-            # 바꾸면 documents 테이블은 예전 아이디를 그대로 가리킨 채 남아
-            # 라이브러리 목록 조회(WHERE username = 새 아이디)에서 전부
-            # 빠져버려 문서가 사라진 것처럼 보이는 문제가 있었다. 같은
-            # 트랜잭션 안에서 명시적으로 함께 갱신한다.
+            # 사용자별 데이터 테이블은 SQLite의 ON UPDATE CASCADE에 의존하지
+            # 않고 같은 트랜잭션에서 명시적으로 함께 갱신한다. 그렇지 않으면
+            # 아이디 변경 후 문서, 읽기 기록, EMA 프로필, 비교 세션이 예전
+            # 아이디에 남아 새 아이디로 조회되지 않는다.
             if new_username != old_username:
-                cursor.execute(
-                    "UPDATE documents SET username = ? WHERE username = ?",
-                    (new_username, old_username)
-                )
+                for table in (
+                    "documents",
+                    "reading_time",
+                    "reading_sessions",
+                    "user_reading_profiles",
+                    "compare_sessions",
+                    "folders",
+                ):
+                    cursor.execute(
+                        f"UPDATE {table} SET username = ? WHERE username = ?",
+                        (new_username, old_username),
+                    )
             conn.commit()
             return True
     except Exception:
@@ -534,12 +575,43 @@ def db_search_documents(username: str, query: str, only_trash: bool = False) -> 
 
 
 def db_delete_document(doc_id: str) -> bool:
+    # documents FK들은 전부 ON DELETE CASCADE로 선언돼 있지만, SQLite는
+    # 커넥션마다 PRAGMA foreign_keys=ON을 켜야 실제로 CASCADE가 동작하는데
+    # 이 프로젝트는 그 PRAGMA를 켜지 않는다(update_user_credentials 참고).
+    # 그래서 documents 삭제만으로는 연관 레코드가 전혀 지워지지 않아
+    # translations/chats/... 가 고아로 영구히 남는다. 여기서 명시적으로
+    # 정리한다. reading_time/reading_sessions/compare_sessions은 "삭제된
+    # 논문도 제목/기록을 보존해서 보여준다"는 의도된 설계라 대상에서
+    # 제외한다(reading_time.doc_title 컬럼 참고). concepts/concept_edges는
+    # 문서가 아니라 개념 간 전역 관계라 문서 삭제와 무관하다.
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM documents WHERE id = ?", (doc_id,))
         if not cursor.fetchone():
             return False
+
+        cursor.execute("SELECT id FROM chats WHERE doc_id = ?", (doc_id,))
+        chat_ids = [row["id"] for row in cursor.fetchall()]
+        if chat_ids:
+            placeholders = ",".join("?" for _ in chat_ids)
+            cursor.execute(
+                f"DELETE FROM question_concepts WHERE chat_id IN ({placeholders})",
+                chat_ids,
+            )
+
+        cursor.execute("DELETE FROM question_papers WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM paper_concepts WHERE doc_id = ?", (doc_id,))
+        cursor.execute(
+            "DELETE FROM paper_edges WHERE doc_id_a = ? OR doc_id_b = ?",
+            (doc_id, doc_id),
+        )
+        cursor.execute("DELETE FROM annotations WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM memos WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM page_insights WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM translations WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM chats WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+        cursor.execute("DELETE FROM document_folders WHERE doc_id = ?", (doc_id,))
         conn.commit()
         return True
 
@@ -747,7 +819,11 @@ def db_get_compare_doc_ids(compare_id: str) -> List[str]:
 
 def db_list_compare_chat_sessions(username: str) -> List[Dict[str, Any]]:
     """사용자가 논문 비교 기능으로 대화한 채팅 세션 목록을, 최근 대화 시각
-    역순으로 반환합니다. 각 세션의 doc_ids에 연결된 문서 제목도 함께 담습니다."""
+    역순으로 반환합니다. 각 세션의 doc_ids에 연결된 문서 제목도 함께 담습니다.
+
+    compare_sessions와 사용자의 documents를 각각 한 번씩만 조회해, 세션별·문서별
+    SELECT가 반복되던 N+1 패턴을 피합니다.
+    """
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -756,6 +832,12 @@ def db_list_compare_chat_sessions(username: str) -> List[Dict[str, Any]]:
         )
         rows = cursor.fetchall()
 
+        cursor.execute(
+            "SELECT id, filename, metadata FROM documents WHERE username = ?",
+            (username,),
+        )
+        documents_by_id = {row["id"]: dict(row) for row in cursor.fetchall()}
+
         sessions = []
         for r in rows:
             row = dict(r)
@@ -763,15 +845,10 @@ def db_list_compare_chat_sessions(username: str) -> List[Dict[str, Any]]:
 
             titles = []
             for doc_id in doc_ids:
-                cursor.execute(
-                    "SELECT filename, metadata FROM documents WHERE id = ? AND username = ?",
-                    (doc_id, username)
-                )
-                doc_row = cursor.fetchone()
-                if not doc_row:
+                doc = documents_by_id.get(doc_id)
+                if not doc:
                     titles.append("(삭제된 논문)")
                     continue
-                doc = dict(doc_row)
                 metadata = json.loads(doc["metadata"]) if doc["metadata"] else {}
                 titles.append(metadata.get("title") or doc["filename"])
 
@@ -843,6 +920,118 @@ def db_update_document_metadata(doc_id: str, metadata: dict) -> None:
             (meta_str, doc_id)
         )
         conn.commit()
+
+
+def db_patch_document_metadata(
+    doc_id: str,
+    updates: dict,
+    remove_keys: tuple[str, ...] = (),
+) -> Optional[dict]:
+    """Merge individual metadata fields without overwriting concurrent changes."""
+    with get_db() as conn:
+        # Keep the read/merge/write sequence inside one write transaction. Long
+        # running jobs often hold an old metadata snapshot, so callers that only
+        # changed one field must not replace the whole JSON document with it.
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT metadata FROM documents WHERE id = ?",
+            (doc_id,),
+        ).fetchone()
+        if row is None:
+            return None
+
+        try:
+            metadata = json.loads(row["metadata"]) if row["metadata"] else {}
+        except (TypeError, json.JSONDecodeError):
+            metadata = {}
+        metadata.update(updates)
+        for key in remove_keys:
+            metadata.pop(key, None)
+
+        conn.execute(
+            "UPDATE documents SET metadata = ? WHERE id = ?",
+            (json.dumps(metadata, ensure_ascii=False), doc_id),
+        )
+        conn.commit()
+        return metadata
+
+
+# ── 라이브러리 폴더 ───────────────────────────────────────────────────────────
+
+def db_list_folders(username: str) -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        rows = conn.execute("SELECT id, username, parent_id, name, color, sort_order, created_at, updated_at FROM folders WHERE username = ? ORDER BY sort_order, name COLLATE NOCASE", (username,)).fetchall()
+        return [dict(row) for row in rows]
+
+def db_get_folder(folder_id: str, username: str) -> Optional[Dict[str, Any]]:
+    with get_db() as conn:
+        row = conn.execute("SELECT id, username, parent_id, name, color, sort_order, created_at, updated_at FROM folders WHERE id = ? AND username = ?", (folder_id, username)).fetchone()
+        return dict(row) if row else None
+
+def db_create_folder(folder_id: str, username: str, name: str, parent_id: Optional[str], color: str) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        conn.execute("INSERT INTO folders (id, username, parent_id, name, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (folder_id, username, parent_id, name, color, now, now))
+        conn.commit()
+    return {"id": folder_id, "username": username, "parent_id": parent_id, "name": name, "color": color, "created_at": now, "updated_at": now}
+
+def db_update_folder(folder_id: str, username: str, **updates: Any) -> bool:
+    allowed = {key: value for key, value in updates.items() if key in {"name", "color", "parent_id"}}
+    if not allowed: return False
+    allowed["updated_at"] = datetime.now(timezone.utc).isoformat()
+    set_sql = ", ".join(f"{key} = ?" for key in allowed)
+    with get_db() as conn:
+        cursor = conn.execute(f"UPDATE folders SET {set_sql} WHERE id = ? AND username = ?", (*allowed.values(), folder_id, username))
+        conn.commit()
+        return cursor.rowcount == 1
+
+def db_delete_folder(folder_id: str, username: str, delete_papers: bool = False) -> bool:
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            WITH RECURSIVE folder_tree(id) AS (
+                SELECT id FROM folders WHERE id = ? AND username = ?
+                UNION ALL
+                SELECT child.id
+                FROM folders child
+                JOIN folder_tree parent ON child.parent_id = parent.id
+                WHERE child.username = ?
+            )
+            SELECT id FROM folder_tree
+            """,
+            (folder_id, username, username),
+        ).fetchall()
+        folder_ids = [row["id"] for row in rows]
+        if not folder_ids:
+            return False
+
+        placeholders = ",".join("?" for _ in folder_ids)
+        # 삭제를 선택한 경우 하위 폴더를 포함한 트리 전체의 논문을 휴지통으로 보낸다.
+        if delete_papers:
+            conn.execute(
+                f"UPDATE documents SET is_deleted = 1 WHERE username = ? AND id IN (SELECT doc_id FROM document_folders WHERE folder_id IN ({placeholders}))",
+                (username, *folder_ids),
+            )
+        conn.execute(f"UPDATE document_folders SET folder_id = NULL WHERE folder_id IN ({placeholders})", folder_ids)
+        conn.execute(f"DELETE FROM folders WHERE username = ? AND id IN ({placeholders})", (username, *folder_ids))
+        conn.commit()
+        return True
+
+def db_get_document_folder_map(username: str) -> Dict[str, Optional[str]]:
+    with get_db() as conn:
+        rows = conn.execute("SELECT df.doc_id, df.folder_id FROM document_folders df JOIN documents d ON d.id = df.doc_id WHERE d.username = ?", (username,)).fetchall()
+        return {row["doc_id"]: row["folder_id"] for row in rows}
+
+def db_move_documents_to_folder(doc_ids: List[str], username: str, folder_id: Optional[str]) -> int:
+    if not doc_ids: return 0
+    placeholders = ",".join("?" for _ in doc_ids)
+    with get_db() as conn:
+        rows = conn.execute(f"SELECT id FROM documents WHERE username = ? AND id IN ({placeholders})", (username, *doc_ids)).fetchall()
+        owned_ids = [row["id"] for row in rows]
+        for doc_id in owned_ids:
+            conn.execute("INSERT INTO document_folders (doc_id, folder_id) VALUES (?, ?) ON CONFLICT(doc_id) DO UPDATE SET folder_id = excluded.folder_id", (doc_id, folder_id))
+        conn.commit()
+        return len(owned_ids)
 
 
 # ── 앱 내부 상태 (app_meta) ───────────────────────────────────────────────────
@@ -1403,7 +1592,7 @@ def db_get_latest_reading_session(paper_id: str, username: str) -> Optional[Dict
                    page_sessions_json, interaction_summary_json, reading_depth,
                    reading_score, reading_confidence, verified_pages_count,
                    verified_pages_json, total_pages, reading_activity,
-                   minimum_evidence_time, created_at, updated_at
+                   minimum_evidence_time, analytics_version, created_at, updated_at
             FROM reading_sessions
             WHERE username = ? AND paper_id = ?
             ORDER BY updated_at DESC LIMIT 1
@@ -1426,7 +1615,7 @@ def db_get_reading_session(session_id: str, username: str) -> Optional[Dict[str,
                    page_sessions_json, interaction_summary_json, reading_depth,
                    reading_score, reading_confidence, verified_pages_count,
                    verified_pages_json, total_pages, reading_activity,
-                   minimum_evidence_time, created_at, updated_at
+                   minimum_evidence_time, analytics_version, created_at, updated_at
             FROM reading_sessions
             WHERE id = ? AND username = ?
             """,
@@ -1456,6 +1645,7 @@ def db_save_reading_session(
     reading_activity: str = "unclassified",
     minimum_evidence_time: float = 90.0,
     verified_pages_json: Optional[str] = None,
+    analytics_version: int = 2,
 ) -> bool:
     """Insert a session or replace it only with a newer heartbeat version."""
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -1468,8 +1658,8 @@ def db_save_reading_session(
                 page_sessions_json, interaction_summary_json, reading_depth,
                 reading_score, reading_confidence, verified_pages_count, total_pages,
                 reading_activity, minimum_evidence_time, verified_pages_json,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                analytics_version, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 ended_at = excluded.ended_at,
                 active_reading_time = excluded.active_reading_time,
@@ -1484,6 +1674,7 @@ def db_save_reading_session(
                 total_pages = excluded.total_pages,
                 reading_activity = excluded.reading_activity,
                 minimum_evidence_time = excluded.minimum_evidence_time,
+                analytics_version = excluded.analytics_version,
                 updated_at = excluded.updated_at
             WHERE excluded.version > reading_sessions.version
             """,
@@ -1505,6 +1696,7 @@ def db_save_reading_session(
                 reading_activity,
                 minimum_evidence_time,
                 verified_pages_json,
+                analytics_version,
                 now_iso,
                 now_iso,
             ),
@@ -1525,7 +1717,7 @@ def db_get_reading_sessions_for_user(username: str) -> List[Dict[str, Any]]:
                    rs.reading_depth, rs.reading_score, rs.reading_confidence,
                    rs.verified_pages_count, rs.verified_pages_json,
                    rs.total_pages, rs.reading_activity,
-                   rs.minimum_evidence_time, rs.updated_at,
+                   rs.minimum_evidence_time, rs.analytics_version, rs.updated_at,
                    titles.doc_title
             FROM reading_sessions AS rs
             LEFT JOIN (
@@ -1573,6 +1765,143 @@ def db_save_user_reading_profile(username: str, ema_seconds_per_page: float, ses
             (username, ema_seconds_per_page, session_count, now_iso),
         )
         conn.commit()
+
+
+def db_migrate_reading_analytics_v2() -> None:
+    """Recalculate legacy sessions and rebuild EMA from meaningful page visits."""
+    from services.reading_analytics import (
+        READING_ANALYTICS_VERSION, InteractionSummary, PageSession,
+        ReadingSessionPayload, count_meaningful_page_sessions,
+        process_reading_analytics, update_user_ema,
+    )
+
+    with get_db() as conn:
+        affected_rows = conn.execute(
+            "SELECT DISTINCT username FROM reading_sessions WHERE analytics_version < ?",
+            (READING_ANALYTICS_VERSION,),
+        ).fetchall()
+        affected_users = [row["username"] for row in affected_rows]
+        if not affected_users:
+            return
+
+        placeholders = ",".join("?" for _ in affected_users)
+        rows = conn.execute(
+            f"""
+            SELECT id, username, paper_id, version, active_reading_time, ended_at,
+                   page_sessions_json, interaction_summary_json, total_pages, analytics_version
+            FROM reading_sessions
+            WHERE username IN ({placeholders})
+            ORDER BY username, started_at, created_at
+            """,
+            affected_users,
+        ).fetchall()
+
+        profiles = {username: (600.0, 0) for username in affected_users}
+        for row in rows:
+            username = row["username"]
+            user_ema, session_count = profiles[username]
+            try:
+                raw_pages = json.loads(row["page_sessions_json"] or "[]")
+                raw_interaction = json.loads(row["interaction_summary_json"] or "{}")
+                page_sessions = [
+                    PageSession(**page) for page in raw_pages if isinstance(page, dict)
+                ]
+                interaction = InteractionSummary(**raw_interaction)
+                payload = ReadingSessionPayload(
+                    sessionId=row["id"],
+                    paperId=row["paper_id"],
+                    version=max(0, row["version"] or 0),
+                    currentPage=max([page.page for page in page_sessions], default=1),
+                    activeReadingTime=max(0, row["active_reading_time"] or 0),
+                    pageSessions=page_sessions,
+                    interactionSummary=interaction,
+                )
+            except (TypeError, ValueError, json.JSONDecodeError):
+                conn.execute(
+                    "UPDATE reading_sessions SET analytics_version = ? WHERE id = ?",
+                    (READING_ANALYTICS_VERSION, row["id"]),
+                )
+                continue
+
+            if (row["analytics_version"] < READING_ANALYTICS_VERSION):
+                result = process_reading_analytics(
+                    payload, max(0, row["total_pages"] or 0), user_ema,
+                )
+                verified_pages = sorted(
+                    page for page, score in result.pageScores.items() if score >= 50.0
+                )
+                conn.execute(
+                    """
+                    UPDATE reading_sessions
+                    SET reading_depth = ?, reading_score = ?, reading_confidence = ?,
+                        verified_pages_count = ?, verified_pages_json = ?, total_pages = ?,
+                        reading_activity = ?, minimum_evidence_time = ?, analytics_version = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        result.readingDepth, result.readingScore, result.readingConfidence,
+                        result.verifiedPagesCount, json.dumps(verified_pages), result.totalPages,
+                        result.readingActivity, result.minimumEvidenceTime,
+                        READING_ANALYTICS_VERSION, row["id"],
+                    ),
+                )
+
+            meaningful_pages = count_meaningful_page_sessions(page_sessions)
+            if row["ended_at"] and meaningful_pages > 0:
+                profiles[username] = update_user_ema(
+                    user_ema, session_count, payload.activeReadingTime, meaningful_pages,
+                )
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for username, (ema_seconds, session_count) in profiles.items():
+            conn.execute(
+                """
+                INSERT INTO user_reading_profiles
+                    (username, ema_seconds_per_page, session_count, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(username) DO UPDATE SET
+                    ema_seconds_per_page = excluded.ema_seconds_per_page,
+                    session_count = excluded.session_count,
+                    updated_at = excluded.updated_at
+                """,
+                (username, ema_seconds, session_count, now_iso),
+            )
+        conn.commit()
+
+
+def db_backfill_document_titles() -> None:
+    """Restore extracted paper titles lost by legacy metadata replacement."""
+    from services.pdf_parser import get_pdf_metadata
+
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, pdf_path, metadata FROM documents WHERE is_deleted = 0"
+        ).fetchall()
+
+    for row in rows:
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            metadata = {}
+        if (metadata.get("title") or not os.path.isfile(row["pdf_path"] or "")):
+            continue
+        try:
+            title = (get_pdf_metadata(row["pdf_path"]).get("title") or "").strip()
+        except Exception:
+            continue
+        if not title:
+            continue
+        metadata["title"] = title
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE documents SET metadata = ? WHERE id = ?",
+                (json.dumps(metadata, ensure_ascii=False), row["id"]),
+            )
+            conn.execute(
+                "UPDATE reading_time SET doc_title = ? WHERE doc_id = ?",
+                (title, row["id"]),
+            )
+            conn.commit()
 
 
 def db_get_all_reading_analytics_summary(username: str, since_days: Optional[int] = None) -> Dict[str, Any]:
@@ -1634,4 +1963,3 @@ def db_get_all_reading_analytics_summary(username: str, since_days: Optional[int
         "total_active_reading_time": total_active_time,
         "paper_stats": paper_stats,
     }
-

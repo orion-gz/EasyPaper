@@ -1,10 +1,11 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
-python-multipart==0.0.9
+python-multipart>=0.0.18
 pymupdf==1.24.10
 httpx==0.27.2
 pydantic==2.8.2
 aiofiles==23.2.1
 python-dotenv==1.0.1
 matplotlib==3.11.1
-pillow==12.3.0
+# marker-pdf/surya-ocr require Pillow >=10.2.0,<11.
+pillow>=10.2.0,<11

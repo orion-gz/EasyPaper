@@ -1,6 +1,7 @@
 import base64
 import fitz  # PyMuPDF
 import re
+from functools import lru_cache
 from typing import List, Dict, Any, Optional
 
 
@@ -64,7 +65,7 @@ def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
                         "type": 0
                     })
                 pages.append({
-                    "page": page_num,
+                    "page_num": page_num,
                     "text": text,
                     "blocks": blocks,
                     "parser_engine": "pdfplumber"
@@ -78,21 +79,18 @@ def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
 
 def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:
     try:
-        from marker.converters.pdf import PdfConverter
-        from marker.models import create_model_dict
+        from marker.renderers.json import JSONRenderer
 
-        converter = PdfConverter(artifact_dict=create_model_dict())
-        rendered = converter(pdf_path)
-        markdown_text = getattr(rendered, "markdown", "") or str(rendered)
+        document, converter = _build_marker_document(pdf_path)
+        json_output = converter.resolve_dependencies(JSONRenderer)(document)
 
-        raw_pages = markdown_text.split("\n\n---\n\n")
         pages = []
-        for idx, page_str in enumerate(raw_pages):
+        for idx, page_json in enumerate(json_output.children):
+            text_content = clean_text_for_translation(_marker_page_text(page_json))
             pages.append({
-                "page": idx + 1,
-                "text": page_str,
-                "blocks": [{"bbox": (0, 0, 100, 100), "text": page_str, "type": 0}],
-                "markdown": page_str,
+                "page_num": idx + 1,
+                "text": text_content,
+                "blocks": [{"bbox": tuple(page_json.bbox), "text": text_content, "type": 0}],
                 "parser_engine": "marker"
             })
         return pages if pages else _extract_pages_pymupdf(pdf_path)
@@ -104,32 +102,27 @@ def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:
 
 def _extract_pages_mineru(pdf_path: str) -> List[Dict[str, Any]]:
     try:
-        import importlib
-        if not importlib.util.find_spec("magic_pdf"):
-            raise ImportError("magic_pdf 패키지가 설치되어 있지 않습니다.")
+        content_list = _run_mineru(pdf_path)
+        pages_text: Dict[int, List[str]] = {}
+        for item in content_list:
+            text = _mineru_item_text(item)
+            if text:
+                pages_text.setdefault(item.get("page_idx", 0), []).append(text)
 
-        from magic_pdf.data.dataset import PymuDocDataset
-        from magic_pdf.model.doc_analyze_by_custom_model import doc_analyze
+        if not pages_text:
+            return _extract_pages_pymupdf(pdf_path)
 
-        with open(pdf_path, "rb") as f:
-            pdf_bytes = f.read()
-
-        ds = PymuDocDataset(pdf_bytes)
-        infer_result = ds.apply(doc_analyze, ocr=False)
-        pipe_result = infer_result.pipe_txt()
-        markdown_text = pipe_result.get_markdown() if hasattr(pipe_result, "get_markdown") else str(pipe_result)
-
-        raw_pages = markdown_text.split("\n\n---\n\n")
+        max_page_idx = max(pages_text.keys())
         pages = []
-        for idx, page_str in enumerate(raw_pages):
+        for page_idx in range(max_page_idx + 1):
+            text_content = clean_text_for_translation("\n\n".join(pages_text.get(page_idx, [])))
             pages.append({
-                "page": idx + 1,
-                "text": page_str,
-                "blocks": [{"bbox": (0, 0, 100, 100), "text": page_str, "type": 0}],
-                "markdown": page_str,
+                "page_num": page_idx + 1,
+                "text": text_content,
+                "blocks": [{"bbox": (0, 0, 1000, 1000), "text": text_content, "type": 0}],
                 "parser_engine": "mineru"
             })
-        return pages if pages else _extract_pages_pymupdf(pdf_path)
+        return pages
     except Exception as e:
         import logging
         logging.warning(f"MinerU 파서 실행 실패 ({e}). PyMuPDF 파서로 폴백합니다.")
@@ -397,175 +390,200 @@ def clean_text_for_translation(text: str) -> str:
 
 
 def _extract_paper_title(doc: fitz.Document) -> str:
-    """PDF 첫 페이지의 텍스트와 폰트 크기를 분석하여 논문의 실제 제목을 추출합니다."""
+    """첫 페이지의 행 위치와 글꼴 크기를 분석해 실제 논문 제목을 추출합니다.
+
+    가장 큰 글꼴 하나만 기준으로 삼으면 저널 masthead나 ``Research Article`` 같은
+    문서 유형 라벨이 실제 제목보다 큰 PDF에서 제목을 놓친다. 물리적인 행을 먼저
+    만들고, 본문보다 눈에 띄는 연속 행들을 각각 제목 후보로 평가한다.
+    """
     if len(doc) == 0:
         return ""
-    
+
     try:
         page = doc[0]
+        height = page.rect.height
         blocks = page.get_text("dict")["blocks"]
-        
         spans_info = []
-        for b in blocks:
-            if "lines" not in b:
-                continue
-            for line in b["lines"]:
-                for span in line["spans"]:
-                    text = span["text"]
+        for block in blocks:
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    text = span.get("text", "")
                     stripped = text.strip()
-                    if not stripped:
+                    if not stripped or stripped.isdigit():
                         continue
-                    # 단일 문자이면서 폰트 크기가 작은 경우(노이즈) 무시
                     if len(stripped) < 2 and span["size"] < 12:
                         continue
-                    # 숫자로만 이루어진 스팬은 무시
-                    if stripped.isdigit():
-                        continue
-                    
-                    # arXiv 스탬프 및 학회/저널 프리프린트 헤더 필터링
-                    lower_text = text.lower()
+                    lower_text = stripped.lower()
                     if "arxiv" in lower_text:
                         continue
-                    if any(kw in lower_text for kw in ["preprint", "under review", "submitted to", "accepted as"]):
+                    if any(keyword in lower_text for keyword in (
+                        "preprint", "under review", "submitted to", "accepted as"
+                    )):
                         continue
-                    
-                    bbox = span["bbox"]
-                    y0 = bbox[1]
-                    height = page.rect.height
-                    
-                    # 상단 8% 미만 또는 하단 15% 초과 영역에 있으면서 폰트가 작은 경우(헤더/푸터) 무시
+                    y0 = span["bbox"][1]
                     if (y0 < height * 0.08 or y0 > height * 0.85) and span["size"] < 12:
                         continue
-                        
                     spans_info.append({
                         "text": text,
                         "size": span["size"],
                         "font": span["font"],
-                        "bbox": bbox
+                        "bbox": span["bbox"],
                     })
-        
+
         if not spans_info:
             return ""
-            
-        # 가장 큰 폰트 크기 찾기
-        max_size = max(s["size"] for s in spans_info)
-        
-        # 최상위 폰트 크기(최대 크기의 78% 이상인 것들 - Small Caps 지원용)에 해당하는 스팬 수집
-        title_spans = []
-        for s in spans_info:
-            if s["size"] >= max_size * 0.78:
-                title_spans.append(s)
-                
-        if not title_spans:
-            return ""
-            
-        # 1. y좌표 기준으로 1차 정렬한 뒤, 동적으로 같은 행(Line)에 있는 스팬들을 묶어서 그룹화합니다.
-        #    이렇게 하면 PDF 렌더링 시 y좌표가 소수점 단위로 미세하게 다른 스팬들이 엉뚱하게 정렬되는 문제를 방지합니다.
-        def group_spans_into_lines(spans_list):
-            if not spans_list:
-                return []
-            sorted_by_y = sorted(spans_list, key=lambda s: s["bbox"][1])
-            lines_list = []
-            current_line = []
-            current_y = None
-            for s in sorted_by_y:
-                y0 = s["bbox"][1]
-                y1 = s["bbox"][3]
-                h = y1 - y0
-                if current_y is None:
-                    current_line.append(s)
-                    current_y = y0
+
+        def group_spans_into_lines(spans):
+            lines = []
+            for span in sorted(spans, key=lambda item: (item["bbox"][1], item["bbox"][0])):
+                y0, y1 = span["bbox"][1], span["bbox"][3]
+                span_height = y1 - y0
+                if not lines or abs(y0 - lines[-1]["anchor_y"]) >= max(span_height * 0.5, 8.0):
+                    lines.append({"anchor_y": y0, "spans": [span]})
                 else:
-                    # y0 차이가 글자 높이의 50% 미만이거나 8픽셀 미만이면 같은 행으로 간주
-                    if abs(y0 - current_y) < max(h * 0.5, 8.0):
-                        current_line.append(s)
-                    else:
-                        current_line.sort(key=lambda x: x["bbox"][0])
-                        lines_list.append(current_line)
-                        current_line = [s]
-                        current_y = y0
-            if current_line:
-                current_line.sort(key=lambda x: x["bbox"][0])
-                lines_list.append(current_line)
-            return lines_list
+                    lines[-1]["spans"].append(span)
+            for line in lines:
+                line["spans"].sort(key=lambda item: item["bbox"][0])
+            return [line["spans"] for line in lines]
 
-        line_groups = group_spans_into_lines(title_spans)
-
-        # 1-1. 제목 폰트 크기가 우연히 저자명/소속 또는 "1. Introduction" 같은 번호 매겨진
-        #      섹션 헤더와 비슷한 경우, 이런 줄들이 제목 후보에 섞여 들어올 수 있습니다.
-        #      제목은 항상 페이지 최상단의 "하나의 연속된 블록"이므로, 아래 패턴에 걸리는 줄이나
-        #      비정상적으로 큰 줄 간격(제목-저자 블록 사이의 여백)이 나타나면 그 지점에서 수집을 중단합니다.
-        SECTION_HEADER_RE = re.compile(
+        section_header_re = re.compile(
             r'^\(?[ivxlc\d]{1,4}\)?[\.\:\)]?\s+(introduction|abstract|related\s+work|background|'
             r'method(ology)?|conclusion|references|experiments?|results?|discussion|acknowledg|'
             r'appendix|approach|overview|preliminaries|evaluation|analysis|motivation)\b',
             re.IGNORECASE,
         )
-        AUTHOR_HINT_RE = re.compile(
+        author_hint_re = re.compile(
             r'(@|university|institute|department|school of|college of|laborator|corporation|\bltd\.?\b|\binc\.?\b)',
             re.IGNORECASE,
         )
+        publication_header_re = re.compile(
+            r'^(research|original|review|survey|brief|regular|feature|perspective|'
+            r'editorial|methodology|case)\s+(article|paper|report|communication)$|'
+            r'^(open\s+access|letter\s+to\s+the\s+editor)$|'
+            r'^(the\s+)?(international\s+)?journal\s+of\b|'
+            r'^.+\s+(journal|transactions|proceedings)\s+(of|on)\b',
+            re.IGNORECASE,
+        )
+        bibliographic_header_re = re.compile(
+            r'\b(doi\s*:|issn\b|volume\s+\d|vol\.\s*\d|copyright|©|all rights reserved)\b',
+            re.IGNORECASE,
+        )
+        editor_watermark_re = re.compile(
+            r'\b(?:created|edited|generated)\s+(?:in|with|using|by)\s+'
+            r'(?:the\s+)?master\s+pdf\s+editor\b',
+            re.IGNORECASE,
+        )
 
-        kept_lines = []
-        prev_line_bottom = None
-        prev_line_height = None
-        for line_spans in line_groups:
-            line_text_norm = re.sub(r'\s+', ' ', "".join(s["text"] for s in line_spans)).strip()
-
-            if SECTION_HEADER_RE.match(line_text_norm) or AUTHOR_HINT_RE.search(line_text_norm):
-                break
-
-            line_top = min(s["bbox"][1] for s in line_spans)
-            line_bottom = max(s["bbox"][3] for s in line_spans)
-            line_height = line_bottom - line_top
-
-            # 이전 줄과의 간격이 줄 높이의 2배를 넘으면 제목 블록과 분리된 다른 블록(저자/소속 등)으로 간주
-            if prev_line_bottom is not None and prev_line_height and (line_top - prev_line_bottom) > prev_line_height * 2.0:
-                break
-
-            kept_lines.append(line_spans)
-            prev_line_bottom = line_bottom
-            prev_line_height = line_height
-
-        sorted_spans = [s for line_spans in kept_lines for s in line_spans]
-        
-        # 2. 정렬된 스팬들을 결합할 때, 단어 중간에 폰트 크기 변경으로 쪼개진 스팬(gap < 2.5px)은 공백 없이 결합하고,
-        #    일반적인 띄어쓰기는 공백을 유지하여 자연스러운 문장으로 결합합니다.
-        title_parts = []
-        for i, s in enumerate(sorted_spans):
-            text = s["text"]
-            lower_text = text.strip().lower()
-            if lower_text in ["abstract", "introduction", "keywords", "key words"]:
+        lines = []
+        for line_spans in group_spans_into_lines(spans_info):
+            line_text = re.sub(r'\s+', ' ', "".join(span["text"] for span in line_spans)).strip()
+            if not line_text:
                 continue
-            if i == 0:
-                title_parts.append(text)
+            top = min(span["bbox"][1] for span in line_spans)
+            bottom = max(span["bbox"][3] for span in line_spans)
+            char_count = sum(max(len(span["text"].strip()), 1) for span in line_spans)
+            font_size = sum(
+                span["size"] * max(len(span["text"].strip()), 1) for span in line_spans
+            ) / char_count
+            lines.append({
+                "spans": line_spans,
+                "text": line_text,
+                "top": top,
+                "bottom": bottom,
+                "height": bottom - top,
+                "size": font_size,
+            })
+
+        if not lines:
+            return ""
+
+        # 가장 많은 글자에 사용된 글꼴 크기를 첫 페이지의 본문 크기로 간주한다.
+        size_weights = {}
+        for span in spans_info:
+            rounded_size = round(span["size"] * 2) / 2
+            size_weights[rounded_size] = size_weights.get(rounded_size, 0) + len(span["text"].strip())
+        body_size = max(size_weights, key=size_weights.get)
+        max_size = max(line["size"] for line in lines)
+        min_prominent_size = max(11.5, min(body_size * 1.18, max_size * 0.72))
+
+        def is_title_line(line):
+            line_text = line["text"]
+            if line["top"] > height * 0.60:
+                return False
+            if len(line_text) < 3 or not re.search(r'[A-Za-zÀ-ÖØ-öø-ÿ가-힣]', line_text):
+                return False
+            if section_header_re.match(line_text) or author_hint_re.search(line_text):
+                return False
+            if publication_header_re.match(line_text) or bibliographic_header_re.search(line_text):
+                return False
+            # Master PDF Editor 등이 삽입한 대형 워터마크는 본문과 같은
+            # y 좌표의 한 행으로 합쳐지기도 한다. 글꼴 크기만 보면 이 행이
+            # 실제 제목보다 긴 제목 후보로 선택되므로 후보에서 제외한다.
+            if editor_watermark_re.search(line_text):
+                return False
+            return line["size"] >= min_prominent_size
+
+        candidates = []
+        current = []
+        for line in lines:
+            if not is_title_line(line):
+                if current:
+                    candidates.append(current)
+                    current = []
+                continue
+            if current:
+                gap = line["top"] - current[-1]["bottom"]
+                allowed_gap = max(current[-1]["height"], line["height"]) * 1.35
+                if gap > allowed_gap:
+                    candidates.append(current)
+                    current = []
+            current.append(line)
+        if current:
+            candidates.append(current)
+        if not candidates:
+            return ""
+
+        def candidate_score(candidate):
+            candidate_text = " ".join(line["text"] for line in candidate)
+            weighted_size = sum(
+                line["size"] * len(line["text"]) for line in candidate
+            ) / len(candidate_text)
+            length_score = min(len(candidate_text), 120) / 20.0
+            position_penalty = candidate[0]["top"] / height * 3.0
+            short_all_caps_penalty = 3.0 if len(candidate_text) < 35 and candidate_text.isupper() else 0.0
+            return (
+                weighted_size / max(body_size, 1) * 3.0
+                + length_score
+                - position_penalty
+                - short_all_caps_penalty
+            )
+
+        title_lines = max(candidates, key=candidate_score)
+        title_spans = [span for line in title_lines for span in line["spans"]]
+        title_parts = []
+        for index, span in enumerate(title_spans):
+            span_text = span["text"]
+            if span_text.strip().lower() in ("abstract", "introduction", "keywords", "key words"):
+                continue
+            if index == 0:
+                title_parts.append(span_text)
+                continue
+            previous = title_spans[index - 1]
+            is_same_line = abs(span["bbox"][1] - previous["bbox"][1]) < 5.0
+            gap = span["bbox"][0] - previous["bbox"][2]
+            if is_same_line and gap < 2.5:
+                title_parts.append(span_text)
+            elif title_parts[-1].endswith(" ") or span_text.startswith(" "):
+                title_parts.append(span_text)
             else:
-                prev_s = sorted_spans[i - 1]
-                prev_y0 = prev_s["bbox"][1]
-                curr_y0 = s["bbox"][1]
-                prev_x1 = prev_s["bbox"][2]
-                curr_x0 = s["bbox"][0]
-                
-                is_same_line = abs(curr_y0 - prev_y0) < 5.0
-                gap = curr_x0 - prev_x1
-                
-                if is_same_line and gap < 2.5:
-                    title_parts.append(text)
-                else:
-                    if title_parts[-1].endswith(" ") or text.startswith(" "):
-                        title_parts.append(text)
-                    else:
-                        title_parts.append(" " + text)
-            
-        title_text = "".join(title_parts).strip()
-        title_text = re.sub(r'\s+', ' ', title_text)
-        
-        # 유효한 제목 길이 제한
+                title_parts.append(" " + span_text)
+
+        title_text = re.sub(r'\s+', ' ', "".join(title_parts)).strip()
         if 5 <= len(title_text) <= 250:
             return title_text
-    except Exception as e:
-        print(f"Failed to extract title from PDF content: {e}")
-        
+    except Exception as error:
+        print(f"Failed to extract title from PDF content: {error}")
+
     return ""
 
 
@@ -858,6 +876,219 @@ _CAPTION_RE = re.compile(
 # 배제됨). 로마 숫자는 대문자만 인정한다(re.IGNORECASE를 안 씀) - 본문에
 # 흔한 "(i)", "(ii)" 같은 소문자 열거 표기를 수식 번호로 오인하지 않기 위함이다.
 _EQUATION_LINE_RE = re.compile(rf"\((\d{{1,3}}|{_ROMAN_NUMERAL_RE})\)\s*$")
+
+
+# ── Marker 엔진 연동 ──────────────────────────────────────────────────────
+# marker는 build_document()(ML 추론, 무거움)와 렌더러(포맷 변환, 가벼움)가 분리되어
+# 있다. extract_pages()와 extract_pdf_images()가 같은 문서에 대해 각각 호출될 때
+# 추론을 두 번 하지 않도록, 완성된 Document 객체 자체를 경로 기준으로 캐싱한다.
+# ponytail: 프로세스 전역 단순 LRU(경로 문자열 키) - 같은 경로에 다른 내용의 파일이
+# 재업로드되면 과거 결과가 재사용될 수 있다. 세션마다 고유 경로를 쓰는 업로드
+# 흐름에서는 문제되지 않지만, 필요해지면 (경로, mtime) 키로 바꿀 것.
+_marker_artifacts = None
+
+
+def _get_marker_artifacts():
+    global _marker_artifacts
+    if _marker_artifacts is None:
+        from marker.models import create_model_dict
+        _marker_artifacts = create_model_dict()
+    return _marker_artifacts
+
+
+@lru_cache(maxsize=2)
+def _build_marker_document(pdf_path: str):
+    from marker.converters.pdf import PdfConverter
+    converter = PdfConverter(artifact_dict=_get_marker_artifacts())
+    document = converter.build_document(pdf_path)
+    return document, converter
+
+
+# 텍스트 스트림에서 제외할 블록 타입 - 이미지 자체는 텍스트가 아니므로 번역
+# 대상에서 빠지는 게 맞다(pymupdf 경로의 벡터 그림 필터링과 같은 의도).
+_MARKER_SKIP_TEXT_TYPES = {"Figure", "Picture", "Diagram", "FigureGroup", "PictureGroup"}
+# 오버레이 후보로 그대로 쓸 그룹 타입 - marker가 이미지/표와 그 캡션을 하나로
+# 묶어서 감지해주므로, 우리가 직접 캡션-도형 거리 매칭을 할 필요가 없다.
+_MARKER_GROUP_REGION_TYPES = {"FigureGroup", "TableGroup", "PictureGroup"}
+_MARKER_LEAF_REGION_TYPES = {"Table", "Figure", "Picture", "Diagram"}
+
+
+def _marker_html_to_text(block_html: str) -> str:
+    """marker 블록의 html 조각을 일반 텍스트로 변환한다. 볼드(<strong>/<b>)는
+    pymupdf 경로와 동일하게 마크다운(**...**)으로 남겨 서식 정보를 보존한다."""
+    from bs4 import BeautifulSoup
+    marked = re.sub(r"<(strong|b)\b[^>]*>(.*?)</\1>", r"**\2**", block_html or "", flags=re.S | re.I)
+    return BeautifulSoup(marked, "html.parser").get_text(" ", strip=True)
+
+
+def _marker_collect_text(block, parts: List[str]) -> None:
+    if block.block_type in _MARKER_SKIP_TEXT_TYPES:
+        return
+    if block.children:
+        for child in block.children:
+            _marker_collect_text(child, parts)
+        return
+    text = _marker_html_to_text(block.html)
+    if text:
+        parts.append(text)
+
+
+def _marker_page_text(page_json) -> str:
+    parts: List[str] = []
+    for child in page_json.children or []:
+        _marker_collect_text(child, parts)
+    return "\n\n".join(parts)
+
+
+def _marker_find_caption_text(block) -> Optional[str]:
+    for child in block.children or []:
+        if child.block_type == "Caption":
+            return _marker_html_to_text(child.html)
+    return None
+
+
+def _match_label_from_caption_text(caption_text: Optional[str]) -> "tuple[Optional[str], Optional[str]]":
+    if not caption_text:
+        return None, None
+    m = _CAPTION_RE.match(re.sub(r"\*+", "", caption_text))
+    if not m or not m.group(2):
+        return None, None
+    kind = "Figure" if m.group(1).lower().startswith("fig") else "Table"
+    return f"{kind} {m.group(2).upper()}", caption_text[:600]
+
+
+def _marker_page_regions(page_json) -> List[Dict[str, Any]]:
+    """marker의 JSON 블록 트리를 훑어 fig/table/equation 오버레이 후보를 만든다.
+    marker가 이미 정확한 레이아웃 bbox와 (그룹인 경우) 캡션까지 함께 감지해주므로,
+    pymupdf 경로의 벡터-그림 휴리스틱/캡션 거리 매칭이 전혀 필요 없다."""
+    px0, py0, px1, py1 = page_json.bbox
+    page_w, page_h = px1 - px0, py1 - py0
+    if page_w <= 0 or page_h <= 0:
+        return []
+
+    def to_percent(bbox) -> Dict[str, float]:
+        x0, y0, x1, y1 = bbox
+        return {
+            "left": (x0 - px0) / page_w * 100,
+            "top": (y0 - py0) / page_h * 100,
+            "width": (x1 - x0) / page_w * 100,
+            "height": (y1 - y0) / page_h * 100,
+        }
+
+    regions: List[Dict[str, Any]] = []
+
+    def walk(block) -> None:
+        bt = block.block_type
+        if bt in _MARKER_GROUP_REGION_TYPES:
+            label, caption = _match_label_from_caption_text(_marker_find_caption_text(block))
+            pct = to_percent(block.bbox)
+            if pct["width"] >= 2 and pct["height"] >= 2:
+                regions.append({**pct, "label": label, "caption": caption})
+            return
+        if bt in _MARKER_LEAF_REGION_TYPES:
+            pct = to_percent(block.bbox)
+            if pct["width"] >= 2 and pct["height"] >= 2:
+                regions.append({**pct, "label": None, "caption": None})
+            return
+        if bt == "Equation":
+            eq_text = re.sub(r"\*+", "", _marker_html_to_text(block.html))
+            m = _EQUATION_LINE_RE.search(eq_text)
+            label = f"Equation {m.group(1)}" if m and m.group(1) else None
+            pct = to_percent(block.bbox)
+            if pct["width"] >= 1 and pct["height"] >= 1:
+                regions.append({**pct, "label": label, "caption": None})
+            return
+        for child in block.children or []:
+            walk(child)
+
+    for child in page_json.children or []:
+        walk(child)
+    return regions
+
+
+# ── MinerU 엔진 연동 ──────────────────────────────────────────────────────
+@lru_cache(maxsize=2)
+def _run_mineru(pdf_path: str) -> tuple:
+    """MinerU pipeline 백엔드로 파싱해 content_list(블록별 type/bbox/caption 목록)를
+    돌려준다. do_parse()는 결과를 디스크에 파일로만 저장하므로 임시 디렉터리에
+    받아 content_list.json을 읽어들인다. bbox는 0~1000 범위로 정규화되어 있다
+    (MinerU 자체 규격 - 페이지 크기와 무관하게 그대로 퍼센트 변환 가능)."""
+    import json
+    import os
+    import tempfile
+    from mineru.cli.common import do_parse
+
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+
+    pdf_file_name = "doc"
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        do_parse(
+            output_dir=tmp_dir,
+            pdf_file_names=[pdf_file_name],
+            pdf_bytes_list=[pdf_bytes],
+            p_lang_list=["en"],
+            backend="pipeline",
+            f_draw_layout_bbox=False,
+            f_draw_span_bbox=False,
+            f_dump_md=False,
+            f_dump_middle_json=False,
+            f_dump_model_output=False,
+            f_dump_orig_pdf=False,
+            f_dump_content_list=True,
+        )
+        content_list_path = os.path.join(tmp_dir, pdf_file_name, "auto", f"{pdf_file_name}_content_list.json")
+        with open(content_list_path, "r", encoding="utf-8") as f:
+            content_list = json.load(f)
+    return tuple(content_list)
+
+
+def _mineru_item_text(item: Dict[str, Any]) -> str:
+    """content_list 항목 하나를 번역 대상 본문 텍스트로 변환한다. 표/그림 본문은
+    번역 스트림에 넣지 않고 캡션만 포함한다(pymupdf 경로도 그림 내부 텍스트는
+    본문에서 제외하므로 동일한 취급)."""
+    t = item.get("type")
+    if t == "text":
+        return (item.get("text") or "").strip()
+    if t == "image":
+        return " ".join(item.get("image_caption") or []).strip()
+    if t == "table":
+        return " ".join(item.get("table_caption") or []).strip()
+    if t == "equation":
+        return (item.get("text") or "").strip()
+    return ""
+
+
+def _mineru_page_regions(content_list: tuple) -> Dict[int, List[Dict[str, Any]]]:
+    regions_by_page: Dict[int, List[Dict[str, Any]]] = {}
+    for item in content_list:
+        bbox = item.get("bbox")
+        t = item.get("type")
+        if not bbox or t not in ("image", "table", "equation"):
+            continue
+
+        label, caption = None, None
+        if t == "image":
+            label, caption = _match_label_from_caption_text(" ".join(item.get("image_caption") or []).strip() or None)
+        elif t == "table":
+            label, caption = _match_label_from_caption_text(" ".join(item.get("table_caption") or []).strip() or None)
+        else:
+            eq_text = item.get("text") or ""
+            m = _EQUATION_LINE_RE.search(eq_text)
+            label = f"Equation {m.group(1)}" if m and m.group(1) else None
+
+        x0, y0, x1, y1 = bbox
+        left, top = x0 / 10.0, y0 / 10.0
+        width, height = (x1 - x0) / 10.0, (y1 - y0) / 10.0
+        if width < 1 or height < 1:
+            continue
+
+        page_idx = item.get("page_idx", 0)
+        regions_by_page.setdefault(page_idx, []).append({
+            "left": left, "top": top, "width": width, "height": height,
+            "label": label, "caption": caption,
+        })
+    return regions_by_page
 
 
 def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
@@ -1514,6 +1745,38 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
             engine = "pymupdf"
 
     engine = (engine or "pymupdf").lower().strip()
+
+    # marker/mineru는 자체 레이아웃 모델이 이미 figure/table/equation 영역과
+    # (그룹인 경우) 캡션까지 감지해준다 - pymupdf 휴리스틱을 돌릴 필요가 없고,
+    # 오히려 marker/mineru가 인식한 실제 텍스트 순서/구조와 무관한 별개의 좌표계라
+    # 섞어 쓰면 안 된다. 실패 시에만 pymupdf 휴리스틱으로 폴백한다.
+    if engine == "marker":
+        try:
+            from marker.renderers.json import JSONRenderer
+            document, converter = _build_marker_document(pdf_path)
+            json_output = converter.resolve_dependencies(JSONRenderer)(document)
+            images_data = []
+            for idx, page_json in enumerate(json_output.children):
+                for region in _marker_page_regions(page_json):
+                    images_data.append({"page": idx + 1, **region})
+            return images_data
+        except Exception as e:
+            import logging
+            logging.warning(f"Marker 레이아웃 추출 실패 ({e}). PyMuPDF 휴리스틱으로 폴백합니다.")
+            engine = "pymupdf"
+    elif engine == "mineru":
+        try:
+            content_list = _run_mineru(pdf_path)
+            regions_by_page = _mineru_page_regions(content_list)
+            images_data = []
+            for page_idx, regions in regions_by_page.items():
+                for region in regions:
+                    images_data.append({"page": page_idx + 1, **region})
+            return images_data
+        except Exception as e:
+            import logging
+            logging.warning(f"MinerU 레이아웃 추출 실패 ({e}). PyMuPDF 휴리스틱으로 폴백합니다.")
+            engine = "pymupdf"
 
     doc = fitz.open(pdf_path)
     images_data = []

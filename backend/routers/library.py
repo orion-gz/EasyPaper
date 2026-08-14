@@ -1,33 +1,101 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, Response
+from services.ownership import require_owned_document
 from services.auth import get_current_user
 from services.library import (
     list_documents, search_documents, get_document, permanently_delete_document,
     soft_delete_document, restore_document, empty_trash,
-    get_translation, get_pdf_path, get_cover_path, update_document_metadata,
-    get_chat_quote_image_path
+    get_translation, get_pdf_path, get_cover_path,
+    patch_document_metadata,
+    get_chat_quote_image_path, list_folders, create_folder, update_folder, delete_folder, move_documents_to_folder
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 import json
+import re
 
 router = APIRouter()
 
 
 from typing import Optional
 
+class FolderCreateRequest(BaseModel):
+    name: str
+    parent_id: Optional[str] = None
+    color: str = "#6b7280"
 
-def _require_owned_document(doc_id: str, current_user: str, doc: Optional[dict] = None) -> dict:
-    """문서가 존재하고 현재 로그인한 사용자 소유인지 확인한다.
+class FolderUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    parent_id: Optional[str] = None
+    move: bool = False
 
-    다른 사용자의 문서는 존재 여부조차 알려주지 않도록, 존재하지 않는 경우와
-    동일하게 404로 응답한다(문서는 있지만 권한이 없다는 403은 doc_id가
-    실제로 존재한다는 사실 자체를 노출하게 됨).
-    """
-    if doc is None:
-        doc = get_document(doc_id)
-    if not doc or doc.get("username") != current_user:
-        raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
-    return doc
+class DocumentMoveRequest(BaseModel):
+    doc_ids: list[str]
+    folder_id: Optional[str] = None
+
+class DocumentTitleUpdateRequest(BaseModel):
+    title: str
+
+
+MAX_LIBRARY_MIRROR_JSON_BYTES = 5 * 1024 * 1024
+
+
+class LibraryMirrorPayload(BaseModel):
+    data: dict = Field(default_factory=dict)
+
+    @field_validator("data")
+    @classmethod
+    def limit_serialized_size(cls, value: dict) -> dict:
+        encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(encoded) > MAX_LIBRARY_MIRROR_JSON_BYTES:
+            raise ValueError("주석 또는 메모 데이터는 5MiB 이하여야 합니다.")
+        return value
+
+
+@router.get("/library/folders")
+async def get_library_folders(current_user: str = Depends(get_current_user)):
+    return {"folders": list_folders(current_user)}
+
+@router.post("/library/folders")
+async def create_library_folder(body: FolderCreateRequest, current_user: str = Depends(get_current_user)):
+    import uuid
+    name = body.name.strip()
+    if not name or len(name) > 120:
+        raise HTTPException(status_code=400, detail="폴더 이름은 1~120자여야 합니다.")
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", body.color):
+        raise HTTPException(status_code=400, detail="폴더 색상 형식이 올바르지 않습니다.")
+    try:
+        return create_folder(current_user, str(uuid.uuid4()), name, body.parent_id, body.color)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+@router.patch("/library/folders/{folder_id}")
+async def patch_library_folder(folder_id: str, body: FolderUpdateRequest, current_user: str = Depends(get_current_user)):
+    if body.name is not None and (not body.name.strip() or len(body.name.strip()) > 120):
+        raise HTTPException(status_code=400, detail="폴더 이름은 1~120자여야 합니다.")
+    if body.color is not None and not re.fullmatch(r"#[0-9a-fA-F]{6}", body.color):
+        raise HTTPException(status_code=400, detail="폴더 색상 형식이 올바르지 않습니다.")
+    try:
+        ok = update_folder(current_user, folder_id, name=body.name.strip() if body.name is not None else None, color=body.color, parent_id=body.parent_id, move=body.move)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not ok: raise HTTPException(status_code=404, detail="폴더를 찾을 수 없습니다.")
+    return {"ok": True}
+
+@router.delete("/library/folders/{folder_id}")
+async def delete_library_folder(folder_id: str, delete_papers: bool = False, current_user: str = Depends(get_current_user)):
+    if not delete_folder(current_user, folder_id, delete_papers): raise HTTPException(status_code=404, detail="폴더를 찾을 수 없습니다.")
+    return {"ok": True}
+
+@router.post("/library/documents/move")
+async def move_library_documents(body: DocumentMoveRequest, current_user: str = Depends(get_current_user)):
+    try:
+        moved = move_documents_to_folder(current_user, body.doc_ids, body.folder_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if moved != len(set(body.doc_ids)): raise HTTPException(status_code=404, detail="일부 논문을 찾을 수 없습니다.")
+    return {"moved": moved}
+
 
 @router.get("/library")
 async def get_library(
@@ -217,7 +285,7 @@ class StartSessionRequest(BaseModel):
 @router.post("/library/{doc_id}/reading-session/start")
 async def start_reading_session_api(doc_id: str, body: Optional[StartSessionRequest] = None, current_user: str = Depends(get_current_user)):
     """PDF Viewer 진입 시 Reading Session을 생성하거나 2분 이내 이전 세션과 병합합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     import uuid
     from datetime import datetime, timezone
     from services.db import db_get_latest_reading_session, db_save_reading_session
@@ -225,7 +293,7 @@ async def start_reading_session_api(doc_id: str, body: Optional[StartSessionRequ
     latest = db_get_latest_reading_session(doc_id, current_user)
     now = datetime.now(timezone.utc)
 
-    if latest and latest.get("updated_at"):
+    if latest and latest.get("updated_at") and not latest.get("ended_at"):
         try:
             last_updated = datetime.fromisoformat(latest["updated_at"])
             diff_sec = (now - last_updated).total_seconds()
@@ -279,7 +347,7 @@ from services.reading_analytics import ReadingSessionPayload
 @router.post("/library/{doc_id}/reading-session/heartbeat")
 async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessionPayload, current_user: str = Depends(get_current_user)):
     """Viewer에서 20초 간격으로 전달되는 Heartbeat 데이터를 처리하고 Analytics를 재계산합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     if payload.paperId != doc_id:
         raise HTTPException(status_code=400, detail="paperId does not match the route document")
 
@@ -304,7 +372,12 @@ async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessio
     profile = db_get_user_reading_profile(current_user)
     user_ema = profile.get("ema_seconds_per_page", 600.0)
 
-    res = process_reading_analytics(payload, doc_total_pages, user_ema)
+    res = process_reading_analytics(
+        payload,
+        doc_total_pages,
+        user_ema,
+        previous_reading_score=existing["reading_score"] if existing else 0.0,
+    )
 
     started_at = existing["started_at"] if existing else datetime.now(timezone.utc).isoformat()
 
@@ -339,7 +412,7 @@ async def post_reading_session_heartbeat_api(doc_id: str, payload: ReadingSessio
 @router.post("/library/{doc_id}/reading-session/end")
 async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, current_user: str = Depends(get_current_user)):
     """Viewer 세션 종료 시 최종 상태를 기록하고 Analytics 결과를 저장합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     if payload.paperId != doc_id:
         raise HTTPException(status_code=400, detail="paperId does not match the route document")
 
@@ -351,7 +424,9 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
         db_save_reading_session,
         db_save_user_reading_profile,
     )
-    from services.reading_analytics import process_reading_analytics, update_user_ema
+    from services.reading_analytics import (
+        count_meaningful_page_sessions, process_reading_analytics, update_user_ema,
+    )
 
     doc = get_document(doc_id)
     doc_total_pages = doc.get("total_pages", 0) if doc else 0
@@ -363,7 +438,12 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
 
     profile = db_get_user_reading_profile(current_user)
     user_ema = profile.get("ema_seconds_per_page", 600.0)
-    res = process_reading_analytics(payload, doc_total_pages, user_ema)
+    res = process_reading_analytics(
+        payload,
+        doc_total_pages,
+        user_ema,
+        previous_reading_score=existing["reading_score"] if existing else 0.0,
+    )
     started_at = existing["started_at"] if existing else datetime.now(timezone.utc).isoformat()
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -398,11 +478,11 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
             user_ema,
             profile.get("session_count", 0),
             payload.activeReadingTime,
-            len({ps.page for ps in payload.pageSessions}),
+            count_meaningful_page_sessions(payload.pageSessions),
         )
         db_save_user_reading_profile(current_user, new_ema, new_count)
 
-    update_document_metadata(doc_id, {"last_read_at": now_iso})
+    patch_document_metadata(doc_id, {"last_read_at": now_iso})
 
     return res.model_dump()
 
@@ -420,7 +500,7 @@ async def get_reading_analytics_summary_api(since_days: Optional[int] = None, cu
 @router.get("/library/{doc_id}/reading-analytics")
 async def get_paper_reading_analytics_api(doc_id: str, current_user: str = Depends(get_current_user)):
     """특정 논문의 Reading Analytics (Page Score, Reading Score, Depth, Confidence) 정보를 반환합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     import json
     from services.db import db_get_latest_reading_session
     session = db_get_latest_reading_session(doc_id, current_user)
@@ -469,7 +549,7 @@ async def get_library_document(
 ):
     """특정 문서의 메타데이터와 번역 완료 페이지 목록을 반환합니다."""
     doc = get_document(doc_id, target_lang, style, ignore_math, ignore_table, ignore_refs)
-    _require_owned_document(doc_id, current_user, doc)
+    require_owned_document(doc_id, current_user, doc)
     return doc
 
 
@@ -485,7 +565,7 @@ async def get_library_translation(
     current_user: str = Depends(get_current_user)
 ):
     """라이브러리에서 특정 페이지 번역을 가져옵니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     suffix = ""
     if target_lang is not None and style is not None:
         suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
@@ -519,7 +599,7 @@ async def update_library_translation(
     current_user: str = Depends(get_current_user)
 ):
     """라이브러리의 특정 페이지 번역 데이터를 수정하여 캐시 및 DB에 저장합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     suffix = ""
     if target_lang is not None and style is not None:
         suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
@@ -544,7 +624,7 @@ async def update_library_translation(
 @router.get("/library/{doc_id}/pdf")
 async def get_library_pdf(doc_id: str, current_user: str = Depends(get_current_user)):
     """라이브러리 PDF 파일을 서빙합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
@@ -572,7 +652,7 @@ async def export_annotated_pdf(
     하이라이트·밑줄·메모는 브라우저 localStorage에만 있으므로 요청 본문으로
     전달받는다(서버는 이 데이터를 저장하지 않고 즉시 PDF 생성에만 사용).
     """
-    doc = _require_owned_document(doc_id, current_user)
+    doc = require_owned_document(doc_id, current_user)
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
@@ -620,7 +700,7 @@ async def get_library_cover(doc_id: str, current_user: str = Depends(get_current
     내부에서 이미 캐싱), 그 최초 렌더링 자체가 동기 CPU 작업이라 이벤트
     루프를 블로킹하지 않도록 스레드로 넘긴다."""
     import asyncio
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     cover_path = await asyncio.to_thread(get_cover_path, doc_id)
     if not cover_path:
         raise HTTPException(status_code=404, detail="미리보기 이미지를 생성할 수 없습니다.")
@@ -632,7 +712,7 @@ async def get_library_chat_quote_image(doc_id: str, quote_id: str, current_user:
     """채팅에서 인용한 이미지를 서빙합니다. 채팅을 보낸 브라우저의 localStorage에
     이미지가 있으면 프론트는 이 엔드포인트를 거치지 않고 그걸 우선 쓰고, 없을
     때(다른 기기/브라우저에서 히스토리를 열었을 때)만 여기서 복원합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     image_path = get_chat_quote_image_path(doc_id, quote_id)
     if not image_path:
         raise HTTPException(status_code=404, detail="인용 이미지를 찾을 수 없습니다.")
@@ -642,7 +722,7 @@ async def get_library_chat_quote_image(doc_id: str, quote_id: str, current_user:
 @router.delete("/library/{doc_id}")
 async def delete_library_document(doc_id: str, current_user: str = Depends(get_current_user)):
     """라이브러리 문서를 휴지통으로 이동(Soft Delete)합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     if not soft_delete_document(doc_id):
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
     return {"message": "문서가 휴지통으로 이동되었습니다."}
@@ -650,10 +730,10 @@ async def delete_library_document(doc_id: str, current_user: str = Depends(get_c
 @router.post("/library/{doc_id}/reading-heartbeat")
 async def post_reading_heartbeat(doc_id: str, body: ReadingHeartbeatRequest, current_user: str = Depends(get_current_user)):
     """뷰어/비교 화면이 보이고 포커스된 동안 프론트가 주기적으로 보내는 경과
-    시간(초)을 누적합니다. category는 'reading'(뷰어 기본) / 'chat'(채팅
-    사이드바가 열려있는 동안) / 'compare'(논문 비교 채팅 화면) 중 하나입니다.
+    시간(초)을 누적합니다. category는 'reading'(PDF 영역 상호작용) / 'chat'(채팅
+    영역 상호작용) / 'compare'(논문 비교 채팅 화면) 중 하나입니다.
     한 번의 하트비트 간격(예: 20초) 이상을 보내는 조작을 막기 위해 상한을 둡니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     if body.category not in ("reading", "chat", "compare"):
         raise HTTPException(status_code=400, detail="알 수 없는 category입니다.")
     seconds = max(0, min(body.seconds, 120))
@@ -665,7 +745,7 @@ async def post_reading_heartbeat(doc_id: str, body: ReadingHeartbeatRequest, cur
 @router.post("/library/{doc_id}/restore")
 async def restore_library_document(doc_id: str, current_user: str = Depends(get_current_user)):
     """휴지통에서 문서를 복원합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     if not restore_document(doc_id):
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
     return {"message": "문서가 성공적으로 복원되었습니다."}
@@ -673,7 +753,7 @@ async def restore_library_document(doc_id: str, current_user: str = Depends(get_
 @router.delete("/library/{doc_id}/permanent")
 async def delete_library_document_permanently(doc_id: str, current_user: str = Depends(get_current_user)):
     """라이브러리에서 문서를 영구히 삭제(Hard Delete)합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     if not permanently_delete_document(doc_id):
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
     return {"message": "문서가 영구적으로 삭제되었습니다."}
@@ -682,7 +762,7 @@ async def delete_library_document_permanently(doc_id: str, current_user: str = D
 @router.post("/library/{doc_id}/clear-cache")
 async def clear_library_document_cache(doc_id: str, current_user: str = Depends(get_current_user)):
     """특정 문서의 PDF 텍스트 및 이미지 추출 디스크 캐시를 삭제합니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     from services.cache import clear_document_cache
     cleared_files, freed_bytes = clear_document_cache(doc_id)
     return {
@@ -707,7 +787,7 @@ async def get_library_document_images(doc_id: str, current_user: str = Depends(g
     import asyncio
     from services.cache import get_cached_images, save_images_cache
 
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
@@ -734,7 +814,7 @@ async def get_library_figure_image(doc_id: str, index: int, current_user: str = 
     from services.cache import get_cached_images
     from services.pdf_parser import render_image_crop_bytes
 
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
@@ -762,7 +842,7 @@ async def get_library_references(doc_id: str, current_user: str = Depends(get_cu
     참고문헌이 수십~백여 개인 경우가 흔한데, 열 때마다 전부 미리 조회하면
     외부 API 레이트리밋에 바로 걸리고 대부분은 클릭되지도 않아 낭비다.
     """
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
 
     from services.library import get_page_insight, save_page_insight
 
@@ -802,11 +882,12 @@ async def resolve_library_reference(doc_id: str, ref_num: str, current_user: str
     """특정 번호의 참고문헌을 외부(OpenAlex, 가능하면 arXiv)에서
     검색해 링크를 반환합니다. 결과(성공/실패 모두)는 캐시해 같은 항목을
     반복 조회하지 않습니다."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
 
     from services.library import get_page_insight, save_page_insight
 
-    cached = get_page_insight(doc_id, 0, "reference_url", suffix=ref_num)
+    cache_suffix = f"v2_{ref_num}"
+    cached = get_page_insight(doc_id, 0, "reference_url", suffix=cache_suffix)
     if cached is not None:
         try:
             data = json.loads(cached)
@@ -830,7 +911,7 @@ async def resolve_library_reference(doc_id: str, ref_num: str, current_user: str
 
     from services.reference_linker import resolve_reference
     result = await resolve_reference(ref_text)
-    save_page_insight(doc_id, 0, "reference_url", json.dumps(result or {}, ensure_ascii=False), suffix=ref_num)
+    save_page_insight(doc_id, 0, "reference_url", json.dumps(result or {}, ensure_ascii=False), suffix=cache_suffix)
 
     if not result:
         raise HTTPException(status_code=404, detail="외부에서 일치하는 논문을 찾지 못했습니다.")
@@ -844,37 +925,107 @@ async def get_library_annotations(doc_id: str, current_user: str = Depends(get_c
     localStorage가 원본(source of truth)이며 이 데이터는 다중 기기 동기화를
     위한 best-effort 백업일 뿐이다. 저장된 적이 없으면 빈 데이터를 반환한다.
     """
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     from services.db import db_get_annotations
     result = db_get_annotations(doc_id)
     return result or {"data": {}, "updated_at": None}
 
 
 @router.put("/library/{doc_id}/annotations")
-async def put_library_annotations(doc_id: str, payload: dict, current_user: str = Depends(get_current_user)):
+async def put_library_annotations(doc_id: str, payload: LibraryMirrorPayload, current_user: str = Depends(get_current_user)):
     """하이라이트/주석 서버 미러를 통째로 덮어씁니다(전체 블롭 upsert)."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     from services.db import db_put_annotations
-    db_put_annotations(doc_id, payload.get("data", {}))
+    db_put_annotations(doc_id, payload.data)
     return {"status": "ok"}
 
 
 @router.get("/library/{doc_id}/memos")
 async def get_library_memos(doc_id: str, current_user: str = Depends(get_current_user)):
     """문서의 메모 서버 미러 데이터를 반환합니다. (annotations와 동일한 성격)"""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     from services.db import db_get_memos
     result = db_get_memos(doc_id)
     return result or {"data": {}, "updated_at": None}
 
 
 @router.put("/library/{doc_id}/memos")
-async def put_library_memos(doc_id: str, payload: dict, current_user: str = Depends(get_current_user)):
+async def put_library_memos(doc_id: str, payload: LibraryMirrorPayload, current_user: str = Depends(get_current_user)):
     """메모 서버 미러를 통째로 덮어씁니다(전체 블롭 upsert)."""
-    _require_owned_document(doc_id, current_user)
+    require_owned_document(doc_id, current_user)
     from services.db import db_put_memos
-    db_put_memos(doc_id, payload.get("data", {}))
+    db_put_memos(doc_id, payload.data)
     return {"status": "ok"}
+
+
+@router.get("/library/tags/ontology")
+async def get_paper_tag_ontology(current_user: str = Depends(get_current_user)):
+    """Return the closed tag ontology used by both AI and manual editing."""
+    from services.paper_tags import PAPER_TAG_SCHEMA_VERSION, TAG_ONTOLOGY
+    return {"version": PAPER_TAG_SCHEMA_VERSION, "roles": TAG_ONTOLOGY}
+
+
+@router.put("/library/{doc_id}/tags")
+async def update_paper_tags(
+    doc_id: str,
+    payload: dict,
+    current_user: str = Depends(get_current_user),
+):
+    """Persist an explicit user tag decision and protect it from AI backfills."""
+    require_owned_document(doc_id, current_user)
+    from services.paper_tags import flatten_categories, normalize_tag_items
+
+    items = []
+    for field, role in (("primary_topics", "primary_topic"), ("domains", "domain"), ("methods", "method")):
+        values = payload.get(field, [])
+        if not isinstance(values, list):
+            raise HTTPException(status_code=400, detail=f"{field}는 배열이어야 합니다.")
+        items.extend({"name": name, "role": role, "confidence": 1.0, "evidence": "사용자 지정"} for name in values)
+    paper_tags = normalize_tag_items(items, source="user")
+    if not paper_tags.get("primary_topics"):
+        raise HTTPException(status_code=400, detail="핵심 주제를 하나 이상 선택해 주세요.")
+    requested_count = sum(len(payload.get(field, [])) for field in ("primary_topics", "domains", "methods"))
+    if len(flatten_categories(paper_tags)) != requested_count:
+        raise HTTPException(status_code=400, detail="허용되지 않거나 중복된 태그가 포함되어 있습니다.")
+    metadata = patch_document_metadata(doc_id, {
+        "paper_tags": paper_tags,
+        "categories": flatten_categories(paper_tags),
+    })
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id]["metadata"] = metadata
+    return {"status": "success", "metadata": metadata}
+
+
+@router.post("/library/{doc_id}/tags/reclassify")
+async def reclassify_paper_tags(
+    doc_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """Explicitly replace current tags using the latest classifier schema."""
+    doc = require_owned_document(doc_id, current_user)
+    from services.library import get_pdf_path
+    from services.cache import get_cached_pages, save_pages_cache
+    from services.pdf_parser import extract_pages
+    from services.paper_tags import classify_and_store_paper_tags
+    import asyncio
+
+    pdf_path = get_pdf_path(doc_id)
+    if not pdf_path:
+        raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
+    pages = get_cached_pages(doc_id, pdf_path)
+    if pages is None:
+        pages = await asyncio.to_thread(extract_pages, pdf_path)
+        save_pages_cache(doc_id, pdf_path, pages)
+    title = (doc.get("metadata") or {}).get("title") or doc.get("filename") or ""
+    paper_tags = await classify_and_store_paper_tags(doc_id, pages, title, force=True)
+    if not paper_tags:
+        raise HTTPException(status_code=502, detail="태그를 분류하지 못했습니다.")
+    refreshed = require_owned_document(doc_id, current_user)
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id]["metadata"] = refreshed.get("metadata") or {}
+    return {"status": "success", "metadata": refreshed.get("metadata") or {}}
 
 
 @router.get("/library/{doc_id}/bibliography")
@@ -887,7 +1038,7 @@ async def get_library_bibliography(
     자체의 서지 정보는 데이터베이스에 없으므로, 제목으로 OpenAlex를 검색해서
     찾는다(참고문헌 링크 연결과 동일한 무료/키 불필요 API - services/
     reference_linker.py). refresh=True 시 기존 캐시를 지우고 재검색합니다."""
-    doc = _require_owned_document(doc_id, current_user)
+    doc = require_owned_document(doc_id, current_user)
     meta = doc.get("metadata") or {}
 
     cached = meta.get("bibliography")
@@ -899,9 +1050,35 @@ async def get_library_bibliography(
     result = await resolve_paper_metadata(title)
 
     bibliography = result or {"venue": None, "doi": None, "arxiv_id": None, "citation_count": None}
-    meta["bibliography"] = bibliography
-    update_document_metadata(doc_id, meta)
+    patch_document_metadata(doc_id, {"bibliography": bibliography})
     return bibliography
+
+
+@router.put("/library/{doc_id}/title")
+async def update_doc_title(
+    doc_id: str,
+    body: DocumentTitleUpdateRequest,
+    current_user: str = Depends(get_current_user),
+):
+    """Update a document title through an explicit, persistent write path."""
+    require_owned_document(doc_id, current_user)
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="제목을 입력해주세요.")
+    if len(title) > 500:
+        raise HTTPException(status_code=400, detail="제목은 500자 이하여야 합니다.")
+
+    persisted_meta = patch_document_metadata(
+        doc_id,
+        {"title": title, "title_source": "manual"},
+        remove_keys=("bibliography",),
+    )
+
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id]["metadata"] = persisted_meta
+
+    return {"status": "success", "title": title, "metadata": persisted_meta}
 
 
 @router.put("/library/{doc_id}/metadata")
@@ -911,7 +1088,7 @@ async def update_doc_metadata(
     current_user: str = Depends(get_current_user)
 ):
     """문서의 메타데이터(예: 제목 등)를 업데이트합니다. 제목 변경 시 서지 정보 캐시를 초기화합니다."""
-    doc = _require_owned_document(doc_id, current_user)
+    doc = require_owned_document(doc_id, current_user)
 
     meta = doc.get("metadata") or {}
     old_title = meta.get("title")
@@ -956,22 +1133,27 @@ async def update_doc_metadata(
             if not updated and ns not in combined:
                 combined.append(ns)
 
-        meta["read_sessions"] = combined[-100:]
         payload_copy = dict(payload)
-        payload_copy.pop("read_sessions")
-        meta.update(payload_copy)
+        payload_copy["read_sessions"] = combined[-100:]
+        updates = payload_copy
     else:
-        meta.update(payload)
-    
-    if "title" in payload and payload["title"] != old_title:
-        meta.pop("bibliography", None)
+        updates = payload
 
-    update_document_metadata(doc_id, meta)
-    
+    if "title" in payload:
+        updates = dict(updates)
+        updates["title_source"] = "manual"
+
+    if "title" in payload and payload["title"] != old_title:
+        remove_keys = ("bibliography",)
+    else:
+        remove_keys = ()
+
+    persisted_meta = patch_document_metadata(doc_id, updates, remove_keys)
+
     # 활성 메모리 세션도 업데이트하여 정합성 유지
     from routers.upload import sessions
     if doc_id in sessions:
-        sessions[doc_id]["metadata"] = meta
-        
-    return {"status": "success", "metadata": meta}
+        sessions[doc_id]["metadata"] = persisted_meta
+
+    return {"status": "success", "metadata": persisted_meta}
 

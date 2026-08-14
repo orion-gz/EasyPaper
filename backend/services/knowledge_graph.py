@@ -17,19 +17,20 @@
   _match_library_references 재사용)으로 계산해 paper_edges에 영구 저장한다.
   라이브러리 전체를 스캔하는 매칭이라 요청마다 다시 돌리기엔 비용이 있고,
   결과가 자주 바뀌지 않아 캐싱 가치가 크다.
-- 카테고리 엣지: metadata.categories가 겹치는 문서끼리 매 요청마다 메모리에서
-  즉석으로 계산한다(get_graph_data) - DB에 저장하지 않는다. LLM 호출 없이
-  카테고리 리스트만 비교하면 되는 저렴한 연산인 반면, 저장해두면 논문이
-  나중에 재분류될 때마다 이전 엣지를 무효화하는 로직이 추가로 필요해진다.
-  "비용 대비 정합성 유지 부담"을 저울질했을 때 인용 엣지와는 반대 선택.
+- 연구 태그: 역할별 태그를 Tag 노드로 노출하고, 논문 간 직접 엣지는 같은
+  primary topic을 공유할 때만 요청 시 계산한다. broad domain만 겹치는 논문은
+  Tag 노드를 통해 간접적으로만 보이므로 직접 관련성이 있다고 과장하지 않는다.
 - 질문-개념 연결: 채팅 응답이 저장된 직후(chat.py) 해당 질문이 그 논문(들)의
   기존 개념 중 무엇과 관련 있는지 폐쇄형으로 분류한다(새 개념을 만들지 않음).
 - Note 노드: 이미 서버 DB에 미러링된 memos 테이블을 그대로 노출한다(LLM
   호출 불필요 - 순수 데이터 노출).
 """
 import asyncio
+import hashlib
 import json
 import logging
+import math
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -43,6 +44,10 @@ READING_RECOMMENDATIONS_CACHE_DAYS = 7
 # 한 번은 그날의 최신 활동(질문/메모/읽은 논문)을 반영해 새로 생성되게 한다.
 AI_INSIGHTS_CACHE_HOURS = 24
 
+# OpenAlex에 짧은 시간 동안 과도한 요청을 보내지 않으면서 직렬 네트워크
+# 왕복은 피하기 위한 추천 논문 검증 동시성 상한.
+OPENALEX_RECOMMENDATION_CONCURRENCY = 4
+
 # 그래프 조회 시점에 아직 개념/인용 동기화가 안 된(graph_synced_at 없는) 문서를
 # 백그라운드로 백필한다. 같은 문서에 대해 중복으로 백필 태스크가 여러 개
 # 뜨는 것을 막기 위한 in-flight 집합.
@@ -51,16 +56,63 @@ _syncing: set = set()
 # 질문(chats.role='user') 배치 백필용 in-flight 집합(chat_id 단위).
 _syncing_questions: set = set()
 
+# 구버전 태그 재분류용 in-flight 집합.
+_syncing_tags: set = set()
+
 # 그래프 조회 시점에 한 번에 처리할 미동기화 질문 상한 - 오래된 질문이 아주
 # 많이 쌓여도 그래프 조회 한 번에 LLM 호출이 무한정 늘어나지 않도록 방지.
 _QUESTION_BACKFILL_BATCH_SIZE = 20
+_TAG_BACKFILL_CONCURRENCY = 3
+
+
+def _build_category_edges(docs: list) -> list:
+    """Connect papers only when a versioned primary topic overlaps."""
+    from services.paper_tags import iter_tag_records
+    docs_by_topic = {}
+    for doc in docs:
+        names = {
+            item["name"] for item in iter_tag_records(doc.get("metadata") or {})
+            if item["role"] == "primary_topic" and item["name"] != "Other"
+        }
+        for name in names:
+            docs_by_topic.setdefault(name, []).append(doc["id"])
+    edges = []
+    total_docs = max(1, len(docs))
+    for topic, doc_ids in docs_by_topic.items():
+        weight = math.log((total_docs + 1) / (len(doc_ids) + 1)) + 1.0
+        for index, source_id in enumerate(doc_ids):
+            for target_id in doc_ids[index + 1:]:
+                edges.append({
+                    "source": f"paper:{source_id}", "target": f"paper:{target_id}",
+                    "type": "category", "category": topic,
+                    "relation": "shared_primary_topic", "weight": round(weight, 4),
+                })
+    return edges
+
+
+def _queue_tag_nodes(docs: list, nodes: list, edges: list) -> None:
+    """Expose every tag role as a node without making domain-only paper edges."""
+    from services.paper_tags import iter_tag_records
+    seen = set()
+    for doc in docs:
+        for item in iter_tag_records(doc.get("metadata") or {}):
+            role, name = item["role"], item["name"]
+            tag_id = "tag:" + hashlib.sha1(f"{role}:{name}".encode()).hexdigest()[:16]
+            if tag_id not in seen:
+                seen.add(tag_id)
+                nodes.append({"id": tag_id, "type": "tag", "label": name, "role": role})
+            edges.append({
+                "source": f"paper:{doc['id']}", "target": tag_id,
+                "type": "tagged_with", "role": role,
+                "confidence": item.get("confidence", 0.0),
+            })
 
 
 async def sync_document_for_graph(doc_id: str, pages: list, doc_title: str) -> None:
     """번역 완료 직후 호출되어, 해당 문서의 개념을 추출하고 라이브러리 내
     다른 논문과의 인용 관계를 매칭해 DB에 저장한다. 실패해도 번역 파이프라인
     자체는 영향받지 않도록 호출부(translation_job.py)에서 try/except로 감싼다."""
-    from services.library import get_document, update_document_metadata
+    from services.library import get_document, patch_document_metadata
     doc = get_document(doc_id)
     if not doc:
         return
@@ -113,9 +165,7 @@ async def sync_document_for_graph(doc_id: str, pages: list, doc_title: str) -> N
     except Exception:
         pass  # 참고문헌 파싱/매칭 실패는 조용히 무시한다 (primer.py와 동일한 철학)
 
-    meta = doc.get("metadata", {})
-    meta["graph_synced_at"] = datetime.now(timezone.utc).isoformat()
-    update_document_metadata(doc_id, meta)
+    patch_document_metadata(doc_id, {"graph_synced_at": datetime.now(timezone.utc).isoformat()})
 
 
 async def sync_question_for_graph(chat_id: int, doc_id_or_compare_id: str, question_text: str) -> None:
@@ -194,6 +244,28 @@ async def _backfill_one(doc_id: str) -> None:
         logger.warning(f"지식 그래프 백필 실패 (doc_id={doc_id}): {e}")
     finally:
         _syncing.discard(doc_id)
+
+
+async def _backfill_paper_tags(doc_id: str) -> None:
+    try:
+        from services.library import get_document, get_pdf_path
+        from services.cache import get_cached_pages, save_pages_cache
+        from services.pdf_parser import extract_pages
+        from services.paper_tags import classify_and_store_paper_tags
+        doc = get_document(doc_id)
+        pdf_path = get_pdf_path(doc_id)
+        if not doc or not pdf_path:
+            return
+        pages = get_cached_pages(doc_id, pdf_path)
+        if pages is None:
+            pages = await asyncio.to_thread(extract_pages, pdf_path)
+            save_pages_cache(doc_id, pdf_path, pages)
+        title = (doc.get("metadata") or {}).get("title") or doc.get("filename") or ""
+        await classify_and_store_paper_tags(doc_id, pages, title, force=False)
+    except Exception as e:
+        logger.warning(f"논문 태그 백필 실패 (doc_id={doc_id}): {e}")
+    finally:
+        _syncing_tags.discard(doc_id)
 
 
 async def _backfill_question(chat_id: int, doc_id: str, content: str) -> None:
@@ -290,31 +362,15 @@ async def get_graph_data(username: str) -> dict:
             "label": meta.get("title") or doc["filename"],
             "doc_id": doc["id"],
             "categories": meta.get("categories", []),
+            "paper_tags": meta.get("paper_tags"),
         })
 
     edges = []
 
-    # 카테고리 엣지: DB에 저장하지 않고 매 요청마다 메모리에서 계산한다
-    # (모듈 docstring의 설계 근거 참고).
-    seen_category_pairs = set()
-    for i in range(len(docs)):
-        cats_i = set((docs[i].get("metadata", {}) or {}).get("categories", []) or [])
-        if not cats_i:
-            continue
-        for j in range(i + 1, len(docs)):
-            cats_j = set((docs[j].get("metadata", {}) or {}).get("categories", []) or [])
-            shared = cats_i & cats_j
-            for cat in shared:
-                pair_key = (docs[i]["id"], docs[j]["id"], cat)
-                if pair_key in seen_category_pairs:
-                    continue
-                seen_category_pairs.add(pair_key)
-                edges.append({
-                    "source": f"paper:{docs[i]['id']}",
-                    "target": f"paper:{docs[j]['id']}",
-                    "type": "category",
-                    "category": cat,
-                })
+    # 직접 논문 엣지는 공유 primary topic에만 생성한다. 모든 역할의 태그는
+    # 별도 노드로 노출해 넓은 domain 공유를 직접 관련성으로 오해하지 않게 한다.
+    edges.extend(_build_category_edges(docs))
+    _queue_tag_nodes(docs, nodes, edges)
 
     # 인용 엣지: sync_document_for_graph가 미리 계산해 저장해둔 것을 그대로 읽는다.
     from services.db import db_get_paper_edges_for_docs
@@ -366,6 +422,19 @@ async def get_graph_data(username: str) -> dict:
     # Figure 노드: LLM 호출 불필요, 이미 캐시된 것만 노출(강제 파싱 트리거 안 함).
     _queue_figure_nodes(doc_ids, nodes, edges)
 
+    # 구버전 자동 태그는 요청을 막지 않고 백그라운드 재분류한다.
+    from services.paper_tags import needs_ai_reclassification
+    pending_tag_docs = []
+    available_tag_slots = max(0, _TAG_BACKFILL_CONCURRENCY - len(_syncing_tags))
+    for doc in docs:
+        if not needs_ai_reclassification(doc.get("metadata") or {}):
+            continue
+        pending_tag_docs.append(doc["id"])
+        if doc["id"] not in _syncing_tags and available_tag_slots > 0:
+            _syncing_tags.add(doc["id"])
+            available_tag_slots -= 1
+            asyncio.create_task(_backfill_paper_tags(doc["id"]))
+
     # 아직 개념/인용 동기화가 안 된(graph_synced_at 없는) 문서는 pending으로
     # 표시하고, 백그라운드로 백필을 걸어둔다(fire-and-forget - 이번 응답에는
     # 반영되지 않고, 클라이언트가 잠시 뒤 다시 조회하면 반영된다).
@@ -391,6 +460,7 @@ async def get_graph_data(username: str) -> dict:
         "nodes": nodes,
         "edges": edges,
         "pending_docs": pending_docs,
+        "pending_tag_docs": pending_tag_docs,
     }
 
 
@@ -439,17 +509,22 @@ async def get_activity_timeline(username: str) -> List[dict]:
     docs = list_documents(username=username, include_deleted=True)
     titles_by_doc = {d["id"]: (d.get("metadata") or {}).get("title") or d["filename"] for d in docs}
     deleted_by_doc = {d["id"]: bool(d.get("is_deleted")) for d in docs}
+    manually_read_by_doc = {d["id"]: bool((d.get("metadata") or {}).get("read")) for d in docs}
 
     doc_ids_seen = set(titles_by_doc.keys())
     events = []
 
     from services.reading_analytics import (
         PageSession, analyze_page_sessions, classify_reading_activity,
+        is_meaningful_page_session,
     )
 
     analytics_rows = db_get_reading_sessions_for_user(username)
     user_ema = db_get_user_reading_profile(username).get("ema_seconds_per_page", 600.0)
     analytics_doc_ids = {row["paper_id"] for row in analytics_rows}
+    latest_session_by_doc = {}
+    for row in analytics_rows:
+        latest_session_by_doc.setdefault(row["paper_id"], row["id"])
     for row in analytics_rows:
         try:
             page_sessions = json.loads(row.get("page_sessions_json") or "[]")
@@ -463,7 +538,9 @@ async def get_activity_timeline(username: str) -> List[dict]:
                 page_models.append(PageSession(**page))
             except (TypeError, ValueError):
                 continue
-        pages = sorted({page.page for page in page_models})
+        pages = sorted({
+            page.page for page in page_models if is_meaningful_page_session(page)
+        })
         active_time = max(0, row.get("active_reading_time") or 0)
         verified_pages = max(0, row.get("verified_pages_count") or 0)
         verified_page_numbers = None
@@ -499,13 +576,15 @@ async def get_activity_timeline(username: str) -> List[dict]:
                 user_ema,
                 page_models,
             )
+        doc_id = row["paper_id"]
+        if manually_read_by_doc.get(doc_id) and latest_session_by_doc.get(doc_id) == row["id"]:
+            activity_type = "read"
         if activity_type == "ignored":
             continue
         start_ts = row.get("started_at") or row.get("updated_at")
         end_ts = row.get("ended_at")
         if end_ts == start_ts:
             end_ts = None
-        doc_id = row["paper_id"]
         events.append({
             "type": activity_type,
             "reading_activity": activity_type,
@@ -715,20 +794,25 @@ async def get_reading_recommendations(username: str, force: bool = False) -> Lis
     raw = await generate_reading_recommendations(titles, categories, session_id=username)
     exclude_word_sets = [w for w in (_normalize_words(t) for t in titles) if w]
 
-    results = []
-    for r in raw:
+    semaphore = asyncio.Semaphore(OPENALEX_RECOMMENDATION_CONCURRENCY)
+
+    async def resolve_recommendation(r: dict) -> Optional[dict]:
         title = (r.get("title") or "").strip()
         if not title:
-            continue
-        resolved = await resolve_reference(title)
+            return None
+        async with semaphore:
+            resolved = await resolve_reference(title)
         if not resolved or not _is_plausible_match(title, resolved):
-            continue
+            return None
         result_words = _normalize_words(resolved.get("title", ""))
         if not result_words:
-            continue
+            return None
         if any(len(result_words & seen) / len(result_words) >= 0.6 for seen in exclude_word_sets):
-            continue  # 이미 읽은 논문과 같은 논문이면 제외
-        results.append({**resolved, "reason": r.get("reason", "")})
+            return None  # 이미 읽은 논문과 같은 논문이면 제외
+        return {**resolved, "reason": r.get("reason", "")}
+
+    resolved_results = await asyncio.gather(*(resolve_recommendation(r) for r in raw))
+    results = [result for result in resolved_results if result is not None]
 
     db_set_meta(_reading_recommendations_cache_key(username), json.dumps({
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -994,6 +1078,49 @@ def _ai_insights_cache_key(username: str) -> str:
     return f"ai_insights:{username}"
 
 
+def _resolve_ai_insight_title(doc: dict) -> str:
+    """AI 인사이트에 전달할 논문 제목을 반환한다.
+
+    과거 데이터에는 metadata.title이 비어 있거나 업로드 파일명 자체로 저장된
+    경우가 있다. 이 값을 그대로 LLM에 넘기면 인사이트에도 파일명이 논문
+    제목처럼 노출되므로, 그런 경우 PDF 본문에서 제목을 다시 추출해 저장한다.
+    """
+    metadata = doc.get("metadata") or {}
+    title = (metadata.get("title") or "").strip()
+    if title and metadata.get("title_source") == "manual":
+        return title
+
+    filename = (doc.get("filename") or "").strip()
+    filename_stem = os.path.splitext(filename)[0]
+    title_is_filename = bool(title and filename) and title.casefold() in {
+        filename.casefold(),
+        filename_stem.casefold(),
+    }
+
+    if title and not title_is_filename:
+        return title
+
+    pdf_path = doc.get("pdf_path") or ""
+    if pdf_path and os.path.isfile(pdf_path):
+        try:
+            from services.pdf_parser import get_pdf_metadata
+            extracted_title = (get_pdf_metadata(pdf_path).get("title") or "").strip()
+        except Exception:
+            extracted_title = ""
+        if extracted_title and extracted_title.casefold() not in {
+            filename.casefold(),
+            filename_stem.casefold(),
+        }:
+            from services.library import patch_document_metadata
+            updated_metadata = dict(metadata)
+            updated_metadata["title"] = extracted_title
+            patch_document_metadata(doc["id"], {"title": extracted_title})
+            doc["metadata"] = updated_metadata
+            return extracted_title
+
+    return title or filename or "제목 없음"
+
+
 async def get_ai_insights(username: str) -> List[dict]:
     """대시보드 "AI 인사이트" 카드의 내용을 생성한다. 예전에는 get_knowledge_gaps의
     규칙 기반 격차 문구를 그대로 노출했지만, 그건 매번 같은 두 패턴("질문이
@@ -1010,6 +1137,11 @@ async def get_ai_insights(username: str) -> List[dict]:
     카드가 비지 않게 한다."""
     from services.db import db_get_meta, db_set_meta
 
+    from services.library import list_documents
+    docs = list_documents(username=username)
+    titles_by_doc = {d["id"]: _resolve_ai_insight_title(d) for d in docs}
+    title_signature = [[doc_id, title] for doc_id, title in sorted(titles_by_doc.items())]
+
     cache_key = _ai_insights_cache_key(username)
     cached_raw = db_get_meta(cache_key)
     if cached_raw:
@@ -1017,13 +1149,14 @@ async def get_ai_insights(username: str) -> List[dict]:
             cached = json.loads(cached_raw)
             generated_at = datetime.fromisoformat(cached["generated_at"])
             age = datetime.now(timezone.utc) - generated_at
-            if age < timedelta(hours=AI_INSIGHTS_CACHE_HOURS):
+            if (
+                age < timedelta(hours=AI_INSIGHTS_CACHE_HOURS)
+                and cached.get("title_signature") == title_signature
+            ):
                 return cached["insights"]
         except Exception:
             pass  # 캐시가 손상됐으면 무시하고 새로 생성
 
-    from services.library import list_documents
-    docs = list_documents(username=username)
     rule_based_gaps = await get_knowledge_gaps(username)
     if not docs:
         return rule_based_gaps
@@ -1032,7 +1165,6 @@ async def get_ai_insights(username: str) -> List[dict]:
     # 이해 부족/개념 공백을 실제로 진단하기엔 근거가 너무 짧다. 여기서는 같은
     # 원본(memos/questions)을 직접 조회해 더 긴 내용(최대 200자)을 LLM에 넘긴다.
     from services.db import db_get_memos, db_get_related_questions_for_doc
-    titles_by_doc = {d["id"]: (d.get("metadata") or {}).get("title") or d["filename"] for d in docs}
     note_entries = []
     question_entries = []
     for doc in docs:
@@ -1087,6 +1219,7 @@ async def get_ai_insights(username: str) -> List[dict]:
 
     db_set_meta(cache_key, json.dumps({
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "title_signature": title_signature,
         "insights": insights,
     }, ensure_ascii=False))
     return insights

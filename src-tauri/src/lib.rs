@@ -238,6 +238,7 @@ pub fn run() {
             command
                 .env("APP_HOST", "127.0.0.1")
                 .env("EASYPAPER_CONFIG_DIR", &app_data_dir)
+                .env("EASYPAPER_DESKTOP", "1")
                 .env("DB_PATH", &db_path)
                 .env("UPLOAD_DIR", &uploads_dir)
                 .env("CACHE_DIR", &cache_dir)

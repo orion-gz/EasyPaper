@@ -9,8 +9,13 @@
 # 기존 backend/config.py 패턴과 상성이 나쁘다.
 
 import os
+from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
+
+# 데스크탑 배포본의 제한된 설치 모드에서 pip를 직접 호출할 수 있도록
+# pip의 동적 모듈과 데이터를 sidecar에 포함한다.
+pip_datas, pip_binaries, pip_hiddenimports = collect_all("pip")
 
 BACKEND_DIR = os.path.join(os.path.dirname(os.path.abspath(SPEC)), "..")
 BACKEND_DIR = os.path.abspath(BACKEND_DIR)
@@ -18,8 +23,8 @@ BACKEND_DIR = os.path.abspath(BACKEND_DIR)
 a = Analysis(
     [os.path.join(BACKEND_DIR, "main.py")],
     pathex=[BACKEND_DIR],
-    binaries=[],
-    datas=[
+    binaries=pip_binaries,
+    datas=pip_datas + [
         # DEFAULT_PROMPT_TEMPLATE 폴백이 config.py에 있어 필수는 아니지만,
         # 사용자가 커스터마이징하기 전 기본 템플릿 파일을 그대로 들고 있으면
         # 첫 실행 UX가 서버/Docker 배포와 동일해진다.
@@ -31,7 +36,7 @@ a = Analysis(
         # "<sidecar 실행파일 디렉토리>/_internal/frontend/dist"로 알려준다.
         (os.path.join(BACKEND_DIR, "..", "frontend", "dist"), "frontend/dist"),
     ],
-    hiddenimports=[
+    hiddenimports=pip_hiddenimports + [
         # uvicorn은 프로토콜/루프 구현체를 동적으로 임포트하므로 PyInstaller의
         # 정적 분석이 놓치기 쉽다. main.py가 uvicorn.run(app, ...)으로 앱
         # 객체를 직접 넘기도록 바뀌어(문자열 임포트 아님) 최소 요구치는 줄었지만,

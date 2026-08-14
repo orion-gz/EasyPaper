@@ -355,6 +355,47 @@ async def test_reading_recommendations_filters_implausible_and_duplicate(isolate
     assert any(r["reason"] == "자기지도학습 확장" for r in results)
 
 
+@pytest.mark.asyncio
+async def test_reading_recommendations_resolve_references_with_bounded_concurrency(
+    isolated_dirs, monkeypatch
+):
+    import asyncio
+    import services.llm_client as llm_client
+    import services.reference_linker as reference_linker
+    import services.knowledge_graph as knowledge_graph
+
+    _create_doc_owned_by(isolated_dirs, "doc-rec-concurrent-1", "testuser", {"title": "Read One"})
+    _create_doc_owned_by(isolated_dirs, "doc-rec-concurrent-2", "testuser", {"title": "Read Two"})
+    recommendation_count = knowledge_graph.OPENALEX_RECOMMENDATION_CONCURRENCY + 3
+
+    async def fake_generate(titles, categories, session_id=None):
+        return [
+            {"title": f"Recommended Paper {index}", "reason": f"reason {index}"}
+            for index in range(recommendation_count)
+        ]
+
+    active = 0
+    max_active = 0
+
+    async def fake_resolve(query_text):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return {"title": query_text, "url": f"https://example.com/{query_text}"}
+
+    monkeypatch.setattr(llm_client, "generate_reading_recommendations", fake_generate)
+    monkeypatch.setattr(reference_linker, "resolve_reference", fake_resolve)
+
+    results = await knowledge_graph.get_reading_recommendations("testuser")
+
+    assert max_active == knowledge_graph.OPENALEX_RECOMMENDATION_CONCURRENCY
+    assert [result["title"] for result in results] == [
+        f"Recommended Paper {index}" for index in range(recommendation_count)
+    ]
+
+
 def test_reading_recommendations_endpoint(test_client, isolated_dirs, monkeypatch):
     import services.llm_client as llm_client
     import services.reference_linker as reference_linker
@@ -436,3 +477,35 @@ def test_reading_recommendations_endpoint_force_query_param(test_client, isolate
     res = test_client.get("/api/library/graph/recommendations?force=true")
     assert res.status_code == 200
     assert call_count["n"] == 2
+
+
+def test_timeline_manual_read_uses_meaningful_page_range(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    _create_doc_owned_by(
+        isolated_dirs, "doc-manual-read", "testuser",
+        {"title": "Extracted Timeline Title", "read": True},
+    )
+    db.db_save_reading_session(
+        session_id="manual-read", username="testuser", paper_id="doc-manual-read",
+        started_at="2026-08-10T01:00:00+00:00", ended_at=None,
+        active_reading_time=31, version=1,
+        page_sessions_json=json.dumps([
+            {"page": 1, "activeTime": 1, "scrollCoverage": 0.05},
+            {"page": 5, "activeTime": 30, "scrollCoverage": 0.4},
+            {
+                "page": 9, "activeTime": 2, "scrollCoverage": 0.1,
+                "interaction": {"figureClick": 1},
+            },
+        ]),
+        interaction_summary_json="{}", reading_depth="Browsing",
+        reading_score=20, reading_confidence=20, verified_pages_count=0,
+        total_pages=10, reading_activity="browsed",
+    )
+
+    events = test_client.get("/api/library/timeline").json()["events"]
+    event = next(item for item in events if item.get("reading_session_id") == "manual-read")
+
+    assert event["type"] == "read"
+    assert event["doc_title"] == "Extracted Timeline Title"
+    assert event["start_page"] == 5
+    assert event["end_page"] == 9

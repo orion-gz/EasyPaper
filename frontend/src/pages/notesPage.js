@@ -16,7 +16,18 @@ import '../styles/notes.css'
 import { fetchLibrary, fetchLibraryAnnotations, fetchLibraryMemos, fetchPrimer } from '../library.js'
 import { icon } from '../icons.js'
 import { lastActivityIso } from '../readPages.js'
-import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
+import { formatTranslationHtml, formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
+
+let renderGeneration = 0
+
+// 뷰어의 플로팅 메모 색상 이름을 Notes 카드에서 사용하는 실제 accent 색상으로
+// 맞춘다. default는 사용자가 설정한 앱 accent를 그대로 사용한다.
+const MEMO_ACCENT_COLORS = {
+  yellow: '#eab308',
+  green: '#10b981',
+  blue: '#3b82f6',
+  red: '#f43f5e',
+}
 
 // 즐겨찾기는 서버에 저장되는 필드가 아니라 Library 페이지가 이미 쓰고 있는
 // 로컬 전용 상태다(백엔드에 star/favorite 필드가 없음 - Library 리스킨 때 같은
@@ -37,12 +48,6 @@ function toggleFavoriteDoc(docId) {
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-function truncate(text, maxLen) {
-  if (!text) return ''
-  const trimmed = text.trim()
-  return trimmed.length > maxLen ? trimmed.substring(0, maxLen) + '...' : trimmed
 }
 
 // ── 모듈 상태 (페이지를 재방문해도 마지막 선택/탭/검색어를 기억한다) ──
@@ -133,7 +138,8 @@ async function buildPaperEntry(doc) {
     ;(memosByPage[pageKey] || []).forEach(memo => {
       const ts = memoTimestamp(memo)
       const text = (memo.content && memo.content.trim()) || memo.sentenceText || '(내용 없음)'
-      memoItems.push({ kind: 'memo', docId: doc.id, page: pageNum, ts, text, color: null })
+      const color = MEMO_ACCENT_COLORS[memo.color] || null
+      memoItems.push({ kind: 'memo', docId: doc.id, page: pageNum, ts, text, color })
     })
   })
 
@@ -422,17 +428,16 @@ function ensureSummaryLoaded(root, docId) {
 
 function renderAnnotationCard(item) {
   const iconName = item.kind === 'memo' ? 'edit3' : item.kind === 'highlight' ? 'highlighter' : 'underline'
-  const shortText = truncate(item.text, 220)
-  const canExpand = item.text.trim().length > shortText.replace(/\.\.\.$/, '').length
+  const canExpand = item.text.trim().length > 220
   const tsHtml = item.ts ? `<span class="notes-card-ts">${escapeHtml(formatTs(item.ts))}</span>` : ''
   const style = item.color ? ` style="--notes-item-accent:${escapeHtml(item.color)}"` : ''
   return `
-    <div class="notes-annotation-card notes-card-${item.kind}"${style} data-doc-id="${escapeHtml(item.docId)}">
+    <div class="notes-annotation-card notes-card-${item.kind} ${canExpand ? 'notes-card-collapsible' : ''}"${style} data-doc-id="${escapeHtml(item.docId)}">
       <div class="notes-card-top">
         <span class="notes-card-badge">${icon(iconName, 12)}p. ${item.page}</span>
         ${tsHtml}
       </div>
-      <p class="notes-card-text" data-full="${escapeHtml(item.text)}" data-short="${escapeHtml(shortText)}">${escapeHtml(shortText)}</p>
+      <div class="notes-card-text">${formatMarkdownLatexHtml(item.text)}</div>
       ${canExpand ? `<button type="button" class="notes-card-expand-btn">${icon('chevronDown', 12)}<span>더보기</span></button>` : ''}
     </div>
   `
@@ -494,6 +499,7 @@ function renderDetail(root) {
     <div class="notes-tab-content">${renderTabContent(entry)}</div>
   `
   bindThumbFallback(detailEl)
+  applyKatexToElement(detailEl)
 
   if (activeSubtab === 'summary') ensureSummaryLoaded(root, entry.doc.id)
 }
@@ -571,10 +577,8 @@ function attachListeners(root) {
     const expandBtn = e.target.closest('.notes-card-expand-btn')
     if (expandBtn) {
       const card = expandBtn.closest('.notes-annotation-card')
-      const textEl = card && card.querySelector('.notes-card-text')
-      if (!card || !textEl) return
+      if (!card) return
       const expanded = card.classList.toggle('expanded')
-      textEl.textContent = expanded ? textEl.dataset.full : textEl.dataset.short
       expandBtn.innerHTML = `${icon(expanded ? 'chevronUp' : 'chevronDown', 12)}<span>${expanded ? '접기' : '더보기'}</span>`
       return
     }
@@ -639,6 +643,8 @@ function shellHtml() {
 export async function renderNotesPage() {
   const root = document.getElementById('page-notes')
   if (!root) return
+  const generation = ++renderGeneration
+  const isCurrent = () => generation === renderGeneration && root.classList.contains('active')
 
   root.innerHTML = shellHtml()
   attachListeners(root)
@@ -649,10 +655,14 @@ export async function renderNotesPage() {
     docs = data.documents || []
   } catch (err) {
     console.error('Notes 페이지: 라이브러리 조회 실패:', err)
-    const listEl = root.querySelector('.notes-paper-list-items')
-    if (listEl) listEl.innerHTML = `<div class="notes-empty"><p style="color:var(--error)">논문 목록을 불러오지 못했습니다</p></div>`
+    if (isCurrent()) {
+      const listEl = root.querySelector('.notes-paper-list-items')
+      if (listEl) listEl.innerHTML = `<div class="notes-empty"><p style="color:var(--error)">논문 목록을 불러오지 못했습니다</p></div>`
+    }
     return
   }
+
+  if (!isCurrent()) return
 
   if (docs.length === 0) {
     allPapers = []
@@ -662,7 +672,9 @@ export async function renderNotesPage() {
     return
   }
 
-  allPapers = await Promise.all(docs.map(buildPaperEntry))
+  const loadedPapers = await Promise.all(docs.map(buildPaperEntry))
+  if (!isCurrent()) return
+  allPapers = loadedPapers
 
   if (!selectedDocId || !allPapers.some(e => e.doc.id === selectedDocId)) {
     selectedDocId = sortPapers(allPapers)[0].doc.id
