@@ -14,9 +14,9 @@ export const SAMPLE_PDF_CITATION = fs.readFileSync(path.join(__dirname, 'fixture
  * page.route()를 추가로 덮어써서 시나리오별 응답을 얹는다.
  *
  * @param {import('@playwright/test').Page} page
- * @param {object} [overrides] - { documents, onRoute } 등 확장 옵션
+ * @param {object} [overrides] - { documents, folders } 등 확장 옵션
  */
-export async function mockBaseRoutes(page, { documents = [] } = {}) {
+export async function mockBaseRoutes(page, { documents = [], folders = [] } = {}) {
   await page.route('**/api/**', async route => {
     const url = route.request().url()
 
@@ -45,7 +45,7 @@ export async function mockBaseRoutes(page, { documents = [] } = {}) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ show: false, version: 'test0000', version_date: '2026-01-01', changelog: [] }) })
     }
     if (url.includes('/api/library/folders')) {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ folders: [] }) })
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ folders }) })
     }
     if (url.includes('/api/library/trash')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ documents: [], total: 0 }) })
