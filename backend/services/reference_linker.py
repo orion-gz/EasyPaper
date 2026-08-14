@@ -70,37 +70,99 @@ def _calculate_title_similarity(query_title: str, cand_title: str) -> float:
 # recognition" 전체 인용문 검색 시 완전히 무관한 논문이 1위로 나옴, 제목만 검색하면
 # 정확히 매칭됨), 따옴표로 감싸진 제목이 있으면 그 부분만 검색어로 쓴다.
 _QUOTED_TITLE_RE = re.compile(r'["“]([^"”]{8,300})["”]')
+_DOI_RE = re.compile(r'10\.\d{4,9}/[-._;()/:A-Za-z0-9]+', re.IGNORECASE)
+_YEAR_RE = re.compile(r'\b(?:19|20)\d{2}[a-z]?\b', re.IGNORECASE)
+_VENUE_RE = re.compile(
+    r'\b(?:proceedings|conference|journal|transactions|workshop|symposium|'
+    r'arxiv|volume|vol\.?|issue|no\.?|pages?|pp\.?|publisher|press|doi)\b',
+    re.IGNORECASE,
+)
+
+
+def _clean_title_candidate(value: str) -> str:
+    value = re.sub(r'\*\*|["“”]', '', value or '')
+    value = re.sub(r'^\s*[-–—,;:.]+|[-–—,;:.]+\s*$', '', value)
+    return re.sub(r'\s+', ' ', value).strip()
 
 
 def _extract_search_query(citation_text: str) -> str:
-    """인용 원문에서 검색어로 쓸 부분을 뽑는다. 따옴표로 감싼 제목이 있으면 그것만
-    쓰고, 없으면(따옴표 없이 저자 뒤에 바로 제목이 오는 스타일 등, 신뢰할 만하게
-    분리할 방법이 없음) 원문 전체를 그대로 쓴다."""
-    m = _QUOTED_TITLE_RE.search(citation_text)
-    if m:
-        return m.group(1).strip().rstrip(",.")
-    return citation_text
+    """참고문헌에서 저자·연도·게재처·DOI를 제외한 제목 후보를 추출한다."""
+    raw = re.sub(r'[\u200b-\u200d\ufeff]', ' ', citation_text or '').strip()
+    if not raw:
+        return ''
 
+    match = _QUOTED_TITLE_RE.search(raw)
+    if match:
+        return _clean_title_candidate(match.group(1))
+
+    text = re.sub(r'^\s*(?:\[[^]]+]|\d+[.)])\s*', '', raw)
+    text = re.sub(r'https?://\S+|www\.\S+', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bdoi\s*:\s*10\.\d{4,9}/\S+', ' ', text, flags=re.IGNORECASE)
+    text = _DOI_RE.sub(' ', text)
+    text = re.sub(r'\barxiv\s*:\s*\S+', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # 흔한 "Authors et al. Title" 및 APA "Authors (2020). Title" 앞부분 제거.
+    text = re.sub(r'^.*?\bet\s+al\.?(?:\s*[,;:])?\s*', '', text, flags=re.IGNORECASE)
+    apa_year = re.match(r'^.*?\((?:19|20)\d{2}[a-z]?\)\s*[.,;:]?\s*(.+)$', text, re.IGNORECASE)
+    if apa_year:
+        text = apa_year.group(1)
+
+    candidates = []
+    for part in re.split(r'\.\s+(?=[A-Z0-9“"])', text):
+        part = _clean_title_candidate(part)
+        if not part:
+            continue
+        without_year = _YEAR_RE.sub('', part).strip()
+        words = re.findall(r"\w[\w'’-]*", part, flags=re.UNICODE)
+        if _YEAR_RE.search(part) and len(without_year.split()) < 3:
+            continue
+        score = min(len(words), 18)
+        if len(words) < 3:
+            score -= 10
+        if _VENUE_RE.search(part):
+            score -= 8
+        if part.count(',') >= 3:
+            score -= 6
+        if re.match(r'^(?:[A-Z]\.?)\s+[A-Z][a-z]+', part):
+            score -= 4
+        candidates.append((score, part))
+
+    if candidates:
+        score, candidate = max(candidates, key=lambda item: item[0])
+        if score > 0:
+            candidate = re.sub(
+                r'\s*\b(?:19|20)\d{2}[a-z]?\b.*$', '', candidate, flags=re.IGNORECASE
+            )
+            return _clean_title_candidate(candidate)
+
+    fallback = _YEAR_RE.sub(' ', text)
+    fallback = re.sub(
+        r'\b(?:vol|no|pp|pages?)\.?\s*[\d–—-]+', ' ', fallback, flags=re.IGNORECASE
+    )
+    return ' '.join(_clean_title_candidate(fallback).split()[:18])
 
 def _pick_url(work: dict) -> Optional[str]:
     """work 메타데이터에서 표시할 링크를 고른다. 원문을 무료로 바로 볼 수 있는
-    arXiv 링크를 최우선으로 하고, 그다음은 오픈 액세스 링크, 대표 링크, DOI
-    순으로 폴백한다."""
+    arXiv 링크를 최우선으로 하고, 그다음은 canonical 대표 링크/DOI, 검증이
+    어려운 OpenAlex OA 링크 순으로 폴백한다."""
     for location in work.get("locations") or []:
         source = location.get("source") or {}
         display_name = (source.get("display_name") or "").lower()
         if "arxiv" in display_name and location.get("landing_page_url"):
             return location["landing_page_url"]
 
-    open_access = work.get("open_access") or {}
-    if open_access.get("oa_url"):
-        return open_access["oa_url"]
-
+    # OpenAlex의 oa_url은 다른 저장소 문서에 잘못 연결된 사례가 있어
+    # canonical primary/DOI 링크를 먼저 사용하고, OA URL은 마지막 폴백으로 둔다.
     primary_location = work.get("primary_location") or {}
     if primary_location.get("landing_page_url"):
         return primary_location["landing_page_url"]
 
-    return work.get("doi") or None
+    if work.get("doi"):
+        return work["doi"]
+
+    open_access = work.get("open_access") or {}
+    return open_access.get("oa_url") or None
 
 
 _ARXIV_ID_RE = re.compile(r'arxiv\.org/abs/([0-9]{4}\.[0-9]{4,5}(?:v\d+)?)', re.IGNORECASE)
@@ -204,15 +266,19 @@ async def resolve_paper_metadata(title: str) -> Optional[dict]:
 
 
 async def resolve_reference(query_text: str) -> Optional[dict]:
-    """참고문헌 원문 텍스트로 OpenAlex를 검색해 가장 관련성 높은 논문의
-    제목/링크/연도를 반환합니다. 매칭 실패나 네트워크 오류 시 None.
-    """
+    """참고문헌을 정제해 OpenAlex 상위 후보를 제목·연도로 검증한 뒤 링크를 반환한다."""
     raw = (query_text or "").strip()
     if not raw:
         return None
-    query = _extract_search_query(raw)[:300]
 
-    params = {"search": query, "per_page": 1}
+    query = _extract_search_query(raw)[:300]
+    if not query:
+        return None
+
+    expected_years = {int(year[:4]) for year in _YEAR_RE.findall(raw)}
+    expected_doi = _DOI_RE.search(raw)
+    expected_doi_text = expected_doi.group(0).rstrip(".,;") if expected_doi else None
+    params = {"search": query, "per_page": 5}
     mailto = get_openalex_mailto()
     if mailto:
         params["mailto"] = mailto
@@ -225,20 +291,61 @@ async def resolve_reference(query_text: str) -> Optional[dict]:
                 logger.warning(f"OpenAlex 검색 실패: status={resp.status_code}")
                 return None
 
-            data = resp.json()
-            works = data.get("results") or []
+            works = (resp.json().get("results") or [])
             if not works:
                 return None
 
-            work = works[0]
-            url = _pick_url(work)
-            if not url:
+            best_work = None
+            best_url = None
+            best_score = 0.0
+            best_title_score = 0.0
+            for work in works:
+                url = _pick_url(work)
+                if not url:
+                    continue
+
+                candidate_title = work.get("title") or work.get("display_name") or ""
+                candidate_doi = work.get("doi") or ""
+                if expected_doi_text and expected_doi_text.lower() in candidate_doi.lower():
+                    best_work, best_url, best_score = work, url, 1.0
+                    best_title_score = 1.0
+                    break
+
+                title_score = _calculate_title_similarity(query, candidate_title)
+                score = title_score
+                candidate_year = work.get("publication_year")
+                if expected_years and candidate_year:
+                    year_distance = min(abs(candidate_year - year) for year in expected_years)
+                    score += 0.05 if year_distance <= 1 else -0.15
+
+                # 동일 제목 중복 레코드는 정식 DOI와 인용수가 높은 원 레코드를 우선한다.
+                if candidate_doi:
+                    score += 0.02
+                cited_count = max(0, work.get("cited_by_count") or 0)
+                score += min(0.05, len(str(cited_count)) * 0.01)
+
+                if score > best_score:
+                    best_work, best_url, best_score = work, url, score
+                    best_title_score = title_score
+
+            if not best_work or not best_url or best_title_score < 0.50:
+                logger.info(
+                    f"OpenAlex 참고문헌 매칭 실패 "
+                    f"(제목 유사도: {best_title_score:.2f}, 종합 점수: {best_score:.2f}, "
+                    f"query='{query}')"
+                )
                 return None
 
+            resolved_year = best_work.get("publication_year")
+            if expected_years and resolved_year:
+                closest_year = min(expected_years, key=lambda year: abs(resolved_year - year))
+                if abs(resolved_year - closest_year) > 1:
+                    resolved_year = closest_year
+
             return {
-                "title": work.get("title") or work.get("display_name") or "",
-                "url": url,
-                "year": work.get("publication_year"),
+                "title": best_work.get("title") or best_work.get("display_name") or "",
+                "url": best_url,
+                "year": resolved_year,
             }
     except Exception as e:
         logger.warning(f"참고문헌 검색 중 오류: {e}")

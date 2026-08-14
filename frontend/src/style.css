@@ -5942,17 +5942,20 @@ body.light-theme .citation-tooltip {
   color: var(--text-primary);
   margin-right: 2px;
 }
-.citation-tooltip-result {
+.citation-tooltip-result,
+.citation-tooltip-scholar-results {
   font-size: 12.5px;
   line-height: 1.5;
   margin-bottom: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
-.citation-tooltip-result.hidden {
+.citation-tooltip-result.hidden,
+.citation-tooltip-scholar-results.hidden {
   display: none;
 }
-.citation-tooltip-result a {
+.citation-tooltip-result a,
+.citation-tooltip-scholar-results a {
   display: flex;
   align-items: flex-start;
   gap: 4px;
@@ -5960,7 +5963,8 @@ body.light-theme .citation-tooltip {
   font-weight: 600;
   text-decoration: none;
 }
-.citation-tooltip-result a:hover {
+.citation-tooltip-result a:hover,
+.citation-tooltip-scholar-results a:hover {
   text-decoration: underline;
 }
 .citation-tooltip-result-item {
