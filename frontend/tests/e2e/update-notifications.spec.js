@@ -32,7 +32,7 @@ async function mockUpdateEndpoints(page, { postUpdateShow, updateAvailable }) {
 test('방금 업데이트된 직후에는 완료 안내만 뜨고, 새 업데이트 확인 팝업과 겹치지 않는다', async ({ page }) => {
   await mockBaseRoutes(page, { documents: [] })
   await mockUpdateEndpoints(page, { postUpdateShow: true, updateAvailable: true })
-  await gotoApp(page)
+  await gotoApp(page, { navigateToLibrary: false })
   await page.waitForTimeout(1000)
 
   await expect(page.locator('#update-complete-modal')).not.toHaveClass(/hidden/)
@@ -46,7 +46,7 @@ test('방금 업데이트된 직후에는 완료 안내만 뜨고, 새 업데이
 test('방금 업데이트되지 않았고 새 업데이트가 있으면 변경 로그 팝업이 뜬다', async ({ page }) => {
   await mockBaseRoutes(page, { documents: [] })
   await mockUpdateEndpoints(page, { postUpdateShow: false, updateAvailable: true })
-  await gotoApp(page)
+  await gotoApp(page, { navigateToLibrary: false })
   await page.waitForTimeout(1000)
 
   await expect(page.locator('#update-complete-modal')).toHaveClass(/hidden/)
@@ -62,7 +62,7 @@ test('방금 업데이트되지 않았고 새 업데이트가 있으면 변경 �
 test('업데이트도 없고 방금 업데이트되지도 않았으면 아무 팝업도 뜨지 않는다', async ({ page }) => {
   await mockBaseRoutes(page, { documents: [] })
   await mockUpdateEndpoints(page, { postUpdateShow: false, updateAvailable: false })
-  await gotoApp(page)
+  await gotoApp(page, { navigateToLibrary: false })
   await page.waitForTimeout(1000)
 
   await expect(page.locator('#update-complete-modal')).toHaveClass(/hidden/)
@@ -80,7 +80,8 @@ test('설정 화면에서 업데이트 확인 버튼을 누르면 새 업데이�
 
   await gotoApp(page)
   await page.waitForTimeout(600)
-  await page.click('#global-settings-btn')
+  await page.click('#sidebar-settings-btn')
+  await page.click('.tab-btn[data-tab="tab-info"]')
   await page.waitForTimeout(400)
 
   // 확인 전에는 실행 버튼이 비활성 상태여야 한다
@@ -104,7 +105,8 @@ test('설정 화면에서 업데이트 확인 결과 이미 최신 버전이면 
 
   await gotoApp(page)
   await page.waitForTimeout(600)
-  await page.click('#global-settings-btn')
+  await page.click('#sidebar-settings-btn')
+  await page.click('.tab-btn[data-tab="tab-info"]')
   await page.waitForTimeout(400)
 
   await page.click('#system-update-check-btn')
@@ -124,7 +126,8 @@ test('업데이트 실행 후 확인을 다시 누르지 않고는 실행 버튼
 
   await gotoApp(page)
   await page.waitForTimeout(600)
-  await page.click('#global-settings-btn')
+  await page.click('#sidebar-settings-btn')
+  await page.click('.tab-btn[data-tab="tab-info"]')
   await page.waitForTimeout(400)
 
   await page.click('#system-update-check-btn')
@@ -153,7 +156,8 @@ test('설정 화면에서 업데이트 확인 주기를 변경하면 저장된�
 
   await gotoApp(page)
   await page.waitForTimeout(600)
-  await page.click('#global-settings-btn')
+  await page.click('#sidebar-settings-btn')
+  await page.click('.tab-btn[data-tab="tab-info"]')
   await page.waitForTimeout(400)
 
   await expect(page.locator('#setting-update-check-interval')).toHaveValue('weekly')
@@ -173,7 +177,8 @@ test('현재 버전 텍스트를 클릭하면 CHANGELOG.md 전체 내용을 보�
 
   await gotoApp(page)
   await page.waitForTimeout(600)
-  await page.click('#global-settings-btn')
+  await page.click('#sidebar-settings-btn')
+  await page.click('.tab-btn[data-tab="tab-info"]')
   await page.waitForTimeout(400)
 
   await expect(page.locator('#full-changelog-modal')).toHaveClass(/hidden/)

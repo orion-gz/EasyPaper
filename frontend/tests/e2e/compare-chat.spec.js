@@ -20,20 +20,16 @@ test('논문 2편을 선택해 비교 채팅을 시작하고, 질문에 대한 �
 
   await gotoApp(page)
 
-  // 선택 모드 진입 전에는 체크박스가 보이지 않는다
-  await expect(page.locator('.doc-card-compare-check').first()).not.toBeVisible()
+  await expect(page.locator('#lib-select-toolbar')).toHaveClass(/hidden/)
 
-  await page.click('#lib-compare-toggle-btn')
-  await expect(page.locator('.doc-card-compare-check').first()).toBeVisible()
-
-  const checkboxes = page.locator('.doc-card-compare-check')
+  const checkboxes = page.locator('.doc-card-check-btn')
   await checkboxes.nth(0).click()
   await checkboxes.nth(1).click()
 
-  await expect(page.locator('#compare-select-count')).toHaveText('2/5개 선택됨')
-  await expect(page.locator('#compare-select-start-btn')).toBeEnabled()
+  await expect(page.locator('#lib-select-count')).toHaveText('2개 선택됨')
+  await expect(page.locator('#lib-select-compare-btn')).toBeEnabled()
 
-  await page.click('#compare-select-start-btn')
+  await page.click('#lib-select-compare-btn')
   await expect(page.locator('#compare-screen')).toHaveClass(/active/)
   await expect(page).toHaveURL(/#compare\?ids=doc-1,doc-2/)
 
@@ -66,16 +62,16 @@ test('선택하지 않은 상태에서는 비교 채팅 시작 버튼이 비활�
   await mockBaseRoutes(page, { documents: docs })
 
   await gotoApp(page)
-  await page.click('#lib-compare-toggle-btn')
-  await expect(page.locator('#compare-select-start-btn')).toBeDisabled()
+  await expect(page.locator('#lib-select-toolbar')).toHaveClass(/hidden/)
 
-  await page.locator('.doc-card-compare-check').first().click()
-  await expect(page.locator('#compare-select-count')).toHaveText('1/5개 선택됨')
-  await expect(page.locator('#compare-select-start-btn')).toBeDisabled()
+  const firstCheckbox = page.locator('.doc-card-check-btn').first()
+  await firstCheckbox.click()
+  await expect(page.locator('#lib-select-count')).toHaveText('1개 선택됨')
+  await expect(page.locator('#lib-select-compare-btn')).toBeDisabled()
 
-  await page.click('#compare-select-cancel-btn')
-  await expect(page.locator('#compare-select-bar')).toHaveClass(/hidden/)
-  await expect(page.locator('.doc-card-compare-check').first()).not.toBeVisible()
+  await page.click('#lib-select-close-btn')
+  await expect(page.locator('#lib-select-toolbar')).toHaveClass(/hidden/)
+  await expect(firstCheckbox).not.toHaveClass(/checked/)
 })
 
 // 비교 선택 모드에서는 카드를 클릭하면 선택 상태만 토글되어야 한다. "열기" 버튼은
@@ -89,12 +85,13 @@ test('비교 선택 모드에서 열기 버튼을 눌러도 뷰어로 이동하�
   await mockBaseRoutes(page, { documents: docs })
 
   await gotoApp(page)
-  await page.click('#lib-compare-toggle-btn')
+  await page.locator('.doc-card-check-btn').first().click()
 
-  const firstCard = page.locator('.doc-card').first()
-  await firstCard.locator('.doc-open-btn').click({ force: true })
+  const secondCard = page.locator('.doc-card').nth(1)
+  await secondCard.locator('.doc-open-btn').click({ force: true })
 
-  await expect(page.locator('#compare-select-count')).toHaveText('1/5개 선택됨')
+  await expect(page.locator('#lib-select-count')).toHaveText('2개 선택됨')
+  await expect(page.locator('#lib-select-compare-btn')).toBeEnabled()
   await expect(page.locator('#library-screen')).toHaveClass(/active/)
   await expect(page.locator('#viewer-screen')).not.toHaveClass(/active/)
 })

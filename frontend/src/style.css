@@ -323,7 +323,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  z-index: 100;
+  z-index: 120;
   gap: 16px;
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
   transform: translateY(0);
