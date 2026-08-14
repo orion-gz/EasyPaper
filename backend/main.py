@@ -1,3 +1,16 @@
+import sys
+
+# PyInstaller sidecar는 일반 Python 인터프리터가 아니어서 ``-m pip``를
+# 실행할 수 없다. 설치용으로 자신을 다시 띄운 경우 서버 import 전에 분기한다.
+if len(sys.argv) > 1 and sys.argv[1] == "--easypaper-install-pdf-parser":
+    from venv_manager import run_packaged_parser_installer
+    raise SystemExit(run_packaged_parser_installer())
+
+# 선택 파서의 격리 환경을 FastAPI 등 다른 패키지보다 먼저 활성화한다.
+from config import get_pdf_parser_engine
+from venv_manager import relaunch_into_required_venv
+relaunch_into_required_venv(get_pdf_parser_engine())
+
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -10,13 +23,7 @@ from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-from config import CORS_ORIGINS, UPLOAD_DIR, APP_HOST, APP_PORT, get_pdf_parser_engine
-
-# mineru 엔진은 marker와 같은 venv에 공존할 수 없어 전용 venv(.venv-mineru)를
-# 쓴다 - 다른 무거운 import보다 먼저, 아직 소켓을 열지 않은 이 시점에 프로세스를
-# 필요한 venv로 교체한다. 자세한 이유는 venv_manager.py 참고.
-from venv_manager import relaunch_into_required_venv
-relaunch_into_required_venv(get_pdf_parser_engine())
+from config import CORS_ORIGINS, UPLOAD_DIR, APP_HOST, APP_PORT
 
 from routers import upload, translate, chat
 from routers import library as library_router
