@@ -17,6 +17,7 @@ import { formatTranslationHtml, applyKatexToElement } from './textFormat.js'
 import { createSelectionRect, resolveDragSelection } from './library-selection.js'
 import { globalAnalyticsTracker } from './readingAnalytics.js'
 import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
+import { compareDocsByLastRead } from './readPages.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -5363,7 +5364,7 @@ document.addEventListener('keydown', async e => {
 // 없음) 새 필드를 추가하지 않고 로컬 전용 편의 기능으로만 제공한다 - localStorage에만
 // 저장되며 기기 간 동기화되거나 서버에 반영되지 않는다.
 let activeStatusFilter = 'all' // 'all' | 'unread' | 'reading' | 'finished' | 'favorites'
-let librarySortMode = localStorage.getItem('easypaper_library_sort') || 'recent' // 'recent' | 'title' | 'progress'
+let librarySortMode = localStorage.getItem('easypaper_library_sort') || 'recent' // 'recent' | 'last-read' | 'title' | 'progress'
 
 const LIBRARY_FAVORITES_KEY = 'easypaper_library_favorites'
 function getFavoriteIds() {
@@ -5444,6 +5445,8 @@ function sortDocsByMode(docs) {
     })
   } else if (librarySortMode === 'progress') {
     sorted.sort((a, b) => getLibraryReadProgress(b) - getLibraryReadProgress(a))
+  } else if (librarySortMode === 'last-read') {
+    sorted.sort(compareDocsByLastRead)
   } else {
     sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   }
@@ -5889,6 +5892,7 @@ function ensureLibraryChrome() {
       <div class="lib-sort-dropdown">
         <select id="library-sort-select" class="lib-sort-select" title="정렬 기준">
           <option value="recent">최근 추가순</option>
+          <option value="last-read">최근 읽은 순</option>
           <option value="title">제목순</option>
           <option value="progress">번역 진행률순</option>
         </select>

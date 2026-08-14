@@ -3,10 +3,12 @@ import test from 'node:test'
 
 import {
   addDaysKey,
+  compareDocsByLastRead,
   computeStreakDays,
   countUniqueVerifiedPages,
   hasReadActivity,
   lastActivityIso,
+  lastReadTimestamp,
   readPageCount,
   todayKey,
   uniqueVerifiedPageKeys,
@@ -57,6 +59,31 @@ test('마지막 활동 시각과 실제 읽기 활동 여부를 구분한다', (
   assert.equal(lastActivityIso(meta, createdAt), meta.last_read_at)
   assert.equal(hasReadActivity(meta), true)
   assert.equal(hasReadActivity({}), false)
+})
+
+test('최근 읽은 시각은 읽기 기록만 사용하고 두 기록 중 최신값을 고른다', () => {
+  assert.equal(lastReadTimestamp({
+    last_read_at: '2026-08-02T00:00:00Z',
+    read_at: '2026-08-03T00:00:00Z',
+  }), Date.parse('2026-08-03T00:00:00Z'))
+  assert.equal(lastReadTimestamp({ last_read_at: 'invalid' }), -Infinity)
+  assert.equal(lastReadTimestamp({}), -Infinity)
+})
+
+test('최근 읽은 순은 최신 읽기 활동을 우선하고 미열람 논문은 최근 추가순으로 뒤에 둔다', () => {
+  const docs = [
+    { id: 'unread-new', created_at: '2026-08-05T00:00:00Z', metadata: {} },
+    { id: 'read-old', created_at: '2026-08-04T00:00:00Z', metadata: { last_read_at: '2026-08-06T00:00:00Z' } },
+    { id: 'unread-old', created_at: '2026-08-01T00:00:00Z', metadata: {} },
+    { id: 'read-new', created_at: '2026-08-02T00:00:00Z', metadata: { read_at: '2026-08-07T00:00:00Z' } },
+  ]
+
+  assert.deepEqual(docs.sort(compareDocsByLastRead).map(doc => doc.id), [
+    'read-new',
+    'read-old',
+    'unread-new',
+    'unread-old',
+  ])
 })
 
 test('날짜 키 덧셈은 월·연도 경계를 넘는다', () => {
