@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
+from contextlib import asynccontextmanager
 import logging
 
 from logging_config import setup_logging
@@ -26,10 +27,23 @@ from routers import insight as insight_router
 from routers import primer as primer_router
 from services.auth import get_current_user
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Initialize persistent state and restore library sessions at startup."""
+    from services.db import init_db
+    from services.usage_tracker import init_usage_table
+
+    init_db()
+    init_usage_table()
+    upload.restore_sessions_from_library()
+    yield
+
+
 app = FastAPI(
     title="EasyPaper API",
     description="PDF 논문 번역 서비스 (Gemma 4 E4B + Ollama)",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS 설정 (모든 오리진 허용 — NPM/리버스 프록시 환경)
@@ -53,14 +67,6 @@ app.include_router(insight_router.router, prefix="/api", dependencies=[Depends(g
 app.include_router(primer_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Primer"])
 
 
-@app.on_event("startup")
-async def startup_event():
-    """서버 시작 시 데이터베이스 초기화 및 라이브러리의 문서들을 세션으로 복원합니다."""
-    from services.db import init_db
-    from services.usage_tracker import init_usage_table
-    init_db()
-    init_usage_table()
-    upload.restore_sessions_from_library()
 
 
 @app.get("/api/pdf-file/{session_id}")
