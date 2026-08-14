@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Dict, List
 
 
-READING_ANALYTICS_VERSION = 2
+READING_ANALYTICS_VERSION = 3
 MIN_MEANINGFUL_PAGE_SECONDS = 10.0
 SEMANTIC_INTERACTION_FIELDS = (
     "selection", "highlight", "underline", "memo", "question",
@@ -57,6 +57,17 @@ class ReadingAnalyticsResult(BaseModel):
     minimumEvidenceTime: float
 
 
+class PaperReadingAnalyticsResult(BaseModel):
+    readingScore: float
+    readingConfidence: float
+    readingDepth: str
+    verifiedPagesCount: int
+    meaningfulPagesCount: int
+    totalPages: int
+    activeReadingTime: float
+    pageScores: Dict[int, float] = Field(default_factory=dict)
+
+
 # --- 1. Interaction Quality Calculation ---
 def calculate_interaction_quality(interaction: InteractionSummary) -> float:
     """Calculate interaction evidence without letting raw scroll events dominate."""
@@ -89,6 +100,29 @@ def is_meaningful_page_session(page_session: PageSession) -> bool:
 
 def count_meaningful_page_sessions(page_sessions: List[PageSession]) -> int:
     return len({ps.page for ps in page_sessions if is_meaningful_page_session(ps)})
+
+
+def consolidate_page_sessions(page_sessions: List[PageSession]) -> Dict[int, PageSession]:
+    """Merge repeated payload entries into one cumulative record per page."""
+    consolidated: Dict[int, PageSession] = {}
+    for ps in page_sessions:
+        previous = consolidated.get(ps.page)
+        if previous is None:
+            consolidated[ps.page] = ps.model_copy(deep=True)
+            continue
+        positive_enter_times = [v for v in (previous.enterTime, ps.enterTime) if v > 0]
+        previous.enterTime = min(positive_enter_times) if positive_enter_times else 0
+        previous.leaveTime = max(previous.leaveTime, ps.leaveTime)
+        previous.visibleTime += ps.visibleTime
+        previous.activeTime += ps.activeTime
+        previous.scrollCoverage = max(previous.scrollCoverage, ps.scrollCoverage)
+        for field_name in InteractionSummary.model_fields:
+            setattr(
+                previous.interaction,
+                field_name,
+                getattr(previous.interaction, field_name) + getattr(ps.interaction, field_name),
+            )
+    return consolidated
 
 
 def calculate_minimum_evidence_time(user_ema: float) -> float:
@@ -151,24 +185,7 @@ def analyze_page_sessions(
 
     # A client should send one cumulative entry per page, but consolidating here
     # prevents duplicate page entries from inflating verified-page counts.
-    consolidated: Dict[int, PageSession] = {}
-    for ps in page_sessions:
-        previous = consolidated.get(ps.page)
-        if previous is None:
-            consolidated[ps.page] = ps.model_copy(deep=True)
-            continue
-        positive_enter_times = [v for v in (previous.enterTime, ps.enterTime) if v > 0]
-        previous.enterTime = min(positive_enter_times) if positive_enter_times else 0
-        previous.leaveTime = max(previous.leaveTime, ps.leaveTime)
-        previous.visibleTime += ps.visibleTime
-        previous.activeTime += ps.activeTime
-        previous.scrollCoverage = max(previous.scrollCoverage, ps.scrollCoverage)
-        for field_name in InteractionSummary.model_fields:
-            setattr(
-                previous.interaction,
-                field_name,
-                getattr(previous.interaction, field_name) + getattr(ps.interaction, field_name),
-            )
+    consolidated = consolidate_page_sessions(page_sessions)
 
     for ps in consolidated.values():
         page_num = ps.page
@@ -223,6 +240,34 @@ def analyze_page_sessions(
 
     avg_confidence = round(weighted_confidence_sum / confidence_weight_sum, 1) if confidence_weight_sum else 0.0
     return page_scores, verified_count, avg_confidence
+
+
+def build_page_evidence(
+    page_sessions: List[PageSession],
+    expected_page_time: float,
+    total_pages: int,
+) -> Dict[int, Dict[str, float]]:
+    """Return persistable evidence for meaningful pages in one session."""
+    consolidated = consolidate_page_sessions(page_sessions)
+    page_scores, _, _ = analyze_page_sessions(
+        list(consolidated.values()), expected_page_time, total_pages,
+    )
+    evidence: Dict[int, Dict[str, float]] = {}
+    for page, page_session in consolidated.items():
+        if not is_meaningful_page_session(page_session):
+            continue
+        evidence[page] = {
+            "score": page_scores[page],
+            "evidence_time": max(
+                MIN_MEANINGFUL_PAGE_SECONDS,
+                min(
+                    page_session.activeTime,
+                    max(MIN_MEANINGFUL_PAGE_SECONDS, expected_page_time),
+                ),
+            ),
+            "interaction_quality": calculate_interaction_quality(page_session.interaction),
+        }
+    return evidence
 
 
 # --- 3. Reading Depth Analyzer ---
@@ -288,6 +333,75 @@ def calculate_reading_score(
     )
 
     return round(max(0.0, min(100.0, score)), 1)
+
+
+def calculate_paper_reading_analytics(
+    page_evidence: Dict[int, Dict[str, float]],
+    total_pages: int,
+    active_reading_time: float,
+    previous_reading_score: float = 0.0,
+    previous_reading_depth: str = "Opened",
+) -> PaperReadingAnalyticsResult:
+    """Calculate cumulative paper achievement from each page's strongest evidence."""
+    page_scores = {
+        int(page): round(max(0.0, min(100.0, evidence.get("score", 0.0))), 1)
+        for page, evidence in page_evidence.items()
+    }
+    meaningful_count = len(page_scores)
+    verified_count = sum(score >= 50.0 for score in page_scores.values())
+    confidence_weight = sum(
+        max(MIN_MEANINGFUL_PAGE_SECONDS, evidence.get("evidence_time", 0.0))
+        for evidence in page_evidence.values()
+    )
+    weighted_confidence = sum(
+        page_scores[int(page)]
+        * max(MIN_MEANINGFUL_PAGE_SECONDS, evidence.get("evidence_time", 0.0))
+        for page, evidence in page_evidence.items()
+    )
+    confidence = round(weighted_confidence / confidence_weight, 1) if confidence_weight else 0.0
+    total_iq = sum(
+        max(0.0, evidence.get("interaction_quality", 0.0))
+        for evidence in page_evidence.values()
+    )
+
+    depth = determine_reading_depth(
+        active_reading_time, verified_count, total_pages, 0.0, meaningful_count,
+    )
+    for _ in range(3):
+        score = calculate_reading_score(
+            verified_count, total_pages, confidence, depth, total_iq, meaningful_count,
+        )
+        next_depth = determine_reading_depth(
+            active_reading_time, verified_count, total_pages, score, meaningful_count,
+        )
+        if next_depth == depth:
+            break
+        depth = next_depth
+    score = calculate_reading_score(
+        verified_count, total_pages, confidence, depth, total_iq, meaningful_count,
+    )
+
+    depth_rank = {
+        "Opened": 0,
+        "Browsing": 1,
+        "Reading": 2,
+        "Deep Reading": 3,
+        "Completed": 4,
+    }
+    score = round(max(previous_reading_score, score), 1)
+    if depth_rank.get(previous_reading_depth, 0) > depth_rank.get(depth, 0):
+        depth = previous_reading_depth
+
+    return PaperReadingAnalyticsResult(
+        readingScore=score,
+        readingConfidence=confidence,
+        readingDepth=depth,
+        verifiedPagesCount=verified_count,
+        meaningfulPagesCount=meaningful_count,
+        totalPages=max(1, total_pages),
+        activeReadingTime=max(0.0, active_reading_time),
+        pageScores=page_scores,
+    )
 
 
 # --- 5. EMA Learning Engine ---
