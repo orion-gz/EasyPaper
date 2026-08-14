@@ -62,6 +62,12 @@ def test_session_token_round_trip():
     assert token.split(":")[0] == "admin"
 
 
+def test_session_token_round_trip_with_colon_in_username():
+    token = create_session_token("team:admin")
+    assert verify_session_token(token) is True
+    assert token.rsplit(":", 2)[0] == "team:admin"
+
+
 def test_session_token_rejects_tampered_username():
     token = create_session_token("admin")
     _, expires, sig = token.split(":")
@@ -111,6 +117,18 @@ async def test_get_current_user_still_requires_cookie_when_skip_login_disabled(m
 
     with pytest.raises(HTTPException):
         await get_current_user(FakeRequest())
+
+
+async def test_get_current_user_preserves_colon_in_username(monkeypatch):
+    import services.auth as auth_module
+
+    monkeypatch.setattr(auth_module, "get_skip_login", lambda: False)
+    token = create_session_token("team:admin")
+
+    class FakeRequest:
+        cookies = {"session_token": token}
+
+    assert await get_current_user(FakeRequest()) == "team:admin"
 
 
 def test_login_lockout_starts_unlocked():
