@@ -692,7 +692,8 @@ def db_list_assistant_chat_sessions(username: str) -> List[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT d.id AS doc_id, d.filename, d.metadata, MAX(c.created_at) AS last_message_at
+            SELECT d.id AS doc_id, d.filename, d.metadata, d.created_at,
+                   MAX(c.created_at) AS last_message_at
             FROM chats c
             JOIN documents d ON d.id = c.doc_id
             WHERE d.username = ? AND d.is_deleted = 0 AND c.doc_id NOT LIKE 'cmp\\_%' ESCAPE '\\'
@@ -709,6 +710,7 @@ def db_list_assistant_chat_sessions(username: str) -> List[Dict[str, Any]]:
             sessions.append({
                 "doc_id": row["doc_id"],
                 "title": title,
+                "created_at": row["created_at"],
                 "last_message_at": row["last_message_at"],
             })
         return sessions

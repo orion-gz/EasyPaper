@@ -107,3 +107,17 @@ def test_bulk_translation_rows_returns_empty_list_for_doc_without_translations(i
 def test_bulk_translation_rows_empty_doc_ids_returns_empty_dict(isolated_dirs):
     db = isolated_dirs["db"]
     assert db.db_bulk_translation_rows([]) == {}
+
+
+def test_assistant_chat_sessions_include_document_upload_time(isolated_dirs):
+    db = isolated_dirs["db"]
+    doc = db.db_save_document("doc-1", "admin", "paper.pdf", "/x", 3, {"title": "Paper"})
+    db.db_save_chat_message("doc-1", "user", "질문")
+
+    sessions = db.db_list_assistant_chat_sessions("admin")
+
+    assert len(sessions) == 1
+    assert sessions[0]["doc_id"] == "doc-1"
+    assert sessions[0]["title"] == "Paper"
+    assert sessions[0]["created_at"] == doc["created_at"]
+    assert sessions[0]["last_message_at"]
