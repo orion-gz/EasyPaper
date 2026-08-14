@@ -687,8 +687,14 @@ body.light-theme .lib-detail-panel {
 .folder-dialog-label { display:grid; gap:8px; color:var(--text-secondary); font-size:13px; }
 .folder-dialog-input { width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--bg-elevated); color:var(--text-primary); font:inherit; outline:none; }
 .folder-dialog-input:focus { border-color:var(--control-accent); }
+.library-grid.list-view { --library-list-row-min-height:64px; }
+.library-grid.list-view .doc-list-row,
 .library-grid.list-view .library-folder-card {
-  min-height:0;
+  height:var(--library-list-row-min-height);
+  min-height:var(--library-list-row-min-height);
+  flex:0 0 var(--library-list-row-min-height);
+}
+.library-grid.list-view .library-folder-card {
   padding:11px 14px;
   display:flex;
   align-items:center;
