@@ -9,7 +9,7 @@ from services.library import (
     patch_document_metadata,
     get_chat_quote_image_path, list_folders, create_folder, update_folder, delete_folder, move_documents_to_folder
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 import json
 import re
 
@@ -35,6 +35,21 @@ class DocumentMoveRequest(BaseModel):
 
 class DocumentTitleUpdateRequest(BaseModel):
     title: str
+
+
+MAX_LIBRARY_MIRROR_JSON_BYTES = 5 * 1024 * 1024
+
+
+class LibraryMirrorPayload(BaseModel):
+    data: dict = Field(default_factory=dict)
+
+    @field_validator("data")
+    @classmethod
+    def limit_serialized_size(cls, value: dict) -> dict:
+        encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(encoded) > MAX_LIBRARY_MIRROR_JSON_BYTES:
+            raise ValueError("주석 또는 메모 데이터는 5MiB 이하여야 합니다.")
+        return value
 
 
 @router.get("/library/folders")
@@ -916,11 +931,11 @@ async def get_library_annotations(doc_id: str, current_user: str = Depends(get_c
 
 
 @router.put("/library/{doc_id}/annotations")
-async def put_library_annotations(doc_id: str, payload: dict, current_user: str = Depends(get_current_user)):
+async def put_library_annotations(doc_id: str, payload: LibraryMirrorPayload, current_user: str = Depends(get_current_user)):
     """하이라이트/주석 서버 미러를 통째로 덮어씁니다(전체 블롭 upsert)."""
     require_owned_document(doc_id, current_user)
     from services.db import db_put_annotations
-    db_put_annotations(doc_id, payload.get("data", {}))
+    db_put_annotations(doc_id, payload.data)
     return {"status": "ok"}
 
 
@@ -934,11 +949,11 @@ async def get_library_memos(doc_id: str, current_user: str = Depends(get_current
 
 
 @router.put("/library/{doc_id}/memos")
-async def put_library_memos(doc_id: str, payload: dict, current_user: str = Depends(get_current_user)):
+async def put_library_memos(doc_id: str, payload: LibraryMirrorPayload, current_user: str = Depends(get_current_user)):
     """메모 서버 미러를 통째로 덮어씁니다(전체 블롭 upsert)."""
     require_owned_document(doc_id, current_user)
     from services.db import db_put_memos
-    db_put_memos(doc_id, payload.get("data", {}))
+    db_put_memos(doc_id, payload.data)
     return {"status": "ok"}
 
 
