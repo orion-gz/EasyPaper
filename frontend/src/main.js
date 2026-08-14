@@ -13,6 +13,7 @@ import { createSelectionRect, resolveDragSelection } from './library-selection.j
 import { globalAnalyticsTracker } from './readingAnalytics.js'
 import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
 import { compareDocsByLastRead } from './readPages.js'
+import { buildScholarSearchUrl } from './citationSearch.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -12062,12 +12063,8 @@ document.addEventListener('scroll', () => {
 let citationTooltipEl = null
 let citationTooltipHideTimer = null
 let citationTooltipDocId = null
-let citationTooltipRefNum = null
+let citationTooltipReferences = []
 let citationTooltipBoxEl = null
-
-function buildScholarSearchUrl(refText) {
-  return `https://scholar.google.com/scholar?q=${encodeURIComponent((refText || '').slice(0, 300))}`
-}
 
 // Tauri 데스크탑 webview는 보안상 window.open()/target="_blank"로 외부
 // URL을 새 탭으로 열어주지 않는다(웹 브라우저와 달리 시스템 기본 브라우저를
@@ -12112,8 +12109,7 @@ function getOrCreateCitationTooltip() {
   })
   el.querySelector('.citation-tooltip-scholar-btn').addEventListener('click', (e) => {
     e.stopPropagation()
-    const text = el.querySelector('.citation-tooltip-text').textContent
-    openExternalUrl(buildScholarSearchUrl(text))
+    openExternalUrl(buildScholarSearchUrl(citationTooltipReferences.map(ref => ref.text)))
   })
   // resolveCitationTooltip()이 innerHTML로 채워 넣는 "원문 링크 찾기" 결과의
   // <a> 태그는 그때그때 새로 생기므로, 매번 리스너를 다는 대신 이 안정적인
@@ -12139,14 +12135,13 @@ function positionCitationTooltip() {
   left = Math.max(8, Math.min(left, window.innerWidth - tw - 8))
   let top = rect.top - th - 10
   if (top < 8) top = rect.bottom + 10
+  top = Math.max(8, Math.min(top, window.innerHeight - th - 8))
   citationTooltipEl.style.left = `${left}px`
   citationTooltipEl.style.top = `${top}px`
 }
 
 // refKeys가 여러 개면(예: "[66-69]" 범위 인용, "(A, 2020; B, 2019)" 나열)
-// 각 항목을 "[키] 원문" 형태로 구분해 전부 보여준다. "원문 링크 찾기"/
-// Google Scholar 검색용 textContent에서도 항목 사이가 구분되도록 줄바꿈으로
-// 이어붙인다.
+// 각 항목을 "[키] 원문" 형태로 구분해 전부 보여준다.
 function buildCitationTooltipHtml(refKeys, refMap) {
   if (refKeys.length === 1) return renderBoldText(refMap[refKeys[0]] || '')
   return refKeys
@@ -12160,8 +12155,7 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl) {
   if (state.isSelectionDragging) return
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   citationTooltipDocId = docId
-  // "원문 링크 찾기"/Google Scholar 검색은 여러 키 중 첫 번째를 기준으로 동작한다.
-  citationTooltipRefNum = refKeys[0]
+  citationTooltipReferences = refKeys.map(key => ({ key, text: refMap[key] || '' }))
   citationTooltipBoxEl = boxEl
 
   const tooltip = getOrCreateCitationTooltip()
@@ -12189,20 +12183,47 @@ function scheduleCitationTooltipHide() {
 }
 
 async function resolveCitationTooltip() {
-  if (!citationTooltipEl || !citationTooltipDocId || !citationTooltipRefNum) return
+  if (!citationTooltipEl || !citationTooltipDocId || !citationTooltipReferences.length) return
   const resolveBtn = citationTooltipEl.querySelector('.citation-tooltip-resolve-btn')
   const resultEl = citationTooltipEl.querySelector('.citation-tooltip-result')
   if (resolveBtn.disabled) return
+
+  const requestedDocId = citationTooltipDocId
+  const requestedRefs = citationTooltipReferences.map(ref => ({ ...ref }))
+  const isCurrentRequest = () => citationTooltipDocId === requestedDocId &&
+    citationTooltipReferences.map(ref => ref.key).join('\u0000') === requestedRefs.map(ref => ref.key).join('\u0000')
 
   resolveBtn.disabled = true
   resolveBtn.innerHTML = `${icon('refreshCw', 12, 'style="vertical-align:-2px;margin-right:4px"')}찾는 중...`
 
   try {
-    const result = await resolveLibraryReference(citationTooltipDocId, citationTooltipRefNum)
-    if (result && result.url) {
+    const results = await Promise.all(requestedRefs.map(async ref => {
+      try {
+        return { ...ref, result: await resolveLibraryReference(requestedDocId, ref.key) }
+      } catch (error) {
+        console.warn(`참고문헌 [${ref.key}] 조회 실패:`, error)
+        return { ...ref, result: null, error: true }
+      }
+    }))
+
+    if (!isCurrentRequest()) return
+
+    const successes = results.filter(item => item.result && item.result.url)
+    if (requestedRefs.length === 1 && successes.length) {
+      const result = successes[0].result
       resultEl.className = 'citation-tooltip-result'
       const label = result.title ? `${result.title}${result.year ? ` (${result.year})` : ''}` : result.url
       resultEl.innerHTML = `<a href="${escapeHtml(result.url)}" target="_blank" rel="noopener">${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px;flex-shrink:0"')}<span>${escapeHtml(label)}</span></a>`
+    } else if (requestedRefs.length > 1) {
+      resultEl.className = `citation-tooltip-result${successes.length ? '' : ' citation-tooltip-result-empty'}`
+      resultEl.innerHTML = results.map(({ key, result, error }) => {
+        if (result && result.url) {
+          const label = result.title ? `${result.title}${result.year ? ` (${result.year})` : ''}` : result.url
+          return `<div class="citation-tooltip-result-item"><span class="citation-tooltip-multi-key">[${escapeHtml(key)}]</span><a href="${escapeHtml(result.url)}" target="_blank" rel="noopener">${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px;flex-shrink:0"')}<span>${escapeHtml(label)}</span></a></div>`
+        }
+        const message = error ? '조회 중 오류가 발생했습니다.' : '원문 링크를 찾지 못했습니다.'
+        return `<div class="citation-tooltip-result-item citation-tooltip-result-empty"><span class="citation-tooltip-multi-key">[${escapeHtml(key)}]</span><span>${message}</span></div>`
+      }).join('')
     } else {
       resultEl.className = 'citation-tooltip-result citation-tooltip-result-empty'
       resultEl.textContent = '원문 링크를 찾지 못했습니다. Google Scholar 검색을 이용해보세요.'
@@ -12212,6 +12233,7 @@ async function resolveCitationTooltip() {
     resultEl.className = 'citation-tooltip-result citation-tooltip-result-empty'
     resultEl.textContent = '조회 중 오류가 발생했습니다.'
   } finally {
+    if (!isCurrentRequest()) return
     resolveBtn.disabled = false
     resolveBtn.innerHTML = `${icon('search', 12, 'style="vertical-align:-2px;margin-right:4px"')}다시 찾기`
     positionCitationTooltip()
@@ -12220,7 +12242,9 @@ async function resolveCitationTooltip() {
 
 // PDF 스크롤 중에는 인용 박스와 툴팁의 상대 위치가 계속 바뀌므로, 스크롤이
 // 시작되면 곧바로 닫는다(매 스크롤 이벤트마다 재계산하는 것보다 훨씬 가볍다).
-document.addEventListener('scroll', () => {
+document.addEventListener('scroll', (event) => {
+  // 참고문헌이 많아 툴팁 자체를 스크롤한 경우에는 열린 상태를 유지한다.
+  if (citationTooltipEl && event.target && citationTooltipEl.contains(event.target)) return
   if (citationTooltipEl && !citationTooltipEl.classList.contains('hidden')) hideCitationTooltip()
 }, true)
 

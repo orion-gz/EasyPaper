@@ -5907,6 +5907,9 @@ body.light-theme .citation-marker-box:hover {
   z-index: 200;
   width: 300px;
   max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(23, 20, 38, 0.97);
   color: var(--text-primary);
   border: 1px solid var(--border-strong);
@@ -5929,8 +5932,6 @@ body.light-theme .citation-tooltip {
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--text-secondary);
-  max-height: 110px;
-  overflow-y: auto;
   margin-bottom: 10px;
 }
 .citation-tooltip-multi-item + .citation-tooltip-multi-item {
@@ -5961,6 +5962,17 @@ body.light-theme .citation-tooltip {
 }
 .citation-tooltip-result a:hover {
   text-decoration: underline;
+}
+.citation-tooltip-result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.citation-tooltip-result-item + .citation-tooltip-result-item {
+  margin-top: 7px;
+}
+.citation-tooltip-result-item > .citation-tooltip-multi-key {
+  flex-shrink: 0;
 }
 .citation-tooltip-result-empty {
   color: var(--text-muted);
