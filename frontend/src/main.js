@@ -13,7 +13,7 @@ import { createSelectionRect, resolveDragSelection } from './library-selection.j
 import { globalAnalyticsTracker } from './readingAnalytics.js'
 import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
 import { compareDocsByLastRead } from './readPages.js'
-import { buildScholarSearchUrl } from './citationSearch.js'
+import { buildScholarSearchUrl, extractCitationTitle } from './citationSearch.js'
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -11585,8 +11585,7 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
 
   // refKeys(여러 개일 수 있음)를 받아 하나의 오버레이 박스를 그린다. 툴팁에는
   // refMap에 실제로 존재하는 키의 원문을 전부 이어붙여 보여준다("[66-69]"
-  // 같은 범위 인용이 여러 참고문헌을 한 번에 가리키는 경우를 위함). "원문
-  // 링크 찾기"/Google Scholar 검색은 첫 번째 키를 기준으로 동작한다.
+  // 같은 범위 인용이 여러 참고문헌을 한 번에 가리키는 경우를 위함).
   const addCitationBox = (charStart, charEnd, refKeys) => {
     const validKeys = refKeys.filter(k => refMap[k])
     if (validKeys.length === 0) return
@@ -12092,6 +12091,7 @@ function getOrCreateCitationTooltip() {
   el.innerHTML = `
     <div class="citation-tooltip-text"></div>
     <div class="citation-tooltip-result hidden"></div>
+    <div class="citation-tooltip-scholar-results hidden"></div>
     <div class="citation-tooltip-actions">
       <button type="button" class="citation-tooltip-action-btn citation-tooltip-resolve-btn">${icon('search', 12, 'style="vertical-align:-2px;margin-right:4px"')}원문 링크 찾기</button>
       <button type="button" class="citation-tooltip-action-btn citation-tooltip-scholar-btn">${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px"')}Google Scholar 검색</button>
@@ -12109,7 +12109,20 @@ function getOrCreateCitationTooltip() {
   })
   el.querySelector('.citation-tooltip-scholar-btn').addEventListener('click', (e) => {
     e.stopPropagation()
-    openExternalUrl(buildScholarSearchUrl(citationTooltipReferences.map(ref => ref.text)))
+    const searchableRefs = citationTooltipReferences
+      .map(ref => ({ ...ref, title: extractCitationTitle(ref.text) }))
+      .filter(ref => ref.title)
+    if (searchableRefs.length <= 1) {
+      if (searchableRefs.length) openExternalUrl(buildScholarSearchUrl(searchableRefs[0].text))
+      return
+    }
+
+    const scholarResultsEl = el.querySelector('.citation-tooltip-scholar-results')
+    scholarResultsEl.className = 'citation-tooltip-scholar-results'
+    scholarResultsEl.innerHTML = searchableRefs.map(ref =>
+      `<div class="citation-tooltip-result-item"><span class="citation-tooltip-multi-key">[${escapeHtml(ref.key)}]</span><a href="${escapeHtml(buildScholarSearchUrl(ref.text))}" target="_blank" rel="noopener">${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px;flex-shrink:0"')}<span>${escapeHtml(ref.title)}</span></a></div>`
+    ).join('')
+    positionCitationTooltip()
   })
   // resolveCitationTooltip()이 innerHTML로 채워 넣는 "원문 링크 찾기" 결과의
   // <a> 태그는 그때그때 새로 생기므로, 매번 리스너를 다는 대신 이 안정적인
@@ -12163,9 +12176,15 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl) {
   const resultEl = tooltip.querySelector('.citation-tooltip-result')
   resultEl.className = 'citation-tooltip-result hidden'
   resultEl.innerHTML = ''
+  const scholarResultsEl = tooltip.querySelector('.citation-tooltip-scholar-results')
+  scholarResultsEl.className = 'citation-tooltip-scholar-results hidden'
+  scholarResultsEl.innerHTML = ''
   const resolveBtn = tooltip.querySelector('.citation-tooltip-resolve-btn')
   resolveBtn.disabled = false
   resolveBtn.innerHTML = `${icon('search', 12, 'style="vertical-align:-2px;margin-right:4px"')}원문 링크 찾기`
+  const scholarBtn = tooltip.querySelector('.citation-tooltip-scholar-btn')
+  const scholarLabel = refKeys.length > 1 ? 'Google Scholar 개별 검색' : 'Google Scholar 검색'
+  scholarBtn.innerHTML = `${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px"')}${scholarLabel}`
 
   tooltip.classList.remove('hidden')
   positionCitationTooltip()

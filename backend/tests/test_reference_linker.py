@@ -51,8 +51,8 @@ async def test_resolve_reference_prefers_arxiv_link_when_available():
 
 
 @pytest.mark.asyncio
-async def test_resolve_reference_falls_back_through_open_access_then_primary_then_doi():
-    # open_access.oa_url 우선
+async def test_resolve_reference_prefers_canonical_primary_over_untrusted_oa_url():
+    # OpenAlex OA 연결이 잘못될 수 있으므로 canonical primary 링크 우선
     mock_response = _make_response(200, {
         "results": [{
             "title": "Some Paper",
@@ -65,9 +65,9 @@ async def test_resolve_reference_falls_back_through_open_access_then_primary_the
     })
     with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response)):
         result = await resolve_reference("Some Paper query text")
-    assert result["url"] == "https://example.com/oa.pdf"
+    assert result["url"] == "https://example.com/primary"
 
-    # open_access 없으면 primary_location
+    # primary_location이 있으면 OA 유무와 관계없이 canonical 링크 사용
     mock_response = _make_response(200, {
         "results": [{
             "title": "Some Paper",
@@ -82,7 +82,7 @@ async def test_resolve_reference_falls_back_through_open_access_then_primary_the
         result = await resolve_reference("Some Paper query text")
     assert result["url"] == "https://example.com/primary"
 
-    # 그마저 없으면 doi
+    # primary가 없으면 DOI 사용
     mock_response = _make_response(200, {
         "results": [{
             "title": "Some Paper",
@@ -146,9 +146,17 @@ def test_extract_search_query_uses_quoted_title_when_present():
     assert _extract_search_query(citation) == "Deep residual learning for image recognition"
 
 
-def test_extract_search_query_falls_back_to_full_text_without_quotes():
+def test_extract_search_query_cleans_unquoted_et_al_citation():
     citation = "A. Vaswani, N. Shazeer, N. Parmar, et al. Attention is all you need. NeurIPS, 2017."
-    assert _extract_search_query(citation) == citation
+    assert _extract_search_query(citation) == "Attention is all you need"
+
+
+def test_extract_search_query_cleans_apa_citation():
+    citation = (
+        "Smith, J., Doe, A. (2020). Reliable Widget Detection at Scale. "
+        "Journal of Widgets, 4(2), 10-20. https://doi.org/10.1234/widgets"
+    )
+    assert _extract_search_query(citation) == "Reliable Widget Detection at Scale"
 
 
 @pytest.mark.asyncio
@@ -160,3 +168,98 @@ async def test_resolve_reference_sends_extracted_title_as_search_param():
 
     sent_params = mock_get.call_args.kwargs["params"]
     assert sent_params["search"] == "The Real Title"
+
+
+@pytest.mark.asyncio
+async def test_resolve_reference_validates_top_candidates_instead_of_using_first():
+    mock_response = _make_response(200, {
+        "results": [
+            {
+                "title": "An Unrelated Survey of Neural Networks",
+                "publication_year": 2016,
+                "primary_location": {"landing_page_url": "https://example.com/wrong"},
+                "locations": [],
+            },
+            {
+                "title": "Deep Residual Learning for Image Recognition",
+                "publication_year": 2016,
+                "primary_location": {"landing_page_url": "https://example.com/correct"},
+                "locations": [],
+            },
+        ]
+    })
+    mock_get = AsyncMock(return_value=mock_response)
+    with patch("httpx.AsyncClient.get", new=mock_get):
+        result = await resolve_reference(
+            "He et al. Deep Residual Learning for Image Recognition. CVPR, 2016."
+        )
+
+    assert result["url"] == "https://example.com/correct"
+    assert mock_get.call_args.kwargs["params"]["per_page"] == 5
+
+
+@pytest.mark.asyncio
+async def test_resolve_reference_rejects_unrelated_openalex_candidates():
+    mock_response = _make_response(200, {
+        "results": [{
+            "title": "Completely Different Research Topic",
+            "publication_year": 2018,
+            "doi": "https://doi.org/10.9999/wrong",
+            "cited_by_count": 999999,
+            "primary_location": {"landing_page_url": "https://example.com/wrong"},
+            "locations": [],
+        }]
+    })
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response)):
+        result = await resolve_reference(
+            "Vaswani et al. Attention Is All You Need. NeurIPS, 2017."
+        )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_reference_uses_citation_year_to_break_title_tie():
+    mock_response = _make_response(200, {
+        "results": [
+            {
+                "title": "Shared Paper Title",
+                "publication_year": 1999,
+                "primary_location": {"landing_page_url": "https://example.com/wrong-year"},
+                "locations": [],
+            },
+            {
+                "title": "Shared Paper Title",
+                "publication_year": 2021,
+                "primary_location": {"landing_page_url": "https://example.com/right-year"},
+                "locations": [],
+            },
+        ]
+    })
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response)):
+        result = await resolve_reference("Author et al. Shared Paper Title. 2021.")
+
+    assert result["url"] == "https://example.com/right-year"
+
+
+@pytest.mark.asyncio
+async def test_resolve_reference_uses_citation_year_when_openalex_year_is_corrupt():
+    mock_response = _make_response(200, {
+        "results": [{
+            "title": "Attention Is All You Need",
+            "publication_year": 2025,
+            "cited_by_count": 6000,
+            "doi": "https://doi.org/10.fake/duplicate",
+            "locations": [{
+                "source": {"display_name": "arXiv"},
+                "landing_page_url": "https://arxiv.org/abs/1706.03762",
+            }],
+        }]
+    })
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response)):
+        result = await resolve_reference(
+            "Vaswani et al. Attention Is All You Need. NeurIPS, 2017."
+        )
+
+    assert result["url"] == "https://arxiv.org/abs/1706.03762"
+    assert result["year"] == 2017

@@ -886,7 +886,8 @@ async def resolve_library_reference(doc_id: str, ref_num: str, current_user: str
 
     from services.library import get_page_insight, save_page_insight
 
-    cached = get_page_insight(doc_id, 0, "reference_url", suffix=ref_num)
+    cache_suffix = f"v2_{ref_num}"
+    cached = get_page_insight(doc_id, 0, "reference_url", suffix=cache_suffix)
     if cached is not None:
         try:
             data = json.loads(cached)
@@ -910,7 +911,7 @@ async def resolve_library_reference(doc_id: str, ref_num: str, current_user: str
 
     from services.reference_linker import resolve_reference
     result = await resolve_reference(ref_text)
-    save_page_insight(doc_id, 0, "reference_url", json.dumps(result or {}, ensure_ascii=False), suffix=ref_num)
+    save_page_insight(doc_id, 0, "reference_url", json.dumps(result or {}, ensure_ascii=False), suffix=cache_suffix)
 
     if not result:
         raise HTTPException(status_code=404, detail="외부에서 일치하는 논문을 찾지 못했습니다.")

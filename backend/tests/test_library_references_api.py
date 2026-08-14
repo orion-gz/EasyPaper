@@ -93,3 +93,29 @@ def test_resolve_reference_other_users_document_returns_404(test_client, isolate
     _create_doc(isolated_dirs, doc_id="doc-other2", username="otheruser")
     res = test_client.get("/api/library/doc-other2/references/1")
     assert res.status_code == 404
+
+
+def test_resolve_reference_ignores_legacy_inaccurate_cache(test_client, isolated_dirs):
+    _create_doc(isolated_dirs)
+    db = isolated_dirs["db"]
+    db.db_save_page_insight(
+        "doc-1", 0, "reference_list", json.dumps({"1": "Correct paper title. 2022."})
+    )
+    db.db_save_page_insight(
+        "doc-1", 0, "reference_url",
+        json.dumps({"title": "Wrong", "url": "https://example.com/wrong", "year": 1999}),
+        suffix="1",
+    )
+
+    corrected = {
+        "title": "Correct paper title",
+        "url": "https://example.com/correct",
+        "year": 2022,
+    }
+    mock_resolve = AsyncMock(return_value=corrected)
+    with patch("services.reference_linker.resolve_reference", new=mock_resolve):
+        response = test_client.get("/api/library/doc-1/references/1")
+
+    assert response.status_code == 200
+    assert response.json()["url"] == "https://example.com/correct"
+    mock_resolve.assert_awaited_once()

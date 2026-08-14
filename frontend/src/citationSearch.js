@@ -62,9 +62,17 @@ export function extractCitationTitle(citationText) {
     .join(' ')
 }
 
-export function buildScholarSearchUrl(citationTexts) {
+function scholarUrlFromTitle(title) {
+  return `https://scholar.google.com/scholar?q=${encodeURIComponent(`"${title.replace(/"/g, '')}"`)}`
+}
+
+export function buildScholarSearchUrl(citationText) {
+  const title = extractCitationTitle(citationText)
+  return scholarUrlFromTitle(title)
+}
+
+export function buildScholarSearchUrls(citationTexts) {
   const texts = Array.isArray(citationTexts) ? citationTexts : [citationTexts]
   const titles = [...new Set(texts.map(extractCitationTitle).filter(Boolean))]
-  const query = titles.map(title => `"${title.replace(/"/g, '')}"`).join(' OR ')
-  return `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`
+  return titles.map(scholarUrlFromTitle)
 }
