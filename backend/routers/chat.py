@@ -3,7 +3,7 @@ import hashlib
 import re
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from routers.upload import sessions, ensure_session, require_session_owner
@@ -26,17 +26,22 @@ _QUOTE_IMAGE_MARKER_RE = re.compile(r'^\[인용된 이미지[^\]|]*\|([A-Za-z0-9
 
 router = APIRouter()
 
+MAX_CHAT_MESSAGES = 100
+MAX_CHAT_MESSAGE_CHARS = 100_000
+MAX_CHAT_IMAGE_BASE64_CHARS = 16 * 1024 * 1024
+
+
 class ChatMessage(BaseModel):
-    role: str
-    content: str
+    role: str = Field(max_length=32)
+    content: str = Field(max_length=MAX_CHAT_MESSAGE_CHARS)
 
 class ChatRequest(BaseModel):
-    session_id: str
-    messages: List[ChatMessage]
+    session_id: str = Field(min_length=1, max_length=128)
+    messages: List[ChatMessage] = Field(max_length=MAX_CHAT_MESSAGES)
     # 캡처 모드로 첨부한 이미지의 raw base64(PNG, data URL 접두사 없음). 있으면
     # 이번 질문(messages의 마지막 user 메시지)에 실제로 첨부해 vision 지원
     # provider(openai/gemini/claude)가 캡처 영역을 직접 보고 답할 수 있게 한다.
-    image_base64: Optional[str] = None
+    image_base64: Optional[str] = Field(default=None, max_length=MAX_CHAT_IMAGE_BASE64_CHARS)
 
 # ── 여러 논문 간 비교 채팅 ──────────────────────────────
 MIN_COMPARE_DOCS = 2
@@ -47,7 +52,7 @@ COMPARE_TOTAL_CONTEXT_CHARS = 60000
 
 class CompareChatRequest(BaseModel):
     doc_ids: List[str]
-    messages: List[ChatMessage]
+    messages: List[ChatMessage] = Field(max_length=MAX_CHAT_MESSAGES)
 
 
 def _build_compare_id(doc_ids: List[str]) -> str:
