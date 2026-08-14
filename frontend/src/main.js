@@ -249,6 +249,7 @@ const fileInput         = $('file-input')
 const libUploadBtn      = $('lib-upload-btn')
 const libraryGrid       = $('library-grid')
 const libraryCategoryFilters = $('library-category-filters')
+const libraryCategoryFilterToggle = $('library-category-filter-toggle')
 const librarySearchInput = $('library-search-input')
 const librarySearchClearBtn = $('library-search-clear-btn')
 const librarySearchStatus = $('library-search-status')
@@ -4501,8 +4502,19 @@ if (workspaceSearchInput) {
   })
 }
 
-
 let activeCategoryFilter = 'ALL'
+const LIBRARY_FILTERS_COLLAPSED_KEY = 'easypaper_library_category_filters_collapsed'
+let libraryCategoryFiltersCollapsed = localStorage.getItem(LIBRARY_FILTERS_COLLAPSED_KEY) === 'true'
+
+function updateLibraryCategoryFilterVisibility(hasCategories = libraryCategoryFilters?.childElementCount > 0) {
+  if (!libraryCategoryFilters || !libraryCategoryFilterToggle) return
+  libraryCategoryFilterToggle.classList.toggle('hidden', !hasCategories)
+  libraryCategoryFilters.classList.toggle('hidden', hasCategories && libraryCategoryFiltersCollapsed)
+  libraryCategoryFilterToggle.setAttribute('aria-expanded', String(!libraryCategoryFiltersCollapsed))
+  libraryCategoryFilterToggle.setAttribute('aria-label', libraryCategoryFiltersCollapsed ? '카테고리 필터 펼치기' : '카테고리 필터 접기')
+  libraryCategoryFilterToggle.title = libraryCategoryFiltersCollapsed ? '카테고리 필터 펼치기' : '카테고리 필터 접기'
+  libraryCategoryFilterToggle.innerHTML = `${icon(libraryCategoryFiltersCollapsed ? 'chevronDown' : 'chevronUp', 13)}<span>${libraryCategoryFiltersCollapsed ? '필터 펼치기' : '필터 접기'}</span>`
+}
 
 // ── 여러 논문 비교 채팅: 라이브러리 선택 모드 ──────────────
 // ── 라이브러리 논문 선택 모드 & 하단 플로팅 알약 툴바 ──
@@ -5881,6 +5893,12 @@ function ensureLibraryChrome() {
   if (libraryChromeReady) return
   libraryChromeReady = true
 
+  libraryCategoryFilterToggle?.addEventListener('click', () => {
+    libraryCategoryFiltersCollapsed = !libraryCategoryFiltersCollapsed
+    localStorage.setItem(LIBRARY_FILTERS_COLLAPSED_KEY, String(libraryCategoryFiltersCollapsed))
+    updateLibraryCategoryFilterVisibility()
+  })
+
   if (librarySearchBox && !$('library-status-tabs')) {
     librarySearchBox.insertAdjacentHTML('beforebegin', `
       <div class="library-toolbar-row">
@@ -5938,6 +5956,7 @@ async function renderLibrary() {
 
   libraryGrid.innerHTML = ''
   libraryCategoryFilters.innerHTML = ''
+  updateLibraryCategoryFilterVisibility(false)
   try {
     let data
     if (state.currentLibraryTab === 'trash') {
@@ -6017,6 +6036,7 @@ async function renderLibrary() {
         libraryCategoryFilters.appendChild(btn)
       })
     }
+    updateLibraryCategoryFilterVisibility(uniqueCategories.length > 0)
 
     // Initial card rendering
     filterLibraryCards(docs)
