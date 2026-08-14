@@ -75,7 +75,13 @@ export async function mockBaseRoutes(page, { documents = [], folders = [] } = {}
 /** 로그인 상태로 앱을 열고(온보딩은 건너뜀) 라이브러리 화면이 뜰 때까지 기다린다. */
 export async function gotoApp(page) {
   await page.goto('/index.html')
-  await page.evaluate(() => localStorage.setItem('easypaper_onboarding_seen', '1'))
+  await page.evaluate(() => {
+    localStorage.setItem('easypaper_onboarding_seen', '1')
+    localStorage.setItem('easypaper_disable_primer', 'true')
+  })
   await page.reload()
-  await page.waitForTimeout(600)
+  const libraryNav = page.locator('.sidebar-nav-item[data-page="library"]')
+  await libraryNav.waitFor({ state: 'visible' })
+  await libraryNav.click()
+  await page.locator('#library-screen.active').waitFor()
 }
