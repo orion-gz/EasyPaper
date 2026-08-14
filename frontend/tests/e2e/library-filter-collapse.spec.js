@@ -18,10 +18,20 @@ test('category filter chips stay collapsed after reload', async ({ page }) => {
   const toggle = page.locator('#library-category-filter-toggle')
   await expect(filters).toBeVisible()
   await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  const expandedPositions = await Promise.all([filters.boundingBox(), toggle.boundingBox()])
+  expect(expandedPositions[1].x - (expandedPositions[0].x + expandedPositions[0].width)).toBeLessThanOrEqual(4)
 
   await toggle.click()
   await expect(filters).toBeHidden()
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  const collapsedPositions = await Promise.all([
+    page.locator('.library-category-filter-group').boundingBox(),
+    toggle.boundingBox(),
+  ])
+  expect(
+    collapsedPositions[0].x + collapsedPositions[0].width
+      - (collapsedPositions[1].x + collapsedPositions[1].width),
+  ).toBeLessThanOrEqual(1)
   await expect.poll(() => page.evaluate(() => localStorage.getItem('easypaper_library_category_filters_collapsed'))).toBe('true')
 
   await page.reload()
