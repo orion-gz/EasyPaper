@@ -1873,6 +1873,10 @@ const PROVIDER_CONFIG = [
   {
     id: 'antigravity', label: 'Antigravity', icon: icon('zap', 13),
     models: [
+      // Gemini 3.7 Flash
+      { value: 'Gemini 3.7 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.7 Flash' },
+      { value: 'Gemini 3.7 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.7 Flash' },
+      { value: 'Gemini 3.7 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.7 Flash' },
       // Gemini 3.6 Flash
       { value: 'Gemini 3.6 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.6 Flash' },
       { value: 'Gemini 3.6 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.6 Flash' },
