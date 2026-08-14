@@ -344,11 +344,19 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
     update_translation_prompt_template(data.translation_prompt_template)
 
     if restart_needed:
+        if venv_manager.is_packaged_desktop():
+            return {
+                "message": f"'{pdf_parser_engine}' 엔진 적용을 위해 앱을 재시작합니다. 진행 중인 번역이 중단될 수 있습니다.",
+                "restarting": True,
+                "restart_mode": "desktop_app",
+            }
+
         import asyncio
         asyncio.create_task(_restart_server_process(get_project_root()))
         return {
             "message": f"'{pdf_parser_engine}' 엔진 적용을 위해 서버가 잠시 후 재시작됩니다. 진행 중인 번역이 중단될 수 있습니다.",
             "restarting": True,
+            "restart_mode": "server",
         }
 
     return {"message": "시스템 설정이 성공적으로 변경되었습니다.", "restarting": False}
@@ -378,6 +386,18 @@ def _is_package_installed_in_venv(venv_dir: str, module_name: str) -> bool:
     return any(os.path.isdir(os.path.join(sp, module_name)) for sp in site_packages_dirs)
 
 
+def _is_pdf_parser_installed(engine: str) -> bool:
+    if venv_manager.is_packaged_desktop():
+        return venv_manager.is_parser_installed(engine)
+    if engine == "pdfplumber":
+        return _is_package_installed("pdfplumber")
+    venv_dir = (
+        venv_manager.MINERU_VENV if engine == "mineru"
+        else venv_manager.DEFAULT_VENV
+    )
+    return _is_package_installed_in_venv(venv_dir, engine)
+
+
 @router.get("/settings/pdf-parsers")
 async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
     current_engine = get_pdf_parser_engine()
@@ -399,7 +419,7 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
             "pros": "표 구조 및 그래픽 좌표 추적 우수",
             "cons": "PyMuPDF보다 약간 느림",
             "size_info": "약 15 MB",
-            "installed": _is_package_installed("pdfplumber"),
+            "installed": _is_pdf_parser_installed("pdfplumber"),
             "install_package": "pdfplumber"
         },
         {
@@ -409,7 +429,7 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
             "pros": "수식을 LaTeX 변환, 정교한 오버레이 크롭",
             "cons": "PyTorch/Vision 포함 (대용량), 처리 속도 느림",
             "size_info": "약 2.5 GB (PyTorch & Vision 모델 포함)",
-            "installed": _is_package_installed_in_venv(venv_manager.DEFAULT_VENV, "marker"),
+            "installed": _is_pdf_parser_installed("marker"),
             "install_package": "marker-pdf"
         },
         {
@@ -417,9 +437,9 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
             "name": "MinerU",
             "description": "대규모 학술 서적 및 논문 레이아웃 분석 AI 파서",
             "pros": "정밀한 레이아웃/표/수식 세그멘테이션",
-            "cons": "대용량 패키지, 높은 CPU/GPU 및 메모리 소모. marker와 의존성이 충돌해 전용 가상환경(.venv-mineru)에 별도 설치되며, 이 엔진으로 전환/이탈 시 서버가 재시작됩니다.",
+            "cons": "대용량 패키지, 높은 CPU/GPU 및 메모리 소모. marker와 의존성이 충돌해 격리된 환경에 별도 설치되며, 이 엔진으로 전환/이탈 시 서버 또는 데스크탑 앱이 재시작됩니다.",
             "size_info": "약 3.0 GB (전용 가상환경, Layout/Formula/OCR 모델 포함)",
-            "installed": _is_package_installed_in_venv(venv_manager.MINERU_VENV, "mineru"),
+            "installed": _is_pdf_parser_installed("mineru"),
             "install_package": "mineru[pipeline]"
         }
     ]
@@ -436,65 +456,81 @@ async def install_pdf_parser_stream(
 ):
     import asyncio
 
-    package_map = {
-        "pdfplumber": "pdfplumber",
-        "marker": "marker-pdf",
-        "mineru": "mineru[pipeline]"
-    }
-
-    pkg_name = package_map.get(parser_id)
-    if not pkg_name:
+    package = venv_manager.PARSER_PACKAGES.get(parser_id)
+    if not package:
         raise HTTPException(status_code=400, detail="지원되지 않는 파서 엔진입니다.")
+    pkg_name = package[0]
 
-    # marker/mineru는 transformers 버전 요구사항이 정반대라 같은 venv에 절대
-    # 공존할 수 없다(런타임에서 실제 크래시로 확인됨) - mineru만 전용
-    # venv(.venv-mineru)에 설치한다. pdfplumber/marker는 기본 venv 그대로.
-    target_venv = venv_manager.MINERU_VENV if parser_id == "mineru" else venv_manager.DEFAULT_VENV
+    # PyInstaller sidecar는 Python 인터프리터가 아니므로 -m venv/-m pip를
+    # 실행할 수 없고, 앱 번들 내부 경로는 macOS/Windows에서 읽기 전용이다.
+    # 데스크탑에서는 번들 pip 전용 모드로 sidecar를 다시 실행해 사용자 앱
+    # 데이터 폴더에 엔진별 패키지를 설치한다. 일반 서버는 기존 venv를 쓴다.
+    packaged_desktop = venv_manager.is_packaged_desktop()
+    target_venv = (
+        venv_manager.MINERU_VENV if parser_id == "mineru"
+        else venv_manager.DEFAULT_VENV
+    )
 
     async def event_stream():
-        if not venv_manager.is_venv_available(target_venv):
-            yield f"data: {json.dumps({'status': 'progress', 'line': f'전용 가상환경을 새로 만듭니다: {target_venv}'})}\n\n"
-            proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "venv", target_venv,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, stdin=asyncio.subprocess.DEVNULL
-            )
-            async for text in _stream_subprocess_lines(proc):
-                yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
-            await proc.wait()
-            if proc.returncode != 0:
-                yield f"data: {json.dumps({'status': 'error', 'message': '가상환경 생성 실패'})}\n\n"
-                return
+        if packaged_desktop:
+            install_dir = venv_manager.parser_packages_dir(parser_id)
+            yield f"data: {json.dumps({'status': 'progress', 'line': f'사용자 앱 데이터 폴더에 {pkg_name} 설치를 시작합니다: {install_dir}'})}\n\n"
+            cmd = venv_manager.parser_install_command(parser_id)
+        else:
+            if not venv_manager.is_venv_available(target_venv):
+                yield f"data: {json.dumps({'status': 'progress', 'line': f'전용 가상환경을 새로 만듭니다: {target_venv}'})}\n\n"
+                proc = await asyncio.create_subprocess_exec(
+                    sys.executable, "-m", "venv", target_venv,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    stdin=asyncio.subprocess.DEVNULL,
+                )
+                async for text in _stream_subprocess_lines(proc):
+                    yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
+                await proc.wait()
+                if proc.returncode != 0:
+                    yield f"data: {json.dumps({'status': 'error', 'message': '가상환경 생성 실패'})}\n\n"
+                    return
 
-            # 이 venv가 나중에 엔진 전환 시 앱 전체를 그대로 구동하게 되므로,
-            # 새 패키지 하나만 있어서는 안 되고 fastapi 등 기본 의존성도 필요하다.
-            requirements_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "requirements.txt")
-            yield f"data: {json.dumps({'status': 'progress', 'line': '기본 의존성(requirements.txt) 설치 중...'})}\n\n"
-            proc = await asyncio.create_subprocess_exec(
-                venv_manager.venv_python(target_venv), "-u", "-m", "pip", "install", "-r", requirements_path,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, stdin=asyncio.subprocess.DEVNULL
-            )
-            async for text in _stream_subprocess_lines(proc):
-                yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
-            await proc.wait()
-            if proc.returncode != 0:
-                yield f"data: {json.dumps({'status': 'error', 'message': '기본 의존성 설치 실패'})}\n\n"
-                return
+                requirements_path = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "requirements.txt",
+                )
+                yield f"data: {json.dumps({'status': 'progress', 'line': '기본 의존성(requirements.txt) 설치 중...'})}\n\n"
+                proc = await asyncio.create_subprocess_exec(
+                    venv_manager.venv_python(target_venv), "-u", "-m", "pip",
+                    "install", "-r", requirements_path,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    stdin=asyncio.subprocess.DEVNULL,
+                )
+                async for text in _stream_subprocess_lines(proc):
+                    yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
+                await proc.wait()
+                if proc.returncode != 0:
+                    yield f"data: {json.dumps({'status': 'error', 'message': '기본 의존성 설치 실패'})}\n\n"
+                    return
 
-        python_bin = venv_manager.venv_python(target_venv)
-        yield f"data: {json.dumps({'status': 'progress', 'line': f'가상환경({python_bin})에 {pkg_name} 설치를 시작합니다...'})}\n\n"
-        try:
+            python_bin = venv_manager.venv_python(target_venv)
+            yield f"data: {json.dumps({'status': 'progress', 'line': f'가상환경({python_bin})에 {pkg_name} 설치를 시작합니다...'})}\n\n"
             cmd = [python_bin, "-u", "-m", "pip", "install", pkg_name]
+
+        try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
-                stdin=asyncio.subprocess.DEVNULL
+                stdin=asyncio.subprocess.DEVNULL,
             )
             async for text in _stream_subprocess_lines(proc):
                 yield f"data: {json.dumps({'status': 'progress', 'line': text})}\n\n"
             await proc.wait()
-            if proc.returncode == 0:
+            if proc.returncode == 0 and (
+                not packaged_desktop or venv_manager.is_parser_installed(parser_id)
+            ):
                 yield f"data: {json.dumps({'status': 'success', 'message': f'{pkg_name} 설치가 정상적으로 완료되었습니다.'})}\n\n"
+            elif proc.returncode == 0:
+                yield f"data: {json.dumps({'status': 'error', 'message': '설치 프로세스는 완료됐지만 패키지 검증에 실패했습니다.'})}\n\n"
             else:
                 yield f"data: {json.dumps({'status': 'error', 'message': f'설치가 오류 코드 {proc.returncode}로 종료되었습니다.'})}\n\n"
         except Exception as e:
@@ -507,7 +543,7 @@ async def install_pdf_parser_stream(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
-        }
+        },
     )
 
 @router.post("/settings/uninstall-pdf-parser")
@@ -520,29 +556,37 @@ async def uninstall_pdf_parser(
 
     body = await request.json()
     parser_id = body.get("parser_id", "")
-
-    package_map = {
-        "pdfplumber": "pdfplumber",
-        "marker": "marker-pdf",
-        "mineru": "mineru"
-    }
-
-    pkg_name = package_map.get(parser_id)
-    if not pkg_name:
+    package = venv_manager.PARSER_PACKAGES.get(parser_id)
+    if not package:
         raise HTTPException(status_code=400, detail="지원되지 않는 파서 엔진입니다.")
+    # pip install에는 extras가 필요하지만 uninstall은 배포 패키지 이름만
+    # 받아야 한다 (예: mineru[pipeline] 설치, mineru 삭제).
+    pkg_name = package[0].split("[", 1)[0]
 
-    target_venv = venv_manager.MINERU_VENV if parser_id == "mineru" else venv_manager.DEFAULT_VENV
-    if not venv_manager.is_venv_available(target_venv):
-        raise HTTPException(status_code=400, detail="설치되어 있지 않습니다.")
+    if venv_manager.is_packaged_desktop():
+        try:
+            venv_manager.uninstall_packaged_parser(parser_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=400, detail="설치되어 있지 않습니다.")
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"삭제 실패: {exc}")
+    else:
+        target_venv = (
+            venv_manager.MINERU_VENV if parser_id == "mineru"
+            else venv_manager.DEFAULT_VENV
+        )
+        if not venv_manager.is_venv_available(target_venv):
+            raise HTTPException(status_code=400, detail="설치되어 있지 않습니다.")
 
-    python_bin = venv_manager.venv_python(target_venv)
-    result = subprocess.run(
-        [python_bin, "-m", "pip", "uninstall", "-y", pkg_name],
-        capture_output=True, text=True
-    )
-
-    if result.returncode != 0:
-        raise HTTPException(status_code=500, detail=f"삭제 실패: {result.stderr.strip() or result.stdout.strip()}")
+        python_bin = venv_manager.venv_python(target_venv)
+        result = subprocess.run(
+            [python_bin, "-m", "pip", "uninstall", "-y", pkg_name],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise HTTPException(status_code=500, detail=f"삭제 실패: {detail}")
 
     # 삭제한 파서가 현재 엔진이면 pymupdf로 복귀
     from config import update_system_settings
@@ -563,11 +607,10 @@ async def uninstall_pdf_parser(
             gemini_api_key=cfg.GEMINI_API_KEY,
             claude_api_key=cfg.CLAUDE_API_KEY,
             openalex_mailto=cfg.OPENALEX_MAILTO,
-            pdf_parser_engine="pymupdf"
+            pdf_parser_engine="pymupdf",
         )
 
     return {"status": "success", "message": f"{pkg_name} 패키지가 삭제되었습니다."}
-
 
 
 @router.post("/settings/clear-pages-cache")

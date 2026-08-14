@@ -2420,22 +2420,32 @@ const settingLibraryPicker = new ProviderModelPicker($('setting-library-provider
   onChange: () => { updateSettingsUIVisibility(); autoSaveSystemSettings() }
 })
 
-// marker와 mineru는 필요한 파이썬 패키지 버전이 정반대라(transformers 5.x
-// 이상/미만) 같은 서버 프로세스에 공존할 수 없다 - mineru는 전용
-// 가상환경에서 돌고, 이 둘 사이를 전환하면 백엔드가 스스로 재시작해서
-// 올바른 가상환경으로 다시 올라온다. 재시작이 필요할 만한 전환에서만
-// 사용자에게 미리 경고한다(진행 중인 번역이 끊길 수 있음).
+// marker와 mineru는 상충하는 transformers 버전이 필요하다. 서버 배포는 venv,
+// Tauri 배포는 앱 데이터의 엔진별 패키지 폴더로 격리한다. Tauri에서는
+// 어떤 엔진 전환도 앱을 재실행해 선택 엔진의 의존성만 로드한다.
 let currentSavedPdfEngine = 'pymupdf'
 
 // autoSaveSystemSettings 결과에 restarting이 담겨 있으면(설정 저장 API가
 // 재시작이 트리거됐음을 알려준 것) 재시작 완료를 기다렸다가 새로고침한다.
 async function maybeHandlePdfEngineRestart(res) {
-  if (res && res.restarting) {
-    showToast(res.message || 'PDF 파서 엔진 적용을 위해 서버가 재시작됩니다...', 'info')
-    await waitForServerRestartAndReload()
-    return true
+  if (!res || !res.restarting) return false
+
+  showToast(res.message || 'PDF 파서 엔진 적용을 위해 재시작합니다...', 'info')
+  if (res.restart_mode === 'desktop_app' && isTauriDesktop) {
+    try {
+      // 앱 종료 이벤트에서 현재 sidecar를 정리한 뒤 새 프로세스를 시작한다.
+      const { relaunch } = await import('@tauri-apps/plugin-process')
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await relaunch()
+      return true
+    } catch (err) {
+      showToast('앱 재시작 실패: ' + (err.message || err), 'error')
+      return false
+    }
   }
-  return false
+
+  await waitForServerRestartAndReload()
+  return true
 }
 
 const settingPdfParserPicker = new PdfParserPicker($('setting-pdf-parser-picker'), {
@@ -2445,10 +2455,10 @@ const settingPdfParserPicker = new PdfParserPicker($('setting-pdf-parser-picker'
     // 설치된 파서만 즉시 엔진 변경 저장. 미설치 파서는 카드의 [패키지 설치] 버튼을 눌러야 함.
     if (parser && parser.installed) {
       const needsRestartWarning = selectedId !== currentSavedPdfEngine &&
-        (selectedId === 'mineru' || currentSavedPdfEngine === 'mineru')
+        (isTauriDesktop || selectedId === 'mineru' || currentSavedPdfEngine === 'mineru')
       if (needsRestartWarning) {
         const ok = await showCustomConfirm(
-          `[${parser.name}](으)로 전환하면 서버가 재시작됩니다(약 3~5초 소요). 지금 진행 중인 번역이 있다면 중단될 수 있습니다. 계속할까요?`,
+          `[${parser.name}](으)로 전환하면 ${isTauriDesktop ? '앱' : '서버'}이 재시작됩니다(약 3~5초 소요). 지금 진행 중인 번역이 있다면 중단될 수 있습니다. 계속할까요?`,
           { title: 'PDF 파서 엔진 전환', confirmText: '전환 및 재시작', danger: true }
         )
         if (!ok) {
