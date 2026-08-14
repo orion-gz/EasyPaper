@@ -15,6 +15,7 @@
 import '../styles/notes.css'
 import { fetchLibrary, fetchLibraryAnnotations, fetchLibraryMemos, fetchPrimer } from '../library.js'
 import { icon } from '../icons.js'
+import { lastActivityIso } from '../readPages.js'
 import { formatTranslationHtml, formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
 
 let renderGeneration = 0
@@ -52,6 +53,7 @@ function escapeHtml(str) {
 // ── 모듈 상태 (페이지를 재방문해도 마지막 선택/탭/검색어를 기억한다) ──
 let allPapers = []          // PaperEntry[] - renderNotesPage()마다 새로 집계
 let filterMode = 'all'      // 'all' | 'hasNotes' | 'favorites'
+let sortMode = 'recent'     // 'recent' | 'title' | 'uploaded'
 let searchQuery = ''
 let selectedDocId = null
 let activeSubtab = 'summary' // 'summary' | 'memo' | 'highlight' | 'underline' | 'all'
@@ -179,14 +181,40 @@ function totalCount(entry) {
 }
 
 // ── 좌측 논문 목록 ────────────────────────────────────────────────────
+function timestamp(iso) {
+  const value = new Date(iso || 0).getTime()
+  return Number.isNaN(value) ? 0 : value
+}
+
+function comparePaperTitles(a, b) {
+  return (a.title || '').localeCompare(b.title || '', 'ko')
+}
+
+function sortPapers(entries) {
+  return entries.slice().sort((a, b) => {
+    if (sortMode === 'title') return comparePaperTitles(a, b)
+
+    const aDoc = a.doc || {}
+    const bDoc = b.doc || {}
+    const aIso = sortMode === 'uploaded'
+      ? aDoc.created_at
+      : lastActivityIso(aDoc.metadata || {}, aDoc.created_at)
+    const bIso = sortMode === 'uploaded'
+      ? bDoc.created_at
+      : lastActivityIso(bDoc.metadata || {}, bDoc.created_at)
+    return timestamp(bIso) - timestamp(aIso) || comparePaperTitles(a, b)
+  })
+}
+
 function getFilteredPapers() {
   const q = searchQuery.trim().toLowerCase()
-  return allPapers.filter(entry => {
+  const filtered = allPapers.filter(entry => {
     if (filterMode === 'hasNotes' && totalCount(entry) === 0) return false
     if (filterMode === 'favorites' && !entry.favorite) return false
     if (!q) return true
     return entry.title.toLowerCase().includes(q) || (entry.author || '').toLowerCase().includes(q)
   })
+  return sortPapers(filtered)
 }
 
 function renderThumb(docId, sizePx) {
@@ -487,6 +515,15 @@ function attachListeners(root) {
     })
   }
 
+  const sortSelect = root.querySelector('.notes-sort-select')
+  if (sortSelect) {
+    sortSelect.value = sortMode
+    sortSelect.addEventListener('change', () => {
+      sortMode = sortSelect.value
+      renderPaperList(root)
+    })
+  }
+
   root.querySelectorAll('.notes-filter-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.filter
@@ -575,6 +612,14 @@ function shellHtml() {
             ${icon('search', 14)}
             <input type="text" class="notes-search-input" placeholder="논문 검색..." />
           </div>
+          <div class="notes-sort-box">
+            <select class="notes-sort-select" aria-label="논문 정렬 기준">
+              <option value="recent">최근 읽은순</option>
+              <option value="title">제목순</option>
+              <option value="uploaded">업로드순</option>
+            </select>
+            <span class="notes-sort-icon">${icon('chevronDown', 12)}</span>
+          </div>
           <div class="notes-filter-tabs">
             <button type="button" class="notes-filter-tab-btn active" data-filter="all">전체 <span class="notes-filter-count-all">0</span></button>
             <button type="button" class="notes-filter-tab-btn" data-filter="hasNotes">메모 있음 <span class="notes-filter-count-hasnotes">0</span></button>
@@ -632,7 +677,7 @@ export async function renderNotesPage() {
   allPapers = loadedPapers
 
   if (!selectedDocId || !allPapers.some(e => e.doc.id === selectedDocId)) {
-    selectedDocId = allPapers[0].doc.id
+    selectedDocId = sortPapers(allPapers)[0].doc.id
   }
 
   // 필터 탭 활성 상태를 모듈 상태와 동기화(재방문 시 이전 필터 유지)

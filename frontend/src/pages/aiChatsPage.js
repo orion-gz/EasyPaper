@@ -1,6 +1,6 @@
 // AI Chats 워크스페이스 페이지 — 논문별(단일 논문) AI 어시스턴트 채팅 세션 목록
 // 검색 / 탭 필터 / 정렬 / 표·카드 보기 전환 / 페이지네이션을 지원한다.
-// 데이터 원본: getChatSessionsAPI() → { sessions: [{ doc_id, title, last_message_at }] }
+// 데이터 원본: getChatSessionsAPI() → { sessions: [{ doc_id, title, created_at, last_message_at }] }
 // "최근 메시지" 미리보기는 세션 목록 API에 없으므로, 세션별로 getChatHistoryAPI(doc_id)를
 // (동시 실행 개수를 제한하며) 추가로 불러와 마지막 메시지 내용을 채운다.
 
@@ -86,6 +86,7 @@ export async function renderAiChatsPage() {
             <div id="aic-sort-menu" class="aic-sort-menu hidden">
               <button type="button" class="aic-sort-option active" data-sort="updated">최근 업데이트순</button>
               <button type="button" class="aic-sort-option" data-sort="title">제목순 (가나다)</button>
+              <button type="button" class="aic-sort-option" data-sort="uploaded">업로드순</button>
             </div>
           </div>
           <div class="aic-view-toggle" id="aic-view-toggle">
@@ -145,6 +146,8 @@ export async function renderAiChatsPage() {
     list = list.slice()
     if (state.sortMode === 'title') {
       list.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ko'))
+    } else if (state.sortMode === 'uploaded') {
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
     } else {
       list.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0))
     }

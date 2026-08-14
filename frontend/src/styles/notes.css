@@ -74,6 +74,37 @@
 .notes-search-input:focus { border-color: var(--control-accent); }
 .notes-search-input::placeholder { color: var(--text-muted); }
 
+.notes-sort-box {
+  flex-shrink: 0;
+  position: relative;
+  margin: 0 16px 12px;
+}
+.notes-sort-select {
+  width: 100%;
+  appearance: none;
+  padding: 8px 30px 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.notes-sort-select:hover,
+.notes-sort-select:focus { border-color: var(--control-accent); color: var(--text-primary); }
+.notes-sort-icon {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  display: flex;
+  color: var(--text-muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
 .notes-filter-tabs {
   flex-shrink: 0;
   display: flex;
