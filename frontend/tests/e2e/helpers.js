@@ -44,6 +44,17 @@ export async function mockBaseRoutes(page, { documents = [], folders = [] } = {}
     if (url.includes('/api/settings/post-update-notice')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ show: false, version: 'test0000', version_date: '2026-01-01', changelog: [] }) })
     }
+    const emptyLibraryViews = {
+      '/api/library/dashboard': { stats: {}, recent_papers: [] },
+      '/api/library/graph': { nodes: [], edges: [] },
+      '/api/library/timeline': { events: [] },
+      '/api/library/reading-stats': { total_seconds: 0, total_seconds_by_day: {}, paper_stats: [] },
+      '/api/library/reading-analytics-summary': { paper_stats: {} },
+    }
+    const emptyLibraryView = emptyLibraryViews[new URL(url).pathname]
+    if (emptyLibraryView) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(emptyLibraryView) })
+    }
     if (url.includes('/api/library/folders')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ folders }) })
     }
@@ -73,15 +84,17 @@ export async function mockBaseRoutes(page, { documents = [], folders = [] } = {}
 }
 
 /** 로그인 상태로 앱을 열고(온보딩은 건너뜀) 라이브러리 화면이 뜰 때까지 기다린다. */
-export async function gotoApp(page) {
+export async function gotoApp(page, { navigateToLibrary = true } = {}) {
   await page.goto('/index.html')
   await page.evaluate(() => {
     localStorage.setItem('easypaper_onboarding_seen', '1')
     localStorage.setItem('easypaper_disable_primer', 'true')
   })
   await page.reload()
-  const libraryNav = page.locator('.sidebar-nav-item[data-page="library"]')
-  await libraryNav.waitFor({ state: 'visible' })
-  await libraryNav.click()
-  await page.locator('#library-screen.active').waitFor()
+  if (navigateToLibrary) {
+    const libraryNav = page.locator('.sidebar-nav-item[data-page="library"]')
+    await libraryNav.waitFor({ state: 'visible' })
+    await libraryNav.click()
+    await page.locator('#library-screen.active').waitFor()
+  }
 }

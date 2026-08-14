@@ -31,6 +31,7 @@ test('내보내기 버튼 클릭 시 형식 선택 메뉴가 뜨고, PDF 선택 
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1200)
 
+  await page.click('#toolbar-kebab-btn')
   await page.click('#export-btn')
   await expect(page.locator('#export-format-menu')).not.toHaveClass(/hidden/)
   await expect(page.getByText('마크다운 (.md)')).toBeVisible()
@@ -57,6 +58,7 @@ test('메뉴 바깥을 클릭하면 형식 선택 메뉴가 닫힌다', async ({
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1000)
 
+  await page.click('#toolbar-kebab-btn')
   await page.click('#export-btn')
   await expect(page.locator('#export-format-menu')).not.toHaveClass(/hidden/)
 
