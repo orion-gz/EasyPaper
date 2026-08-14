@@ -97,7 +97,7 @@ def create_session_token(username: str, ttl_seconds: int = SESSION_TTL_DEFAULT_S
 
 def verify_session_token(token: str) -> bool:
     try:
-        parts = token.split(':')
+        parts = token.rsplit(':', 2)
         if len(parts) != 3:
             return False
         username, expires_str, signature = parts
@@ -120,7 +120,7 @@ async def get_current_user(request: Request) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="로그인이 필요합니다.",
         )
-    return token.split(':')[0]
+    return token.rsplit(':', 2)[0]
 
 
 async def require_admin_user(current_user: str = Depends(get_current_user)) -> str:
