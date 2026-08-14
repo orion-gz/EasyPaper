@@ -55,6 +55,28 @@ export function hasReadActivity(meta) {
   return Boolean(meta?.last_read_at || meta?.read_at)
 }
 
+// Library의 "최근 읽은 순"은 업로드 시각을 읽기 활동으로 간주하지 않는다.
+// last_read_at/read_at 중 유효한 최신 시각을 사용하고, 읽은 기록이 없는 문서는
+// -Infinity로 두어 목록 뒤로 보낸다.
+export function lastReadTimestamp(meta) {
+  const timestamps = [meta?.last_read_at, meta?.read_at]
+    .map(value => Date.parse(value))
+    .filter(Number.isFinite)
+  return timestamps.length > 0 ? Math.max(...timestamps) : -Infinity
+}
+
+export function compareDocsByLastRead(a, b) {
+  const aReadAt = lastReadTimestamp(a?.metadata)
+  const bReadAt = lastReadTimestamp(b?.metadata)
+  if (aReadAt !== bReadAt) return bReadAt > aReadAt ? 1 : -1
+
+  const createdTimestamp = doc => {
+    const value = Date.parse(doc?.created_at)
+    return Number.isFinite(value) ? value : -Infinity
+  }
+  return createdTimestamp(b) - createdTimestamp(a)
+}
+
 // ISO 타임스탬프 문자열을 사용자 로컬 시간대 자정 기준 "YYYY-MM-DD" 날짜 키로 변환한다.
 // 단순 .slice(0, 10)을 하면 UTC 날짜가 잘려 나와 한국 시간(KST) 등에서 9시간 시차
 // 어긋남이 발생하므로, local Date 객체의 연/월/일을 사용한다.
