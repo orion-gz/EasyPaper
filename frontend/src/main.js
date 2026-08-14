@@ -8,11 +8,6 @@ import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTransla
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { icon } from './icons.js'
-import { renderKnowledgeGraph, highlightSearchMatches } from './knowledgeGraph.js'
-import { renderDashboardPage } from './pages/dashboardPage.js'
-import { renderReadingHistoryPage } from './pages/readingHistoryPage.js'
-import { renderAiChatsPage } from './pages/aiChatsPage.js'
-import { renderNotesPage } from './pages/notesPage.js'
 import { formatTranslationHtml, applyKatexToElement } from './textFormat.js'
 import { createSelectionRect, resolveDragSelection } from './library-selection.js'
 import { globalAnalyticsTracker } from './readingAnalytics.js'
@@ -4436,14 +4431,18 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
     syncLibraryTabUI('archive')
     await renderLibrary()
   } else if (pageId === 'chats') {
+    const { renderAiChatsPage } = await import('./pages/aiChatsPage.js')
     await renderAiChatsPage()
   } else if (pageId === 'notes') {
+    const { renderNotesPage } = await import('./pages/notesPage.js')
     await renderNotesPage()
   } else if (pageId === 'graph') {
     await renderLibraryGraphTab()
   } else if (pageId === 'dashboard') {
+    const { renderDashboardPage } = await import('./pages/dashboardPage.js')
     await renderDashboardPage()
   } else if (pageId === 'history') {
+    const { renderReadingHistoryPage } = await import('./pages/readingHistoryPage.js')
     await renderReadingHistoryPage()
   }
 }
@@ -6658,6 +6657,7 @@ async function renderLibraryGraphTab() {
       libraryGraphCyInstance = null
     }
     libraryGraphCanvas.innerHTML = ''
+    const { renderKnowledgeGraph } = await import('./knowledgeGraph.js')
     libraryGraphCyInstance = renderKnowledgeGraph(libraryGraphCanvas, data, { onNodeClick: showGraphDetailPanel })
 
     rgGraphLoadedAt = new Date()
@@ -6911,6 +6911,7 @@ if (libraryGraphSearchInput) {
     const query = libraryGraphSearchInput.value.trim()
     libraryGraphSearchTimer = setTimeout(async () => {
       if (!libraryGraphCyInstance) return
+      const { highlightSearchMatches } = await import('./knowledgeGraph.js')
       if (!query) {
         highlightSearchMatches(libraryGraphCyInstance, [])
         return
