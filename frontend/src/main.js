@@ -5699,6 +5699,36 @@ async function requestDeleteFolder(folder) {
   await renderLibrary()
 }
 
+function closeFolderCardMenus() {
+  document.querySelectorAll('.folder-card-actions').forEach(menu => {
+    menu.classList.add('hidden')
+    const folderId = menu.dataset.folderId
+    const ownerCard = folderId ? document.querySelector(`.library-folder-card[data-folder-id="${CSS.escape(folderId)}"]`) : null
+    const actionGroup = ownerCard?.querySelector('.folder-card-cta')
+    if (actionGroup && menu.parentElement !== actionGroup) {
+      const openButton = actionGroup.querySelector('.folder-card-open-btn')
+      actionGroup.insertBefore(menu, openButton)
+    }
+    menu.removeAttribute('style')
+  })
+}
+
+function positionFolderCardMenu(menu, trigger) {
+  document.body.appendChild(menu)
+  menu.classList.remove('hidden')
+  const triggerRect = trigger.getBoundingClientRect()
+  const menuWidth = menu.offsetWidth
+  const menuHeight = menu.offsetHeight
+  const left = Math.max(8, Math.min(triggerRect.right - menuWidth, window.innerWidth - menuWidth - 8))
+  const belowTop = triggerRect.bottom + 6
+  const top = belowTop + menuHeight <= window.innerHeight - 8 ? belowTop : Math.max(8, triggerRect.top - menuHeight - 6)
+  menu.style.position = 'fixed'
+  menu.style.left = `${left}px`
+  menu.style.top = `${top}px`
+  menu.style.right = 'auto'
+  menu.style.zIndex = '100001'
+}
+
 function createFolderCard(folder) {
   const card = document.createElement('article')
   card.className = 'library-folder-card'
@@ -5708,14 +5738,55 @@ function createFolderCard(folder) {
   card.title = 'Enter/F2: 이름 변경 · Delete/Backspace: 삭제 · Ctrl/Cmd+X: 잘라내기'
   card.dataset.folderId = folder.id
   card.style.setProperty('--folder-color', folder.color)
-  card.innerHTML = `<div class="folder-card-icon">${icon('folder', 32, 'fill="currentColor" stroke="none"')}</div><div class="folder-card-name">${escapeHtml(folder.name)}</div><div class="folder-card-meta">폴더 열기</div><button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button><div class="folder-card-actions hidden"><button data-action="rename">이름 변경</button><button data-action="color">폴더 색상</button><button data-action="delete">폴더 삭제</button></div>`
-  card.addEventListener('click', e => { if (e.target.closest('.folder-card-menu')) return; navigateLibraryFolder(folder.id) })
+  const isListView = libraryViewMode === 'list'
+  const paperCount = currentLibraryDocs.filter(doc => (doc.folder_id || null) === folder.id).length
+  const childFolderCount = libraryFolders.filter(candidate => (candidate.parent_id || null) === folder.id).length
+  const menuHtml = `<button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button><div class="folder-card-actions hidden"><button data-action="rename">이름 변경</button><button data-action="color">폴더 색상</button><button data-action="delete">폴더 삭제</button></div>`
+
+  card.innerHTML = isListView
+    ? `<div class="folder-card-icon">${icon('folder', 18, 'fill="currentColor" stroke="none"')}</div>
+      <div class="folder-card-name" title="${escapeHtml(folder.name)}">${escapeHtml(folder.name)}</div>
+      <div class="folder-card-meta">
+        <span>${icon('fileText', 12)}논문 ${paperCount}편</span>
+        <span class="meta-dot"></span>
+        <span>${icon('folder', 12)}하위 폴더 ${childFolderCount}개</span>
+      </div>
+      <div class="folder-card-cta">
+        <button class="folder-card-rename-btn" title="이름 변경">${icon('edit3', 14)}</button>
+        ${menuHtml}
+        <button class="folder-card-open-btn" title="폴더 열기">${icon('externalLink', 14)}</button>
+      </div>`
+    : `<div class="folder-card-icon">${icon('folder', 32, 'fill="currentColor" stroke="none"')}</div><div class="folder-card-name">${escapeHtml(folder.name)}</div><div class="folder-card-meta">폴더 열기</div>${menuHtml}`
+  card.addEventListener('click', e => {
+    if (e.target.closest('.folder-card-menu, .folder-card-rename-btn, .folder-card-open-btn')) return
+    navigateLibraryFolder(folder.id)
+  })
   card.addEventListener('dragstart', e => { e.dataTransfer.setData('application/x-easypaper-item', JSON.stringify({ kind: 'folder', id: folder.id })); e.dataTransfer.effectAllowed = 'move' })
   setFolderDropTarget(card, folder.id)
   const menu = card.querySelector('.folder-card-actions')
-  card.querySelector('.folder-card-menu').addEventListener('click', e => { e.stopPropagation(); menu.classList.toggle('hidden') })
+  menu.dataset.folderId = folder.id
+  const menuTrigger = card.querySelector('.folder-card-menu')
+  menuTrigger.addEventListener('click', e => {
+    e.stopPropagation()
+    const shouldOpen = menu.classList.contains('hidden')
+    closeFolderCardMenus()
+    if (!shouldOpen) return
+    if (isListView) positionFolderCardMenu(menu, menuTrigger)
+    else menu.classList.remove('hidden')
+  })
+  card.querySelector('.folder-card-rename-btn')?.addEventListener('click', async e => {
+    e.stopPropagation()
+    try { await requestRenameFolder(folder) } catch (err) { showToast(err.message || '폴더 이름 변경 실패', 'error') }
+  })
+  card.querySelector('.folder-card-open-btn')?.addEventListener('click', e => {
+    e.stopPropagation()
+    navigateLibraryFolder(folder.id)
+  })
   menu.addEventListener('click', async e => {
-    e.stopPropagation(); const action = e.target.dataset.action; if (!action) return
+    e.stopPropagation()
+    const action = e.target.dataset.action
+    if (!action) return
+    closeFolderCardMenus()
     try {
       if (action === 'rename') await requestRenameFolder(folder)
       if (action === 'color') { const color = await showFolderColorDialog(folder.color); if (color && color !== folder.color) { await updateFolderWithUndo(folder, { color }); await renderLibrary() } }
@@ -5875,12 +5946,18 @@ function initLibraryContextMenu() {
   })
   document.addEventListener('pointerdown', event => {
     if (libraryContextMenu && !event.target.closest('.library-context-menu')) closeLibraryContextMenu()
+    if (!event.target.closest('.folder-card-menu, .folder-card-actions')) closeFolderCardMenus()
   })
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') closeLibraryContextMenu()
+    if (event.key === 'Escape') {
+      closeLibraryContextMenu()
+      closeFolderCardMenus()
+    }
   })
   surface.addEventListener('scroll', closeLibraryContextMenu)
+  document.addEventListener('scroll', closeFolderCardMenus, true)
   window.addEventListener('resize', closeLibraryContextMenu)
+  window.addEventListener('resize', closeFolderCardMenus)
 }
 
 initLibraryContextMenu()

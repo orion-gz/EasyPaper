@@ -676,10 +676,10 @@ body.light-theme .lib-detail-panel {
 .folder-dialog-input:focus { border-color:var(--control-accent); }
 .library-grid.list-view .library-folder-card {
   min-height:0;
-  padding:12px 16px;
+  padding:11px 14px;
   display:flex;
   align-items:center;
-  gap:16px;
+  gap:12px;
   border-radius:14px;
   background:var(--bg-card);
   transition:background .2s ease, border-color .2s ease, transform .2s ease;
@@ -688,6 +688,7 @@ body.light-theme .lib-detail-panel {
   transform:translateX(2px);
   border-color:var(--border-strong);
   background:var(--bg-card-hover);
+  box-shadow:0 5px 18px -14px color-mix(in srgb, var(--folder-color) 65%, transparent);
 }
 .library-grid.list-view .library-folder-card:focus-visible {
   border-color:var(--control-accent);
@@ -697,21 +698,54 @@ body.light-theme .lib-detail-panel {
   display:flex;
   align-items:center;
   justify-content:center;
-  width:22px;
-  height:22px;
-  flex:0 0 22px;
+  width:30px;
+  height:30px;
+  flex:0 0 30px;
   margin:0;
+  border:1px solid color-mix(in srgb, var(--folder-color) 28%, var(--border));
+  border-radius:9px;
+  background:color-mix(in srgb, var(--folder-color) 13%, var(--bg-elevated));
+  color:var(--folder-color);
   filter:none;
+  box-shadow:inset 0 1px 0 color-mix(in srgb, var(--folder-color) 16%, transparent);
 }
-.library-grid.list-view .folder-card-icon svg { width:22px; height:22px; }
+.library-grid.list-view .folder-card-icon svg { width:17px; height:17px; }
 .library-grid.list-view .folder-card-name {
   flex:1 1 240px;
   min-width:120px;
   font-size:14.5px;
+  font-weight:700;
   letter-spacing:-.01em;
 }
-.library-grid.list-view .folder-card-meta { flex:0 0 auto; margin:0; font-size:11px; font-weight:500; }
-.library-grid.list-view .folder-card-menu {
+.library-grid.list-view .folder-card-meta {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex:0 0 auto;
+  margin:0;
+  color:var(--text-muted);
+  font-size:11px;
+  font-weight:500;
+  white-space:nowrap;
+}
+.library-grid.list-view .folder-card-meta > span:not(.meta-dot) { display:inline-flex; align-items:center; gap:4px; }
+.library-grid.list-view .folder-card-meta svg { opacity:.72; }
+.library-grid.list-view .folder-card-meta .meta-dot {
+  width:3px;
+  height:3px;
+  border-radius:50%;
+  background:var(--border-strong);
+}
+.library-grid.list-view .folder-card-cta {
+  display:flex;
+  align-items:center;
+  gap:4px;
+  flex:0 0 auto;
+  margin-left:auto;
+}
+.library-grid.list-view .folder-card-rename-btn,
+.library-grid.list-view .folder-card-menu,
+.library-grid.list-view .folder-card-open-btn {
   position:static;
   display:flex;
   align-items:center;
@@ -722,12 +756,36 @@ body.light-theme .lib-detail-panel {
   padding:0;
   border:1px solid var(--border);
   border-radius:8px;
+  background:transparent;
+  color:var(--text-muted);
+  cursor:pointer;
+  transition:background .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
 }
+.library-grid.list-view .folder-card-rename-btn:hover,
 .library-grid.list-view .folder-card-menu:hover {
   border-color:var(--border-strong);
   background:var(--bg-hover);
+  color:var(--text-primary);
 }
-.library-grid.list-view .folder-card-actions { top:calc(50% + 20px); right:16px; }
+.library-grid.list-view .folder-card-open-btn {
+  border-color:var(--control-accent);
+  border-radius:50%;
+  background:var(--control-accent);
+  color:#fff;
+}
+.library-grid.list-view .folder-card-open-btn:hover {
+  filter:brightness(1.1);
+  transform:scale(1.04);
+}
+.library-grid.list-view .folder-card-actions { position:fixed; top:auto; right:auto; z-index:100001; }
+@media (max-width:900px) {
+  .library-grid.list-view .folder-card-meta > span:last-child,
+  .library-grid.list-view .folder-card-meta .meta-dot { display:none; }
+}
+@media (max-width:640px) {
+  .library-grid.list-view .folder-card-meta,
+  .library-grid.list-view .folder-card-rename-btn { display:none; }
+}
 
 .doc-card[draggable=true], .doc-list-row[draggable=true] { cursor:grab; }
 .doc-dragging { opacity:.55; cursor:grabbing!important; }
