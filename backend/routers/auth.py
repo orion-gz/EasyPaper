@@ -430,7 +430,10 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
 
 
 @router.get("/settings/install-pdf-parser")
-async def install_pdf_parser_stream(parser_id: str):
+async def install_pdf_parser_stream(
+    parser_id: str,
+    current_user: str = Depends(get_current_user),
+):
     import asyncio
 
     package_map = {
@@ -508,7 +511,10 @@ async def install_pdf_parser_stream(parser_id: str):
     )
 
 @router.post("/settings/uninstall-pdf-parser")
-async def uninstall_pdf_parser(request: Request):
+async def uninstall_pdf_parser(
+    request: Request,
+    current_user: str = Depends(get_current_user),
+):
     import subprocess
     import config as cfg
 
