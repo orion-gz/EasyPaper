@@ -35,9 +35,12 @@
 .library-category-filter-group {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
   flex: 1 1 auto;
+}
+.library-category-filter-group.collapsed {
+  justify-content: flex-end;
 }
 .library-category-filter-toggle {
   display: inline-flex;
