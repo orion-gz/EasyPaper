@@ -36,15 +36,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
-      - name: Build sidecar binary (PyInstaller onedir)
-        shell: bash
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            backend/packaging/build.bat
-          else
-            backend/packaging/build.sh
-          fi
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -55,15 +46,27 @@ jobs:
           npm ci
           npm run build
 
-      - name: Re-bundle sidecar with frontend dist
+      - name: Build sidecar binary (PyInstaller onedir)
         shell: bash
         run: |
-          rm -rf backend/packaging/dist backend/packaging/build
           if [ "${{ runner.os }}" = "Windows" ]; then
             backend/packaging/build.bat
           else
             backend/packaging/build.sh
           fi
+
+      - name: Packaged PDF parser installer smoke test
+        shell: bash
+        run: |
+          BIN=backend/packaging/dist/easypaper-backend/easypaper-backend
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            BIN="backend/packaging/dist/easypaper-backend/easypaper-backend.exe"
+          fi
+          PARSER_CONFIG="${{ runner.temp }}/easypaper-parser-smoke"
+          EASYPAPER_CONFIG_DIR="$PARSER_CONFIG" \
+          EASYPAPER_DESKTOP=1 \
+          "$BIN" --easypaper-install-pdf-parser pdfplumber
+          test -d "$PARSER_CONFIG/pdf-parser-packages/pdfplumber/pdfplumber"
 
       - name: Standalone healthcheck (no GUI needed)
         shell: bash

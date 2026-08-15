@@ -61,6 +61,24 @@ def parser_install_command(engine: str) -> list[str]:
     return [sys.executable, _PACKAGED_INSTALL_ARG, engine]
 
 
+def _register_windows_frozen_distlib_finder() -> None:
+    """pip이 번들된 Windows console-script 런처를 읽을 수 있게 한다."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+
+    # distlib은 패키지 loader 타입으로 resource finder를 고른다. 기본
+    # registry는 PyInstaller의 PyiFrozenLoader를 모르지만 collect_all("pip")은
+    # distlib 런처 실행 파일을 frozen 패키지 옆에 실제 파일로 배치하므로,
+    # 일반 파일시스템 finder를 그대로 등록하는 것이 맞다.
+    from pip._vendor import distlib
+    from pip._vendor.distlib import resources
+
+    resources._finder_registry.setdefault(
+        type(distlib.__loader__), resources.ResourceFinder
+    )
+    resources._finder_cache.pop("pip._vendor.distlib", None)
+
+
 def run_packaged_parser_installer(argv: list[str] | None = None) -> int:
     """번들 pip로 선택 파서를 사용자 앱 데이터 폴더에 원자적으로 설치한다."""
     # Windows GUI sidecar의 파이프 stdout은 cp1252 등으로 잡힐 수 있어
@@ -88,6 +106,7 @@ def run_packaged_parser_installer(argv: list[str] | None = None) -> int:
     target_dir = parser_packages_dir(engine)
 
     try:
+        _register_windows_frozen_distlib_finder()
         from pip._internal.cli.main import main as pip_main
 
         result = pip_main([
