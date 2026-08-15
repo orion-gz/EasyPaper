@@ -45,6 +45,19 @@ jobs:
             backend/packaging/build.sh
           fi
 
+      - name: Packaged PDF parser installer smoke test
+        shell: bash
+        run: |
+          BIN=backend/packaging/dist/easypaper-backend/easypaper-backend
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            BIN="backend/packaging/dist/easypaper-backend/easypaper-backend.exe"
+          fi
+          PARSER_CONFIG="${{ runner.temp }}/easypaper-parser-smoke"
+          EASYPAPER_CONFIG_DIR="$PARSER_CONFIG" \
+          EASYPAPER_DESKTOP=1 \
+          "$BIN" --easypaper-install-pdf-parser pdfplumber
+          test -d "$PARSER_CONFIG/pdf-parser-packages/pdfplumber/pdfplumber"
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
