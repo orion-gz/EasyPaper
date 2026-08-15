@@ -106,6 +106,26 @@ def test_packaged_installer_atomically_publishes_verified_package(tmp_path, monk
     assert not list((tmp_path / "pdf-parser-packages").glob(".pdfplumber-install-*"))
 
 
+def test_windows_frozen_installer_registers_distlib_resource_finder(monkeypatch):
+    from pip._vendor import distlib
+    from pip._vendor.distlib import resources
+
+    class FakeFrozenLoader:
+        pass
+
+    loader_type = FakeFrozenLoader
+    monkeypatch.setattr(venv_manager.sys, "platform", "win32")
+    monkeypatch.setattr(venv_manager.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(distlib, "__loader__", loader_type())
+    resources._finder_registry.pop(loader_type, None)
+
+    try:
+        venv_manager._register_windows_frozen_distlib_finder()
+        assert resources._finder_registry[loader_type] is resources.ResourceFinder
+    finally:
+        resources._finder_registry.pop(loader_type, None)
+
+
 def test_packaged_installer_keeps_existing_package_when_upgrade_fails(
     tmp_path, monkeypatch
 ):
