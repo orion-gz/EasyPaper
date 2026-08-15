@@ -36,6 +36,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend (needed for sidecar's bundled dist)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
       - name: Build sidecar binary (PyInstaller onedir)
         shell: bash
         run: |
@@ -57,26 +67,6 @@ jobs:
           EASYPAPER_DESKTOP=1 \
           "$BIN" --easypaper-install-pdf-parser pdfplumber
           test -d "$PARSER_CONFIG/pdf-parser-packages/pdfplumber/pdfplumber"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Build frontend (needed for sidecar's bundled dist)
-        working-directory: frontend
-        run: |
-          npm ci
-          npm run build
-
-      - name: Re-bundle sidecar with frontend dist
-        shell: bash
-        run: |
-          rm -rf backend/packaging/dist backend/packaging/build
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            backend/packaging/build.bat
-          else
-            backend/packaging/build.sh
-          fi
 
       - name: Standalone healthcheck (no GUI needed)
         shell: bash

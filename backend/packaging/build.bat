@@ -15,4 +15,6 @@ cd /d "%BACKEND_DIR%"
   --workpath "%SCRIPT_DIR%build" ^
   --noconfirm
 
+if errorlevel 1 exit /b %errorlevel%
+
 echo Built: %SCRIPT_DIR%dist\easypaper-backend\
