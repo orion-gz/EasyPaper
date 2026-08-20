@@ -2219,6 +2219,16 @@ body.light-theme .pdf-annotation-underline {
   border-bottom: 2px solid rgba(220, 53, 69, 0.9);
 }
 
+@keyframes viewer-note-jump-pulse {
+  0%, 100% { outline-color: transparent; }
+  35% { outline-color: var(--control-accent); }
+}
+.viewer-note-jump-target {
+  outline: 3px solid transparent;
+  outline-offset: 3px;
+  animation: viewer-note-jump-pulse 0.6s ease-in-out 3;
+}
+
 /* ── 텍스트 선택 팝업 메뉴 리파인 ── */
 .selection-menu {
   position: absolute;

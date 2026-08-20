@@ -9193,7 +9193,8 @@ function applyAnnotationToRange(range, type, textLayerDiv, pageNum, color) {
     text,
     startOffset: offsets.startOffset,
     endOffset: offsets.endOffset,
-    color: chosenColor
+    color: chosenColor,
+    createdAt: new Date().toISOString()
   })
   saveAnnotations(state.sessionId, annotations)
   globalAnalyticsTracker.trackInteraction(type, pageNum)
@@ -9880,6 +9881,7 @@ function renderPageMemos(pageNum) {
             box.style.top = `${r.top}px`
             box.style.width = `${r.width}px`
             box.style.height = `${r.height}px`
+            box.dataset.memoId = memo.id
             if (isHiddenIndividually) {
               box.title = '숨겨진 메모 다시 표시'
               box.addEventListener('click', (e) => { e.stopPropagation(); revealHiddenMemo() })
@@ -9897,6 +9899,7 @@ function renderPageMemos(pageNum) {
         if (pdfElements) {
           pdfElements.forEach(el => {
             el.classList.add('pdf-sentence-has-memo', `color-${memo.color || 'default'}`)
+            el.dataset.memoId = memo.id
             if (isHiddenIndividually) {
               // 클릭 시 되살리기는 pageWrapper에 위임된 리스너(위 참고)가 처리한다 -
               // 이 요소는 재렌더링 때마다 파괴되지 않고 남아있어 직접 리스너를
@@ -10223,6 +10226,7 @@ function createFloatingMemoForSentence(pageNum, sentenceIdx, explicitRange) {
     charStart: memoRange.charStart,
     charEnd: memoRange.charEnd,
     content: '',
+    createdAt: new Date().toISOString(),
     x: leftPct,
     y: topPct
   }
@@ -15247,6 +15251,62 @@ viewerScrollContainer.addEventListener('click', (e) => {
 })()
 
 // ── 해시 라우팅 및 뒤로가기 제어 ──────────────────────
+function viewerAnnotationTargetFromParams(params) {
+  const page = parseInt(params.get('page'), 10)
+  if (!Number.isInteger(page) || page < 1) return null
+  const toOptionalInt = (key) => {
+    const raw = params.get(key)
+    if (raw === null) return null
+    const value = parseInt(raw, 10)
+    return Number.isInteger(value) && value >= 0 ? value : null
+  }
+  return {
+    page,
+    kind: params.get('kind') || null,
+    memoId: params.get('memoId') || null,
+    startOffset: toOptionalInt('start'),
+    endOffset: toOptionalInt('end'),
+  }
+}
+
+function findViewerAnnotationElement(target) {
+  const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${target.page}"]`)
+  if (!pageWrapper) return null
+  if (target.memoId) {
+    const memoId = CSS.escape(target.memoId)
+    return pageWrapper.querySelector(`.sentence-memo-box[data-memo-id="${memoId}"]`)
+      || pageWrapper.querySelector(`.pdf-sentence-has-memo[data-memo-id="${memoId}"]`)
+      || pageWrapper.querySelector(`.floating-memo[data-id="${memoId}"]`)
+  }
+  if ((target.kind === 'highlight' || target.kind === 'underline') && target.startOffset !== null) {
+    const className = target.kind === 'highlight' ? 'pdf-annotation-highlight' : 'pdf-annotation-underline'
+    return Array.from(pageWrapper.querySelectorAll(`.${className}[data-start-offset]`)).find(el => {
+      if (Number(el.dataset.startOffset) !== target.startOffset) return false
+      return target.endOffset === null || Number(el.dataset.endOffset) === target.endOffset
+    }) || null
+  }
+  return null
+}
+
+async function navigateToViewerAnnotation(target) {
+  if (!target || target.page > state.totalPages) return
+  scrollToPage(viewerScrollContainer, target.page, { instant: true })
+
+  const hasExactAnchor = target.memoId || target.startOffset !== null
+  if (!hasExactAnchor) return
+  const deadline = Date.now() + 4000
+  let targetEl = findViewerAnnotationElement(target)
+  while (!targetEl && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 50))
+    targetEl = findViewerAnnotationElement(target)
+  }
+  if (!targetEl) return
+
+  targetEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+  targetEl.classList.add('viewer-note-jump-target')
+  setTimeout(() => targetEl.classList.remove('viewer-note-jump-target'), 1800)
+}
+
 async function handleRouting() {
   try {
     const hash = location.hash
@@ -15256,9 +15316,11 @@ async function handleRouting() {
       const params = new URLSearchParams(hash.slice('#viewer?'.length))
       const docId = params.get('id')
       const wantChatOpen = params.get('chat') === '1'
+      const annotationTarget = viewerAnnotationTargetFromParams(params)
       if (docId) {
         if (state.sessionId === docId && viewerScreen.classList.contains('active')) {
           console.log("[Router] Viewer already active for document:", docId)
+          if (annotationTarget) await navigateToViewerAnnotation(annotationTarget)
           if (wantChatOpen) openChatSidebar()
           return
         }
@@ -15266,6 +15328,7 @@ async function handleRouting() {
         const doc = await fetchLibraryDoc(docId)
         if (doc) {
           await openFromLibrary(doc, false)
+          if (annotationTarget && state.sessionId === docId) await navigateToViewerAnnotation(annotationTarget)
           if (wantChatOpen) openChatSidebar()
           return
         }
