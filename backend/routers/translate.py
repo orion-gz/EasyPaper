@@ -158,6 +158,9 @@ async def translate_page(
             
             # 태그 분석 및 매핑 생성
             cleaned_translation, sentences = parse_tagged_translation(complete_translation, src_sentences)
+            if document_mode == "general":
+                from services.translation_quality import assert_translation_integrity
+                assert_translation_integrity(page_text, cleaned_translation)
             payload_data = {
                 "translation": cleaned_translation,
                 "sentences": sentences

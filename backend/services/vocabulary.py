@@ -4,6 +4,10 @@ import json
 import re
 from typing import Any
 
+from services.vocabulary_candidates import (
+    ADVANCED_CANDIDATES, CANDIDATE_LIST_LICENSE, CANDIDATE_LIST_VERSION,
+)
+
 
 VALID_LEVELS = {"SAT", "GRE", "SAT·GRE"}
 MAX_ITEMS_PER_GROUP = 20
@@ -34,7 +38,8 @@ def validate_vocabulary_result(raw: str, page_text: str, page_num: int) -> dict[
     value = _extract_json(raw)
     result = {
         "schema_version": 1,
-        "candidate_filter_version": "heuristic-v1",
+        "candidate_filter_version": CANDIDATE_LIST_VERSION,
+        "candidate_filter_license": CANDIDATE_LIST_LICENSE,
         "advanced_words": [],
         "technical_terms": [],
     }
@@ -59,7 +64,8 @@ def validate_vocabulary_result(raw: str, page_text: str, page_num: int) -> dict[
             if key == "advanced_words":
                 if not has_english_context or item.get("level") not in VALID_LEVELS:
                     continue
-                if lemma in BASIC_WORDS or not re.fullmatch(r"[A-Za-z][A-Za-z'-]{3,}", term):
+                if (lemma in BASIC_WORDS or lemma not in ADVANCED_CANDIDATES
+                        or not re.fullmatch(r"[A-Za-z][A-Za-z'-]{3,}", term)):
                     continue
 
             requested_occurrence = item.get("occurrence", 1)

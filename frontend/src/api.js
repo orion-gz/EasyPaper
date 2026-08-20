@@ -20,6 +20,41 @@ export async function patchWorkspaceSettingsAPI(payload) {
 }
 
 
+export async function patchDocumentClassificationAPI(docId, payload) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/classification`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || '문서 분류 변경 실패')
+  return res.json()
+}
+
+export async function estimateInsightJobAPI(sessionId, kind, targetLang = '한국어') {
+  const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/estimate?target_lang=${encodeURIComponent(targetLang)}`)
+  if (!res.ok) throw new Error('인사이트 작업 예상량 조회 실패')
+  return res.json()
+}
+
+export async function startInsightJobAPI(sessionId, kind, targetLang = '한국어', confirmed = false) {
+  const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/start`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_lang: targetLang, confirmed }),
+  })
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail?.message || '인사이트 작업 시작 실패')
+  return res.json()
+}
+
+export async function getInsightJobStatusAPI(sessionId, kind) {
+  const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/status`, { cache: 'no-store' })
+  if (!res.ok) throw new Error('인사이트 작업 상태 조회 실패')
+  return res.json()
+}
+
+export async function cancelInsightJobAPI(sessionId, kind) {
+  const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/cancel`, { method: 'POST' })
+  if (!res.ok) throw new Error('인사이트 작업 취소 실패')
+  return res.json()
+}
+
 export async function uploadPDF(file, options, onProgress) {
   const formData = new FormData()
   formData.append('file', file)

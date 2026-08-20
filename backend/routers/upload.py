@@ -44,6 +44,9 @@ def ensure_session(session_id: str) -> bool:
         if pages is None:
             pages = extract_pages(pdf_path)
             save_pages_cache(session_id, pdf_path, pages)
+        # 기존 문서는 처음 열릴 때 원문 FTS 인덱스를 지연 백필한다.
+        from services.context_retrieval import index_document_chunks
+        index_document_chunks(session_id, pages)
         sessions[session_id] = {
             "pdf_path": pdf_path,
             "filename": doc["filename"],
@@ -120,9 +123,11 @@ async def upload_pdf(
     """PDF 파일을 업로드하고 텍스트를 추출합니다."""
     enforce_rate_limit("upload", current_user)
 
-    from services.document_policy import validate_classification
+    from services.document_policy import feature_enabled, validate_classification
     try:
         validate_classification(document_mode, document_type)
+        if document_mode == "general" and not feature_enabled("general_document_mode"):
+            raise ValueError("일반 문서 모드가 아직 활성화되지 않았습니다.")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -176,6 +181,13 @@ async def upload_pdf(
         session_id, file.filename, pdf_path, len(pages), metadata,
         username=current_user, document_mode=document_mode, document_type=document_type,
     )
+    from services.context_retrieval import index_document_chunks
+    indexed_chunks = index_document_chunks(session_id, pages)
+    from services.observability import record_document_mode_event
+    record_document_mode_event(
+        current_user, "upload", document_mode, document_type,
+        numeric_value=len(pages), status="indexed" if indexed_chunks else "fallback",
+    )
 
     # 세션 저장 (메모리)
     sessions[session_id] = {
@@ -228,14 +240,13 @@ async def upload_pdf(
             print(f"[Upload {session_id}] Primer 생성 실패: {e}")
 
         if keyword_mode == "auto":
-            start_keyword_job(
-                session_id,
-                pages,
-                target_lang,
-                metadata.get("title") or file.filename,
-                document_mode,
-                document_type,
-            )
+            # 일반 장문 문서는 예상 LLM 호출량을 사용자가 확인한 뒤 별도
+            # insight-jobs API로 시작한다. 20페이지 이하는 기존 자동 흐름 유지.
+            if document_mode != "general" or len(pages) <= 20:
+                start_keyword_job(
+                    session_id, pages, target_lang,
+                    metadata.get("title") or file.filename, document_mode, document_type,
+                )
 
         if summary_mode == "auto":
             start_summary_job(

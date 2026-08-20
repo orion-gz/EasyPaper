@@ -1,4 +1,4 @@
-import { CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
+import { CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY, WORKSPACE_PURPOSE_SELECTED_KEY } from "./documentModes.js"
 // 첫 실행 시 AI 엔진 자동 감지 / 설치 안내 온보딩 모달
 // main.js에서 분리됨 - DOM 참조 및 로직은 이 파일 안에서만 쓰인다.
 import {
@@ -71,7 +71,7 @@ export function createOnboarding({
 
   function openOnboarding() {
     openOverlayModal(onboardingModal)
-    if (Number(localStorage.getItem(ONBOARDING_VERSION_KEY) || 0) < CURRENT_ONBOARDING_VERSION) {
+    if (!localStorage.getItem(WORKSPACE_PURPOSE_SELECTED_KEY)) {
       showOnboardingStep("purpose")
     } else {
       showOnboardingStep("detecting")
@@ -102,6 +102,7 @@ export function createOnboarding({
     try {
       await onWorkspaceSelected?.(onboardingState.selectedPurpose)
       localStorage.setItem(ONBOARDING_VERSION_KEY, String(CURRENT_ONBOARDING_VERSION))
+      localStorage.setItem(WORKSPACE_PURPOSE_SELECTED_KEY, '1')
       showOnboardingStep("detecting")
       detectAndRenderOnboarding()
     } catch (error) {

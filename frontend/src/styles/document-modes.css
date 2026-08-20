@@ -100,3 +100,24 @@ body[data-workspace-mode="general"] #chat-subtab-compare { display: none !import
   outline-offset: 2px;
   border-radius: 3px;
 }
+
+
+.insight-job-progress {
+  position: fixed; right: 18px; bottom: 18px; z-index: 1200;
+  width: min(360px, calc(100vw - 28px)); padding: 14px;
+  border: 1px solid var(--border-strong); border-radius: 12px;
+  background: var(--bg-elevated); color: var(--text-primary);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 22%);
+}
+.insight-job-progress > strong, .insight-job-progress > span { display: block; }
+.insight-job-progress > span { margin-top: 5px; color: var(--text-secondary); font-size: 12px; }
+.insight-job-progress-track { height: 6px; margin: 11px 0; overflow: hidden; border-radius: 999px; background: var(--border-strong); }
+.insight-job-progress-track i { display: block; width: 0; height: 100%; background: var(--control-accent); transition: width .2s ease; }
+.insight-job-progress > div:last-child { display: flex; justify-content: flex-end; gap: 7px; }
+.insight-job-progress button { padding: 6px 9px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-primary); color: var(--text-primary); cursor: pointer; }
+
+@media (max-width: 520px) {
+  .workspace-mode-switch-compact { position: static; width: 100%; }
+  .document-type-modal-content { width: calc(100vw - 20px); max-height: calc(100vh - 24px); overflow: auto; }
+  .insight-job-progress { right: 14px; bottom: 14px; }
+}

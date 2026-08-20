@@ -259,6 +259,9 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                 )
                 # 태그 분석 및 매핑 생성
                 cleaned_translation, sentences = parse_tagged_translation(translation, src_sentences)
+                if document_mode == "general":
+                    from services.translation_quality import assert_translation_integrity
+                    assert_translation_integrity(text, cleaned_translation)
                 payload_data = {
                     "translation": cleaned_translation,
                     "sentences": sentences

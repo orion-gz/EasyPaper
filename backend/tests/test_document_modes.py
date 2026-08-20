@@ -324,3 +324,111 @@ async def test_background_job_promotes_legacy_research_cache_without_retranslati
     assert translated["called"] is False
     assert db.db_get_translation("legacy-job", 1, current_suffix, fallback=False)
     assert job["completed_pages"] == [1]
+
+
+
+def test_fts_retrieval_finds_late_page_and_extends_section(isolated_dirs):
+    from services.context_retrieval import index_document_chunks, retrieve_context
+    pages = [
+        {"page_num": 1, "text": "# Introduction\n\nGeneral setup and background."},
+        {"page_num": 302, "text": "# Recovery Procedure\n\nRotate the recovery token before restarting.\n\nVerify the audit checksum after restart."},
+    ]
+    assert index_document_chunks("long-doc", pages) >= 2
+    result = retrieve_context("long-doc", pages, "How do I verify the audit checksum?")
+    assert 302 in result.evidence_pages
+    assert "audit checksum" in result.text
+    assert result.strategy.startswith("fts5")
+
+
+def test_context_prioritizes_explicit_and_current_pages(isolated_dirs):
+    from services.context_retrieval import retrieve_context
+    pages = [{"page_num": n, "text": f"Section {n}\n\ncontent for page {n}"} for n in range(1, 8)]
+    result = retrieve_context("priority-doc", pages, "페이지 6을 설명해줘", current_page=4)
+    assert {4, 6}.issubset(result.evidence_pages)
+
+
+def test_page_citation_validation_removes_unsupported_ranges():
+    from services.context_retrieval import validate_page_citations
+    answer, invalid = validate_page_citations("근거 [p.2], 과장 [pp.5-7]", {2, 5, 6})
+    assert "[p.2]" in answer
+    assert "[pp.5-7]" not in answer
+    assert invalid == ["[pp.5-7]"]
+
+
+def test_advanced_vocabulary_uses_versioned_local_candidates():
+    raw = json.dumps({
+        "advanced_words": [
+            {"term": "Ubiquitous", "lemma": "ubiquitous", "level": "GRE", "meaning": "편재하는"},
+            {"term": "Interoperable", "lemma": "interoperable", "level": "GRE", "meaning": "상호 운용 가능한"},
+        ],
+        "technical_terms": [],
+    })
+    result = validate_vocabulary_result(raw, "Ubiquitous but interoperable systems exist.", 3)
+    assert [item["lemma"] for item in result["advanced_words"]] == ["ubiquitous"]
+    assert result["candidate_filter_version"] == "easypaper-advanced-en-v1"
+    assert result["candidate_filter_license"]
+
+
+def test_registry_rollout_flags_follow_environment(monkeypatch):
+    monkeypatch.setenv("EASYPAPER_GENERAL_DOCUMENT_MODE", "false")
+    monkeypatch.setenv("EASYPAPER_DOCUMENT_FTS", "0")
+    payload = registry_payload()
+    assert payload["rollout"]["general_document_mode"] is False
+    assert payload["rollout"]["document_fts"] is False
+
+
+def test_insight_job_estimate_skips_empty_and_cached_pages(isolated_dirs):
+    from services.document_policy import insight_cache_suffix
+    from services.insight_job import estimate_insight_job
+    pages = [
+        {"page_num": 1, "text": "Ubiquitous systems."},
+        {"page_num": 2, "text": ""},
+        {"page_num": 3, "text": "Another technical page."},
+    ]
+    suffix = insight_cache_suffix("general", "technical", "한국어")
+    isolated_dirs["library"].save_page_insight("estimate-doc", 1, "keywords", "{}", suffix)
+    estimate = estimate_insight_job("estimate-doc", pages, "한국어", "keywords", "general", "technical")
+    assert estimate["eligible_pages"] == 1
+    assert estimate["cached_or_empty_pages"] == 2
+    assert estimate["estimated_calls"] == 1
+
+
+
+def test_long_vocabulary_job_requires_estimate_confirmation(isolated_dirs, test_client, monkeypatch):
+    from routers import upload
+    pages = [{"page_num": n, "text": f"Ubiquitous technical content {n}."} for n in range(1, 26)]
+    isolated_dirs["db"].db_save_document(
+        "long-vocab", "testuser", "manual.pdf", "/x", 25, {}, "general", "manual",
+    )
+    monkeypatch.setitem(upload.sessions, "long-vocab", {
+        "pdf_path": "/x", "filename": "manual.pdf", "pages": pages,
+        "total_pages": 25, "metadata": {}, "username": "testuser",
+        "document_mode": "general", "document_type": "manual",
+    })
+    estimate = test_client.get("/api/insight-jobs/long-vocab/keywords/estimate")
+    assert estimate.status_code == 200
+    assert estimate.json()["estimated_calls"] == 25
+    assert estimate.json()["requires_confirmation"] is True
+    rejected = test_client.post(
+        "/api/insight-jobs/long-vocab/keywords/start",
+        json={"target_lang": "한국어", "confirmed": False},
+    )
+    assert rejected.status_code == 409
+    assert rejected.json()["detail"]["estimated_calls"] == 25
+
+
+def test_workspace_switch_metrics_expose_no_document_content(isolated_dirs, test_client):
+    changed = test_client.patch("/api/settings/workspace", json={"preferred_workspace_mode": "general"})
+    assert changed.status_code == 200
+    response = test_client.get("/api/metrics/document-modes")
+    assert response.status_code == 200
+    metrics = response.json()["metrics"]
+    assert any(item["event"] == "workspace_switch" and item["document_mode"] == "general" for item in metrics)
+    assert all("content" not in item and "prompt" not in item for item in metrics)
+
+
+def test_translation_integrity_rejects_missing_protected_literals():
+    from services.translation_quality import TranslationIntegrityError, assert_translation_integrity
+    source = "Run `npm install` at https://example.test and wait 30s."
+    with pytest.raises(TranslationIntegrityError):
+        assert_translation_integrity(source, "설치를 실행하고 기다리세요.")

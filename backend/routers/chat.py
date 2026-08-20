@@ -75,25 +75,26 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
     session_id = data.session_id
     session = require_session_owner(session_id, current_user)
 
-    # 현재 페이지와 선택 영역을 먼저 배치해 긴 문서에서도 질문 주변 근거가
-    # 40,000자 컨텍스트 절단 전에 포함되도록 한다.
+    # 질문 관련 문단을 FTS5로 찾고 명시 페이지·현재 페이지·선택 영역을
+    # 우선 재순위화한다. 장/절이 이어지는 인접 문단도 함께 확장한다.
     pages = session.get("pages", [])
-    ordered_pages = list(pages)
-    if data.current_page is not None:
-        ordered_pages.sort(key=lambda p: (abs(p.get("page_num", 0) - data.current_page), p.get("page_num", 0)))
-    paper_text = ""
-    if data.selected_text:
-        selected_page = data.current_page or "?"
-        paper_text += f"\n\n--- Selected text, Page {selected_page} ---\n{data.selected_text}"
-    for p in ordered_pages:
-        page_num = p.get("page_num", 0)
-        page_text = p.get("text", "").strip()
-        if page_text:
-            paper_text += f"\n\n--- Page {page_num} ---\n{page_text}"
-
-    # 컨텍스트 길이 제약 (최대 40,000자, 약 8,000~10,000 토큰 내외로 유지)
-    if len(paper_text) > 40000:
-        paper_text = paper_text[:40000] + "\n\n[이하 본문 생략]"
+    latest_question = data.messages[-1].content if data.messages else ""
+    from time import perf_counter
+    from services.context_retrieval import retrieve_context
+    retrieval_started = perf_counter()
+    context_result = retrieve_context(
+        session_id, pages, latest_question,
+        current_page=data.current_page, selected_text=data.selected_text,
+    )
+    paper_text = context_result.text
+    from services.observability import record_document_mode_event
+    record_document_mode_event(
+        current_user, "chat_retrieval",
+        session.get("document_mode", "research"),
+        session.get("document_type", "research_paper"),
+        duration_ms=round((perf_counter() - retrieval_started) * 1000),
+        numeric_value=context_result.retrieval_count, status=context_result.strategy,
+    )
 
     filename = session.get("filename", "알 수 없음")
 
@@ -133,10 +134,20 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
                 page_image_b64=data.image_base64
             ):
                 full_response.append(token)
-                yield token
 
-            # Save assistant response to database
-            assistant_content = "".join(full_response).strip()
+            # 응답 전체에서 실제 제공된 근거 페이지 밖 인용을 제거한 뒤에만
+            # 클라이언트와 채팅 기록에 노출한다.
+            from services.context_retrieval import validate_page_citations
+            assistant_content, invalid_citations = validate_page_citations(
+                "".join(full_response).strip(), context_result.evidence_pages,
+            )
+            record_document_mode_event(
+                current_user, "chat_citation", document_mode, document_type,
+                status="invalid_removed" if invalid_citations else "valid",
+                numeric_value=len(invalid_citations),
+            )
+            for offset in range(0, len(assistant_content), 240):
+                yield assistant_content[offset:offset + 240]
             if assistant_content:
                 db_save_chat_message(session_id, "assistant", assistant_content)
                 # 지식 그래프: 이 질문을 논문의 기존 개념과 연결한다(fire-and-forget -
@@ -169,16 +180,15 @@ async def chat_suggestions(data: ChatRequest, current_user: str = Depends(get_cu
     session = require_session_owner(session_id, current_user)
 
     pages = session.get("pages", [])
-    paper_text = ""
-    for p in pages:
-        page_text = (p.get("text", "") or "").strip()
-        if page_text:
-            paper_text += f"\n\n{page_text}"
-            if len(paper_text) > 6000:
-                break
+    history_messages = [{"role": msg.role, "content": msg.content} for msg in data.messages]
+    latest_question = data.messages[-1].content if data.messages else ""
+    from services.context_retrieval import retrieve_context
+    paper_text = retrieve_context(
+        session_id, pages, latest_question, current_page=data.current_page,
+        selected_text=data.selected_text, budget=6000, max_chunks=5,
+    ).text
 
     filename = session.get("filename", "알 수 없음")
-    history_messages = [{"role": msg.role, "content": msg.content} for msg in data.messages]
 
     try:
         questions = await generate_suggested_questions(

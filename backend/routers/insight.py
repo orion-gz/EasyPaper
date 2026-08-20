@@ -1,6 +1,7 @@
 import json
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from routers.upload import require_session_owner
 from services.auth import get_current_user
@@ -10,6 +11,65 @@ from services.library import save_page_insight, get_page_insight
 router = APIRouter()
 
 VALID_KINDS = ("keywords", "summary")
+
+
+def _require_insight_feature(session: dict, kind: str) -> None:
+    if session.get("document_mode", "research") == "general" and kind == "keywords":
+        from services.document_policy import feature_enabled
+        if not feature_enabled("advanced_vocabulary"):
+            raise HTTPException(status_code=403, detail="고급 어휘 기능이 아직 활성화되지 않았습니다.")
+
+
+class InsightJobStartRequest(BaseModel):
+    target_lang: str = "한국어"
+    confirmed: bool = False
+
+
+@router.get("/insight-jobs/{session_id}/{kind}/estimate")
+async def estimate_page_insight_job(session_id: str, kind: str, target_lang: str = "한국어", current_user: str = Depends(get_current_user)):
+    session = require_session_owner(session_id, current_user)
+    _require_insight_feature(session, kind)
+    from services.insight_job import estimate_insight_job, VALID_JOB_KINDS
+    if kind not in VALID_JOB_KINDS:
+        raise HTTPException(status_code=400, detail="지원하지 않는 인사이트 작업입니다.")
+    return estimate_insight_job(
+        session_id, session["pages"], target_lang, kind,
+        session.get("document_mode", "research"), session.get("document_type", "research_paper"),
+    )
+
+
+@router.post("/insight-jobs/{session_id}/{kind}/start")
+async def start_page_insight_job(session_id: str, kind: str, body: InsightJobStartRequest, current_user: str = Depends(get_current_user)):
+    session = require_session_owner(session_id, current_user)
+    _require_insight_feature(session, kind)
+    from services.insight_job import estimate_insight_job, start_keyword_job, start_summary_job, VALID_JOB_KINDS
+    if kind not in VALID_JOB_KINDS:
+        raise HTTPException(status_code=400, detail="지원하지 않는 인사이트 작업입니다.")
+    mode = session.get("document_mode", "research")
+    doc_type = session.get("document_type", "research_paper")
+    estimate = estimate_insight_job(session_id, session["pages"], body.target_lang, kind, mode, doc_type)
+    if estimate["requires_confirmation"] and not body.confirmed:
+        raise HTTPException(status_code=409, detail={"message": "예상 호출량 확인이 필요합니다.", **estimate})
+    title = session.get("metadata", {}).get("title") or session.get("filename", "")
+    starter = start_keyword_job if kind == "keywords" else start_summary_job
+    return starter(session_id, session["pages"], body.target_lang, title, mode, doc_type)
+
+
+@router.get("/insight-jobs/{session_id}/{kind}/status")
+async def page_insight_job_status(session_id: str, kind: str, current_user: str = Depends(get_current_user)):
+    require_session_owner(session_id, current_user)
+    from services.insight_job import get_insight_job_status
+    status = get_insight_job_status(session_id, kind)
+    if not status:
+        raise HTTPException(status_code=404, detail="인사이트 작업을 찾을 수 없습니다.")
+    return status
+
+
+@router.post("/insight-jobs/{session_id}/{kind}/cancel")
+async def cancel_page_insight_job(session_id: str, kind: str, current_user: str = Depends(get_current_user)):
+    require_session_owner(session_id, current_user)
+    from services.insight_job import cancel_insight_job
+    return {"cancelled": cancel_insight_job(session_id, kind)}
 
 
 @router.get("/insight/{session_id}/{page_num}")
@@ -30,6 +90,7 @@ async def get_page_insight_stream(
         raise HTTPException(status_code=400, detail=f"kind는 {VALID_KINDS} 중 하나여야 합니다.")
 
     session = require_session_owner(session_id, current_user)
+    _require_insight_feature(session, kind)
     total_pages = session["total_pages"]
 
     if page_num < 1 or page_num > total_pages:

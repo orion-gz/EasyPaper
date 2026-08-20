@@ -1,5 +1,6 @@
 export const WORKSPACE_MODE_KEY = 'easypaper_workspace_mode'
 export const ONBOARDING_VERSION_KEY = 'easypaper_onboarding_version'
+export const WORKSPACE_PURPOSE_SELECTED_KEY = 'easypaper_workspace_purpose_selected'
 export const DOCUMENT_TYPE_OPTIONS_KEY = 'easypaper_document_type_options_v1'
 export const CURRENT_ONBOARDING_VERSION = 1
 
@@ -33,6 +34,12 @@ export function getDocumentTypes(registry, mode) {
   const found = registry?.modes?.find(item => item.value === normalized)?.types
   if (Array.isArray(found) && found.length) return found
   return FALLBACK_DOCUMENT_TYPES[normalized].map(([value, label]) => ({ value, label, mode: normalized }))
+}
+
+export function isWorkspaceModeAvailable(registry, mode) {
+  const normalized = normalizeWorkspaceMode(mode)
+  if (normalized === 'general' && registry?.rollout?.general_document_mode === false) return false
+  return true
 }
 
 export function defaultDocumentType(mode) {

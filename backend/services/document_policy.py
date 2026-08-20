@@ -5,6 +5,7 @@ translation, insight, chat, and UI registry endpoint shares the same contract.
 """
 
 from dataclasses import dataclass
+import os
 from typing import Dict, Tuple
 
 
@@ -64,6 +65,19 @@ DOCUMENT_MODES = ("research", "general")
 DEFAULT_DOCUMENT_TYPE = {"research": "research_paper", "general": "other"}
 
 
+def feature_enabled(name: str) -> bool:
+    defaults = {
+        "general_document_mode": True,
+        "document_fts": True,
+        "advanced_vocabulary": True,
+    }
+    if name not in defaults:
+        return False
+    env_name = f"EASYPAPER_{name.upper()}"
+    raw = os.getenv(env_name)
+    return defaults[name] if raw is None else raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
 def validate_classification(document_mode: str, document_type: str) -> DocumentTypePolicy:
     if document_mode not in DOCUMENT_MODES:
         raise ValueError(f"document_mode must be one of {DOCUMENT_MODES}")
@@ -92,11 +106,16 @@ def registry_payload() -> dict:
                     "research_recommendations": mode == "research",
                     "primer": mode == "research",
                     "document_overview": mode == "general",
-                    "advanced_vocabulary": mode == "general",
+                    "advanced_vocabulary": mode == "general" and feature_enabled("advanced_vocabulary"),
                 },
             }
             for mode in DOCUMENT_MODES
         ],
+        "rollout": {
+            "general_document_mode": feature_enabled("general_document_mode"),
+            "document_fts": feature_enabled("document_fts"),
+            "advanced_vocabulary": feature_enabled("advanced_vocabulary"),
+        },
     }
 
 

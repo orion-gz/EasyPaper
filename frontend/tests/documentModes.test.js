@@ -5,10 +5,12 @@ import {
   defaultDocumentType,
   documentTypeLabel,
   getDocumentTypes,
+  isWorkspaceModeAvailable,
   loadDocumentTypeOptions,
   normalizeWorkspaceMode,
   saveDocumentTypeOptions,
   storeWorkspaceMode,
+  WORKSPACE_PURPOSE_SELECTED_KEY,
 } from '../src/documentModes.js'
 import { parseStructuredVocabulary, renderStructuredVocabulary } from '../src/vocabularyView.js'
 
@@ -63,4 +65,11 @@ test('structured vocabulary keeps location metadata and non-English notice', () 
     advanced_words: [], technical_terms: [], advanced_words_notice: '영어 원문이 아닙니다.',
   })
   assert.match(noticeHtml, /영어 원문이 아닙니다/)
+})
+
+
+test('server rollout can disable general workspace mode', () => {
+  assert.equal(isWorkspaceModeAvailable({ rollout: { general_document_mode: false } }, 'general'), false)
+  assert.equal(isWorkspaceModeAvailable({ rollout: { general_document_mode: true } }, 'general'), true)
+  assert.equal(isWorkspaceModeAvailable(null, 'research'), true)
 })

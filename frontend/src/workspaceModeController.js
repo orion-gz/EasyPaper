@@ -2,10 +2,12 @@ import {
   CURRENT_ONBOARDING_VERSION,
   DOCUMENT_TYPE_OPTIONS_KEY,
   ONBOARDING_VERSION_KEY,
+  WORKSPACE_PURPOSE_SELECTED_KEY,
   defaultDocumentType,
   documentTypeLabel,
   getDocumentTypes,
   getStoredWorkspaceMode,
+  isWorkspaceModeAvailable,
   storeWorkspaceMode,
 } from './documentModes.js'
 
@@ -30,6 +32,7 @@ export function createWorkspaceModeController({
   let registry = null
   let pendingUpload = null
   let selectedType = null
+  let classificationMode = mode
 
   const modal = document.getElementById('document-type-modal')
   const optionRoot = document.getElementById('document-type-options')
@@ -91,12 +94,23 @@ export function createWorkspaceModeController({
     const [typesResult, settingsResult] = await Promise.allSettled([
       fetchDocumentTypes(), getWorkspaceSettings(),
     ])
-    if (typesResult.status === 'fulfilled') registry = typesResult.value
+    if (typesResult.status === 'fulfilled') {
+      registry = typesResult.value
+      const generalEnabled = isWorkspaceModeAvailable(registry, 'general')
+      document.querySelectorAll('[data-workspace-mode="general"]').forEach(button => {
+        button.hidden = !generalEnabled
+        button.disabled = !generalEnabled
+      })
+      if (!generalEnabled && mode === 'general') mode = storeWorkspaceMode('research')
+    }
     if (settingsResult.status === 'fulfilled') {
       const settings = settingsResult.value
       if (settings.preferred_workspace_mode) mode = storeWorkspaceMode(settings.preferred_workspace_mode)
       if (Number.isInteger(settings.onboarding_version)) {
         localStorage.setItem(ONBOARDING_VERSION_KEY, String(settings.onboarding_version))
+        if (settings.onboarding_version >= 1 && settings.preferred_workspace_mode) {
+          localStorage.setItem(WORKSPACE_PURPOSE_SELECTED_KEY, '1')
+        }
       }
       if (settings.document_type_options && Object.keys(settings.document_type_options).length > 0) {
         localStorage.setItem(DOCUMENT_TYPE_OPTIONS_KEY, JSON.stringify(settings.document_type_options))
@@ -118,11 +132,11 @@ export function createWorkspaceModeController({
   function renderUploadTypes() {
     selectedType = null
     confirmBtn.disabled = true
-    modeChip.textContent = mode === 'research' ? '연구 모드' : '일반 문서 모드'
-    if (uploadModeSwitch) uploadModeSwitch.textContent = mode === 'research' ? '일반 문서 모드로 전환' : '연구 모드로 전환'
+    modeChip.textContent = classificationMode === 'research' ? '연구 모드' : '일반 문서 모드'
+    if (uploadModeSwitch) uploadModeSwitch.textContent = classificationMode === 'research' ? '일반 문서 모드로 전환' : '연구 모드로 전환'
     summary.textContent = ''
     optionRoot.innerHTML = ''
-    getDocumentTypes(registry, mode).forEach(type => {
+    getDocumentTypes(registry, classificationMode).forEach(type => {
       const button = document.createElement('button')
       button.type = 'button'
       button.className = 'document-type-option'
@@ -133,17 +147,21 @@ export function createWorkspaceModeController({
         selectedType = type.value
         optionRoot.querySelectorAll('[role="radio"]').forEach(item => item.setAttribute('aria-checked', String(item === button)))
         confirmBtn.disabled = false
-        summary.textContent = `${mode === 'research' ? '연구' : '일반 문서'} · ${type.label}`
+        summary.textContent = `${classificationMode === 'research' ? '연구' : '일반 문서'} · ${type.label}`
       })
       optionRoot.appendChild(button)
     })
   }
 
-  function chooseUploadClassification(files) {
+  function chooseClassification(initialMode, purpose = 'upload', files = []) {
+    classificationMode = initialMode === 'general' ? 'general' : 'research'
     if (!modal || !optionRoot) {
-      return Promise.resolve({ documentMode: mode, documentType: defaultDocumentType(mode), files })
+      return Promise.resolve({ documentMode: classificationMode, documentType: defaultDocumentType(classificationMode), files })
     }
     if (pendingUpload) closeUploadModal(null)
+    const title = modal.querySelector('.modal-header h2')
+    if (title) title.textContent = purpose === 'upload' ? 'PDF 업로드' : '문서 분류 변경'
+    if (confirmBtn) confirmBtn.textContent = purpose === 'upload' ? '업로드' : '변경'
     renderUploadTypes()
     modal.classList.remove('hidden')
     requestAnimationFrame(() => modal.classList.add('is-visible'))
@@ -151,26 +169,30 @@ export function createWorkspaceModeController({
     return new Promise(resolve => { pendingUpload = resolve })
   }
 
+  function chooseUploadClassification(files) { return chooseClassification(mode, 'upload', files) }
+  function chooseDocumentClassification(currentMode) { return chooseClassification(currentMode, 'change') }
+
   confirmBtn?.addEventListener('click', () => {
     if (!selectedType) return
-    closeUploadModal({ documentMode: mode, documentType: selectedType })
+    closeUploadModal({ documentMode: classificationMode, documentType: selectedType })
   })
   document.getElementById('document-type-close-btn')?.addEventListener('click', () => closeUploadModal(null))
   document.getElementById('document-type-cancel-btn')?.addEventListener('click', () => closeUploadModal(null))
-  uploadModeSwitch?.addEventListener('click', async () => {
-    await setMode(mode === 'research' ? 'general' : 'research')
+  uploadModeSwitch?.addEventListener('click', () => {
+    classificationMode = classificationMode === 'research' ? 'general' : 'research'
     renderUploadTypes()
     optionRoot.querySelector('button')?.focus()
   })
   modal?.addEventListener('click', event => { if (event.target === modal) closeUploadModal(null) })
 
   return {
-    initialize, setMode, chooseUploadClassification,
+    initialize, setMode, chooseUploadClassification, chooseDocumentClassification,
     getMode: () => mode,
     getRegistry: () => registry,
     getTypeLabel: (docMode, type) => documentTypeLabel(registry, docMode, type),
     markOnboardingComplete: selectedMode => {
       localStorage.setItem(ONBOARDING_VERSION_KEY, String(CURRENT_ONBOARDING_VERSION))
+      localStorage.setItem(WORKSPACE_PURPOSE_SELECTED_KEY, '1')
       return setMode(selectedMode, { persist: false })
     },
   }

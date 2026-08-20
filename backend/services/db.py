@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import json
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -91,6 +92,35 @@ def init_db():
             UNIQUE(doc_id, page_num, kind, suffix)
         )
         """)
+
+        # 문서 채팅용 페이지·문단 전문 검색 인덱스. PDF 원문을 문단 단위로
+        # 저장해 재시작 후에도 후반부 질문을 검색할 수 있다.
+        try:
+            cursor.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS document_chunks_fts USING fts5(
+                doc_id UNINDEXED, page_num UNINDEXED, ordinal UNINDEXED,
+                section, content, tokenize='unicode61'
+            )
+            """)
+        except sqlite3.OperationalError:
+            # 일부 최소 SQLite 빌드에서는 FTS5가 빠질 수 있다. 채팅은
+            # context_retrieval의 메모리 어휘 중첩 폴백으로 계속 동작한다.
+            pass
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_mode_metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            event TEXT NOT NULL,
+            document_mode TEXT,
+            document_type TEXT,
+            status TEXT,
+            duration_ms INTEGER,
+            numeric_value REAL,
+            created_at TEXT NOT NULL
+        )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_mode_metrics_scope ON document_mode_metrics(username, event, created_at)")
 
         # documents 테이블 동적 스키마 마이그레이션 (is_deleted 컬럼 추가)
         try:
@@ -606,20 +636,32 @@ def _escape_like(text: str) -> str:
 
 
 def db_search_documents(username: str, query: str, only_trash: bool = False, document_mode: Optional[str] = None) -> list:
-    """파일명/제목·카테고리(metadata)와 페이지별 번역 텍스트를 가로질러 검색어를
-    찾아 매칭되는 문서 목록을 반환합니다 (대소문자 구분 없음).
-
-    원문(PDF에서 추출한 텍스트)은 세션 메모리에만 있고 DB에 영속화되지
-    않아 검색 대상에 포함하지 못한다 - 파일명/제목/카테고리와 번역된
-    텍스트만 검색 대상이다.
-    """
+    """Search metadata, translations, and indexed original page paragraphs."""
     is_deleted_val = 1 if only_trash else 0
     like_query = f"%{_escape_like(query)}%"
+    fts_doc_ids: list[str] = []
+    tokens = list(dict.fromkeys(re.findall(r"[A-Za-z0-9가-힣_]{2,}", query or "")))[:12]
 
     with get_db() as conn:
         cursor = conn.cursor()
+        if tokens:
+            expression = " OR ".join(f'"{token.replace(chr(34), "")}"' for token in tokens)
+            try:
+                fts_doc_ids = [row["doc_id"] for row in cursor.execute(
+                    "SELECT DISTINCT doc_id FROM document_chunks_fts WHERE document_chunks_fts MATCH ? LIMIT 200",
+                    (expression,),
+                ).fetchall()]
+            except sqlite3.OperationalError:
+                fts_doc_ids = []
+
+        original_clause = ""
+        params: list[Any] = [username, is_deleted_val, document_mode, document_mode, like_query, like_query, like_query]
+        if fts_doc_ids:
+            placeholders = ",".join("?" for _ in fts_doc_ids)
+            original_clause = f" OR d.id IN ({placeholders})"
+            params.extend(fts_doc_ids)
         cursor.execute(
-            """
+            f"""
             SELECT DISTINCT d.id, d.username, d.filename, d.pdf_path, d.total_pages,
                    d.metadata, d.document_mode, d.document_type,
                    d.mode_schema_version, d.is_deleted, d.created_at
@@ -631,15 +673,15 @@ def db_search_documents(username: str, query: str, only_trash: bool = False, doc
                     d.filename LIKE ? ESCAPE '\\'
                  OR d.metadata LIKE ? ESCAPE '\\'
                  OR t.translation LIKE ? ESCAPE '\\'
+                 {original_clause}
               )
             ORDER BY d.created_at DESC
             """,
-            (username, is_deleted_val, document_mode, document_mode, like_query, like_query, like_query)
+            params,
         )
-        rows = cursor.fetchall()
         docs = []
-        for r in rows:
-            doc = dict(r)
+        for row in cursor.fetchall():
+            doc = dict(row)
             doc["metadata"] = json.loads(doc["metadata"]) if doc["metadata"] else {}
             docs.append(doc)
         return docs
@@ -679,6 +721,10 @@ def db_delete_document(doc_id: str) -> bool:
         cursor.execute("DELETE FROM annotations WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM memos WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM page_insights WHERE doc_id = ?", (doc_id,))
+        try:
+            cursor.execute("DELETE FROM document_chunks_fts WHERE doc_id = ?", (doc_id,))
+        except sqlite3.OperationalError:
+            pass
         cursor.execute("DELETE FROM translations WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM chats WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
@@ -960,6 +1006,10 @@ def db_clear_page_insights(doc_id: str) -> None:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM page_insights WHERE doc_id = ?", (doc_id,))
+        try:
+            cursor.execute("DELETE FROM document_chunks_fts WHERE doc_id = ?", (doc_id,))
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
 
 def db_delete_page_insight(doc_id: str, page_num: int, kind: str, suffix: str = "") -> None:

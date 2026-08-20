@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from services.auth import get_current_user
 from services.db import db_get_workspace_settings, db_upsert_workspace_settings
-from services.document_policy import DOCUMENT_MODES, registry_payload
+from services.document_policy import DOCUMENT_MODES, feature_enabled, registry_payload
 
 
 router = APIRouter()
@@ -39,6 +39,8 @@ async def patch_workspace_settings(
     mode = body.preferred_workspace_mode
     if mode is not None and mode not in DOCUMENT_MODES:
         raise HTTPException(status_code=400, detail=f"workspace_mode must be one of {DOCUMENT_MODES}")
+    if mode == "general" and not feature_enabled("general_document_mode"):
+        raise HTTPException(status_code=403, detail="일반 문서 모드가 아직 활성화되지 않았습니다.")
 
     onboarding_version = (
         body.onboarding_version
@@ -47,6 +49,10 @@ async def patch_workspace_settings(
     )
     if onboarding_version > CURRENT_ONBOARDING_VERSION:
         raise HTTPException(status_code=400, detail="지원하지 않는 onboarding_version입니다.")
+
+    if mode is not None and mode != current.get("preferred_workspace_mode"):
+        from services.observability import record_document_mode_event
+        record_document_mode_event(current_user, "workspace_switch", mode, status="selected")
 
     result = db_upsert_workspace_settings(
         current_user,
@@ -65,6 +71,12 @@ class DocumentClassificationPatch(BaseModel):
     document_type: str
 
 
+@router.get("/metrics/document-modes")
+async def get_document_mode_metrics(current_user: str = Depends(get_current_user)):
+    from services.observability import summarize_document_mode_metrics
+    return {"metrics": summarize_document_mode_metrics(current_user)}
+
+
 @router.patch("/library/{doc_id}/classification")
 async def patch_document_classification(
     doc_id: str, body: DocumentClassificationPatch,
@@ -77,6 +89,8 @@ async def patch_document_classification(
     doc = require_owned_document(doc_id, current_user)
     try:
         validate_classification(body.document_mode, body.document_type)
+        if body.document_mode == "general" and not feature_enabled("general_document_mode"):
+            raise ValueError("일반 문서 모드가 아직 활성화되지 않았습니다.")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

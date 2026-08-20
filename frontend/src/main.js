@@ -8,7 +8,7 @@ import { createWorkspaceModeController } from "./workspaceModeController.js"
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { icon } from './icons.js'
@@ -458,6 +458,63 @@ function getSummaryMode() {
   return localStorage.getItem('easypaper_summary_mode') || 'manual'
 }
 
+function showInsightJobProgress(sessionId, kind, title) {
+  const existing = document.querySelector(`[data-insight-job="${CSS.escape(sessionId)}:${CSS.escape(kind)}"]`)
+  if (existing) return
+  const modal = document.createElement('div')
+  modal.className = 'insight-job-progress'
+  modal.dataset.insightJob = `${sessionId}:${kind}`
+  modal.setAttribute('role', 'status')
+  modal.setAttribute('aria-live', 'polite')
+  modal.innerHTML = `<strong>${escapeHtml(title)}</strong><span class="insight-job-progress-text">작업 준비 중...</span><div class="insight-job-progress-track"><i></i></div><div><button type="button" data-action="cancel">취소</button><button type="button" data-action="retry" class="hidden">실패 페이지 재시도</button><button type="button" data-action="close" class="hidden">닫기</button></div>`
+  document.body.appendChild(modal)
+  const text = modal.querySelector('.insight-job-progress-text')
+  const bar = modal.querySelector('i')
+  const cancel = modal.querySelector('[data-action="cancel"]')
+  const retry = modal.querySelector('[data-action="retry"]')
+  const close = modal.querySelector('[data-action="close"]')
+  let stopped = false
+  async function poll() {
+    if (stopped || !modal.isConnected) return
+    try {
+      const status = await getInsightJobStatusAPI(sessionId, kind)
+      const total = Math.max(1, status.eligible_pages || 0)
+      const done = status.completed_pages || 0
+      const pct = Math.min(100, Math.round((done / total) * 100))
+      bar.style.width = `${pct}%`
+      text.textContent = `${done}/${status.eligible_pages}페이지 · ${pct}%${status.failed_pages?.length ? ` · 실패 ${status.failed_pages.length}` : ''}`
+      if (['completed', 'completed_with_errors', 'cancelled'].includes(status.status)) {
+        stopped = true
+        cancel.classList.add('hidden')
+        close.classList.remove('hidden')
+        retry.classList.toggle('hidden', status.status !== 'completed_with_errors')
+        return
+      }
+    } catch (error) {
+      text.textContent = error.message
+    }
+    setTimeout(poll, 1000)
+  }
+  cancel.addEventListener('click', async () => {
+    cancel.disabled = true
+    await cancelInsightJobAPI(sessionId, kind).catch(() => {})
+    stopped = false
+    poll()
+  })
+  retry.addEventListener('click', async () => {
+    retry.disabled = true
+    await startInsightJobAPI(sessionId, kind, getTranslationOptions().targetLang, true)
+    stopped = false
+    cancel.disabled = false
+    cancel.classList.remove('hidden')
+    retry.classList.add('hidden')
+    close.classList.add('hidden')
+    poll()
+  })
+  close.addEventListener('click', () => modal.remove())
+  poll()
+}
+
 // 툴바 위치: 'top'(기본) / 'bottom' / 'left' / 'right'. body에 클래스로
 // 반영하고, 나머지는 전부 CSS(.toolbar-pos-*)가 처리한다 - 위치별로
 // .topbar/.panels/.outline-sidebar/.floating-scroll-nav 등의 레이아웃이
@@ -643,6 +700,17 @@ async function handleFiles(files, targetFolderId = null, classification = null) 
       lastTotalPages = result.total_pages
       lastTitle = (result.metadata && result.metadata.title) ? result.metadata.title : result.filename
       successCount++
+      if (result.document_mode === 'general' && getKeywordMode() === 'auto' && result.total_pages > 20) {
+        const estimate = await estimateInsightJobAPI(result.session_id, 'keywords', getTranslationOptions().targetLang)
+        const confirmed = await showCustomConfirm(
+          `빈 페이지와 기존 캐시를 제외하고 최대 ${estimate.estimated_calls}회의 AI 호출이 예상됩니다. 전체 고급 어휘 생성을 시작할까요?`,
+          { title: '장문 어휘 생성', confirmText: '생성 시작', danger: false },
+        )
+        if (confirmed) {
+          await startInsightJobAPI(result.session_id, 'keywords', getTranslationOptions().targetLang, true)
+          showInsightJobProgress(result.session_id, 'keywords', `${lastTitle} · 고급 어휘`)
+        }
+      }
       if (classification?.documentType) {
         saveDocumentTypeOptions(classification.documentType, { ...rememberedTypeOptions, ...getTranslationOptions() })
         patchWorkspaceSettingsAPI({ document_type_options: loadDocumentTypeOptions() }).catch(() => {
@@ -7884,6 +7952,7 @@ function ensureLibraryDetailPanel() {
         <button id="lib-detail-edit-btn" class="lib-detail-icon-btn" title="제목 수정">${icon('edit3', 14)}</button>
         <button id="lib-detail-more-btn" class="lib-detail-icon-btn" title="더보기">${moreIconSvg}</button>
         <div id="lib-detail-more-menu" class="lib-detail-more-menu hidden">
+          <button id="lib-detail-classification-btn" class="lib-detail-more-item">${icon('layers', 13)}<span>문서 분류 변경</span></button>
           <button id="lib-detail-clear-cache-btn" class="lib-detail-more-item">${icon('refreshCw', 13)}<span>PDF 추출 캐시 삭제</span></button>
           <button id="lib-detail-delete-btn" class="lib-detail-more-item danger">${icon('trash2', 13)}<span>삭제 (휴지통으로 이동)</span></button>
         </div>
@@ -7953,6 +8022,29 @@ function ensureLibraryDetailPanel() {
     })
     document.addEventListener('click', () => moreMenu.classList.add('hidden'))
   }
+
+  $('lib-detail-classification-btn')?.addEventListener('click', async () => {
+    if (!libraryDetailDoc) return
+    const doc = libraryDetailDoc
+    moreMenu?.classList.add('hidden')
+    const selected = await workspaceModeController.chooseDocumentClassification(doc.document_mode || 'research')
+    if (!selected || (selected.documentMode === (doc.document_mode || 'research') && selected.documentType === doc.document_type)) return
+    const ok = await showCustomConfirm(
+      '분류를 변경하면 이후 번역·개요·AI 정책이 새 문서 종류를 따릅니다. 기존 번역 또는 인사이트가 있으면 안전을 위해 변경되지 않습니다.',
+      { title: '문서 분류 변경', confirmText: '분류 변경', danger: false },
+    )
+    if (!ok) return
+    try {
+      const updated = await patchDocumentClassificationAPI(doc.id, { document_mode: selected.documentMode, document_type: selected.documentType })
+      libraryDetailDoc = { ...doc, ...updated }
+      closeLibraryDetailPanel()
+      await workspaceModeController.setMode(selected.documentMode)
+      await showLibraryScreen()
+      showToast('문서 분류를 변경했습니다.', 'success')
+    } catch (error) {
+      showToast(error.message || '문서 분류 변경 실패', 'error')
+    }
+  })
 
   $('lib-detail-clear-cache-btn')?.addEventListener('click', async () => {
     if (!libraryDetailDoc) return
