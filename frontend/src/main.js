@@ -392,6 +392,7 @@ const primerGraph          = $('primer-graph')
 const primerSkipBtn        = $('primer-skip-btn')
 const primerContinueBtn    = $('primer-continue-btn')
 const chatInput          = $('chat-input')
+const chatInputExpandBtn = $('chat-input-expand-btn')
 const chatSendBtn        = $('chat-send-btn')
 
 
@@ -12921,6 +12922,28 @@ function initChatListeners() {
       } else {
         sendChatMessage()
       }
+    })
+  }
+
+  if (chatInputExpandBtn && chatInput) {
+    chatInputExpandBtn.addEventListener('click', () => {
+      const inputBox = chatInput.closest('.chat-input-box')
+      if (!inputBox) return
+
+      const expanded = inputBox.classList.toggle('expanded')
+      const label = expanded ? '입력창 축소' : '입력창 확장'
+      chatInputExpandBtn.setAttribute('aria-expanded', String(expanded))
+      chatInputExpandBtn.setAttribute('aria-label', label)
+      chatInputExpandBtn.title = label
+      chatInputExpandBtn.innerHTML = expanded
+        ? icon('shrink', 15)
+        : icon('expand', 15)
+
+      if (!expanded) {
+        chatInput.style.height = 'auto'
+        chatInput.style.height = `${chatInput.scrollHeight}px`
+      }
+      chatInput.focus()
     })
   }
   

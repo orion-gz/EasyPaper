@@ -3092,11 +3092,49 @@ body.light-theme .chat-input-area {
   box-sizing: border-box;
 }
 
+.chat-input-box.expanded #chat-input {
+  flex: none;
+  height: clamp(180px, 40vh, 420px) !important;
+  max-height: none;
+}
+
 .chat-input-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 4px 8px 8px 8px;
+}
+
+.chat-input-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-input-expand-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.chat-input-expand-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-mid);
+  color: var(--text-primary);
+}
+
+.chat-input-expand-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── Chat Model Picker inside Footer Refinement ── */
