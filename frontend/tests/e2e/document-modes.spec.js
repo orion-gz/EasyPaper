@@ -33,6 +33,12 @@ test('워크스페이스 전환은 홈과 데이터 범위를 바꾸고 문서 �
   await page.locator('#workspace-mode-switch [data-workspace-mode="general"]').click()
   await expect(page.locator('#workspace-page-title')).toHaveText('문서 홈')
   await expect(page.locator('.sidebar-nav-item[data-page="graph"]')).not.toBeVisible()
+  await expect(page.locator('.document-home')).toBeVisible()
+  await expect(page.locator('.document-home-stat-grid')).toHaveCSS('display', 'grid')
+  await expect(page.locator('.document-home-recent-row')).toHaveCount(2)
+  await expect(page.locator('.document-home-recent-list')).toContainText('Setup Manual')
+  await expect(page.locator('.document-home-recent-list')).toContainText('Example Book')
+  expect(await page.locator('#page-dashboard').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
 
   await page.locator('.sidebar-nav-item[data-page="library"]').click()
   await expect(page.locator('#library-grid').getByText('Setup Manual')).toBeVisible()
@@ -43,6 +49,22 @@ test('워크스페이스 전환은 홈과 데이터 범위를 바꾸고 문서 �
   await page.locator('.document-type-chip.general', { hasText: '매뉴얼' }).click()
   await expect(page.locator('#library-grid').getByText('Setup Manual')).toBeVisible()
   await expect(page.locator('#library-grid').getByText('Example Book')).not.toBeVisible()
+})
+
+
+test('좁은 화면에서도 문서 홈 카드가 화면 밖으로 넘치지 않는다', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockBaseRoutes(page, { documents: [] })
+  await page.route('**/api/settings/workspace', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ onboarding_version: 1, current_onboarding_version: 1, preferred_workspace_mode: 'research', document_type_options: {} }),
+  }))
+  await gotoApp(page)
+  await page.locator('#workspace-mode-switch-compact [data-workspace-mode="general"]').click()
+
+  await expect(page.locator('.document-home')).toBeVisible()
+  await expect(page.locator('.document-home-empty')).toContainText('일반 문서가 없습니다.')
+  expect(await page.locator('.document-home').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
 })
 
 
