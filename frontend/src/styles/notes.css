@@ -331,6 +331,46 @@
   padding: 18px 22px 26px;
 }
 
+.notes-annotation-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.notes-annotation-toolbar label {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.notes-annotation-sort-box { position: relative; }
+.notes-annotation-sort-select {
+  min-width: 138px;
+  padding: 6px 28px 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  cursor: pointer;
+  appearance: none;
+}
+.notes-annotation-sort-select:hover,
+.notes-annotation-sort-select:focus {
+  border-color: var(--control-accent);
+  color: var(--text-primary);
+}
+.notes-annotation-sort-icon {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  display: inline-flex;
+  color: var(--text-muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
 .notes-card-list {
   display: flex;
   flex-direction: column;
@@ -394,6 +434,15 @@
 .notes-card-text ol,
 .notes-card-text pre,
 .notes-card-text blockquote { margin: 0 0 0.55em; }
+.notes-card-text ul,
+.notes-card-text ol {
+  padding-inline-start: 1.55rem;
+}
+.notes-card-text li > ul,
+.notes-card-text li > ol {
+  margin-top: 0.25em;
+  margin-bottom: 0;
+}
 .notes-card-text .katex-display { margin: 0.45em 0; overflow-x: auto; overflow-y: hidden; }
 .notes-card-text pre { overflow-x: auto; }
 .notes-card-expand-btn {

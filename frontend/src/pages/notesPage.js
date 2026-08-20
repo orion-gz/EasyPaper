@@ -57,6 +57,7 @@ let sortMode = 'recent'     // 'recent' | 'title' | 'uploaded'
 let searchQuery = ''
 let selectedDocId = null
 let activeSubtab = 'summary' // 'summary' | 'memo' | 'highlight' | 'underline' | 'all'
+let annotationSortMode = 'page-asc' // 'page-asc' | 'page-desc' | 'newest' | 'oldest'
 
 // 요약(primer)은 문서당 LLM 호출 비용이 있으므로 탭을 실제로 열었을 때만
 // 가져오고, 한 번 가져오면 페이지 재방문 동안 재사용한다.
@@ -105,15 +106,25 @@ async function getDocAnnotationsAndMemos(docId) {
   return { annotationsByPage, memosByPage }
 }
 
-// 메모 객체에는 별도 createdAt 필드가 없고, id가 `memo_${Date.now()}` 형태로
-// 생성 시각을 담고 있다(main.js createFloatingMemoForSentence 참고) - 이게
-// 유일한 시각 정보라 여기서 역산한다. 하이라이트/언더라인 객체는 애초에
-// 시각 필드 자체가 저장되지 않으므로(타입/텍스트/오프셋/색만 저장) 카드에
-// 시간을 표시할 수 없다 - 페이지 배지만 노출한다.
+// 새 데이터는 createdAt을 사용하고, 구버전 메모는 `memo_${Date.now()}` ID에서
+// 생성 시각을 역산한다. 구버전 하이라이트/언더라인은 시각 정보가 없으므로
+// 저장 배열 순서를 생성순 정렬의 fallback으로 사용한다.
 function memoTimestamp(memo) {
+  const stored = memo && (memo.createdAt || memo.created_at)
+  if (stored) {
+    const d = new Date(stored)
+    if (!isNaN(d.getTime())) return d
+  }
   const m = /^memo_(\d+)/.exec(String((memo && memo.id) || ''))
   if (!m) return null
   const d = new Date(Number(m[1]))
+  return isNaN(d.getTime()) ? null : d
+}
+
+function annotationTimestamp(annotation) {
+  const stored = annotation && (annotation.createdAt || annotation.created_at)
+  if (!stored) return null
+  const d = new Date(stored)
   return isNaN(d.getTime()) ? null : d
 }
 
@@ -131,6 +142,7 @@ async function buildPaperEntry(doc) {
   const memoItems = []
   const highlightItems = []
   const underlineItems = []
+  let storageOrder = 0
 
   Object.keys(memosByPage).forEach(pageKey => {
     const pageNum = parseInt(pageKey.replace('page_', ''), 10)
@@ -139,7 +151,11 @@ async function buildPaperEntry(doc) {
       const ts = memoTimestamp(memo)
       const text = (memo.content && memo.content.trim()) || memo.sentenceText || '(내용 없음)'
       const color = MEMO_ACCENT_COLORS[memo.color] || null
-      memoItems.push({ kind: 'memo', docId: doc.id, page: pageNum, ts, text, color })
+      memoItems.push({
+        kind: 'memo', docId: doc.id, page: pageNum, ts, text, color,
+        memoId: memo.id || null,
+        storageOrder: storageOrder++,
+      })
     })
   })
 
@@ -147,16 +163,23 @@ async function buildPaperEntry(doc) {
     const pageNum = parseInt(pageKey.replace('page_', ''), 10)
     if (isNaN(pageNum)) return
     ;(annotationsByPage[pageKey] || []).forEach(ann => {
-      const item = { kind: ann.type, docId: doc.id, page: pageNum, ts: null, text: ann.text || '(내용 없음)', color: ann.color || null }
+      const item = {
+        kind: ann.type,
+        docId: doc.id,
+        page: pageNum,
+        ts: annotationTimestamp(ann),
+        text: ann.text || '(내용 없음)',
+        color: ann.color || null,
+        startOffset: ann.startOffset,
+        endOffset: ann.endOffset,
+        storageOrder: storageOrder++,
+      }
       if (ann.type === 'highlight') highlightItems.push(item)
       else if (ann.type === 'underline') underlineItems.push(item)
     })
   })
 
-  memoItems.sort((a, b) => (b.ts ? b.ts.getTime() : 0) - (a.ts ? a.ts.getTime() : 0))
-  highlightItems.sort((a, b) => a.page - b.page)
-  underlineItems.sort((a, b) => a.page - b.page)
-  const allItems = [...memoItems, ...highlightItems, ...underlineItems].sort((a, b) => a.page - b.page)
+  const allItems = [...memoItems, ...highlightItems, ...underlineItems]
 
   const meta = doc.metadata || {}
   const title = meta.title || doc.filename
@@ -431,8 +454,16 @@ function renderAnnotationCard(item) {
   const canExpand = item.text.trim().length > 220
   const tsHtml = item.ts ? `<span class="notes-card-ts">${escapeHtml(formatTs(item.ts))}</span>` : ''
   const style = item.color ? ` style="--notes-item-accent:${escapeHtml(item.color)}"` : ''
+  const targetData = [
+    `data-doc-id="${escapeHtml(item.docId)}"`,
+    `data-page="${item.page}"`,
+    `data-kind="${escapeHtml(item.kind)}"`,
+    item.memoId ? `data-memo-id="${escapeHtml(item.memoId)}"` : '',
+    Number.isInteger(item.startOffset) ? `data-start-offset="${item.startOffset}"` : '',
+    Number.isInteger(item.endOffset) ? `data-end-offset="${item.endOffset}"` : '',
+  ].filter(Boolean).join(' ')
   return `
-    <div class="notes-annotation-card notes-card-${item.kind} ${canExpand ? 'notes-card-collapsible' : ''}"${style} data-doc-id="${escapeHtml(item.docId)}">
+    <div class="notes-annotation-card notes-card-${item.kind} ${canExpand ? 'notes-card-collapsible' : ''}"${style} ${targetData} role="link" tabindex="0" aria-label="${item.page}페이지 ${escapeHtml(item.kind)} 위치로 이동">
       <div class="notes-card-top">
         <span class="notes-card-badge">${icon(iconName, 12)}p. ${item.page}</span>
         ${tsHtml}
@@ -443,13 +474,47 @@ function renderAnnotationCard(item) {
   `
 }
 
+function compareAnnotationItems(a, b) {
+  if (annotationSortMode === 'page-asc' || annotationSortMode === 'page-desc') {
+    const direction = annotationSortMode === 'page-asc' ? 1 : -1
+    return direction * (a.page - b.page) || a.storageOrder - b.storageOrder
+  }
+  const aTime = a.ts ? a.ts.getTime() : null
+  const bTime = b.ts ? b.ts.getTime() : null
+  if (aTime !== null && bTime !== null && aTime !== bTime) {
+    return annotationSortMode === 'newest' ? bTime - aTime : aTime - bTime
+  }
+  if (aTime !== null || bTime !== null) {
+    return annotationSortMode === 'newest' ? (aTime !== null ? -1 : 1) : (aTime !== null ? 1 : -1)
+  }
+  return annotationSortMode === 'newest' ? b.storageOrder - a.storageOrder : a.storageOrder - b.storageOrder
+}
+
+function renderAnnotationSortControl() {
+  return `
+    <div class="notes-annotation-toolbar">
+      <label for="notes-annotation-sort">주석 정렬</label>
+      <div class="notes-annotation-sort-box">
+        <select id="notes-annotation-sort" class="notes-annotation-sort-select" aria-label="주석 정렬 기준">
+          <option value="page-asc"${annotationSortMode === 'page-asc' ? ' selected' : ''}>페이지 오름차순</option>
+          <option value="page-desc"${annotationSortMode === 'page-desc' ? ' selected' : ''}>페이지 내림차순</option>
+          <option value="newest"${annotationSortMode === 'newest' ? ' selected' : ''}>최근 생성순</option>
+          <option value="oldest"${annotationSortMode === 'oldest' ? ' selected' : ''}>오래된 생성순</option>
+        </select>
+        <span class="notes-annotation-sort-icon">${icon('chevronDown', 12)}</span>
+      </div>
+    </div>
+  `
+}
+
 function renderTabContent(entry) {
   if (activeSubtab === 'summary') return renderSummaryTabContent(entry.doc.id)
   const items = entry.items[activeSubtab] || []
   if (items.length === 0) {
     return `<div class="notes-empty"><p>${EMPTY_MESSAGES[activeSubtab]}</p></div>`
   }
-  return `<div class="notes-card-list">${items.map(renderAnnotationCard).join('')}</div>`
+  const sortedItems = items.slice().sort(compareAnnotationItems)
+  return `${renderAnnotationSortControl()}<div class="notes-card-list">${sortedItems.map(renderAnnotationCard).join('')}</div>`
 }
 
 function renderDetail(root) {
@@ -573,6 +638,9 @@ function attachListeners(root) {
       return
     }
 
+    const annotationSortSelect = e.target.closest('.notes-annotation-sort-select')
+    if (annotationSortSelect) return
+
     // 카드 "더보기/접기" 토글 (뷰어 이동으로 전파되지 않도록 별도 처리)
     const expandBtn = e.target.closest('.notes-card-expand-btn')
     if (expandBtn) {
@@ -583,11 +651,10 @@ function attachListeners(root) {
       return
     }
 
-    // 주석 카드 클릭 → 뷰어에서 해당 논문 열기(뷰어 라우터는 정확한 페이지
-    // 이동을 위한 쿼리 파라미터를 지원하지 않아 문서까지만 이동한다)
+    // 주석 카드 클릭 → 문서/페이지와 저장된 정확한 앵커를 함께 전달한다.
     const card = e.target.closest('.notes-annotation-card')
     if (card && card.dataset.docId) {
-      location.hash = 'viewer?id=' + encodeURIComponent(card.dataset.docId)
+      openAnnotationInViewer(card)
       return
     }
 
@@ -597,6 +664,30 @@ function attachListeners(root) {
       location.hash = 'viewer?id=' + encodeURIComponent(openBtn.dataset.docId)
     }
   })
+
+  root.addEventListener('change', (e) => {
+    const select = e.target.closest('.notes-annotation-sort-select')
+    if (!select) return
+    annotationSortMode = select.value
+    renderDetail(root)
+  })
+
+  root.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    const card = e.target.closest('.notes-annotation-card')
+    if (!card || e.target.closest('button, select, a')) return
+    e.preventDefault()
+    openAnnotationInViewer(card)
+  })
+}
+
+function openAnnotationInViewer(card) {
+  const params = new URLSearchParams({ id: card.dataset.docId, page: card.dataset.page })
+  if (card.dataset.kind) params.set('kind', card.dataset.kind)
+  if (card.dataset.memoId) params.set('memoId', card.dataset.memoId)
+  if (card.dataset.startOffset) params.set('start', card.dataset.startOffset)
+  if (card.dataset.endOffset) params.set('end', card.dataset.endOffset)
+  location.hash = `viewer?${params.toString()}`
 }
 
 function shellHtml() {
