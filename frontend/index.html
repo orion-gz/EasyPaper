@@ -576,12 +576,19 @@
             <textarea id="chat-input" class="chat-input-textarea" placeholder="논문에 대해 궁금한 점을 질문하세요..." rows="1"></textarea>
             <div class="chat-input-footer">
               <div id="chat-sidebar-provider"></div>
-              <button id="chat-send-btn" class="chat-send-btn" title="전송">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="22" y1="2" x2="11" y2="13"/>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
-              </button>
+              <div class="chat-input-actions">
+                <button type="button" id="chat-input-expand-btn" class="chat-input-expand-btn" title="입력창 확장" aria-label="입력창 확장" aria-controls="chat-input" aria-expanded="false">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/>
+                  </svg>
+                </button>
+                <button id="chat-send-btn" class="chat-send-btn" title="전송">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
