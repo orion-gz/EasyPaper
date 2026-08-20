@@ -22,10 +22,18 @@ export function invalidateLibraryGetCache() {
   sharedGetCache.clear()
 }
 
-function buildQuery(options) {
-  if (!options || !options.targetLang) return ''
-  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs } = options
-  return `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}`
+function buildQuery(options = {}) {
+  const params = new URLSearchParams()
+  if (options.targetLang) {
+    params.set("target_lang", options.targetLang)
+    params.set("style", options.style)
+    params.set("ignore_math", options.ignoreMath)
+    params.set("ignore_table", options.ignoreTable)
+    params.set("ignore_refs", options.ignoreRefs)
+  }
+  if (options.documentMode) params.set("document_mode", options.documentMode)
+  const query = params.toString()
+  return query ? "?" + query : ""
 }
 
 export async function fetchLibrary(options = {}) {
@@ -242,8 +250,10 @@ export async function putLibraryMemos(docId, data) {
   return res.json()
 }
 
-export async function searchLibrary(query) {
-  const res = await fetch(`${API_BASE}/library/search?q=${encodeURIComponent(query)}`)
+export async function searchLibrary(query, documentMode = null) {
+  const params = new URLSearchParams({ q: query })
+  if (documentMode) params.set("document_mode", documentMode)
+  const res = await fetch(`${API_BASE}/library/search?${params}`)
   if (!res.ok) throw new Error('검색 실패')
   return res.json()
 }
@@ -326,13 +336,19 @@ export async function sendReadingHeartbeat(docId, seconds, category = 'reading',
 
 // Reading History 페이지의 총 읽기 시간/카테고리별 시간 분포/논문별 읽기 시간
 // 랭킹에 쓰이는 실측 집계. sinceDays를 주면 최근 N일로 제한한다.
-export async function fetchReadingTimeStats(sinceDays) {
-  const query = sinceDays ? `?since_days=${sinceDays}` : ''
+export async function fetchReadingTimeStats(sinceDays, documentMode = null) {
+  const params = new URLSearchParams()
+  if (sinceDays) params.set('since_days', sinceDays)
+  if (documentMode) params.set('document_mode', documentMode)
+  const query = params.size ? `?${params}` : ''
   return fetchJsonWithSharedTtl(`${API_BASE}/library/reading-stats${query}`, '읽기 시간 통계 조회 실패')
 }
 
-export async function fetchReadingAnalyticsSummary(sinceDays) {
-  const query = sinceDays ? `?since_days=${sinceDays}` : ''
+export async function fetchReadingAnalyticsSummary(sinceDays, documentMode = null) {
+  const params = new URLSearchParams()
+  if (sinceDays) params.set('since_days', sinceDays)
+  if (documentMode) params.set('document_mode', documentMode)
+  const query = params.size ? `?${params}` : ''
   return fetchJsonWithSharedTtl(`${API_BASE}/library/reading-analytics-summary${query}`, 'Reading Analytics summary fetch failed')
 }
 

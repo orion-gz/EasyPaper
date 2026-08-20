@@ -43,6 +43,9 @@ def init_db():
             pdf_path TEXT NOT NULL,
             total_pages INTEGER NOT NULL,
             metadata TEXT,
+            document_mode TEXT NOT NULL DEFAULT 'research',
+            document_type TEXT NOT NULL DEFAULT 'research_paper',
+            mode_schema_version INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             FOREIGN KEY (username) REFERENCES users (username) ON DELETE CASCADE ON UPDATE CASCADE
         )
@@ -94,6 +97,16 @@ def init_db():
             cursor.execute("ALTER TABLE documents ADD COLUMN is_deleted INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
             pass
+
+        for column_sql in (
+            "ALTER TABLE documents ADD COLUMN document_mode TEXT NOT NULL DEFAULT 'research'",
+            "ALTER TABLE documents ADD COLUMN document_type TEXT NOT NULL DEFAULT 'research_paper'",
+            "ALTER TABLE documents ADD COLUMN mode_schema_version INTEGER NOT NULL DEFAULT 1",
+        ):
+            try:
+                cursor.execute(column_sql)
+            except sqlite3.OperationalError:
+                pass
 
         # chats 테이블 동적 스키마 마이그레이션 (graph_synced_at 컬럼 추가).
         # 질문이 어떤 Concept과도 매칭되지 않는 것은 정상 케이스라
@@ -272,6 +285,7 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_translations_doc_saved ON translations(doc_id, saved_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_insights_doc ON page_insights(doc_id, kind, suffix)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_username_deleted ON documents(username, is_deleted, created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_username_mode_deleted ON documents(username, document_mode, is_deleted, created_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chats_doc ON chats(doc_id, id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_paper_concepts_doc ON paper_concepts(doc_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_paper_concepts_concept ON paper_concepts(concept_id)")
@@ -376,6 +390,22 @@ def init_db():
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_folders_user_parent ON folders(username, parent_id, sort_order)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_folders_folder ON document_folders(folder_id)")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_workspace_settings (
+            username TEXT PRIMARY KEY,
+            onboarding_version INTEGER NOT NULL DEFAULT 0,
+            preferred_workspace_mode TEXT,
+            document_type_options TEXT,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """)
+        cursor.execute(
+            """INSERT OR IGNORE INTO user_workspace_settings
+               (username, onboarding_version, preferred_workspace_mode, document_type_options, updated_at)
+               SELECT username, 1, 'research', '{}', ? FROM users""",
+            (datetime.now(timezone.utc).isoformat(),),
+        )
         # foreign_keys 설정이 꺼진 기존 설치에서 영구 삭제된 논문이나 폴더를
         # 가리키는 매핑이 남을 수 있으므로 시작 시 기존 데이터도 정리한다.
         cursor.execute("DELETE FROM document_folders WHERE doc_id NOT IN (SELECT id FROM documents)")
@@ -483,6 +513,7 @@ def update_user_credentials(old_username: str, new_username: str, new_password_h
                     "user_reading_profiles",
                     "compare_sessions",
                     "folders",
+                    "user_workspace_settings",
                 ):
                     cursor.execute(
                         f"UPDATE {table} SET username = ? WHERE username = ?",
@@ -496,34 +527,38 @@ def update_user_credentials(old_username: str, new_username: str, new_password_h
 
 # ── 문서 (Documents) ──────────────────────────────────────────────────────────
 
-def db_save_document(doc_id: str, username: str, filename: str, pdf_path: str, total_pages: int, metadata: dict) -> dict:
+def db_save_document(
+    doc_id: str, username: str, filename: str, pdf_path: str, total_pages: int,
+    metadata: dict, document_mode: str = "research",
+    document_type: str = "research_paper", mode_schema_version: int = 1,
+) -> dict:
     meta_str = json.dumps(metadata, ensure_ascii=False)
     created_at = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT OR REPLACE INTO documents (id, username, filename, pdf_path, total_pages, metadata, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO documents
+                (id, username, filename, pdf_path, total_pages, metadata,
+                 document_mode, document_type, mode_schema_version, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (doc_id, username, filename, pdf_path, total_pages, meta_str, created_at)
+            (doc_id, username, filename, pdf_path, total_pages, meta_str,
+             document_mode, document_type, mode_schema_version, created_at)
         )
         conn.commit()
     return {
-        "id": doc_id,
-        "username": username,
-        "filename": filename,
-        "pdf_path": pdf_path,
-        "total_pages": total_pages,
-        "metadata": metadata,
-        "created_at": created_at
+        "id": doc_id, "username": username, "filename": filename,
+        "pdf_path": pdf_path, "total_pages": total_pages, "metadata": metadata,
+        "document_mode": document_mode, "document_type": document_type,
+        "mode_schema_version": mode_schema_version, "created_at": created_at,
     }
 
 def db_get_document(doc_id: str) -> Optional[dict]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents WHERE id = ?",
+            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, is_deleted, created_at FROM documents WHERE id = ?",
             (doc_id,)
         )
         row = cursor.fetchone()
@@ -533,46 +568,44 @@ def db_get_document(doc_id: str) -> Optional[dict]:
             return doc
         return None
 
-def db_list_documents(username: Optional[str] = None, only_trash: bool = False, include_deleted: bool = False) -> list:
+def db_list_documents(username: Optional[str] = None, only_trash: bool = False, include_deleted: bool = False, document_mode: Optional[str] = None) -> list:
+    conditions = []
+    params = []
+    if username:
+        conditions.append("username = ?")
+        params.append(username)
+    if not include_deleted:
+        conditions.append("is_deleted = ?")
+        params.append(1 if only_trash else 0)
+    if document_mode is not None:
+        conditions.append("document_mode = ?")
+        params.append(document_mode)
+
+    query = (
+        "SELECT id, username, filename, pdf_path, total_pages, metadata, "
+        "document_mode, document_type, mode_schema_version, is_deleted, created_at "
+        "FROM documents"
+    )
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY created_at DESC"
+
     with get_db() as conn:
         cursor = conn.cursor()
-        if include_deleted:
-            if username:
-                cursor.execute(
-                    "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents WHERE username = ? ORDER BY created_at DESC",
-                    (username,)
-                )
-            else:
-                cursor.execute(
-                    "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents ORDER BY created_at DESC"
-                )
-        else:
-            is_deleted_val = 1 if only_trash else 0
-            if username:
-                cursor.execute(
-                    "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents WHERE username = ? AND is_deleted = ? ORDER BY created_at DESC",
-                    (username, is_deleted_val)
-                )
-            else:
-                cursor.execute(
-                    "SELECT id, username, filename, pdf_path, total_pages, metadata, is_deleted, created_at FROM documents WHERE is_deleted = ? ORDER BY created_at DESC",
-                    (is_deleted_val,)
-                )
-        rows = cursor.fetchall()
+        cursor.execute(query, params)
         docs = []
-        for r in rows:
-            doc = dict(r)
+        for row in cursor.fetchall():
+            doc = dict(row)
             doc["metadata"] = json.loads(doc["metadata"]) if doc["metadata"] else {}
             docs.append(doc)
         return docs
-
 
 def _escape_like(text: str) -> str:
     """LIKE 패턴의 와일드카드(%, _)를 리터럴로 취급하도록 이스케이프한다."""
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def db_search_documents(username: str, query: str, only_trash: bool = False) -> list:
+def db_search_documents(username: str, query: str, only_trash: bool = False, document_mode: Optional[str] = None) -> list:
     """파일명/제목·카테고리(metadata)와 페이지별 번역 텍스트를 가로질러 검색어를
     찾아 매칭되는 문서 목록을 반환합니다 (대소문자 구분 없음).
 
@@ -588,10 +621,12 @@ def db_search_documents(username: str, query: str, only_trash: bool = False) -> 
         cursor.execute(
             """
             SELECT DISTINCT d.id, d.username, d.filename, d.pdf_path, d.total_pages,
-                   d.metadata, d.is_deleted, d.created_at
+                   d.metadata, d.document_mode, d.document_type,
+                   d.mode_schema_version, d.is_deleted, d.created_at
             FROM documents d
             LEFT JOIN translations t ON t.doc_id = d.id
             WHERE d.username = ? AND d.is_deleted = ?
+              AND (? IS NULL OR d.document_mode = ?)
               AND (
                     d.filename LIKE ? ESCAPE '\\'
                  OR d.metadata LIKE ? ESCAPE '\\'
@@ -599,7 +634,7 @@ def db_search_documents(username: str, query: str, only_trash: bool = False) -> 
               )
             ORDER BY d.created_at DESC
             """,
-            (username, is_deleted_val, like_query, like_query, like_query)
+            (username, is_deleted_val, document_mode, document_mode, like_query, like_query, like_query)
         )
         rows = cursor.fetchall()
         docs = []
@@ -792,37 +827,36 @@ def db_clear_chat_history(doc_id: str) -> None:
         conn.commit()
 
 
-def db_list_assistant_chat_sessions(username: str) -> List[Dict[str, Any]]:
-    """사용자가 AI 어시스턴트(단일 논문) 기능으로 대화한 채팅 세션 목록을,
-    최근 대화 시각 역순으로 반환합니다. 비교 채팅(doc_id가 "cmp_"로 시작)은
-    제외하고, 휴지통에 있거나 삭제된 문서의 대화도 제외합니다."""
+def db_list_assistant_chat_sessions(username: str, document_mode: Optional[str] = None) -> List[Dict[str, Any]]:
+    """사용자의 단일 문서 채팅을 현재 문서 모드 범위에서 최근 대화 순으로 반환한다."""
     with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
+        rows = conn.execute(
             """
             SELECT d.id AS doc_id, d.filename, d.metadata, d.created_at,
-                   MAX(c.created_at) AS last_message_at
+                   d.document_mode, d.document_type, MAX(c.created_at) AS last_message_at
             FROM chats c
             JOIN documents d ON d.id = c.doc_id
-            WHERE d.username = ? AND d.is_deleted = 0 AND c.doc_id NOT LIKE 'cmp\\_%' ESCAPE '\\'
+            WHERE d.username = ? AND d.is_deleted = 0
+              AND (? IS NULL OR d.document_mode = ?)
+              AND c.doc_id NOT LIKE 'cmp\\_%' ESCAPE '\\'
             GROUP BY c.doc_id
             ORDER BY last_message_at DESC
             """,
-            (username,)
-        )
-        sessions = []
-        for r in cursor.fetchall():
-            row = dict(r)
-            metadata = json.loads(row["metadata"]) if row["metadata"] else {}
-            title = metadata.get("title") or row["filename"]
-            sessions.append({
-                "doc_id": row["doc_id"],
-                "title": title,
-                "created_at": row["created_at"],
-                "last_message_at": row["last_message_at"],
-            })
-        return sessions
-
+            (username, document_mode, document_mode),
+        ).fetchall()
+    sessions = []
+    for row_data in rows:
+        row = dict(row_data)
+        metadata = json.loads(row["metadata"]) if row["metadata"] else {}
+        sessions.append({
+            "doc_id": row["doc_id"],
+            "title": metadata.get("title") or row["filename"],
+            "created_at": row["created_at"],
+            "last_message_at": row["last_message_at"],
+            "document_mode": row["document_mode"],
+            "document_type": row["document_type"],
+        })
+    return sessions
 
 def db_upsert_compare_session(compare_id: str, username: str, doc_ids: List[str]) -> None:
     """비교 채팅 세션 id와 그 대상 문서 id 목록의 매핑을 저장/갱신합니다."""
@@ -1070,7 +1104,63 @@ def db_move_documents_to_folder(doc_ids: List[str], username: str, folder_id: Op
         return len(owned_ids)
 
 
-# ── 앱 내부 상태 (app_meta) ───────────────────────────────────────────────────
+def db_document_has_mode_sensitive_data(doc_id: str) -> bool:
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT
+                 EXISTS(SELECT 1 FROM translations WHERE doc_id = ?) AS has_translations,
+                 EXISTS(SELECT 1 FROM page_insights WHERE doc_id = ?) AS has_insights""",
+            (doc_id, doc_id),
+        ).fetchone()
+    return bool(row["has_translations"] or row["has_insights"])
+
+
+def db_update_document_classification(doc_id: str, document_mode: str, document_type: str, mode_schema_version: int = 1) -> bool:
+    with get_db() as conn:
+        cursor = conn.execute(
+            "UPDATE documents SET document_mode = ?, document_type = ?, mode_schema_version = ? WHERE id = ?",
+            (document_mode, document_type, mode_schema_version, doc_id),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
+
+
+def db_get_workspace_settings(username: str) -> dict:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT onboarding_version, preferred_workspace_mode, document_type_options, updated_at FROM user_workspace_settings WHERE username = ?",
+            (username,),
+        ).fetchone()
+    if not row:
+        return {"onboarding_version": 0, "preferred_workspace_mode": None, "document_type_options": {}, "updated_at": None}
+    data = dict(row)
+    try:
+        data["document_type_options"] = json.loads(data["document_type_options"] or "{}")
+    except (TypeError, json.JSONDecodeError):
+        data["document_type_options"] = {}
+    return data
+
+
+def db_upsert_workspace_settings(username: str, onboarding_version: int, preferred_workspace_mode: Optional[str], document_type_options: dict) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    options_json = json.dumps(document_type_options, ensure_ascii=False)
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO user_workspace_settings
+               (username, onboarding_version, preferred_workspace_mode, document_type_options, updated_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(username) DO UPDATE SET
+                 onboarding_version = excluded.onboarding_version,
+                 preferred_workspace_mode = excluded.preferred_workspace_mode,
+                 document_type_options = excluded.document_type_options,
+                 updated_at = excluded.updated_at""",
+            (username, onboarding_version, preferred_workspace_mode, options_json, now),
+        )
+        conn.commit()
+    return db_get_workspace_settings(username)
+
+
+# ── 앱 내부 상태 (app_meta) ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def db_get_meta(key: str) -> Optional[str]:
     with get_db() as conn:
@@ -1564,7 +1654,7 @@ def db_add_reading_time(doc_id: str, username: str, category: str, seconds: int)
         conn.commit()
 
 
-def db_get_reading_time_stats(username: str, since_days: Optional[int] = None) -> Dict[str, Any]:
+def db_get_reading_time_stats(username: str, since_days: Optional[int] = None, document_mode: Optional[str] = None) -> Dict[str, Any]:
     """사용자의 실측 읽기 시간을 세 가지 형태로 집계해서 반환한다:
     - total_seconds_by_category: {"reading": n, "chat": n, "compare": n} (시간 분포용)
     - total_seconds_by_doc: {doc_id: seconds} (Top Papers by Reading Time용, 카테고리 무관 합계)
@@ -1578,8 +1668,13 @@ def db_get_reading_time_stats(username: str, since_days: Optional[int] = None) -
             cutoff = (datetime.now(timezone.utc) - timedelta(days=since_days - 1)).strftime("%Y-%m-%d")
             day_filter = " AND day >= ?"
             params.append(cutoff)
+        mode_join = ""
+        if document_mode is not None:
+            mode_join = " JOIN documents d ON d.id = rt.doc_id"
+            day_filter += " AND d.document_mode = ?"
+            params.append(document_mode)
         cursor.execute(
-            f"SELECT doc_id, day, category, seconds FROM reading_time WHERE username = ?{day_filter}",
+            f"SELECT rt.doc_id, rt.day, rt.category, rt.seconds FROM reading_time rt{mode_join} WHERE rt.username = ?{day_filter}",
             params,
         )
         rows = cursor.fetchall()
@@ -2168,7 +2263,7 @@ def db_backfill_document_titles() -> None:
             conn.commit()
 
 
-def db_get_all_reading_analytics_summary(username: str, since_days: Optional[int] = None) -> Dict[str, Any]:
+def db_get_all_reading_analytics_summary(username: str, since_days: Optional[int] = None, document_mode: Optional[str] = None) -> Dict[str, Any]:
     """Aggregate cumulative paper achievements for dashboard and history."""
     with get_db() as conn:
         params: List[Any] = [username]
@@ -2178,14 +2273,19 @@ def db_get_all_reading_analytics_summary(username: str, since_days: Optional[int
             day_filter = " AND updated_at >= ?"
             params.append(cutoff)
 
+        mode_join = ""
+        if document_mode is not None:
+            mode_join = " JOIN documents d ON d.id = prs.paper_id"
+            day_filter += " AND d.document_mode = ?"
+            params.append(document_mode)
         rows = conn.execute(
             f"""
-            SELECT paper_id, reading_score, reading_confidence, reading_depth,
-                   verified_pages_count, meaningful_pages_count, total_pages,
-                   active_reading_time, updated_at
-            FROM paper_reading_stats
-            WHERE username = ?{day_filter}
-            ORDER BY updated_at DESC
+            SELECT prs.paper_id, prs.reading_score, prs.reading_confidence, prs.reading_depth,
+                   prs.verified_pages_count, prs.meaningful_pages_count, prs.total_pages,
+                   prs.active_reading_time, prs.updated_at
+            FROM paper_reading_stats prs{mode_join}
+            WHERE prs.username = ?{day_filter}
+            ORDER BY prs.updated_at DESC
             """,
             params,
         ).fetchall()

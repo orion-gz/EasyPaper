@@ -1,3 +1,4 @@
+import { CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 // 첫 실행 시 AI 엔진 자동 감지 / 설치 안내 온보딩 모달
 // main.js에서 분리됨 - DOM 참조 및 로직은 이 파일 안에서만 쓰인다.
 import {
@@ -9,10 +10,13 @@ export function createOnboarding({
   openOverlayModal, closeOverlayModal, showToast, escapeHtml, providerConfig,
   viewerTransPicker, settingDefaultAiPicker, settingTransPicker,
   chatSidebarPicker, settingChatPicker, settingAnalysisPicker, settingLibraryPicker,
+  onWorkspaceSelected,
 }) {
   const $ = (id) => document.getElementById(id)
 
   const onboardingModal        = $('onboarding-modal')
+  const onboardingPurpose      = $("onboarding-purpose")
+  const onboardingPurposeNext = $("onboarding-purpose-next-btn")
   const onboardingCloseBtn     = $('onboarding-close-btn')
   const onboardingSkipBtn      = $('onboarding-skip-btn')
   const onboardingDetecting    = $('onboarding-detecting')
@@ -43,7 +47,6 @@ export function createOnboarding({
 
   function maybeShowOnboarding() {
     if (!onboardingModal) return
-    if (localStorage.getItem(ONBOARDING_SEEN_KEY) === '1') return
     openOnboarding()
   }
 
@@ -51,24 +54,29 @@ export function createOnboarding({
   const onboardingState = {
     sys: null, cli: null, ollamaStatus: null,
     detected: [], selectedDetectedIdx: null,
-    currentEntry: null, selectedModel: null,
-    step: 'detecting',
+    currentEntry: null, selectedModel: null, selectedPurpose: null,
+    step: 'purpose',
   }
 
   // 온보딩 4단계(감지 중 / 감지됨 선택 / 모델 선택 / 설치 안내) 중 하나로 전환.
   // 감지됨·설치 섹션은 "모델 선택" 단계에서는 별도 화면처럼 숨겨 선택에 집중하게 함
   function showOnboardingStep(step) {
     onboardingState.step = step
+    if (onboardingPurpose) onboardingPurpose.classList.toggle("hidden", step !== "purpose")
     onboardingDetecting.classList.toggle('hidden', step !== 'detecting')
     onboardingDetected.classList.toggle('hidden', !(step === 'detected' && onboardingState.detected.length > 0))
     if (onboardingModelSelect) onboardingModelSelect.classList.toggle('hidden', step !== 'model-select')
-    onboardingInstall.classList.toggle('hidden', step === 'detecting' || step === 'model-select')
+    onboardingInstall.classList.toggle('hidden', step === 'purpose' || step === 'detecting' || step === 'model-select')
   }
 
   function openOnboarding() {
     openOverlayModal(onboardingModal)
-    showOnboardingStep('detecting')
-    detectAndRenderOnboarding()
+    if (Number(localStorage.getItem(ONBOARDING_VERSION_KEY) || 0) < CURRENT_ONBOARDING_VERSION) {
+      showOnboardingStep("purpose")
+    } else {
+      showOnboardingStep("detecting")
+      detectAndRenderOnboarding()
+    }
   }
 
   function closeOnboarding() {
@@ -78,6 +86,30 @@ export function createOnboarding({
 
   if (onboardingCloseBtn) onboardingCloseBtn.addEventListener('click', closeOnboarding)
   if (onboardingSkipBtn) onboardingSkipBtn.addEventListener('click', closeOnboarding)
+  document.querySelectorAll("[data-purpose-mode]").forEach(button => {
+    button.addEventListener("click", () => {
+      onboardingState.selectedPurpose = button.dataset.purposeMode
+      document.querySelectorAll("[data-purpose-mode]").forEach(item => {
+        const selected = item === button
+        item.setAttribute("aria-checked", String(selected))
+      })
+      if (onboardingPurposeNext) onboardingPurposeNext.disabled = false
+    })
+  })
+  onboardingPurposeNext?.addEventListener("click", async () => {
+    if (!onboardingState.selectedPurpose) return
+    onboardingPurposeNext.disabled = true
+    try {
+      await onWorkspaceSelected?.(onboardingState.selectedPurpose)
+      localStorage.setItem(ONBOARDING_VERSION_KEY, String(CURRENT_ONBOARDING_VERSION))
+      showOnboardingStep("detecting")
+      detectAndRenderOnboarding()
+    } catch (error) {
+      onboardingPurposeNext.disabled = false
+      showToast(`워크스페이스 설정 저장 실패: ${error.message}`, "error")
+    }
+  })
+
   if (onboardingModal) {
     onboardingModal.addEventListener('click', (e) => {
       if (e.target === onboardingModal) closeOnboarding()

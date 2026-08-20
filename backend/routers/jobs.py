@@ -44,17 +44,25 @@ async def get_page_translation(
     current_user: str = Depends(get_current_user)
 ):
     """특정 페이지의 번역 MD 내용 및 매핑 데이터를 반환합니다."""
-    require_session_owner(session_id, current_user)
-    suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
+    session = require_session_owner(session_id, current_user)
+    from services.document_policy import translation_cache_candidates
+    suffix_candidates = translation_cache_candidates(
+        session.get("document_mode", "research"),
+        session.get("document_type", "research_paper"),
+        target_lang, style, ignore_math, ignore_table, ignore_refs,
+    )
     
     from services.library import get_translation_full
-    full_cached = get_translation_full(session_id, page_num, suffix)
-    
+    full_cached = {"translation": "", "sentences": []}
+    for suffix in suffix_candidates:
+        full_cached = get_translation_full(session_id, page_num, suffix, fallback=False)
+        if full_cached.get("translation"):
+            break
+        page_text = get_page_md(session_id, page_num, suffix, fallback=False)
+        if page_text is not None:
+            return {"page_num": page_num, "translation": page_text, "sentences": []}
     if not full_cached.get("translation"):
-        text = get_page_md(session_id, page_num, suffix)
-        if text is None:
-            raise HTTPException(status_code=404, detail="아직 번역되지 않은 페이지입니다.")
-        return {"page_num": page_num, "translation": text, "sentences": []}
+        raise HTTPException(status_code=404, detail="아직 번역되지 않은 페이지입니다.")
         
     return {
         "page_num": page_num,
@@ -74,15 +82,26 @@ async def download_translation(
     current_user: str = Depends(get_current_user)
 ):
     """전체 번역 MD 파일을 다운로드합니다."""
-    require_session_owner(session_id, current_user)
-    suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
-    path = get_full_md_path(session_id, suffix)
+    session = require_session_owner(session_id, current_user)
+    from services.document_policy import translation_cache_candidates
+    suffix_candidates = translation_cache_candidates(
+        session.get("document_mode", "research"),
+        session.get("document_type", "research_paper"),
+        target_lang, style, ignore_math, ignore_table, ignore_refs,
+    )
+    path = None
+    matched_suffix = suffix_candidates[0]
+    for suffix in suffix_candidates:
+        path = get_full_md_path(session_id, suffix, fallback=False)
+        if path:
+            matched_suffix = suffix
+            break
     if not path:
         raise HTTPException(status_code=404, detail="아직 번역이 완료되지 않았습니다.")
     return FileResponse(
         path,
         media_type="text/markdown",
-        filename=f"translation_{suffix}.md",
+        filename=f"translation_{matched_suffix}.md",
     )
 
 

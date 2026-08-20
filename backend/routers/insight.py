@@ -44,7 +44,10 @@ async def get_page_insight_stream(
         raise HTTPException(status_code=404, detail="페이지를 찾을 수 없습니다.")
 
     page_text = page_data.get("text", "").strip()
-    suffix = target_lang
+    document_mode = session.get("document_mode", "research")
+    document_type = session.get("document_type", "research_paper")
+    from services.document_policy import insight_cache_suffix
+    suffix = insight_cache_suffix(document_mode, document_type, target_lang)
     doc_title = session.get("metadata", {}).get("title") or session.get("filename", "")
 
     async def event_stream():
@@ -71,13 +74,32 @@ async def get_page_insight_stream(
                 page_text,
                 target_lang=target_lang,
                 doc_title=doc_title,
+                document_mode=document_mode,
+                document_type=document_type,
                 session_id=session_id
             ):
                 full_result.append(token)
+                if document_mode == "general" and kind == "keywords":
+                    continue
                 data = json.dumps({"content": token, "done": False, "cached": False}, ensure_ascii=False)
                 yield f"data: {data}\n\n"
 
             complete_result = "".join(full_result).strip()
+            if document_mode == "general" and kind == "keywords":
+                try:
+                    from services.vocabulary import validate_vocabulary_result
+                    complete_result = json.dumps(
+                        validate_vocabulary_result(complete_result, page_text, page_num),
+                        ensure_ascii=False,
+                    )
+                except (ValueError, json.JSONDecodeError):
+                    complete_result = json.dumps(
+                        {"schema_version": 1, "advanced_words": [], "technical_terms": []},
+                        ensure_ascii=False,
+                    )
+            if document_mode == "general" and kind == "keywords":
+                data = json.dumps({"content": complete_result, "done": False, "cached": False}, ensure_ascii=False)
+                yield f"data: {data}\n\n"
             save_page_insight(session_id, page_num, kind, complete_result, suffix)
             yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False}, ensure_ascii=False)}\n\n"
         except Exception as e:

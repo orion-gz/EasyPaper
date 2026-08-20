@@ -17,6 +17,7 @@ import { fetchLibrary, fetchLibraryAnnotations, fetchLibraryMemos, fetchPrimer }
 import { icon } from '../icons.js'
 import { lastActivityIso } from '../readPages.js'
 import { formatTranslationHtml, formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
+import { documentTypeLabel } from '../documentModes.js'
 
 let renderGeneration = 0
 
@@ -258,6 +259,7 @@ function renderPaperRow(entry) {
       ${renderThumb(doc.id, 40)}
       <div class="notes-paper-row-body">
         <div class="notes-paper-row-title">${escapeHtml(title)}</div>
+        <span class="document-type-chip ${escapeHtml(doc.document_mode || 'research')}">${escapeHtml(documentTypeLabel(null, doc.document_mode || 'research', doc.document_type || 'research_paper'))}</span>
         ${metaLine ? `<div class="notes-paper-row-meta">${escapeHtml(metaLine)}</div>` : ''}
         <div class="notes-paper-row-counts">
           <span class="notes-count-chip" title="하이라이트">${icon('highlighter', 12)}${counts.highlight}</span>
@@ -731,7 +733,7 @@ function shellHtml() {
   `
 }
 
-export async function renderNotesPage() {
+export async function renderNotesPage(documentMode = 'research') {
   const root = document.getElementById('page-notes')
   if (!root) return
   const generation = ++renderGeneration
@@ -742,7 +744,7 @@ export async function renderNotesPage() {
 
   let docs = []
   try {
-    const data = await fetchLibrary()
+    const data = await fetchLibrary({ documentMode })
     docs = data.documents || []
   } catch (err) {
     console.error('Notes 페이지: 라이브러리 조회 실패:', err)

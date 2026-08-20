@@ -12,6 +12,7 @@ from services.cache import get_cached_translation, save_translation_cache, get_c
 from services.library import save_translation as lib_save_translation, get_translation as lib_get_translation, get_translation_full as lib_get_translation_full, clear_translations as lib_clear_translations
 from services.pdf_parser import render_page_image_base64
 from services.rate_limiter import enforce_rate_limit
+from services.document_policy import translation_cache_candidates
 
 # 수식(LaTeX) 번역 정확도를 위해 페이지 이미지를 함께 첨부할 수 있는 provider
 # (translation_job.py의 배치 번역 잡과 동일한 기준).
@@ -54,11 +55,24 @@ async def translate_page(
     page_text = page_data.get("text", "").strip()
     
     # 설정 옵션들을 결합한 고유 캐시 접미사 생성
-    suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
+    document_mode = session.get("document_mode", "research")
+    document_type = session.get("document_type", "research_paper")
+    suffix_candidates = translation_cache_candidates(
+        document_mode, document_type, target_lang, style,
+        ignore_math, ignore_table, ignore_refs,
+    )
+    suffix = suffix_candidates[0]
 
     async def event_stream():
         # 1순위: 라이브러리 저장 번역 확인
-        full_cached = lib_get_translation_full(session_id, page_num, suffix, fallback=False) or get_cached_translation_full(session_id, page_num, suffix)
+        full_cached = {}
+        for candidate_suffix in suffix_candidates:
+            full_cached = (
+                lib_get_translation_full(session_id, page_num, candidate_suffix, fallback=False)
+                or get_cached_translation_full(session_id, page_num, candidate_suffix)
+            )
+            if full_cached.get("translation"):
+                break
         cached_text = full_cached.get("translation")
         cached_sentences = full_cached.get("sentences", [])
 
@@ -129,6 +143,8 @@ async def translate_page(
                     prev_context=prev_context,
                     session_id=session_id,
                     page_num=page_num,
+                    document_mode=document_mode,
+                    document_type=document_type,
                     page_image_b64=page_image_b64
                 ):
                     chunk_result.append(token)

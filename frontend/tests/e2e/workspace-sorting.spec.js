@@ -38,7 +38,7 @@ test('Notes 논문 목록을 최근 읽은순, 제목순, 업로드순으로 정
 
 test('AI Chats 목록을 논문 업로드순으로 정렬한다', async ({ page }) => {
   await mockBaseRoutes(page, { documents })
-  await page.route('**/api/chat/sessions', route => route.fulfill({
+  await page.route('**/api/chat/sessions*', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({

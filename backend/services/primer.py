@@ -44,9 +44,10 @@ from services.library import (
 from services.reference_parser import extract_reference_list
 from services.section_parser import detect_sections
 from services.term_extractor import extract_candidate_terms
-from services.llm_client import generate_reading_primer
+from services.llm_client import generate_reading_primer, stream_page_insight
 
 _PRIMER_CACHE_KIND = "primer_v2"
+_OVERVIEW_CACHE_KIND = "document_overview_v2"
 _RECOMMENDATION_LIMIT = 5
 _LIBRARY_MATCH_THRESHOLD = 0.7
 _DUPLICATE_TITLE_THRESHOLD = 0.6
@@ -238,6 +239,138 @@ async def generate_primer(
         print(f"[primer] 캐시 저장 실패 ({doc_id}): {e}")
 
     return result
+
+
+def _overview_cache_suffix(target_lang: str, document_type: str) -> str:
+    from services.document_policy import INSIGHT_PROMPT_VERSION
+    return f"{INSIGHT_PROMPT_VERSION}:{target_lang}:{document_type}"
+
+
+def _string_list(value, limit: int = 8) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value[:limit] if str(item).strip()]
+
+
+def _parse_document_overview(raw: str) -> dict:
+    """LLM JSON을 Primer UI 호환 개요로 정규화한다. 비정형 응답은 요약으로 폴백한다."""
+    cleaned = (raw or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
+    try:
+        value = json.loads(cleaned)
+    except (json.JSONDecodeError, TypeError):
+        value = None
+    if not isinstance(value, dict):
+        return {
+            "hook": cleaned,
+            "lineage": "",
+            "feynman": "",
+            "checklist": [],
+            "glossary": [],
+        }
+
+    purpose = str(value.get("purpose") or "").strip()
+    audience = str(value.get("audience") or "").strip()
+    hook_parts = [part for part in (
+        purpose,
+        f"예상 독자: {audience}" if audience else "",
+    ) if part]
+    structure = _string_list(value.get("structure"))
+    key_points = _string_list(value.get("key_points"), limit=5)
+    prerequisites = _string_list(value.get("prerequisites"))
+    warnings = _string_list(value.get("warnings"))
+    metrics = _string_list(value.get("metrics"))
+
+    glossary = []
+    for item in (value.get("glossary") or [])[:10]:
+        if not isinstance(item, dict):
+            continue
+        term = str(item.get("term") or "").strip()
+        definition = str(item.get("definition") or "").strip()
+        if term and definition:
+            glossary.append({"term": term, "definition": definition})
+
+    return {
+        "hook": "\n\n".join(hook_parts),
+        "lineage": "\n".join(f"- {item}" for item in structure),
+        "feynman": "\n".join(f"- {item}" for item in key_points),
+        "checklist": prerequisites + [f"주의: {item}" for item in warnings] + [f"핵심 지표·결론: {item}" for item in metrics],
+        "glossary": glossary,
+    }
+
+
+async def generate_document_overview(
+    doc_id: str,
+    pages: list,
+    metadata: dict,
+    document_type: str,
+    target_lang: str = "한국어",
+    session_id: str = None,
+) -> dict:
+    """대표 구간에서 목적·독자·구조·핵심 내용 등을 추출해 요청 시 캐싱한다."""
+    nonempty = [page for page in pages if (page.get("text") or "").strip()]
+    selected = []
+    seen_pages = set()
+    for page in nonempty[:3] + (nonempty[-2:] if len(nonempty) > 3 else []):
+        page_num = page.get("page_num", 0)
+        if page_num not in seen_pages:
+            selected.append(page)
+            seen_pages.add(page_num)
+
+    excerpts = []
+    budget = 16_000
+    used = 0
+    for page in selected:
+        chunk = f"--- Page {page.get('page_num', 0)} ---\n{page.get('text', '').strip()}"
+        chunk = chunk[:max(0, budget - used)]
+        if chunk:
+            excerpts.append(chunk)
+            used += len(chunk)
+        if used >= budget:
+            break
+    if not excerpts:
+        raise RuntimeError("문서 개요를 생성할 텍스트가 없습니다.")
+
+    title = metadata.get("title") or ""
+    tokens = []
+    async for token in stream_page_insight(
+        "overview", "\n\n".join(excerpts), target_lang=target_lang,
+        doc_title=title, session_id=session_id,
+        document_mode="general", document_type=document_type,
+    ):
+        tokens.append(token)
+    raw = "".join(tokens).strip()
+    if not raw:
+        raise RuntimeError("문서 개요가 비어 있습니다.")
+
+    from services.document_policy import get_policy
+    policy = get_policy("general", document_type)
+    overview = _parse_document_overview(raw)
+    result = {
+        **overview,
+        "questions": [f"{action}을 문서 근거와 함께 설명해 주세요." for action in policy.quick_actions],
+        "experiment_flow": [],
+        "figure": None,
+        "citation_graph": {"library": [], "external": []},
+        "document_overview": True,
+    }
+    suffix = _overview_cache_suffix(target_lang, document_type)
+    save_page_insight(doc_id, 0, _OVERVIEW_CACHE_KIND, json.dumps(result, ensure_ascii=False), suffix=suffix)
+    return result
+
+def get_cached_document_overview(doc_id: str, document_type: str, target_lang: str = "한국어") -> Optional[dict]:
+    content = get_page_insight(doc_id, 0, _OVERVIEW_CACHE_KIND, suffix=_overview_cache_suffix(target_lang, document_type))
+    if not content:
+        return None
+    try:
+        return json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def invalidate_document_overview(doc_id: str, document_type: str, target_lang: str = "한국어") -> None:
+    delete_page_insight(doc_id, 0, _OVERVIEW_CACHE_KIND, suffix=_overview_cache_suffix(target_lang, document_type))
 
 
 def get_cached_primer(doc_id: str, target_lang: str = "한국어") -> Optional[dict]:

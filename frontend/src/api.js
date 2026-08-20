@@ -1,15 +1,36 @@
 const API_BASE = '/api'
+export async function fetchDocumentTypesAPI() {
+  const res = await fetch(`${API_BASE}/document-types`)
+  if (!res.ok) throw new Error("문서 종류 조회 실패")
+  return res.json()
+}
+
+export async function getWorkspaceSettingsAPI() {
+  const res = await fetch(`${API_BASE}/settings/workspace`, { cache: "no-store" })
+  if (!res.ok) throw new Error("워크스페이스 설정 조회 실패")
+  return res.json()
+}
+
+export async function patchWorkspaceSettingsAPI(payload) {
+  const res = await fetch(`${API_BASE}/settings/workspace`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "워크스페이스 설정 저장 실패")
+  return res.json()
+}
+
 
 export async function uploadPDF(file, options, onProgress) {
   const formData = new FormData()
   formData.append('file', file)
 
-  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode } = options
+  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode, documentMode, documentType } = options
   const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}&keyword_mode=${encodeURIComponent(keywordMode || 'manual')}&summary_mode=${encodeURIComponent(summaryMode || 'manual')}`
+  const classificationQuery = "&document_mode=" + encodeURIComponent(documentMode || "research") + "&document_type=" + encodeURIComponent(documentType || "research_paper")
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', `${API_BASE}/upload${query}`)
+    xhr.open('POST', `${API_BASE}/upload${query}${classificationQuery}`)
 
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
@@ -531,7 +552,7 @@ export async function deleteModelAPI(modelName) {
  *   provider가 캡처 영역을 직접 보고 답한다.
  * @returns {function} abort - 중단 함수
  */
-export function streamChatAPI(sessionId, messages, onToken, onDone, onError, imageBase64) {
+export function streamChatAPI(sessionId, messages, onToken, onDone, onError, imageBase64, context = {}) {
   const controller = new AbortController()
 
   fetch(`${API_BASE}/chat/stream`, {
@@ -540,7 +561,9 @@ export function streamChatAPI(sessionId, messages, onToken, onDone, onError, ima
     body: JSON.stringify({
       session_id: sessionId,
       messages: messages,
-      image_base64: imageBase64 || undefined
+      image_base64: imageBase64 || undefined,
+      current_page: context.currentPage || undefined,
+      selected_text: context.selectedText || undefined
     }),
     signal: controller.signal
   })
@@ -724,8 +747,9 @@ export async function getCompareChatHistoryAPI(docIds) {
 /**
  * AI 어시스턴트(단일 논문) 채팅 세션 목록을 반환합니다.
  */
-export async function getChatSessionsAPI() {
-  const res = await fetch(`${API_BASE}/chat/sessions`, { cache: 'no-store' })
+export async function getChatSessionsAPI(documentMode = null) {
+  const query = documentMode ? `?document_mode=${encodeURIComponent(documentMode)}` : ''
+  const res = await fetch(`${API_BASE}/chat/sessions${query}`, { cache: 'no-store' })
   if (!res.ok) throw new Error('채팅 세션 목록 로드 실패')
   return res.json()
 }

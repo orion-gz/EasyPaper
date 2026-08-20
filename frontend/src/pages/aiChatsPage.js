@@ -8,6 +8,7 @@ import '../styles/ai-chats.css'
 import { icon } from '../icons.js'
 import { getChatSessionsAPI, getChatHistoryAPI } from '../api.js'
 import { formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
+import { documentTypeLabel } from '../documentModes.js'
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
@@ -63,7 +64,7 @@ async function mapWithConcurrency(items, limit, fn) {
   return results
 }
 
-export async function renderAiChatsPage() {
+export async function renderAiChatsPage(documentMode = 'research') {
   const container = document.getElementById('page-chats')
   if (!container) return
   const generation = ++renderGeneration
@@ -72,7 +73,7 @@ export async function renderAiChatsPage() {
   container.innerHTML = `
     <div class="aic-page">
       <div class="aic-header">
-        <p class="aic-subtitle">논문별 AI 채팅 세션을 관리하고 이어서 대화하세요.</p>
+        <p class="aic-subtitle">${documentMode === 'research' ? '논문별' : '문서별'} AI 채팅 세션을 관리하고 이어서 대화하세요.</p>
       </div>
 
       <div class="aic-controls">
@@ -178,6 +179,12 @@ export async function renderAiChatsPage() {
     return formatMarkdownLatexHtml(p.text)
   }
 
+  function typeChipHtml(session) {
+    const mode = session.document_mode || documentMode
+    const type = session.document_type || (mode === 'research' ? 'research_paper' : 'other')
+    return `<span class="document-type-chip ${escapeHtml(mode)}">${escapeHtml(documentTypeLabel(null, mode, type))}</span>`
+  }
+
   function actionsHtml(session) {
     return `
       <button type="button" class="aic-action-btn aic-action-primary" data-action="chat" data-doc="${escapeHtml(session.doc_id)}" title="대화 열기">
@@ -210,7 +217,7 @@ export async function renderAiChatsPage() {
         <table class="aic-table">
           <thead>
             <tr>
-              <th class="aic-col-paper">논문</th>
+              <th class="aic-col-paper">${documentMode === 'research' ? '논문' : '문서'}</th>
               <th class="aic-col-message">최근 메시지</th>
               <th class="aic-col-updated">마지막 대화</th>
               <th class="aic-col-actions">작업</th>
@@ -222,7 +229,7 @@ export async function renderAiChatsPage() {
                 <td class="aic-col-paper">
                   <div class="aic-paper-cell">
                     <div class="aic-paper-icon">${icon('fileText', 17)}</div>
-                    <div class="aic-paper-title" title="${escapeHtml(session.title)}">${escapeHtml(session.title)}</div>
+                    <div><div class="aic-paper-title" title="${escapeHtml(session.title)}">${escapeHtml(session.title)}</div>${typeChipHtml(session)}</div>
                   </div>
                 </td>
                 <td class="aic-col-message"><div class="aic-preview" data-preview-doc="${escapeHtml(session.doc_id)}">${previewCellHtml(session)}</div></td>
@@ -246,6 +253,7 @@ export async function renderAiChatsPage() {
               <span class="aic-card-updated" title="${escapeHtml(formatFullTime(session.last_message_at))}">${formatRelativeTime(session.last_message_at)}</span>
             </div>
             <div class="aic-card-title" title="${escapeHtml(session.title)}">${escapeHtml(session.title)}</div>
+            ${typeChipHtml(session)}
             <div class="aic-card-preview" data-preview-doc="${escapeHtml(session.doc_id)}">${previewCellHtml(session)}</div>
             <div class="aic-actions aic-card-actions">${actionsHtml(session)}</div>
           </div>
@@ -378,7 +386,7 @@ export async function renderAiChatsPage() {
     renderBody()
     renderPagination()
     try {
-      const data = await getChatSessionsAPI()
+      const data = await getChatSessionsAPI(documentMode)
       if (!isCurrent()) return
       state.sessions = data.sessions || []
       state.loading = false
