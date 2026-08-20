@@ -4968,7 +4968,10 @@ body.light-theme .pdf-sentence.pdf-sentence-has-memo.color-red {
   position: absolute;
   z-index: 10000;
   width: 260px;
+  min-width: 220px;
+  max-width: min(640px, 90vw);
   min-height: 160px;
+  max-height: min(720px, 85vh);
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -4978,9 +4981,22 @@ body.light-theme .pdf-sentence.pdf-sentence-has-memo.color-red {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  resize: both;
   font-family: var(--font-sans);
   color: var(--text-primary);
   animation: popupScale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.floating-memo::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  opacity: 0.65;
+  pointer-events: none;
 }
 body.light-theme .floating-memo {
   box-shadow: 0 3px 14px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.03);
@@ -5243,6 +5259,11 @@ body.light-theme .custom-confirm-modal {
    그대로 유지되어 헤더 아래에 빈 공간만 남는다. */
 .floating-memo.collapsed {
   min-height: 0;
+  max-height: none;
+  resize: none;
+}
+.floating-memo.collapsed::after {
+  display: none;
 }
 .floating-memo.collapsed .floating-memo-body {
   display: none;
