@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { formatMarkdownLatexHtml } from '../src/textFormat.js'
+import { formatMarkdownLatexHtml, linkPageCitations } from '../src/textFormat.js'
 
 const passthrough = html => html
 
@@ -58,4 +58,13 @@ test('미리보기에 쓰이는 블록 Markdown도 누락 없이 렌더링한다
   assert.match(html, /<ul>/)
   assert.match(html, /<strong>정확도<\/strong>/)
   assert.match(html, /<code>지연시간<\/code>/)
+})
+
+
+test('유효한 단일·범위 페이지 인용만 이동 버튼으로 만든다', () => {
+  const html = linkPageCitations('<p>근거 [p.3], 범위 [pp.4-6], 오류 [p.12] [pp.8-7]</p>', 10)
+  assert.match(html, /data-page-citation="3"/)
+  assert.match(html, /data-page-citation="4" data-page-citation-end="6"/)
+  assert.match(html, /\[p\.12\]/)
+  assert.match(html, /\[pp\.8-7\]/)
 })

@@ -13,6 +13,24 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+
+/** 검증 가능한 단일·범위 페이지 인용만 클릭 가능한 버튼으로 바꾼다. */
+export function linkPageCitations(html, totalPages) {
+  const maximum = Number(totalPages)
+  if (!html || !Number.isInteger(maximum) || maximum < 1) return html || ''
+  const rangeLinked = html.replace(/\[pp\.(\d+)\s*[-–]\s*(\d+)\]/gi, (match, startText, endText) => {
+    const start = Number(startText)
+    const end = Number(endText)
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > maximum) return match
+    return `<button type="button" class="chat-page-citation" data-page-citation="${start}" data-page-citation-end="${end}" title="${start}–${end}페이지로 이동">[pp.${start}-${end}]</button>`
+  })
+  return rangeLinked.replace(/\[p\.(\d+)\]/gi, (match, pageText) => {
+    const page = Number(pageText)
+    if (!Number.isInteger(page) || page < 1 || page > maximum) return match
+    return `<button type="button" class="chat-page-citation" data-page-citation="${page}" title="${page}페이지로 이동">[p.${page}]</button>`
+  })
+}
+
 /** Markdown과 LaTeX를 안전하게 렌더링한다. */
 export function formatMarkdownLatexHtml(text, options = {}) {
   if (!text) return ''

@@ -16,6 +16,16 @@ import re
 router = APIRouter()
 
 
+def _document_translation_suffix(doc, target_lang, style, ignore_math, ignore_table, ignore_refs):
+    if target_lang is None or style is None:
+        return ""
+    from services.document_policy import translation_cache_suffix
+    return translation_cache_suffix(
+        doc.get("document_mode", "research"), doc.get("document_type", "research_paper"),
+        target_lang, style, bool(ignore_math), bool(ignore_table), bool(ignore_refs),
+    )
+
+
 from typing import Optional
 
 class FolderCreateRequest(BaseModel):
@@ -104,10 +114,11 @@ async def get_library(
     ignore_math: Optional[bool] = None,
     ignore_table: Optional[bool] = None,
     ignore_refs: Optional[bool] = None,
+    document_mode: Optional[str] = None,
     current_user: str = Depends(get_current_user)
 ):
     """라이브러리의 모든 문서 목록을 반환합니다."""
-    docs = list_documents(current_user, target_lang, style, ignore_math, ignore_table, ignore_refs)
+    docs = list_documents(current_user, target_lang, style, ignore_math, ignore_table, ignore_refs, document_mode=document_mode)
     return {"documents": docs, "total": len(docs)}
 
 
@@ -116,12 +127,13 @@ async def get_library_trash(
     target_lang: Optional[str] = None,
     style: Optional[str] = None,
     ignore_math: Optional[bool] = None,
+    document_mode: Optional[str] = None,
     ignore_table: Optional[bool] = None,
     ignore_refs: Optional[bool] = None,
     current_user: str = Depends(get_current_user)
 ):
     """휴지통에 보관 중인 문서 목록을 반환합니다."""
-    docs = list_documents(current_user, target_lang, style, ignore_math, ignore_table, ignore_refs, only_trash=True)
+    docs = list_documents(current_user, target_lang, style, ignore_math, ignore_table, ignore_refs, only_trash=True, document_mode=document_mode)
     return {"documents": docs, "total": len(docs)}
 
 
@@ -134,13 +146,13 @@ async def empty_library_trash(current_user: str = Depends(get_current_user)):
 
 
 @router.get("/library/search")
-async def search_library(q: str = "", current_user: str = Depends(get_current_user)):
+async def search_library(q: str = "", document_mode: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """파일명/제목·카테고리와 번역된 본문 텍스트를 가로질러 검색합니다.
 
     /library/{doc_id}보다 먼저 등록해야 한다 - 그렇지 않으면 "search"가
     doc_id 경로 파라미터로 잘못 매칭된다.
     """
-    docs = search_documents(current_user, q)
+    docs = search_documents(current_user, q, document_mode=document_mode)
     return {"documents": docs, "total": len(docs)}
 
 
@@ -265,7 +277,7 @@ class ReadingHeartbeatRequest(BaseModel):
 
 
 @router.get("/library/reading-stats")
-async def get_library_reading_stats(since_days: Optional[int] = None, current_user: str = Depends(get_current_user)):
+async def get_library_reading_stats(since_days: Optional[int] = None, document_mode: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """Reading History 페이지의 "읽은 시간" 관련 위젯(총 읽기 시간, 카테고리별
     시간 분포, 논문별 읽기 시간 랭킹)에 쓰이는 실측 집계를 반환합니다. 프론트가
     뷰어/비교 화면에서 보낸 하트비트(POST /library/{doc_id}/reading-heartbeat)를
@@ -275,7 +287,7 @@ async def get_library_reading_stats(since_days: Optional[int] = None, current_us
     이유로, 그렇지 않으면 "reading-stats"가 doc_id 경로 파라미터로 잘못 매칭된다.
     """
     from services.db import db_get_reading_time_stats
-    return db_get_reading_time_stats(current_user, since_days)
+    return db_get_reading_time_stats(current_user, since_days, document_mode=document_mode)
 
 
 class StartSessionRequest(BaseModel):
@@ -509,10 +521,10 @@ async def end_reading_session_api(doc_id: str, payload: ReadingSessionPayload, c
 
 
 @router.get("/library/reading-analytics-summary")
-async def get_reading_analytics_summary_api(since_days: Optional[int] = None, current_user: str = Depends(get_current_user)):
+async def get_reading_analytics_summary_api(since_days: Optional[int] = None, document_mode: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """전체 논문의 Reading Analytics 요약 집계 정보(평균 Score, Depth, Confidence 등)를 반환합니다."""
     from services.db import db_get_all_reading_analytics_summary, db_get_user_reading_profile
-    summary = db_get_all_reading_analytics_summary(current_user, since_days)
+    summary = db_get_all_reading_analytics_summary(current_user, since_days, document_mode=document_mode)
     profile = db_get_user_reading_profile(current_user)
     summary["user_profile"] = profile
     return summary
@@ -570,10 +582,10 @@ async def get_library_translation(
     current_user: str = Depends(get_current_user)
 ):
     """라이브러리에서 특정 페이지 번역을 가져옵니다."""
-    require_owned_document(doc_id, current_user)
-    suffix = ""
-    if target_lang is not None and style is not None:
-        suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
+    doc = require_owned_document(doc_id, current_user)
+    suffix = _document_translation_suffix(
+        doc, target_lang, style, ignore_math, ignore_table, ignore_refs,
+    )
         
     from services.library import get_translation_full
     full_cached = get_translation_full(doc_id, page_num, suffix)
@@ -604,10 +616,10 @@ async def update_library_translation(
     current_user: str = Depends(get_current_user)
 ):
     """라이브러리의 특정 페이지 번역 데이터를 수정하여 캐시 및 DB에 저장합니다."""
-    require_owned_document(doc_id, current_user)
-    suffix = ""
-    if target_lang is not None and style is not None:
-        suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
+    doc = require_owned_document(doc_id, current_user)
+    suffix = _document_translation_suffix(
+        doc, target_lang, style, ignore_math, ignore_table, ignore_refs,
+    )
 
     from services.library import save_translation
     from services.cache import save_translation_cache
@@ -662,9 +674,10 @@ async def export_annotated_pdf(
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
 
-    suffix = ""
-    if payload.target_lang is not None and payload.style is not None:
-        suffix = f"{payload.target_lang}_{payload.style}_math{int(payload.ignore_math)}_table{int(payload.ignore_table)}_refs{int(payload.ignore_refs)}"
+    suffix = _document_translation_suffix(
+        doc, payload.target_lang, payload.style, payload.ignore_math,
+        payload.ignore_table, payload.ignore_refs,
+    )
 
     from services.library import get_translation_full
     total_pages = doc.get("total_pages", 0) or 0

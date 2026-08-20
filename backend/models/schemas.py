@@ -8,6 +8,8 @@ class UploadResponse(BaseModel):
     total_pages: int
     file_size_mb: float
     metadata: dict
+    document_mode: str = "research"
+    document_type: str = "research_paper"
 
 
 class PageInfo(BaseModel):

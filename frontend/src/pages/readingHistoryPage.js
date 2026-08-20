@@ -366,7 +366,7 @@ function hideRhTooltip() {
 }
 
 // ── 렌더 ───────────────────────────────────────────────────
-export async function renderReadingHistoryPage() {
+export async function renderReadingHistoryPage(documentMode = 'research') {
   const el = document.getElementById('page-history')
   if (!el) return
   const generation = ++renderGeneration
@@ -384,13 +384,14 @@ export async function renderReadingHistoryPage() {
     const [timelineRes, dashboardRes, libraryRes, readingStatsRes, analyticsSummaryRes] = await Promise.all([
       fetchLibraryTimeline().catch(() => ({ events: [] })),
       fetchLibraryDashboard().catch(() => null),
-      fetchLibrary().catch(() => ({ documents: [] })),
-      fetchReadingTimeStats().catch(() => null),
-      fetchReadingAnalyticsSummary().catch(() => null),
+      fetchLibrary({ documentMode }).catch(() => ({ documents: [] })),
+      fetchReadingTimeStats(null, documentMode).catch(() => null),
+      fetchReadingAnalyticsSummary(null, documentMode).catch(() => null),
     ])
-    events = timelineRes?.events || []
-    dashboard = dashboardRes
     libraryDocs = libraryRes?.documents || []
+    const visibleDocIds = new Set(libraryDocs.map(doc => doc.id))
+    events = (timelineRes?.events || []).filter(event => !event.doc_id || visibleDocIds.has(event.doc_id))
+    dashboard = documentMode === 'research' ? dashboardRes : null
     readingStats = readingStatsRes
     analyticsSummary = analyticsSummaryRes
   } catch (err) {

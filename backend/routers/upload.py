@@ -44,6 +44,9 @@ def ensure_session(session_id: str) -> bool:
         if pages is None:
             pages = extract_pages(pdf_path)
             save_pages_cache(session_id, pdf_path, pages)
+        # 기존 문서는 처음 열릴 때 원문 FTS 인덱스를 지연 백필한다.
+        from services.context_retrieval import index_document_chunks
+        index_document_chunks(session_id, pages)
         sessions[session_id] = {
             "pdf_path": pdf_path,
             "filename": doc["filename"],
@@ -52,6 +55,8 @@ def ensure_session(session_id: str) -> bool:
             "metadata": doc.get("metadata", {}),
             "from_library": True,
             "username": doc.get("username", "admin"),
+            "document_mode": doc.get("document_mode", "research"),
+            "document_type": doc.get("document_type", "research_paper"),
         }
         return True
     except Exception:
@@ -111,10 +116,20 @@ async def upload_pdf(
     translation_mode: str = "auto",
     keyword_mode: str = "manual",
     summary_mode: str = "manual",
+    document_mode: str = "research",
+    document_type: str = "research_paper",
     current_user: str = Depends(get_current_user)
 ):
     """PDF 파일을 업로드하고 텍스트를 추출합니다."""
     enforce_rate_limit("upload", current_user)
+
+    from services.document_policy import feature_enabled, validate_classification
+    try:
+        validate_classification(document_mode, document_type)
+        if document_mode == "general" and not feature_enabled("general_document_mode"):
+            raise ValueError("일반 문서 모드가 아직 활성화되지 않았습니다.")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     # 파일 검증
     if not file.filename or not file.filename.lower().endswith(".pdf"):
@@ -162,7 +177,17 @@ async def upload_pdf(
         raise HTTPException(status_code=422, detail=f"PDF 파싱 실패: {str(e)}")
 
     # 라이브러리에 영구 저장
-    save_document(session_id, file.filename, pdf_path, len(pages), metadata, username=current_user)
+    save_document(
+        session_id, file.filename, pdf_path, len(pages), metadata,
+        username=current_user, document_mode=document_mode, document_type=document_type,
+    )
+    from services.context_retrieval import index_document_chunks
+    indexed_chunks = index_document_chunks(session_id, pages)
+    from services.observability import record_document_mode_event
+    record_document_mode_event(
+        current_user, "upload", document_mode, document_type,
+        numeric_value=len(pages), status="indexed" if indexed_chunks else "fallback",
+    )
 
     # 세션 저장 (메모리)
     sessions[session_id] = {
@@ -173,6 +198,8 @@ async def upload_pdf(
         "metadata": metadata,
         "from_library": False,
         "username": current_user,
+        "document_mode": document_mode,
+        "document_type": document_type,
     }
 
     # translation_mode가 "auto"(기본값)가 아니면 - 번역 창을 펼칠 때(pane) 또는
@@ -199,25 +226,27 @@ async def upload_pdf(
 
     async def _run_post_upload_insights():
         try:
-            await generate_primer(
-                session_id,
-                pages,
-                metadata,
-                username=current_user,
-                pdf_path=pdf_path,
-                target_lang=target_lang,
-                session_id=session_id,
-            )
+            if document_mode == "research":
+                await generate_primer(
+                    session_id,
+                    pages,
+                    metadata,
+                    username=current_user,
+                    pdf_path=pdf_path,
+                    target_lang=target_lang,
+                    session_id=session_id,
+                )
         except Exception as e:
             print(f"[Upload {session_id}] Primer 생성 실패: {e}")
 
         if keyword_mode == "auto":
-            start_keyword_job(
-                session_id,
-                pages,
-                target_lang,
-                metadata.get("title") or file.filename,
-            )
+            # 일반 장문 문서는 예상 LLM 호출량을 사용자가 확인한 뒤 별도
+            # insight-jobs API로 시작한다. 20페이지 이하는 기존 자동 흐름 유지.
+            if document_mode != "general" or len(pages) <= 20:
+                start_keyword_job(
+                    session_id, pages, target_lang,
+                    metadata.get("title") or file.filename, document_mode, document_type,
+                )
 
         if summary_mode == "auto":
             start_summary_job(
@@ -225,6 +254,8 @@ async def upload_pdf(
                 pages,
                 target_lang,
                 metadata.get("title") or file.filename,
+                document_mode,
+                document_type,
             )
 
     asyncio.create_task(_run_post_upload_insights())
@@ -235,6 +266,8 @@ async def upload_pdf(
         total_pages=len(pages),
         file_size_mb=round(file_size_mb, 2),
         metadata=metadata,
+        document_mode=document_mode,
+        document_type=document_type,
     )
 
 
@@ -248,6 +281,8 @@ async def get_session(session_id: str, current_user: str = Depends(get_current_u
         "filename": session["filename"],
         "total_pages": session["total_pages"],
         "metadata": session["metadata"],
+        "document_mode": session.get("document_mode", "research"),
+        "document_type": session.get("document_type", "research_paper"),
     }
 
 

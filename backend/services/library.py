@@ -29,6 +29,17 @@ from services.db import (
 )
 
 
+def _translation_suffix_for_doc(doc: dict, target_lang: Optional[str], style: Optional[str], ignore_math: Optional[bool], ignore_table: Optional[bool], ignore_refs: Optional[bool]) -> Optional[str]:
+    if target_lang is None or style is None:
+        return None
+    from services.document_policy import translation_cache_suffix
+    return translation_cache_suffix(
+        doc.get("document_mode", "research"),
+        doc.get("document_type", "research_paper"),
+        target_lang, style, bool(ignore_math), bool(ignore_table), bool(ignore_refs),
+    )
+
+
 def _resolve_translated_pages(rows: list, suffix: Optional[str]) -> list:
     """(page_num, suffix, saved_at) 행 목록에서 문서 하나의 "번역 완료 페이지"
     목록을 계산합니다. 요청한 suffix로 번역된 페이지가 있으면 그걸 쓰고,
@@ -67,7 +78,8 @@ def _chat_quote_image_path(doc_id: str, quote_id: str) -> Optional[str]:
 # ── 문서 저장 ─────────────────────────────────────────────────────────────────
 
 def save_document(doc_id: str, filename: str, pdf_src_path: str,
-                  total_pages: int, metadata: dict, username: str = "admin") -> dict:
+                  total_pages: int, metadata: dict, username: str = "admin",
+                  document_mode: str = "research", document_type: str = "research_paper") -> dict:
     """PDF를 라이브러리에 영구 저장하고 데이터베이스에 기록합니다."""
     doc_dir = os.path.join(LIBRARY_DIR, doc_id)
     os.makedirs(os.path.join(doc_dir, "translations"), exist_ok=True)
@@ -76,7 +88,10 @@ def save_document(doc_id: str, filename: str, pdf_src_path: str,
     shutil.copy2(pdf_src_path, _pdf_path(doc_id))
 
     # 데이터베이스에 저장
-    doc_meta = db_save_document(doc_id, username, filename, _pdf_path(doc_id), total_pages, metadata)
+    doc_meta = db_save_document(
+        doc_id, username, filename, _pdf_path(doc_id), total_pages, metadata,
+        document_mode=document_mode, document_type=document_type,
+    )
     doc_meta["translated_pages"] = []
     return doc_meta
 
@@ -92,9 +107,9 @@ def get_document(
     """라이브러리에서 문서 메타데이터를 가져옵니다."""
     doc = db_get_document(doc_id)
     if doc:
-        suffix = None
-        if target_lang is not None and style is not None:
-            suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
+        suffix = _translation_suffix_for_doc(
+            doc, target_lang, style, ignore_math, ignore_table, ignore_refs,
+        )
 
         rows = db_bulk_translation_rows([doc_id]).get(doc_id, [])
         doc["translated_pages"] = _resolve_translated_pages(rows, suffix)
@@ -111,6 +126,7 @@ def list_documents(
     ignore_refs: Optional[bool] = None,
     only_trash: bool = False,
     include_deleted: bool = False,
+    document_mode: Optional[str] = None,
 ) -> list:
     """라이브러리의 문서를 최신순으로 반환합니다 (필터링 가능).
 
@@ -118,29 +134,28 @@ def list_documents(
     문서 수와 4초 주기 폴링이 곱해지며 라이브러리 화면 자체가 느려지는
     주 원인이었던 부분 - 이제 전체 문서의 번역 행을 한 번의 커넥션으로 모아
     메모리에서 매칭한다."""
-    docs = db_list_documents(username, only_trash=only_trash, include_deleted=include_deleted)
+    docs = db_list_documents(username, only_trash=only_trash, include_deleted=include_deleted, document_mode=document_mode)
     if not docs:
         return docs
-
-    suffix = None
-    if target_lang is not None and style is not None:
-        suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
 
     rows_by_doc = db_bulk_translation_rows([doc["id"] for doc in docs])
     folder_map = db_get_document_folder_map(username) if username else {}
     for doc in docs:
+        suffix = _translation_suffix_for_doc(
+            doc, target_lang, style, ignore_math, ignore_table, ignore_refs,
+        )
         doc["translated_pages"] = _resolve_translated_pages(rows_by_doc.get(doc["id"], []), suffix)
         doc["folder_id"] = folder_map.get(doc["id"])
     return docs
 
 
-def search_documents(username: str, query: str, only_trash: bool = False) -> list:
+def search_documents(username: str, query: str, only_trash: bool = False, document_mode: Optional[str] = None) -> list:
     """파일명/제목·카테고리와 번역된 텍스트를 가로질러 검색어와 매칭되는
     문서 목록을 최신순으로 반환합니다."""
     query = (query or "").strip()
     if not query:
         return []
-    docs = db_search_documents(username, query, only_trash=only_trash)
+    docs = db_search_documents(username, query, only_trash=only_trash, document_mode=document_mode)
     if not docs:
         return docs
 

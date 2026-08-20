@@ -129,13 +129,17 @@ async def stream_translation(
     prev_context: str = "",
     session_id: str = None,
     page_num: int = None,
-    page_image_b64: str = None
+    page_image_b64: str = None,
+    document_mode: str = "research",
+    document_type: str = "research_paper",
 ) -> AsyncGenerator[str, None]:
     """
     Ollama /api/chat 엔드포인트를 사용해 번역 결과를 스트리밍합니다.
     사용자의 요구에 따른 언어, 번역 스타일, 제외 요소 옵션에 맞춰 프롬프트를 동적으로 구성합니다.
     """
     provider = get_trans_provider()
+    from services.document_policy import build_translation_policy
+    document_policy_rules = build_translation_policy(document_mode, document_type)
     model = get_trans_model()
 
     # antigravity/claude code는 문서(session_id)당 세션(대화)이 실제로 이어지므로,
@@ -179,6 +183,7 @@ async def stream_translation(
         exclusion_part = ("\n" + "\n".join(exclusion_reminders) + "\n") if exclusion_reminders else ""
 
         prompt = (
+            f"{document_policy_rules}\n"
             "앞서 안내한 문체·용어·수식·표·참고문헌 처리 규칙을 동일하게 유지하며 이어지는 다음 원문을 번역하세요.\n"
             "서론이나 설명 없이 번역 결과만 즉시 출력하세요. 입력 텍스트의 각 문장 앞에 있는 [S0], [S1] 등 문장 식별자 "
             "태그는 번역 결과에서도 반드시 그대로, 순서를 바꾸거나 누락 없이 유지하세요. 태그 개수는 원문과 정확히 "
@@ -208,37 +213,38 @@ async def stream_translation(
         # 세션 지속 provider가 아니면 여기 도달하지 않지만, 안전하게 아래 전체
         # 프롬프트 경로로 흘러가도록 둔다.
 
-    # 1. 번역 목적어 설정
-    lang_instruction = f"다음 영어 논문 텍스트를 자연스러운 {target_lang}로 번역하세요."
+    # 1. 문서 모드에 맞는 목적어와 문체 설정
+    is_research = document_mode == "research"
+    source_noun = "영어 논문 텍스트" if is_research else "문서 텍스트"
+    lang_instruction = f"다음 {source_noun}를 자연스러운 {target_lang}로 번역하세요."
 
-    # 2. 번역 스타일 문구 조립
     naturalness_guidance = (
-        "번역투 방지: 영어 원문의 문장 구조나 어순을 그대로 옮기려 하지 말고, 자연스러운 한국어 "
-        "문장으로 재구성하세요. 영어 특유의 길고 복잡한 문장은 자연스러운 한국어 호흡에 맞게 "
-        "두세 문장으로 나눠 쓰세요 - 단, 문장을 나누더라도 그 원문 문장에 해당하는 [S] 태그는 "
-        "하나만 유지하고 그 뒤에 나뉜 한국어 문장들을 모두 이어서 쓰세요(새로운 태그를 만들지 "
-        "마세요). 또한 '~되어진다', '~라고 보여진다' 같은 불필요한 이중 피동 표현은 능동형이나 "
-        "더 자연스러운 한국어 구문으로 바꿔 쓰세요. 단, 이 과정에서 원문의 의미나 사실 관계를 "
-        "바꾸거나 생략해서는 절대 안 됩니다."
+        "번역투 방지: 원문의 문장 구조나 어순을 그대로 옮기려 하지 말고, 자연스러운 목표 언어 "
+        "문장으로 재구성하세요. 길고 복잡한 문장은 자연스러운 호흡에 맞게 두세 문장으로 나눠 "
+        "쓰세요. 단, 문장을 나누더라도 원문 문장의 [S] 태그는 하나만 유지하고 새로운 태그를 "
+        "만들지 마세요. 이 과정에서 원문의 의미나 사실 관계를 바꾸거나 생략해서는 안 됩니다."
     )
 
     if style == "literal":
-        style_instruction = f"자연스러운 직역을 수행하고 원문의 어순을 가능한 한 유지하여 단어 대조가 쉽도록 번역하세요."
+        style_instruction = "자연스러운 직역을 수행하고 원문의 어순을 가능한 한 유지하여 단어 대조가 쉽도록 번역하세요."
     elif style == "summary":
+        focus = "연구 내용" if is_research else "내용"
         style_instruction = (
-            f"문단의 핵심 연구 내용을 요약하여 짧고 명확한 개조식 또는 설명글 형태로 요약 번역하세요.\n"
+            f"문단의 핵심 {focus}을 짧고 명확한 개조식 또는 설명글 형태로 요약 번역하세요.\n"
             f"{naturalness_guidance}"
         )
-    else:  # "academic" (의역/학술용 다듬기)
+    else:
+        register = "학술 문체" if is_research else "원문의 목적과 문체"
         style_instruction = (
-            f"자연스럽고 명확한 {target_lang} 학술 문체를 사용하고, 문맥에 맞게 번역문을 매끄럽게 다듬으세요.\n"
+            f"자연스럽고 명확한 {target_lang} 표현을 사용하고 {register}를 유지해 번역문을 다듬으세요.\n"
             f"{naturalness_guidance}"
         )
 
     rules = [
-        "전문 용어 번역 원칙: 사전적으로 정확한 번역이 아니라, 이 분야의 한국어 논문·기술 문서에서 "
+        document_policy_rules,
+        "전문 용어 번역 원칙: 사전적으로 정확한 번역이 아니라, 해당 분야의 한국어 문서에서 "
         "실제로 관용적으로 쓰이는 표기를 따르세요.\n"
-        f"- 이미 자연스러운 {target_lang} 대응어가 정착된 일반 학술 용어는 {target_lang}로 번역하고 "
+        f"- 이미 자연스러운 {target_lang} 대응어가 정착된 일반 용어는 {target_lang}로 번역하고 "
         f"필요시 괄호에 영어 원문을 병기하세요 (예: 심층 학습(Deep Learning), 지도 학습(Supervised Learning)).\n"
         "- 하지만 self-attention, transformer, attention mechanism, backpropagation, embedding, "
         "fine-tuning, batch normalization, dropout, epoch처럼 실제 한국어 논문/기술 문서에서도 "
@@ -250,9 +256,10 @@ async def stream_translation(
         "현장에서 쓰지 않는 표현이면 부자연스러운 번역입니다.",
         "문단 구조(빈 줄)를 원문과 동일하게 유지하세요.",
         "URL, DOI, 저자명, 이메일 주소 등은 번역하지 말고 원문 그대로 유지하세요.",
-        "논문 리뷰용 줄 번호(예: 001 002)나 페이지 헤더/푸터 정보는 번역에서 제외하세요.",
+        "페이지 줄 번호(예: 001 002)나 페이지 헤더/푸터 정보는 번역에서 제외하세요.",
         "설명이나 메모, 서론(예: '여기에 번역이 있습니다')은 절대 추가하지 말고 번역 결과만 즉시 출력하세요.",
-        "번역문은 반드시 경어체(예: '~합니다', '~입니다', '~바랍니다')로만 작성하고, 평어체(예: '~한다', '~다')를 절대 섞어 쓰지 마세요.",
+        ("번역문은 반드시 경어체로만 작성하고 평어체를 섞지 마세요."
+         if is_research else "원문의 서술 시점, 존대 수준, 대화체와 명령문의 강도를 유지하세요."),
         "중요: 입력 텍스트의 각 문장 시작 부분에 [S0], [S1], [S2] 등과 같은 문장 식별자 태그가 포함되어 있습니다. 번역 결과에서도 각 번역된 문장 앞에 일치하는 태그(예: [S0], [S1]...)를 반드시 그대로 유지하여 출력하세요. 태그의 순서를 바꾸거나 누락하지 마세요. "
         "태그 개수는 원문과 정확히 동일해야 합니다 - 두 개 이상의 원문 문장을 하나의 태그 아래로 합쳐서 번역하지 마세요(예: [S3] 문장이 [S4] 문장의 번역까지 함께 포함해서는 안 됩니다). 반대로 원문에 없는 태그를 새로 만들거나, 번역 문장을 임의로 더 잘게 나누어 추가 태그를 붙이지도 마세요. "
         "예를 들어 원문이 \"[S0] Sentence A. [S1] Sentence B.\"라면, 번역 결과는 반드시 \"[S0] A의 번역. [S1] B의 번역.\"처럼 태그 1개당 정확히 그 태그가 표시된 원문 문장 1개의 번역만 대응해야 합니다. "
@@ -287,7 +294,7 @@ async def stream_translation(
     if ignore_table:
         rules.append("Markdown 표(Table) 형식의 출력은 절대 하지 말고, 표 데이터는 번역에서 완전히 제외하세요.")
     else:
-        rules.append("표(Table) 내의 정보도 학술적 문맥에 맞춰 깔끔하게 번역하고 마크다운 표 형태를 유지하세요.")
+        rules.append("표(Table)의 수치·단위·레이블을 보존하고 문서 문맥에 맞게 번역하고 마크다운 표 형태를 유지하세요.")
         
     if ignore_refs:
         rules.append("참고문헌(References) 목록이나 각주 정보는 번역하지 말고 목록에서 제외하세요.")
@@ -298,7 +305,7 @@ async def stream_translation(
     # 4. 문맥 정보 추가 (Context-aware Translation)
     context_part = ""
     if doc_title:
-        context_part += f"- 논문 제목 (Document Title): {doc_title}\n"
+        context_part += f"- 문서 제목 (Document Title): {doc_title}\n"
     if prev_context:
         # 이전 번역 결과가 너무 길면 뒷부분 1000자만 잘서 보냄
         truncated_prev = prev_context[-1000:] if len(prev_context) > 1000 else prev_context
@@ -925,7 +932,9 @@ async def stream_page_insight(
     text: str,
     target_lang: str,
     doc_title: str = "",
-    session_id: str = None
+    session_id: str = None,
+    document_mode: str = "research",
+    document_type: str = "research_paper",
 ) -> AsyncGenerator[str, None]:
     """
     페이지 원문에서 키워드/전문용어 설명(kind='keywords') 또는 요약(kind='summary')을
@@ -964,7 +973,33 @@ async def stream_page_insight(
             f"요약 내용만 즉시 출력하세요."
         )
 
-    prompt = f"{instruction}\n\n원문:\n{text}"
+    if document_mode == "general" and kind == "overview":
+        instruction = (
+            f"일반 문서 {doc_title!r}의 대표 구간을 분석해 문서 개요를 {target_lang}로 작성하세요. "
+            "문서에 명시된 근거만 사용하고 모르는 항목은 빈 값으로 두세요. "
+            "purpose(문서 목적), audience(예상 독자), structure(장·절 구성 문자열 배열), "
+            "key_points(핵심 내용 최대 5개), prerequisites(전제 지식·설치/실행 조건), "
+            "warnings(주의·금지·예외), metrics(보고서의 핵심 지표·결론), "
+            "glossary(term과 definition 객체 배열)를 포함한 JSON 객체만 출력하세요. "
+            "기술 문서·매뉴얼은 전제 조건과 경고를, 보고서는 지표와 결론을 우선하세요."
+        )
+    elif document_mode == "general" and kind == "keywords":
+        instruction = (
+            f"문서 페이지에서 실제로 등장한 고급 영어 어휘와 전문 키워드를 추출하세요. "
+            f"고급 어휘는 SAT/GRE 또는 CEFR C1~C2 수준만 선택하고 적격 항목이 적으면 개수를 채우지 마세요. "
+            f"기능어, 기초 어휘, 숫자, 단순 고유명사는 제외하고 같은 표제어는 하나로 합치세요. "
+            f"기술 용어·제품명·API명은 technical_terms로 분리하세요. 각 항목은 term, lemma, part_of_speech, "
+            f"meaning({target_lang}), example(원문 일부), level(SAT|GRE|SAT·GRE), char_start, char_end, occurrence, bbox(null)를 포함하세요. "
+            f"원문에 없는 단어와 위치를 만들지 마세요. JSON 객체 {{\"advanced_words\": [], \"technical_terms\": []}}만 출력하세요."
+        )
+    elif document_mode == "general" and kind == "summary":
+        instruction = (
+            f"일반 문서 {doc_title!r}의 이 페이지를 {target_lang}로 3~5문장 이내로 요약하세요. "
+            "절차, 요구사항, 예외, 경고, 수치와 조건을 우선하고 문서에 없는 내용을 추가하지 마세요."
+        )
+
+    from services.document_policy import COMMON_SAFETY_RULES
+    prompt = f"{COMMON_SAFETY_RULES}\n{instruction}\n\n원문:\n{text}"
 
     provider = get_analysis_provider()
     model = get_analysis_model()
@@ -1255,6 +1290,8 @@ async def generate_suggested_questions(
     history_messages: list,
     doc_title: str = "",
     session_id: str = None,
+    document_mode: str = "research",
+    document_type: str = "research_paper",
 ) -> list:
     """
     직전 어시스턴트 답변까지의 대화 흐름과 논문 본문 일부를 참고해, 사용자가 이어서
@@ -1271,20 +1308,24 @@ async def generate_suggested_questions(
             convo_lines.append(f"{role_label}: {content[:800]}")
     convo_text = "\n".join(convo_lines)
 
+    from services.document_policy import COMMON_SAFETY_RULES, get_policy
+    policy = get_policy(document_mode, document_type)
+    noun = "학술 논문" if document_mode == "research" else "문서"
+    action_hint = ", ".join(policy.quick_actions)
     instruction = (
-        f"다음은 학술 논문 '{doc_title}'을 읽으며 사용자와 AI 어시스턴트가 나눈 대화입니다. "
+        f"{COMMON_SAFETY_RULES}\n다음은 {noun} '{doc_title}'을 읽으며 사용자와 AI 어시스턴트가 나눈 대화입니다. "
         f"이 대화의 마지막 어시스턴트 답변을 참고해, 사용자가 이어서 궁금해할 만한 자연스러운 "
         f"후속 질문을 정확히 3개 제안하세요.\n\n"
-        f"- 각 질문은 아래 논문 본문 발췌 내용에 근거해 답할 수 있는 구체적인 질문이어야 합니다.\n"
-        f"- 방금 나온 답변을 단순 반복하지 말고, 더 깊이 파고들거나(근거, 한계, 비교 등) 다른 "
-        f"관점으로 확장하는 질문으로 구성하세요.\n"
+        f"- 각 질문은 아래 {noun} 본문 발췌 내용에 근거해 답할 수 있는 구체적인 질문이어야 합니다.\n"
+        f"- 방금 나온 답변을 반복하지 말고 문서 종류에 맞는 관점으로 확장하세요. "
+        f"권장 관점: {action_hint}.\n"
         f"- 각 질문은 물음표로 끝나는 한 문장의 자연스러운 한국어 질문으로, 서로 겹치지 않게 "
         f"작성하세요.\n\n"
         f"반드시 아래 형식으로만 출력하고 다른 설명이나 서론은 절대 추가하지 마세요.\n"
         f"SQ1: <질문>\nSQ2: <질문>\nSQ3: <질문>"
     )
 
-    prompt = f"{instruction}\n\n[논문 본문 발췌]\n{paper_text[:6000]}\n\n[대화 내역]\n{convo_text}"
+    prompt = f"{instruction}\n\n[{noun} 본문 발췌]\n{paper_text[:6000]}\n\n[대화 내역]\n{convo_text}"
 
     provider = get_chat_provider()
     model = get_chat_model()

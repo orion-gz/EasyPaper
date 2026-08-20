@@ -7,7 +7,8 @@ from fastapi.responses import FileResponse
 from routers.upload import require_session_owner
 from services.auth import get_current_user
 from services.ownership import require_owned_document
-from services.primer import get_cached_primer, generate_primer, invalidate_primer_cache
+from services.primer import (get_cached_primer, generate_primer, invalidate_primer_cache,
+    generate_document_overview, get_cached_document_overview, invalidate_document_overview)
 from services.library import get_primer_figure_path
 
 router = APIRouter()
@@ -33,7 +34,15 @@ _RETRY_COOLDOWN_SECONDS = 15
 def _ensure_generation_started(doc_id: str, target_lang: str, session: dict, current_user: str) -> None:
     """이 문서/언어 조합의 브리핑 생성이 이미 진행 중이 아니면 백그라운드
     태스크로 새로 시작한다. GET(캐시 미스)과 POST(재생성) 양쪽에서 공유한다."""
-    task_key = f"{doc_id}:{target_lang}"
+    document_mode = session.get("document_mode", "research")
+    document_type = session.get("document_type", "research_paper")
+    # 기존 연구 브리핑의 task key는 유지해 쿨다운/진행 중 상태 호환성을 보존한다.
+    # 일반 문서만 종류별 개요 정책이 달라 분류를 key에 포함한다.
+    task_key = (
+        f"{doc_id}:{target_lang}"
+        if document_mode == "research"
+        else f"{doc_id}:{target_lang}:{document_mode}:{document_type}"
+    )
     task = _pending_generations.get(task_key)
     if task is not None and not task.done():
         return
@@ -44,15 +53,17 @@ def _ensure_generation_started(doc_id: str, target_lang: str, session: dict, cur
 
     async def _generate():
         try:
-            await generate_primer(
-                doc_id,
-                session["pages"],
-                session["metadata"],
-                username=current_user,
-                pdf_path=session["pdf_path"],
-                target_lang=target_lang,
-                session_id=doc_id,
-            )
+            if document_mode == "general":
+                await generate_document_overview(
+                    doc_id, session["pages"], session["metadata"], document_type,
+                    target_lang=target_lang, session_id=doc_id,
+                )
+            else:
+                await generate_primer(
+                    doc_id, session["pages"], session["metadata"],
+                    username=current_user, pdf_path=session["pdf_path"],
+                    target_lang=target_lang, session_id=doc_id,
+                )
             _last_failure_at.pop(task_key, None)
         except Exception as e:
             # generate_primer()가 실패하면 캐시에 아무것도 저장하지 않은 채 여기서
@@ -72,11 +83,15 @@ async def get_primer(doc_id: str, target_lang: str = "한국어", current_user: 
     """읽기 전 브리핑 콘텐츠를 반환합니다. 업로드 직후 백그라운드로 이미 생성되어
     있으면 캐시에서 즉시 반환하고, 아직 없으면(구버전 문서 등) 백그라운드 생성을
     시작(또는 이미 진행 중이면 그대로 두고)하고 {"status": "pending"}을 반환합니다."""
-    cached = get_cached_primer(doc_id, target_lang=target_lang)
+    session = require_session_owner(doc_id, current_user)
+    if session.get("document_mode", "research") == "general":
+        cached = get_cached_document_overview(
+            doc_id, session.get("document_type", "other"), target_lang=target_lang,
+        )
+    else:
+        cached = get_cached_primer(doc_id, target_lang=target_lang)
     if cached:
         return cached
-
-    session = require_session_owner(doc_id, current_user)
     _ensure_generation_started(doc_id, target_lang, session, current_user)
     return {"status": "pending"}
 
@@ -87,7 +102,10 @@ async def regenerate_primer(doc_id: str, target_lang: str = "한국어", current
     부실하다고 느낄 때 수동으로 재시도할 수 있게 하는 용도. GET과 마찬가지로
     생성은 백그라운드로 돌리고 즉시 {"status": "pending"}을 반환한다."""
     session = require_session_owner(doc_id, current_user)
-    invalidate_primer_cache(doc_id, target_lang)
+    if session.get("document_mode", "research") == "general":
+        invalidate_document_overview(doc_id, session.get("document_type", "other"), target_lang)
+    else:
+        invalidate_primer_cache(doc_id, target_lang)
     _ensure_generation_started(doc_id, target_lang, session, current_user)
     return {"status": "pending"}
 

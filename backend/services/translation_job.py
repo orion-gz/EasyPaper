@@ -15,7 +15,7 @@ from config import LIBRARY_DIR, get_trans_provider
 from services.atomic_io import atomic_write_text
 from services.chunker import split_into_chunks, align_sentences, tag_source_text, parse_tagged_translation
 from services.llm_client import stream_translation
-from services.library import save_translation, get_translation, get_document, get_pdf_path
+from services.library import save_translation, get_translation, get_translation_full, get_document, get_pdf_path
 from services.pdf_parser import render_page_image_base64
 
 # 수식(LaTeX) 번역 정확도를 위해 페이지 이미지를 함께 첨부할 수 있는 provider.
@@ -154,16 +154,25 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
     ignore_table = options.get("ignore_table", True)
     ignore_refs = options.get("ignore_refs", False)
 
-    suffix = f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
-
-    # 문서 제목 정보 가져오기
+    # 저장된 분류가 번역 정책과 캐시 키의 유일한 기준이다.
     doc_title = ""
+    document_mode = "research"
+    document_type = "research_paper"
     try:
         doc = get_document(session_id)
         if doc:
             doc_title = doc.get("metadata", {}).get("title") or doc.get("filename", "")
+            document_mode = doc.get("document_mode", "research")
+            document_type = doc.get("document_type", "research_paper")
     except Exception as e:
         print(f"[Job {session_id}] Failed to get document title: {e}")
+
+    from services.document_policy import translation_cache_candidates
+    suffix_candidates = translation_cache_candidates(
+        document_mode, document_type, target_lang, style,
+        ignore_math, ignore_table, ignore_refs,
+    )
+    suffix = suffix_candidates[0]
 
     # vision을 지원하는 provider면 페이지별로 원본 이미지를 함께 보내 수식(LaTeX)
     # 재현 정확도를 높인다 - ignore_math면 애초에 수식을 생략하므로 렌더링하지 않는다.
@@ -173,7 +182,25 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
     scanned_any = False
     for page_data in pages:
         page_num = page_data["page_num"]
-        if get_translation(session_id, page_num, suffix) is not None:
+        cached = None
+        cached_suffix = suffix
+        for candidate_suffix in suffix_candidates:
+            candidate = get_translation_full(
+                session_id, page_num, candidate_suffix, fallback=False,
+            )
+            if candidate.get("translation"):
+                cached = candidate
+                cached_suffix = candidate_suffix
+                break
+        if cached is not None:
+            # 기존 연구 문서의 구버전 캐시는 한 번만 새 정책 키로 승격해 이후
+            # 페이지 조회·전체 MD 생성도 정확한 키만 사용하게 한다.
+            if cached_suffix != suffix:
+                save_translation(
+                    session_id, page_num,
+                    json.dumps(cached, ensure_ascii=False), suffix,
+                )
+                _save_page_md(session_id, page_num, cached["translation"], suffix)
             if page_num not in job["completed_pages"]:
                 job["completed_pages"].append(page_num)
                 scanned_any = True
@@ -187,7 +214,7 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
             page_num = page_data["page_num"]
 
             # 이미 완료된 페이지는 스킵 (동일 옵션의 영구 저장 확인)
-            if get_translation(session_id, page_num, suffix) is not None:
+            if get_translation(session_id, page_num, suffix, fallback=False) is not None:
                 if page_num not in job["completed_pages"]:
                     job["completed_pages"].append(page_num)
                     _save_job(session_id, job)
@@ -199,7 +226,7 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
             prev_context = ""
             if page_num > 1:
                 try:
-                    prev_context = get_translation(session_id, page_num - 1, suffix) or ""
+                    prev_context = get_translation(session_id, page_num - 1, suffix, fallback=False) or ""
                 except Exception:
                     pass
 
@@ -226,10 +253,15 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                     prev_context=prev_context,
                     session_id=session_id,
                     page_num=page_num,
+                    document_mode=document_mode,
+                    document_type=document_type,
                     page_image_b64=page_image_b64
                 )
                 # 태그 분석 및 매핑 생성
                 cleaned_translation, sentences = parse_tagged_translation(translation, src_sentences)
+                if document_mode == "general":
+                    from services.translation_quality import assert_translation_integrity
+                    assert_translation_integrity(text, cleaned_translation)
                 payload_data = {
                     "translation": cleaned_translation,
                     "sentences": sentences
@@ -257,23 +289,24 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
         # 전체 MD 파일 생성
         _build_full_md(session_id, pages, suffix)
 
-        # 역할별 폐쇄형 태그 분석. 사용자 수정 태그는 자동 작업이 덮어쓰지 않는다.
-        try:
-            from services.paper_tags import classify_and_store_paper_tags
-            paper_tags = await classify_and_store_paper_tags(
-                session_id, pages, doc_title, force=False
-            )
-            if paper_tags:
-                print(f"[Job {session_id}] Classified structured paper tags")
-        except Exception as ex:
-            print(f"[Job {session_id}] Structured tag classification failed: {ex}")
+        # 학술 태그와 지식 그래프는 연구 문서 전용 후처리다. 일반 문서에는
+        # 연구 분류·인용 관계를 억지로 생성하지 않고 번역 완료로 끝낸다.
+        if document_mode == "research":
+            try:
+                from services.paper_tags import classify_and_store_paper_tags
+                paper_tags = await classify_and_store_paper_tags(
+                    session_id, pages, doc_title, force=False
+                )
+                if paper_tags:
+                    print(f"[Job {session_id}] Classified structured paper tags")
+            except Exception as ex:
+                print(f"[Job {session_id}] Structured tag classification failed: {ex}")
 
-        # 지식 그래프 동기화 (개념 추출 + 인용 엣지 매칭, 번역 완료 후)
-        try:
-            from services.knowledge_graph import sync_document_for_graph
-            await sync_document_for_graph(session_id, pages, doc_title)
-        except Exception as ex:
-            print(f"[Job {session_id}] Knowledge graph sync failed: {ex}")
+            try:
+                from services.knowledge_graph import sync_document_for_graph
+                await sync_document_for_graph(session_id, pages, doc_title)
+            except Exception as ex:
+                print(f"[Job {session_id}] Knowledge graph sync failed: {ex}")
 
     except asyncio.CancelledError:
         job["status"] = "cancelled"
@@ -303,7 +336,9 @@ async def _translate_page(
     prev_context: str = "",
     session_id: str = None,
     page_num: int = None,
-    page_image_b64: str = None
+    page_image_b64: str = None,
+    document_mode: str = "research",
+    document_type: str = "research_paper",
 ) -> str:
     """단일 페이지 텍스트를 번역합니다."""
     if not text:
@@ -325,6 +360,8 @@ async def _translate_page(
             doc_title=doc_title,
             prev_context=current_prev,
             page_image_b64=page_image_b64,
+            document_mode=document_mode,
+            document_type=document_type,
             session_id=session_id,
             page_num=page_num
         ):
@@ -356,7 +393,7 @@ def _build_full_md(session_id: str, pages: list, suffix: str = "") -> None:
 
     for page_data in sorted(pages, key=lambda p: p["page_num"]):
         page_num = page_data["page_num"]
-        translation = get_translation(session_id, page_num, suffix)
+        translation = get_translation(session_id, page_num, suffix, fallback=False)
         if translation:
             parts.append(f"## {page_num}페이지\n\n{translation}")
 
@@ -366,36 +403,37 @@ def _build_full_md(session_id: str, pages: list, suffix: str = "") -> None:
         f.write("\n\n---\n\n".join(parts))
 
 
-def get_full_md_path(session_id: str, suffix: str = "") -> Optional[str]:
+def get_full_md_path(session_id: str, suffix: str = "", fallback: bool = True) -> Optional[str]:
     """전체 MD 파일 경로를 반환합니다."""
     suffix_part = f"_{suffix}" if suffix else ""
     path = os.path.join(LIBRARY_DIR, session_id, f"translation{suffix_part}.md")
     if os.path.exists(path):
         return path
     
-    # Fallback: Find any translation_*.md file
-    import glob
-    files = glob.glob(os.path.join(LIBRARY_DIR, session_id, "translation_*.md"))
-    if files:
-        files.sort(key=os.path.getmtime, reverse=True)
-        return files[0]
+    # 명시적 정책 키 조회에서는 다른 모드/옵션의 파일을 재사용하지 않는다.
+    if fallback:
+        import glob
+        files = glob.glob(os.path.join(LIBRARY_DIR, session_id, "translation_*.md"))
+        if files:
+            files.sort(key=os.path.getmtime, reverse=True)
+            return files[0]
     return None
 
 
-def get_page_md(session_id: str, page_num: int, suffix: str = "") -> Optional[str]:
+def get_page_md(session_id: str, page_num: int, suffix: str = "", fallback: bool = True) -> Optional[str]:
     """페이지 MD 파일 내용을 반환합니다."""
     suffix_part = f"_{suffix}" if suffix else ""
     path = os.path.join(LIBRARY_DIR, session_id, "md", f"page_{page_num}{suffix_part}.md")
     if not os.path.exists(path):
         # Fallback 1: Try database translation cache
         from services.library import get_translation as lib_get_translation
-        db_text = lib_get_translation(session_id, page_num, suffix)
+        db_text = lib_get_translation(session_id, page_num, suffix, fallback=fallback)
         if db_text:
             return db_text
             
-        # Fallback 2: Try any page MD file
+        # 명시적 정책 키 조회에서는 다른 모드/옵션의 페이지 파일을 사용하지 않는다.
         md_dir = os.path.join(LIBRARY_DIR, session_id, "md")
-        if os.path.exists(md_dir):
+        if fallback and os.path.exists(md_dir):
             import glob
             files = glob.glob(os.path.join(md_dir, f"page_{page_num}_*.md"))
             if files:

@@ -20,7 +20,7 @@ const folders = [{
 test('큰 카드, 작은 카드, 리스트 보기를 전환하고 마지막 선택을 기억한다', async ({ page }) => {
   await mockBaseRoutes(page, { documents: docs, folders })
   await gotoApp(page)
-  await page.getByRole('button', { name: 'Library' }).click()
+  await page.locator('.sidebar-nav-item[data-page="library"]').click()
   await expect(page.locator('#library-screen')).toHaveClass(/active/)
 
   const grid = page.locator('#library-grid')
@@ -45,7 +45,7 @@ test('큰 카드, 작은 카드, 리스트 보기를 전환하고 마지막 선�
   await expect.poll(() => page.evaluate(() => localStorage.getItem('easypaper_library_view'))).toBe('compact')
 
   await page.reload()
-  await page.getByRole('button', { name: 'Library' }).click()
+  await page.locator('.sidebar-nav-item[data-page="library"]').click()
   await expect(page.locator('#library-screen')).toHaveClass(/active/)
   await expect(page.locator('#library-grid')).toHaveClass(/compact-view/)
   await expect(page.getByRole('button', { name: '작은 카드 보기' })).toHaveAttribute('aria-pressed', 'true')

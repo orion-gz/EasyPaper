@@ -16,12 +16,31 @@ export const SAMPLE_PDF_CITATION = fs.readFileSync(path.join(__dirname, 'fixture
  * @param {import('@playwright/test').Page} page
  * @param {object} [overrides] - { documents, folders } 등 확장 옵션
  */
-export async function mockBaseRoutes(page, { documents = [], folders = [] } = {}) {
+export async function mockBaseRoutes(page, {
+  documents = [],
+  folders = [],
+  workspaceSettings = {},
+} = {}) {
   await page.route('**/api/**', async route => {
     const url = route.request().url()
 
     if (url.includes('/api/auth/check')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'authenticated', username: 'admin' }) })
+    }
+    if (url.includes('/api/settings/workspace')) {
+      return route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({
+          onboarding_version: 1,
+          current_onboarding_version: 1,
+          preferred_workspace_mode: 'research',
+          document_type_options: {},
+          ...workspaceSettings,
+        }),
+      })
+    }
+    if (url.includes('/api/document-types')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ modes: [] }) })
     }
     if (url.includes('/api/settings/system')) {
       return route.fulfill({
@@ -88,6 +107,7 @@ export async function gotoApp(page, { navigateToLibrary = true } = {}) {
   await page.goto('/index.html')
   await page.evaluate(() => {
     localStorage.setItem('easypaper_onboarding_seen', '1')
+    localStorage.setItem('easypaper_onboarding_version', '1')
     localStorage.setItem('easypaper_disable_primer', 'true')
   })
   await page.reload()

@@ -42,6 +42,8 @@ class ChatRequest(BaseModel):
     # 이번 질문(messages의 마지막 user 메시지)에 실제로 첨부해 vision 지원
     # provider(openai/gemini/claude)가 캡처 영역을 직접 보고 답할 수 있게 한다.
     image_base64: Optional[str] = Field(default=None, max_length=MAX_CHAT_IMAGE_BASE64_CHARS)
+    current_page: Optional[int] = Field(default=None, ge=1)
+    selected_text: Optional[str] = Field(default=None, max_length=20_000)
 
 # ── 여러 논문 간 비교 채팅 ──────────────────────────────
 MIN_COMPARE_DOCS = 2
@@ -73,36 +75,35 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
     session_id = data.session_id
     session = require_session_owner(session_id, current_user)
 
-    # 세션 내의 모든 페이지에서 텍스트 수집
+    # 질문 관련 문단을 FTS5로 찾고 명시 페이지·현재 페이지·선택 영역을
+    # 우선 재순위화한다. 장/절이 이어지는 인접 문단도 함께 확장한다.
     pages = session.get("pages", [])
-    paper_text = ""
-    for p in pages:
-        page_num = p.get("page_num", 0)
-        page_text = p.get("text", "").strip()
-        if page_text:
-            paper_text += f"\n\n--- Page {page_num} ---\n{page_text}"
-
-    # 컨텍스트 길이 제약 (최대 40,000자, 약 8,000~10,000 토큰 내외로 유지)
-    if len(paper_text) > 40000:
-        paper_text = paper_text[:40000] + "\n\n[이하 본문 생략]"
+    latest_question = data.messages[-1].content if data.messages else ""
+    from time import perf_counter
+    from services.context_retrieval import retrieve_context
+    retrieval_started = perf_counter()
+    context_result = retrieve_context(
+        session_id, pages, latest_question,
+        current_page=data.current_page, selected_text=data.selected_text,
+    )
+    paper_text = context_result.text
+    from services.observability import record_document_mode_event
+    record_document_mode_event(
+        current_user, "chat_retrieval",
+        session.get("document_mode", "research"),
+        session.get("document_type", "research_paper"),
+        duration_ms=round((perf_counter() - retrieval_started) * 1000),
+        numeric_value=context_result.retrieval_count, status=context_result.strategy,
+    )
 
     filename = session.get("filename", "알 수 없음")
 
-    system_prompt = f"""당신은 업로드된 학술 논문 연구 분야의 세계 최고 권위 전문가(Expert Assistant)입니다. 
-당신에게는 해당 논문의 전체 또는 핵심 텍스트 내용이 컨텍스트로 제공됩니다.
-
-[논문 제목: {filename}]
-
-[논문 본문 컨텍스트]
-{paper_text}
-
-[답변 가이드라인]
-1. 반드시 제공된 [논문 본문 컨텍스트]에 기반하여 질문에 답변하세요.
-2. 만약 제공된 정보에 없는 내용이라면, 논문 내용에 없다고 명시적으로 언급하고 일반적인 AI 지식으로 부가 설명을 덧붙이세요.
-3. 한국어로 번역 또는 설명하되, 전문 학술 용어는 원어(영어 등)와 번역을 함께 병기하여(예: 심층 학습(Deep Learning)) 설명의 정확도를 높이세요.
-4. 수식이나 기호가 포함된 경우 Markdown 수식(LaTeX: $ 또는 $$) 형식으로 명확히 표현하세요.
-5. 친절하고 신뢰감 있는 학술 전문가 톤앤매너로 대답해주세요.
-"""
+    from services.document_policy import build_assistant_prompt
+    document_mode = session.get("document_mode", "research")
+    document_type = session.get("document_type", "research_paper")
+    system_prompt = build_assistant_prompt(
+        document_mode, document_type, filename, paper_text,
+    )
 
     history_messages = [{"role": msg.role, "content": msg.content} for msg in data.messages]
 
@@ -133,15 +134,25 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
                 page_image_b64=data.image_base64
             ):
                 full_response.append(token)
-                yield token
 
-            # Save assistant response to database
-            assistant_content = "".join(full_response).strip()
+            # 응답 전체에서 실제 제공된 근거 페이지 밖 인용을 제거한 뒤에만
+            # 클라이언트와 채팅 기록에 노출한다.
+            from services.context_retrieval import validate_page_citations
+            assistant_content, invalid_citations = validate_page_citations(
+                "".join(full_response).strip(), context_result.evidence_pages,
+            )
+            record_document_mode_event(
+                current_user, "chat_citation", document_mode, document_type,
+                status="invalid_removed" if invalid_citations else "valid",
+                numeric_value=len(invalid_citations),
+            )
+            for offset in range(0, len(assistant_content), 240):
+                yield assistant_content[offset:offset + 240]
             if assistant_content:
                 db_save_chat_message(session_id, "assistant", assistant_content)
                 # 지식 그래프: 이 질문을 논문의 기존 개념과 연결한다(fire-and-forget -
                 # 실패해도 채팅 응답 자체에는 영향 없음).
-                if question_chat_id is not None:
+                if question_chat_id is not None and document_mode == "research":
                     from services.knowledge_graph import sync_question_for_graph
                     asyncio.create_task(
                         sync_question_for_graph(question_chat_id, session_id, latest_msg.content)
@@ -169,20 +180,21 @@ async def chat_suggestions(data: ChatRequest, current_user: str = Depends(get_cu
     session = require_session_owner(session_id, current_user)
 
     pages = session.get("pages", [])
-    paper_text = ""
-    for p in pages:
-        page_text = (p.get("text", "") or "").strip()
-        if page_text:
-            paper_text += f"\n\n{page_text}"
-            if len(paper_text) > 6000:
-                break
+    history_messages = [{"role": msg.role, "content": msg.content} for msg in data.messages]
+    latest_question = data.messages[-1].content if data.messages else ""
+    from services.context_retrieval import retrieve_context
+    paper_text = retrieve_context(
+        session_id, pages, latest_question, current_page=data.current_page,
+        selected_text=data.selected_text, budget=6000, max_chunks=5,
+    ).text
 
     filename = session.get("filename", "알 수 없음")
-    history_messages = [{"role": msg.role, "content": msg.content} for msg in data.messages]
 
     try:
         questions = await generate_suggested_questions(
-            paper_text, history_messages, doc_title=filename, session_id=session_id
+            paper_text, history_messages, doc_title=filename, session_id=session_id,
+            document_mode=session.get("document_mode", "research"),
+            document_type=session.get("document_type", "research_paper"),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"추천 질문 생성 실패: {str(e)}")
@@ -304,10 +316,10 @@ async def get_compare_chat_history(doc_ids: str, current_user: str = Depends(get
 
 
 @router.get("/chat/sessions")
-async def get_chat_sessions(current_user: str = Depends(get_current_user)):
+async def get_chat_sessions(document_mode: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """현재 사용자가 AI 어시스턴트(단일 논문) 기능으로 나눈 채팅 세션 목록을
     최근 대화 순으로 반환합니다."""
-    sessions = db_list_assistant_chat_sessions(current_user)
+    sessions = db_list_assistant_chat_sessions(current_user, document_mode=document_mode)
     return {"sessions": sessions}
 
 

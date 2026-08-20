@@ -94,3 +94,17 @@ def test_search_result_includes_translated_pages(isolated_dirs):
 
     results = library.search_documents("admin", "Searchable")
     assert results[0]["translated_pages"] == [1]
+
+
+
+def test_search_matches_indexed_original_page_text(isolated_dirs):
+    from services.context_retrieval import index_document_chunks
+    db = isolated_dirs["db"]
+    library = isolated_dirs["library"]
+    db.db_save_document("doc-source", "admin", "manual.pdf", "/x", 2, {"title": "Manual"}, "general", "manual")
+    index_document_chunks("doc-source", [
+        {"page_num": 1, "text": "Ordinary introduction."},
+        {"page_num": 2, "text": "Rotate the cryptographic recovery token before restart."},
+    ])
+    results = library.search_documents("admin", "cryptographic recovery", document_mode="general")
+    assert [doc["id"] for doc in results] == ["doc-source"]
