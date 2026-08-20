@@ -1050,10 +1050,36 @@ function replaceBoldOutsideCode(text) {
   return processedBlocks.join('')
 }
 
+const renderedTranslationContent = new WeakMap()
+
 function renderTransContent(pageNum, text, cached = false) {
   const contentEl = $(`trans-content-${pageNum}`)
   const statusEl  = $(`trans-status-${pageNum}`)
   if (!contentEl) return
+
+  // IntersectionObserver의 현재 페이지 콜백은 스크롤 중 노출 비율이 바뀔 때마다
+  // 여러 번 실행된다. 이미 같은 번역을 그린 상태에서 DOM을 다시 만들면 아래의
+  // 재세그멘테이션 경로가 메모 카드까지 제거/재생성해 메모가 깜빡이거나 편집
+  // 포커스를 잃는다. 캐시 배지만 제자리에서 동기화하고 기존 콘텐츠는 유지한다.
+  if (
+    renderedTranslationContent.has(contentEl) &&
+    renderedTranslationContent.get(contentEl) === text &&
+    contentEl.querySelector('.trans-text')
+  ) {
+    const badge = contentEl.querySelector('.cached-badge')
+    if (cached && !badge) {
+      const cachedBadge = document.createElement('div')
+      cachedBadge.className = 'cached-badge'
+      cachedBadge.textContent = '✓ 캐시'
+      contentEl.prepend(cachedBadge)
+    } else if (!cached && badge) {
+      badge.remove()
+    }
+    if (statusEl) { statusEl.textContent = '✓ 완료'; statusEl.classList.add('done') }
+    return
+  }
+
+  renderedTranslationContent.set(contentEl, text)
   contentEl.innerHTML = ''
   if (cached) {
     const badge = document.createElement('div')
@@ -9755,8 +9781,8 @@ function updateMemoConnectorLine(pageWrapper, memo) {
 
   const memoLeft = (memo.x / 100) * pageWrapper.offsetWidth
   const memoTop = (memo.y / 100) * pageWrapper.offsetHeight
-  const memoWidth = 260
   const memoEl = pageWrapper.querySelector(`.floating-memo[data-id="${memo.id}"]`)
+  const memoWidth = memoEl ? memoEl.offsetWidth : (memo.width || 260)
   const memoHeight = memoEl ? memoEl.offsetHeight : 160
 
   const memoCenterX = memoLeft + memoWidth / 2
@@ -9788,7 +9814,11 @@ function renderPageMemos(pageNum) {
   const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
   if (!pageWrapper) return
 
-  pageWrapper.querySelectorAll('.floating-memo').forEach(el => el.remove())
+  pageWrapper.querySelectorAll('.floating-memo').forEach(el => {
+    el._memoResizeObserver?.disconnect()
+    if (el._memoResizeSaveTimer) clearTimeout(el._memoResizeSaveTimer)
+    el.remove()
+  })
   const svg = pageWrapper.querySelector('.memo-connector-svg')
   if (svg) svg.innerHTML = ''
   
@@ -9916,6 +9946,8 @@ function renderPageMemos(pageNum) {
     memoEl.setAttribute('data-id', memo.id)
     memoEl.style.left = `${memo.x}%`
     memoEl.style.top = `${memo.y}%`
+    if (Number.isFinite(memo.width)) memoEl.style.width = `${memo.width}px`
+    if (!memo.collapsed && Number.isFinite(memo.height)) memoEl.style.height = `${memo.height}px`
 
     let isEditing = !memo.content.trim()
 
@@ -10084,6 +10116,7 @@ function renderPageMemos(pageNum) {
       saveMemos(state.sessionId, allMemosObj)
 
       memoEl.classList.toggle('collapsed', memo.collapsed)
+      memoEl.style.height = memo.collapsed || !Number.isFinite(memo.height) ? '' : `${memo.height}px`
       collapseBtn.innerHTML = icon(memo.collapsed ? 'chevronDown' : 'chevronUp', 12)
       collapseBtn.title = memo.collapsed ? '메모 펼치기' : '메모 접기'
       setTimeout(() => updateMemoConnectorLine(pageWrapper, memo), 0)
@@ -10126,6 +10159,36 @@ function renderPageMemos(pageNum) {
     })
 
     pageWrapper.appendChild(memoEl)
+
+    // CSS 네이티브 resize를 사용하는 동안 연결선을 실시간으로 맞추고, 사용자가
+    // 놓은 최종 크기를 메모 데이터에 저장해 문서를 다시 열어도 복원한다.
+    if (window.ResizeObserver) {
+      let observedWidth = memoEl.offsetWidth
+      let observedHeight = memoEl.offsetHeight
+      const resizeObserver = new ResizeObserver(entries => {
+        const entry = entries[0]
+        if (!entry || memo.collapsed) return
+        const borderBox = entry.borderBoxSize?.[0]
+        const nextWidth = Math.round(borderBox?.inlineSize ?? memoEl.offsetWidth)
+        const nextHeight = Math.round(borderBox?.blockSize ?? memoEl.offsetHeight)
+        if (nextWidth === observedWidth && nextHeight === observedHeight) return
+        observedWidth = nextWidth
+        observedHeight = nextHeight
+        memo.width = nextWidth
+        memo.height = nextHeight
+        updateMemoConnectorLine(pageWrapper, memo)
+
+        if (memoEl._memoResizeSaveTimer) clearTimeout(memoEl._memoResizeSaveTimer)
+        memoEl._memoResizeSaveTimer = setTimeout(() => {
+          const allMemosObj = loadMemos(state.sessionId)
+          allMemosObj[`page_${pageNum}`] = pageMemos
+          saveMemos(state.sessionId, allMemosObj)
+          memoEl._memoResizeSaveTimer = null
+        }, 250)
+      })
+      memoEl._memoResizeObserver = resizeObserver
+      resizeObserver.observe(memoEl)
+    }
 
     const header = memoEl.querySelector('.floating-memo-header')
     header.addEventListener('mousedown', (e) => {
