@@ -5943,7 +5943,7 @@ function createFolderCard(folder) {
     ? `<div class="folder-card-icon">${icon('folder', 18, 'fill="currentColor" stroke="none"')}</div>
       <div class="folder-card-name" title="${escapeHtml(folder.name)}">${escapeHtml(folder.name)}</div>
       <div class="folder-card-meta">
-        <span>${icon('fileText', 12)}논문 ${paperCount}편</span>
+        <span>${icon('fileText', 12)}문서 ${paperCount}개</span>
         <span class="meta-dot"></span>
         <span>${icon('folder', 12)}하위 폴더 ${childFolderCount}개</span>
       </div>

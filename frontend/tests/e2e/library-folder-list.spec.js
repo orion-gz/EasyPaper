@@ -24,7 +24,7 @@ test('폴더 리스트를 논문 행처럼 표시하고 메뉴가 스크롤 높�
   const folder = grid.locator('.library-folder-card[data-folder-id="folder-root"]')
   await expect(folder).toBeVisible()
   await expect(folder.locator('.folder-card-icon')).toBeVisible()
-  await expect(folder.locator('.folder-card-meta')).toContainText('논문 0편')
+  await expect(folder.locator('.folder-card-meta')).toContainText('문서 0개')
 
   const paper = grid.locator('.doc-list-row[data-id="doc-root"]')
   const [folderBox, paperBox] = await Promise.all([folder.boundingBox(), paper.boundingBox()])
