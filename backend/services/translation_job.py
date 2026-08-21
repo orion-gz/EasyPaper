@@ -64,13 +64,21 @@ def start_job(
     style: str = "academic",
     ignore_math: bool = False,
     ignore_table: bool = True,
-    ignore_refs: bool = False
+    ignore_refs: bool = False,
+    page_numbers: Optional[list[int]] = None,
 ) -> dict:
     """
     백그라운드 번역 잡을 시작합니다.
     이미 진행 중이거나 완료된 잡이 있으면 기존 상태를 반환합니다.
     """
     existing = _load_job(session_id)
+    available_pages = {page["page_num"] for page in pages}
+    target_pages = sorted(
+        available_pages if page_numbers is None
+        else available_pages.intersection(page_numbers)
+    )
+    if not target_pages:
+        raise ValueError("번역할 페이지가 없습니다.")
 
     # 이미 동일한 옵션으로 완료된 잡이면 재시작하지 않음
     if existing and existing.get("status") == "completed":
@@ -79,7 +87,8 @@ def start_job(
             opts.get("style") == style and
             opts.get("ignore_math") == ignore_math and
             opts.get("ignore_table") == ignore_table and
-            opts.get("ignore_refs") == ignore_refs):
+            opts.get("ignore_refs") == ignore_refs and
+            existing.get("target_pages", sorted(available_pages)) == target_pages):
             return existing
 
     # 아직 실행 중인 태스크가 있으면 먼저 취소(Restart 대응)
@@ -90,7 +99,8 @@ def start_job(
     job = {
         "session_id": session_id,
         "status": "running",
-        "total_pages": len(pages),
+        "total_pages": len(target_pages),
+        "target_pages": target_pages,
         "completed_pages": [],
         "failed_pages": [],
         "options": {
@@ -173,6 +183,9 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
         ignore_math, ignore_table, ignore_refs,
     )
     suffix = suffix_candidates[0]
+    target_page_numbers = set(job.get("target_pages") or [page["page_num"] for page in pages])
+    job_pages = [page for page in pages if page["page_num"] in target_page_numbers]
+    job["target_pages"] = sorted(target_page_numbers)
 
     # vision을 지원하는 provider면 페이지별로 원본 이미지를 함께 보내 수식(LaTeX)
     # 재현 정확도를 높인다 - ignore_math면 애초에 수식을 생략하므로 렌더링하지 않는다.
@@ -180,7 +193,7 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
 
     # 이미 완료된 페이지들을 루프 돌기 전 한 번에 스캔하여 저장
     scanned_any = False
-    for page_data in pages:
+    for page_data in job_pages:
         page_num = page_data["page_num"]
         cached = None
         cached_suffix = suffix
@@ -210,7 +223,7 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
         _save_job(session_id, job)
 
     try:
-        for page_data in pages:
+        for page_data in job_pages:
             page_num = page_data["page_num"]
 
             # 이미 완료된 페이지는 스킵 (동일 옵션의 영구 저장 확인)
@@ -286,12 +299,18 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
         job["completed_at"] = datetime.now(timezone.utc).isoformat()
         _save_job(session_id, job)
 
-        # 전체 MD 파일 생성
-        _build_full_md(session_id, pages, suffix)
+        # 범위 잡이 문서의 마지막 미번역 구간까지 채운 경우에만 전체 산출물과
+        # 연구 후처리를 생성한다. 부분 범위 완료를 전체 문서 완료로 오인하지 않는다.
+        all_pages_completed = all(
+            get_translation(session_id, page["page_num"], suffix, fallback=False) is not None
+            for page in pages
+        )
+        if all_pages_completed:
+            _build_full_md(session_id, pages, suffix)
 
         # 학술 태그와 지식 그래프는 연구 문서 전용 후처리다. 일반 문서에는
         # 연구 분류·인용 관계를 억지로 생성하지 않고 번역 완료로 끝낸다.
-        if document_mode == "research":
+        if document_mode == "research" and all_pages_completed:
             try:
                 from services.paper_tags import classify_and_store_paper_tags
                 paper_tags = await classify_and_store_paper_tags(

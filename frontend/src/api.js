@@ -401,7 +401,9 @@ export async function restartJobAPI(sessionId, options) {
       style: options.style,
       ignore_math: options.ignoreMath,
       ignore_table: options.ignoreTable,
-      ignore_refs: options.ignoreRefs
+      ignore_refs: options.ignoreRefs,
+      page_numbers: options.pageNumbers,
+      resume_scope: options.resumeScope || false,
     })
   })
   if (!res.ok) {

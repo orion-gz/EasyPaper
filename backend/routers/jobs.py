@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -20,6 +22,8 @@ class RestartJobRequest(BaseModel):
     ignore_math: bool = False
     ignore_table: bool = True
     ignore_refs: bool = False
+    page_numbers: Optional[list[int]] = None
+    resume_scope: bool = False
 
 
 @router.get("/jobs/{session_id}/status")
@@ -114,16 +118,25 @@ async def restart_translation_job(
     """주어진 옵션으로 번역 작업을 중단하고 새로 재시작합니다."""
     session = require_session_owner(session_id, current_user)
     pages = session["pages"]
-    
-    job = start_job(
-        session_id,
-        pages,
-        target_lang=data.target_lang,
-        style=data.style,
-        ignore_math=data.ignore_math,
-        ignore_table=data.ignore_table,
-        ignore_refs=data.ignore_refs
-    )
+    page_numbers = data.page_numbers
+    if data.resume_scope and page_numbers is None:
+        previous_job = get_job_status(session_id)
+        if previous_job:
+            page_numbers = previous_job.get("target_pages")
+
+    try:
+        job = start_job(
+            session_id,
+            pages,
+            target_lang=data.target_lang,
+            style=data.style,
+            ignore_math=data.ignore_math,
+            ignore_table=data.ignore_table,
+            ignore_refs=data.ignore_refs,
+            page_numbers=page_numbers,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"message": "번역 잡이 성공적으로 재시작되었습니다.", "job": job}
 
 

@@ -1039,6 +1039,35 @@ body:not(.light-theme) .pdf-page-inner canvas {
   padding: 12px 0;
 }
 
+.manual-translation-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.translate-page-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--accent-mid);
+  border-radius: var(--radius-sm);
+  background: rgba(74, 135, 181, 0.1);
+  color: var(--accent-light);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.translate-page-btn:hover {
+  background: rgba(74, 135, 181, 0.2);
+}
+
+.translate-page-btn:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
 .trans-text {
   font-size: 15.5px;
   line-height: 1.9;
@@ -2376,6 +2405,12 @@ body.light-theme .pdf-annotation-underline {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
+}
+
+.setting-scope-hint {
+  color: var(--accent-light);
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
 .form-group input {
@@ -5231,6 +5266,43 @@ body.light-theme .custom-confirm-modal {
 .custom-confirm-btn.confirm-btn.primary-btn:hover {
   background: var(--accent-strong);
   box-shadow: 0 0 4px rgba(126, 196, 232, 0.25);
+}
+
+.translation-scope-modal {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.translation-scope-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.translation-scope-options button {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.translation-scope-options button:hover {
+  border-color: var(--accent-mid);
+  background: var(--bg-hover);
+}
+
+.translation-scope-options span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+@media (max-width: 480px) {
+  .translation-scope-options { grid-template-columns: 1fr; }
 }
 
 /* ── Color picker in memo header ── */
