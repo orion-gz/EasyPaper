@@ -4564,15 +4564,6 @@ async function showLibraryScreen(shouldPushState = true, targetPage) {
 // 6개 페이지(Dashboard/Library/Reading History/AI Chats/Notes/Research Graph)는
 // 각각 #page-<id> 섹션으로 존재하며, 사이드바 클릭이나 해시 변경 시 이 함수 하나로 전환한다.
 const WORKSPACE_PAGES = ['dashboard', 'library', 'history', 'chats', 'notes', 'graph']
-const WORKSPACE_PAGE_TITLES = {
-  dashboard: '대시보드',
-  library: 'Library',
-  history: 'Reading History',
-  chats: 'AI Chats',
-  notes: 'Notes',
-  graph: 'Research Graph',
-}
-
 async function showWorkspacePage(pageId, { pushState = true } = {}) {
   if (!WORKSPACE_PAGES.includes(pageId)) pageId = 'dashboard'
   if (state.currentWorkspacePage === 'library' && pageId !== 'library') {
@@ -4600,8 +4591,7 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
     })
   }
   if (workspacePageTitle) {
-    const generalTitles = { dashboard: "문서 홈", library: "문서 라이브러리", history: "읽기 기록", chats: "문서 AI", notes: "문서 노트" }
-    workspacePageTitle.textContent = workspaceModeController.getMode() === "general" ? (generalTitles[pageId] || "") : (WORKSPACE_PAGE_TITLES[pageId] || "")
+    workspacePageTitle.textContent = workspaceModeController.getPageLabel(pageId)
   }
 
   if (pushState) {
