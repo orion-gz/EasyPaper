@@ -7962,6 +7962,7 @@ function documentTypeChipHtml(doc, includeMode = false) {
 function createDocCard(doc) {
   const d = prepareDocItemHtml(doc)
   const isFav = isFavoriteDoc(doc.id)
+  const docMode = doc.document_mode || 'research'
 
   // 카드 뷰는 리스트 뷰의 압축 진행률(d.progressHtml)과는 별도로, 전체 너비 바 +
   // 퍼센트를 보여주는 새 레이아웃을 쓴다(리스트 뷰는 손대지 않는다 - createDocListRow는
@@ -7990,6 +7991,7 @@ function createDocCard(doc) {
   const card = document.createElement('div')
   card.className = 'doc-card'
   card.dataset.id = doc.id
+  card.dataset.documentMode = docMode
   card.innerHTML = `
     ${d.compareCheckHtml}
     <div class="doc-card-zone">
@@ -8005,7 +8007,7 @@ function createDocCard(doc) {
         </div>
         <div class="lib-card-top-body">
           <div class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(d.displayTitle)}</div>
-          ${documentTypeChipHtml(doc)}
+          ${documentTypeChipHtml(doc, true)}
         </div>
       </div>
       ${d.tagsHtml}
@@ -8653,6 +8655,7 @@ async function loadLibraryDetailRelated(doc) {
 
 function createDocListRow(doc) {
   const d = prepareDocItemHtml(doc)
+  const docMode = doc.document_mode || 'research'
 
   // 리스트 뷰도 카드 뷰와 마찬가지로 최대 2개만 보여주고 나머지는 "+N"으로 요약한다.
   let listTagsHtml = ''
@@ -8668,11 +8671,12 @@ function createDocListRow(doc) {
   const row = document.createElement('div')
   row.className = 'doc-list-row'
   row.dataset.id = doc.id
+  row.dataset.documentMode = docMode
   row.innerHTML = `
     ${d.compareCheckHtml}
     ${d.checkBtnHtml}
     <div class="doc-list-title" title="${escapeHtml(doc.filename)}">${escapeHtml(d.displayTitle)}</div>
-    ${documentTypeChipHtml(doc)}
+    ${documentTypeChipHtml(doc, true)}
     ${listTagsHtml}
     <div class="doc-card-meta">
       ${d.dateHtml}<span class="meta-dot"></span><span class="doc-meta-chip">${doc.total_pages || 0}p</span>

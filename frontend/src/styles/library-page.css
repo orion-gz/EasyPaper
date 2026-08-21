@@ -32,6 +32,7 @@
 }
 
 /* ── 카테고리 필터 접기/펼치기 ── */
+#library-filter-row { flex-wrap: wrap; }
 .library-category-filter-group {
   display: flex;
   align-items: flex-start;
@@ -190,9 +191,16 @@
   min-width: 0;
   flex: 1;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
 }
-.lib-card-top-body .doc-card-title { padding-right: 28px; }
+.lib-card-top-body .doc-card-title {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 28px;
+}
 
 /* 즐겨찾기 배지 - 카드 썸네일 오른쪽 위 모서리에 겹쳐 배치해 기존
    읽음 체크/미리보기 아이콘(카드 우상단, .doc-card-zone-actions)과
@@ -279,6 +287,11 @@
   padding-right: 22px;
   font-size: 12.5px;
   line-height: 1.35;
+}
+.library-grid.compact-view .lib-card-top-body { gap: 5px; }
+.library-grid.compact-view .document-type-chip {
+  padding: 3px 7px;
+  font-size: 10px;
 }
 .library-grid.compact-view .doc-card-tags,
 .library-grid.compact-view .doc-card-meta,

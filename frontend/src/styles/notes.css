@@ -176,10 +176,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.notes-paper-row-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 6px;
+}
+.notes-paper-row-footer .document-type-chip { max-width: 112px; overflow: hidden; text-overflow: ellipsis; }
 .notes-paper-row-counts {
   display: flex;
   gap: 8px;
-  margin-top: 6px;
+  flex: 0 0 auto;
 }
 
 .notes-count-chip {

@@ -86,6 +86,7 @@ test('비교 선택 모드에서 열기 버튼을 눌러도 뷰어로 이동하�
 
   await gotoApp(page)
   await page.locator('.doc-card-check-btn').first().click()
+  await expect(page.locator('#lib-select-count')).toHaveText('1개 선택됨')
 
   const secondCard = page.locator('.doc-card').nth(1)
   await secondCard.locator('.doc-open-btn').click({ force: true })
