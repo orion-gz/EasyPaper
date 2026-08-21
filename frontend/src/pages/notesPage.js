@@ -20,6 +20,11 @@ import { formatTranslationHtml, formatMarkdownLatexHtml, applyKatexToElement } f
 import { documentTypeLabel } from '../documentModes.js'
 
 let renderGeneration = 0
+let activeDocumentMode = 'research'
+
+function notesCopy(researchCopy, generalCopy) {
+  return activeDocumentMode === 'general' ? generalCopy : researchCopy
+}
 
 // 뷰어의 플로팅 메모 색상 이름을 Notes 카드에서 사용하는 실제 accent 색상으로
 // 맞춘다. default는 사용자가 설정한 앱 accent를 그대로 사용한다.
@@ -289,7 +294,7 @@ function renderPaperList(root) {
   if (!listEl) return
 
   if (filtered.length === 0) {
-    listEl.innerHTML = `<div class="notes-empty"><p>${allPapers.length === 0 ? '저장된 논문이 없습니다' : '조건에 맞는 논문이 없습니다'}</p></div>`
+    listEl.innerHTML = `<div class="notes-empty"><p>${allPapers.length === 0 ? notesCopy('저장된 논문이 없습니다', '저장된 문서가 없습니다') : notesCopy('조건에 맞는 논문이 없습니다', '조건에 맞는 문서가 없습니다')}</p></div>`
     return
   }
   listEl.innerHTML = filtered.map(renderPaperRow).join('')
@@ -311,11 +316,13 @@ const SUBTABS = [
   { key: 'all', label: '모든 주석', icon: 'layers' },
 ]
 
-const EMPTY_MESSAGES = {
-  memo: '이 논문에 남긴 메모가 없습니다.',
-  highlight: '하이라이트한 내용이 없습니다.',
-  underline: '밑줄 친 내용이 없습니다.',
-  all: '아직 저장된 주석이 없습니다.',
+function emptyMessage(key) {
+  return {
+    memo: notesCopy('이 논문에 남긴 메모가 없습니다.', '이 문서에 남긴 메모가 없습니다.'),
+    highlight: '하이라이트한 내용이 없습니다.',
+    underline: '밑줄 친 내용이 없습니다.',
+    all: '아직 저장된 주석이 없습니다.',
+  }[key]
 }
 
 // 요약 탭: primer(읽기 전 브리핑)를 그대로 가져와 뷰어의 브리핑 모달과 같은
@@ -358,7 +365,7 @@ function renderSummaryTabContent(docId) {
   }
   const data = cached.data || {}
   if (!primerHasAnyContent(data)) {
-    return `<div class="notes-empty"><p>이 논문에는 아직 생성된 브리핑이 없습니다.<br/>뷰어에서 논문을 열면 자동으로 생성됩니다.</p></div>`
+    return `<div class="notes-empty"><p>${notesCopy("이 논문에는 아직 생성된 브리핑이 없습니다.<br/>뷰어에서 논문을 열면 자동으로 생성됩니다.", "이 문서에는 아직 생성된 브리핑이 없습니다.<br/>뷰어에서 문서를 열면 자동으로 생성됩니다.")}</p></div>`
   }
 
   const parts = []
@@ -390,7 +397,7 @@ function renderSummaryTabContent(docId) {
   }
 
   if (data.lineage) {
-    parts.push(renderPrimerSection('activity', '이 논문의 연구 계보',
+    parts.push(renderPrimerSection('activity', notesCopy('이 논문의 연구 계보', '문서 구조'),
       `<p class="primer-lineage-text">${formatTranslationHtml(data.lineage)}</p>`))
   }
 
@@ -423,7 +430,7 @@ function renderSummaryTabContent(docId) {
         <p class="primer-glossary-def">${formatTranslationHtml(g.definition)}</p>
       </details>
     `).join('')
-    parts.push(renderPrimerSection('book', '이 논문이 새로 정의한 용어',
+    parts.push(renderPrimerSection('book', notesCopy('이 논문이 새로 정의한 용어', '이 문서의 주요 용어'),
       `<div class="primer-glossary">${itemsHtml}</div>`))
   }
 
@@ -515,7 +522,7 @@ function renderTabContent(entry) {
   if (activeSubtab === 'summary') return renderSummaryTabContent(entry.doc.id)
   const items = entry.items[activeSubtab] || []
   if (items.length === 0) {
-    return `<div class="notes-empty"><p>${EMPTY_MESSAGES[activeSubtab]}</p></div>`
+    return `<div class="notes-empty"><p>${emptyMessage(activeSubtab)}</p></div>`
   }
   const sortedItems = items.slice().sort(compareAnnotationItems)
   return `${renderAnnotationSortControl()}<div class="notes-card-list">${sortedItems.map(renderAnnotationCard).join('')}</div>`
@@ -530,7 +537,7 @@ function renderDetail(root) {
     detailEl.innerHTML = `
       <div class="notes-detail-empty">
         ${icon('fileText', 40)}
-        <p>왼쪽 목록에서 논문을 선택하면<br/>메모와 하이라이트를 확인할 수 있습니다.</p>
+        <p>${notesCopy("왼쪽 목록에서 논문을 선택하면", "왼쪽 목록에서 문서를 선택하면")}<br/>메모와 하이라이트를 확인할 수 있습니다.</p>
       </div>
     `
     return
@@ -697,18 +704,18 @@ function openAnnotationInViewer(card) {
 function shellHtml() {
   return `
     <div class="notes-page-inner">
-      <p class="notes-page-subtitle">논문별 메모, 하이라이트, 언더라인을 확인하세요.</p>
+      <p class="notes-page-subtitle">${notesCopy("논문별", "문서별")} 메모, 하이라이트, 언더라인을 확인하세요.</p>
       <div class="notes-layout">
         <aside class="notes-sidebar">
           <div class="notes-sidebar-header">
-            <h3>논문 목록</h3>
+            <h3>${notesCopy("논문 목록", "문서 목록")}</h3>
           </div>
           <div class="notes-search-box">
             ${icon('search', 14)}
-            <input type="text" class="notes-search-input" placeholder="논문 검색..." />
+            <input type="text" class="notes-search-input" placeholder="${notesCopy("논문 검색...", "문서 검색...")}" />
           </div>
           <div class="notes-sort-box">
-            <select class="notes-sort-select" aria-label="논문 정렬 기준">
+            <select class="notes-sort-select" aria-label="${notesCopy("논문 정렬 기준", "문서 정렬 기준")}">
               <option value="recent">최근 읽은순</option>
               <option value="title">제목순</option>
               <option value="uploaded">업로드순</option>
@@ -739,6 +746,7 @@ export async function renderNotesPage(documentMode = 'research') {
   const root = document.getElementById('page-notes')
   if (!root) return
   const generation = ++renderGeneration
+  activeDocumentMode = documentMode === 'general' ? 'general' : 'research'
   const isCurrent = () => generation === renderGeneration && root.classList.contains('active')
 
   root.innerHTML = shellHtml()
@@ -752,7 +760,7 @@ export async function renderNotesPage(documentMode = 'research') {
     console.error('Notes 페이지: 라이브러리 조회 실패:', err)
     if (isCurrent()) {
       const listEl = root.querySelector('.notes-paper-list-items')
-      if (listEl) listEl.innerHTML = `<div class="notes-empty"><p style="color:var(--error)">논문 목록을 불러오지 못했습니다</p></div>`
+      if (listEl) listEl.innerHTML = `<div class="notes-empty"><p style="color:var(--error)">${notesCopy("논문 목록을 불러오지 못했습니다", "문서 목록을 불러오지 못했습니다")}</p></div>`
     }
     return
   }
