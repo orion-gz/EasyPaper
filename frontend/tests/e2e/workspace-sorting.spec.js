@@ -27,6 +27,8 @@ test('Notes 논문 목록을 최근 읽은순, 제목순, 업로드순으로 정
 
   const titles = page.locator('.notes-paper-row-title')
   await expect(titles).toHaveCount(3)
+  await expect(page.locator('.notes-paper-row-footer > .document-type-chip')).toHaveCount(3)
+  await expect(page.locator('.notes-paper-row-title + .document-type-chip')).toHaveCount(0)
   expect(await paperTitles(titles)).toEqual(['Beta Paper', 'Alpha Paper', 'Gamma Paper'])
 
   await page.selectOption('.notes-sort-select', 'title')
@@ -54,6 +56,8 @@ test('AI Chats 목록을 논문 업로드순으로 정렬한다', async ({ page 
 
   const titles = page.locator('.aic-paper-title')
   await expect(titles).toHaveCount(3)
+  await expect(page.locator('.aic-col-type .document-type-chip')).toHaveCount(3)
+  await expect(page.locator('.aic-col-paper .document-type-chip')).toHaveCount(0)
   expect(await paperTitles(titles)).toEqual(['Beta Paper', 'Gamma Paper', 'Alpha Paper'])
 
   await page.click('#aic-sort-btn')

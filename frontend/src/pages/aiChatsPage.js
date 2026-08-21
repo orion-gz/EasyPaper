@@ -218,6 +218,7 @@ export async function renderAiChatsPage(documentMode = 'research') {
           <thead>
             <tr>
               <th class="aic-col-paper">${documentMode === 'research' ? '논문' : '문서'}</th>
+              <th class="aic-col-type">분류</th>
               <th class="aic-col-message">최근 메시지</th>
               <th class="aic-col-updated">마지막 대화</th>
               <th class="aic-col-actions">작업</th>
@@ -229,9 +230,10 @@ export async function renderAiChatsPage(documentMode = 'research') {
                 <td class="aic-col-paper">
                   <div class="aic-paper-cell">
                     <div class="aic-paper-icon">${icon('fileText', 17)}</div>
-                    <div><div class="aic-paper-title" title="${escapeHtml(session.title)}">${escapeHtml(session.title)}</div>${typeChipHtml(session)}</div>
+                    <div class="aic-paper-title" title="${escapeHtml(session.title)}">${escapeHtml(session.title)}</div>
                   </div>
                 </td>
+                <td class="aic-col-type">${typeChipHtml(session)}</td>
                 <td class="aic-col-message"><div class="aic-preview" data-preview-doc="${escapeHtml(session.doc_id)}">${previewCellHtml(session)}</div></td>
                 <td class="aic-col-updated" title="${escapeHtml(formatFullTime(session.last_message_at))}">${formatRelativeTime(session.last_message_at)}</td>
                 <td class="aic-col-actions"><div class="aic-actions">${actionsHtml(session)}</div></td>

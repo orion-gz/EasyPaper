@@ -199,7 +199,7 @@
 }
 .aic-table {
   width: 100%;
-  min-width: 620px;
+  min-width: 720px;
   /* 잘림의 실제 원인 - table-layout이 기본값(auto)이면 브라우저가 셀
      내용(특히 줄바꿈 없는 논문 제목)의 "선호 폭"을 기준으로 컬럼 폭을
      재배분해서, 아래 %가 있어도 Action 컬럼이 밀려 잘렸다. fixed로
@@ -231,9 +231,10 @@
   color: var(--text-secondary);
 }
 .aic-col-paper { width: 28%; }
-.aic-col-message { width: 24%; color: var(--text-secondary); }
+.aic-col-type { width: 14%; }
+.aic-col-message { width: 22%; color: var(--text-secondary); }
 .aic-col-updated { width: 12%; white-space: nowrap; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; }
-.aic-col-actions { width: 36%; }
+.aic-col-actions { width: 24%; }
 
 .aic-paper-cell {
   display: flex;
@@ -260,7 +261,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  flex: 1 1 auto;
 }
+.aic-col-type .document-type-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .aic-preview,
 .aic-card-preview {
   display: block;

@@ -259,12 +259,14 @@ function renderPaperRow(entry) {
       ${renderThumb(doc.id, 40)}
       <div class="notes-paper-row-body">
         <div class="notes-paper-row-title">${escapeHtml(title)}</div>
-        <span class="document-type-chip ${escapeHtml(doc.document_mode || 'research')}">${escapeHtml(documentTypeLabel(null, doc.document_mode || 'research', doc.document_type || 'research_paper'))}</span>
         ${metaLine ? `<div class="notes-paper-row-meta">${escapeHtml(metaLine)}</div>` : ''}
-        <div class="notes-paper-row-counts">
-          <span class="notes-count-chip" title="하이라이트">${icon('highlighter', 12)}${counts.highlight}</span>
-          <span class="notes-count-chip" title="언더라인">${icon('underline', 12)}${counts.underline}</span>
-          <span class="notes-count-chip" title="메모">${icon('edit3', 12)}${counts.memo}</span>
+        <div class="notes-paper-row-footer">
+          <span class="document-type-chip ${escapeHtml(doc.document_mode || 'research')}">${escapeHtml(documentTypeLabel(null, doc.document_mode || 'research', doc.document_type || 'research_paper'))}</span>
+          <div class="notes-paper-row-counts">
+            <span class="notes-count-chip" title="하이라이트">${icon('highlighter', 12)}${counts.highlight}</span>
+            <span class="notes-count-chip" title="언더라인">${icon('underline', 12)}${counts.underline}</span>
+            <span class="notes-count-chip" title="메모">${icon('edit3', 12)}${counts.memo}</span>
+          </div>
         </div>
       </div>
       <button type="button" class="notes-fav-btn ${favorite ? 'active' : ''}" data-fav-doc-id="${escapeHtml(doc.id)}" title="${favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}">

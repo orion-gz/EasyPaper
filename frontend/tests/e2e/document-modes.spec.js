@@ -46,6 +46,16 @@ test('워크스페이스 전환은 홈과 데이터 범위를 바꾸고 문서 �
   await expect(page.locator('#lib-compare-toggle-btn')).not.toBeVisible()
   await expect(page.locator('.category-filter-btn', { hasText: '매뉴얼' })).toBeVisible()
 
+  const manualCard = page.locator('.doc-card', { hasText: 'Setup Manual' })
+  const manualChip = manualCard.locator('.document-type-chip.general')
+  await expect(manualCard).toHaveAttribute('data-document-mode', 'general')
+  await expect(manualChip).toHaveText('일반 · 매뉴얼')
+  await expect(manualChip).toHaveCSS('white-space', 'nowrap')
+  expect(await manualChip.evaluate(el => el.getBoundingClientRect().width > el.getBoundingClientRect().height)).toBe(true)
+  expect(await manualCard.evaluate(el => getComputedStyle(el, '::before').width)).toBe('3px')
+  await expect(page.locator('.document-mode-legend')).toContainText('연구 문서')
+  await expect(page.locator('.document-mode-legend')).toContainText('일반 문서')
+
   await page.locator('.document-type-chip.general', { hasText: '매뉴얼' }).click()
   await expect(page.locator('#library-grid').getByText('Setup Manual')).toBeVisible()
   await expect(page.locator('#library-grid').getByText('Example Book')).not.toBeVisible()
