@@ -370,6 +370,11 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
   const el = document.getElementById('page-history')
   if (!el) return
   const generation = ++renderGeneration
+  const isGeneralDocumentMode = documentMode === "general"
+  const modeCopy = (researchCopy, generalCopy) => isGeneralDocumentMode ? generalCopy : researchCopy
+  const categoryLabels = isGeneralDocumentMode
+    ? { reading: "문서 읽기", chat: "AI 채팅", compare: "문서 비교" }
+    : CATEGORY_LABEL
   const isCurrent = () => generation === renderGeneration && el.classList.contains('active')
 
   hideRhTooltip() // 다른 페이지로 이동한 뒤에도 뜬 채로 남아있지 않도록
@@ -485,12 +490,12 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     if (period === '7') {
       return [
         {
-          icon: 'bookOpen', color: 'var(--rh-c4)', label: '등록 논문',
+          icon: 'bookOpen', color: 'var(--rh-c4)', label: modeCopy("등록 논문", "등록 문서"),
           value: (curr7.uploadedPapers || 0).toLocaleString(),
           sub: deltaHtml(curr7.uploadedPapers, prev7.uploadedPapers, '', '이전 7일 대비'),
         },
         {
-          icon: 'checkCircle', color: 'var(--rh-c2)', label: '읽은 논문',
+          icon: 'checkCircle', color: 'var(--rh-c2)', label: modeCopy("읽은 논문", "읽은 문서"),
           value: (curr7.papersRead || 0).toLocaleString(),
           sub: deltaHtml(curr7.papersRead, prev7.papersRead, '', '이전 7일 대비'),
         },
@@ -525,14 +530,14 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     if (period === 'all') {
       return [
         {
-          icon: 'bookOpen', color: 'var(--rh-c4)', label: '등록 논문',
+          icon: 'bookOpen', color: 'var(--rh-c4)', label: modeCopy("등록 논문", "등록 문서"),
           value: totalUploadedCount.toLocaleString(),
-          sub: `<span class="rh-stat-delta">전체 등록 논문</span>`,
+          sub: `<span class="rh-stat-delta">${modeCopy("전체 등록 논문", "전체 등록 문서")}</span>`,
         },
         {
-          icon: 'checkCircle', color: 'var(--rh-c2)', label: '읽은 논문',
+          icon: 'checkCircle', color: 'var(--rh-c2)', label: modeCopy("읽은 논문", "읽은 문서"),
           value: totalReadCount.toLocaleString(),
-          sub: `<span class="rh-stat-delta">전체 완독/읽기 문서</span>`,
+          sub: `<span class="rh-stat-delta">${modeCopy("전체 완독/읽기 논문", "전체 완독/읽기 문서")}</span>`,
         },
         {
           icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
@@ -564,12 +569,12 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
 
     return [
       {
-        icon: 'bookOpen', color: 'var(--rh-c4)', label: '등록 논문',
+        icon: 'bookOpen', color: 'var(--rh-c4)', label: modeCopy("등록 논문", "등록 문서"),
         value: (curr.uploadedPapers || 0).toLocaleString(),
         sub: deltaHtml(curr.uploadedPapers, prev.uploadedPapers),
       },
       {
-        icon: 'checkCircle', color: 'var(--rh-c2)', label: '읽은 논문',
+        icon: 'checkCircle', color: 'var(--rh-c2)', label: modeCopy("읽은 논문", "읽은 문서"),
         value: (curr.papersRead || 0).toLocaleString(),
         sub: deltaHtml(curr.papersRead, prev.papersRead),
       },
@@ -676,7 +681,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     const seconds = byCategory[c] || 0
     const pct = mixTotalSeconds ? (seconds / mixTotalSeconds) * 100 : 0
     if (pct <= 0) return ''
-    return `<div class="rh-mix-seg" style="width:${pct}%;background:var(${CATEGORY_COLOR_VAR[c]})" title="${escapeHtml(CATEGORY_LABEL[c])}: ${formatDuration(seconds)}"></div>`
+    return `<div class="rh-mix-seg" style="width:${pct}%;background:var(${CATEGORY_COLOR_VAR[c]})" title="${escapeHtml(categoryLabels[c])}: ${formatDuration(seconds)}"></div>`
   }).join('')
 
   const mixLegendHtml = CATEGORY_ORDER.map(c => {
@@ -685,7 +690,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     return `
       <div class="rh-mix-row">
         <span class="rh-mix-dot" style="background:var(${CATEGORY_COLOR_VAR[c]})"></span>
-        <span class="rh-mix-label">${escapeHtml(CATEGORY_LABEL[c])}</span>
+        <span class="rh-mix-label">${escapeHtml(categoryLabels[c])}</span>
         <span class="rh-mix-count">${formatDuration(seconds)}</span>
         <span class="rh-mix-pct">${pct}%</span>
       </div>`
@@ -704,7 +709,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     const doc = docsById.get(p.doc_id)
     const isDeleted = !doc || doc.is_deleted === 1
     // 삭제된 논문: titleByDoc(reading_time 스냅샷) → timelineDocTitles → '삭제된 논문' 순으로 fallback
-    const deletedFallback = titleByDoc.get(p.doc_id) || timelineDocTitles.get(p.doc_id) || '삭제된 논문'
+    const deletedFallback = titleByDoc.get(p.doc_id) || timelineDocTitles.get(p.doc_id) || modeCopy("삭제된 논문", "삭제된 문서")
     const title = docTitle(p.doc_id, deletedFallback)
     const widthPct = Math.max(6, Math.round((p.seconds / topMaxSeconds) * 100))
     const pStat = paperAnalyticsMap[p.doc_id]
@@ -714,7 +719,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     const verifiedPages = pStat ? pStat.verified_pages_count : '-'
 
     return `
-      <div class="rh-top-row ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(p.doc_id || '')}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${isDeleted ? '삭제된 논문입니다' : ''}">
+      <div class="rh-top-row ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(p.doc_id || '')}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${isDeleted ? modeCopy("삭제된 논문입니다", "삭제된 문서입니다") : ""}">
         <span class="rh-top-rank">${i + 1}</span>
         <div class="rh-top-body">
           <div class="rh-top-title" style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
@@ -732,7 +737,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
         </div>
         <span class="rh-top-value">${formatDuration(p.seconds)}</span>
       </div>`
-  }).join('') : '<div class="rh-empty">아직 기록된 읽기 시간이 없습니다. 뷰어에서 논문을 열어 읽으면 자동으로 쌓입니다.</div>'
+  }).join('') : `<div class="rh-empty">${modeCopy("아직 기록된 읽기 시간이 없습니다. 뷰어에서 논문을 열어 읽으면 자동으로 쌓입니다.", "아직 기록된 읽기 시간이 없습니다. 뷰어에서 문서를 열어 읽으면 자동으로 쌓입니다.")}</div>`
 
   // ── Reading Streak 위젯: 이번 주(월~일) ──
   const weekStartOffset = (keyToLocalDate(tKey).getDay() + 6) % 7
@@ -757,7 +762,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     <div class="rh-page">
       <div class="rh-header">
         <div>
-          <p class="rh-header-subtitle">읽기 활동과 연구 여정을 확인하세요.</p>
+          <p class="rh-header-subtitle">${modeCopy("읽기 활동과 연구 여정을 확인하세요.", "읽기 활동과 문서 여정을 확인하세요.")}</p>
         </div>
         <div class="rh-header-chips" id="rh-period-chips">
           <button type="button" class="rh-chip" data-period="7">${icon('calendar', 13)} 최근 7일</button>
@@ -839,7 +844,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
 
           <div class="rh-card">
             <div class="rh-card-head">
-              <span class="rh-card-title">${icon('award', 15)} 읽기 시간 상위 논문</span>
+              <span class="rh-card-title">${icon('award', 15)} ${modeCopy("읽기 시간 상위 논문", "읽기 시간 상위 문서")}</span>
             </div>
             <div class="rh-top-list">${topPapersHtml}</div>
           </div>
@@ -853,7 +858,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
               <span class="rh-streak-unit">일</span>
             </div>
             <div class="rh-streak-week">${streakWeekHtml}</div>
-            <div class="rh-streak-msg">${streaks.current > 0 ? '계속 이어가세요!' : '오늘 논문을 읽고 연속 기록을 시작해보세요.'}</div>
+            <div class="rh-streak-msg">${streaks.current > 0 ? "계속 이어가세요!" : modeCopy("오늘 논문을 읽고 연속 기록을 시작해보세요.", "오늘 문서를 읽고 연속 기록을 시작해보세요.")}</div>
           </div>
 
           <div class="rh-callout-row">
@@ -951,17 +956,17 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
             const isDeleted = Boolean(e.is_deleted)
             let pageMeta = ''
             let timeLabel = formatTime(e.timestamp)
-            let hoverTitle = isDeleted ? '삭제된 논문입니다' : '이 논문 열기'
+            let hoverTitle = isDeleted ? modeCopy("삭제된 논문입니다", "삭제된 문서입니다") : modeCopy("이 논문 열기", "이 문서 열기")
 
             if (e.type === 'read' || e.type === 'browsed') {
               const startStr = formatTime(e.timestamp)
               const endStr = e.end_timestamp ? formatTime(e.end_timestamp) : null
               if (startStr && endStr && startStr !== endStr) {
                 timeLabel = `${startStr} ~ ${endStr}`
-                hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시간: ${startStr} ~ ${endStr})` : `읽기 시간: ${startStr} 시작 ~ ${endStr} 종료 | 클릭하여 이 논문 열기`
+                hoverTitle = isDeleted ? `${modeCopy("삭제된 논문입니다", "삭제된 문서입니다")} (읽기 시간: ${startStr} ~ ${endStr})` : `읽기 시간: ${startStr} 시작 ~ ${endStr} 종료 | ${modeCopy("클릭하여 이 논문 열기", "클릭하여 이 문서 열기")}`
               } else if (startStr) {
                 timeLabel = startStr
-                hoverTitle = isDeleted ? `삭제된 논문입니다 (읽기 시각: ${startStr})` : `읽기 시각: ${startStr} | 클릭하여 이 논문 열기`
+                hoverTitle = isDeleted ? `${modeCopy("삭제된 논문입니다", "삭제된 문서입니다")} (읽기 시각: ${startStr})` : `읽기 시각: ${startStr} | ${modeCopy("클릭하여 이 논문 열기", "클릭하여 이 문서 열기")}`
               }
 
               if (e.start_page && e.end_page) {

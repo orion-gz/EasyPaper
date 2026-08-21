@@ -14,8 +14,8 @@ import {
 
 const MODE_COPY = {
   research: {
-    title: '대시보드', library: '논문 라이브러리', history: '독서 기록',
-    chats: 'AI Chats', notes: '연구 노트', search: '연구 문서에서 검색', add: '논문 추가',
+    title: '연구 홈', library: '논문 라이브러리', history: '읽기 기록',
+    chats: '논문 AI', notes: '논문 노트', search: '연구 문서에서 검색', add: '논문 추가',
   },
   general: {
     title: '문서 홈', library: '문서 라이브러리', history: '읽기 기록',
@@ -41,12 +41,16 @@ export function createWorkspaceModeController({
   const modeChip = document.getElementById('upload-mode-chip')
   const uploadModeSwitch = document.getElementById('document-upload-switch-mode-btn')
 
-  function updateCopy() {
+  function getPageLabel(pageId) {
     const copy = MODE_COPY[mode]
-    const labels = {
+    return {
       dashboard: copy.title, library: copy.library, history: copy.history,
       chats: copy.chats, notes: copy.notes, graph: 'Research Graph',
-    }
+    }[pageId] || ''
+  }
+
+  function updateCopy() {
+    const copy = MODE_COPY[mode]
     document.body.dataset.workspaceMode = mode
     document.querySelectorAll('[data-workspace-mode]').forEach(button => {
       const selected = button.dataset.workspaceMode === mode
@@ -54,7 +58,7 @@ export function createWorkspaceModeController({
       button.tabIndex = selected ? 0 : -1
     })
     document.querySelectorAll('.sidebar-nav-item[data-page]').forEach(button => {
-      const label = labels[button.dataset.page]
+      const label = getPageLabel(button.dataset.page)
       if (!label) return
       const text = button.querySelector('.sidebar-nav-label')
       const tooltip = button.querySelector('.sidebar-tooltip')
@@ -186,7 +190,7 @@ export function createWorkspaceModeController({
   modal?.addEventListener('click', event => { if (event.target === modal) closeUploadModal(null) })
 
   return {
-    initialize, setMode, chooseUploadClassification, chooseDocumentClassification,
+    initialize, setMode, chooseUploadClassification, chooseDocumentClassification, getPageLabel,
     getMode: () => mode,
     getRegistry: () => registry,
     getTypeLabel: (docMode, type) => documentTypeLabel(registry, docMode, type),
