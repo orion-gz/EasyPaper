@@ -20,6 +20,7 @@ router = APIRouter()
 
 # 메모리 내 세션 저장소
 sessions: dict = {}
+LONG_DOCUMENT_PAGE_THRESHOLD = 50
 
 
 def ensure_session(session_id: str) -> bool:
@@ -204,7 +205,9 @@ async def upload_pdf(
 
     # translation_mode가 "auto"(기본값)가 아니면 - 페이지 번역 버튼을 누를 때(pane) 또는
     # 스크롤로 페이지를 볼 때(scroll)만 번역하길 원하는 사용자이므로 - 업로드
-    # 직후 전체 문서를 자동으로 번역하는 백그라운드 잡을 시작하지 않는다. 이후
+    # 직후 전체 문서를 자동으로 번역하는 백그라운드 잡을 시작하지 않는다.
+    # auto를 선택했더라도 50페이지 이상이면 긴 문서 보호 정책에 따라 전체 잡을
+    # 시작하지 않고, 프런트엔드가 실제로 본 페이지만 지연 번역한다. 이후
     # 번역은 프런트엔드가 /translate/{id}/{page}를 호출해 페이지별로 트리거한다.
     #
     # auto 번역 잡은 선택 기능인 읽기 전 브리핑에 의존하지 않도록
@@ -212,7 +215,7 @@ async def upload_pdf(
     # 멈춰도 job status가 404로 남지 않고 번역이 진행된다. 문서당 세션을
     # 재사용하는 CLI provider의 실제 LLM 호출은 llm_client의 세션 락이
     # 직렬화하므로 동시에 같은 세션을 쓰지 않는다.
-    if translation_mode == "auto":
+    if translation_mode == "auto" and len(pages) < LONG_DOCUMENT_PAGE_THRESHOLD:
         start_job(
             session_id,
             pages,

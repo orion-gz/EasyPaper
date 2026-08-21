@@ -1,0 +1,66 @@
+import { test, expect } from '@playwright/test'
+import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+
+test('연구와 일반 문서 워크스페이스의 번역 모드를 따로 저장한다', async ({ page }) => {
+  await mockBaseRoutes(page, { documents: [] })
+  await page.route('**/api/document-types', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ modes: [
+      { value: 'research', types: [{ value: 'research_paper', mode: 'research', label: '연구 논문' }] },
+      { value: 'general', types: [{ value: 'other', mode: 'general', label: '기타 문서' }] },
+    ] }),
+  }))
+  await gotoApp(page)
+  await page.evaluate(() => {
+    localStorage.setItem('easypaper_translation_mode_research', 'pane')
+    localStorage.setItem('easypaper_translation_mode_general', 'scroll')
+  })
+
+  await page.locator('#sidebar-settings-btn').click()
+  await expect(page.locator('#setting-translation-mode')).toHaveValue('pane')
+  await expect(page.locator('#setting-translation-mode-scope')).toHaveText('연구 모드에만 적용')
+  await page.locator('#close-settings-btn').click()
+
+  await page.locator('#workspace-mode-switch [data-workspace-mode="general"]').click()
+  await page.locator('#sidebar-settings-btn').click()
+  await expect(page.locator('#setting-translation-mode')).toHaveValue('scroll')
+  await expect(page.locator('#setting-translation-mode-scope')).toHaveText('일반 문서 모드에만 적용')
+  await page.locator('#setting-translation-mode').selectOption('auto')
+  await page.locator('#close-settings-btn').click()
+
+  await page.locator('#workspace-mode-switch [data-workspace-mode="research"]').click()
+  await page.locator('#sidebar-settings-btn').click()
+  await expect(page.locator('#setting-translation-mode')).toHaveValue('pane')
+  expect(await page.evaluate(() => localStorage.getItem('easypaper_translation_mode_general'))).toBe('auto')
+})
+
+test('번역 범위 선택에서 문서 전체 페이지 목록을 잡 API에 전달한다', async ({ page }) => {
+  const doc = {
+    id: 'doc-scope', filename: 'Scope.pdf', total_pages: 1,
+    metadata: { title: 'Scoped translation' }, translated_pages: [],
+  }
+  let restartPayload = null
+
+  await mockBaseRoutes(page, { documents: [doc] })
+  await page.route('**/api/library/doc-scope/pdf', route => route.fulfill({
+    status: 200, contentType: 'application/pdf', body: SAMPLE_PDF_A,
+  }))
+  await page.route('**/api/jobs/doc-scope/restart', route => {
+    restartPayload = route.request().postDataJSON()
+    return route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ job: { status: 'running', total_pages: 1, target_pages: [1] } }),
+    })
+  })
+
+  await gotoApp(page)
+  await page.evaluate(() => { location.hash = '#viewer?id=doc-scope' })
+  await expect(page.locator('#viewer-screen')).toHaveClass(/active/)
+  await page.locator('#toolbar-kebab-btn').click()
+  await page.locator('#translation-scope-btn').click()
+  await page.locator('.translation-scope-modal [data-scope="all"]').click()
+
+  await expect.poll(() => restartPayload).not.toBeNull()
+  expect(restartPayload.page_numbers).toEqual([1])
+})

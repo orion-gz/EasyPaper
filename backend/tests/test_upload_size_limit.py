@@ -78,3 +78,35 @@ def test_auto_translation_job_starts_before_primer(test_client, isolated_dirs, m
     assert res.status_code == 200
     assert events
     assert events[0] == "translation"
+
+
+def test_auto_translation_skips_full_job_at_fifty_pages(test_client, isolated_dirs, monkeypatch):
+    upload_dir = isolated_dirs["upload_dir"]
+    monkeypatch.setattr(upload_module, "UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(upload_module, "MAX_FILE_SIZE_MB", 50)
+    monkeypatch.setattr(
+        upload_module, "extract_pages",
+        lambda _path: [{"page_num": page, "text": ""} for page in range(1, 51)],
+    )
+
+    starts = []
+
+    def fake_start_job(*args, **kwargs):
+        starts.append((args, kwargs))
+        return {"status": "running"}
+
+    async def fake_generate_primer(*args, **kwargs):
+        return {}
+
+    monkeypatch.setattr(upload_module, "start_job", fake_start_job)
+    monkeypatch.setattr(upload_module, "generate_primer", fake_generate_primer)
+
+    response = test_client.post(
+        "/api/upload?translation_mode=auto",
+        files={"file": ("long.pdf", _minimal_pdf_bytes(), "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total_pages"] == 50
+    assert starts == []
+    upload_module.sessions.pop(response.json()["session_id"], None)

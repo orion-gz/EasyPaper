@@ -481,9 +481,13 @@
 
             <div class="kebab-menu-divider"></div>
 
+            <button id="translation-scope-btn" class="kebab-menu-item" title="번역할 페이지 범위 선택">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+              <span>번역 범위 선택</span>
+            </button>
             <button id="retranslate-btn" class="kebab-menu-item" title="처음부터 다시 번역하기">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              <span>처음부터 다시 번역하기</span>
+              <span>문서 전체 재번역</span>
             </button>
             <button id="cancel-trans-btn" class="kebab-menu-item hidden" title="번역 작업 중지" style="color: var(--error);">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
@@ -860,8 +864,9 @@
           
           <div class="form-group">
             <label for="setting-translation-mode">번역 모드</label>
+            <small id="setting-translation-mode-scope" class="setting-scope-hint"></small>
             <select id="setting-translation-mode" class="form-select">
-              <option value="auto">업로드 시 자동 번역 (기본)</option>
+              <option value="auto">업로드 시 자동 번역 (50페이지 미만)</option>
               <option value="pane">번역 버튼으로 한 페이지씩 번역</option>
               <option value="scroll">스크롤로 페이지를 볼 때 번역</option>
             </select>
