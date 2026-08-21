@@ -202,11 +202,10 @@ async def upload_pdf(
         "document_type": document_type,
     }
 
-    # translation_mode가 "auto"(기본값)가 아니면 - 번역 창을 펼칠 때(pane) 또는
+    # translation_mode가 "auto"(기본값)가 아니면 - 페이지 번역 버튼을 누를 때(pane) 또는
     # 스크롤로 페이지를 볼 때(scroll)만 번역하길 원하는 사용자이므로 - 업로드
     # 직후 전체 문서를 자동으로 번역하는 백그라운드 잡을 시작하지 않는다. 이후
-    # 번역은 프런트엔드가 상황에 맞춰 /jobs/{id}/restart(pane) 또는
-    # /translate/{id}/{page}(scroll) 를 호출해 트리거한다.
+    # 번역은 프런트엔드가 /translate/{id}/{page}를 호출해 페이지별로 트리거한다.
     #
     # auto 번역 잡은 선택 기능인 읽기 전 브리핑에 의존하지 않도록
     # 업로드 응답 전에 즉시 등록한다. 이렇게 해야 primer LLM이 느리거나

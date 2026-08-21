@@ -1039,6 +1039,35 @@ body:not(.light-theme) .pdf-page-inner canvas {
   padding: 12px 0;
 }
 
+.manual-translation-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.translate-page-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--accent-mid);
+  border-radius: var(--radius-sm);
+  background: rgba(74, 135, 181, 0.1);
+  color: var(--accent-light);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.translate-page-btn:hover {
+  background: rgba(74, 135, 181, 0.2);
+}
+
+.translate-page-btn:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
 .trans-text {
   font-size: 15.5px;
   line-height: 1.9;

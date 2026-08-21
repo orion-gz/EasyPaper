@@ -530,8 +530,8 @@ function applyToolbarPosition(pos) {
 }
 applyToolbarPosition(getToolbarPosition())
 
-// 번역 모드: 'auto'(업로드 시 전체 자동 번역, 기본값) / 'pane'(번역 창을 펼칠 때만
-// 시작) / 'scroll'(스크롤로 페이지가 보일 때마다 그 페이지만 번역). 대상 언어/문체와
+// 번역 모드: 'auto'(업로드 시 전체 자동 번역, 기본값) / 'pane'(사용자가 번역 버튼을
+// 눌러 한 페이지씩 번역) / 'scroll'(스크롤로 페이지가 보일 때마다 그 페이지만 번역). 대상 언어/문체와
 // 달리 캐시 접미사에 영향을 주지 않는 "언제 번역할지"만 다루는 옵션이라
 // getTranslationOptions()와는 별도로 관리한다.
 function getTranslationMode() {
@@ -800,23 +800,6 @@ function createPagePair(pageNum) {
   return pair
 }
 
-// 번역 모드가 'pane'일 때, 번역 창이 펼쳐진 시점에 전체 문서 백그라운드 번역
-// 잡을 시작한다. 이미 잡이 있으면(과거에 시작되었거나 완료됨) 아무 것도 하지
-// 않는다 - start_job은 동일 옵션으로 이미 완료된 잡이면 재시작하지 않고,
-// 실행 중인 잡을 다시 시작해도 캐시된 페이지는 건너뛰므로 여러 번 호출돼도
-// 안전하지만, 불필요한 네트워크 호출을 줄이기 위해 잡 존재 여부를 먼저 확인한다.
-async function ensureTranslationJobStarted() {
-  if (!state.sessionId) return
-  try {
-    const job = await getJobStatus(state.sessionId)
-    if (!job) {
-      await restartJobAPI(state.sessionId, getTranslationOptions())
-    }
-  } catch (err) {
-    console.warn('번역 잡 시작 확인 실패:', err)
-  }
-}
-
 // ── 스크롤 뷰어 초기화 ────────────────────────────
 async function initScrollViewer() {
   viewerScrollContainer.innerHTML = ''
@@ -922,14 +905,6 @@ async function initScrollViewer() {
     }
   })
 
-  // 번역 모드가 'pane'이고 번역 창이 이미 펼쳐진 상태로 문서를 열었다면,
-  // (예: 이전에 펼친 채로 남겨둔 경우) 폴링을 시작하기 전에 전체 문서 번역
-  // 잡을 지금 시작해둔다. 접힌 채로 열었다면 아래 trans-collapse-btn
-  // 클릭 핸들러가 나중에 펼칠 때 시작한다.
-  if (getTranslationMode() === 'pane' && !isTransPaneCollapsed) {
-    ensureTranslationJobStarted()
-  }
-
   // 백그라운드 잡 폴링 시작
   startJobPolling(state.sessionId)
 }
@@ -949,6 +924,12 @@ function createTransBlock(pageNum) {
   const rightChevron = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`
   const chevron = isTransPaneCollapsed ? rightChevron : leftChevron
   const btnTitle = isTransPaneCollapsed ? '번역 창 펴기' : '번역 창 접기'
+  const translationPlaceholder = getTranslationMode() === 'pane'
+    ? `<div class="manual-translation-prompt">
+        <span>필요한 페이지만 직접 번역할 수 있습니다.</span>
+        <button type="button" class="translate-page-btn" data-page="${pageNum}">이 페이지 번역하기</button>
+      </div>`
+    : '<div class="trans-page-placeholder">스크롤하면 자동으로 번역됩니다</div>'
 
   block.innerHTML = `
     <div class="trans-page-label">
@@ -962,7 +943,7 @@ function createTransBlock(pageNum) {
       <button class="trans-tab-refresh-btn insight-tab-btn hidden" title="다시 생성">${icon('refreshCw', 12)}</button>
     </div>
     <div class="trans-page-content" id="trans-content-${pageNum}">
-      <div class="trans-page-placeholder">스크롤하면 자동으로 번역됩니다</div>
+      ${translationPlaceholder}
     </div>
     <div class="trans-insight-content hidden" id="keywords-content-${pageNum}"></div>
     <div class="trans-insight-content hidden" id="summary-content-${pageNum}"></div>
@@ -1120,8 +1101,8 @@ function renderInsightContent(contentEl, kind, text) {
 }
 
 // ── 페이지 번역 ───────────────────────────────────
-// 번역 모드가 'scroll'일 때 - 전체 문서 백그라운드 잡이 돌고 있지 않으므로 -
-// 스크롤로 보이게 된 페이지 하나만 그 자리에서 즉시 번역한다(/translate/{id}/{page}
+// 번역 모드가 'scroll'이거나 'pane'에서 사용자가 버튼을 눌렀을 때, 페이지 하나를
+// 그 자리에서 즉시 번역한다(/translate/{id}/{page}
 // SSE 엔드포인트, 캐시가 있으면 즉시 반환). 완료되면 job-polling 경로와 동일하게
 // state.translatedPages/translationCache/translationSentences를 채워 이후
 // 다시 방문했을 때는 재번역 없이 캐시를 바로 쓴다.
@@ -15567,8 +15548,16 @@ document.addEventListener('mouseup', () => {
 
 window.addEventListener('resize', triggerMemosRedraw)
 
-// 인라인 접기/펴기 버튼 클릭 이벤트 바인딩 (이벤트 위임)
+// 페이지 번역 및 인라인 접기/펴기 버튼 클릭 이벤트 바인딩 (이벤트 위임)
 viewerScrollContainer.addEventListener('click', (e) => {
+  const translateBtn = e.target.closest('.translate-page-btn')
+  if (translateBtn) {
+    e.stopPropagation()
+    const pageNum = Number.parseInt(translateBtn.dataset.page, 10)
+    if (Number.isInteger(pageNum)) translatePage(pageNum)
+    return
+  }
+
   const btn = e.target.closest('.trans-collapse-btn')
   if (!btn) return
   e.stopPropagation()
@@ -15588,11 +15577,6 @@ viewerScrollContainer.addEventListener('click', (e) => {
 
   showToast(isTransPaneCollapsed ? '번역 창이 접혔습니다.' : '번역 창이 펼쳐졌습니다.', 'info')
 
-  // 번역 모드가 'pane'이면 번역 창을 펼치는 순간이 곧 "번역을 시작해도 좋다"는
-  // 신호다 - 접혀 있는 동안은 백그라운드 잡을 시작하지 않고 아껴뒀다가 여기서 시작한다.
-  if (!isTransPaneCollapsed && getTranslationMode() === 'pane') {
-    ensureTranslationJobStarted()
-  }
 });
 
 // 초기 로드 시 localStorage 상태 복원 및 초기화 실행
