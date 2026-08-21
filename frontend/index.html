@@ -200,17 +200,16 @@
             </div>
             <div id="library-search-status" class="hidden" style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 14px;"></div>
 
-            <div class="document-mode-legend" aria-label="문서 분류 색상 안내">
-              <span class="document-mode-legend-title">분류 색상</span>
-              <span class="document-mode-legend-item research"><span class="document-mode-legend-dot" aria-hidden="true"></span>연구 문서</span>
-              <span class="document-mode-legend-item general"><span class="document-mode-legend-dot" aria-hidden="true"></span>일반 문서</span>
-            </div>
-
             <!-- 카테고리 필터 + 보기 방식 전환 영역 -->
             <div id="library-filter-row" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px;">
               <div class="library-category-filter-group">
                 <div id="library-category-filters" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;"></div>
                 <button type="button" id="library-category-filter-toggle" class="library-category-filter-toggle hidden" aria-controls="library-category-filters" aria-expanded="true"></button>
+              </div>
+              <div class="document-mode-legend" aria-label="문서 분류 색상 안내">
+                <span class="document-mode-legend-title">분류 색상</span>
+                <span class="document-mode-legend-item research"><span class="document-mode-legend-dot" aria-hidden="true"></span>연구 문서</span>
+                <span class="document-mode-legend-item general"><span class="document-mode-legend-dot" aria-hidden="true"></span>일반 문서</span>
               </div>
               <div id="library-view-toggle" class="library-view-toggle" role="group" aria-label="논문 보기 방식">
                 <button type="button" class="view-toggle-btn" data-view="card" title="큰 카드 보기" aria-label="큰 카드 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>

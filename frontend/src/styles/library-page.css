@@ -32,6 +32,7 @@
 }
 
 /* ── 카테고리 필터 접기/펼치기 ── */
+#library-filter-row { flex-wrap: wrap; }
 .library-category-filter-group {
   display: flex;
   align-items: flex-start;
