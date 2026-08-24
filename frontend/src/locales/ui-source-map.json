@@ -1109,5 +1109,6 @@
   "활동 더 보기": "common:legacy.ui.1108",
   "페이지 오류": "common:legacy.ui.1109",
   "–페이지로 이동": "common:legacy.ui.1110",
-  "페이지로 이동": "common:legacy.ui.1111"
+  "페이지로 이동": "common:legacy.ui.1111",
+  "화면 테마": "settings:themeHeading"
 }

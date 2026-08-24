@@ -27,6 +27,18 @@ test('기존 일반 설정을 연구 모드에 승계한다', () => {
   assert.equal(getModeSetting('disablePrimer', 'research', storage), true)
 })
 
+test('기존 테마 설정은 두 모드의 최초 값으로 승계한다', () => {
+  const storage = memoryStorage({
+    theme: 'light',
+    easypaper_accent_color: '#e0677a',
+  })
+
+  assert.equal(getModeSetting('theme', 'research', storage), 'light')
+  assert.equal(getModeSetting('theme', 'general', storage), 'light')
+  assert.equal(getModeSetting('accentColor', 'research', storage), '#e0677a')
+  assert.equal(getModeSetting('accentColor', 'general', storage), '#e0677a')
+})
+
 test('일반 문서는 자연스러운 문체와 필요 시 번역을 기본으로 사용한다', () => {
   const defaults = getModeDefaults('general')
 
@@ -52,4 +64,19 @@ test('기존 표시명 언어 설정을 BCP 47 코드로 한 번 이전한다', 
 
   assert.equal(getModeSetting('targetLang', 'research', storage), 'ko')
   assert.equal(storage.getItem(modeSettingStorageKey('targetLang', 'research')), 'ko')
+})
+
+test('모드별 테마와 강조색이 서로 덮어쓰지 않는다', () => {
+  const storage = memoryStorage()
+  setModeSetting('theme', 'research', 'light', storage)
+  setModeSetting('theme', 'general', 'dark', storage)
+  setModeSetting('accentColor', 'research', '#e0677a', storage)
+  setModeSetting('accentColor', 'general', '#1c9c6b', storage)
+
+  assert.equal(storage.getItem(modeSettingStorageKey('theme', 'research')), 'light')
+  assert.equal(storage.getItem(modeSettingStorageKey('theme', 'general')), 'dark')
+  assert.equal(getModeSetting('theme', 'research', storage), 'light')
+  assert.equal(getModeSetting('theme', 'general', storage), 'dark')
+  assert.equal(getModeSetting('accentColor', 'research', storage), '#e0677a')
+  assert.equal(getModeSetting('accentColor', 'general', storage), '#1c9c6b')
 })

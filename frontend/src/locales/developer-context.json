@@ -3781,5 +3781,23 @@
   },
   "common:addMenu.close": {
     "description": "Accessible label for closing the library add menu"
+  },
+  "settings:themeHeading": {
+    "description": "Heading for document-mode-specific display theme settings"
+  },
+  "settings:themeScopeResearch": {
+    "description": "Research-mode-only theme scope label"
+  },
+  "settings:themeScopeGeneral": {
+    "description": "General-document-mode-only theme scope label"
+  },
+  "settings:accentColor": {
+    "description": "Accent color setting label"
+  },
+  "settings:themeLightEnabled": {
+    "description": "Toast shown after switching to light mode"
+  },
+  "settings:themeDarkEnabled": {
+    "description": "Toast shown after switching to dark mode"
   }
 }
