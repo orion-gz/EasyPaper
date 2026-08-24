@@ -1,5 +1,7 @@
 const MODE_DEFAULTS = {
   research: {
+    theme: 'dark',
+    accentColor: '#2563eb',
     targetLang: '한국어',
     style: 'academic',
     translationMode: 'auto',
@@ -14,6 +16,8 @@ const MODE_DEFAULTS = {
     disablePrimer: false,
   },
   general: {
+    theme: 'dark',
+    accentColor: '#2563eb',
     targetLang: '한국어',
     style: 'natural',
     translationMode: 'scroll',
@@ -30,6 +34,8 @@ const MODE_DEFAULTS = {
 }
 
 const LEGACY_KEYS = {
+  theme: 'theme',
+  accentColor: 'easypaper_accent_color',
   targetLang: 'easypaper_target_lang',
   style: 'easypaper_style',
   translationMode: 'easypaper_translation_mode',
@@ -43,6 +49,8 @@ const LEGACY_KEYS = {
   disableFigureOverlay: 'easypaper_disable_figure_overlay',
   disablePrimer: 'easypaper_disable_primer',
 }
+
+const SHARED_LEGACY_PREFERENCES = new Set(['theme', 'accentColor', 'targetLang'])
 
 const BOOLEAN_SETTINGS = new Set([
   'ignoreMath', 'ignoreTable', 'ignoreRefs', 'disableInsights',
@@ -65,9 +73,9 @@ export function getModeSetting(name, mode, storage = localStorage) {
   if (fallback === undefined) throw new Error(`Unknown mode setting: ${name}`)
 
   let raw = storage.getItem(modeSettingStorageKey(name, normalizedMode))
-  // 기존 전역 설정은 연구 모드의 값으로 승계한다. 번역 대상 언어는 사용자의
-  // 기본 선호도라 일반 문서도 첫 사용 시 기존 값을 승계한다.
-  if (raw === null && (normalizedMode === 'research' || name === 'targetLang')) {
+  // 기존 전역 설정은 연구 모드의 값으로 승계한다. 테마와 번역 대상 언어는
+  // 사용자의 기본 선호도라 일반 문서도 첫 사용 시 기존 값을 승계한다.
+  if (raw === null && (normalizedMode === 'research' || SHARED_LEGACY_PREFERENCES.has(name))) {
     raw = storage.getItem(LEGACY_KEYS[name])
   }
   if (raw === null) return fallback

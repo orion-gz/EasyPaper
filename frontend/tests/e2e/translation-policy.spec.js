@@ -100,3 +100,34 @@ test('번역 범위 선택에서 문서 전체 페이지 목록을 잡 API에 �
   await expect.poll(() => restartPayload).not.toBeNull()
   expect(restartPayload.page_numbers).toEqual([1])
 })
+
+test('워크스페이스 모드별 테마와 강조색을 독립적으로 적용한다', async ({ page }) => {
+  await mockBaseRoutes(page, { documents: [] })
+  await gotoApp(page)
+  await page.evaluate(() => {
+    localStorage.setItem('easypaper_theme_research', 'light')
+    localStorage.setItem('easypaper_theme_general', 'dark')
+    localStorage.setItem('easypaper_accent_color_research', '#e0677a')
+    localStorage.setItem('easypaper_accent_color_general', '#1c9c6b')
+  })
+  await page.reload()
+
+  await expect(page.locator('body')).toHaveClass(/light-theme/)
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent-mid').trim())).toBe('#e0677a')
+
+  await page.locator('#workspace-mode-switch [data-workspace-mode="general"]').click()
+  await expect(page.locator('body')).not.toHaveClass(/light-theme/)
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent-mid').trim())).toBe('#1c9c6b')
+
+  await page.locator('#sidebar-theme-toggle-btn').click()
+  expect(await page.evaluate(() => localStorage.getItem('easypaper_theme_general'))).toBe('light')
+  await page.locator('#sidebar-settings-btn').click()
+  await expect(page.locator('#settings-theme-scope')).toHaveText('일반 문서 모드에만 적용')
+  await page.locator('.accent-swatch[data-hex="#5457b8"]').click()
+  expect(await page.evaluate(() => localStorage.getItem('easypaper_accent_color_general'))).toBe('#5457b8')
+
+  await page.locator('#close-settings-btn').click()
+  await page.locator('#workspace-mode-switch [data-workspace-mode="research"]').click()
+  await expect(page.locator('body')).toHaveClass(/light-theme/)
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent-mid').trim())).toBe('#e0677a')
+})

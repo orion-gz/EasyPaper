@@ -904,7 +904,24 @@
               </label>
             </div>
           </div>
-          
+
+          <div class="settings-section-heading">
+            <strong>화면 테마</strong>
+            <span id="settings-theme-scope">연구 모드에만 적용</span>
+          </div>
+
+          <div class="form-group">
+            <label>테마 색상</label>
+            <div id="setting-accent-swatches" class="accent-swatch-group"></div>
+            <div class="accent-picker-row">
+              <label for="setting-accent-picker" class="accent-picker-swatch">
+                <input type="color" id="setting-accent-picker" value="#2563eb" />
+              </label>
+              <span id="setting-accent-hex" class="accent-hex-label">#2563EB</span>
+              <button type="button" id="setting-accent-reset-btn" class="accent-reset-btn">기본값</button>
+            </div>
+          </div>
+
           <div class="settings-section-heading settings-section-heading-common">
             <strong>PDF 뷰어 및 화면</strong>
             <span>두 모드에 공통으로 적용됩니다.</span>
@@ -928,18 +945,6 @@
               <option value="left">왼쪽</option>
               <option value="right">오른쪽</option>
             </select>
-          </div>
-
-          <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
-            <label>테마 색상</label>
-            <div id="setting-accent-swatches" class="accent-swatch-group"></div>
-            <div class="accent-picker-row">
-              <label for="setting-accent-picker" class="accent-picker-swatch">
-                <input type="color" id="setting-accent-picker" value="#2563eb" />
-              </label>
-              <span id="setting-accent-hex" class="accent-hex-label">#2563EB</span>
-              <button type="button" id="setting-accent-reset-btn" class="accent-reset-btn">기본값</button>
-            </div>
           </div>
 
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">

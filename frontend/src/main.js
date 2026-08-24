@@ -198,6 +198,7 @@ const settingsAutomationTitle = $('settings-automation-title')
 const settingsKeywordsLabel = $('settings-keywords-label')
 const settingsKeywordsDescription = $('settings-keywords-description')
 const settingsReadingToolsLabel = $('settings-reading-tools-label')
+const settingsThemeScope = $('settings-theme-scope')
 const settingTargetLang   = $('setting-target-lang')
 const settingTransStyle   = $('setting-trans-style')
 const settingTranslationMode = $('setting-translation-mode')
@@ -321,6 +322,7 @@ const workspaceModeController = createWorkspaceModeController({
 
     const incoming = workspaceLibraryState[mode]
     lastWorkspaceMode = mode
+    applyModeTheme(mode)
     if (settingsModal && !settingsModal.classList.contains('hidden')) {
       syncModeSettings(mode)
     }
@@ -605,9 +607,13 @@ function syncModeSettings(documentMode) {
   settingDisableCitationOverlay.checked = !getModeSetting('disableCitationOverlay', settingsTranslationModeContext)
   settingDisableFigureOverlay.checked = !getModeSetting('disableFigureOverlay', settingsTranslationModeContext)
   settingDisablePrimer.checked = !getModeSetting('disablePrimer', settingsTranslationModeContext)
+  updateAccentSettingsUI(getModeSetting('accentColor', settingsTranslationModeContext))
 
   if (settingTranslationModeScope) {
     settingTranslationModeScope.textContent = isGeneral ? '일반 문서 모드에만 적용' : '연구 모드에만 적용'
+  }
+  if (settingsThemeScope) {
+    settingsThemeScope.textContent = isGeneral ? '일반 문서 모드에만 적용' : '연구 모드에만 적용'
   }
   settingsModeTitle.textContent = isGeneral ? '일반 문서 모드 설정' : '연구 모드 설정'
   settingsModeBadge.textContent = isGeneral ? '일반 문서 모드' : '연구 모드'
@@ -2163,6 +2169,7 @@ async function checkAuthentication() {
       lastWorkspaceMode = workspaceModeController.getMode()
       await showLibraryScreen()
     }
+    applyModeTheme(workspaceModeController.getMode())
     await refreshSystemSettings()
     await maybeShowOnboarding()
     // 업데이트 직후(방금 재시작됨) 안내가 있으면 그것부터 먼저 보여주고, 없을
@@ -9443,7 +9450,7 @@ async function syncDesktopWindowTheme(isLight) {
 }
 
 function initTheme() {
-  const savedTheme = localStorage.getItem('theme') || 'dark'
+  const savedTheme = getModeSetting('theme', workspaceModeController.getMode())
   const isLight = savedTheme === 'light'
   document.body.classList.toggle('light-theme', isLight)
   updateThemeIcons(isLight)
@@ -9451,8 +9458,9 @@ function initTheme() {
 }
 
 function toggleTheme() {
+  const mode = workspaceModeController.getMode()
   const isLight = document.body.classList.toggle('light-theme')
-  localStorage.setItem('theme', isLight ? 'light' : 'dark')
+  setModeSetting('theme', mode, isLight ? 'light' : 'dark')
   updateThemeIcons(isLight)
   applyAccentColor(currentAccentColor, { persist: false })
   showToast(isLight ? '라이트 모드로 전환 ✓' : '다크 모드로 전환 ✓', 'success')
@@ -9579,7 +9587,7 @@ function applyAccentColor(hex, { persist = true } = {}) {
   document.body.style.setProperty('--border-glow', isLight ? tokens.borderGlowLight : tokens.borderGlowDark)
 
   currentAccentColor = hex
-  if (persist) localStorage.setItem('easypaper_accent_color', hex)
+  if (persist) setModeSetting('accentColor', workspaceModeController.getMode(), hex)
   updateAccentSettingsUI(hex)
 }
 
@@ -9612,10 +9620,19 @@ if (settingAccentResetBtn) {
 }
 
 function initAccentColor() {
-  const saved = localStorage.getItem('easypaper_accent_color') || DEFAULT_ACCENT_COLOR
+  const saved = getModeSetting('accentColor', workspaceModeController.getMode())
   applyAccentColor(saved, { persist: false })
 }
 initAccentColor()
+
+function applyModeTheme(mode) {
+  const normalizedMode = normalizeSettingsMode(mode)
+  const isLight = getModeSetting('theme', normalizedMode) === 'light'
+  document.body.classList.toggle('light-theme', isLight)
+  updateThemeIcons(isLight)
+  applyAccentColor(getModeSetting('accentColor', normalizedMode), { persist: false })
+  syncDesktopWindowTheme(isLight)
+}
 
 // ── PDF 텍스트 하이라이트 & 밑줄 (Annotation) 기능 ──────────────────
 
