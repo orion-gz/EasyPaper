@@ -35,6 +35,42 @@ test('연구와 일반 문서 워크스페이스의 번역 모드를 따로 저�
   expect(await page.evaluate(() => localStorage.getItem('easypaper_translation_mode_general'))).toBe('auto')
 })
 
+test('설정 화면이 현재 워크스페이스 모드의 값과 항목 구성을 보여준다', async ({ page }) => {
+  await mockBaseRoutes(page, { documents: [] })
+  await gotoApp(page)
+  await page.evaluate(() => {
+    localStorage.setItem('easypaper_style', 'literal')
+    localStorage.setItem('easypaper_ignore_table', 'false')
+  })
+
+  await page.locator('#sidebar-settings-btn').click()
+  await expect(page.locator('#settings-mode-title')).toHaveText('연구 모드 설정')
+  await expect(page.locator('#setting-trans-style')).toHaveValue('literal')
+  await expect(page.locator('#setting-ignore-table')).not.toBeChecked()
+  await expect(page.locator('#setting-disable-citation-overlay').locator('..')).toBeVisible()
+
+  await page.locator('#close-settings-btn').click()
+  await page.locator('#workspace-mode-switch [data-workspace-mode="general"]').click()
+  await page.locator('#sidebar-settings-btn').click()
+  await expect(page.locator('#settings-mode-title')).toHaveText('일반 문서 모드 설정')
+  await expect(page.locator('#setting-trans-style')).toHaveValue('natural')
+  await expect(page.locator('#setting-translation-mode')).toHaveValue('scroll')
+  await expect(page.locator('#setting-ignore-table')).not.toBeChecked()
+  await expect(page.locator('#setting-disable-citation-overlay').locator('..')).toBeHidden()
+  await expect(page.locator('#settings-keywords-label')).toHaveText('고급 어휘 자동 생성')
+
+  await page.locator('#setting-trans-style').selectOption('summary')
+  await page.locator('#setting-ignore-table').locator('..').click()
+  expect(await page.evaluate(() => localStorage.getItem('easypaper_ignore_table_general'))).toBe('true')
+
+  await page.locator('#close-settings-btn').click()
+  await page.locator('#workspace-mode-switch [data-workspace-mode="research"]').click()
+  await page.locator('#sidebar-settings-btn').click()
+  await expect(page.locator('#settings-mode-title')).toHaveText('연구 모드 설정')
+  await expect(page.locator('#setting-trans-style')).toHaveValue('literal')
+  await expect(page.locator('#setting-ignore-table')).not.toBeChecked()
+})
+
 test('번역 범위 선택에서 문서 전체 페이지 목록을 잡 API에 전달한다', async ({ page }) => {
   const doc = {
     id: 'doc-scope', filename: 'Scope.pdf', total_pages: 1,

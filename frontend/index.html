@@ -843,6 +843,17 @@
       <!-- 일반 설정 탭 -->
       <div id="tab-general" class="tab-pane active">
         <form id="general-settings-form" class="modal-form">
+          <div class="settings-mode-context">
+            <span class="settings-mode-eyebrow">설정 적용 대상</span>
+            <span id="settings-mode-badge" class="settings-mode-badge" aria-live="polite">연구 모드</span>
+            <strong id="settings-mode-title">연구 모드 설정</strong>
+            <p id="settings-mode-description">논문 번역과 학술 읽기에 적용되는 설정입니다.</p>
+          </div>
+
+          <div class="settings-section-heading">
+            <strong id="settings-translation-heading">논문 번역</strong>
+            <span>현재 모드에만 저장됩니다.</span>
+          </div>
           <div class="form-group">
             <label for="setting-target-lang">번역 대상 언어</label>
             <select id="setting-target-lang" class="form-select">
@@ -857,6 +868,7 @@
             <label for="setting-trans-style">번역 문체 (스타일)</label>
             <select id="setting-trans-style" class="form-select">
               <option value="academic">학술용 의역 (매끄럽고 자연스러움)</option>
+              <option value="natural">원문 문체 유지 (목적과 분위기를 자연스럽게 반영)</option>
               <option value="literal">직역 (원문 대조 및 어순 유지)</option>
               <option value="summary">요약 번역 (문단별 요점 정리)</option>
             </select>
@@ -893,6 +905,11 @@
             </div>
           </div>
           
+          <div class="settings-section-heading settings-section-heading-common">
+            <strong>PDF 뷰어 및 화면</strong>
+            <span>두 모드에 공통으로 적용됩니다.</span>
+          </div>
+
           <div class="form-group">
             <label for="setting-default-zoom">기본 PDF 확대 비율</label>
             <select id="setting-default-zoom" class="form-select">
@@ -928,6 +945,7 @@
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
             <label>뷰어 편의 설정</label>
             <div class="toggle-switch-group">
+              <span class="settings-subsection-label">공통 읽기 동작</span>
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-disable-hover-tooltip" />
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
@@ -939,11 +957,17 @@
                 <span class="toggle-switch-label">마지막으로 읽던 위치 자동 이동<small>끄면 항상 1페이지부터 시작</small></span>
               </label>
               <label class="toggle-switch">
+                <input type="checkbox" id="setting-toolbar-autohide" />
+                <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+                <span class="toggle-switch-label">스크롤 시 상단 툴바 자동 숨김<small>아래로 스크롤하면 숨겨지고, 위로 스크롤하면 다시 표시됨</small></span>
+              </label>
+              <span class="settings-subsection-label" id="settings-reading-tools-label">연구 모드 읽기 도구</span>
+              <label class="toggle-switch">
                 <input type="checkbox" id="setting-disable-insights" />
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
                 <span class="toggle-switch-label">번역 패널의 키워드·요약 탭<small>탭을 열 때만 생성되지만 토큰을 추가로 사용함</small></span>
               </label>
-              <label class="toggle-switch">
+              <label class="toggle-switch" data-settings-mode-only="research">
                 <input type="checkbox" id="setting-disable-citation-overlay" />
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
                 <span class="toggle-switch-label">본문 인용 표기 호버 미리보기<small>예: [1], (Smith, 2020)</small></span>
@@ -953,26 +977,21 @@
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
                 <span class="toggle-switch-label">Figure/Table/수식 참조 호버 미리보기<small>예: Fig. 1, Table 2, Eq. (3)</small></span>
               </label>
-              <label class="toggle-switch">
+              <label class="toggle-switch" data-settings-mode-only="research">
                 <input type="checkbox" id="setting-disable-primer" />
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
                 <span class="toggle-switch-label">논문을 열 때 "읽기 전 브리핑" 팝업<small>꺼도 툴바 버튼으로 언제든 다시 볼 수 있음</small></span>
-              </label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="setting-toolbar-autohide" />
-                <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
-                <span class="toggle-switch-label">스크롤 시 상단 툴바 자동 숨김<small>아래로 스크롤하면 숨겨지고, 위로 스크롤하면 다시 표시됨</small></span>
               </label>
             </div>
           </div>
 
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
-            <label>논문 처리 시 자동 생성</label>
+            <label id="settings-automation-title">논문 처리 시 자동 생성</label>
             <div class="toggle-switch-group">
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-auto-generate-keywords" />
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
-                <span class="toggle-switch-label">키워드·단어 자동 생성<small>업로드 후 모든 페이지에 대해 백그라운드 생성합니다.</small></span>
+                <span class="toggle-switch-label"><span id="settings-keywords-label">키워드·단어 자동 생성</span><small id="settings-keywords-description">업로드 후 모든 페이지에 대해 백그라운드 생성합니다.</small></span>
               </label>
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-auto-generate-summaries" />

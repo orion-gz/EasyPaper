@@ -5,6 +5,7 @@ import './styles/research-graph.css'
 import "./styles/document-modes.css"
 import { marked } from 'marked'
 import { createWorkspaceModeController } from "./workspaceModeController.js"
+import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSettings.js'
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
@@ -86,14 +87,14 @@ const state = {
   disableBookmark: localStorage.getItem('easypaper_disable_bookmark') === 'true',
   // 번역 패널의 "키워드/단어", "요약" 탭을 끌지 여부(기본값 켜짐 - 다른 편의
   // 설정과 달리 토큰을 추가로 소모하는 기능이라 설정에서 끌 수 있게 함).
-  disableInsights: localStorage.getItem('easypaper_disable_insights') === 'true',
+  disableInsights: getModeSetting('disableInsights', 'research'),
   // 본문 인용([1], (Smith, 2020) 등) 표기 호버 미리보기를 끌지 여부.
-  disableCitationOverlay: localStorage.getItem('easypaper_disable_citation_overlay') === 'true',
+  disableCitationOverlay: getModeSetting('disableCitationOverlay', 'research'),
   // Figure/Table/수식 참조 표기 호버 미리보기를 끌지 여부.
-  disableFigureOverlay: localStorage.getItem('easypaper_disable_figure_overlay') === 'true',
+  disableFigureOverlay: getModeSetting('disableFigureOverlay', 'research'),
   // 논문을 처음 열 때 뜨는 "읽기 전 브리핑" 게이팅 모달을 끌지 여부. 꺼도
   // 뷰어 툴바 버튼으로는 언제든 다시 열어볼 수 있다.
-  disablePrimer: localStorage.getItem('easypaper_disable_primer') === 'true',
+  disablePrimer: getModeSetting('disablePrimer', 'research'),
   // 아래로 스크롤하면 상단 툴바를 자동으로 숨기고 위로 스크롤하면 다시 보여줄지
   // 여부. 다른 편의 설정과 달리 새로 추가하는 화면 동작이라 기본값은 꺼짐(false).
   toolbarAutoHide: localStorage.getItem('easypaper_toolbar_autohide') === 'true',
@@ -189,6 +190,14 @@ const tabBtns           = document.querySelectorAll('.tab-btn')
 const tabPanes          = document.querySelectorAll('.tab-pane')
 
 // 설정 폼 및 엘리먼트
+const settingsModeTitle = $('settings-mode-title')
+const settingsModeBadge = $('settings-mode-badge')
+const settingsModeDescription = $('settings-mode-description')
+const settingsTranslationHeading = $('settings-translation-heading')
+const settingsAutomationTitle = $('settings-automation-title')
+const settingsKeywordsLabel = $('settings-keywords-label')
+const settingsKeywordsDescription = $('settings-keywords-description')
+const settingsReadingToolsLabel = $('settings-reading-tools-label')
 const settingTargetLang   = $('setting-target-lang')
 const settingTransStyle   = $('setting-trans-style')
 const settingTranslationMode = $('setting-translation-mode')
@@ -313,7 +322,7 @@ const workspaceModeController = createWorkspaceModeController({
     const incoming = workspaceLibraryState[mode]
     lastWorkspaceMode = mode
     if (settingsModal && !settingsModal.classList.contains('hidden')) {
-      syncTranslationModeSetting(mode)
+      syncModeSettings(mode)
     }
     state.currentLibraryTab = incoming.tab
     activeCategoryFilter = incoming.category
@@ -446,22 +455,37 @@ const chatSendBtn        = $('chat-send-btn')
 
 
 // ── 설정 기본값 및 옵션 헬퍼 ──────────────────────────
-function getTranslationOptions() {
+function getActiveSettingsMode(documentMode = null) {
+  if (documentMode) return normalizeSettingsMode(documentMode)
+  if (state.sessionId) return normalizeSettingsMode(state.currentDocumentMode)
+  return normalizeSettingsMode(document.body.dataset.workspaceMode)
+}
+
+function getTranslationOptions(documentMode = null) {
+  const mode = getActiveSettingsMode(documentMode)
   return {
-    targetLang: localStorage.getItem('easypaper_target_lang') || '한국어',
-    style: localStorage.getItem('easypaper_style') || 'academic',
-    ignoreMath: localStorage.getItem('easypaper_ignore_math') === 'true',
-    ignoreTable: localStorage.getItem('easypaper_ignore_table') !== 'false', // 기본값 true
-    ignoreRefs: localStorage.getItem('easypaper_ignore_refs') === 'true'
+    targetLang: getModeSetting('targetLang', mode),
+    style: getModeSetting('style', mode),
+    ignoreMath: getModeSetting('ignoreMath', mode),
+    ignoreTable: getModeSetting('ignoreTable', mode),
+    ignoreRefs: getModeSetting('ignoreRefs', mode)
   }
 }
 
-function getKeywordMode() {
-  return localStorage.getItem('easypaper_keyword_mode') || 'manual'
+function getKeywordMode(documentMode = null) {
+  return getModeSetting('keywordMode', getActiveSettingsMode(documentMode))
 }
 
-function getSummaryMode() {
-  return localStorage.getItem('easypaper_summary_mode') || 'manual'
+function getSummaryMode(documentMode = null) {
+  return getModeSetting('summaryMode', getActiveSettingsMode(documentMode))
+}
+
+function applyModeViewerSettings(documentMode) {
+  const mode = normalizeSettingsMode(documentMode)
+  state.disableInsights = getModeSetting('disableInsights', mode)
+  state.disableCitationOverlay = getModeSetting('disableCitationOverlay', mode)
+  state.disableFigureOverlay = getModeSetting('disableFigureOverlay', mode)
+  state.disablePrimer = getModeSetting('disablePrimer', mode)
 }
 
 function showInsightJobProgress(sessionId, kind, title) {
@@ -538,18 +562,8 @@ applyToolbarPosition(getToolbarPosition())
 
 const LONG_DOCUMENT_PAGE_THRESHOLD = 50
 
-// 번역 모드는 연구/일반 문서 워크스페이스별로 독립 저장한다. 기존 전역 키는
-// 업그레이드 직후 두 모드의 초기값으로만 읽어 사용자 설정을 보존한다.
-function translationModeStorageKey(documentMode) {
-  const normalizedMode = documentMode === 'general' ? 'general' : 'research'
-  return `easypaper_translation_mode_${normalizedMode}`
-}
-
 function getTranslationMode(documentMode = null) {
-  const activeMode = documentMode || (state.sessionId ? state.currentDocumentMode : document.body.dataset.workspaceMode) || 'research'
-  return localStorage.getItem(translationModeStorageKey(activeMode))
-    || localStorage.getItem('easypaper_translation_mode')
-    || 'auto'
+  return getModeSetting('translationMode', getActiveSettingsMode(documentMode))
 }
 
 function isLongDocument(totalPages = state.totalPages) {
@@ -574,14 +588,45 @@ function getTranslationPlaceholderHtml(pageNum) {
   return `<div class="trans-page-placeholder">${message}</div>`
 }
 
-function syncTranslationModeSetting(documentMode) {
-  settingsTranslationModeContext = documentMode === 'general' ? 'general' : 'research'
+function syncModeSettings(documentMode) {
+  settingsTranslationModeContext = normalizeSettingsMode(documentMode)
+  const isGeneral = settingsTranslationModeContext === 'general'
+  const options = getTranslationOptions(settingsTranslationModeContext)
+
+  settingTargetLang.value = options.targetLang
+  settingTransStyle.value = options.style
   settingTranslationMode.value = getTranslationMode(settingsTranslationModeContext)
+  settingIgnoreMath.checked = options.ignoreMath
+  settingIgnoreTable.checked = options.ignoreTable
+  settingIgnoreRefs.checked = options.ignoreRefs
+  settingAutoGenerateKeywords.checked = getKeywordMode(settingsTranslationModeContext) === 'auto'
+  settingAutoGenerateSummaries.checked = getSummaryMode(settingsTranslationModeContext) === 'auto'
+  settingDisableInsights.checked = !getModeSetting('disableInsights', settingsTranslationModeContext)
+  settingDisableCitationOverlay.checked = !getModeSetting('disableCitationOverlay', settingsTranslationModeContext)
+  settingDisableFigureOverlay.checked = !getModeSetting('disableFigureOverlay', settingsTranslationModeContext)
+  settingDisablePrimer.checked = !getModeSetting('disablePrimer', settingsTranslationModeContext)
+
   if (settingTranslationModeScope) {
-    settingTranslationModeScope.textContent = settingsTranslationModeContext === 'general'
-      ? '일반 문서 모드에만 적용'
-      : '연구 모드에만 적용'
+    settingTranslationModeScope.textContent = isGeneral ? '일반 문서 모드에만 적용' : '연구 모드에만 적용'
   }
+  settingsModeTitle.textContent = isGeneral ? '일반 문서 모드 설정' : '연구 모드 설정'
+  settingsModeBadge.textContent = isGeneral ? '일반 문서 모드' : '연구 모드'
+  settingsModeDescription.textContent = isGeneral
+    ? '책, 기술 문서, 보고서처럼 다양한 문서의 번역과 읽기에 적용됩니다.'
+    : '논문 번역과 학술 읽기에 적용되는 기존 설정입니다.'
+  settingsTranslationHeading.textContent = isGeneral ? '일반 문서 번역' : '논문 번역'
+  settingsAutomationTitle.textContent = isGeneral ? '문서 처리 시 자동 생성' : '논문 처리 시 자동 생성'
+  settingsReadingToolsLabel.textContent = isGeneral ? '일반 문서 모드 읽기 도구' : '연구 모드 읽기 도구'
+  settingsKeywordsLabel.textContent = isGeneral ? '고급 어휘 자동 생성' : '키워드·단어 자동 생성'
+  settingsKeywordsDescription.textContent = isGeneral
+    ? '어려운 표현과 전문 용어를 페이지별로 정리합니다.'
+    : '업로드 후 모든 페이지에 대해 백그라운드 생성합니다.'
+
+  settingTransStyle.querySelector('option[value="academic"]').hidden = isGeneral
+  settingTransStyle.querySelector('option[value="natural"]').hidden = !isGeneral
+  document.querySelectorAll('[data-settings-mode-only="research"]').forEach(element => {
+    element.classList.toggle('hidden', isGeneral)
+  })
 }
 
 // ── 토스트 ────────────────────────────────────────
@@ -726,11 +771,11 @@ async function handleFiles(files, targetFolderId = null, classification = null) 
 
     try {
       const result = await uploadPDF(file, {
-        ...getTranslationOptions(),
+        ...getTranslationOptions(classification?.documentMode || workspaceModeController.getMode()),
         ...rememberedTypeOptions,
         translationMode: getTranslationMode(classification?.documentMode || workspaceModeController.getMode()),
-        keywordMode: getKeywordMode(),
-        summaryMode: getSummaryMode(),
+        keywordMode: getKeywordMode(classification?.documentMode || workspaceModeController.getMode()),
+        summaryMode: getSummaryMode(classification?.documentMode || workspaceModeController.getMode()),
         documentMode: classification?.documentMode || workspaceModeController.getMode(),
         documentType: classification?.documentType || defaultDocumentType(workspaceModeController.getMode())
       }, (pct) => {
@@ -753,19 +798,19 @@ async function handleFiles(files, targetFolderId = null, classification = null) 
         )
       }
       successCount++
-      if (result.document_mode === 'general' && getKeywordMode() === 'auto' && result.total_pages > 20) {
-        const estimate = await estimateInsightJobAPI(result.session_id, 'keywords', getTranslationOptions().targetLang)
+      if (result.document_mode === 'general' && getKeywordMode(result.document_mode) === 'auto' && result.total_pages > 20) {
+        const estimate = await estimateInsightJobAPI(result.session_id, 'keywords', getTranslationOptions(result.document_mode).targetLang)
         const confirmed = await showCustomConfirm(
           `빈 페이지와 기존 캐시를 제외하고 최대 ${estimate.estimated_calls}회의 AI 호출이 예상됩니다. 전체 고급 어휘 생성을 시작할까요?`,
           { title: '장문 어휘 생성', confirmText: '생성 시작', danger: false },
         )
         if (confirmed) {
-          await startInsightJobAPI(result.session_id, 'keywords', getTranslationOptions().targetLang, true)
+          await startInsightJobAPI(result.session_id, 'keywords', getTranslationOptions(result.document_mode).targetLang, true)
           showInsightJobProgress(result.session_id, 'keywords', `${lastTitle} · 고급 어휘`)
         }
       }
       if (classification?.documentType) {
-        saveDocumentTypeOptions(classification.documentType, { ...rememberedTypeOptions, ...getTranslationOptions() })
+        saveDocumentTypeOptions(classification.documentType, { ...rememberedTypeOptions, ...getTranslationOptions(classification.documentMode) })
         patchWorkspaceSettingsAPI({ document_type_options: loadDocumentTypeOptions() }).catch(() => {
           showToast('문서 종류별 옵션을 서버에 저장하지 못했습니다.', 'warning')
         })
@@ -3383,26 +3428,13 @@ globalSettingsBtn.addEventListener('click', async () => {
   tabPanes[0].classList.add('active')
 
   // 2. 일반 설정값 로드
-  settingTargetLang.value = localStorage.getItem('easypaper_target_lang') || '한국어'
-  settingTransStyle.value = localStorage.getItem('easypaper_style') || 'academic'
-  syncTranslationModeSetting(workspaceModeController.getMode())
-  settingIgnoreMath.checked = localStorage.getItem('easypaper_ignore_math') === 'true'
-  settingIgnoreTable.checked = localStorage.getItem('easypaper_ignore_table') !== 'false'
-  settingIgnoreRefs.checked = localStorage.getItem('easypaper_ignore_refs') === 'true'
+  syncModeSettings(workspaceModeController.getMode())
   settingDefaultZoom.value = localStorage.getItem('easypaper_default_zoom') || '1.5'
   settingToolbarPosition.value = getToolbarPosition()
-  // 토글 스위치는 "기능이 켜져 있는지"를 직관적으로 보여줘야 하므로, 저장된
-  // disable* 플래그(true = 꺼짐)를 반전해서 보여준다 - 이 스위치들이 켜져
-  // 있으면 해당 기능이 켜진 것으로 보이도록.
+  // 아래 항목은 모드와 관계없는 공통 뷰어 설정이다.
   settingDisableHoverTooltip.checked = !state.disableHoverTooltip
   settingDisableBookmark.checked = !state.disableBookmark
-  settingDisableInsights.checked = !state.disableInsights
-  settingDisableCitationOverlay.checked = !state.disableCitationOverlay
-  settingDisableFigureOverlay.checked = !state.disableFigureOverlay
-  settingDisablePrimer.checked = !state.disablePrimer
   settingToolbarAutoHide.checked = state.toolbarAutoHide
-  settingAutoGenerateKeywords.checked = getKeywordMode() === 'auto'
-  settingAutoGenerateSummaries.checked = getSummaryMode() === 'auto'
   updateAccentSettingsUI(currentAccentColor)
 
   // 3. 시스템 설정값 로드 (백엔드 통신)
@@ -3583,24 +3615,24 @@ document.querySelectorAll('.recommend-model-btn').forEach(btn => {
 // 필드(대상 언어/문체/모드/제외 요소)가 바뀌면 기존과 동일하게 재번역을 제안하고,
 // 줌/툴바 위치처럼 뷰어 표시에만 영향을 주는 필드는 저장 후 바로 적용만 한다.
 function persistGeneralSettingsToStorage() {
-  localStorage.setItem('easypaper_target_lang', settingTargetLang.value)
-  localStorage.setItem('easypaper_style', settingTransStyle.value)
-  localStorage.setItem(translationModeStorageKey(settingsTranslationModeContext), settingTranslationMode.value)
-  localStorage.setItem('easypaper_keyword_mode', settingAutoGenerateKeywords.checked ? 'auto' : 'manual')
-  localStorage.setItem('easypaper_summary_mode', settingAutoGenerateSummaries.checked ? 'auto' : 'manual')
-  localStorage.setItem('easypaper_ignore_math', settingIgnoreMath.checked)
-  localStorage.setItem('easypaper_ignore_table', settingIgnoreTable.checked)
-  localStorage.setItem('easypaper_ignore_refs', settingIgnoreRefs.checked)
+  setModeSetting('targetLang', settingsTranslationModeContext, settingTargetLang.value)
+  setModeSetting('style', settingsTranslationModeContext, settingTransStyle.value)
+  setModeSetting('translationMode', settingsTranslationModeContext, settingTranslationMode.value)
+  setModeSetting('keywordMode', settingsTranslationModeContext, settingAutoGenerateKeywords.checked ? 'auto' : 'manual')
+  setModeSetting('summaryMode', settingsTranslationModeContext, settingAutoGenerateSummaries.checked ? 'auto' : 'manual')
+  setModeSetting('ignoreMath', settingsTranslationModeContext, settingIgnoreMath.checked)
+  setModeSetting('ignoreTable', settingsTranslationModeContext, settingIgnoreTable.checked)
+  setModeSetting('ignoreRefs', settingsTranslationModeContext, settingIgnoreRefs.checked)
   localStorage.setItem('easypaper_default_zoom', settingDefaultZoom.value)
   localStorage.setItem('easypaper_toolbar_position', settingToolbarPosition.value)
 }
 
 async function handleTranslationAffectingSettingChange() {
   persistGeneralSettingsToStorage()
-  showToast('일반 설정이 저장되었습니다.', 'success')
+  showToast(`${settingsTranslationModeContext === 'general' ? '일반 문서' : '연구'} 모드 설정이 저장되었습니다.`, 'success')
 
   // 현재 논문을 작업 중인 경우 번역 잡 재시작 제안
-  if (state.sessionId) {
+  if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
     const ok = await showCustomConfirm('번역 설정을 즉시 변경하고 다시 번역하시겠습니까?\n(확인을 누르면 기존 번역이 초기화되고 새로 번역을 시작합니다.)', { title: '설정 변경 및 재번역', confirmText: '재번역', danger: true })
     if (ok) {
       // 로컬 번역 정보 전체 비우기
@@ -3666,9 +3698,12 @@ settingDisableBookmark.addEventListener('change', () => {
 })
 
 settingDisableInsights.addEventListener('change', () => {
-  state.disableInsights = !settingDisableInsights.checked
-  localStorage.setItem('easypaper_disable_insights', state.disableInsights)
-  applyInsightsTabVisibility()
+  const disabled = !settingDisableInsights.checked
+  setModeSetting('disableInsights', settingsTranslationModeContext, disabled)
+  if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
+    state.disableInsights = disabled
+    applyInsightsTabVisibility()
+  }
 })
 
 // 이미 렌더링되어 있는 페이지들의 오버레이 레이어를 다시 그려 설정 변경을
@@ -3685,20 +3720,29 @@ function refreshAllPageOverlays() {
 }
 
 settingDisableCitationOverlay.addEventListener('change', () => {
-  state.disableCitationOverlay = !settingDisableCitationOverlay.checked
-  localStorage.setItem('easypaper_disable_citation_overlay', state.disableCitationOverlay)
-  refreshAllPageOverlays()
+  const disabled = !settingDisableCitationOverlay.checked
+  setModeSetting('disableCitationOverlay', settingsTranslationModeContext, disabled)
+  if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
+    state.disableCitationOverlay = disabled
+    refreshAllPageOverlays()
+  }
 })
 
 settingDisableFigureOverlay.addEventListener('change', () => {
-  state.disableFigureOverlay = !settingDisableFigureOverlay.checked
-  localStorage.setItem('easypaper_disable_figure_overlay', state.disableFigureOverlay)
-  refreshAllPageOverlays()
+  const disabled = !settingDisableFigureOverlay.checked
+  setModeSetting('disableFigureOverlay', settingsTranslationModeContext, disabled)
+  if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
+    state.disableFigureOverlay = disabled
+    refreshAllPageOverlays()
+  }
 })
 
 settingDisablePrimer.addEventListener('change', () => {
-  state.disablePrimer = !settingDisablePrimer.checked
-  localStorage.setItem('easypaper_disable_primer', state.disablePrimer)
+  const disabled = !settingDisablePrimer.checked
+  setModeSetting('disablePrimer', settingsTranslationModeContext, disabled)
+  if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
+    state.disablePrimer = disabled
+  }
 })
 
 settingToolbarAutoHide.addEventListener('change', () => {
@@ -4618,7 +4662,7 @@ function updateTrashTabVisibility(trashDocs) {
 // 갱신을 막지 않도록 호출부에서 await 없이 백그라운드로 실행한다.
 async function refreshTrashTabVisibility() {
   try {
-    const trashData = await fetchLibraryTrash({ ...getTranslationOptions(), documentMode: workspaceModeController.getMode() })
+    const trashData = await fetchLibraryTrash({ ...getTranslationOptions(workspaceModeController.getMode()), documentMode: workspaceModeController.getMode() })
     updateTrashTabVisibility(trashData.documents || [])
   } catch (err) {
     console.error('휴지통 개수 조회 실패:', err)
@@ -4631,7 +4675,7 @@ async function refreshTrashTabVisibility() {
 // refreshTrashTabVisibility()를 직접 쓰는 쪽이 중복 요청을 피할 수 있다.
 async function loadLibraryCount() {
   try {
-    const data = await fetchLibrary({ ...getTranslationOptions(), documentMode: workspaceModeController.getMode() })
+    const data = await fetchLibrary({ ...getTranslationOptions(workspaceModeController.getMode()), documentMode: workspaceModeController.getMode() })
     updateUnreadBadge(data.documents || [])
   } catch {}
   await refreshTrashTabVisibility()
@@ -6389,9 +6433,9 @@ async function renderLibrary() {
   try {
     let data
     if (state.currentLibraryTab === 'trash') {
-      data = await fetchLibraryTrash({ ...getTranslationOptions(), documentMode: workspaceModeController.getMode() })
+      data = await fetchLibraryTrash({ ...getTranslationOptions(workspaceModeController.getMode()), documentMode: workspaceModeController.getMode() })
     } else {
-      data = await fetchLibrary({ ...getTranslationOptions(), documentMode: workspaceModeController.getMode() })
+      data = await fetchLibrary({ ...getTranslationOptions(workspaceModeController.getMode()), documentMode: workspaceModeController.getMode() })
     }
     const allDocs = data.documents || []
     if (state.currentLibraryTab !== 'trash') {
@@ -7414,8 +7458,8 @@ async function refreshLibraryProgress() {
 
   try {
     const data = state.currentLibraryTab === 'trash'
-      ? await fetchLibraryTrash({ ...getTranslationOptions(), documentMode: workspaceModeController.getMode() })
-      : await fetchLibrary({ ...getTranslationOptions(), documentMode: workspaceModeController.getMode() })
+      ? await fetchLibraryTrash({ ...getTranslationOptions(workspaceModeController.getMode()), documentMode: workspaceModeController.getMode() })
+      : await fetchLibrary({ ...getTranslationOptions(workspaceModeController.getMode()), documentMode: workspaceModeController.getMode() })
     const freshDocsById = new Map((data.documents || []).map(doc => [doc.id, doc]))
 
     currentLibraryDocs.forEach((doc, idx) => {
@@ -9200,6 +9244,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
     state.currentDocId = doc.id
     state.currentDocMetadata = doc.metadata || {}
     state.currentDocumentMode = doc.document_mode || "research"
+    applyModeViewerSettings(state.currentDocumentMode)
     state.currentDocumentType = doc.document_type || "research_paper"
 
     // 읽기 전 브리핑 게이팅: 설정에서 껐거나 이미 이 문서의 브리핑을 본 적
