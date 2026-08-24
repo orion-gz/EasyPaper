@@ -28,7 +28,7 @@ def fake_generation(monkeypatch):
     calls = {"count": 0}
 
     def fake_require_session_owner(doc_id, current_user):
-        return {"pages": [], "metadata": {"title": "My Paper"}, "pdf_path": "/x/paper.pdf"}
+        return {"pages": [], "metadata": {"title": "My Paper"}, "pdf_path": "/x/paper.pdf", "source_language": "auto", "detected_source_language": "en"}
 
     async def fake_generate_primer(doc_id, pages, metadata, username, pdf_path, target_lang, session_id, source_lang="auto"):
         calls["count"] += 1
@@ -45,7 +45,7 @@ def fake_generation(monkeypatch):
 def test_returns_cached_content_immediately_without_pending(test_client, isolated_dirs, fake_generation):
     _create_doc_owned_by(isolated_dirs, "doc-cached", "testuser")
     isolated_dirs["library"].save_page_insight(
-        "doc-cached", 0, "primer_v2", '{"hook": "cached hook"}', suffix="한국어"
+        "doc-cached", 0, "primer_v2", '{"hook": "cached hook"}', suffix="document-insights-v1:en:ko"
     )
     res = test_client.get("/api/library/doc-cached/primer")
     assert res.status_code == 200
@@ -101,13 +101,26 @@ def test_does_not_restart_generation_within_cooldown_after_a_recent_failure():
     다음 폴링(3초 간격)마다 곧바로 재시도하면 CLI 서브프로세스를 계속 새로
     띄우게 되어 백엔드 CPU를 독점하는 장애로 이어졌다(실제로 재현됨). 최근 실패
     기록이 쿨다운 이내면 새 생성을 시작하지 않아야 한다."""
-    task_key = "doc-cooldown:한국어"
+    task_key = "doc-cooldown:en:ko"
     primer_router._pending_generations.clear()
     primer_router._last_failure_at.clear()
     primer_router._last_failure_at[task_key] = time.monotonic()
 
     primer_router._ensure_generation_started(
-        "doc-cooldown", "한국어", {"pages": [], "metadata": {}, "pdf_path": "/x"}, "testuser"
+        "doc-cooldown", "ko", "en", {"pages": [], "metadata": {}, "pdf_path": "/x"}, "testuser"
     )
 
     assert task_key not in primer_router._pending_generations
+
+
+def test_rejects_invalid_target_and_unresolved_source(test_client, monkeypatch):
+    monkeypatch.setattr(primer_router, "require_session_owner", lambda *_: {
+        "pages": [], "metadata": {}, "pdf_path": "/x",
+        "source_language": "auto", "detected_source_language": "und",
+    })
+    invalid = test_client.get("/api/library/doc/primer?target_lang=xx")
+    assert invalid.status_code == 400
+    assert invalid.json()["code"] == "unsupported_target_language"
+    unresolved = test_client.get("/api/library/doc/primer?target_lang=fr")
+    assert unresolved.status_code == 409
+    assert unresolved.json()["code"] == "source_language_not_translatable"

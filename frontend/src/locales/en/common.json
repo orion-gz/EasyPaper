@@ -1,6 +1,4 @@
 {
-  "app.title": "EasyPaper",
-  "app.tagline": "Read papers without language barriers",
   "login.username": "Username",
   "login.password": "Password",
   "login.submit": "Sign in",
@@ -45,5 +43,10 @@
   "language.id": "Indonesian",
   "language.vi": "Vietnamese",
   "language.th": "Thai",
-  "language.sw": "Swahili"
+  "language.sw": "Swahili",
+  "login.heading": "Academic paper translation",
+  "login.secure": "Secure sign-in",
+  "login.usernamePlaceholder": "Enter username",
+  "login.remember": "Keep me signed in on this device",
+  "upload.inProgress": "Uploading files…"
 }

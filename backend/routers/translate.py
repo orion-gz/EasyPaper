@@ -193,7 +193,7 @@ async def translate_page(
             lib_save_translation(session_id, page_num, payload_json, suffix)
 
         except Exception as e:
-            error_data = json.dumps({"error": str(e), "done": True})
+            error_data = json.dumps({"error": {"code": "generation_failed", "params": {}, "fallback": "Generation failed."}, "done": True})
             yield f"data: {error_data}\n\n"
             return
 

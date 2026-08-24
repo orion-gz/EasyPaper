@@ -7072,3 +7072,9 @@ body.light-theme .chat-drawer {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+
+.document-language-controls { display:flex; flex-direction:column; align-items:stretch; gap:6px; padding:6px 0; font-size:11px; color:var(--text-muted); }
+.document-language-controls > span[aria-hidden] { display:none; }
+.document-language-controls label { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.document-language-controls select { max-width:150px; background:var(--bg-elevated); color:var(--text-primary); border:1px solid var(--border); border-radius:6px; padding:3px 5px; }
+#document-language-status { max-width:230px; white-space:normal; }

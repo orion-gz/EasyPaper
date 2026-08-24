@@ -3,5 +3,8 @@
   "unsupported_target_language": "Unsupported target language: {{language}}",
   "unsupported_ui_locale": "Unsupported interface language: {{locale}}",
   "same_source_and_target_language": "Source and target languages must be different.",
-  "unknown": "Something went wrong. Please try again."
+  "unknown": "Something went wrong. Please try again.",
+  "source_language_not_translatable": "{{language}} cannot be translated automatically. Choose a supported source language.",
+  "generation_failed": "Generation failed. Please try again.",
+  "network": "Could not connect to the server."
 }

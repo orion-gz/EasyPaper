@@ -40,7 +40,7 @@
         <span class="logo-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M12 9 Q12 13 16 13 Q12 13 12 17 Q12 13 8 13 Q12 13 12 9 Z" fill="currentColor"/></svg></span>
         <span class="logo-text">EasyPaper</span>
       </div>
-      <h1 class="upload-title">학술 논문 번역 서비스<br /><span class="gradient-text">보안 로그인</span></h1>
+      <h1 class="upload-title"><span data-i18n="login.heading">Academic paper translation</span><br /><span class="gradient-text" data-i18n="login.secure">Secure sign-in</span></h1>
       
       <label style="align-self:flex-end;font-size:12px;color:var(--text-secondary)"><span data-i18n="ui.language">화면 언어</span>
         <select id="login-ui-locale" class="form-select" style="display:inline-block;width:auto;margin-left:8px"><option value="ko">한국어</option><option value="en">English</option></select>
@@ -49,7 +49,7 @@
         <form id="login-form" class="drop-zone-inner" style="padding: 36px 32px; gap: 20px; width: 100%;">
           <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
             <label for="login-username" data-i18n="login.username" style="font-size: 13px; color: var(--text-secondary); font-weight: 500; text-align: left; width: 100%;">아이디</label>
-            <input type="text" id="login-username" placeholder="아이디 입력" required style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text-primary); outline: none; font-size: 14px;" />
+            <input type="text" id="login-username" placeholder="아이디 입력" data-i18n-placeholder="login.usernamePlaceholder" required style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text-primary); outline: none; font-size: 14px;" />
           </div>
           <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
             <label for="login-password" data-i18n="login.password" style="font-size: 13px; color: var(--text-secondary); font-weight: 500; text-align: left; width: 100%;">비밀번호</label>
@@ -57,7 +57,7 @@
           </div>
           <label style="width: 100%; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer;">
             <input type="checkbox" id="login-remember-checkbox" style="width: 16px; height: 16px; cursor: pointer;" />
-            로그인 상태 유지 (이 기기에서 자동 로그인)
+            <span data-i18n="login.remember">로그인 상태 유지 (이 기기에서 자동 로그인)</span>
           </label>
           <button type="submit" class="file-btn" data-i18n="login.submit" style="width: 100%; justify-content: center; margin-top: 10px; padding: 12px 28px; border-radius: 12px; border: none;">로그인</button>
         </form>
@@ -83,36 +83,36 @@
           </div>
         </div>
 
-        <div class="workspace-mode-switch" id="workspace-mode-switch" role="tablist" aria-label="워크스페이스 모드">
-          <button type="button" role="tab" data-workspace-mode="research" aria-selected="true">연구</button>
-          <button type="button" role="tab" data-workspace-mode="general" aria-selected="false">일반 문서</button>
+        <div class="workspace-mode-switch" id="workspace-mode-switch" role="tablist" aria-label="워크스페이스 모드" data-i18n-aria-label="navigation:workspaceMode">
+          <button type="button" role="tab" data-workspace-mode="research" aria-selected="true" data-i18n="navigation:research">연구</button>
+          <button type="button" role="tab" data-workspace-mode="general" aria-selected="false" data-i18n="navigation:generalDocuments">일반 문서</button>
         </div>
 
         <nav class="app-sidebar-nav" id="app-sidebar-nav">
           <button type="button" class="sidebar-nav-item" data-page="dashboard">
             <span class="sidebar-nav-icon" data-icon="home"></span>
-            <span class="sidebar-nav-label">연구 홈</span>
-            <span class="sidebar-tooltip">연구 홈</span>
+            <span class="sidebar-nav-label" data-i18n="navigation:dashboard">연구 홈</span>
+            <span class="sidebar-tooltip" data-i18n="navigation:dashboard">연구 홈</span>
           </button>
           <button type="button" class="sidebar-nav-item" data-page="library">
             <span class="sidebar-nav-icon" data-icon="bookOpen"></span>
-            <span class="sidebar-nav-label">논문 라이브러리</span>
-            <span class="sidebar-tooltip">논문 라이브러리</span>
+            <span class="sidebar-nav-label" data-i18n="navigation:library">논문 라이브러리</span>
+            <span class="sidebar-tooltip" data-i18n="navigation:library">논문 라이브러리</span>
           </button>
           <button type="button" class="sidebar-nav-item" data-page="history">
             <span class="sidebar-nav-icon" data-icon="clock"></span>
-            <span class="sidebar-nav-label">읽기 기록</span>
-            <span class="sidebar-tooltip">읽기 기록</span>
+            <span class="sidebar-nav-label" data-i18n="navigation:history">읽기 기록</span>
+            <span class="sidebar-tooltip" data-i18n="navigation:history">읽기 기록</span>
           </button>
           <button type="button" class="sidebar-nav-item" data-page="chats">
             <span class="sidebar-nav-icon" data-icon="messageCircle"></span>
-            <span class="sidebar-nav-label">논문 AI</span>
-            <span class="sidebar-tooltip">논문 AI</span>
+            <span class="sidebar-nav-label" data-i18n="navigation:chats">논문 AI</span>
+            <span class="sidebar-tooltip" data-i18n="navigation:chats">논문 AI</span>
           </button>
           <button type="button" class="sidebar-nav-item" data-page="notes">
             <span class="sidebar-nav-icon" data-icon="fileText"></span>
-            <span class="sidebar-nav-label">논문 노트</span>
-            <span class="sidebar-tooltip">논문 노트</span>
+            <span class="sidebar-nav-label" data-i18n="navigation:notes">논문 노트</span>
+            <span class="sidebar-tooltip" data-i18n="navigation:notes">논문 노트</span>
           </button>
           <button type="button" class="sidebar-nav-item" data-page="graph">
             <span class="sidebar-nav-icon" data-icon="network"></span>
@@ -127,18 +127,18 @@
               <svg class="sun-icon hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
               <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
             </span>
-            <span class="sidebar-nav-label">테마 전환</span>
-            <span class="sidebar-tooltip">테마 전환</span>
+            <span class="sidebar-nav-label" data-i18n="navigation:theme">테마 전환</span>
+            <span class="sidebar-tooltip" data-i18n="navigation:theme">테마 전환</span>
           </button>
           <button type="button" id="sidebar-settings-btn" class="sidebar-nav-item">
             <span class="sidebar-nav-icon" data-icon="settings"></span>
-            <span class="sidebar-nav-label">Settings</span>
-            <span class="sidebar-tooltip">Settings</span>
+            <span class="sidebar-nav-label" data-i18n="navigation:settings">Settings</span>
+            <span class="sidebar-tooltip" data-i18n="navigation:settings">Settings</span>
           </button>
           <button type="button" id="sidebar-logout-btn" class="sidebar-nav-item">
             <span class="sidebar-nav-icon" data-icon="logOut"></span>
-            <span class="sidebar-nav-label">로그아웃</span>
-            <span class="sidebar-tooltip">로그아웃</span>
+            <span class="sidebar-nav-label" data-i18n="navigation:logout">로그아웃</span>
+            <span class="sidebar-tooltip" data-i18n="navigation:logout">로그아웃</span>
           </button>
         </div>
       </aside>
@@ -148,13 +148,13 @@
         <header class="workspace-topnav">
           <h1 id="workspace-page-title" class="workspace-page-title">연구 홈</h1>
           <div class="workspace-topnav-actions">
-            <div class="workspace-mode-switch workspace-mode-switch-compact" id="workspace-mode-switch-compact" role="tablist" aria-label="워크스페이스 모드">
-              <button type="button" role="tab" data-workspace-mode="research" aria-selected="true">연구</button>
+            <div class="workspace-mode-switch workspace-mode-switch-compact" id="workspace-mode-switch-compact" role="tablist" aria-label="워크스페이스 모드" data-i18n-aria-label="navigation:workspaceMode">
+              <button type="button" role="tab" data-workspace-mode="research" aria-selected="true" data-i18n="navigation:research">연구</button>
               <button type="button" role="tab" data-workspace-mode="general" aria-selected="false">일반</button>
             </div>
             <div class="workspace-search-box">
               <span class="workspace-search-icon" data-icon="search"></span>
-              <input type="text" id="workspace-search-input" placeholder="논문, 개념, 질문 검색..." />
+              <input type="text" id="workspace-search-input" placeholder="논문, 개념, 질문 검색..." data-i18n-placeholder="navigation:searchPlaceholder" />
             </div>
           </div>
         </header>
@@ -168,13 +168,13 @@
           <section id="page-library" class="workspace-page">
             <div class="library-header">
               <div>
-                <p class="library-header-subtitle">보관함에 저장된 모든 논문을 한 곳에서 관리하세요</p>
+                <p class="library-header-subtitle" data-i18n="library:subtitle">보관함에 저장된 모든 논문을 한 곳에서 관리하세요</p>
               </div>
               <div>
                 <div class="lib-add-fab-wrap">
                   <button id="lib-upload-btn" class="file-btn lib-add-main-btn" aria-expanded="false" aria-label="추가 메뉴 열기"><span aria-hidden="true">+</span></button>
-                  <button id="lib-add-paper-btn" class="lib-add-sub-btn"><span class="lib-add-label">논문 추가</span><span class="lib-add-circle" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z"/><path d="M14 2v6h6"/></svg></span></button>
-                  <button id="lib-add-folder-btn" class="lib-add-sub-btn"><span class="lib-add-label">폴더 추가</span><span class="lib-add-circle" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/><path d="M12 11v6M9 14h6"/></svg></span></button>
+                  <button id="lib-add-paper-btn" class="lib-add-sub-btn"><span class="lib-add-label" data-i18n="library:addDocument">논문 추가</span><span class="lib-add-circle" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z"/><path d="M14 2v6h6"/></svg></span></button>
+                  <button id="lib-add-folder-btn" class="lib-add-sub-btn"><span class="lib-add-label" data-i18n="library:addFolder">폴더 추가</span><span class="lib-add-circle" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/><path d="M12 11v6M9 14h6"/></svg></span></button>
                 </div>
               </div>
             </div>
@@ -477,6 +477,12 @@
               <div class="progress-mini-bar" id="progress-mini-bar"></div>
               <span id="progress-mini-text">0%</span>
             </div>
+            <div id="document-language-controls" class="document-language-controls" hidden>
+              <label><span data-i18n="viewer:source.label">Source</span><select id="document-source-lang" aria-label="Document source language" data-i18n-aria-label="viewer:source.aria"></select></label>
+              <span aria-hidden="true">→</span>
+              <label><span data-i18n="viewer:target.label">Target</span><select id="document-target-lang" aria-label="Document target language" data-i18n-aria-label="viewer:target.aria"></select></label>
+              <span id="document-language-status" role="status"></span>
+            </div>
             <!-- AI 번역 모델 선택 드롭다운 -->
             <div class="kebab-menu-row">
               <span class="kebab-menu-label">번역 모델</span>
@@ -591,7 +597,7 @@
               <img id="chat-quote-img" class="chat-quote-img hidden" alt="Quoted Figure" />
               <button id="chat-quote-close-btn" class="chat-quote-close-btn" title="인용 취소">&times;</button>
             </div>
-            <textarea id="chat-input" class="chat-input-textarea" placeholder="논문에 대해 궁금한 점을 질문하세요..." rows="1"></textarea>
+            <textarea id="chat-input" class="chat-input-textarea" placeholder="논문에 대해 궁금한 점을 질문하세요..." data-i18n-placeholder="chat:placeholder" rows="1"></textarea>
             <div class="chat-input-footer">
               <div id="chat-sidebar-provider"></div>
               <div class="chat-input-actions">
@@ -662,19 +668,19 @@
 
       <div style="padding: 24px; max-height: 70vh; overflow-y: auto;">
         <div id="onboarding-purpose" class="hidden">
-          <h3>EasyPaper를 어떤 용도로 사용하시나요?</h3>
-          <p class="onboarding-purpose-help">기본 작업공간만 정하며 문서를 자동 분류하지 않습니다. 나중에 사이드바에서 언제든 변경할 수 있습니다.</p>
+          <h3 data-i18n="onboarding:purpose.heading">EasyPaper를 어떤 용도로 사용하시나요?</h3>
+          <p class="onboarding-purpose-help" data-i18n="onboarding:purpose.help">기본 작업공간만 정하며 문서를 자동 분류하지 않습니다. 나중에 사이드바에서 언제든 변경할 수 있습니다.</p>
           <div class="onboarding-purpose-cards" role="radiogroup">
-            <button type="button" data-purpose-mode="research" role="radio" aria-checked="false"><strong>연구 논문 중심</strong><span>논문 번역, 읽기 전 브리핑, 논문 비교, Research Graph</span></button>
-            <button type="button" data-purpose-mode="general" role="radio" aria-checked="false"><strong>일반 문서 중심</strong><span>기술 문서, 책, 아티클, 보고서, 매뉴얼 번역과 문서 AI</span></button>
+            <button type="button" data-purpose-mode="research" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.research">연구 논문 중심</strong><span data-i18n="onboarding:purpose.researchHelp">논문 번역, 읽기 전 브리핑, 논문 비교, Research Graph</span></button>
+            <button type="button" data-purpose-mode="general" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.general">일반 문서 중심</strong><span data-i18n="onboarding:purpose.generalHelp">기술 문서, 책, 아티클, 보고서, 매뉴얼 번역과 문서 AI</span></button>
           </div>
-          <div class="document-type-modal-actions"><button type="button" id="onboarding-purpose-next-btn" class="btn btn-primary" disabled>다음</button></div>
+          <div class="document-type-modal-actions"><button type="button" id="onboarding-purpose-next-btn" class="btn btn-primary" disabled data-i18n="onboarding:next">다음</button></div>
         </div>
 
         <!-- 상태 1: 감지 중 -->
         <div id="onboarding-detecting" style="display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 20px 0;">
           <div class="spinner" style="width: 28px; height: 28px; border-width: 3px;"></div>
-          <p style="font-size: 13.5px; color: var(--text-secondary);">설치된 AI 엔진을 확인하고 있어요...</p>
+          <p style="font-size: 13.5px; color: var(--text-secondary);" data-i18n="onboarding:detecting">설치된 AI 엔진을 확인하고 있어요...</p>
         </div>
 
         <!-- 상태 2: 감지된 엔진 목록 (선택 후 "다음"으로 진행) -->
@@ -688,7 +694,7 @@
 
         <!-- 상태 3: 선택한 엔진의 모델 선택 -->
         <div id="onboarding-model-select" class="hidden">
-          <button type="button" id="onboarding-back-btn" style="background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 0; margin-bottom: 10px; display: flex; align-items: center; gap: 4px;">← 뒤로</button>
+          <button type="button" id="onboarding-back-btn" style="background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 0; margin-bottom: 10px; display: flex; align-items: center; gap: 4px;" data-i18n="onboarding:back">← 뒤로</button>
           <p style="font-size: 13.5px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.6;"><strong id="onboarding-model-select-provider" style="color: var(--text-primary);"></strong>에서 사용할 모델을 선택해주세요.</p>
 
           <div id="onboarding-model-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto;"></div>
@@ -718,7 +724,7 @@
           </div>
 
           <div style="text-align: right; margin-top: 14px;">
-            <button type="button" id="onboarding-confirm-btn" class="btn btn-primary" disabled style="padding: 9px 20px; font-size: 13px;">확인</button>
+            <button type="button" id="onboarding-confirm-btn" class="btn btn-primary" disabled style="padding: 9px 20px; font-size: 13px;" data-i18n="onboarding:confirm">확인</button>
           </div>
         </div>
 
@@ -1426,7 +1432,7 @@
   <!-- Google Drive 스타일 업로드 팝업 -->
   <div id="upload-popup" class="upload-popup hidden">
     <div class="upload-popup-header">
-      <span class="upload-popup-title" id="upload-popup-title">파일 업로드 중...</span>
+      <span class="upload-popup-title" id="upload-popup-title" data-i18n="common:upload.inProgress">파일 업로드 중...</span>
       <div class="upload-popup-controls">
         <button id="upload-popup-minimize" class="popup-control-btn" title="최소화">−</button>
         <button id="upload-popup-close" class="popup-control-btn" title="닫기">&times;</button>

@@ -253,7 +253,7 @@ async def test_general_translation_job_skips_research_postprocessing(monkeypatch
     assert called == {"paper_tags": False, "graph": False}
 
 
-def test_job_page_cache_fallback_is_legacy_research_only(isolated_dirs, test_client, monkeypatch):
+def test_unresolved_source_does_not_reuse_legacy_cache(isolated_dirs, test_client, monkeypatch):
     from routers.upload import sessions
 
     db = isolated_dirs["db"]
@@ -275,9 +275,9 @@ def test_job_page_cache_fallback_is_legacy_research_only(isolated_dirs, test_cli
 
     research = test_client.get("/api/jobs/legacy-research/page/1")
     general = test_client.get("/api/jobs/general-cache/page/1")
-    assert research.status_code == 200
-    assert research.json()["translation"] == "old research"
-    assert general.status_code == 404
+    assert research.status_code == 409
+    assert research.json()["code"] == "source_language_not_translatable"
+    assert general.status_code == 409
 
 
 @pytest.mark.asyncio

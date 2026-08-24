@@ -1,6 +1,4 @@
 {
-  "app.title": "EasyPaper",
-  "app.tagline": "언어 장벽 없이 논문을 읽으세요",
   "login.username": "아이디",
   "login.password": "비밀번호",
   "login.submit": "로그인",
@@ -45,5 +43,10 @@
   "language.id": "인도네시아어",
   "language.vi": "베트남어",
   "language.th": "태국어",
-  "language.sw": "스와힐리어"
+  "language.sw": "스와힐리어",
+  "login.heading": "학술 논문 번역 서비스",
+  "login.secure": "보안 로그인",
+  "login.usernamePlaceholder": "아이디 입력",
+  "login.remember": "로그인 상태 유지 (이 기기에서 자동 로그인)",
+  "upload.inProgress": "파일 업로드 중…"
 }

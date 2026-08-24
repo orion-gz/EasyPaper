@@ -13,6 +13,29 @@ from services.library import get_primer_figure_path
 
 router = APIRouter()
 
+
+def _validated_languages(session: dict, target_value: str) -> tuple[str, str]:
+    from services.languages import (
+        DOCUMENT_LANGUAGE_CODES, api_language_error, normalize_document_language,
+        resolve_source_language,
+    )
+    try:
+        target = normalize_document_language(target_value, allow_legacy=True)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(target_value))
+    requested_source = session.get("source_language") or "auto"
+    try:
+        source = resolve_source_language(session, requested_source)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(requested_source, source=True))
+    if source not in DOCUMENT_LANGUAGE_CODES:
+        raise HTTPException(status_code=409, detail={
+            "code": "source_language_not_translatable",
+            "params": {"language": source},
+            "fallback": "The source language cannot be used for briefing generation.",
+        })
+    return target, source
+
 # 캐시가 없는 문서(구버전 등)는 이 자리에서 생성해야 하는데, 계보/실험 흐름/
 # 용어집까지 생성하는 지금의 프롬프트는 로컬 LLM 기준 수 분씩 걸릴 수 있다.
 # 이 시간 동안 HTTP 요청을 열어둔 채 기다리면 리버스 프록시(nginx 등)의 기본
@@ -31,7 +54,7 @@ _last_failure_at: dict[str, float] = {}
 _RETRY_COOLDOWN_SECONDS = 15
 
 
-def _ensure_generation_started(doc_id: str, target_lang: str, session: dict, current_user: str) -> None:
+def _ensure_generation_started(doc_id: str, target_lang: str, source_lang: str, session: dict, current_user: str) -> None:
     """이 문서/언어 조합의 브리핑 생성이 이미 진행 중이 아니면 백그라운드
     태스크로 새로 시작한다. GET(캐시 미스)과 POST(재생성) 양쪽에서 공유한다."""
     document_mode = session.get("document_mode", "research")
@@ -39,9 +62,9 @@ def _ensure_generation_started(doc_id: str, target_lang: str, session: dict, cur
     # 기존 연구 브리핑의 task key는 유지해 쿨다운/진행 중 상태 호환성을 보존한다.
     # 일반 문서만 종류별 개요 정책이 달라 분류를 key에 포함한다.
     task_key = (
-        f"{doc_id}:{target_lang}"
+        f"{doc_id}:{source_lang}:{target_lang}"
         if document_mode == "research"
-        else f"{doc_id}:{target_lang}:{document_mode}:{document_type}"
+        else f"{doc_id}:{source_lang}:{target_lang}:{document_mode}:{document_type}"
     )
     task = _pending_generations.get(task_key)
     if task is not None and not task.done():
@@ -56,14 +79,14 @@ def _ensure_generation_started(doc_id: str, target_lang: str, session: dict, cur
             if document_mode == "general":
                 await generate_document_overview(
                     doc_id, session["pages"], session["metadata"], document_type,
-                    target_lang=target_lang, session_id=doc_id,
+                    target_lang=target_lang, source_lang=source_lang, session_id=doc_id,
                 )
             else:
                 await generate_primer(
                     doc_id, session["pages"], session["metadata"],
                     username=current_user, pdf_path=session["pdf_path"],
                     target_lang=target_lang, session_id=doc_id,
-                    source_lang=session.get("source_language") or session.get("detected_source_language", "auto"),
+                    source_lang=source_lang,
                 )
             _last_failure_at.pop(task_key, None)
         except Exception as e:
@@ -80,34 +103,38 @@ def _ensure_generation_started(doc_id: str, target_lang: str, session: dict, cur
 
 
 @router.get("/library/{doc_id}/primer")
-async def get_primer(doc_id: str, target_lang: str = "한국어", current_user: str = Depends(get_current_user)):
+async def get_primer(doc_id: str, target_lang: str = "ko", current_user: str = Depends(get_current_user)):
     """읽기 전 브리핑 콘텐츠를 반환합니다. 업로드 직후 백그라운드로 이미 생성되어
     있으면 캐시에서 즉시 반환하고, 아직 없으면(구버전 문서 등) 백그라운드 생성을
     시작(또는 이미 진행 중이면 그대로 두고)하고 {"status": "pending"}을 반환합니다."""
     session = require_session_owner(doc_id, current_user)
+    target_lang, source_lang = _validated_languages(session, target_lang)
     if session.get("document_mode", "research") == "general":
         cached = get_cached_document_overview(
-            doc_id, session.get("document_type", "other"), target_lang=target_lang,
+            doc_id, session.get("document_type", "other"), target_lang=target_lang, source_lang=source_lang,
         )
     else:
-        cached = get_cached_primer(doc_id, target_lang=target_lang)
+        cached = get_cached_primer(doc_id, target_lang=target_lang, source_lang=source_lang)
     if cached:
         return cached
-    _ensure_generation_started(doc_id, target_lang, session, current_user)
+    _ensure_generation_started(doc_id, target_lang, source_lang, session, current_user)
+    await asyncio.sleep(0)
     return {"status": "pending"}
 
 
 @router.post("/library/{doc_id}/primer/regenerate")
-async def regenerate_primer(doc_id: str, target_lang: str = "한국어", current_user: str = Depends(get_current_user)):
+async def regenerate_primer(doc_id: str, target_lang: str = "ko", current_user: str = Depends(get_current_user)):
     """캐시된 브리핑을 지우고 처음부터 다시 생성을 시작합니다. 사용자가 결과가
     부실하다고 느낄 때 수동으로 재시도할 수 있게 하는 용도. GET과 마찬가지로
     생성은 백그라운드로 돌리고 즉시 {"status": "pending"}을 반환한다."""
     session = require_session_owner(doc_id, current_user)
+    target_lang, source_lang = _validated_languages(session, target_lang)
     if session.get("document_mode", "research") == "general":
-        invalidate_document_overview(doc_id, session.get("document_type", "other"), target_lang)
+        invalidate_document_overview(doc_id, session.get("document_type", "other"), target_lang, source_lang)
     else:
-        invalidate_primer_cache(doc_id, target_lang)
-    _ensure_generation_started(doc_id, target_lang, session, current_user)
+        invalidate_primer_cache(doc_id, target_lang, source_lang)
+    _ensure_generation_started(doc_id, target_lang, source_lang, session, current_user)
+    await asyncio.sleep(0)
     return {"status": "pending"}
 
 

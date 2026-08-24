@@ -1,0 +1,344 @@
+{
+  "chat:placeholder": {
+    "description": "Ask about this document…"
+  },
+  "common:login.username": {
+    "description": "Username"
+  },
+  "common:login.password": {
+    "description": "Password"
+  },
+  "common:login.submit": {
+    "description": "Sign in"
+  },
+  "common:ui.language": {
+    "description": "Interface language"
+  },
+  "common:language.auto": {
+    "description": "Auto-detect"
+  },
+  "common:language.mul": {
+    "description": "Multiple languages"
+  },
+  "common:language.und": {
+    "description": "Undetermined"
+  },
+  "common:language.ko": {
+    "description": "Korean"
+  },
+  "common:language.en": {
+    "description": "English"
+  },
+  "common:language.ja": {
+    "description": "Japanese"
+  },
+  "common:language.zh-Hans": {
+    "description": "Simplified Chinese"
+  },
+  "common:language.zh-Hant": {
+    "description": "Traditional Chinese"
+  },
+  "common:language.es": {
+    "description": "Spanish"
+  },
+  "common:language.fr": {
+    "description": "French"
+  },
+  "common:language.de": {
+    "description": "German"
+  },
+  "common:language.pt-BR": {
+    "description": "Brazilian Portuguese"
+  },
+  "common:language.pt-PT": {
+    "description": "European Portuguese"
+  },
+  "common:language.it": {
+    "description": "Italian"
+  },
+  "common:language.nl": {
+    "description": "Dutch"
+  },
+  "common:language.ru": {
+    "description": "Russian"
+  },
+  "common:language.uk": {
+    "description": "Ukrainian"
+  },
+  "common:language.pl": {
+    "description": "Polish"
+  },
+  "common:language.cs": {
+    "description": "Czech"
+  },
+  "common:language.sk": {
+    "description": "Slovak"
+  },
+  "common:language.bg": {
+    "description": "Bulgarian"
+  },
+  "common:language.hr": {
+    "description": "Croatian"
+  },
+  "common:language.sr": {
+    "description": "Serbian"
+  },
+  "common:language.sl": {
+    "description": "Slovenian"
+  },
+  "common:language.sv": {
+    "description": "Swedish"
+  },
+  "common:language.da": {
+    "description": "Danish"
+  },
+  "common:language.no": {
+    "description": "Norwegian"
+  },
+  "common:language.fi": {
+    "description": "Finnish"
+  },
+  "common:language.et": {
+    "description": "Estonian"
+  },
+  "common:language.lv": {
+    "description": "Latvian"
+  },
+  "common:language.lt": {
+    "description": "Lithuanian"
+  },
+  "common:language.el": {
+    "description": "Greek"
+  },
+  "common:language.tr": {
+    "description": "Turkish"
+  },
+  "common:language.ar": {
+    "description": "Arabic"
+  },
+  "common:language.he": {
+    "description": "Hebrew"
+  },
+  "common:language.hi": {
+    "description": "Hindi"
+  },
+  "common:language.bn": {
+    "description": "Bengali"
+  },
+  "common:language.id": {
+    "description": "Indonesian"
+  },
+  "common:language.vi": {
+    "description": "Vietnamese"
+  },
+  "common:language.th": {
+    "description": "Thai"
+  },
+  "common:language.sw": {
+    "description": "Swahili"
+  },
+  "common:login.heading": {
+    "description": "Academic paper translation"
+  },
+  "common:login.secure": {
+    "description": "Secure sign-in"
+  },
+  "common:login.usernamePlaceholder": {
+    "description": "Enter username"
+  },
+  "common:login.remember": {
+    "description": "Keep me signed in on this device"
+  },
+  "common:upload.inProgress": {
+    "description": "Uploading files…"
+  },
+  "errors:unsupported_source_language": {
+    "description": "Unsupported source language: {{language}}"
+  },
+  "errors:unsupported_target_language": {
+    "description": "Unsupported target language: {{language}}"
+  },
+  "errors:unsupported_ui_locale": {
+    "description": "Unsupported interface language: {{locale}}"
+  },
+  "errors:same_source_and_target_language": {
+    "description": "Source and target languages must be different."
+  },
+  "errors:unknown": {
+    "description": "Something went wrong. Please try again."
+  },
+  "errors:source_language_not_translatable": {
+    "description": "{{language}} cannot be translated automatically. Choose a supported source language."
+  },
+  "errors:generation_failed": {
+    "description": "Generation failed. Please try again."
+  },
+  "errors:network": {
+    "description": "Could not connect to the server."
+  },
+  "library:document.count_one": {
+    "description": "{{count}} document"
+  },
+  "library:document.count_other": {
+    "description": "{{count}} documents"
+  },
+  "library:subtitle": {
+    "description": "Manage all saved papers in one place."
+  },
+  "library:addDocument": {
+    "description": "Add paper"
+  },
+  "library:addFolder": {
+    "description": "Add folder"
+  },
+  "navigation:dashboard": {
+    "description": "Dashboard"
+  },
+  "navigation:library": {
+    "description": "Library"
+  },
+  "navigation:settings": {
+    "description": "Settings"
+  },
+  "navigation:workspaceMode": {
+    "description": "Workspace mode"
+  },
+  "navigation:research": {
+    "description": "Research"
+  },
+  "navigation:generalDocuments": {
+    "description": "General documents"
+  },
+  "navigation:history": {
+    "description": "Reading history"
+  },
+  "navigation:chats": {
+    "description": "Paper AI"
+  },
+  "navigation:notes": {
+    "description": "Paper notes"
+  },
+  "navigation:theme": {
+    "description": "Switch theme"
+  },
+  "navigation:logout": {
+    "description": "Sign out"
+  },
+  "navigation:searchPlaceholder": {
+    "description": "Search papers, concepts, and questions…"
+  },
+  "onboarding:uiLanguage": {
+    "description": "Interface language"
+  },
+  "onboarding:next": {
+    "description": "Next"
+  },
+  "onboarding:confirm": {
+    "description": "Confirm"
+  },
+  "onboarding:purpose.heading": {
+    "description": "How will you use EasyPaper?"
+  },
+  "onboarding:purpose.help": {
+    "description": "This only sets the default workspace and does not classify documents automatically. You can change it from the sidebar at any time."
+  },
+  "onboarding:purpose.research": {
+    "description": "Research papers"
+  },
+  "onboarding:purpose.researchHelp": {
+    "description": "Paper translation, pre-reading briefings, comparisons, and Research Graph"
+  },
+  "onboarding:purpose.general": {
+    "description": "General documents"
+  },
+  "onboarding:purpose.generalHelp": {
+    "description": "Translation and document AI for technical documents, books, articles, reports, and manuals"
+  },
+  "onboarding:detecting": {
+    "description": "Checking for installed AI engines…"
+  },
+  "onboarding:back": {
+    "description": "← Back"
+  },
+  "settings:uiLanguage": {
+    "description": "Interface language"
+  },
+  "settings:sourceLanguage": {
+    "description": "Default source language"
+  },
+  "settings:targetLanguage": {
+    "description": "Translation target language"
+  },
+  "settings:saved": {
+    "description": "Language settings saved."
+  },
+  "viewer:translation.waiting": {
+    "description": "Waiting"
+  },
+  "viewer:translation.progress": {
+    "description": "{{completed}} of {{total}} pages"
+  },
+  "viewer:source.label": {
+    "description": "Source"
+  },
+  "viewer:source.aria": {
+    "description": "Document source language"
+  },
+  "viewer:target.label": {
+    "description": "Target"
+  },
+  "viewer:target.aria": {
+    "description": "Document target language"
+  },
+  "viewer:source.undetermined": {
+    "description": "Source language could not be determined. Automatic translation is paused."
+  },
+  "viewer:source.multiple": {
+    "description": "Multiple source languages detected. Select one source to translate."
+  },
+  "viewer:source.unsupportedCode": {
+    "description": "Detected {{language}}, which is not supported for automatic translation."
+  },
+  "viewer:translation.sameLanguage": {
+    "description": "Translation skipped; insights remain available."
+  },
+  "viewer:translation.pair": {
+    "description": "{{source}} → {{target}}"
+  },
+  "viewer:language.saved": {
+    "description": "Document language override saved."
+  },
+  "navigation:researchDashboard": {
+    "description": "Research home"
+  },
+  "navigation:researchLibrary": {
+    "description": "Paper library"
+  },
+  "navigation:generalDashboard": {
+    "description": "Document home"
+  },
+  "navigation:generalLibrary": {
+    "description": "Document library"
+  },
+  "navigation:researchSearch": {
+    "description": "Search research papers"
+  },
+  "navigation:generalSearch": {
+    "description": "Search general documents"
+  },
+  "navigation:addPaper": {
+    "description": "Add paper"
+  },
+  "navigation:addDocument": {
+    "description": "Add document"
+  },
+  "navigation:generalChats": {
+    "description": "Document AI"
+  },
+  "navigation:generalNotes": {
+    "description": "Document notes"
+  },
+  "dashboard:generalDocumentsEmpty": {
+    "description": "Empty state for the general-document dashboard."
+  }
+}

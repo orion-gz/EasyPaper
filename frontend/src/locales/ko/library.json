@@ -1,5 +1,7 @@
 {
-  "empty": "아직 문서가 없습니다.",
   "document.count_one": "문서 {{count}}개",
-  "document.count_other": "문서 {{count}}개"
+  "document.count_other": "문서 {{count}}개",
+  "subtitle": "보관함에 저장된 모든 논문을 한 곳에서 관리하세요.",
+  "addDocument": "논문 추가",
+  "addFolder": "폴더 추가"
 }

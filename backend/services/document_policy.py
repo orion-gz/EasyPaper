@@ -165,18 +165,14 @@ def translation_cache_candidates(document_mode: str, document_type: str, target_
         ignore_math, ignore_table, ignore_refs, source_lang,
     )
     candidates = [current]
+    # Source-less caches are safe only while the source is genuinely unresolved.
     legacy_target = {"ko": "한국어", "en": "영어", "ja": "일본어", "zh-Hans": "중국어"}.get(target_lang)
-    if legacy_target:
+    if source_lang == "auto" and legacy_target:
         candidates.append(translation_cache_suffix(
             document_mode, document_type, legacy_target, style,
             ignore_math, ignore_table, ignore_refs,
         ))
-    if source_lang != "auto":
-        candidates.append(translation_cache_suffix(
-            document_mode, document_type, target_lang, style,
-            ignore_math, ignore_table, ignore_refs,
-        ))
-    if document_mode == "research" and document_type == "research_paper":
+    if source_lang == "auto" and document_mode == "research" and document_type == "research_paper":
         candidates.append(legacy_translation_cache_suffix(
             target_lang, style, ignore_math, ignore_table, ignore_refs,
         ))

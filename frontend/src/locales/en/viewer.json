@@ -1,7 +1,14 @@
 {
-  "translation.start": "Start translation",
   "translation.waiting": "Waiting",
   "translation.progress": "{{completed}} of {{total}} pages",
-  "source.unsupported": "This source language is not currently supported.",
-  "content.direction": "auto"
+  "source.label": "Source",
+  "source.aria": "Document source language",
+  "target.label": "Target",
+  "target.aria": "Document target language",
+  "source.undetermined": "Source language could not be determined. Automatic translation is paused.",
+  "source.multiple": "Multiple source languages detected. Select one source to translate.",
+  "source.unsupportedCode": "Detected {{language}}, which is not supported for automatic translation.",
+  "translation.sameLanguage": "Translation skipped; insights remain available.",
+  "translation.pair": "{{source}} → {{target}}",
+  "language.saved": "Document language override saved."
 }

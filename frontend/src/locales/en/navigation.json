@@ -1,5 +1,24 @@
 {
   "dashboard": "Dashboard",
   "library": "Library",
-  "settings": "Settings"
+  "settings": "Settings",
+  "workspaceMode": "Workspace mode",
+  "research": "Research",
+  "generalDocuments": "General documents",
+  "history": "Reading history",
+  "chats": "Paper AI",
+  "notes": "Paper notes",
+  "theme": "Switch theme",
+  "logout": "Sign out",
+  "searchPlaceholder": "Search papers, concepts, and questions…",
+  "researchDashboard": "Research home",
+  "researchLibrary": "Paper library",
+  "generalDashboard": "Document home",
+  "generalLibrary": "Document library",
+  "researchSearch": "Search research papers",
+  "generalSearch": "Search general documents",
+  "addPaper": "Add paper",
+  "addDocument": "Add document",
+  "generalChats": "Document AI",
+  "generalNotes": "Document notes"
 }

@@ -184,7 +184,7 @@ async def get_page_insight_stream(
             save_page_insight(session_id, page_num, kind, complete_result, suffix)
             yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False}, ensure_ascii=False)}\n\n"
         except Exception as e:
-            error_data = json.dumps({"error": str(e), "done": True})
+            error_data = json.dumps({"error": {"code": "generation_failed", "params": {}, "fallback": "Generation failed."}, "done": True})
             yield f"data: {error_data}\n\n"
             return
 

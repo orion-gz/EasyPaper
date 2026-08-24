@@ -1,16 +1,18 @@
 import i18next from 'i18next'
-import { INITIAL_NAMESPACES, UI_LOCALES } from './locales/manifest.js'
+import { FEATURE_NAMESPACES, INITIAL_NAMESPACES, UI_LOCALES } from './locales/manifest.js'
 
-const modules = typeof import.meta.glob === 'function' ? import.meta.glob('./locales/*/*.json') : {}
+const modules = import.meta.env ? import.meta.glob('./locales/*/*.json') : {}
 const loaded = new Set()
 let currentLocale = null
+let domObserver = null
+let translatingMutations = false
 
-function browserLocale() {
+export function browserLocale() {
   const languages = typeof navigator === 'undefined' ? [] : (navigator.languages || [navigator.language])
   return languages.some((value) => String(value).toLowerCase().startsWith('ko')) ? 'ko' : 'en'
 }
 
-function normalizeLocale(locale) {
+export function normalizeLocale(locale) {
   return Object.hasOwn(UI_LOCALES, locale) ? locale : 'en'
 }
 
@@ -33,6 +35,10 @@ export async function loadNamespaces(namespaces) {
   await i18next.loadNamespaces(requested)
 }
 
+export async function loadFeatureNamespaces(feature) {
+  return loadNamespaces(FEATURE_NAMESPACES[feature] || [])
+}
+
 export async function initI18n() {
   const stored = localStorage.getItem('easypaper_ui_locale')
   currentLocale = normalizeLocale(stored || browserLocale())
@@ -49,6 +55,7 @@ export async function initI18n() {
   await loadNamespaces(INITIAL_NAMESPACES)
   applyDocumentLocale()
   translateDocument()
+  observeDynamicTranslations()
   document.documentElement.classList.remove('i18n-loading')
   document.dispatchEvent(new CustomEvent('easypaper:locale-changed', { detail: { locale: currentLocale } }))
   return currentLocale
@@ -77,13 +84,18 @@ function applyDocumentLocale() {
 
 export function t(key, params = {}) {
   const value = i18next.t(key, params)
-  if (value && value !== key) return value
+  const bareKey = key.includes(':') ? key.split(':').slice(1).join(':') : key
+  if (value && value !== key && value !== bareKey) return value
   const fallback = i18next.t(key, { ...params, lng: 'en' })
-  return fallback && fallback !== key ? fallback : params.fallback || ''
+  return fallback && fallback !== key && fallback !== bareKey ? fallback : params.fallback || ''
 }
 
 export function translateDocument(root = document) {
-  root.querySelectorAll('[data-i18n]').forEach((element) => {
+  const select = (selector) => [
+    ...(root.matches?.(selector) ? [root] : []),
+    ...(root.querySelectorAll?.(selector) || []),
+  ]
+  select('[data-i18n]').forEach((element) => {
     const value = t(element.dataset.i18n)
     if (value) element.textContent = value
   })
@@ -93,11 +105,25 @@ export function translateDocument(root = document) {
     ['aria-label', 'i18nAriaLabel', 'data-i18n-aria-label'],
   ]
   for (const [attribute, dataName, selector] of bindings) {
-    root.querySelectorAll('[' + selector + ']').forEach((element) => {
+    select('[' + selector + ']').forEach((element) => {
       const value = t(element.dataset[dataName])
       if (value) element.setAttribute(attribute, value)
     })
   }
+}
+
+function observeDynamicTranslations() {
+  if (domObserver || typeof MutationObserver === 'undefined' || !document.body) return
+  domObserver = new MutationObserver(records => {
+    if (translatingMutations) return
+    translatingMutations = true
+    try {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.nodeType === 1) translateDocument(node)
+      }
+    } finally { translatingMutations = false }
+  })
+  domObserver.observe(document.body, { childList: true, subtree: true })
 }
 
 export function formatNumber(value, options) {
@@ -115,7 +141,22 @@ export function errorMessage(payload, fallback = '') {
   if (payload?.detail && typeof payload.detail === 'object') {
     return errorMessage(payload.detail, fallback)
   }
-  if (typeof payload?.detail === 'string') return payload.detail
-  if (typeof payload?.message === 'string') return payload.message
+  // Legacy string details are often Korean. Never leak them into an English UI.
+  if (getLocale() === 'ko' && typeof payload?.detail === 'string') return payload.detail
+  if (getLocale() === 'ko' && typeof payload?.message === 'string') return payload.message
   return fallback || t('errors:unknown')
+}
+
+export function parseApiError(payload, fallback = '') {
+  return new Error(errorMessage(payload, fallback))
+}
+
+export function formatRelativeTime(value, now = Date.now()) {
+  const deltaSeconds = Math.round((new Date(value).getTime() - now) / 1000)
+  const formatter = new Intl.RelativeTimeFormat(getLocale(), { numeric: 'auto' })
+  const units = [['year', 31_536_000], ['month', 2_592_000], ['day', 86_400], ['hour', 3_600], ['minute', 60]]
+  for (const [unit, seconds] of units) {
+    if (Math.abs(deltaSeconds) >= seconds) return formatter.format(Math.round(deltaSeconds / seconds), unit)
+  }
+  return formatter.format(deltaSeconds, 'second')
 }

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Iterable
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,7 @@ DEFAULT_TARGET_LANGUAGE = "ko"
 
 _BY_CODE = {item.code: item for item in DOCUMENT_LANGUAGES}
 _CANONICAL_CASE = {code.lower(): code for code in DOCUMENT_LANGUAGE_CODES}
+_SAFE_BCP47 = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
 _LEGACY_TARGET_VALUES = {
     "한국어": "ko", "영어": "en", "일본어": "ja", "중국어": "zh-Hans",
     "korean": "ko", "english": "en", "japanese": "ja",
@@ -70,6 +74,37 @@ def normalize_ui_locale(value: str) -> str:
     if locale in UI_LOCALES:
         return locale
     raise ValueError(f"Unsupported UI locale: {value}")
+
+
+def normalize_detected_language(value: str) -> str:
+    """Normalize a detector result without treating it as translatable."""
+    raw = (value or "").strip().replace("_", "-")
+    lowered = raw.lower()
+    if lowered in {"und", "mul"}:
+        return lowered
+    canonical = _CANONICAL_CASE.get(lowered)
+    if canonical:
+        return canonical
+    if not _SAFE_BCP47.fullmatch(raw):
+        return "und"
+    parts = raw.split("-")
+    return "-".join([parts[0].lower(), *[
+        part.title() if len(part) == 4 and part.isalpha()
+        else part.upper() if len(part) == 2 and part.isalpha()
+        else part.lower()
+        for part in parts[1:]
+    ]])
+
+
+def resolve_source_language(session: dict, requested: str, *, require_supported: bool = False) -> str:
+    """Validate a requested source and resolve auto against detector state."""
+    normalized = normalize_document_language(requested, allow_auto=True)
+    resolved = normalize_detected_language(
+        session.get("detected_source_language", "und")
+    ) if normalized == "auto" else normalized
+    if require_supported and resolved not in DOCUMENT_LANGUAGE_CODES:
+        raise ValueError(resolved)
+    return resolved
 
 
 def language_name(code: str) -> str:
@@ -121,7 +156,8 @@ _LINGUA_TO_BCP47 = {
     "BENGALI": "bn", "INDONESIAN": "id", "VIETNAMESE": "vi", "THAI": "th",
     "SWAHILI": "sw",
 }
-_TRADITIONAL_CHINESE = frozenset("體國學會為這個來時說對開關門書車馬魚鳥龍臺萬與專業東絲")
+_TRADITIONAL_CHINESE = frozenset("體國學會為這個來時說對開關門書車馬魚鳥龍臺萬與專業東絲種識語檔並驗準據從將無務發後裡")
+_BRAZILIAN_PORTUGUESE = re.compile(r"\b(?:você|vocês|ônibus|trem|arquivo|acadêmic[oa]|fato|equipe)\b", re.IGNORECASE)
 
 
 @lru_cache(maxsize=1)
@@ -134,7 +170,28 @@ def _language_code(language, text: str) -> str | None:
     code = _LINGUA_TO_BCP47.get(getattr(language, "name", str(language)).upper())
     if code == "zh-Hans" and any(char in _TRADITIONAL_CHINESE for char in text):
         return "zh-Hant"
-    return code
+    # Lingua detects Portuguese but not region. Default to pt-PT and promote to
+    # pt-BR only when strong Brazilian lexical/orthographic markers occur.
+    if code == "pt-PT" and _BRAZILIAN_PORTUGUESE.search(text):
+        return "pt-BR"
+    if code:
+        return code
+    iso = getattr(language, "iso_code_639_1", None)
+    iso_name = getattr(iso, "name", None)
+    if iso_name and iso_name.upper() != "NONE":
+        return normalize_detected_language(iso_name)
+    return None
+
+
+def _confident_sample_codes(detector, samples: Iterable[str]) -> set[str]:
+    codes: set[str] = set()
+    for sample in samples:
+        values = detector.compute_language_confidence_values(sample)
+        if values and float(values[0].value) >= 0.55:
+            code = _language_code(values[0].language, sample)
+            if code:
+                codes.add(code)
+    return codes
 
 
 def detect_document_language(pages: Iterable[dict]) -> dict[str, object]:
@@ -152,19 +209,16 @@ def detect_document_language(pages: Iterable[dict]) -> dict[str, object]:
         code = _language_code(best.language, text)
         if confidence < 0.35:
             return {"language": "und", "confidence": round(confidence, 4), "supported": False}
-        confident_pages: set[str] = set()
-        for sample in page_samples:
-            page_values = detector.compute_language_confidence_values(sample)
-            if page_values and float(page_values[0].value) >= 0.55:
-                page_code = _language_code(page_values[0].language, sample)
-                if page_code:
-                    confident_pages.add(page_code)
-        if len(confident_pages) > 1:
+        confident_pages = _confident_sample_codes(detector, page_samples)
+        chunks = [chunk.strip() for chunk in re.split(r"\n\s*\n|\n", text)
+                  if sum(char.isalpha() for char in chunk) >= 40]
+        if len(confident_pages | _confident_sample_codes(detector, chunks[:40])) > 1:
             return {"language": "mul", "confidence": round(confidence, 4), "supported": False}
         if code is None:
             return {"language": "und", "confidence": round(confidence, 4), "supported": False}
         return {"language": code, "confidence": round(confidence, 4), "supported": code in DOCUMENT_LANGUAGE_CODES}
     except Exception:
+        logger.exception("Document language detection failed; preserving upload as und")
         return {"language": "und", "confidence": 0.0, "supported": False}
 
 

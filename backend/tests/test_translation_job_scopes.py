@@ -7,6 +7,8 @@ def _session(page_count=5):
         "pages": [{"page_num": page, "text": f"page {page}"} for page in range(1, page_count + 1)],
         "username": "testuser",
         "total_pages": page_count,
+        "source_language": "en",
+        "detected_source_language": "en",
     }
 
 

@@ -10,17 +10,31 @@ import {
   isWorkspaceModeAvailable,
   storeWorkspaceMode,
 } from './documentModes.js'
+import { t } from './i18n.js'
 
 
-const MODE_COPY = {
-  research: {
-    title: '연구 홈', library: '논문 라이브러리', history: '읽기 기록',
-    chats: '논문 AI', notes: '논문 노트', search: '연구 문서에서 검색', add: '논문 추가',
-  },
-  general: {
-    title: '문서 홈', library: '문서 라이브러리', history: '읽기 기록',
-    chats: '문서 AI', notes: '문서 노트', search: '일반 문서에서 검색', add: '문서 추가',
-  },
+function modeCopy(mode) {
+  const copy = {
+    research: {
+      title: t('navigation:researchDashboard'),
+      library: t('navigation:researchLibrary'),
+      history: t('navigation:history'),
+      chats: t('navigation:chats'),
+      notes: t('navigation:notes'),
+      search: t('navigation:researchSearch'),
+      add: t('navigation:addPaper'),
+    },
+    general: {
+      title: t('navigation:generalDashboard'),
+      library: t('navigation:generalLibrary'),
+      history: t('navigation:history'),
+      chats: t('navigation:generalChats'),
+      notes: t('navigation:generalNotes'),
+      search: t('navigation:generalSearch'),
+      add: t('navigation:addDocument'),
+    },
+  }
+  return copy[mode]
 }
 
 
@@ -42,7 +56,7 @@ export function createWorkspaceModeController({
   const uploadModeSwitch = document.getElementById('document-upload-switch-mode-btn')
 
   function getPageLabel(pageId) {
-    const copy = MODE_COPY[mode]
+    const copy = modeCopy(mode)
     return {
       dashboard: copy.title, library: copy.library, history: copy.history,
       chats: copy.chats, notes: copy.notes, graph: 'Research Graph',
@@ -50,7 +64,7 @@ export function createWorkspaceModeController({
   }
 
   function updateCopy() {
-    const copy = MODE_COPY[mode]
+    const copy = modeCopy(mode)
     document.body.dataset.workspaceMode = mode
     document.querySelectorAll('[data-workspace-mode]').forEach(button => {
       const selected = button.dataset.workspaceMode === mode
@@ -93,6 +107,8 @@ export function createWorkspaceModeController({
       setMode(mode === 'research' ? 'general' : 'research')
     })
   })
+
+  document.addEventListener('easypaper:locale-changed', updateCopy)
 
   async function initialize() {
     const [typesResult, settingsResult] = await Promise.allSettled([

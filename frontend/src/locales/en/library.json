@@ -1,5 +1,7 @@
 {
-  "empty": "No documents yet.",
   "document.count_one": "{{count}} document",
-  "document.count_other": "{{count}} documents"
+  "document.count_other": "{{count}} documents",
+  "subtitle": "Manage all saved papers in one place.",
+  "addDocument": "Add paper",
+  "addFolder": "Add folder"
 }

@@ -19,7 +19,8 @@ import { globalAnalyticsTracker } from './readingAnalytics.js'
 import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
 import { compareDocsByLastRead } from './readPages.js'
 import { buildScholarSearchUrl, extractCitationTitle } from './citationSearch.js'
-import { changeLocale, getLocale, initI18n, loadNamespaces, t } from './i18n.js'
+import { changeLocale, getLocale, initI18n, loadFeatureNamespaces, loadNamespaces, t } from './i18n.js'
+import { saveUserLanguagePreferences, saveDocumentLanguageOverride } from './languagePreferences.js'
 
 const i18nReady = initI18n()
 
@@ -129,22 +130,66 @@ function populateLanguageControls(settings = {}) {
     targetSelect.innerHTML = options
     targetSelect.value = targetValue
   }
+  const documentSource = $('document-source-lang')
+  const documentTarget = $('document-target-lang')
+  if (documentSource) {
+    documentSource.innerHTML = '<option value="auto">' + t('common:language.auto') + '</option>' + options
+    documentSource.value = state.sourceLanguage || 'auto'
+  }
+  if (documentTarget) {
+    documentTarget.innerHTML = options
+    documentTarget.value = state.preferredTargetLanguage || targetValue
+  }
+  renderDocumentLanguageStatus()
   for (const id of ['login-ui-locale', 'onboarding-ui-locale', 'setting-ui-locale']) {
     const select = $(id)
     if (select) select.value = getLocale()
   }
 }
 
+function languageDisplayName(code) {
+  return t('common:language.' + code, { fallback: code })
+}
+
+function renderDocumentLanguageStatus() {
+  const status = $('document-language-status')
+  const controls = $('document-language-controls')
+  if (!status || !controls) return
+  controls.hidden = !state.sessionId
+  if (!state.sessionId) return
+  const source = state.sourceLanguage === 'auto' ? state.detectedSourceLanguage : state.sourceLanguage
+  const target = state.preferredTargetLanguage || getModeSetting('targetLang', state.currentDocumentMode)
+  if (source === 'und') status.textContent = t('viewer:source.undetermined')
+  else if (source === 'mul') status.textContent = t('viewer:source.multiple')
+  else if (!languageCatalog.some(item => item.code === source)) {
+    status.textContent = t('viewer:source.unsupportedCode', { language: source })
+  } else if (source === target) {
+    status.textContent = t('viewer:translation.sameLanguage')
+  } else status.textContent = t('viewer:translation.pair', { source: languageDisplayName(source), target: languageDisplayName(target) })
+}
+
+async function persistDocumentLanguageOverride() {
+  if (!state.sessionId) return
+  const source = $('document-source-lang')?.value || state.sourceLanguage || 'auto'
+  const target = $('document-target-lang')?.value || state.preferredTargetLanguage || getModeSetting('targetLang', state.currentDocumentMode)
+  const saved = await saveDocumentLanguageOverride(
+    state.sessionId, { sourceLanguage: source, targetLanguage: target }, patchDocumentLanguagesAPI,
+  )
+  state.sourceLanguage = saved.source_language
+  state.preferredTargetLanguage = saved.preferred_target_language
+  state.pageInsightCache = {}
+  renderDocumentLanguageStatus()
+  showToast(t('viewer:language.saved'), 'success')
+}
+
 async function persistLanguagePreferences() {
   const source = $('setting-source-lang')?.value || localStorage.getItem('easypaper_default_source_language') || 'auto'
   const target = $('setting-target-lang')?.value || getModeSetting('targetLang', 'research')
-  localStorage.setItem('easypaper_default_source_language', source)
-  const saved = await saveLanguageSettingsAPI({ ui_locale: getLocale(), default_source_language: source, target_language: target })
-  if (state.sessionId) {
-    const documentSettings = await patchDocumentLanguagesAPI(state.sessionId, { source_language: source, preferred_target_language: target })
-    state.sourceLanguage = documentSettings.source_language
-    state.preferredTargetLanguage = documentSettings.preferred_target_language
-  }
+  const saved = await saveUserLanguagePreferences(
+    { uiLocale: getLocale(), sourceLanguage: source, targetLanguage: target },
+    { saveSettings: saveLanguageSettingsAPI, storage: localStorage },
+  )
+  showToast(t('settings:saved'), 'success')
   return saved
 }
 
@@ -164,7 +209,7 @@ async function syncLanguageSettingsFromServer() {
 async function handleLocaleSelector(event) {
   await changeLocale(event.target.value)
   populateLanguageControls()
-  if (event.target.id === 'setting-ui-locale') await persistLanguagePreferences()
+  if (state.username && ['setting-ui-locale', 'onboarding-ui-locale'].includes(event.target.id)) await persistLanguagePreferences()
 }
 
 
@@ -287,9 +332,13 @@ for (const id of ['login-ui-locale', 'onboarding-ui-locale', 'setting-ui-locale'
   const selector = $(id)
   if (selector) selector.addEventListener('change', (event) => handleLocaleSelector(event).catch(console.error))
 }
-document.addEventListener('easypaper:locale-changed', () => { if (languageCatalog.length) populateLanguageControls() })
+document.addEventListener('easypaper:locale-changed', () => { if (languageCatalog.length) populateLanguageControls(); renderDocumentLanguageStatus() })
+i18nReady.then(() => populateLanguageControls()).catch(console.error)
 if (settingSourceLang) settingSourceLang.addEventListener('change', () => persistLanguagePreferences().catch(console.error))
 if (settingTargetLang) settingTargetLang.addEventListener('change', () => persistLanguagePreferences().catch(console.error))
+for (const id of ['document-source-lang', 'document-target-lang']) {
+  $(id)?.addEventListener('change', () => persistDocumentLanguageOverride().catch(error => showToast(error.message, 'error')))
+}
 const viewerTopbar = $('viewer-topbar')
 const clearCacheBtn       = $('clear-cache-btn')
 const clearPagesCacheBtn  = $('clear-pages-cache-btn')
@@ -609,7 +658,8 @@ function showInsightJobProgress(sessionId, kind, title) {
   })
   retry.addEventListener('click', async () => {
     retry.disabled = true
-    await startInsightJobAPI(sessionId, kind, getTranslationOptions().targetLang, true)
+    const options = getTranslationOptions()
+    await startInsightJobAPI(sessionId, kind, options.targetLang, options.sourceLang, true)
     stopped = false
     cancel.disabled = false
     cancel.classList.remove('hidden')
@@ -669,7 +719,7 @@ function syncModeSettings(documentMode) {
   const isGeneral = settingsTranslationModeContext === 'general'
   const options = getTranslationOptions(settingsTranslationModeContext)
 
-  settingSourceLang.value = state.sessionId ? state.sourceLanguage : (localStorage.getItem("easypaper_default_source_language") || "auto")
+  settingSourceLang.value = localStorage.getItem("easypaper_default_source_language") || "auto"
   settingTargetLang.value = options.targetLang
   settingTransStyle.value = options.style
   settingTranslationMode.value = getTranslationMode(settingsTranslationModeContext)
@@ -876,13 +926,14 @@ async function handleFiles(files, targetFolderId = null, classification = null) 
       }
       successCount++
       if (result.document_mode === 'general' && getKeywordMode(result.document_mode) === 'auto' && result.total_pages > 20) {
-        const estimate = await estimateInsightJobAPI(result.session_id, 'keywords', getTranslationOptions(result.document_mode).targetLang)
+        const uploadLanguageOptions = getTranslationOptions(result.document_mode)
+        const estimate = await estimateInsightJobAPI(result.session_id, 'keywords', uploadLanguageOptions.targetLang, uploadLanguageOptions.sourceLang)
         const confirmed = await showCustomConfirm(
           `빈 페이지와 기존 캐시를 제외하고 최대 ${estimate.estimated_calls}회의 AI 호출이 예상됩니다. 전체 고급 어휘 생성을 시작할까요?`,
           { title: '장문 어휘 생성', confirmText: '생성 시작', danger: false },
         )
         if (confirmed) {
-          await startInsightJobAPI(result.session_id, 'keywords', getTranslationOptions(result.document_mode).targetLang, true)
+          await startInsightJobAPI(result.session_id, 'keywords', uploadLanguageOptions.targetLang, uploadLanguageOptions.sourceLang, true)
           showInsightJobProgress(result.session_id, 'keywords', `${lastTitle} · 고급 어휘`)
         }
       }
@@ -1133,7 +1184,7 @@ function createTransBlock(pageNum) {
   block.innerHTML = `
     <div class="trans-page-label">
       <span>${icon('fileText', 13, 'style="vertical-align:-2px;margin-right:3px"')}${pageNum}페이지</span>
-      <span class="trans-page-status" id="trans-status-${pageNum}">대기 중</span>
+      <span class="trans-page-status" id="trans-status-${pageNum}">${t('viewer:translation.waiting')}</span>
     </div>
     <div class="trans-tabs${state.disableInsights ? ' insights-off' : ''}" id="trans-tabs-${pageNum}">
       <button class="trans-tab-btn active" data-tab="translation">번역</button>
@@ -1231,9 +1282,9 @@ function loadPageInsight(pageNum, kind, force) {
   contentEl.innerHTML = `<div class="trans-waiting"><div class="trans-wait-spinner"></div><span>${kind === 'keywords' ? '키워드' : '요약'} 생성 중...</span></div>`
 
   let buffer = ''
-  const targetLang = getTranslationOptions().targetLang
+  const { targetLang, sourceLang } = getTranslationOptions()
   streamPageInsightAPI(
-    state.sessionId, pageNum, kind, targetLang, force,
+    state.sessionId, pageNum, kind, targetLang, sourceLang, force,
     (token) => { buffer += token },
     () => {
       state.pageInsightCache[cacheKey] = buffer
@@ -1496,6 +1547,7 @@ function updateProgressMiniRaw(done, total, isRunning = true) {
     progressMini.classList.remove('hidden')
     progressMiniBar.style.setProperty('--progress', `${pct}%`)
     progressMiniText.textContent = `${pct}%`
+    progressMini.setAttribute('aria-label', t('viewer:translation.progress', { completed: done, total }))
   }
 }
 
@@ -2012,7 +2064,7 @@ retranslateBtn.addEventListener('click', async () => {
         contentEl.innerHTML = getTranslationPlaceholderHtml(i)
       }
       if (statusEl) {
-        statusEl.textContent = '대기 중'
+        statusEl.textContent = t('viewer:translation.waiting')
         statusEl.classList.remove('done')
       }
     }
@@ -4826,6 +4878,7 @@ document.querySelectorAll('.view-toggle-btn').forEach(btn => {
 updateViewToggleUI()
 
 async function showLibraryScreen(shouldPushState = true, targetPage) {
+  await loadFeatureNamespaces(targetPage === 'dashboard' ? 'dashboard' : targetPage === 'chats' ? 'chat' : 'library')
   // 뷰어에서 나가는 시점이므로, 아직 디바운스 대기 중인 "마지막으로 읽은
   // 페이지" 저장이 있으면 Dashboard/Library가 새 데이터를 가져오기 전에
   // 먼저 끝마친다 (스크롤 직후 바로 뒤로가기를 눌렀을 때 최근 읽은 논문
@@ -4867,6 +4920,7 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
   // openChatDrawer()를 부르는 경우엔 그냥 무해한 no-op이다.
   if (pageId !== 'chats' || state.currentWorkspacePage !== 'chats') closeChatDrawer()
   state.currentWorkspacePage = pageId
+  await loadFeatureNamespaces(pageId === 'chats' ? 'chat' : pageId)
 
   if (sidebarNav) {
     sidebarNav.querySelectorAll('.sidebar-nav-item[data-page]').forEach(btn => {
@@ -6221,7 +6275,7 @@ function createFolderCard(folder) {
     ? `<div class="folder-card-icon">${icon('folder', 18, 'fill="currentColor" stroke="none"')}</div>
       <div class="folder-card-name" title="${escapeHtml(folder.name)}">${escapeHtml(folder.name)}</div>
       <div class="folder-card-meta">
-        <span>${icon('fileText', 12)}문서 ${paperCount}개</span>
+        <span>${icon('fileText', 12)}${t('library:document.count', { count: paperCount })}</span>
         <span class="meta-dot"></span>
         <span>${icon('folder', 12)}하위 폴더 ${childFolderCount}개</span>
       </div>
@@ -9301,6 +9355,7 @@ async function hydrateAnnotationsAndMemosFromServer(docId) {
 }
 
 async function openFromLibrary(doc, shouldPushState = true) {
+  await loadFeatureNamespaces('viewer')
   if (docOpeningId === doc.id) return
   docOpeningId = doc.id
   try {
@@ -9328,6 +9383,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
     state.sourceLanguage = doc.source_language || "auto"
     state.detectedSourceLanguage = doc.detected_source_language || "und"
     state.preferredTargetLanguage = doc.preferred_target_language || null
+    populateLanguageControls()
 
     // 읽기 전 브리핑 게이팅: 설정에서 껐거나 이미 이 문서의 브리핑을 본 적
     // 있으면 건너뛴다. primer_shown 필드 자체가 없는 구버전 문서(이 기능

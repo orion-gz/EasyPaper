@@ -1,4 +1,5 @@
 import { icon } from '../icons.js'
+import { t } from '../i18n.js'
 import { fetchLibrary } from '../library.js'
 import '../styles/general-document-home.css'
 
@@ -123,14 +124,14 @@ export async function renderGeneralDocumentHomePage() {
             <p>CONTINUE READING</p>
             <h3 id="document-home-recent-title">최근 문서</h3>
           </div>
-          <span>${recent.length ? `최근 ${recent.length}개` : '아직 문서가 없습니다'}</span>
+          <span>${recent.length ? t('library:document.count', { count: recent.length }) : t('dashboard:generalDocumentsEmpty')}</span>
         </div>
         <div class="document-home-recent-list">
           ${recent.length
             ? recent.map(renderRecentDocument).join('')
             : `<div class="document-home-empty">
                 ${icon('folderPlus', 24)}
-                <strong>일반 문서가 없습니다.</strong>
+                <strong>${t('dashboard:generalDocumentsEmpty')}</strong>
                 <span>PDF를 업로드하면 최근 문서가 여기에 표시됩니다.</span>
               </div>`}
         </div>
@@ -145,3 +146,11 @@ export async function renderGeneralDocumentHomePage() {
     })
   })
 }
+
+
+document.addEventListener('easypaper:locale-changed', () => {
+  const root = document.getElementById('page-dashboard')
+  if (root?.classList.contains('active') && document.body.dataset.workspaceMode === 'general') {
+    renderGeneralDocumentHomePage()
+  }
+})

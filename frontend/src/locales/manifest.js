@@ -4,4 +4,11 @@ export const UI_LOCALES = {
 }
 
 export const INITIAL_NAMESPACES = ['common', 'navigation', 'onboarding']
-export const FEATURE_NAMESPACES = ['settings', 'library', 'viewer', 'errors']
+export const FEATURE_NAMESPACES = {
+  settings: ['settings', 'errors'],
+  dashboard: ['dashboard', 'errors'],
+  library: ['library', 'errors'],
+  viewer: ['viewer', 'chat', 'errors'],
+  chat: ['chat', 'errors'],
+  updates: ['updates', 'errors'],
+}

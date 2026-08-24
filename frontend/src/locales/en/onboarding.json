@@ -1,6 +1,13 @@
 {
-  "heading": "Welcome to EasyPaper",
   "uiLanguage": "Interface language",
   "next": "Next",
-  "confirm": "Confirm"
+  "confirm": "Confirm",
+  "purpose.heading": "How will you use EasyPaper?",
+  "purpose.help": "This only sets the default workspace and does not classify documents automatically. You can change it from the sidebar at any time.",
+  "purpose.research": "Research papers",
+  "purpose.researchHelp": "Paper translation, pre-reading briefings, comparisons, and Research Graph",
+  "purpose.general": "General documents",
+  "purpose.generalHelp": "Translation and document AI for technical documents, books, articles, reports, and manuals",
+  "detecting": "Checking for installed AI engines…",
+  "back": "← Back"
 }
