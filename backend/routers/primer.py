@@ -63,6 +63,7 @@ def _ensure_generation_started(doc_id: str, target_lang: str, session: dict, cur
                     doc_id, session["pages"], session["metadata"],
                     username=current_user, pdf_path=session["pdf_path"],
                     target_lang=target_lang, session_id=doc_id,
+                    source_lang=session.get("source_language") or session.get("detected_source_language", "auto"),
                 )
             _last_failure_at.pop(task_key, None)
         except Exception as e:

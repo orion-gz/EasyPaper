@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run validate:i18n && vite build",
+    "validate:i18n": "node scripts/validate-locales.mjs",
     "test:unit": "node --test tests/*.test.js",
     "preview": "vite preview",
     "test:e2e": "playwright test",
@@ -26,6 +27,7 @@
     "cytoscape": "^3.34.0",
     "cytoscape-fcose": "^2.2.0",
     "dompurify": "^3.4.12",
+    "i18next": "^26.4.0",
     "marked": "^18.0.5"
   }
 }

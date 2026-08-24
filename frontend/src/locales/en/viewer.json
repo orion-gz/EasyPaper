@@ -1,0 +1,7 @@
+{
+  "translation.start": "Start translation",
+  "translation.waiting": "Waiting",
+  "translation.progress": "{{completed}} of {{total}} pages",
+  "source.unsupported": "This source language is not currently supported.",
+  "content.direction": "auto"
+}

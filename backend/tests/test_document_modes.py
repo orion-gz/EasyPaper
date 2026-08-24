@@ -319,7 +319,7 @@ async def test_background_job_promotes_legacy_research_cache_without_retranslati
     )
 
     current_suffix = translation_cache_suffix(
-        "research", "research_paper", "한국어", "academic", False, True, False,
+        "research", "research_paper", "ko", "academic", False, True, False,
     )
     assert translated["called"] is False
     assert db.db_get_translation("legacy-job", 1, current_suffix, fallback=False)

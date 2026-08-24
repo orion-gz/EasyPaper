@@ -1,4 +1,36 @@
+import { errorMessage } from './i18n.js'
+
 const API_BASE = '/api'
+
+export async function getLanguagesAPI() {
+  const res = await fetch(`${API_BASE}/languages`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Language catalog request failed")
+  return res.json()
+}
+
+export async function getLanguageSettingsAPI() {
+  const res = await fetch(`${API_BASE}/settings/language`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Language settings request failed")
+  return res.json()
+}
+
+export async function saveLanguageSettingsAPI(payload) {
+  const res = await fetch(`${API_BASE}/settings/language`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(errorMessage(await res.json().catch(() => ({})),
+    "Language settings save failed"))
+  return res.json()
+}
+
+export async function patchDocumentLanguagesAPI(docId, payload) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/languages`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(errorMessage(await res.json().catch(() => ({})),
+    "Document language save failed"))
+  return res.json()
+}
 export async function fetchDocumentTypesAPI() {
   const res = await fetch(`${API_BASE}/document-types`)
   if (!res.ok) throw new Error("문서 종류 조회 실패")
@@ -28,18 +60,20 @@ export async function patchDocumentClassificationAPI(docId, payload) {
   return res.json()
 }
 
-export async function estimateInsightJobAPI(sessionId, kind, targetLang = '한국어') {
-  const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/estimate?target_lang=${encodeURIComponent(targetLang)}`)
+export async function estimateInsightJobAPI(sessionId, kind, targetLang = 'ko') {
+  const sourceLang = localStorage.getItem('easypaper_default_source_language') || 'auto'
+  const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/estimate?target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}`)
   if (!res.ok) throw new Error('인사이트 작업 예상량 조회 실패')
   return res.json()
 }
 
-export async function startInsightJobAPI(sessionId, kind, targetLang = '한국어', confirmed = false) {
+export async function startInsightJobAPI(sessionId, kind, targetLang = 'ko', confirmed = false) {
+  const sourceLang = localStorage.getItem('easypaper_default_source_language') || 'auto'
   const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/start`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target_lang: targetLang, confirmed }),
+    body: JSON.stringify({ target_lang: targetLang, source_lang: sourceLang, confirmed }),
   })
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail?.message || '인사이트 작업 시작 실패')
+  if (!res.ok) throw new Error(errorMessage(await res.json().catch(() => ({})), '인사이트 작업 시작 실패'))
   return res.json()
 }
 
@@ -59,8 +93,8 @@ export async function uploadPDF(file, options, onProgress) {
   const formData = new FormData()
   formData.append('file', file)
 
-  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode, documentMode, documentType } = options
-  const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}&keyword_mode=${encodeURIComponent(keywordMode || 'manual')}&summary_mode=${encodeURIComponent(summaryMode || 'manual')}`
+  const { targetLang, sourceLang = "auto", style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode, documentMode, documentType } = options
+  const query = `?target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}&keyword_mode=${encodeURIComponent(keywordMode || 'manual')}&summary_mode=${encodeURIComponent(summaryMode || 'manual')}`
   const classificationQuery = "&document_mode=" + encodeURIComponent(documentMode || "research") + "&document_type=" + encodeURIComponent(documentType || "research_paper")
 
   return new Promise((resolve, reject) => {
@@ -79,7 +113,7 @@ export async function uploadPDF(file, options, onProgress) {
       } else {
         try {
           const err = JSON.parse(xhr.responseText)
-          reject(new Error(err.detail || '업로드 실패'))
+          reject(new Error(errorMessage(err, '업로드 실패')))
         } catch {
           reject(new Error('업로드 실패'))
         }
@@ -126,8 +160,8 @@ export async function getTranslationStatus(sessionId) {
  */
 export function streamTranslation(sessionId, pageNum, options, onToken, onDone, onError) {
   const controller = new AbortController()
-  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs } = options
-  const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}`
+  const { targetLang, sourceLang = "auto", style, ignoreMath, ignoreTable, ignoreRefs } = options
+  const query = `?target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}`
 
   fetch(`${API_BASE}/translate/${sessionId}/${pageNum}${query}`, {
     signal: controller.signal,
@@ -135,7 +169,7 @@ export function streamTranslation(sessionId, pageNum, options, onToken, onDone, 
     .then(async (res) => {
       if (!res.ok) {
         const err = await res.json()
-        onError(new Error(err.detail || '번역 실패'))
+        onError(new Error(errorMessage(err, '번역 실패')))
         return
       }
 
@@ -198,7 +232,8 @@ export function streamTranslation(sessionId, pageNum, options, onToken, onDone, 
  */
 export function streamPageInsightAPI(sessionId, pageNum, kind, targetLang, force, onToken, onDone, onError) {
   const controller = new AbortController()
-  const query = `?kind=${encodeURIComponent(kind)}&target_lang=${encodeURIComponent(targetLang)}&force=${force ? 'true' : 'false'}`
+  const sourceLang = localStorage.getItem('easypaper_default_source_language') || 'auto'
+  const query = `?kind=${encodeURIComponent(kind)}&target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}&force=${force ? 'true' : 'false'}`
 
   fetch(`${API_BASE}/insight/${sessionId}/${pageNum}${query}`, {
     signal: controller.signal,
@@ -268,8 +303,8 @@ export async function getJobStatus(sessionId) {
  * 특정 페이지의 번역 결과를 조회합니다 (MD 기반).
  */
 export async function getPageTranslation(sessionId, pageNum, options) {
-  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs } = options
-  const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}`
+  const { targetLang, sourceLang = "auto", style, ignoreMath, ignoreTable, ignoreRefs } = options
+  const query = `?target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}`
   const res = await fetch(`${API_BASE}/jobs/${sessionId}/page/${pageNum}${query}`, { cache: 'no-store' })
   if (!res.ok) return null
   return res.json()
@@ -398,6 +433,7 @@ export async function restartJobAPI(sessionId, options) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       target_lang: options.targetLang,
+      source_lang: options.sourceLang || "auto",
       style: options.style,
       ignore_math: options.ignoreMath,
       ignore_table: options.ignoreTable,

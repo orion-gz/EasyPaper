@@ -11,9 +11,10 @@ from config import get_pdf_parser_engine
 from venv_manager import relaunch_into_required_venv
 relaunch_into_required_venv(get_pdf_parser_engine())
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os
 from contextlib import asynccontextmanager
@@ -32,6 +33,7 @@ from routers import auth as auth_router
 from routers import agy as agy_router
 from routers import insight as insight_router
 from routers import primer as primer_router
+from routers import languages as languages_router
 from routers import workspace as workspace_router
 from services.auth import get_current_user
 
@@ -52,7 +54,15 @@ app = FastAPI(
     description="PDF 논문 번역 서비스 (Gemma 4 E4B + Ollama)",
     version="1.0.0",
     lifespan=lifespan,
+
 )
+
+@app.exception_handler(HTTPException)
+async def localized_http_exception_handler(request: Request, exc: HTTPException):
+    if isinstance(exc.detail, dict) and {"code", "params", "fallback"} <= exc.detail.keys():
+        return JSONResponse(status_code=exc.status_code, content=exc.detail, headers=exc.headers)
+    return await http_exception_handler(request, exc)
+
 
 # CORS 설정 (모든 오리진 허용 — NPM/리버스 프록시 환경)
 app.add_middleware(
@@ -73,6 +83,7 @@ app.include_router(jobs_router.router, prefix="/api", dependencies=[Depends(get_
 app.include_router(agy_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["AGY"])
 app.include_router(insight_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Insight"])
 app.include_router(workspace_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Workspace"])
+app.include_router(languages_router.router, prefix="/api", tags=["Languages"])
 app.include_router(primer_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Primer"])
 
 

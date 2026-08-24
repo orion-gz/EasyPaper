@@ -71,7 +71,7 @@ def test_auto_translation_job_starts_before_primer(test_client, isolated_dirs, m
     monkeypatch.setattr(upload_module, "generate_primer", fake_generate_primer)
 
     res = test_client.post(
-        "/api/upload?translation_mode=auto",
+        "/api/upload?translation_mode=auto&source_lang=en",
         files={"file": ("paper.pdf", _minimal_pdf_bytes(), "application/pdf")},
     )
 
@@ -108,5 +108,27 @@ def test_auto_translation_skips_full_job_at_fifty_pages(test_client, isolated_di
 
     assert response.status_code == 200
     assert response.json()["total_pages"] == 50
+    assert starts == []
+    upload_module.sessions.pop(response.json()["session_id"], None)
+
+
+def test_auto_translation_does_not_start_for_undetermined_source(test_client, isolated_dirs, monkeypatch):
+    upload_dir = isolated_dirs["upload_dir"]
+    monkeypatch.setattr(upload_module, "UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(upload_module, "MAX_FILE_SIZE_MB", 50)
+    starts = []
+    monkeypatch.setattr(upload_module, "start_job", lambda *args, **kwargs: starts.append(kwargs))
+
+    async def no_primer(*args, **kwargs):
+        return {}
+
+    monkeypatch.setattr(upload_module, "generate_primer", no_primer)
+    response = test_client.post(
+        "/api/upload?translation_mode=auto",
+        files={"file": ("empty.pdf", _minimal_pdf_bytes(), "application/pdf")},
+    )
+    assert response.status_code == 200
+    assert response.json()["detected_source_language"] == "und"
+    assert response.json()["translation_skipped_reason"] == "unsupported_source_language"
     assert starts == []
     upload_module.sessions.pop(response.json()["session_id"], None)

@@ -1,0 +1,7 @@
+{
+  "unsupported_source_language": "Unsupported source language: {{language}}",
+  "unsupported_target_language": "Unsupported target language: {{language}}",
+  "unsupported_ui_locale": "Unsupported interface language: {{locale}}",
+  "same_source_and_target_language": "Source and target languages must be different.",
+  "unknown": "Something went wrong. Please try again."
+}

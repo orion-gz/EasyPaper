@@ -79,7 +79,10 @@ def _chat_quote_image_path(doc_id: str, quote_id: str) -> Optional[str]:
 
 def save_document(doc_id: str, filename: str, pdf_src_path: str,
                   total_pages: int, metadata: dict, username: str = "admin",
-                  document_mode: str = "research", document_type: str = "research_paper") -> dict:
+                  document_mode: str = "research", document_type: str = "research_paper",
+                  source_language: str = "auto", detected_source_language: str = "und",
+                  source_language_confidence: Optional[float] = None,
+                  preferred_target_language: Optional[str] = None) -> dict:
     """PDF를 라이브러리에 영구 저장하고 데이터베이스에 기록합니다."""
     doc_dir = os.path.join(LIBRARY_DIR, doc_id)
     os.makedirs(os.path.join(doc_dir, "translations"), exist_ok=True)
@@ -91,6 +94,9 @@ def save_document(doc_id: str, filename: str, pdf_src_path: str,
     doc_meta = db_save_document(
         doc_id, username, filename, _pdf_path(doc_id), total_pages, metadata,
         document_mode=document_mode, document_type=document_type,
+        source_language=source_language, detected_source_language=detected_source_language,
+        source_language_confidence=source_language_confidence,
+        preferred_target_language=preferred_target_language,
     )
     doc_meta["translated_pages"] = []
     return doc_meta

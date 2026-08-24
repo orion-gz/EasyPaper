@@ -25,7 +25,8 @@ router = APIRouter()
 async def translate_page(
     session_id: str,
     page_num: int,
-    target_lang: str = "한국어",
+    target_lang: str = "ko",
+    source_lang: str = "auto",
     style: str = "academic",
     ignore_math: bool = False,
     ignore_table: bool = True,
@@ -38,6 +39,26 @@ async def translate_page(
     """
     enforce_rate_limit("translate", current_user)
     session = require_session_owner(session_id, current_user)
+    from services.languages import api_language_error, normalize_document_language
+    try:
+        target_lang = normalize_document_language(target_lang, allow_legacy=True)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(target_lang))
+    try:
+        requested_source = normalize_document_language(source_lang, allow_auto=True)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(source_lang, source=True))
+    source_lang = session.get("detected_source_language", "und") if requested_source == "auto" else requested_source
+    if source_lang in {"und", "mul"}:
+        raise HTTPException(status_code=409, detail={
+            "code": "unsupported_source_language", "params": {"language": source_lang},
+            "fallback": "Set a supported source language before translating.",
+        })
+    if source_lang == target_lang:
+        raise HTTPException(status_code=409, detail={
+            "code": "same_source_and_target_language", "params": {"language": target_lang},
+            "fallback": "Source and target languages must be different.",
+        })
     total_pages = session["total_pages"]
 
     if page_num < 1 or page_num > total_pages:
@@ -59,7 +80,7 @@ async def translate_page(
     document_type = session.get("document_type", "research_paper")
     suffix_candidates = translation_cache_candidates(
         document_mode, document_type, target_lang, style,
-        ignore_math, ignore_table, ignore_refs,
+        ignore_math, ignore_table, ignore_refs, source_lang,
     )
     suffix = suffix_candidates[0]
 
@@ -135,6 +156,7 @@ async def translate_page(
                 async for token in stream_translation(
                     chunk,
                     target_lang=target_lang,
+                    source_lang=source_lang,
                     style=style,
                     ignore_math=ignore_math,
                     ignore_table=ignore_table,

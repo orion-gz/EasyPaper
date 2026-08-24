@@ -1,0 +1,7 @@
+{
+  "translation.start": "번역 시작",
+  "translation.waiting": "대기 중",
+  "translation.progress": "{{total}}페이지 중 {{completed}}페이지",
+  "source.unsupported": "현재 지원하지 않는 원문 언어입니다.",
+  "content.direction": "auto"
+}

@@ -40,8 +40,16 @@ test('모드별 저장 값이 서로 덮어쓰지 않는다', () => {
   setModeSetting('style', 'research', 'academic', storage)
   setModeSetting('style', 'general', 'summary', storage)
 
+
   assert.equal(storage.getItem(modeSettingStorageKey('style', 'research')), 'academic')
   assert.equal(storage.getItem(modeSettingStorageKey('style', 'general')), 'summary')
   assert.equal(getModeSetting('style', 'research', storage), 'academic')
   assert.equal(getModeSetting('style', 'general', storage), 'summary')
+})
+
+test('기존 표시명 언어 설정을 BCP 47 코드로 한 번 이전한다', () => {
+  const storage = memoryStorage({ easypaper_target_lang: '한국어' })
+
+  assert.equal(getModeSetting('targetLang', 'research', storage), 'ko')
+  assert.equal(storage.getItem(modeSettingStorageKey('targetLang', 'research')), 'ko')
 })

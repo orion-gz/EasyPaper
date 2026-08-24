@@ -30,7 +30,7 @@ def fake_generation(monkeypatch):
     def fake_require_session_owner(doc_id, current_user):
         return {"pages": [], "metadata": {"title": "My Paper"}, "pdf_path": "/x/paper.pdf"}
 
-    async def fake_generate_primer(doc_id, pages, metadata, username, pdf_path, target_lang, session_id):
+    async def fake_generate_primer(doc_id, pages, metadata, username, pdf_path, target_lang, session_id, source_lang="auto"):
         calls["count"] += 1
         await asyncio.sleep(2)  # 두 번째 요청이 들어올 때까지 완료되지 않게 함
         return {"hook": "done"}

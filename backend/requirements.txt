@@ -9,3 +9,4 @@ python-dotenv==1.0.1
 matplotlib==3.11.1
 # marker-pdf/surya-ocr require Pillow >=10.2.0,<11.
 pillow>=10.2.0,<11
+lingua-language-detector==2.2.0

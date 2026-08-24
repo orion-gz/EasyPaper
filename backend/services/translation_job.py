@@ -60,12 +60,13 @@ def get_job_status(session_id: str) -> Optional[dict]:
 def start_job(
     session_id: str,
     pages: list,
-    target_lang: str = "한국어",
+    target_lang: str = "ko",
     style: str = "academic",
     ignore_math: bool = False,
     ignore_table: bool = True,
     ignore_refs: bool = False,
     page_numbers: Optional[list[int]] = None,
+    source_lang: str = "auto",
 ) -> dict:
     """
     백그라운드 번역 잡을 시작합니다.
@@ -84,6 +85,7 @@ def start_job(
     if existing and existing.get("status") == "completed":
         opts = existing.get("options", {})
         if (opts.get("target_lang") == target_lang and
+            opts.get("source_lang", "auto") == source_lang and
             opts.get("style") == style and
             opts.get("ignore_math") == ignore_math and
             opts.get("ignore_table") == ignore_table and
@@ -105,6 +107,7 @@ def start_job(
         "failed_pages": [],
         "options": {
             "target_lang": target_lang,
+            "source_lang": source_lang,
             "style": style,
             "ignore_math": ignore_math,
             "ignore_table": ignore_table,
@@ -158,7 +161,8 @@ def resume_incomplete_jobs(sessions: dict) -> None:
 async def _run_job(session_id: str, pages: list, job: dict) -> None:
     """모든 페이지를 순차적으로 번역합니다."""
     options = job.get("options", {})
-    target_lang = options.get("target_lang", "한국어")
+    target_lang = options.get("target_lang", "ko")
+    source_lang = options.get("source_lang", "auto")
     style = options.get("style", "academic")
     ignore_math = options.get("ignore_math", False)
     ignore_table = options.get("ignore_table", True)
@@ -180,7 +184,7 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
     from services.document_policy import translation_cache_candidates
     suffix_candidates = translation_cache_candidates(
         document_mode, document_type, target_lang, style,
-        ignore_math, ignore_table, ignore_refs,
+        ignore_math, ignore_table, ignore_refs, source_lang,
     )
     suffix = suffix_candidates[0]
     target_page_numbers = set(job.get("target_pages") or [page["page_num"] for page in pages])
@@ -258,6 +262,7 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                 translation = await _translate_page(
                     tagged_text,
                     target_lang=target_lang,
+                    source_lang=source_lang,
                     style=style,
                     ignore_math=ignore_math,
                     ignore_table=ignore_table,
@@ -351,6 +356,7 @@ async def _translate_page(
     ignore_math: bool,
     ignore_table: bool,
     ignore_refs: bool,
+    source_lang: str = "auto",
     doc_title: str = "",
     prev_context: str = "",
     session_id: str = None,
@@ -372,6 +378,7 @@ async def _translate_page(
         async for token in stream_translation(
             chunk,
             target_lang=target_lang,
+            source_lang=source_lang,
             style=style,
             ignore_math=ignore_math,
             ignore_table=ignore_table,

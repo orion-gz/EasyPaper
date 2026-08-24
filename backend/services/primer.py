@@ -161,6 +161,7 @@ async def generate_primer(
     username: str,
     pdf_path: str,
     target_lang: str = "한국어",
+    source_lang: str = "auto",
     session_id: str = None,
 ) -> dict:
     """primer 콘텐츠를 생성하고 캐시에 저장한 뒤 결과 dict를 반환한다.
@@ -178,7 +179,8 @@ async def generate_primer(
 
     async def _run_llm() -> dict:
         return await generate_reading_primer(
-            title, sections, candidate_terms, target_lang=target_lang, session_id=session_id
+            title, sections, candidate_terms, target_lang=target_lang,
+            source_lang=source_lang, session_id=session_id,
         )
 
     async def _run_figure() -> Optional[dict]:
