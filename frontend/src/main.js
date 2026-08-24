@@ -1183,7 +1183,7 @@ function createTransBlock(pageNum) {
 
   block.innerHTML = `
     <div class="trans-page-label">
-      <span>${icon('fileText', 13, 'style="vertical-align:-2px;margin-right:3px"')}${pageNum}페이지</span>
+      <span>${icon('fileText', 13, 'style="vertical-align:-2px;margin-right:3px"')}${t('viewer:pageLabel', { page: pageNum })}</span>
       <span class="trans-page-status" id="trans-status-${pageNum}">${t('viewer:translation.waiting')}</span>
     </div>
     <div class="trans-tabs${state.disableInsights ? ' insights-off' : ''}" id="trans-tabs-${pageNum}">
@@ -2443,7 +2443,7 @@ const PROVIDER_CONFIG = [
     ]
   },
   {
-    id: 'ollama', label: 'Ollama (로컬)', icon: icon('hardDrive', 13),
+    id: 'ollama', label: 'Ollama', icon: icon('hardDrive', 13),
     models: [
       { value: 'qwen3.5:9b', label: 'qwen3.5 9b' },
       { value: 'llama3.1:8b', label: 'llamma 3.1' },
@@ -4825,12 +4825,12 @@ function syncLibraryTabUI(activeTab, { resetFilters = true } = {}) {
 
   const subtitleEl = document.querySelector('.library-header-subtitle')
   if (subtitleEl) {
-    const noun = workspaceModeController.getMode() === 'general' ? '문서' : '논문'
-    if (activeTab === 'trash') {
-      subtitleEl.textContent = `휴지통에 보관 중인 ${noun}입니다. 복원하거나 영구 삭제할 수 있습니다.`
-    } else {
-      subtitleEl.textContent = `보관함에 저장된 모든 ${noun}를 한 곳에서 관리하세요`
+    const subtitles = {
+      research: { archive: t('library:subtitle.research.archive'), trash: t('library:subtitle.research.trash') },
+      general: { archive: t('library:subtitle.general.archive'), trash: t('library:subtitle.general.trash') },
     }
+    const mode = workspaceModeController.getMode() === 'general' ? 'general' : 'research'
+    subtitleEl.textContent = subtitles[mode][activeTab === 'trash' ? 'trash' : 'archive']
   }
 
   if (libTabTrash) libTabTrash.classList.toggle('active', activeTab === 'trash')
@@ -9553,7 +9553,10 @@ function setLibraryAddMenuOpen(open) {
   if (!wrap) return
   wrap.classList.toggle('open', open)
   libUploadBtn.setAttribute('aria-expanded', String(open))
-  libUploadBtn.setAttribute('aria-label', open ? '추가 메뉴 닫기' : '추가 메뉴 열기')
+  const labelKey = open ? 'common:addMenu.close' : 'common:addMenu.open'
+  const label = open ? t('common:addMenu.close') : t('common:addMenu.open')
+  libUploadBtn.dataset.i18nAriaLabel = labelKey
+  libUploadBtn.setAttribute('aria-label', label)
 }
 libUploadBtn.addEventListener('click', () => setLibraryAddMenuOpen(!document.querySelector('.lib-add-fab-wrap')?.classList.contains('open')))
 $('lib-add-paper-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); fileInput.click() })
@@ -12998,11 +13001,11 @@ function openChatSidebar() {
 
 function buildChatWelcomeHtml() {
   const isResearch = state.currentDocumentMode === 'research'
-  const noun = isResearch ? '논문' : '문서'
   const examples = isResearch
-    ? ['핵심 연구 내용과 기여도를 요약해줘.', '제안한 방법론의 과정을 설명해줘.', '실험 결과의 주요 수치와 의의는 무엇이야?']
-    : ['이 문서의 핵심 내용을 요약해줘.', '중요한 절차와 전제 조건을 설명해줘.', '주의사항과 핵심 수치를 찾아줘.']
-  return `<div class="chat-message assistant"><div class="message-bubble">안녕하세요! 이 ${noun}에 대해 궁금한 점을 질문해 주세요.<br><br><strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong><ul>${examples.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div></div>`
+    ? [t('chat:suggestions.research.summary'), t('chat:suggestions.research.method'), t('chat:suggestions.research.results')]
+    : [t('chat:suggestions.general.summary'), t('chat:suggestions.general.procedure'), t('chat:suggestions.general.cautions')]
+  const welcome = isResearch ? t('chat:welcome.research') : t('chat:welcome.general')
+  return `<div class="chat-message assistant"><div class="message-bubble">${escapeHtml(welcome)}<br><br><strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}${escapeHtml(t('chat:suggestions.label'))}</strong><ul>${examples.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div></div>`
 }
 
 function resetChatUI() {
@@ -13639,7 +13642,10 @@ function initChatListeners() {
       if (!inputBox) return
 
       const expanded = inputBox.classList.toggle('expanded')
-      const label = expanded ? '입력창 축소' : '입력창 확장'
+      const labelKey = expanded ? 'common:chatInput.collapse' : 'common:chatInput.expand'
+      const label = expanded ? t('common:chatInput.collapse') : t('common:chatInput.expand')
+      chatInputExpandBtn.dataset.i18nAriaLabel = labelKey
+      chatInputExpandBtn.dataset.i18nTitle = labelKey
       chatInputExpandBtn.setAttribute('aria-expanded', String(expanded))
       chatInputExpandBtn.setAttribute('aria-label', label)
       chatInputExpandBtn.title = label
@@ -16168,18 +16174,18 @@ async function loadPDFOutline() {
       // 목차 메타데이터가 존재하지 않는 경우를 대비한 전체 페이지 리스트 폴백(Fallback) 렌더링
       const infoMsg = document.createElement('div')
       infoMsg.style.cssText = 'font-size:11px; color:var(--text-muted); padding:4px 10px 12px; border-bottom:1px dashed var(--border); margin-bottom:8px; line-height:1.4;'
-      infoMsg.innerHTML = `${icon('info', 12, 'style="vertical-align:-2px;margin-right:3px"')}본 PDF에 목차(TOC) 정보가 존재하지 않아, 전체 페이지 리스트를 대신 제공합니다.`
+      infoMsg.innerHTML = `${icon('info', 12, 'style="vertical-align:-2px;margin-right:3px"')}${t('viewer:outline.noToc')}`
       outlineContent.appendChild(infoMsg)
 
       for (let p = 1; p <= state.totalPages; p++) {
         const div = document.createElement('div')
         div.className = 'outline-item depth-0'
         const iconSvg = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
-        div.innerHTML = `${iconSvg}<span>${p} 페이지</span>`
+        div.innerHTML = `${iconSvg}<span>${t('viewer:pageLabel', { page: p })}</span>`
         div.addEventListener('click', () => {
           scrollToPage(viewerScrollContainer, p)
         })
-        div.title = `${p}페이지로 이동`
+        div.title = t('viewer:goToPage', { page: p })
         outlineContent.appendChild(div)
       }
       return
@@ -16197,7 +16203,7 @@ async function loadPDFOutline() {
           div.addEventListener('click', () => {
             scrollToPage(viewerScrollContainer, item.pageNum)
           })
-          div.title = `${item.pageNum}페이지로 이동`
+          div.title = t('viewer:goToPage', { page: item.pageNum })
         }
         outlineContent.appendChild(div)
         if (item.items && item.items.length > 0) {

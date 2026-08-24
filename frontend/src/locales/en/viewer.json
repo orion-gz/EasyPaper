@@ -10,5 +10,8 @@
   "source.unsupportedCode": "Detected {{language}}, which is not supported for automatic translation.",
   "translation.sameLanguage": "Translation skipped; insights remain available.",
   "translation.pair": "{{source}} → {{target}}",
-  "language.saved": "Document language override saved."
+  "language.saved": "Document language override saved.",
+  "outline.noToc": "This PDF has no table of contents, so all pages are listed instead.",
+  "pageLabel": "Page {{page}}",
+  "goToPage": "Go to page {{page}}"
 }

@@ -1,11 +1,14 @@
 import i18next from 'i18next'
 import { FEATURE_NAMESPACES, INITIAL_NAMESPACES, UI_LOCALES } from './locales/manifest.js'
+import uiSourceMap from './locales/ui-source-map.json' with { type: 'json' }
 
 const modules = import.meta.env ? import.meta.glob('./locales/*/*.json') : {}
 const loaded = new Set()
 let currentLocale = null
 let domObserver = null
 let translatingMutations = false
+const localizedTextNodes = new WeakMap()
+const localizedAttributes = new WeakMap()
 
 export function browserLocale() {
   const languages = typeof navigator === 'undefined' ? [] : (navigator.languages || [navigator.language])
@@ -36,7 +39,8 @@ export async function loadNamespaces(namespaces) {
 }
 
 export async function loadFeatureNamespaces(feature) {
-  return loadNamespaces(FEATURE_NAMESPACES[feature] || [])
+  await loadNamespaces(FEATURE_NAMESPACES[feature] || [])
+  translateDocument()
 }
 
 export async function initI18n() {
@@ -107,8 +111,66 @@ export function translateDocument(root = document) {
   for (const [attribute, dataName, selector] of bindings) {
     select('[' + selector + ']').forEach((element) => {
       const value = t(element.dataset[dataName])
-      if (value) element.setAttribute(attribute, value)
+      if (value && element.getAttribute(attribute) !== value) element.setAttribute(attribute, value)
     })
+  }
+  translateMappedUiText(root)
+}
+
+function normalizedUiText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function mappedKey(value) {
+  return uiSourceMap[normalizedUiText(value)] || ''
+}
+
+function loadedTranslation(key) {
+  if (!key) return ''
+  const [namespace] = key.split(':')
+  if (!i18next.hasResourceBundle(getLocale(), namespace) && !i18next.hasResourceBundle('en', namespace)) return ''
+  return t(key)
+}
+
+function replaceTextPreservingOuterWhitespace(raw, value) {
+  const leading = raw.match(/^\s*/)?.[0] || ''
+  const trailing = raw.match(/\s*$/)?.[0] || ''
+  return leading + value + trailing
+}
+
+function translateMappedUiText(root) {
+  const translateTextNode = node => {
+    const parent = node.parentElement
+    if (!parent || parent.closest('script, style, [data-i18n], [data-i18n-skip]')) return
+    const key = localizedTextNodes.get(node) || mappedKey(node.nodeValue)
+    const value = loadedTranslation(key)
+    if (!value) return
+    localizedTextNodes.set(node, key)
+    const translated = replaceTextPreservingOuterWhitespace(node.nodeValue, value)
+    if (node.nodeValue !== translated) node.nodeValue = translated
+  }
+  if (root.nodeType === Node.TEXT_NODE) translateTextNode(root)
+  const walkerRoot = root.nodeType === Node.DOCUMENT_NODE ? root.body : root
+  if (walkerRoot) {
+    const walker = document.createTreeWalker(walkerRoot, NodeFilter.SHOW_TEXT)
+    let node
+    while ((node = walker.nextNode())) translateTextNode(node)
+  }
+  const elements = [
+    ...(root.nodeType === Node.ELEMENT_NODE ? [root] : []),
+    ...(root.querySelectorAll?.('[title], [placeholder], [aria-label]') || []),
+  ]
+  for (const element of elements) {
+    const remembered = localizedAttributes.get(element) || {}
+    for (const attribute of ['title', 'placeholder', 'aria-label']) {
+      if (!element.hasAttribute(attribute) || element.hasAttribute('data-i18n-' + attribute)) continue
+      const key = remembered[attribute] || mappedKey(element.getAttribute(attribute))
+      const value = loadedTranslation(key)
+      if (!value) continue
+      remembered[attribute] = key
+      if (element.getAttribute(attribute) !== value) element.setAttribute(attribute, value)
+    }
+    localizedAttributes.set(element, remembered)
   }
 }
 
@@ -118,12 +180,22 @@ function observeDynamicTranslations() {
     if (translatingMutations) return
     translatingMutations = true
     try {
-      for (const record of records) for (const node of record.addedNodes) {
-        if (node.nodeType === 1) translateDocument(node)
+      for (const record of records) {
+        if (record.type === 'attributes') {
+          const remembered = localizedAttributes.get(record.target)
+          const attribute = record.attributeName
+          if (remembered?.[attribute] && record.target.getAttribute(attribute) !== loadedTranslation(remembered[attribute])) {
+            const nextKey = mappedKey(record.target.getAttribute(attribute))
+            if (nextKey) remembered[attribute] = nextKey
+            else delete remembered[attribute]
+          }
+          translateDocument(record.target)
+        }
+        for (const node of record.addedNodes) if (node.nodeType === 1 || node.nodeType === 3) translateDocument(node)
       }
     } finally { translatingMutations = false }
   })
-  domObserver.observe(document.body, { childList: true, subtree: true })
+  domObserver.observe(document.body, { childList: true, attributes: true, attributeFilter: ['title', 'placeholder', 'aria-label'], subtree: true })
 }
 
 export function formatNumber(value, options) {

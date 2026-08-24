@@ -1,3 +1,12 @@
 {
-  "placeholder": "이 문서에 관해 질문하세요…"
+  "placeholder": "이 문서에 관해 질문하세요…",
+  "welcome.research": "안녕하세요! 이 논문에 대해 궁금한 점을 질문해 주세요.",
+  "welcome.general": "안녕하세요! 이 문서에 대해 궁금한 점을 질문해 주세요.",
+  "suggestions.label": "질문 예시:",
+  "suggestions.research.summary": "핵심 연구 내용과 기여도를 요약해줘.",
+  "suggestions.research.method": "제안한 방법론의 과정을 설명해줘.",
+  "suggestions.research.results": "실험 결과의 주요 수치와 의의는 무엇이야?",
+  "suggestions.general.summary": "이 문서의 핵심 내용을 요약해줘.",
+  "suggestions.general.procedure": "중요한 절차와 전제 조건을 설명해줘.",
+  "suggestions.general.cautions": "주의사항과 핵심 수치를 찾아줘."
 }

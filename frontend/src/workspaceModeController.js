@@ -16,25 +16,25 @@ import { t } from './i18n.js'
 function modeCopy(mode) {
   const copy = {
     research: {
-      title: t('navigation:researchDashboard'),
-      library: t('navigation:researchLibrary'),
-      history: t('navigation:history'),
-      chats: t('navigation:chats'),
-      notes: t('navigation:notes'),
-      search: t('navigation:researchSearch'),
-      add: t('navigation:addPaper'),
+      title: ['navigation:researchDashboard', t('navigation:researchDashboard')],
+      library: ['navigation:researchLibrary', t('navigation:researchLibrary')],
+      history: ['navigation:history', t('navigation:history')],
+      chats: ['navigation:chats', t('navigation:chats')],
+      notes: ['navigation:notes', t('navigation:notes')],
+      search: ['navigation:researchSearch', t('navigation:researchSearch')],
+      add: ['navigation:addPaper', t('navigation:addPaper')],
     },
     general: {
-      title: t('navigation:generalDashboard'),
-      library: t('navigation:generalLibrary'),
-      history: t('navigation:history'),
-      chats: t('navigation:generalChats'),
-      notes: t('navigation:generalNotes'),
-      search: t('navigation:generalSearch'),
-      add: t('navigation:addDocument'),
+      title: ['navigation:generalDashboard', t('navigation:generalDashboard')],
+      library: ['navigation:generalLibrary', t('navigation:generalLibrary')],
+      history: ['navigation:history', t('navigation:history')],
+      chats: ['navigation:generalChats', t('navigation:generalChats')],
+      notes: ['navigation:generalNotes', t('navigation:generalNotes')],
+      search: ['navigation:generalSearch', t('navigation:generalSearch')],
+      add: ['navigation:addDocument', t('navigation:addDocument')],
     },
-  }
-  return copy[mode]
+  }[mode]
+  return Object.fromEntries(Object.entries(copy).map(([name, [key, value]]) => [name, { key, value }]))
 }
 
 
@@ -58,8 +58,8 @@ export function createWorkspaceModeController({
   function getPageLabel(pageId) {
     const copy = modeCopy(mode)
     return {
-      dashboard: copy.title, library: copy.library, history: copy.history,
-      chats: copy.chats, notes: copy.notes, graph: 'Research Graph',
+      dashboard: copy.title.value, library: copy.library.value, history: copy.history.value,
+      chats: copy.chats.value, notes: copy.notes.value, graph: 'Research Graph',
     }[pageId] || ''
   }
 
@@ -76,13 +76,23 @@ export function createWorkspaceModeController({
       if (!label) return
       const text = button.querySelector('.sidebar-nav-label')
       const tooltip = button.querySelector('.sidebar-tooltip')
-      if (text) text.textContent = label
+      if (text) {
+        const copyName = button.dataset.page === 'dashboard' ? 'title' : button.dataset.page
+        if (copy[copyName]?.key) text.dataset.i18n = copy[copyName].key
+        text.textContent = label
+      }
       if (tooltip) tooltip.textContent = label
     })
     const search = document.getElementById('workspace-search-input')
-    if (search) search.placeholder = copy.search
+    if (search) {
+      search.dataset.i18nPlaceholder = copy.search.key
+      search.placeholder = copy.search.value
+    }
     const addLabel = document.querySelector('#lib-add-paper-btn .lib-add-label')
-    if (addLabel) addLabel.textContent = copy.add
+    if (addLabel) {
+      addLabel.dataset.i18n = copy.add.key
+      addLabel.textContent = copy.add.value
+    }
   }
 
   async function setMode(nextMode, { persist = true } = {}) {

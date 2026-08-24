@@ -1,3 +1,12 @@
 {
-  "placeholder": "Ask about this document…"
+  "placeholder": "Ask about this document…",
+  "welcome.research": "Hello! Ask anything about this paper.",
+  "welcome.general": "Hello! Ask anything about this document.",
+  "suggestions.label": "Example questions:",
+  "suggestions.research.summary": "Summarize the main findings and contributions.",
+  "suggestions.research.method": "Explain the proposed methodology.",
+  "suggestions.research.results": "What are the key results and why do they matter?",
+  "suggestions.general.summary": "Summarize the key points of this document.",
+  "suggestions.general.procedure": "Explain the important procedures and prerequisites.",
+  "suggestions.general.cautions": "Identify the cautions and key figures."
 }

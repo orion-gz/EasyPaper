@@ -3,5 +3,9 @@
   "document.count_other": "{{count}} documents",
   "subtitle": "Manage all saved papers in one place.",
   "addDocument": "Add paper",
-  "addFolder": "Add folder"
+  "addFolder": "Add folder",
+  "subtitle.research.archive": "Manage all saved papers in one place.",
+  "subtitle.research.trash": "These papers are in the trash. Restore or permanently delete them.",
+  "subtitle.general.archive": "Manage all saved documents in one place.",
+  "subtitle.general.trash": "These documents are in the trash. Restore or permanently delete them."
 }

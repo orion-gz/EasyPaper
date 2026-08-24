@@ -13,6 +13,7 @@ import { icon } from '../icons.js'
 import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, todayKey, addDaysKey, isWithinDaysLocal } from '../readPages.js'
 import { periodStats, sumSecondsByDayRange, formatDuration, deltaDurationHtml, CATEGORY_LABEL, CATEGORY_COLOR_VAR, CATEGORY_ORDER } from './readingHistoryPage.js'
 import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
+import { t, formatNumber as intlFormatNumber, formatRelativeTime } from '../i18n.js'
 
 let renderGeneration = 0
 
@@ -72,25 +73,12 @@ function emptyNote(text) {
 }
 
 function formatNumber(n) {
-  return (n || 0).toLocaleString('ko-KR')
+  return intlFormatNumber(n || 0)
 }
 
 function relativeTimeKo(iso) {
-  if (!iso) return ''
-  const t = new Date(iso).getTime()
-  if (Number.isNaN(t)) return ''
-  const diffMs = Date.now() - t
-  if (diffMs < 60000) return '방금 전'
-  const min = Math.floor(diffMs / 60000)
-  if (min < 60) return `${min}분 전`
-  const hour = Math.floor(min / 60)
-  if (hour < 24) return `${hour}시간 전`
-  const day = Math.floor(hour / 24)
-  if (day === 1) return '어제'
-  if (day < 7) return `${day}일 전`
-  const week = Math.floor(day / 7)
-  if (week < 5) return `${week}주 전`
-  return new Date(iso).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
+  return iso ? formatRelativeTime(iso) : ''
+
 }
 
 function truncateLabel(s, n) {
@@ -115,7 +103,7 @@ function renderStatCard(def, value, curr7, weeklyPagesRead) {
   const deltaHtml = delta === null ? '' : `
     <div class="dash-stat-delta ${delta > 0 ? 'is-up' : ''}">
       ${delta > 0 ? icon('chevronUp', 11) : ''}
-      <span>${delta > 0 ? `+${formatNumber(delta)}` : '0'} 이번 주</span>
+      <span>${t('dashboard:thisWeekDelta', { count: delta, value: delta > 0 ? `+${formatNumber(delta)}` : '0' })}</span>
     </div>
   `
   return `
@@ -298,7 +286,7 @@ function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySec
         <div class="dash-summary-box">
           <div class="dash-summary-value dash-summary-value-text">${formatDuration(weeklySeconds)}</div>
           <div class="dash-summary-label">주간 읽기 시간</div>
-          <div class="dash-summary-delta">${deltaDurationHtml(weeklySeconds, prevWeeklySeconds, '지난주 대비')}</div>
+          <div class="dash-summary-delta">${deltaDurationHtml(weeklySeconds, prevWeeklySeconds, t('dashboard:comparedLastWeek'))}</div>
         </div>
         <div class="dash-summary-box">
           <div class="dash-summary-value dash-summary-value-text">${focusTopic ? escapeHtml(truncateLabel(focusTopic.name, 12)) : '—'}</div>

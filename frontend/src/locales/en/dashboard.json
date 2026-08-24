@@ -1,3 +1,19 @@
 {
-  "generalDocumentsEmpty": "No general documents yet."
+  "generalDocumentsEmpty": "No general documents yet.",
+  "thisWeekDelta": "This week: {{value}}",
+  "comparedLastWeek": "Compared with last week",
+  "weekdayMon": "Mon",
+  "weekdayWed": "Wed",
+  "weekdayFri": "Fri",
+  "weekdaySun": "Sun",
+  "today": "Today",
+  "yesterday": "Yesterday",
+  "comparedPrevious7Days": "Compared with the previous 7 days",
+  "comparedPrevious30Days": "Compared with the previous 30 days",
+  "activeDaysRatio": "Active on {{percent}}% of the last {{days}} days",
+  "daysCount_one": "{{count}} day",
+  "daysCount_other": "{{count}} days",
+  "activeTotalDays": "Active for {{count}} days total",
+  "activityDaysLongest": "{{active}} active days • longest streak {{longest}} days",
+  "dayUnit": "days"
 }

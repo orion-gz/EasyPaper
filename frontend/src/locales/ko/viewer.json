@@ -10,5 +10,8 @@
   "source.unsupportedCode": "감지된 {{language}} 언어는 자동 번역을 지원하지 않습니다.",
   "translation.sameLanguage": "번역은 생략되며 인사이트는 사용할 수 있습니다.",
   "translation.pair": "{{source}} → {{target}}",
-  "language.saved": "문서별 언어 설정을 저장했습니다."
+  "language.saved": "문서별 언어 설정을 저장했습니다.",
+  "outline.noToc": "이 PDF에는 목차 정보가 없어 전체 페이지를 대신 표시합니다.",
+  "pageLabel": "{{page}}페이지",
+  "goToPage": "{{page}}페이지로 이동"
 }
