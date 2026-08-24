@@ -112,6 +112,7 @@ const $ = (id) => document.getElementById(id)
 // opacity/transform 전환을 두 단계(reflow 강제 → 다음 프레임에 클래스 적용)로
 // 분리해 트랜지션이 실제로 재생되게 한다.
 const modalTriggerElements = new WeakMap()
+const modalCloseTimers = new WeakMap()
 const modalFocusableSelector = [
   '[autofocus]',
   'button:not([disabled])',
@@ -124,6 +125,11 @@ const modalFocusableSelector = [
 
 function openOverlayModal(modal) {
   if (!modal) return
+  const closeTimer = modalCloseTimers.get(modal)
+  if (closeTimer !== undefined) {
+    window.clearTimeout(closeTimer)
+    modalCloseTimers.delete(modal)
+  }
   const trigger = document.activeElement
   if (trigger instanceof HTMLElement && trigger !== document.body) {
     modalTriggerElements.set(modal, trigger)
@@ -139,13 +145,18 @@ function openOverlayModal(modal) {
 }
 function closeOverlayModal(modal) {
   if (!modal) return
+  const previousTimer = modalCloseTimers.get(modal)
+  if (previousTimer !== undefined) window.clearTimeout(previousTimer)
   modal.classList.remove('is-visible')
-  window.setTimeout(() => {
+  const closeTimer = window.setTimeout(() => {
+    modalCloseTimers.delete(modal)
+    if (modal.classList.contains('is-visible')) return
     modal.classList.add('hidden')
     const trigger = modalTriggerElements.get(modal)
     if (trigger?.isConnected) trigger.focus()
     modalTriggerElements.delete(modal)
   }, 300) // CSS 트랜지션(0.3s) 종료 후 display:none
+  modalCloseTimers.set(modal, closeTimer)
 }
 const loginScreen       = $('login-screen')
 const loginForm         = $('login-form')

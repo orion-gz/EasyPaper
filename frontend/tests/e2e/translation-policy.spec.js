@@ -137,3 +137,14 @@ test('워크스페이스 모드별 테마와 강조색을 독립적으로 적용
   await expect(page.locator('body')).toHaveClass(/light-theme/)
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent-mid').trim())).toBe('#e0677a')
 })
+
+test('설정 모달을 빠르게 다시 열어도 열린 상태를 유지한다', async ({ page }) => {
+  await mockBaseRoutes(page, { documents: [] })
+  await gotoApp(page)
+  await page.locator('#sidebar-settings-btn').click()
+  await expect(page.locator('#settings-modal')).toBeVisible()
+  await page.locator('#close-settings-btn').click()
+  await page.locator('#sidebar-settings-btn').click()
+  await page.waitForTimeout(350)
+  await expect(page.locator('#settings-modal')).toBeVisible()
+})
