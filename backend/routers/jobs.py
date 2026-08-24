@@ -16,8 +16,33 @@ from routers.upload import require_session_owner
 
 router = APIRouter()
 
+
+def _validated_languages(session: dict, target_value: str, source_value: str) -> tuple[str, str]:
+    """Apply the same target/source policy to get, download, and restart."""
+    from services.languages import (
+        DOCUMENT_LANGUAGE_CODES, api_language_error, normalize_document_language,
+        resolve_source_language,
+    )
+    try:
+        target = normalize_document_language(target_value, allow_legacy=True)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(target_value))
+    try:
+        source = resolve_source_language(session, source_value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(source_value, source=True))
+    if source not in DOCUMENT_LANGUAGE_CODES:
+        raise HTTPException(status_code=409, detail={
+            "code": "source_language_not_translatable",
+            "params": {"language": source},
+            "fallback": "The source language cannot be translated automatically.",
+        })
+    return target, source
+
+
 class RestartJobRequest(BaseModel):
-    target_lang: str = "한국어"
+    target_lang: str = "ko"
+    source_lang: str = "auto"
     style: str = "academic"
     ignore_math: bool = False
     ignore_table: bool = True
@@ -40,7 +65,8 @@ async def job_status(session_id: str, current_user: str = Depends(get_current_us
 async def get_page_translation(
     session_id: str,
     page_num: int,
-    target_lang: str = "한국어",
+    target_lang: str = "ko",
+    source_lang: str = "auto",
     style: str = "academic",
     ignore_math: bool = False,
     ignore_table: bool = True,
@@ -49,11 +75,12 @@ async def get_page_translation(
 ):
     """특정 페이지의 번역 MD 내용 및 매핑 데이터를 반환합니다."""
     session = require_session_owner(session_id, current_user)
+    target_lang, source_lang = _validated_languages(session, target_lang, source_lang)
     from services.document_policy import translation_cache_candidates
     suffix_candidates = translation_cache_candidates(
         session.get("document_mode", "research"),
         session.get("document_type", "research_paper"),
-        target_lang, style, ignore_math, ignore_table, ignore_refs,
+        target_lang, style, ignore_math, ignore_table, ignore_refs, source_lang,
     )
     
     from services.library import get_translation_full
@@ -78,7 +105,8 @@ async def get_page_translation(
 @router.get("/jobs/{session_id}/download")
 async def download_translation(
     session_id: str,
-    target_lang: str = "한국어",
+    target_lang: str = "ko",
+    source_lang: str = "auto",
     style: str = "academic",
     ignore_math: bool = False,
     ignore_table: bool = True,
@@ -87,11 +115,12 @@ async def download_translation(
 ):
     """전체 번역 MD 파일을 다운로드합니다."""
     session = require_session_owner(session_id, current_user)
+    target_lang, source_lang = _validated_languages(session, target_lang, source_lang)
     from services.document_policy import translation_cache_candidates
     suffix_candidates = translation_cache_candidates(
         session.get("document_mode", "research"),
         session.get("document_type", "research_paper"),
-        target_lang, style, ignore_math, ignore_table, ignore_refs,
+        target_lang, style, ignore_math, ignore_table, ignore_refs, source_lang,
     )
     path = None
     matched_suffix = suffix_candidates[0]
@@ -117,6 +146,12 @@ async def restart_translation_job(
 ):
     """주어진 옵션으로 번역 작업을 중단하고 새로 재시작합니다."""
     session = require_session_owner(session_id, current_user)
+    target_lang, source_lang = _validated_languages(session, data.target_lang, data.source_lang)
+    if source_lang == target_lang:
+        raise HTTPException(status_code=409, detail={
+            "code": "same_source_and_target_language", "params": {"language": target_lang},
+            "fallback": "Source and target languages must be different.",
+        })
     pages = session["pages"]
     page_numbers = data.page_numbers
     if data.resume_scope and page_numbers is None:
@@ -128,7 +163,8 @@ async def restart_translation_job(
         job = start_job(
             session_id,
             pages,
-            target_lang=data.target_lang,
+            target_lang=target_lang,
+            source_lang=source_lang,
             style=data.style,
             ignore_math=data.ignore_math,
             ignore_table=data.ignore_table,
@@ -137,7 +173,7 @@ async def restart_translation_job(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"message": "번역 잡이 성공적으로 재시작되었습니다.", "job": job}
+    return {"message": "Translation job restarted.", "job": job}
 
 
 @router.post("/jobs/{session_id}/cancel")

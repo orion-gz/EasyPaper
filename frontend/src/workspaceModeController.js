@@ -10,17 +10,31 @@ import {
   isWorkspaceModeAvailable,
   storeWorkspaceMode,
 } from './documentModes.js'
+import { t } from './i18n.js'
 
 
-const MODE_COPY = {
-  research: {
-    title: '연구 홈', library: '논문 라이브러리', history: '읽기 기록',
-    chats: '논문 AI', notes: '논문 노트', search: '연구 문서에서 검색', add: '논문 추가',
-  },
-  general: {
-    title: '문서 홈', library: '문서 라이브러리', history: '읽기 기록',
-    chats: '문서 AI', notes: '문서 노트', search: '일반 문서에서 검색', add: '문서 추가',
-  },
+function modeCopy(mode) {
+  const copy = {
+    research: {
+      title: ['navigation:researchDashboard', t('navigation:researchDashboard')],
+      library: ['navigation:researchLibrary', t('navigation:researchLibrary')],
+      history: ['navigation:history', t('navigation:history')],
+      chats: ['navigation:chats', t('navigation:chats')],
+      notes: ['navigation:notes', t('navigation:notes')],
+      search: ['navigation:researchSearch', t('navigation:researchSearch')],
+      add: ['navigation:addPaper', t('navigation:addPaper')],
+    },
+    general: {
+      title: ['navigation:generalDashboard', t('navigation:generalDashboard')],
+      library: ['navigation:generalLibrary', t('navigation:generalLibrary')],
+      history: ['navigation:history', t('navigation:history')],
+      chats: ['navigation:generalChats', t('navigation:generalChats')],
+      notes: ['navigation:generalNotes', t('navigation:generalNotes')],
+      search: ['navigation:generalSearch', t('navigation:generalSearch')],
+      add: ['navigation:addDocument', t('navigation:addDocument')],
+    },
+  }[mode]
+  return Object.fromEntries(Object.entries(copy).map(([name, [key, value]]) => [name, { key, value }]))
 }
 
 
@@ -42,15 +56,15 @@ export function createWorkspaceModeController({
   const uploadModeSwitch = document.getElementById('document-upload-switch-mode-btn')
 
   function getPageLabel(pageId) {
-    const copy = MODE_COPY[mode]
+    const copy = modeCopy(mode)
     return {
-      dashboard: copy.title, library: copy.library, history: copy.history,
-      chats: copy.chats, notes: copy.notes, graph: 'Research Graph',
+      dashboard: copy.title.value, library: copy.library.value, history: copy.history.value,
+      chats: copy.chats.value, notes: copy.notes.value, graph: 'Research Graph',
     }[pageId] || ''
   }
 
   function updateCopy() {
-    const copy = MODE_COPY[mode]
+    const copy = modeCopy(mode)
     document.body.dataset.workspaceMode = mode
     document.querySelectorAll('[data-workspace-mode]').forEach(button => {
       const selected = button.dataset.workspaceMode === mode
@@ -62,13 +76,23 @@ export function createWorkspaceModeController({
       if (!label) return
       const text = button.querySelector('.sidebar-nav-label')
       const tooltip = button.querySelector('.sidebar-tooltip')
-      if (text) text.textContent = label
+      if (text) {
+        const copyName = button.dataset.page === 'dashboard' ? 'title' : button.dataset.page
+        if (copy[copyName]?.key) text.dataset.i18n = copy[copyName].key
+        text.textContent = label
+      }
       if (tooltip) tooltip.textContent = label
     })
     const search = document.getElementById('workspace-search-input')
-    if (search) search.placeholder = copy.search
+    if (search) {
+      search.dataset.i18nPlaceholder = copy.search.key
+      search.placeholder = copy.search.value
+    }
     const addLabel = document.querySelector('#lib-add-paper-btn .lib-add-label')
-    if (addLabel) addLabel.textContent = copy.add
+    if (addLabel) {
+      addLabel.dataset.i18n = copy.add.key
+      addLabel.textContent = copy.add.value
+    }
   }
 
   async function setMode(nextMode, { persist = true } = {}) {
@@ -93,6 +117,8 @@ export function createWorkspaceModeController({
       setMode(mode === 'research' ? 'general' : 'research')
     })
   })
+
+  document.addEventListener('easypaper:locale-changed', updateCopy)
 
   async function initialize() {
     const [typesResult, settingsResult] = await Promise.allSettled([

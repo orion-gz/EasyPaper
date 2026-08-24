@@ -160,7 +160,8 @@ async def generate_primer(
     metadata: dict,
     username: str,
     pdf_path: str,
-    target_lang: str = "한국어",
+    target_lang: str = "ko",
+    source_lang: str = "auto",
     session_id: str = None,
 ) -> dict:
     """primer 콘텐츠를 생성하고 캐시에 저장한 뒤 결과 dict를 반환한다.
@@ -178,7 +179,8 @@ async def generate_primer(
 
     async def _run_llm() -> dict:
         return await generate_reading_primer(
-            title, sections, candidate_terms, target_lang=target_lang, session_id=session_id
+            title, sections, candidate_terms, target_lang=target_lang,
+            source_lang=source_lang, session_id=session_id,
         )
 
     async def _run_figure() -> Optional[dict]:
@@ -234,16 +236,21 @@ async def generate_primer(
     }
 
     try:
-        save_page_insight(doc_id, 0, _PRIMER_CACHE_KIND, json.dumps(result, ensure_ascii=False), suffix=target_lang)
+        save_page_insight(doc_id, 0, _PRIMER_CACHE_KIND, json.dumps(result, ensure_ascii=False), suffix=_primer_cache_suffix(source_lang, target_lang))
     except Exception as e:
         print(f"[primer] 캐시 저장 실패 ({doc_id}): {e}")
 
     return result
 
 
-def _overview_cache_suffix(target_lang: str, document_type: str) -> str:
+def _primer_cache_suffix(source_lang: str, target_lang: str) -> str:
     from services.document_policy import INSIGHT_PROMPT_VERSION
-    return f"{INSIGHT_PROMPT_VERSION}:{target_lang}:{document_type}"
+    return f"{INSIGHT_PROMPT_VERSION}:{source_lang}:{target_lang}"
+
+
+def _overview_cache_suffix(source_lang: str, target_lang: str, document_type: str) -> str:
+    from services.document_policy import INSIGHT_PROMPT_VERSION
+    return f"{INSIGHT_PROMPT_VERSION}:{source_lang}:{target_lang}:{document_type}"
 
 
 def _string_list(value, limit: int = 8) -> list[str]:
@@ -305,7 +312,8 @@ async def generate_document_overview(
     pages: list,
     metadata: dict,
     document_type: str,
-    target_lang: str = "한국어",
+    target_lang: str = "ko",
+    source_lang: str = "auto",
     session_id: str = None,
 ) -> dict:
     """대표 구간에서 목적·독자·구조·핵심 내용 등을 추출해 요청 시 캐싱한다."""
@@ -336,7 +344,7 @@ async def generate_document_overview(
     tokens = []
     async for token in stream_page_insight(
         "overview", "\n\n".join(excerpts), target_lang=target_lang,
-        doc_title=title, session_id=session_id,
+        doc_title=title, session_id=session_id, source_lang=source_lang,
         document_mode="general", document_type=document_type,
     ):
         tokens.append(token)
@@ -355,12 +363,12 @@ async def generate_document_overview(
         "citation_graph": {"library": [], "external": []},
         "document_overview": True,
     }
-    suffix = _overview_cache_suffix(target_lang, document_type)
+    suffix = _overview_cache_suffix(source_lang, target_lang, document_type)
     save_page_insight(doc_id, 0, _OVERVIEW_CACHE_KIND, json.dumps(result, ensure_ascii=False), suffix=suffix)
     return result
 
-def get_cached_document_overview(doc_id: str, document_type: str, target_lang: str = "한국어") -> Optional[dict]:
-    content = get_page_insight(doc_id, 0, _OVERVIEW_CACHE_KIND, suffix=_overview_cache_suffix(target_lang, document_type))
+def get_cached_document_overview(doc_id: str, document_type: str, target_lang: str = "ko", source_lang: str = "auto") -> Optional[dict]:
+    content = get_page_insight(doc_id, 0, _OVERVIEW_CACHE_KIND, suffix=_overview_cache_suffix(source_lang, target_lang, document_type))
     if not content:
         return None
     try:
@@ -369,12 +377,12 @@ def get_cached_document_overview(doc_id: str, document_type: str, target_lang: s
         return None
 
 
-def invalidate_document_overview(doc_id: str, document_type: str, target_lang: str = "한국어") -> None:
-    delete_page_insight(doc_id, 0, _OVERVIEW_CACHE_KIND, suffix=_overview_cache_suffix(target_lang, document_type))
+def invalidate_document_overview(doc_id: str, document_type: str, target_lang: str = "ko", source_lang: str = "auto") -> None:
+    delete_page_insight(doc_id, 0, _OVERVIEW_CACHE_KIND, suffix=_overview_cache_suffix(source_lang, target_lang, document_type))
 
 
-def get_cached_primer(doc_id: str, target_lang: str = "한국어") -> Optional[dict]:
-    content = get_page_insight(doc_id, 0, _PRIMER_CACHE_KIND, suffix=target_lang)
+def get_cached_primer(doc_id: str, target_lang: str = "ko", source_lang: str = "auto") -> Optional[dict]:
+    content = get_page_insight(doc_id, 0, _PRIMER_CACHE_KIND, suffix=_primer_cache_suffix(source_lang, target_lang))
     if not content:
         return None
     try:
@@ -383,9 +391,9 @@ def get_cached_primer(doc_id: str, target_lang: str = "한국어") -> Optional[d
         return None
 
 
-def invalidate_primer_cache(doc_id: str, target_lang: str = "한국어") -> None:
+def invalidate_primer_cache(doc_id: str, target_lang: str = "ko", source_lang: str = "auto") -> None:
     """캐시된 브리핑을 지운다("다시 생성하기" 용도). page_insights는
     INSERT OR REPLACE로 저장되므로 재생성 자체는 캐시를 안 지워도 결국
     덮어써지지만, 캐시를 먼저 지워둬야 재생성이 끝나기 전에 들어오는 GET
     요청이 낡은 캐시를 즉시 반환해버리지 않고 올바르게 pending을 반환한다."""
-    delete_page_insight(doc_id, 0, _PRIMER_CACHE_KIND, suffix=target_lang)
+    delete_page_insight(doc_id, 0, _PRIMER_CACHE_KIND, suffix=_primer_cache_suffix(source_lang, target_lang))

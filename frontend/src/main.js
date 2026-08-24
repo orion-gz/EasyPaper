@@ -9,7 +9,7 @@ import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSet
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { icon } from './icons.js'
@@ -19,6 +19,10 @@ import { globalAnalyticsTracker } from './readingAnalytics.js'
 import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
 import { compareDocsByLastRead } from './readPages.js'
 import { buildScholarSearchUrl, extractCitationTitle } from './citationSearch.js'
+import { changeLocale, getLocale, initI18n, loadFeatureNamespaces, loadNamespaces, t } from './i18n.js'
+import { saveUserLanguagePreferences, saveDocumentLanguageOverride } from './languagePreferences.js'
+
+const i18nReady = initI18n()
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -48,6 +52,9 @@ const state = {
   currentDocMetadata: {},
   currentDocumentMode: "research",
   currentDocumentType: "research_paper",
+  sourceLanguage: "auto",
+  detectedSourceLanguage: "und",
+  preferredTargetLanguage: null,
   sessionId: null,
   filename: null,
   title: null,
@@ -104,6 +111,107 @@ const state = {
 
 // ── DOM 참조 ──────────────────────────────────────
 const $ = (id) => document.getElementById(id)
+
+let languageCatalog = []
+
+function populateLanguageControls(settings = {}) {
+  const sourceSelect = $('setting-source-lang')
+  const targetSelect = $('setting-target-lang')
+  const sourceValue = settings.default_source_language || localStorage.getItem('easypaper_default_source_language') || 'auto'
+  const targetValue = settings.target_language || getModeSetting('targetLang', 'research')
+  const options = languageCatalog.map(({ code, translation_key: key }) =>
+    '<option value="' + code + '">' + t('common:' + key) + '</option>'
+  ).join('')
+  if (sourceSelect) {
+    sourceSelect.innerHTML = '<option value="auto">' + t('common:language.auto') + '</option>' + options
+    sourceSelect.value = sourceValue
+  }
+  if (targetSelect) {
+    targetSelect.innerHTML = options
+    targetSelect.value = targetValue
+  }
+  const documentSource = $('document-source-lang')
+  const documentTarget = $('document-target-lang')
+  if (documentSource) {
+    documentSource.innerHTML = '<option value="auto">' + t('common:language.auto') + '</option>' + options
+    documentSource.value = state.sourceLanguage || 'auto'
+  }
+  if (documentTarget) {
+    documentTarget.innerHTML = options
+    documentTarget.value = state.preferredTargetLanguage || targetValue
+  }
+  renderDocumentLanguageStatus()
+  for (const id of ['login-ui-locale', 'onboarding-ui-locale', 'setting-ui-locale']) {
+    const select = $(id)
+    if (select) select.value = getLocale()
+  }
+}
+
+function languageDisplayName(code) {
+  return t('common:language.' + code, { fallback: code })
+}
+
+function renderDocumentLanguageStatus() {
+  const status = $('document-language-status')
+  const controls = $('document-language-controls')
+  if (!status || !controls) return
+  controls.hidden = !state.sessionId
+  if (!state.sessionId) return
+  const source = state.sourceLanguage === 'auto' ? state.detectedSourceLanguage : state.sourceLanguage
+  const target = state.preferredTargetLanguage || getModeSetting('targetLang', state.currentDocumentMode)
+  if (source === 'und') status.textContent = t('viewer:source.undetermined')
+  else if (source === 'mul') status.textContent = t('viewer:source.multiple')
+  else if (!languageCatalog.some(item => item.code === source)) {
+    status.textContent = t('viewer:source.unsupportedCode', { language: source })
+  } else if (source === target) {
+    status.textContent = t('viewer:translation.sameLanguage')
+  } else status.textContent = t('viewer:translation.pair', { source: languageDisplayName(source), target: languageDisplayName(target) })
+}
+
+async function persistDocumentLanguageOverride() {
+  if (!state.sessionId) return
+  const source = $('document-source-lang')?.value || state.sourceLanguage || 'auto'
+  const target = $('document-target-lang')?.value || state.preferredTargetLanguage || getModeSetting('targetLang', state.currentDocumentMode)
+  const saved = await saveDocumentLanguageOverride(
+    state.sessionId, { sourceLanguage: source, targetLanguage: target }, patchDocumentLanguagesAPI,
+  )
+  state.sourceLanguage = saved.source_language
+  state.preferredTargetLanguage = saved.preferred_target_language
+  state.pageInsightCache = {}
+  renderDocumentLanguageStatus()
+  showToast(t('viewer:language.saved'), 'success')
+}
+
+async function persistLanguagePreferences() {
+  const source = $('setting-source-lang')?.value || localStorage.getItem('easypaper_default_source_language') || 'auto'
+  const target = $('setting-target-lang')?.value || getModeSetting('targetLang', 'research')
+  const saved = await saveUserLanguagePreferences(
+    { uiLocale: getLocale(), sourceLanguage: source, targetLanguage: target },
+    { saveSettings: saveLanguageSettingsAPI, storage: localStorage },
+  )
+  showToast(t('settings:saved'), 'success')
+  return saved
+}
+
+async function syncLanguageSettingsFromServer() {
+  await loadNamespaces(['settings', 'errors'])
+  const [catalog, settings] = await Promise.all([getLanguagesAPI(), getLanguageSettingsAPI()])
+  languageCatalog = catalog.languages || []
+  if (settings.ui_locale) await changeLocale(settings.ui_locale)
+  localStorage.setItem('easypaper_default_source_language', settings.default_source_language || 'auto')
+  if (settings.target_language) {
+    setModeSetting('targetLang', 'research', settings.target_language)
+    setModeSetting('targetLang', 'general', settings.target_language)
+  }
+  populateLanguageControls(settings)
+}
+
+async function handleLocaleSelector(event) {
+  await changeLocale(event.target.value)
+  populateLanguageControls()
+  if (state.username && ['setting-ui-locale', 'onboarding-ui-locale'].includes(event.target.id)) await persistLanguagePreferences()
+}
+
 
 // ── 모달(.modal-overlay) 표시/숨김 공용 헬퍼 ──────────────────────
 // `.hidden`(display:none)과 opacity/transform 트랜지션을 같은 클래스 토글로
@@ -209,6 +317,8 @@ const settingsAutomationTitle = $('settings-automation-title')
 const settingsKeywordsLabel = $('settings-keywords-label')
 const settingsKeywordsDescription = $('settings-keywords-description')
 const settingsReadingToolsLabel = $('settings-reading-tools-label')
+const settingUiLocale = $('setting-ui-locale')
+const settingSourceLang = $('setting-source-lang')
 const settingsThemeScope = $('settings-theme-scope')
 const settingTargetLang   = $('setting-target-lang')
 const settingTransStyle   = $('setting-trans-style')
@@ -229,6 +339,18 @@ const settingDisablePrimer = $('setting-disable-primer')
 const settingToolbarAutoHide = $('setting-toolbar-autohide')
 const settingAutoGenerateKeywords = $('setting-auto-generate-keywords')
 const settingAutoGenerateSummaries = $('setting-auto-generate-summaries')
+
+for (const id of ['login-ui-locale', 'onboarding-ui-locale', 'setting-ui-locale']) {
+  const selector = $(id)
+  if (selector) selector.addEventListener('change', (event) => handleLocaleSelector(event).catch(console.error))
+}
+document.addEventListener('easypaper:locale-changed', () => { if (languageCatalog.length) populateLanguageControls(); renderDocumentLanguageStatus() })
+i18nReady.then(() => populateLanguageControls()).catch(console.error)
+if (settingSourceLang) settingSourceLang.addEventListener('change', () => persistLanguagePreferences().catch(console.error))
+if (settingTargetLang) settingTargetLang.addEventListener('change', () => persistLanguagePreferences().catch(console.error))
+for (const id of ['document-source-lang', 'document-target-lang']) {
+  $(id)?.addEventListener('change', () => persistDocumentLanguageOverride().catch(error => showToast(error.message, 'error')))
+}
 const viewerTopbar = $('viewer-topbar')
 const clearCacheBtn       = $('clear-cache-btn')
 const clearPagesCacheBtn  = $('clear-pages-cache-btn')
@@ -477,11 +599,14 @@ function getActiveSettingsMode(documentMode = null) {
 function getTranslationOptions(documentMode = null) {
   const mode = getActiveSettingsMode(documentMode)
   return {
-    targetLang: getModeSetting('targetLang', mode),
+    targetLang: (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === mode && state.preferredTargetLanguage) || getModeSetting('targetLang', mode),
     style: getModeSetting('style', mode),
     ignoreMath: getModeSetting('ignoreMath', mode),
     ignoreTable: getModeSetting('ignoreTable', mode),
-    ignoreRefs: getModeSetting('ignoreRefs', mode)
+    ignoreRefs: getModeSetting('ignoreRefs', mode),
+    sourceLang: state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === mode
+      ? (state.sourceLanguage === "auto" ? state.detectedSourceLanguage : state.sourceLanguage)
+      : (localStorage.getItem('easypaper_default_source_language') || 'auto')
   }
 }
 
@@ -546,7 +671,8 @@ function showInsightJobProgress(sessionId, kind, title) {
   })
   retry.addEventListener('click', async () => {
     retry.disabled = true
-    await startInsightJobAPI(sessionId, kind, getTranslationOptions().targetLang, true)
+    const options = getTranslationOptions()
+    await startInsightJobAPI(sessionId, kind, options.targetLang, options.sourceLang, true)
     stopped = false
     cancel.disabled = false
     cancel.classList.remove('hidden')
@@ -606,6 +732,7 @@ function syncModeSettings(documentMode) {
   const isGeneral = settingsTranslationModeContext === 'general'
   const options = getTranslationOptions(settingsTranslationModeContext)
 
+  settingSourceLang.value = localStorage.getItem("easypaper_default_source_language") || "auto"
   settingTargetLang.value = options.targetLang
   settingTransStyle.value = options.style
   settingTranslationMode.value = getTranslationMode(settingsTranslationModeContext)
@@ -624,7 +751,11 @@ function syncModeSettings(documentMode) {
     settingTranslationModeScope.textContent = isGeneral ? '일반 문서 모드에만 적용' : '연구 모드에만 적용'
   }
   if (settingsThemeScope) {
-    settingsThemeScope.textContent = isGeneral ? '일반 문서 모드에만 적용' : '연구 모드에만 적용'
+    const themeScopeKey = isGeneral ? 'settings:themeScopeGeneral' : 'settings:themeScopeResearch'
+    settingsThemeScope.dataset.i18n = themeScopeKey
+    settingsThemeScope.textContent = isGeneral
+      ? t('settings:themeScopeGeneral')
+      : t('settings:themeScopeResearch')
   }
   settingsModeTitle.textContent = isGeneral ? '일반 문서 모드 설정' : '연구 모드 설정'
   settingsModeBadge.textContent = isGeneral ? '일반 문서 모드' : '연구 모드'
@@ -816,13 +947,14 @@ async function handleFiles(files, targetFolderId = null, classification = null) 
       }
       successCount++
       if (result.document_mode === 'general' && getKeywordMode(result.document_mode) === 'auto' && result.total_pages > 20) {
-        const estimate = await estimateInsightJobAPI(result.session_id, 'keywords', getTranslationOptions(result.document_mode).targetLang)
+        const uploadLanguageOptions = getTranslationOptions(result.document_mode)
+        const estimate = await estimateInsightJobAPI(result.session_id, 'keywords', uploadLanguageOptions.targetLang, uploadLanguageOptions.sourceLang)
         const confirmed = await showCustomConfirm(
           `빈 페이지와 기존 캐시를 제외하고 최대 ${estimate.estimated_calls}회의 AI 호출이 예상됩니다. 전체 고급 어휘 생성을 시작할까요?`,
           { title: '장문 어휘 생성', confirmText: '생성 시작', danger: false },
         )
         if (confirmed) {
-          await startInsightJobAPI(result.session_id, 'keywords', getTranslationOptions(result.document_mode).targetLang, true)
+          await startInsightJobAPI(result.session_id, 'keywords', uploadLanguageOptions.targetLang, uploadLanguageOptions.sourceLang, true)
           showInsightJobProgress(result.session_id, 'keywords', `${lastTitle} · 고급 어휘`)
         }
       }
@@ -1072,8 +1204,8 @@ function createTransBlock(pageNum) {
 
   block.innerHTML = `
     <div class="trans-page-label">
-      <span>${icon('fileText', 13, 'style="vertical-align:-2px;margin-right:3px"')}${pageNum}페이지</span>
-      <span class="trans-page-status" id="trans-status-${pageNum}">대기 중</span>
+      <span>${icon('fileText', 13, 'style="vertical-align:-2px;margin-right:3px"')}${t('viewer:pageLabel', { page: pageNum })}</span>
+      <span class="trans-page-status" id="trans-status-${pageNum}">${t('viewer:translation.waiting')}</span>
     </div>
     <div class="trans-tabs${state.disableInsights ? ' insights-off' : ''}" id="trans-tabs-${pageNum}">
       <button class="trans-tab-btn active" data-tab="translation">번역</button>
@@ -1081,11 +1213,11 @@ function createTransBlock(pageNum) {
       <button class="trans-tab-btn insight-tab-btn" data-tab="summary">요약</button>
       <button class="trans-tab-refresh-btn insight-tab-btn hidden" title="다시 생성">${icon('refreshCw', 12)}</button>
     </div>
-    <div class="trans-page-content" id="trans-content-${pageNum}">
+    <div class="trans-page-content" id="trans-content-${pageNum}" dir="auto">
       ${translationPlaceholder}
     </div>
-    <div class="trans-insight-content hidden" id="keywords-content-${pageNum}"></div>
-    <div class="trans-insight-content hidden" id="summary-content-${pageNum}"></div>
+    <div class="trans-insight-content hidden" id="keywords-content-${pageNum}" dir="auto"></div>
+    <div class="trans-insight-content hidden" id="summary-content-${pageNum}" dir="auto"></div>
     <div class="trans-resizer-handle"></div>
     <button class="trans-collapse-btn" title="${btnTitle}">${chevron}</button>`
 
@@ -1171,9 +1303,9 @@ function loadPageInsight(pageNum, kind, force) {
   contentEl.innerHTML = `<div class="trans-waiting"><div class="trans-wait-spinner"></div><span>${kind === 'keywords' ? '키워드' : '요약'} 생성 중...</span></div>`
 
   let buffer = ''
-  const targetLang = getTranslationOptions().targetLang
+  const { targetLang, sourceLang } = getTranslationOptions()
   streamPageInsightAPI(
-    state.sessionId, pageNum, kind, targetLang, force,
+    state.sessionId, pageNum, kind, targetLang, sourceLang, force,
     (token) => { buffer += token },
     () => {
       state.pageInsightCache[cacheKey] = buffer
@@ -1436,6 +1568,7 @@ function updateProgressMiniRaw(done, total, isRunning = true) {
     progressMini.classList.remove('hidden')
     progressMiniBar.style.setProperty('--progress', `${pct}%`)
     progressMiniText.textContent = `${pct}%`
+    progressMini.setAttribute('aria-label', t('viewer:translation.progress', { completed: done, total }))
   }
 }
 
@@ -1952,7 +2085,7 @@ retranslateBtn.addEventListener('click', async () => {
         contentEl.innerHTML = getTranslationPlaceholderHtml(i)
       }
       if (statusEl) {
-        statusEl.textContent = '대기 중'
+        statusEl.textContent = t('viewer:translation.waiting')
         statusEl.classList.remove('done')
       }
     }
@@ -2160,6 +2293,7 @@ async function checkAuthentication() {
   const auth = await checkAuthAPI()
   if (auth && auth.status === 'authenticated') {
     state.username = auth.username
+    await syncLanguageSettingsFromServer()
     loginScreen.classList.remove('active')
     globalLogoutBtn.classList.remove('hidden')
     globalSettingsBtn.classList.remove('hidden')
@@ -2331,7 +2465,7 @@ const PROVIDER_CONFIG = [
     ]
   },
   {
-    id: 'ollama', label: 'Ollama (로컬)', icon: icon('hardDrive', 13),
+    id: 'ollama', label: 'Ollama', icon: icon('hardDrive', 13),
     models: [
       { value: 'qwen3.5:9b', label: 'qwen3.5 9b' },
       { value: 'llama3.1:8b', label: 'llamma 3.1' },
@@ -3437,6 +3571,7 @@ async function changeProviderAndModel(type, newProvider, newModel) {
 
 // ── EasyPaper 설정 모달 이벤트 ──────────────────────────
 globalSettingsBtn.addEventListener('click', async () => {
+  await loadNamespaces(['settings', 'errors'])
   openOverlayModal(settingsModal)
 
   // 1. 기본적으로 첫 번째 탭(일반 설정)을 활성화
@@ -4631,7 +4766,7 @@ setInterval(flushReadingHeartbeat, READING_HEARTBEAT_FLUSH_MS)
 window.addEventListener('beforeunload', () => { flushReadingHeartbeat({ keepalive: true }); globalAnalyticsTracker.stopSession() })
 
 // ── 초기화 ────────────────────────────────────────
-checkAuthentication()
+i18nReady.then(() => checkAuthentication()).catch(console.error)
 checkAIStatus()
 setInterval(checkAIStatus, 30000)
 
@@ -4712,12 +4847,12 @@ function syncLibraryTabUI(activeTab, { resetFilters = true } = {}) {
 
   const subtitleEl = document.querySelector('.library-header-subtitle')
   if (subtitleEl) {
-    const noun = workspaceModeController.getMode() === 'general' ? '문서' : '논문'
-    if (activeTab === 'trash') {
-      subtitleEl.textContent = `휴지통에 보관 중인 ${noun}입니다. 복원하거나 영구 삭제할 수 있습니다.`
-    } else {
-      subtitleEl.textContent = `보관함에 저장된 모든 ${noun}를 한 곳에서 관리하세요`
+    const subtitles = {
+      research: { archive: t('library:subtitle.research.archive'), trash: t('library:subtitle.research.trash') },
+      general: { archive: t('library:subtitle.general.archive'), trash: t('library:subtitle.general.trash') },
     }
+    const mode = workspaceModeController.getMode() === 'general' ? 'general' : 'research'
+    subtitleEl.textContent = subtitles[mode][activeTab === 'trash' ? 'trash' : 'archive']
   }
 
   if (libTabTrash) libTabTrash.classList.toggle('active', activeTab === 'trash')
@@ -4765,6 +4900,7 @@ document.querySelectorAll('.view-toggle-btn').forEach(btn => {
 updateViewToggleUI()
 
 async function showLibraryScreen(shouldPushState = true, targetPage) {
+  await loadFeatureNamespaces(targetPage === 'dashboard' ? 'dashboard' : targetPage === 'chats' ? 'chat' : 'library')
   // 뷰어에서 나가는 시점이므로, 아직 디바운스 대기 중인 "마지막으로 읽은
   // 페이지" 저장이 있으면 Dashboard/Library가 새 데이터를 가져오기 전에
   // 먼저 끝마친다 (스크롤 직후 바로 뒤로가기를 눌렀을 때 최근 읽은 논문
@@ -4806,6 +4942,7 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
   // openChatDrawer()를 부르는 경우엔 그냥 무해한 no-op이다.
   if (pageId !== 'chats' || state.currentWorkspacePage !== 'chats') closeChatDrawer()
   state.currentWorkspacePage = pageId
+  await loadFeatureNamespaces(pageId === 'chats' ? 'chat' : pageId)
 
   if (sidebarNav) {
     sidebarNav.querySelectorAll('.sidebar-nav-item[data-page]').forEach(btn => {
@@ -6160,7 +6297,7 @@ function createFolderCard(folder) {
     ? `<div class="folder-card-icon">${icon('folder', 18, 'fill="currentColor" stroke="none"')}</div>
       <div class="folder-card-name" title="${escapeHtml(folder.name)}">${escapeHtml(folder.name)}</div>
       <div class="folder-card-meta">
-        <span>${icon('fileText', 12)}문서 ${paperCount}개</span>
+        <span>${icon('fileText', 12)}${t('library:document.count', { count: paperCount })}</span>
         <span class="meta-dot"></span>
         <span>${icon('folder', 12)}하위 폴더 ${childFolderCount}개</span>
       </div>
@@ -9240,6 +9377,7 @@ async function hydrateAnnotationsAndMemosFromServer(docId) {
 }
 
 async function openFromLibrary(doc, shouldPushState = true) {
+  await loadFeatureNamespaces('viewer')
   if (docOpeningId === doc.id) return
   docOpeningId = doc.id
   try {
@@ -9264,6 +9402,10 @@ async function openFromLibrary(doc, shouldPushState = true) {
     state.currentDocumentMode = doc.document_mode || "research"
     applyModeViewerSettings(state.currentDocumentMode)
     state.currentDocumentType = doc.document_type || "research_paper"
+    state.sourceLanguage = doc.source_language || "auto"
+    state.detectedSourceLanguage = doc.detected_source_language || "und"
+    state.preferredTargetLanguage = doc.preferred_target_language || null
+    populateLanguageControls()
 
     // 읽기 전 브리핑 게이팅: 설정에서 껐거나 이미 이 문서의 브리핑을 본 적
     // 있으면 건너뛴다. primer_shown 필드 자체가 없는 구버전 문서(이 기능
@@ -9433,7 +9575,10 @@ function setLibraryAddMenuOpen(open) {
   if (!wrap) return
   wrap.classList.toggle('open', open)
   libUploadBtn.setAttribute('aria-expanded', String(open))
-  libUploadBtn.setAttribute('aria-label', open ? '추가 메뉴 닫기' : '추가 메뉴 열기')
+  const labelKey = open ? 'common:addMenu.close' : 'common:addMenu.open'
+  const label = open ? t('common:addMenu.close') : t('common:addMenu.open')
+  libUploadBtn.dataset.i18nAriaLabel = labelKey
+  libUploadBtn.setAttribute('aria-label', label)
 }
 libUploadBtn.addEventListener('click', () => setLibraryAddMenuOpen(!document.querySelector('.lib-add-fab-wrap')?.classList.contains('open')))
 $('lib-add-paper-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); fileInput.click() })
@@ -9474,7 +9619,7 @@ function toggleTheme() {
   setModeSetting('theme', mode, isLight ? 'light' : 'dark')
   updateThemeIcons(isLight)
   applyAccentColor(currentAccentColor, { persist: false })
-  showToast(isLight ? '라이트 모드로 전환 ✓' : '다크 모드로 전환 ✓', 'success')
+  showToast(isLight ? t('settings:themeLightEnabled') : t('settings:themeDarkEnabled'), 'success')
   syncDesktopWindowTheme(isLight)
 }
 
@@ -12888,11 +13033,11 @@ function openChatSidebar() {
 
 function buildChatWelcomeHtml() {
   const isResearch = state.currentDocumentMode === 'research'
-  const noun = isResearch ? '논문' : '문서'
   const examples = isResearch
-    ? ['핵심 연구 내용과 기여도를 요약해줘.', '제안한 방법론의 과정을 설명해줘.', '실험 결과의 주요 수치와 의의는 무엇이야?']
-    : ['이 문서의 핵심 내용을 요약해줘.', '중요한 절차와 전제 조건을 설명해줘.', '주의사항과 핵심 수치를 찾아줘.']
-  return `<div class="chat-message assistant"><div class="message-bubble">안녕하세요! 이 ${noun}에 대해 궁금한 점을 질문해 주세요.<br><br><strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong><ul>${examples.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div></div>`
+    ? [t('chat:suggestions.research.summary'), t('chat:suggestions.research.method'), t('chat:suggestions.research.results')]
+    : [t('chat:suggestions.general.summary'), t('chat:suggestions.general.procedure'), t('chat:suggestions.general.cautions')]
+  const welcome = isResearch ? t('chat:welcome.research') : t('chat:welcome.general')
+  return `<div class="chat-message assistant"><div class="message-bubble">${escapeHtml(welcome)}<br><br><strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}${escapeHtml(t('chat:suggestions.label'))}</strong><ul>${examples.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div></div>`
 }
 
 function resetChatUI() {
@@ -13529,7 +13674,10 @@ function initChatListeners() {
       if (!inputBox) return
 
       const expanded = inputBox.classList.toggle('expanded')
-      const label = expanded ? '입력창 축소' : '입력창 확장'
+      const labelKey = expanded ? 'common:chatInput.collapse' : 'common:chatInput.expand'
+      const label = expanded ? t('common:chatInput.collapse') : t('common:chatInput.expand')
+      chatInputExpandBtn.dataset.i18nAriaLabel = labelKey
+      chatInputExpandBtn.dataset.i18nTitle = labelKey
       chatInputExpandBtn.setAttribute('aria-expanded', String(expanded))
       chatInputExpandBtn.setAttribute('aria-label', label)
       chatInputExpandBtn.title = label
@@ -16058,18 +16206,18 @@ async function loadPDFOutline() {
       // 목차 메타데이터가 존재하지 않는 경우를 대비한 전체 페이지 리스트 폴백(Fallback) 렌더링
       const infoMsg = document.createElement('div')
       infoMsg.style.cssText = 'font-size:11px; color:var(--text-muted); padding:4px 10px 12px; border-bottom:1px dashed var(--border); margin-bottom:8px; line-height:1.4;'
-      infoMsg.innerHTML = `${icon('info', 12, 'style="vertical-align:-2px;margin-right:3px"')}본 PDF에 목차(TOC) 정보가 존재하지 않아, 전체 페이지 리스트를 대신 제공합니다.`
+      infoMsg.innerHTML = `${icon('info', 12, 'style="vertical-align:-2px;margin-right:3px"')}${t('viewer:outline.noToc')}`
       outlineContent.appendChild(infoMsg)
 
       for (let p = 1; p <= state.totalPages; p++) {
         const div = document.createElement('div')
         div.className = 'outline-item depth-0'
         const iconSvg = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
-        div.innerHTML = `${iconSvg}<span>${p} 페이지</span>`
+        div.innerHTML = `${iconSvg}<span>${t('viewer:pageLabel', { page: p })}</span>`
         div.addEventListener('click', () => {
           scrollToPage(viewerScrollContainer, p)
         })
-        div.title = `${p}페이지로 이동`
+        div.title = t('viewer:goToPage', { page: p })
         outlineContent.appendChild(div)
       }
       return
@@ -16087,7 +16235,7 @@ async function loadPDFOutline() {
           div.addEventListener('click', () => {
             scrollToPage(viewerScrollContainer, item.pageNum)
           })
-          div.title = `${item.pageNum}페이지로 이동`
+          div.title = t('viewer:goToPage', { page: item.pageNum })
         }
         outlineContent.appendChild(div)
         if (item.items && item.items.length > 0) {

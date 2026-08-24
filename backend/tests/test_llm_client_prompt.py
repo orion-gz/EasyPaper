@@ -43,7 +43,7 @@ async def test_short_prompt_reminds_ignore_table(capture_antigravity_prompt):
         page_num=3,  # (3-1) % 5 != 0 이고 1도 아니므로 짧은 프롬프트 경로
     ))
     prompt = capture_antigravity_prompt[0]
-    assert "Markdown 표" in prompt and "완전히 제외" in prompt
+    assert "Omit tables completely" in prompt and "never emit Markdown tables" in prompt
 
 
 @pytest.mark.asyncio
@@ -55,7 +55,7 @@ async def test_short_prompt_omits_table_reminder_when_not_ignoring(capture_antig
         page_num=3,
     ))
     prompt = capture_antigravity_prompt[0]
-    assert "Markdown 표" not in prompt
+    assert "Omit tables completely" not in prompt
 
 
 @pytest.mark.asyncio
@@ -69,8 +69,8 @@ async def test_short_prompt_reminds_ignore_math_and_refs(capture_antigravity_pro
         page_num=3,
     ))
     prompt = capture_antigravity_prompt[0]
-    assert "수식은 번역하지 말고" in prompt
-    assert "참고문헌" in prompt
+    assert "Omit mathematical expressions" in prompt
+    assert "Omit reference lists and footnotes" in prompt
 
 
 @pytest.mark.asyncio
@@ -87,6 +87,5 @@ async def test_reminder_page_uses_full_prompt_not_short_prompt(capture_antigravi
         page_num=1,
     ))
     prompt = capture_antigravity_prompt[0]
-    # 전체 프롬프트 경로는 "앞서 안내한 규칙을 유지" 문구를 쓰지 않는다
-    assert "앞서 안내한" not in prompt
-    assert "완전히 제외" in prompt
+    assert "Maintain all previously supplied rules" not in prompt
+    assert "Omit tables completely" in prompt

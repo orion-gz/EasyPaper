@@ -13,6 +13,20 @@ router = APIRouter()
 VALID_KINDS = ("keywords", "summary")
 
 
+def _validated_languages(session: dict, target_lang: str, source_lang: str) -> tuple[str, str]:
+    from services.languages import api_language_error, normalize_document_language
+    try:
+        target = normalize_document_language(target_lang, allow_legacy=True)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(target_lang))
+    try:
+        requested_source = normalize_document_language(source_lang, allow_auto=True)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(source_lang, source=True))
+    source = session.get("detected_source_language", "und") if requested_source == "auto" else requested_source
+    return target, source
+
+
 def _require_insight_feature(session: dict, kind: str) -> None:
     if session.get("document_mode", "research") == "general" and kind == "keywords":
         from services.document_policy import feature_enabled
@@ -21,38 +35,41 @@ def _require_insight_feature(session: dict, kind: str) -> None:
 
 
 class InsightJobStartRequest(BaseModel):
-    target_lang: str = "한국어"
+    target_lang: str = "ko"
+    source_lang: str = "auto"
     confirmed: bool = False
 
 
 @router.get("/insight-jobs/{session_id}/{kind}/estimate")
-async def estimate_page_insight_job(session_id: str, kind: str, target_lang: str = "한국어", current_user: str = Depends(get_current_user)):
+async def estimate_page_insight_job(session_id: str, kind: str, target_lang: str = "ko", source_lang: str = "auto", current_user: str = Depends(get_current_user)):
     session = require_session_owner(session_id, current_user)
+    target_lang, source_lang = _validated_languages(session, target_lang, source_lang)
     _require_insight_feature(session, kind)
     from services.insight_job import estimate_insight_job, VALID_JOB_KINDS
     if kind not in VALID_JOB_KINDS:
         raise HTTPException(status_code=400, detail="지원하지 않는 인사이트 작업입니다.")
     return estimate_insight_job(
         session_id, session["pages"], target_lang, kind,
-        session.get("document_mode", "research"), session.get("document_type", "research_paper"),
+        session.get("document_mode", "research"), session.get("document_type", "research_paper"), source_lang,
     )
 
 
 @router.post("/insight-jobs/{session_id}/{kind}/start")
 async def start_page_insight_job(session_id: str, kind: str, body: InsightJobStartRequest, current_user: str = Depends(get_current_user)):
     session = require_session_owner(session_id, current_user)
+    target_lang, source_lang = _validated_languages(session, body.target_lang, body.source_lang)
     _require_insight_feature(session, kind)
     from services.insight_job import estimate_insight_job, start_keyword_job, start_summary_job, VALID_JOB_KINDS
     if kind not in VALID_JOB_KINDS:
         raise HTTPException(status_code=400, detail="지원하지 않는 인사이트 작업입니다.")
     mode = session.get("document_mode", "research")
     doc_type = session.get("document_type", "research_paper")
-    estimate = estimate_insight_job(session_id, session["pages"], body.target_lang, kind, mode, doc_type)
+    estimate = estimate_insight_job(session_id, session["pages"], target_lang, kind, mode, doc_type, source_lang)
     if estimate["requires_confirmation"] and not body.confirmed:
         raise HTTPException(status_code=409, detail={"message": "예상 호출량 확인이 필요합니다.", **estimate})
     title = session.get("metadata", {}).get("title") or session.get("filename", "")
     starter = start_keyword_job if kind == "keywords" else start_summary_job
-    return starter(session_id, session["pages"], body.target_lang, title, mode, doc_type)
+    return starter(session_id, session["pages"], target_lang, title, mode, doc_type, source_lang)
 
 
 @router.get("/insight-jobs/{session_id}/{kind}/status")
@@ -77,7 +94,8 @@ async def get_page_insight_stream(
     session_id: str,
     page_num: int,
     kind: str,
-    target_lang: str = "한국어",
+    target_lang: str = "ko",
+    source_lang: str = "auto",
     force: bool = False,
     current_user: str = Depends(get_current_user)
 ):
@@ -90,6 +108,7 @@ async def get_page_insight_stream(
         raise HTTPException(status_code=400, detail=f"kind는 {VALID_KINDS} 중 하나여야 합니다.")
 
     session = require_session_owner(session_id, current_user)
+    target_lang, source_lang = _validated_languages(session, target_lang, source_lang)
     _require_insight_feature(session, kind)
     total_pages = session["total_pages"]
 
@@ -108,7 +127,7 @@ async def get_page_insight_stream(
     document_mode = session.get("document_mode", "research")
     document_type = session.get("document_type", "research_paper")
     from services.document_policy import insight_cache_suffix
-    suffix = insight_cache_suffix(document_mode, document_type, target_lang)
+    suffix = insight_cache_suffix(document_mode, document_type, target_lang, source_lang)
     doc_title = session.get("metadata", {}).get("title") or session.get("filename", "")
 
     async def event_stream():
@@ -134,6 +153,7 @@ async def get_page_insight_stream(
                 kind,
                 page_text,
                 target_lang=target_lang,
+                source_lang=source_lang,
                 doc_title=doc_title,
                 document_mode=document_mode,
                 document_type=document_type,
@@ -164,7 +184,7 @@ async def get_page_insight_stream(
             save_page_insight(session_id, page_num, kind, complete_result, suffix)
             yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False}, ensure_ascii=False)}\n\n"
         except Exception as e:
-            error_data = json.dumps({"error": str(e), "done": True})
+            error_data = json.dumps({"error": {"code": "generation_failed", "params": {}, "fallback": "Generation failed."}, "done": True})
             yield f"data: {error_data}\n\n"
             return
 

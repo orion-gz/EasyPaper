@@ -12,6 +12,7 @@
 import { fetchLibraryTimeline, fetchLibraryDashboard, fetchLibrary, fetchReadingTimeStats, fetchReadingAnalyticsSummary } from '../library.js'
 import { icon } from '../icons.js'
 import { countUniqueVerifiedPages, readPageCount, lastActivityIso, lastActivityDateKey, isoToLocalDateKey } from '../readPages.js'
+import { t, formatDate, formatNumber } from '../i18n.js'
 import '../styles/reading-history.css'
 import '../styles/dashboard.css'
 
@@ -82,7 +83,7 @@ export const CATEGORY_COLOR_VAR = { reading: '--rh-c1', chat: '--rh-c2', compare
 export const CATEGORY_ORDER = ['reading', 'chat', 'compare']
 
 const DAY_MS = 86400000
-const WEEKDAY_LABELS = ['월', '', '수', '', '금', '', '일']
+const weekdayLabels = () => [t('dashboard:weekdayMon'), '', t('dashboard:weekdayWed'), '', t('dashboard:weekdayFri'), '', t('dashboard:weekdaySun')]
 
 // ── 날짜 키 유틸: 로컬 자정 기준 "YYYY-MM-DD". 이벤트 timestamp는
 // 백엔드가 UTC ISO 문자열로 내려주므로 .slice(0,10) 자체가 이미 날짜 키다. ──
@@ -110,21 +111,18 @@ function eventKey(e) {
 function formatDayLabel(dateKey) {
   const day = keyToLocalDate(dateKey)
   if (isNaN(day.getTime())) return { primary: dateKey, secondary: '' }
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
   const diffDays = Math.round((today - day) / DAY_MS)
-  const primary = diffDays === 0 ? '오늘' : diffDays === 1 ? '어제'
-    : day.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
-  return { primary, secondary: day.toLocaleDateString('ko-KR', { weekday: 'long' }) }
+  const primary = diffDays === 0 ? t('dashboard:today') : diffDays === 1 ? t('dashboard:yesterday') : formatDate(day, { month: 'long', day: 'numeric' })
+  return { primary, secondary: formatDate(day, { weekday: 'long' }) }
 }
 function formatTime(timestamp) {
   const d = new Date(timestamp)
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })
+  return isNaN(d.getTime()) ? '' : formatDate(d, { hour: 'numeric', minute: '2-digit' })
 }
 function formatShortDate(dateKey) {
   const d = keyToLocalDate(dateKey)
-  if (isNaN(d.getTime())) return dateKey
-  return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', year: 'numeric' })
+  return isNaN(d.getTime()) ? dateKey : formatDate(d, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export function buildDailyActivityStats(events, readingStats) {
@@ -298,7 +296,7 @@ export function periodStats(events, docsById, startKey, endKeyExclusive) {
   return { activeDays, papersRead: completedDocIds.size, pagesRead, questions, notes, uploadedPapers }
 }
 
-export function deltaHtml(curr, prev, unit = '', compareText = '이전 30일 대비') {
+export function deltaHtml(curr, prev, unit = '', compareText = t('dashboard:comparedPrevious30Days')) {
   const c = curr || 0
   const p = prev || 0
   const diff = c - p
@@ -317,7 +315,7 @@ export function formatDuration(seconds) {
   if (m > 0) return `${m}m`
   return s > 0 ? `${s}s` : '0m'
 }
-export function deltaDurationHtml(currSeconds, prevSeconds, compareText = '이전 30일 대비') {
+export function deltaDurationHtml(currSeconds, prevSeconds, compareText = t('dashboard:comparedPrevious30Days')) {
   const diff = Math.round(currSeconds - prevSeconds)
   if (diff === 0) return `<span class="rh-stat-delta">±0m ${compareText}</span>`
   const cls = diff > 0 ? 'up' : 'down'
@@ -492,7 +490,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
         {
           icon: 'bookOpen', color: 'var(--rh-c4)', label: modeCopy("등록 논문", "등록 문서"),
           value: (curr7.uploadedPapers || 0).toLocaleString(),
-          sub: deltaHtml(curr7.uploadedPapers, prev7.uploadedPapers, '', '이전 7일 대비'),
+          sub: deltaHtml(curr7.uploadedPapers, prev7.uploadedPapers, '', t('dashboard:comparedPrevious7Days')),
         },
         {
           icon: 'checkCircle', color: 'var(--rh-c2)', label: modeCopy("읽은 논문", "읽은 문서"),
@@ -502,7 +500,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
         {
           icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
           value: `${curr7.activeDays || 0} / 7`,
-          sub: `<span class="rh-stat-delta">최근 7일 중 ${activeDaysPct7}%</span>`,
+          sub: `<span class="rh-stat-delta">${t('dashboard:activeDaysRatio', { days: 7, percent: activeDaysPct7 })}</span>`,
         },
         {
           icon: 'clock', color: 'var(--rh-c3)', label: '읽은 시간',
@@ -541,8 +539,8 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
         },
         {
           icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
-          value: `${allActiveKeys.size}일`,
-          sub: `<span class="rh-stat-delta">총 ${allActiveKeys.size}일 동안 활동</span>`,
+          value: t('dashboard:daysCount', { count: allActiveKeys.size }),
+          sub: `<span class="rh-stat-delta">${t('dashboard:activeTotalDays', { count: allActiveKeys.size })}</span>`,
         },
         {
           icon: 'clock', color: 'var(--rh-c3)', label: '읽은 시간',
@@ -581,7 +579,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
       {
         icon: 'calendar', color: 'var(--rh-c1)', label: '활동일',
         value: `${curr.activeDays || 0} / 30`,
-        sub: `<span class="rh-stat-delta">최근 30일 중 ${activeDaysPct}%</span>`,
+        sub: `<span class="rh-stat-delta">${t('dashboard:activeDaysRatio', { days: 30, percent: activeDaysPct })}</span>`,
       },
       {
         icon: 'clock', color: 'var(--rh-c3)', label: '읽은 시간',
@@ -635,7 +633,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
   weeks.forEach((week, wi) => {
     const firstOfMonthDay = week.find(d => keyToLocalDate(d.key).getDate() <= 7)
     if (firstOfMonthDay) {
-      const label = `${keyToLocalDate(firstOfMonthDay.key).getMonth() + 1}월`
+      const label = formatDate(keyToLocalDate(firstOfMonthDay.key), { month: 'short' })
       if (!monthMarkers.length || monthMarkers[monthMarkers.length - 1].label !== label) {
         monthMarkers.push({ col: wi + 1, label })
       }
@@ -805,14 +803,14 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
               <div class="rh-cal">
                 <div class="rh-cal-months" style="grid-template-columns:repeat(${WEEKS}, 12px)">${monthsHtml}</div>
                 <div class="rh-cal-body">
-                  <div class="rh-cal-weekday-labels">${WEEKDAY_LABELS.map(l => `<span>${l}</span>`).join('')}</div>
+                  <div class="rh-cal-weekday-labels">${weekdayLabels().map(l => `<span>${l}</span>`).join('')}</div>
                   <div class="rh-cal-grid" style="grid-template-columns:repeat(${WEEKS}, 12px)">${calGridHtml}</div>
                 </div>
               </div>
             </div>
             <div class="rh-cal-footer">
               <span>${formatShortDate(gridStart)} &ndash; ${formatShortDate(gridEnd)}</span>
-              <span>총 <b>${allActiveKeys.size}</b>일 활동 &bull; 최장 연속 <b>${streaks.longest}</b>일</span>
+              <span>${t('dashboard:activityDaysLongest', { active: allActiveKeys.size, longest: streaks.longest })}</span>
             </div>
           </div>
 
@@ -854,8 +852,8 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
               <span class="rh-card-title">${icon('zap', 15)} 연속 읽기</span>
             </div>
             <div class="rh-streak-value">
-              <span class="rh-streak-num">${streaks.current}</span>
-              <span class="rh-streak-unit">일</span>
+              <span class="rh-streak-num">${formatNumber(streaks.current)}</span>
+              <span class="rh-streak-unit">${t('dashboard:dayUnit')}</span>
             </div>
             <div class="rh-streak-week">${streakWeekHtml}</div>
             <div class="rh-streak-msg">${streaks.current > 0 ? "계속 이어가세요!" : modeCopy("오늘 논문을 읽고 연속 기록을 시작해보세요.", "오늘 문서를 읽고 연속 기록을 시작해보세요.")}</div>
@@ -874,7 +872,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
               <div class="rh-callout-icon" style="--rh-callout-color:var(--success)">${icon('checkCircle', 16)}</div>
               <div class="rh-callout-body">
                 <div class="rh-callout-label">최장 연속 기록</div>
-                <div class="rh-callout-value">${streaks.longest}일</div>
+                <div class="rh-callout-value">${t('dashboard:daysCount', { count: streaks.longest })}</div>
                 <div class="rh-callout-sub">${streaks.longestStart ? `${formatShortDate(streaks.longestStart)} &ndash; ${formatShortDate(streaks.longestEnd)}` : '아직 활동 없음'}</div>
               </div>
             </div>

@@ -1,0 +1,19 @@
+{
+  "generalDocumentsEmpty": "일반 문서가 없습니다.",
+  "thisWeekDelta": "이번 주 {{value}}",
+  "comparedLastWeek": "지난주 대비",
+  "weekdayMon": "월",
+  "weekdayWed": "수",
+  "weekdayFri": "금",
+  "weekdaySun": "일",
+  "today": "오늘",
+  "yesterday": "어제",
+  "comparedPrevious7Days": "이전 7일 대비",
+  "comparedPrevious30Days": "이전 30일 대비",
+  "activeDaysRatio": "최근 {{days}}일 중 {{percent}}%",
+  "daysCount_one": "{{count}}일",
+  "daysCount_other": "{{count}}일",
+  "activeTotalDays": "총 {{count}}일 동안 활동",
+  "activityDaysLongest": "{{active}}일 활동 • 최장 연속 {{longest}}일",
+  "dayUnit": "일"
+}

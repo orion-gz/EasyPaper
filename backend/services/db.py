@@ -47,6 +47,10 @@ def init_db():
             document_mode TEXT NOT NULL DEFAULT 'research',
             document_type TEXT NOT NULL DEFAULT 'research_paper',
             mode_schema_version INTEGER NOT NULL DEFAULT 1,
+            source_language TEXT NOT NULL DEFAULT 'auto',
+            detected_source_language TEXT NOT NULL DEFAULT 'und',
+            source_language_confidence REAL,
+            preferred_target_language TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY (username) REFERENCES users (username) ON DELETE CASCADE ON UPDATE CASCADE
         )
@@ -132,6 +136,10 @@ def init_db():
             "ALTER TABLE documents ADD COLUMN document_mode TEXT NOT NULL DEFAULT 'research'",
             "ALTER TABLE documents ADD COLUMN document_type TEXT NOT NULL DEFAULT 'research_paper'",
             "ALTER TABLE documents ADD COLUMN mode_schema_version INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE documents ADD COLUMN source_language TEXT NOT NULL DEFAULT 'auto'",
+            "ALTER TABLE documents ADD COLUMN detected_source_language TEXT NOT NULL DEFAULT 'und'",
+            "ALTER TABLE documents ADD COLUMN source_language_confidence REAL",
+            "ALTER TABLE documents ADD COLUMN preferred_target_language TEXT",
         ):
             try:
                 cursor.execute(column_sql)
@@ -436,6 +444,22 @@ def init_db():
                SELECT username, 1, 'research', '{}', ? FROM users""",
             (datetime.now(timezone.utc).isoformat(),),
         )
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_language_settings (
+            username TEXT PRIMARY KEY,
+            ui_locale TEXT,
+            default_source_language TEXT NOT NULL DEFAULT 'auto',
+            target_language TEXT NOT NULL DEFAULT 'ko',
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """)
+        cursor.execute(
+            """INSERT OR IGNORE INTO user_language_settings
+               (username, ui_locale, default_source_language, target_language, updated_at)
+               SELECT username, NULL, 'auto', 'ko', ? FROM users""",
+            (datetime.now(timezone.utc).isoformat(),),
+        )
         # foreign_keys 설정이 꺼진 기존 설치에서 영구 삭제된 논문이나 폴더를
         # 가리키는 매핑이 남을 수 있으므로 시작 시 기존 데이터도 정리한다.
         cursor.execute("DELETE FROM document_folders WHERE doc_id NOT IN (SELECT id FROM documents)")
@@ -544,6 +568,7 @@ def update_user_credentials(old_username: str, new_username: str, new_password_h
                     "compare_sessions",
                     "folders",
                     "user_workspace_settings",
+                    "user_language_settings",
                 ):
                     cursor.execute(
                         f"UPDATE {table} SET username = ? WHERE username = ?",
@@ -561,6 +586,9 @@ def db_save_document(
     doc_id: str, username: str, filename: str, pdf_path: str, total_pages: int,
     metadata: dict, document_mode: str = "research",
     document_type: str = "research_paper", mode_schema_version: int = 1,
+    source_language: str = "auto", detected_source_language: str = "und",
+    source_language_confidence: Optional[float] = None,
+    preferred_target_language: Optional[str] = None,
 ) -> dict:
     meta_str = json.dumps(metadata, ensure_ascii=False)
     created_at = datetime.now(timezone.utc).isoformat()
@@ -570,11 +598,12 @@ def db_save_document(
             """
             INSERT OR REPLACE INTO documents
                 (id, username, filename, pdf_path, total_pages, metadata,
-                 document_mode, document_type, mode_schema_version, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (doc_id, username, filename, pdf_path, total_pages, meta_str,
-             document_mode, document_type, mode_schema_version, created_at)
+             document_mode, document_type, mode_schema_version, source_language, detected_source_language,
+             source_language_confidence, preferred_target_language, created_at)
         )
         conn.commit()
     return {
@@ -582,13 +611,16 @@ def db_save_document(
         "pdf_path": pdf_path, "total_pages": total_pages, "metadata": metadata,
         "document_mode": document_mode, "document_type": document_type,
         "mode_schema_version": mode_schema_version, "created_at": created_at,
+        "source_language": source_language, "detected_source_language": detected_source_language,
+        "source_language_confidence": source_language_confidence,
+        "preferred_target_language": preferred_target_language,
     }
 
 def db_get_document(doc_id: str) -> Optional[dict]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, is_deleted, created_at FROM documents WHERE id = ?",
+            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, is_deleted, created_at FROM documents WHERE id = ?",
             (doc_id,)
         )
         row = cursor.fetchone()
@@ -613,7 +645,8 @@ def db_list_documents(username: Optional[str] = None, only_trash: bool = False, 
 
     query = (
         "SELECT id, username, filename, pdf_path, total_pages, metadata, "
-        "document_mode, document_type, mode_schema_version, is_deleted, created_at "
+        "document_mode, document_type, mode_schema_version, source_language, detected_source_language, "
+        "source_language_confidence, preferred_target_language, is_deleted, created_at "
         "FROM documents"
     )
     if conditions:
@@ -664,7 +697,9 @@ def db_search_documents(username: str, query: str, only_trash: bool = False, doc
             f"""
             SELECT DISTINCT d.id, d.username, d.filename, d.pdf_path, d.total_pages,
                    d.metadata, d.document_mode, d.document_type,
-                   d.mode_schema_version, d.is_deleted, d.created_at
+                   d.mode_schema_version, d.source_language, d.detected_source_language,
+                   d.source_language_confidence, d.preferred_target_language,
+                   d.is_deleted, d.created_at
             FROM documents d
             LEFT JOIN translations t ON t.doc_id = d.id
             WHERE d.username = ? AND d.is_deleted = ?
@@ -1208,6 +1243,56 @@ def db_upsert_workspace_settings(username: str, onboarding_version: int, preferr
         )
         conn.commit()
     return db_get_workspace_settings(username)
+# ── 사용자/문서 언어 설정 ───────────────────────────────────────────────────
+
+def db_get_language_settings(username: str) -> dict:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT ui_locale, default_source_language, target_language, updated_at "
+            "FROM user_language_settings WHERE username = ?", (username,),
+        ).fetchone()
+    if not row:
+        return {"ui_locale": None, "default_source_language": "auto", "target_language": "ko"}
+    return dict(row)
+
+
+def db_upsert_language_settings(username: str, ui_locale: Optional[str],
+                                default_source_language: str, target_language: str) -> dict:
+    updated_at = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO user_language_settings
+               (username, ui_locale, default_source_language, target_language, updated_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(username) DO UPDATE SET ui_locale=excluded.ui_locale,
+                 default_source_language=excluded.default_source_language,
+                 target_language=excluded.target_language, updated_at=excluded.updated_at""",
+            (username, ui_locale, default_source_language, target_language, updated_at),
+        )
+        conn.commit()
+    return db_get_language_settings(username)
+
+
+def db_update_document_languages(doc_id: str, source_language: str,
+                                 preferred_target_language: Optional[str]) -> bool:
+    with get_db() as conn:
+        cursor = conn.execute(
+            "UPDATE documents SET source_language = ?, preferred_target_language = ? WHERE id = ?",
+            (source_language, preferred_target_language, doc_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def db_update_detected_source_language(doc_id: str, detected_source_language: str,
+                                       confidence: Optional[float]) -> bool:
+    with get_db() as conn:
+        cursor = conn.execute(
+            "UPDATE documents SET detected_source_language = ?, source_language_confidence = ? WHERE id = ?",
+            (detected_source_language, confidence, doc_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 # ── 앱 내부 상태 (app_meta) ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

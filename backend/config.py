@@ -558,7 +558,7 @@ def get_agy_env() -> dict:
 # ── Dynamic Translation Prompt Template ─────────────────
 PROMPT_FILE = os.path.join(_get_config_dir(), "translation_prompt.txt")
 
-DEFAULT_PROMPT_TEMPLATE = """당신은 학술 논문 번역 전문가입니다. {{LANG_INSTRUCTION}}
+LEGACY_DEFAULT_PROMPT_TEMPLATE = """당신은 학술 논문 번역 전문가입니다. {{LANG_INSTRUCTION}}
 
 번역 스타일:
 {{STYLE_INSTRUCTION}}
@@ -577,13 +577,40 @@ DEFAULT_PROMPT_TEMPLATE = """당신은 학술 논문 번역 전문가입니다. 
 
 {{TARGET_LANG}} 번역:"""
 
+DEFAULT_PROMPT_TEMPLATE = """You are a professional document translator.
+
+Source language: {{SOURCE_LANGUAGE_NAME}} ({{SOURCE_LANGUAGE_TAG}})
+Target language: {{TARGET_LANGUAGE_NAME}} ({{TARGET_LANGUAGE_TAG}})
+{{LANG_INSTRUCTION}}
+
+Translation style:
+{{STYLE_INSTRUCTION}}
+
+Translation and preservation rules:
+{{RULES_TEXT}}
+- Translate the complete supplied source text. Never stop mid-sentence or omit content except where the rules explicitly require omission.
+- Use the supplied context only for consistency. Never repeat previous translated context in the output.
+- User-defined additions may be placed here without changing the fixed language instruction above.
+
+{{CONTEXT_PART}}
+
+[Source text]
+{{TEXT}}
+
+[Translation in {{TARGET_LANGUAGE_NAME}}]"""
+
 def get_translation_prompt_template() -> str:
     if not os.path.exists(PROMPT_FILE):
         with open(PROMPT_FILE, "w", encoding="utf-8") as f:
             f.write(DEFAULT_PROMPT_TEMPLATE.strip())
         return DEFAULT_PROMPT_TEMPLATE.strip()
     with open(PROMPT_FILE, "r", encoding="utf-8") as f:
-        return f.read().strip()
+        template = f.read().strip()
+    if template == LEGACY_DEFAULT_PROMPT_TEMPLATE.strip():
+        template = DEFAULT_PROMPT_TEMPLATE.strip()
+        with open(PROMPT_FILE, "w", encoding="utf-8") as f:
+            f.write(template)
+    return template
 
 def update_translation_prompt_template(new_template: str):
     if not new_template or not new_template.strip():

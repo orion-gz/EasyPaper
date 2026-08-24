@@ -142,14 +142,15 @@ def build_assistant_prompt(document_mode: str, document_type: str, title: str, c
 {context}
 [END UNTRUSTED context]
 
-Answer from the supplied context first. Cite supporting pages as [p.N] or [pp.N-M]. If the context does not support an answer, say so explicitly before offering clearly labelled general knowledge. Do not fabricate page citations. Reply in Korean unless the user requests another language."""
+Answer from the supplied context first. Cite supporting pages as [p.N] or [pp.N-M]. If the context does not support an answer, say so explicitly before offering clearly labelled general knowledge. Do not fabricate page citations. Reply in the language used by the user's question unless the user requests another language."""
 
 
-def translation_cache_suffix(document_mode: str, document_type: str, target_lang: str, style: str, ignore_math: bool, ignore_table: bool, ignore_refs: bool) -> str:
+def translation_cache_suffix(document_mode: str, document_type: str, target_lang: str, style: str, ignore_math: bool, ignore_table: bool, ignore_refs: bool, source_lang: str = "auto") -> str:
     get_policy(document_mode, document_type)
+    source_part = f"src{source_lang}_" if source_lang != "auto" else ""
     return (
         f"mode{MODE_SCHEMA_VERSION}_{document_mode}_{document_type}_{TRANSLATION_PROMPT_VERSION}_"
-        f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
+        f"{source_part}{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
     )
 
 
@@ -158,18 +159,31 @@ def legacy_translation_cache_suffix(target_lang: str, style: str, ignore_math: b
     return f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
 
 
-def translation_cache_candidates(document_mode: str, document_type: str, target_lang: str, style: str, ignore_math: bool, ignore_table: bool, ignore_refs: bool) -> tuple[str, ...]:
+def translation_cache_candidates(document_mode: str, document_type: str, target_lang: str, style: str, ignore_math: bool, ignore_table: bool, ignore_refs: bool, source_lang: str = "auto") -> tuple[str, ...]:
     current = translation_cache_suffix(
         document_mode, document_type, target_lang, style,
-        ignore_math, ignore_table, ignore_refs,
+        ignore_math, ignore_table, ignore_refs, source_lang,
     )
-    if document_mode == "research" and document_type == "research_paper":
-        return (current, legacy_translation_cache_suffix(
+    candidates = [current]
+    # Source-less caches are safe only while the source is genuinely unresolved.
+    legacy_target = {"ko": "한국어", "en": "영어", "ja": "일본어", "zh-Hans": "중국어"}.get(target_lang)
+    if source_lang == "auto" and legacy_target:
+        candidates.append(translation_cache_suffix(
+            document_mode, document_type, legacy_target, style,
+            ignore_math, ignore_table, ignore_refs,
+        ))
+    if source_lang == "auto" and document_mode == "research" and document_type == "research_paper":
+        candidates.append(legacy_translation_cache_suffix(
             target_lang, style, ignore_math, ignore_table, ignore_refs,
         ))
-    return (current,)
+        if legacy_target:
+            candidates.append(legacy_translation_cache_suffix(
+                legacy_target, style, ignore_math, ignore_table, ignore_refs,
+            ))
+    return tuple(dict.fromkeys(candidates))
 
 
-def insight_cache_suffix(document_mode: str, document_type: str, target_lang: str) -> str:
+def insight_cache_suffix(document_mode: str, document_type: str, target_lang: str, source_lang: str = "auto") -> str:
     get_policy(document_mode, document_type)
-    return f"mode{MODE_SCHEMA_VERSION}_{document_mode}_{document_type}_{INSIGHT_PROMPT_VERSION}_{target_lang}"
+    source_part = f"_src{source_lang}" if source_lang != "auto" else ""
+    return f"mode{MODE_SCHEMA_VERSION}_{document_mode}_{document_type}_{INSIGHT_PROMPT_VERSION}{source_part}_{target_lang}"

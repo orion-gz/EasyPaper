@@ -1,0 +1,12 @@
+{
+  "uiLanguage": "Interface language",
+  "sourceLanguage": "Default source language",
+  "targetLanguage": "Translation target language",
+  "saved": "Language settings saved.",
+  "themeHeading": "Display theme",
+  "themeScopeResearch": "Applies to research mode only",
+  "themeScopeGeneral": "Applies to general document mode only",
+  "accentColor": "Accent color",
+  "themeLightEnabled": "Switched to light mode ✓",
+  "themeDarkEnabled": "Switched to dark mode ✓"
+}

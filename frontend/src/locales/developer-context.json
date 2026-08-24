@@ -1,0 +1,3803 @@
+{
+  "chat:placeholder": {
+    "description": "Ask about this document…"
+  },
+  "common:login.username": {
+    "description": "Username"
+  },
+  "common:login.password": {
+    "description": "Password"
+  },
+  "common:login.submit": {
+    "description": "Sign in"
+  },
+  "common:ui.language": {
+    "description": "Interface language"
+  },
+  "common:language.auto": {
+    "description": "Auto-detect"
+  },
+  "common:language.mul": {
+    "description": "Multiple languages"
+  },
+  "common:language.und": {
+    "description": "Undetermined"
+  },
+  "common:language.ko": {
+    "description": "Korean"
+  },
+  "common:language.en": {
+    "description": "English"
+  },
+  "common:language.ja": {
+    "description": "Japanese"
+  },
+  "common:language.zh-Hans": {
+    "description": "Simplified Chinese"
+  },
+  "common:language.zh-Hant": {
+    "description": "Traditional Chinese"
+  },
+  "common:language.es": {
+    "description": "Spanish"
+  },
+  "common:language.fr": {
+    "description": "French"
+  },
+  "common:language.de": {
+    "description": "German"
+  },
+  "common:language.pt-BR": {
+    "description": "Brazilian Portuguese"
+  },
+  "common:language.pt-PT": {
+    "description": "European Portuguese"
+  },
+  "common:language.it": {
+    "description": "Italian"
+  },
+  "common:language.nl": {
+    "description": "Dutch"
+  },
+  "common:language.ru": {
+    "description": "Russian"
+  },
+  "common:language.uk": {
+    "description": "Ukrainian"
+  },
+  "common:language.pl": {
+    "description": "Polish"
+  },
+  "common:language.cs": {
+    "description": "Czech"
+  },
+  "common:language.sk": {
+    "description": "Slovak"
+  },
+  "common:language.bg": {
+    "description": "Bulgarian"
+  },
+  "common:language.hr": {
+    "description": "Croatian"
+  },
+  "common:language.sr": {
+    "description": "Serbian"
+  },
+  "common:language.sl": {
+    "description": "Slovenian"
+  },
+  "common:language.sv": {
+    "description": "Swedish"
+  },
+  "common:language.da": {
+    "description": "Danish"
+  },
+  "common:language.no": {
+    "description": "Norwegian"
+  },
+  "common:language.fi": {
+    "description": "Finnish"
+  },
+  "common:language.et": {
+    "description": "Estonian"
+  },
+  "common:language.lv": {
+    "description": "Latvian"
+  },
+  "common:language.lt": {
+    "description": "Lithuanian"
+  },
+  "common:language.el": {
+    "description": "Greek"
+  },
+  "common:language.tr": {
+    "description": "Turkish"
+  },
+  "common:language.ar": {
+    "description": "Arabic"
+  },
+  "common:language.he": {
+    "description": "Hebrew"
+  },
+  "common:language.hi": {
+    "description": "Hindi"
+  },
+  "common:language.bn": {
+    "description": "Bengali"
+  },
+  "common:language.id": {
+    "description": "Indonesian"
+  },
+  "common:language.vi": {
+    "description": "Vietnamese"
+  },
+  "common:language.th": {
+    "description": "Thai"
+  },
+  "common:language.sw": {
+    "description": "Swahili"
+  },
+  "common:login.heading": {
+    "description": "Academic paper translation"
+  },
+  "common:login.secure": {
+    "description": "Secure sign-in"
+  },
+  "common:login.usernamePlaceholder": {
+    "description": "Enter username"
+  },
+  "common:login.remember": {
+    "description": "Keep me signed in on this device"
+  },
+  "common:upload.inProgress": {
+    "description": "Uploading files…"
+  },
+  "errors:unsupported_source_language": {
+    "description": "Unsupported source language: {{language}}"
+  },
+  "errors:unsupported_target_language": {
+    "description": "Unsupported target language: {{language}}"
+  },
+  "errors:unsupported_ui_locale": {
+    "description": "Unsupported interface language: {{locale}}"
+  },
+  "errors:same_source_and_target_language": {
+    "description": "Source and target languages must be different."
+  },
+  "errors:unknown": {
+    "description": "Something went wrong. Please try again."
+  },
+  "errors:source_language_not_translatable": {
+    "description": "{{language}} cannot be translated automatically. Choose a supported source language."
+  },
+  "errors:generation_failed": {
+    "description": "Generation failed. Please try again."
+  },
+  "errors:network": {
+    "description": "Could not connect to the server."
+  },
+  "library:document.count_one": {
+    "description": "{{count}} document"
+  },
+  "library:document.count_other": {
+    "description": "{{count}} documents"
+  },
+  "library:subtitle": {
+    "description": "Manage all saved papers in one place."
+  },
+  "library:addDocument": {
+    "description": "Add paper"
+  },
+  "library:addFolder": {
+    "description": "Add folder"
+  },
+  "navigation:dashboard": {
+    "description": "Dashboard"
+  },
+  "navigation:library": {
+    "description": "Library"
+  },
+  "navigation:settings": {
+    "description": "Settings"
+  },
+  "navigation:workspaceMode": {
+    "description": "Workspace mode"
+  },
+  "navigation:research": {
+    "description": "Research"
+  },
+  "navigation:generalDocuments": {
+    "description": "General documents"
+  },
+  "navigation:history": {
+    "description": "Reading history"
+  },
+  "navigation:chats": {
+    "description": "Paper AI"
+  },
+  "navigation:notes": {
+    "description": "Paper notes"
+  },
+  "navigation:theme": {
+    "description": "Switch theme"
+  },
+  "navigation:logout": {
+    "description": "Sign out"
+  },
+  "navigation:searchPlaceholder": {
+    "description": "Search papers, concepts, and questions…"
+  },
+  "onboarding:uiLanguage": {
+    "description": "Interface language"
+  },
+  "onboarding:next": {
+    "description": "Next"
+  },
+  "onboarding:confirm": {
+    "description": "Confirm"
+  },
+  "onboarding:purpose.heading": {
+    "description": "How will you use EasyPaper?"
+  },
+  "onboarding:purpose.help": {
+    "description": "This only sets the default workspace and does not classify documents automatically. You can change it from the sidebar at any time."
+  },
+  "onboarding:purpose.research": {
+    "description": "Research papers"
+  },
+  "onboarding:purpose.researchHelp": {
+    "description": "Paper translation, pre-reading briefings, comparisons, and Research Graph"
+  },
+  "onboarding:purpose.general": {
+    "description": "General documents"
+  },
+  "onboarding:purpose.generalHelp": {
+    "description": "Translation and document AI for technical documents, books, articles, reports, and manuals"
+  },
+  "onboarding:detecting": {
+    "description": "Checking for installed AI engines…"
+  },
+  "onboarding:back": {
+    "description": "← Back"
+  },
+  "settings:uiLanguage": {
+    "description": "Interface language"
+  },
+  "settings:sourceLanguage": {
+    "description": "Default source language"
+  },
+  "settings:targetLanguage": {
+    "description": "Translation target language"
+  },
+  "settings:saved": {
+    "description": "Language settings saved."
+  },
+  "viewer:translation.waiting": {
+    "description": "Waiting"
+  },
+  "viewer:translation.progress": {
+    "description": "{{completed}} of {{total}} pages"
+  },
+  "viewer:source.label": {
+    "description": "Source"
+  },
+  "viewer:source.aria": {
+    "description": "Document source language"
+  },
+  "viewer:target.label": {
+    "description": "Target"
+  },
+  "viewer:target.aria": {
+    "description": "Document target language"
+  },
+  "viewer:source.undetermined": {
+    "description": "Source language could not be determined. Automatic translation is paused."
+  },
+  "viewer:source.multiple": {
+    "description": "Multiple source languages detected. Select one source to translate."
+  },
+  "viewer:source.unsupportedCode": {
+    "description": "Detected {{language}}, which is not supported for automatic translation."
+  },
+  "viewer:translation.sameLanguage": {
+    "description": "Translation skipped; insights remain available."
+  },
+  "viewer:translation.pair": {
+    "description": "{{source}} → {{target}}"
+  },
+  "viewer:language.saved": {
+    "description": "Document language override saved."
+  },
+  "navigation:researchDashboard": {
+    "description": "Research home"
+  },
+  "navigation:researchLibrary": {
+    "description": "Paper library"
+  },
+  "navigation:generalDashboard": {
+    "description": "Document home"
+  },
+  "navigation:generalLibrary": {
+    "description": "Document library"
+  },
+  "navigation:researchSearch": {
+    "description": "Search research papers"
+  },
+  "navigation:generalSearch": {
+    "description": "Search general documents"
+  },
+  "navigation:addPaper": {
+    "description": "Add paper"
+  },
+  "navigation:addDocument": {
+    "description": "Add document"
+  },
+  "navigation:generalChats": {
+    "description": "Document AI"
+  },
+  "navigation:generalNotes": {
+    "description": "Document notes"
+  },
+  "dashboard:generalDocumentsEmpty": {
+    "description": "Empty state for the general-document dashboard."
+  },
+  "common:legacy.ui.0001": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0002": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0003": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0004": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0005": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0006": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0007": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0008": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0009": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0010": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0011": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0012": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0013": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0014": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0015": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0016": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0017": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0018": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0019": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0020": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0021": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0022": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0023": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0024": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0025": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0026": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0027": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0028": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0029": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0030": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0031": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0032": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0033": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0034": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0035": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0036": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0037": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0038": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0039": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0040": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0041": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0042": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0043": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0044": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0045": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0046": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0047": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0048": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0049": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0050": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0051": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0052": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0053": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0054": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0055": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0056": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0057": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0058": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0059": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0060": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0061": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0062": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0063": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0064": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0065": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0066": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0067": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0068": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0069": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0070": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0071": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0072": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0073": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0074": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0075": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0076": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0077": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0078": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0079": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0080": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0081": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0082": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0083": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0084": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0085": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0086": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0087": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0088": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0089": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0090": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0091": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0092": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0093": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0094": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0095": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0096": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0097": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0098": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0099": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0100": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0101": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0102": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0103": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0104": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0105": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0106": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0107": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0108": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0109": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0110": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0111": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0112": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0113": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0114": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0115": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0116": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0117": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0118": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0119": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0120": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0121": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0122": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0123": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0124": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0125": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0126": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0127": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0128": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0129": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0130": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0131": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0132": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0133": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0134": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0135": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0136": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0137": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0138": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0139": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0140": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0141": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0142": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0143": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0144": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0145": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0146": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0147": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0148": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0149": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0150": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0151": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0152": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0153": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0154": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0155": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0156": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0157": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0158": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0159": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0160": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0161": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0162": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0163": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0164": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0165": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0166": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0167": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0168": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0169": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0170": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0171": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0172": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0173": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0174": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0175": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0176": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0177": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0178": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0179": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0180": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0181": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0182": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0183": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0184": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0185": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0186": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0187": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0188": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0189": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0190": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0191": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0192": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0193": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0194": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0195": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0196": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0197": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0198": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0199": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0200": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0201": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0202": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0203": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0204": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0205": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0206": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0207": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0208": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0209": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0210": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0211": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0212": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0213": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0214": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0215": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0216": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0217": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0218": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0219": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0220": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0221": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0222": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0223": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0224": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0225": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0226": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0227": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0228": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0229": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0230": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0231": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0232": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0233": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0234": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0235": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0236": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0237": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0238": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0239": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0240": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0241": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0242": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0243": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0244": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0245": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0246": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0247": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0248": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0249": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0250": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0251": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0252": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0253": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0254": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0255": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0256": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0257": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0258": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0259": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0260": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0261": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0262": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0263": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0264": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0265": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0266": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0267": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0268": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0269": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0270": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0271": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0272": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0273": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0274": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0275": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0276": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0277": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0278": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0279": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0280": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0281": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0282": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0283": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0284": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0285": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0286": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0287": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0288": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0289": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0290": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0291": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0292": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0293": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0294": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0295": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0296": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0297": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0298": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0299": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0300": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0301": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0302": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0303": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0304": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0305": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0306": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0307": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0308": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0309": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0310": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0311": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0312": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0313": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0314": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0315": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0316": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0317": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0318": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0319": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0320": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0321": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0322": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0323": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0324": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0325": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0326": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0327": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0328": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0329": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0330": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0331": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0332": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0333": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0334": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0335": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0336": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0337": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0338": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0339": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0340": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0341": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0342": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0343": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0344": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0345": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0346": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0347": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0348": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0349": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0350": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0351": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0352": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0353": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0354": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0355": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0356": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0357": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0358": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0359": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0360": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0361": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0362": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0363": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0364": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0365": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0366": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0367": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0368": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0369": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0370": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0371": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0372": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0373": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0374": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0375": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0376": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0377": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0378": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0379": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0380": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0381": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0382": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0383": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0384": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0385": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0386": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0387": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0388": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0389": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0390": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0391": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0392": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0393": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0394": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0395": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0396": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0397": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0398": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0399": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0400": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0401": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0402": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0403": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0404": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0405": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0406": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0407": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0408": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0409": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0410": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0411": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0412": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0413": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0414": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0415": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0416": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0417": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0418": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0419": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0420": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0421": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0422": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0423": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0424": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0425": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0426": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0427": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0428": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0429": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0430": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0431": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0432": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0433": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0434": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0435": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0436": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0437": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0438": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0439": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0440": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0441": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0442": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0443": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0444": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0445": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0446": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0447": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0448": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0449": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0450": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0451": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0452": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0453": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0454": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0455": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0456": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0457": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0458": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0459": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0460": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0461": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0462": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0463": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0464": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0465": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0466": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0467": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0468": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0469": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0470": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0471": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0472": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0473": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0474": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0475": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0476": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0477": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0478": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0479": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0480": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0481": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0482": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0483": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0484": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0485": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0486": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0487": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0488": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0489": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0490": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0491": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0492": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0493": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0494": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0495": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0496": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0497": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0498": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0499": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0500": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0501": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0502": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0503": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0504": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0505": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0506": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0507": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0508": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0509": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0510": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0511": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0512": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0513": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0514": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0515": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0516": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0517": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0518": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0519": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0520": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0521": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0522": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0523": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0524": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0525": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0526": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0527": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0528": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0529": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0530": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0531": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0532": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0533": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0534": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0535": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0536": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0537": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0538": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0539": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0540": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0541": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0542": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0543": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0544": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0545": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0546": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0547": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0548": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0549": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0550": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0551": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0552": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0553": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0554": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0555": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0556": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0557": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0558": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0559": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0560": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0561": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0562": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0563": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0564": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0565": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0566": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0567": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0568": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0569": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0570": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0571": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0572": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0573": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0574": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0575": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0576": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0577": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0578": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0579": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0580": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0581": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0582": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0583": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0584": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0585": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0586": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0587": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0588": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0589": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0590": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0591": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0592": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0593": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0594": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0595": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0596": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0597": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0598": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0599": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0600": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0601": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0602": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0603": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0604": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0605": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0606": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0607": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0608": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0609": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0610": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0611": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0612": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0613": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0614": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0615": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0616": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0617": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0618": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0619": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0620": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0621": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0622": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0623": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0624": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0625": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0626": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0627": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0628": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0629": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0630": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0631": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0632": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0633": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0634": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0635": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0636": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0637": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0638": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0639": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0640": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0641": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0642": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0643": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0644": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0645": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0646": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0647": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0648": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0649": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0650": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0651": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0652": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0653": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0654": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0655": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0656": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0657": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0658": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0659": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0660": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0661": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0662": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0663": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0664": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0665": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0666": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0667": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0668": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0669": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0670": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0671": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0672": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0673": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0674": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0675": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0676": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0677": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0678": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0679": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0680": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0681": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0682": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0683": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0684": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0685": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0686": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0687": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0688": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0689": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0690": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0691": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0692": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0693": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0694": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0695": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0696": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0697": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0698": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0699": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0700": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0701": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0702": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0703": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0704": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0705": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0706": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0707": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0708": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0709": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0710": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0711": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0712": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0713": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0714": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0715": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0716": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0717": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0718": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0719": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0720": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0721": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0722": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0723": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0724": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0725": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0726": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0727": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0728": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0729": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0730": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0731": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0732": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0733": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0734": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0735": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0736": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0737": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0738": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0739": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0740": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0741": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0742": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0743": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0744": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0745": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0746": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0747": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0748": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0749": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0750": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0751": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0752": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0753": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0754": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0755": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0756": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0757": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0758": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0759": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0760": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0761": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0762": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0763": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0764": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0765": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0766": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0767": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0768": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0769": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0770": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0771": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0772": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0773": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0774": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0775": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0776": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0777": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0778": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0779": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0780": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0781": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0782": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0783": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0784": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0785": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0786": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0787": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0788": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0789": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0790": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0791": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0792": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0793": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0794": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0795": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0796": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0797": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0798": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0799": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0800": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0801": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0802": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0803": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0804": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0805": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0806": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0807": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0808": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0809": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0810": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0811": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0812": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0813": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0814": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0815": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0816": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0817": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0818": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0819": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0820": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0821": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0822": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0823": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0824": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0825": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0826": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0827": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0828": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0829": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0830": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0831": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0832": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0833": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0834": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0835": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0836": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0837": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0838": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0839": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0840": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0841": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0842": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0843": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0844": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0845": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0846": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0847": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0848": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0849": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0850": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0851": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0852": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0853": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0854": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0855": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0856": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0857": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0858": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0859": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0860": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0861": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0862": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0863": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0864": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0865": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0866": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0867": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0868": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0869": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0870": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0871": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0872": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0873": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0874": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0875": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0876": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0877": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0878": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0879": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0880": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0881": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0882": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0883": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0884": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0885": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0886": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0887": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0888": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0889": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0890": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0891": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0892": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0893": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0894": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0895": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0896": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0897": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0898": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0899": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0900": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0901": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0902": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0903": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0904": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0905": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0906": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0907": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0908": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0909": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0910": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0911": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0912": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0913": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0914": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0915": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0916": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0917": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0918": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0919": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0920": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0921": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0922": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0923": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0924": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0925": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0926": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0927": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0928": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0929": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0930": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0931": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0932": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0933": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0934": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0935": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0936": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0937": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0938": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0939": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0940": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0941": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0942": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0943": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0944": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0945": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0946": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0947": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0948": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0949": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0950": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0951": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0952": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0953": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0954": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0955": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0956": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0957": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0958": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0959": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0960": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0961": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0962": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0963": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0964": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0965": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0966": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0967": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0968": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0969": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0970": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0971": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0972": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0973": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0974": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0975": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0976": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0977": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0978": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0979": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0980": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0981": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0982": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0983": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0984": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0985": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0986": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0987": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0988": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0989": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0990": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0991": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0992": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0993": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0994": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0995": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0996": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0997": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0998": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.0999": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1000": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1001": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1002": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1003": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1004": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1005": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1006": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1007": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1008": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1009": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1010": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1011": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1012": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1013": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1014": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1015": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1016": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1017": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1018": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1019": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1020": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1021": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1022": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1023": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1024": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1025": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1026": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1027": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1028": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1029": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1030": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1031": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1032": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1033": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1034": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1035": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1036": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1037": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1038": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1039": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1040": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1041": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1042": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1043": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1044": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1045": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1046": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1047": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1048": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1049": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1050": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1051": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1052": {
+    "description": "Legacy user-interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1053": {
+    "description": "Runtime-composed library interface text."
+  },
+  "library:subtitle.research.archive": {
+    "description": "Complete library subtitle selected by workspace mode and archive/trash state."
+  },
+  "library:subtitle.research.trash": {
+    "description": "Complete library subtitle selected by workspace mode and archive/trash state."
+  },
+  "library:subtitle.general.archive": {
+    "description": "Complete library subtitle selected by workspace mode and archive/trash state."
+  },
+  "library:subtitle.general.trash": {
+    "description": "Complete library subtitle selected by workspace mode and archive/trash state."
+  },
+  "common:legacy.ui.1054": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1055": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1056": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1057": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1058": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1059": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1060": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1061": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1062": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1063": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1064": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1065": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1066": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1067": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "common:legacy.ui.1068": {
+    "description": "Dashboard interface text localized by exact DOM text matching."
+  },
+  "dashboard:thisWeekDelta": {
+    "description": "Weekly statistic delta with a locale-formatted signed value."
+  },
+  "dashboard:comparedLastWeek": {
+    "description": "Comparison label for the previous week."
+  },
+  "common:legacy.ui.1069": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1070": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1071": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1072": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1073": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1074": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1075": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1076": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1077": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1078": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1079": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1080": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1081": {
+    "description": "Reading history interface text."
+  },
+  "common:legacy.ui.1082": {
+    "description": "Reading history interface text."
+  },
+  "dashboard:weekdayMon": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:weekdayWed": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:weekdayFri": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:weekdaySun": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:today": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:yesterday": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:comparedPrevious7Days": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:comparedPrevious30Days": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:activeDaysRatio": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:daysCount_one": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:daysCount_other": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:activeTotalDays": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:activityDaysLongest": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "dashboard:dayUnit": {
+    "description": "Reading-history date, duration, or activity label formatted for the UI locale."
+  },
+  "common:legacy.ui.1083": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1084": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1085": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1086": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1087": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1088": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1089": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1090": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1091": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1092": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1093": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1094": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1095": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1096": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "viewer:outline.noToc": {
+    "description": "PDF viewer outline or page navigation label."
+  },
+  "viewer:pageLabel": {
+    "description": "PDF viewer outline or page navigation label."
+  },
+  "viewer:goToPage": {
+    "description": "PDF viewer outline or page navigation label."
+  },
+  "common:legacy.ui.1097": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "chat:welcome.research": {
+    "description": "Welcome message in research-paper chat"
+  },
+  "chat:welcome.general": {
+    "description": "Welcome message in general-document chat"
+  },
+  "chat:suggestions.label": {
+    "description": "Heading above suggested document-chat questions"
+  },
+  "chat:suggestions.research.summary": {
+    "description": "Suggested research-paper summary question"
+  },
+  "chat:suggestions.research.method": {
+    "description": "Suggested research-paper methodology question"
+  },
+  "chat:suggestions.research.results": {
+    "description": "Suggested research-paper results question"
+  },
+  "chat:suggestions.general.summary": {
+    "description": "Suggested general-document summary question"
+  },
+  "chat:suggestions.general.procedure": {
+    "description": "Suggested general-document procedure question"
+  },
+  "chat:suggestions.general.cautions": {
+    "description": "Suggested general-document cautions question"
+  },
+  "common:legacy.ui.1098": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1099": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1100": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1101": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1102": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1103": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1104": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1105": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1106": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1107": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1108": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1109": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1110": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:legacy.ui.1111": {
+    "description": "Shared runtime-composed interface text."
+  },
+  "common:chatInput.expand": {
+    "description": "Accessible label for expanding the document-chat input."
+  },
+  "common:chatInput.collapse": {
+    "description": "Accessible label for collapsing the document-chat input."
+  },
+  "common:addMenu.open": {
+    "description": "Accessible label for opening the library add menu"
+  },
+  "common:addMenu.close": {
+    "description": "Accessible label for closing the library add menu"
+  },
+  "settings:themeHeading": {
+    "description": "Heading for document-mode-specific display theme settings"
+  },
+  "settings:themeScopeResearch": {
+    "description": "Research-mode-only theme scope label"
+  },
+  "settings:themeScopeGeneral": {
+    "description": "General-document-mode-only theme scope label"
+  },
+  "settings:accentColor": {
+    "description": "Accent color setting label"
+  },
+  "settings:themeLightEnabled": {
+    "description": "Toast shown after switching to light mode"
+  },
+  "settings:themeDarkEnabled": {
+    "description": "Toast shown after switching to dark mode"
+  }
+}

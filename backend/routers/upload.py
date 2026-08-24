@@ -45,6 +45,14 @@ def ensure_session(session_id: str) -> bool:
         if pages is None:
             pages = extract_pages(pdf_path)
             save_pages_cache(session_id, pdf_path, pages)
+        if doc.get("source_language", "auto") == "auto" and doc.get("detected_source_language", "und") == "und":
+            from services.languages import detect_document_language
+            detection = detect_document_language(pages)
+            doc["detected_source_language"] = detection["language"]
+            doc["source_language_confidence"] = detection["confidence"]
+            from services.db import db_update_detected_source_language
+            db_update_detected_source_language(session_id, str(detection["language"]), float(detection["confidence"]))
+
         # 기존 문서는 처음 열릴 때 원문 FTS 인덱스를 지연 백필한다.
         from services.context_retrieval import index_document_chunks
         index_document_chunks(session_id, pages)
@@ -58,6 +66,10 @@ def ensure_session(session_id: str) -> bool:
             "username": doc.get("username", "admin"),
             "document_mode": doc.get("document_mode", "research"),
             "document_type": doc.get("document_type", "research_paper"),
+            "source_language": doc.get("source_language", "auto"),
+            "detected_source_language": doc.get("detected_source_language", "und"),
+            "source_language_confidence": doc.get("source_language_confidence"),
+            "preferred_target_language": doc.get("preferred_target_language"),
         }
         return True
     except Exception:
@@ -109,7 +121,8 @@ def restore_sessions_from_library():
 @router.post("/upload", response_model=UploadResponse)
 async def upload_pdf(
     file: UploadFile = File(...),
-    target_lang: str = "한국어",
+    target_lang: str = "ko",
+    source_lang: str = "auto",
     style: str = "academic",
     ignore_math: bool = False,
     ignore_table: bool = True,
@@ -123,6 +136,16 @@ async def upload_pdf(
 ):
     """PDF 파일을 업로드하고 텍스트를 추출합니다."""
     enforce_rate_limit("upload", current_user)
+
+    from services.languages import api_language_error, normalize_document_language
+    try:
+        target_lang = normalize_document_language(target_lang, allow_legacy=True)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(target_lang))
+    try:
+        source_lang = normalize_document_language(source_lang, allow_auto=True)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(source_lang, source=True))
 
     from services.document_policy import feature_enabled, validate_classification
     try:
@@ -177,10 +200,19 @@ async def upload_pdf(
         shutil.rmtree(session_dir, ignore_errors=True)
         raise HTTPException(status_code=422, detail=f"PDF 파싱 실패: {str(e)}")
 
+    from services.languages import detect_document_language
+    detection = detect_document_language(pages)
+    detected_source_language = str(detection["language"])
+    resolved_source_language = source_lang if source_lang != "auto" else detected_source_language
+    source_supported = bool(detection["supported"]) if source_lang == "auto" else True
+
     # 라이브러리에 영구 저장
     save_document(
         session_id, file.filename, pdf_path, len(pages), metadata,
         username=current_user, document_mode=document_mode, document_type=document_type,
+        source_language=source_lang, detected_source_language=detected_source_language,
+        source_language_confidence=float(detection["confidence"]),
+        preferred_target_language=target_lang,
     )
     from services.context_retrieval import index_document_chunks
     indexed_chunks = index_document_chunks(session_id, pages)
@@ -201,6 +233,10 @@ async def upload_pdf(
         "username": current_user,
         "document_mode": document_mode,
         "document_type": document_type,
+        "source_language": source_lang,
+        "detected_source_language": detected_source_language,
+        "source_language_confidence": detection["confidence"],
+        "preferred_target_language": target_lang,
     }
 
     # translation_mode가 "auto"(기본값)가 아니면 - 페이지 번역 버튼을 누를 때(pane) 또는
@@ -215,11 +251,17 @@ async def upload_pdf(
     # 멈춰도 job status가 404로 남지 않고 번역이 진행된다. 문서당 세션을
     # 재사용하는 CLI provider의 실제 LLM 호출은 llm_client의 세션 락이
     # 직렬화하므로 동시에 같은 세션을 쓰지 않는다.
-    if translation_mode == "auto" and len(pages) < LONG_DOCUMENT_PAGE_THRESHOLD:
+    translation_skipped_reason = None
+    if not source_supported:
+        translation_skipped_reason = "unsupported_source_language"
+    elif resolved_source_language == target_lang:
+        translation_skipped_reason = "same_source_and_target_language"
+    if translation_mode == "auto" and len(pages) < LONG_DOCUMENT_PAGE_THRESHOLD and translation_skipped_reason is None:
         start_job(
             session_id,
             pages,
             target_lang=target_lang,
+            source_lang=resolved_source_language,
             style=style,
             ignore_math=ignore_math,
             ignore_table=ignore_table,
@@ -236,6 +278,7 @@ async def upload_pdf(
                     username=current_user,
                     pdf_path=pdf_path,
                     target_lang=target_lang,
+                    source_lang=resolved_source_language,
                     session_id=session_id,
                 )
         except Exception as e:
@@ -270,6 +313,11 @@ async def upload_pdf(
         metadata=metadata,
         document_mode=document_mode,
         document_type=document_type,
+        source_language=source_lang,
+        detected_source_language=detected_source_language,
+        source_language_confidence=float(detection["confidence"]),
+        preferred_target_language=target_lang,
+        translation_skipped_reason=translation_skipped_reason,
     )
 
 
@@ -285,6 +333,10 @@ async def get_session(session_id: str, current_user: str = Depends(get_current_u
         "metadata": session["metadata"],
         "document_mode": session.get("document_mode", "research"),
         "document_type": session.get("document_type", "research_paper"),
+        "source_language": session.get("source_language", "auto"),
+        "detected_source_language": session.get("detected_source_language", "und"),
+        "source_language_confidence": session.get("source_language_confidence"),
+        "preferred_target_language": session.get("preferred_target_language"),
     }
 
 

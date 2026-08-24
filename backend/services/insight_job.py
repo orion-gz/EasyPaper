@@ -20,11 +20,12 @@ def _eligible_pages(session_id: str, pages: list, kind: str, suffix: str) -> lis
 
 
 def estimate_insight_job(session_id: str, pages: list, target_lang: str, kind: str,
-                         document_mode: str = "research", document_type: str = "research_paper") -> dict:
+                         document_mode: str = "research", document_type: str = "research_paper",
+                         source_lang: str = "auto") -> dict:
     if kind not in VALID_JOB_KINDS:
         raise ValueError("unsupported insight job kind")
     from services.document_policy import insight_cache_suffix
-    suffix = insight_cache_suffix(document_mode, document_type, target_lang)
+    suffix = insight_cache_suffix(document_mode, document_type, target_lang, source_lang)
     eligible = _eligible_pages(session_id, pages, kind, suffix)
     return {
         "kind": kind,
@@ -53,29 +54,29 @@ def cancel_insight_job(session_id: str, kind: str) -> bool:
 
 
 def start_keyword_job(session_id: str, pages: list, target_lang: str, doc_title: str,
-                      document_mode: str = "research", document_type: str = "research_paper") -> dict:
-    return _start_insight_job(session_id, pages, target_lang, doc_title, "keywords", document_mode, document_type)
+                      document_mode: str = "research", document_type: str = "research_paper", source_lang: str = "auto") -> dict:
+    return _start_insight_job(session_id, pages, target_lang, doc_title, "keywords", document_mode, document_type, source_lang)
 
 
 def start_summary_job(session_id: str, pages: list, target_lang: str, doc_title: str,
-                      document_mode: str = "research", document_type: str = "research_paper") -> dict:
-    return _start_insight_job(session_id, pages, target_lang, doc_title, "summary", document_mode, document_type)
+                      document_mode: str = "research", document_type: str = "research_paper", source_lang: str = "auto") -> dict:
+    return _start_insight_job(session_id, pages, target_lang, doc_title, "summary", document_mode, document_type, source_lang)
 
 
 def _start_insight_job(session_id: str, pages: list, target_lang: str, doc_title: str, kind: str,
-                       document_mode: str = "research", document_type: str = "research_paper") -> dict:
+                       document_mode: str = "research", document_type: str = "research_paper", source_lang: str = "auto") -> dict:
     if kind not in VALID_JOB_KINDS:
         raise ValueError("unsupported insight job kind")
     key = (session_id, kind)
     cancel_insight_job(session_id, kind)
-    estimate = estimate_insight_job(session_id, pages, target_lang, kind, document_mode, document_type)
+    estimate = estimate_insight_job(session_id, pages, target_lang, kind, document_mode, document_type, source_lang)
     status = {
         **estimate, "session_id": session_id, "status": "running", "completed_pages": 0,
         "failed_pages": [], "started_at": _now(), "updated_at": _now(),
     }
     _job_status[key] = status
     task = asyncio.create_task(_run_insight_job(
-        session_id, pages, target_lang, doc_title, kind, key, document_mode, document_type,
+        session_id, pages, target_lang, doc_title, kind, key, document_mode, document_type, source_lang,
     ))
     _running_tasks[key] = task
     return dict(status)
@@ -83,9 +84,9 @@ def _start_insight_job(session_id: str, pages: list, target_lang: str, doc_title
 
 async def _run_insight_job(session_id: str, pages: list, target_lang: str, doc_title: str,
                            kind: str, task_key: tuple[str, str], document_mode: str,
-                           document_type: str) -> None:
+                           document_type: str, source_lang: str = "auto") -> None:
     from services.document_policy import insight_cache_suffix
-    suffix = insight_cache_suffix(document_mode, document_type, target_lang)
+    suffix = insight_cache_suffix(document_mode, document_type, target_lang, source_lang)
     status = _job_status[task_key]
     try:
         eligible = _eligible_pages(session_id, pages, kind, suffix)
@@ -96,7 +97,7 @@ async def _run_insight_job(session_id: str, pages: list, target_lang: str, doc_t
                 result = []
                 async for token in stream_page_insight(
                     kind, text, target_lang=target_lang, doc_title=doc_title,
-                    document_mode=document_mode, document_type=document_type, session_id=session_id,
+                    document_mode=document_mode, document_type=document_type, session_id=session_id, source_lang=source_lang,
                 ):
                     result.append(token)
                 content = "".join(result).strip()

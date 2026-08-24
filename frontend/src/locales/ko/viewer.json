@@ -1,0 +1,17 @@
+{
+  "translation.waiting": "대기 중",
+  "translation.progress": "{{total}}페이지 중 {{completed}}페이지",
+  "source.label": "원문",
+  "source.aria": "문서 원문 언어",
+  "target.label": "대상",
+  "target.aria": "문서 번역 대상 언어",
+  "source.undetermined": "원문 언어를 판별하지 못했습니다. 자동 번역이 중단됩니다.",
+  "source.multiple": "여러 원문 언어가 감지되었습니다. 번역할 원문 언어를 선택하세요.",
+  "source.unsupportedCode": "감지된 {{language}} 언어는 자동 번역을 지원하지 않습니다.",
+  "translation.sameLanguage": "번역은 생략되며 인사이트는 사용할 수 있습니다.",
+  "translation.pair": "{{source}} → {{target}}",
+  "language.saved": "문서별 언어 설정을 저장했습니다.",
+  "outline.noToc": "이 PDF에는 목차 정보가 없어 전체 페이지를 대신 표시합니다.",
+  "pageLabel": "{{page}}페이지",
+  "goToPage": "{{page}}페이지로 이동"
+}

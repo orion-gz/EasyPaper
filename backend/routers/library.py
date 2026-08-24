@@ -46,6 +46,10 @@ class DocumentMoveRequest(BaseModel):
 class DocumentTitleUpdateRequest(BaseModel):
     title: str
 
+class DocumentLanguagesUpdateRequest(BaseModel):
+    source_language: str
+    preferred_target_language: Optional[str] = None
+
 
 MAX_LIBRARY_MIRROR_JSON_BYTES = 5 * 1024 * 1024
 
@@ -567,6 +571,11 @@ async def get_library_document(
     """특정 문서의 메타데이터와 번역 완료 페이지 목록을 반환합니다."""
     doc = get_document(doc_id, target_lang, style, ignore_math, ignore_table, ignore_refs)
     require_owned_document(doc_id, current_user, doc)
+    if doc.get("source_language", "auto") == "auto" and doc.get("detected_source_language", "und") == "und":
+        from routers.upload import ensure_session
+        if ensure_session(doc_id):
+            doc = get_document(doc_id, target_lang, style, ignore_math, ignore_table, ignore_refs)
+            require_owned_document(doc_id, current_user, doc)
     return doc
 
 
@@ -1171,7 +1180,38 @@ async def update_doc_metadata(
     # 활성 메모리 세션도 업데이트하여 정합성 유지
     from routers.upload import sessions
     if doc_id in sessions:
+
+
         sessions[doc_id]["metadata"] = persisted_meta
 
     return {"status": "success", "metadata": persisted_meta}
 
+
+
+@router.patch("/library/{doc_id}/languages")
+async def update_document_languages(
+    doc_id: str,
+    body: DocumentLanguagesUpdateRequest,
+    current_user: str = Depends(get_current_user),
+):
+    require_owned_document(doc_id, current_user)
+    from services.languages import api_language_error, normalize_document_language
+    from services.db import db_update_document_languages
+    try:
+        source_language = normalize_document_language(body.source_language, allow_auto=True)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(body.source_language, source=True))
+    try:
+        target_language = (
+            normalize_document_language(body.preferred_target_language)
+            if body.preferred_target_language is not None else None
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail=api_language_error(body.preferred_target_language or ""))
+    db_update_document_languages(doc_id, source_language, target_language)
+
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id]["source_language"] = source_language
+        sessions[doc_id]["preferred_target_language"] = target_language
+    return {"source_language": source_language, "preferred_target_language": target_language}

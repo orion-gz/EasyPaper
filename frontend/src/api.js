@@ -1,13 +1,50 @@
+import { errorMessage } from './i18n.js'
+
 const API_BASE = '/api'
+
+async function apiError(response, fallback = '') {
+  const payload = await response.json().catch(() => ({}))
+  return new Error(errorMessage(payload, fallback))
+}
+
+export async function getLanguagesAPI() {
+  const res = await fetch(`${API_BASE}/languages`, { cache: "no-store" })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function getLanguageSettingsAPI() {
+  const res = await fetch(`${API_BASE}/settings/language`, { cache: "no-store" })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function saveLanguageSettingsAPI(payload) {
+  const res = await fetch(`${API_BASE}/settings/language`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(errorMessage(await res.json().catch(() => ({})),
+    "Language settings save failed"))
+  return res.json()
+}
+
+export async function patchDocumentLanguagesAPI(docId, payload) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/languages`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(errorMessage(await res.json().catch(() => ({})),
+    "Document language save failed"))
+  return res.json()
+}
 export async function fetchDocumentTypesAPI() {
   const res = await fetch(`${API_BASE}/document-types`)
-  if (!res.ok) throw new Error("문서 종류 조회 실패")
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
 export async function getWorkspaceSettingsAPI() {
   const res = await fetch(`${API_BASE}/settings/workspace`, { cache: "no-store" })
-  if (!res.ok) throw new Error("워크스페이스 설정 조회 실패")
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -15,7 +52,7 @@ export async function patchWorkspaceSettingsAPI(payload) {
   const res = await fetch(`${API_BASE}/settings/workspace`, {
     method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
   })
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "워크스페이스 설정 저장 실패")
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -24,34 +61,34 @@ export async function patchDocumentClassificationAPI(docId, payload) {
   const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/classification`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
   })
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || '문서 분류 변경 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
-export async function estimateInsightJobAPI(sessionId, kind, targetLang = '한국어') {
-  const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/estimate?target_lang=${encodeURIComponent(targetLang)}`)
-  if (!res.ok) throw new Error('인사이트 작업 예상량 조회 실패')
+export async function estimateInsightJobAPI(sessionId, kind, targetLang = 'ko', sourceLang = 'auto') {
+  const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/estimate?target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}`)
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
-export async function startInsightJobAPI(sessionId, kind, targetLang = '한국어', confirmed = false) {
+export async function startInsightJobAPI(sessionId, kind, targetLang = 'ko', sourceLang = 'auto', confirmed = false) {
   const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/start`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target_lang: targetLang, confirmed }),
+    body: JSON.stringify({ target_lang: targetLang, source_lang: sourceLang, confirmed }),
   })
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail?.message || '인사이트 작업 시작 실패')
+  if (!res.ok) throw new Error(errorMessage(await res.json().catch(() => ({}))))
   return res.json()
 }
 
 export async function getInsightJobStatusAPI(sessionId, kind) {
   const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/status`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('인사이트 작업 상태 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
 export async function cancelInsightJobAPI(sessionId, kind) {
   const res = await fetch(`${API_BASE}/insight-jobs/${encodeURIComponent(sessionId)}/${kind}/cancel`, { method: 'POST' })
-  if (!res.ok) throw new Error('인사이트 작업 취소 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -59,8 +96,8 @@ export async function uploadPDF(file, options, onProgress) {
   const formData = new FormData()
   formData.append('file', file)
 
-  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode, documentMode, documentType } = options
-  const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}&keyword_mode=${encodeURIComponent(keywordMode || 'manual')}&summary_mode=${encodeURIComponent(summaryMode || 'manual')}`
+  const { targetLang, sourceLang = "auto", style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode, documentMode, documentType } = options
+  const query = `?target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}&keyword_mode=${encodeURIComponent(keywordMode || 'manual')}&summary_mode=${encodeURIComponent(summaryMode || 'manual')}`
   const classificationQuery = "&document_mode=" + encodeURIComponent(documentMode || "research") + "&document_type=" + encodeURIComponent(documentType || "research_paper")
 
   return new Promise((resolve, reject) => {
@@ -79,14 +116,14 @@ export async function uploadPDF(file, options, onProgress) {
       } else {
         try {
           const err = JSON.parse(xhr.responseText)
-          reject(new Error(err.detail || '업로드 실패'))
+          reject(new Error(errorMessage(err)))
         } catch {
-          reject(new Error('업로드 실패'))
+          reject(new Error(errorMessage({ code: 'unknown' })))
         }
       }
     })
 
-    xhr.addEventListener('error', () => reject(new Error('네트워크 오류')))
+    xhr.addEventListener('error', () => reject(new Error(errorMessage({ code: 'network' }))))
     xhr.send(formData)
   })
 }
@@ -98,19 +135,19 @@ export async function checkHealth() {
 
 export async function fetchCliAvailability() {
   const res = await fetch(`${API_BASE}/availability`)
-  if (!res.ok) throw new Error('CLI 상태 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
 export async function getSession(sessionId) {
   const res = await fetch(`${API_BASE}/session/${sessionId}`)
-  if (!res.ok) throw new Error('세션 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
 export async function getTranslationStatus(sessionId) {
   const res = await fetch(`${API_BASE}/translation-status/${sessionId}`)
-  if (!res.ok) throw new Error('상태 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -126,8 +163,8 @@ export async function getTranslationStatus(sessionId) {
  */
 export function streamTranslation(sessionId, pageNum, options, onToken, onDone, onError) {
   const controller = new AbortController()
-  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs } = options
-  const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}`
+  const { targetLang, sourceLang = "auto", style, ignoreMath, ignoreTable, ignoreRefs } = options
+  const query = `?target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}`
 
   fetch(`${API_BASE}/translate/${sessionId}/${pageNum}${query}`, {
     signal: controller.signal,
@@ -135,7 +172,7 @@ export function streamTranslation(sessionId, pageNum, options, onToken, onDone, 
     .then(async (res) => {
       if (!res.ok) {
         const err = await res.json()
-        onError(new Error(err.detail || '번역 실패'))
+        onError(new Error(errorMessage(err)))
         return
       }
 
@@ -159,7 +196,7 @@ export function streamTranslation(sessionId, pageNum, options, onToken, onDone, 
           try {
             const data = JSON.parse(jsonStr)
             if (data.error) {
-              onError(new Error(data.error))
+              onError(new Error(errorMessage(data.error, data.fallback)))
               return
             }
             if (data.content) {
@@ -196,9 +233,9 @@ export function streamTranslation(sessionId, pageNum, options, onToken, onDone, 
  * @param {function} onError
  * @returns {function} abort
  */
-export function streamPageInsightAPI(sessionId, pageNum, kind, targetLang, force, onToken, onDone, onError) {
+export function streamPageInsightAPI(sessionId, pageNum, kind, targetLang, sourceLang, force, onToken, onDone, onError) {
   const controller = new AbortController()
-  const query = `?kind=${encodeURIComponent(kind)}&target_lang=${encodeURIComponent(targetLang)}&force=${force ? 'true' : 'false'}`
+  const query = `?kind=${encodeURIComponent(kind)}&target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}&force=${force ? 'true' : 'false'}`
 
   fetch(`${API_BASE}/insight/${sessionId}/${pageNum}${query}`, {
     signal: controller.signal,
@@ -206,7 +243,7 @@ export function streamPageInsightAPI(sessionId, pageNum, kind, targetLang, force
     .then(async (res) => {
       if (!res.ok) {
         const err = await res.json()
-        onError(new Error(err.detail || '생성 실패'))
+        onError(new Error(errorMessage(err, 'Generation failed')))
         return
       }
 
@@ -230,7 +267,7 @@ export function streamPageInsightAPI(sessionId, pageNum, kind, targetLang, force
           try {
             const data = JSON.parse(jsonStr)
             if (data.error) {
-              onError(new Error(data.error))
+              onError(new Error(errorMessage(data.error, data.fallback)))
               return
             }
             if (data.content) {
@@ -268,8 +305,8 @@ export async function getJobStatus(sessionId) {
  * 특정 페이지의 번역 결과를 조회합니다 (MD 기반).
  */
 export async function getPageTranslation(sessionId, pageNum, options) {
-  const { targetLang, style, ignoreMath, ignoreTable, ignoreRefs } = options
-  const query = `?target_lang=${encodeURIComponent(targetLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}`
+  const { targetLang, sourceLang = "auto", style, ignoreMath, ignoreTable, ignoreRefs } = options
+  const query = `?target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}`
   const res = await fetch(`${API_BASE}/jobs/${sessionId}/page/${pageNum}${query}`, { cache: 'no-store' })
   if (!res.ok) return null
   return res.json()
@@ -285,14 +322,7 @@ export async function loginAPI(username, password, remember = false) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password, remember })
   })
-  if (!res.ok) {
-    try {
-      const err = await res.json()
-      throw new Error(err.detail || '로그인 실패')
-    } catch {
-      throw new Error('로그인 실패')
-    }
-  }
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -301,7 +331,7 @@ export async function loginAPI(username, password, remember = false) {
  */
 export async function logoutAPI() {
   const res = await fetch(`${API_BASE}/auth/logout`, { method: 'POST' })
-  if (!res.ok) throw new Error('로그아웃 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -327,14 +357,7 @@ export async function changeCredentialsAPI(currentPassword, newUsername, newPass
       new_password: newPassword
     })
   })
-  if (!res.ok) {
-    try {
-      const err = await res.json()
-      throw new Error(err.detail || '변경 실패')
-    } catch {
-      throw new Error('변경 실패')
-    }
-  }
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -343,7 +366,7 @@ export async function changeCredentialsAPI(currentPassword, newUsername, newPass
  */
 export async function getSkipLoginAPI() {
   const res = await fetch(`${API_BASE}/settings/skip-login`)
-  if (!res.ok) throw new Error('로그인 생략 설정 로드 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -356,7 +379,7 @@ export async function setSkipLoginAPI(enabled) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled })
   })
-  if (!res.ok) throw new Error('로그인 생략 설정 저장 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -365,7 +388,7 @@ export async function setSkipLoginAPI(enabled) {
  */
 export async function getSystemSettingsAPI() {
   const res = await fetch(`${API_BASE}/settings/system`)
-  if (!res.ok) throw new Error('시스템 설정 로드 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -378,14 +401,7 @@ export async function saveSystemSettingsAPI(settings) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings)
   })
-  if (!res.ok) {
-    try {
-      const err = await res.json()
-      throw new Error(err.detail || '저장 실패')
-    } catch {
-      throw new Error('저장 실패')
-    }
-  }
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -398,6 +414,7 @@ export async function restartJobAPI(sessionId, options) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       target_lang: options.targetLang,
+      source_lang: options.sourceLang || "auto",
       style: options.style,
       ignore_math: options.ignoreMath,
       ignore_table: options.ignoreTable,
@@ -406,14 +423,7 @@ export async function restartJobAPI(sessionId, options) {
       resume_scope: options.resumeScope || false,
     })
   })
-  if (!res.ok) {
-    try {
-      const err = await res.json()
-      throw new Error(err.detail || '번역 재시작 실패')
-    } catch {
-      throw new Error('번역 재시작 실패')
-    }
-  }
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -424,14 +434,7 @@ export async function cancelJobAPI(sessionId) {
   const res = await fetch(`${API_BASE}/jobs/${sessionId}/cancel`, {
     method: 'POST'
   })
-  if (!res.ok) {
-    try {
-      const err = await res.json()
-      throw new Error(err.detail || '번역 중지 실패')
-    } catch {
-      throw new Error('번역 중지 실패')
-    }
-  }
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -452,7 +455,7 @@ function _streamInstallCliAPI(endpoint, defaultErrorMessage, onProgress, onDone,
     try {
       const data = JSON.parse(rawData)
       if (data.status === 'error') {
-        onError(new Error(data.message || defaultErrorMessage))
+        onError(new Error(errorMessage(data, defaultErrorMessage)))
         controller.abort()
       } else if (data.status === 'success') {
         onDone()
@@ -492,7 +495,7 @@ function _streamInstallCliAPI(endpoint, defaultErrorMessage, onProgress, onDone,
       }
     } catch (err) {
       if (err?.name !== 'AbortError') {
-        onError(err instanceof Error ? err : new Error('네트워크 연결 끊김 또는 설치 실패'))
+        onError(err instanceof Error ? err : new Error(errorMessage({ code: 'network' })))
       }
     }
   })()
@@ -539,7 +542,7 @@ export function streamPullModelAPI(modelName, onStatus, onDone, onError) {
     try {
       const data = JSON.parse(event.data)
       if (data.status === 'error') {
-        onError(new Error(data.message || '다운로드 실패'))
+        onError(new Error(errorMessage(data)))
         eventSource.close()
       } else if (data.status === 'success') {
         onDone()
@@ -553,7 +556,7 @@ export function streamPullModelAPI(modelName, onStatus, onDone, onError) {
   }
   
   eventSource.onerror = (err) => {
-    onError(new Error('네트워크 연결 끊김 또는 다운로드 실패'))
+    onError(new Error(errorMessage({ code: 'network' })))
     eventSource.close()
   }
   
@@ -569,10 +572,7 @@ export async function deleteModelAPI(modelName) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model_name: modelName })
   })
-  if (!resp.ok) {
-    const errorData = await resp.json().catch(() => ({}))
-    throw new Error(errorData.detail || 'Ollama 모델 삭제에 실패했습니다.')
-  }
+  if (!resp.ok) throw await apiError(resp)
   return await resp.json()
 }
 
@@ -605,15 +605,7 @@ export function streamChatAPI(sessionId, messages, onToken, onDone, onError, ima
     signal: controller.signal
   })
     .then(async (res) => {
-      if (!res.ok) {
-        try {
-          const err = await res.json()
-          onError(new Error(err.detail || '답변 생성 실패'))
-        } catch {
-          onError(new Error('답변 생성 실패'))
-        }
-        return
-      }
+      if (!res.ok) { onError(await apiError(res)); return }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -651,7 +643,7 @@ export async function getSuggestedQuestionsAPI(sessionId, messages) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId, messages })
   })
-  if (!res.ok) throw new Error('추천 질문 생성 실패')
+  if (!res.ok) throw await apiError(res)
   const data = await res.json()
   return data.questions || []
 }
@@ -664,14 +656,7 @@ export async function clearTranslationCacheAPI(sessionId) {
   const res = await fetch(`${API_BASE}/translate/${sessionId}/clear-cache`, {
     method: 'POST'
   })
-  if (!res.ok) {
-    try {
-      const err = await res.json()
-      throw new Error(err.detail || '캐시 삭제 실패')
-    } catch {
-      throw new Error('캐시 삭제 실패')
-    }
-  }
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -683,14 +668,7 @@ export async function clearPagesCacheAPI() {
   const res = await fetch(`${API_BASE}/settings/clear-pages-cache`, {
     method: 'POST'
   })
-  if (!res.ok) {
-    try {
-      const err = await res.json()
-      throw new Error(err.detail || '캐시 삭제 실패')
-    } catch {
-      throw new Error('캐시 삭제 실패')
-    }
-  }
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -701,14 +679,7 @@ export async function clearSingleDocCacheAPI(docId) {
   const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/clear-cache`, {
     method: 'POST'
   })
-  if (!res.ok) {
-    try {
-      const err = await res.json()
-      throw new Error(err.detail || '캐시 삭제 실패')
-    } catch {
-      throw new Error('캐시 삭제 실패')
-    }
-  }
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -717,7 +688,7 @@ export async function clearSingleDocCacheAPI(docId) {
  */
 export async function getChatHistoryAPI(sessionId) {
   const res = await fetch(`${API_BASE}/chat/${sessionId}/history`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('채팅 기록 로드 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -739,15 +710,7 @@ export function streamCompareChatAPI(docIds, messages, onToken, onDone, onError)
     signal: controller.signal
   })
     .then(async (res) => {
-      if (!res.ok) {
-        try {
-          const err = await res.json()
-          onError(new Error(err.detail || '답변 생성 실패'))
-        } catch {
-          onError(new Error('답변 생성 실패'))
-        }
-        return
-      }
+      if (!res.ok) { onError(await apiError(res)); return }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -777,7 +740,7 @@ export function streamCompareChatAPI(docIds, messages, onToken, onDone, onError)
  */
 export async function getCompareChatHistoryAPI(docIds) {
   const res = await fetch(`${API_BASE}/chat/compare/history?doc_ids=${encodeURIComponent(docIds.join(','))}`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('채팅 기록 로드 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -787,7 +750,7 @@ export async function getCompareChatHistoryAPI(docIds) {
 export async function getChatSessionsAPI(documentMode = null) {
   const query = documentMode ? `?document_mode=${encodeURIComponent(documentMode)}` : ''
   const res = await fetch(`${API_BASE}/chat/sessions${query}`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('채팅 세션 목록 로드 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -796,7 +759,7 @@ export async function getChatSessionsAPI(documentMode = null) {
  */
 export async function getCompareChatSessionsAPI() {
   const res = await fetch(`${API_BASE}/chat/compare-sessions`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('비교 채팅 세션 목록 로드 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -805,7 +768,7 @@ export async function getCompareChatSessionsAPI() {
  */
 export async function getAgyUsageAPI() {
   const res = await fetch(`${API_BASE}/agy/usage`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('사용량 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -814,7 +777,7 @@ export async function getAgyUsageAPI() {
  */
 export async function getAgyModelsAPI() {
   const res = await fetch(`${API_BASE}/agy/models`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('모델 목록 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -825,14 +788,7 @@ export async function triggerSystemUpdateAPI() {
   const res = await fetch(`${API_BASE}/settings/update`, {
     method: 'POST'
   })
-  if (!res.ok) {
-    try {
-      const err = await res.json()
-      throw new Error(err.detail || '업데이트 실패')
-    } catch {
-      throw new Error('업데이트 실패')
-    }
-  }
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -841,7 +797,7 @@ export async function triggerSystemUpdateAPI() {
  */
 export async function getUpdateCheckConfigAPI() {
   const res = await fetch(`${API_BASE}/settings/update-check-config`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('업데이트 확인 설정 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -851,7 +807,7 @@ export async function setUpdateCheckConfigAPI(interval) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ interval })
   })
-  if (!res.ok) throw new Error('업데이트 확인 설정 저장 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -860,7 +816,7 @@ export async function setUpdateCheckConfigAPI(interval) {
  */
 export async function checkForUpdateAPI() {
   const res = await fetch(`${API_BASE}/settings/update-check`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('업데이트 확인 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -869,7 +825,7 @@ export async function checkForUpdateAPI() {
  */
 export async function getPostUpdateNoticeAPI() {
   const res = await fetch(`${API_BASE}/settings/post-update-notice`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('업데이트 완료 안내 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -878,25 +834,25 @@ export async function getPostUpdateNoticeAPI() {
  */
 export async function getFullChangelogAPI() {
   const res = await fetch(`${API_BASE}/settings/changelog`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('변경 이력 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
 export async function fetchTrashAPI() {
   const res = await fetch(`${API_BASE}/library/trash`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('휴지통 목록 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
 export async function restoreLibraryDocAPI(docId) {
   const res = await fetch(`${API_BASE}/library/${docId}/restore`, { method: 'POST' })
-  if (!res.ok) throw new Error('문서 복원 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
 export async function emptyTrashAPI() {
   const res = await fetch(`${API_BASE}/library/trash/empty`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('휴지통 비우기 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -905,7 +861,7 @@ export async function emptyTrashAPI() {
  */
 export async function fetchPdfParsersInfoAPI() {
   const res = await fetch(`${API_BASE}/settings/pdf-parsers`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('PDF 파서 정보 조회 실패')
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 
@@ -925,7 +881,7 @@ export function installPdfParserAPI(parserId, onProgress, onSuccess, onError) {
         if (onSuccess) onSuccess(data.message)
       } else if (data.status === 'error') {
         es.close()
-        if (onError) onError(new Error(data.message || '설치 중 오류가 발생했습니다.'))
+        if (onError) onError(new Error(errorMessage(data)))
       }
     } catch (err) {
       es.close()
@@ -935,7 +891,7 @@ export function installPdfParserAPI(parserId, onProgress, onSuccess, onError) {
 
   es.onerror = (err) => {
     es.close()
-    if (onError) onError(new Error('네트워크 연결 끊김 또는 서버 오류가 발생했습니다.'))
+    if (onError) onError(new Error(errorMessage({ code: 'network' })))
   }
 
   return es
@@ -947,10 +903,7 @@ export async function uninstallPdfParserAPI(parserId) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ parser_id: parserId })
   })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail || `삭제 요청 실패 (${res.status})`)
-  }
+  if (!res.ok) throw await apiError(res)
   return res.json()
 }
 

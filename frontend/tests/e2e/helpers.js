@@ -20,12 +20,22 @@ export async function mockBaseRoutes(page, {
   documents = [],
   folders = [],
   workspaceSettings = {},
+  languageSettings = { ui_locale: 'ko', default_source_language: 'auto', target_language: 'ko' },
 } = {}) {
   await page.route('**/api/**', async route => {
     const url = route.request().url()
 
     if (url.includes('/api/auth/check')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'authenticated', username: 'admin' }) })
+    }
+    if (url.includes('/api/languages')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ languages: [
+        { code: 'ko', translation_key: 'language.ko' }, { code: 'en', translation_key: 'language.en' },
+        { code: 'ja', translation_key: 'language.ja' }, { code: 'fr', translation_key: 'language.fr' },
+      ] }) })
+    }
+    if (url.includes('/api/settings/language')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(languageSettings) })
     }
     if (url.includes('/api/settings/workspace')) {
       return route.fulfill({

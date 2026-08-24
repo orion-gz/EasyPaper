@@ -2,7 +2,7 @@ const MODE_DEFAULTS = {
   research: {
     theme: 'dark',
     accentColor: '#2563eb',
-    targetLang: '한국어',
+    targetLang: 'ko',
     style: 'academic',
     translationMode: 'auto',
     ignoreMath: false,
@@ -18,7 +18,7 @@ const MODE_DEFAULTS = {
   general: {
     theme: 'dark',
     accentColor: '#2563eb',
-    targetLang: '한국어',
+    targetLang: 'ko',
     style: 'natural',
     translationMode: 'scroll',
     ignoreMath: false,
@@ -56,6 +56,14 @@ const BOOLEAN_SETTINGS = new Set([
   'ignoreMath', 'ignoreTable', 'ignoreRefs', 'disableInsights',
   'disableCitationOverlay', 'disableFigureOverlay', 'disablePrimer',
 ])
+const LEGACY_LANGUAGE_VALUES = {
+  '한국어': 'ko', '영어': 'en', '일본어': 'ja', '중국어': 'zh-Hans',
+}
+
+export function migrateTargetLanguage(value) {
+  return LEGACY_LANGUAGE_VALUES[value] || value
+}
+
 
 export function normalizeSettingsMode(mode) {
   return mode === 'general' ? 'general' : 'research'
@@ -79,6 +87,11 @@ export function getModeSetting(name, mode, storage = localStorage) {
     raw = storage.getItem(LEGACY_KEYS[name])
   }
   if (raw === null) return fallback
+  if (name === "targetLang") {
+    const migrated = migrateTargetLanguage(raw)
+    if (migrated !== raw) storage.setItem(modeSettingStorageKey(name, normalizedMode), migrated)
+    return migrated
+  }
   return BOOLEAN_SETTINGS.has(name) ? raw === 'true' : raw
 }
 
