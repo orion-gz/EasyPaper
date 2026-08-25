@@ -589,6 +589,8 @@ const primerContinueBtn    = $('primer-continue-btn')
 const chatInput          = $('chat-input')
 const chatInputExpandBtn = $('chat-input-expand-btn')
 const chatSendBtn        = $('chat-send-btn')
+const chatPageContextChip = $('chat-page-context-chip')
+const chatIncludeVisual   = $('chat-include-visual')
 
 
 // ── 설정 기본값 및 옵션 헬퍼 ──────────────────────────
