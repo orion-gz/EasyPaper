@@ -339,7 +339,7 @@ function renderRecentPapersCard(docs) {
               <span class="dash-paper-pct">${pct}%</span>
             `
           return `
-            <li class="dash-paper-item" data-doc-id="${escapeHtml(d.id)}">
+            <li class="dash-paper-item" data-doc-id="${escapeHtml(d.id)}" tabindex="0" role="button">
               <img class="dash-paper-cover" src="/api/library/${encodeURIComponent(d.id)}/cover" alt="" loading="lazy" onerror="this.style.visibility='hidden'" />
               <div class="dash-paper-info">
                 <div class="dash-paper-title">${escapeHtml(title)}</div>
@@ -372,7 +372,7 @@ function renderRecentQuestionsCard(list) {
       ${items.length === 0 ? emptyNote('최근 질문이 없습니다.') : `
       <ul class="dash-question-list">
         ${items.map(q => `
-          <li class="dash-question-item" data-doc-id="${escapeHtml(q.doc_id || '')}" title="이 논문의 채팅으로 이동">
+          <li class="dash-question-item" data-doc-id="${escapeHtml(q.doc_id || '')}" title="이 논문의 채팅으로 이동" tabindex="0" role="button">
             <span class="dash-question-icon">${icon('messageCircle', 13)}</span>
             <div class="dash-question-body">
               <div class="dash-question-text">${escapeHtml(q.summary || '')}</div>
@@ -446,7 +446,7 @@ function renderHeatmapCard(heatmap) {
         ${safeHeatmap.slice(0, 8).map(h => {
           const pct = maxScore > 0 ? Math.max(6, Math.round(((h?.score || 0) / maxScore) * 100)) : 6
           return `
-            <div class="dash-heat-cell" data-node-id="concept:${escapeHtml(String(h?.concept_id || ''))}" title="${escapeHtml(h?.name || '')} · 논문 ${h?.paper_count || 0}편 · 질문 ${h?.question_count || 0}개 · 클릭하면 연구 그래프에서 보기">
+            <div class="dash-heat-cell" data-node-id="concept:${escapeHtml(String(h?.concept_id || ''))}" title="${escapeHtml(h?.name || '')} · 논문 ${h?.paper_count || 0}편 · 질문 ${h?.question_count || 0}개 · 클릭하면 연구 그래프에서 보기" tabindex="0" role="button">
               <div class="dash-heat-swatch" style="--heat-pct:${pct}%"></div>
               <div class="dash-heat-label">${escapeHtml(h?.name || '')}</div>
               <div class="dash-heat-count">${formatNumber(h?.score || 0)}</div>
@@ -479,7 +479,7 @@ function renderTimelineCard(events) {
         ${recent.map(e => {
           const isDeleted = Boolean(e.is_deleted)
           return `
-          <li class="dash-timeline-item dash-timeline-${escapeHtml(e.type || '')} ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type || '')}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${isDeleted ? '삭제된 논문입니다' : '이 논문 열기'}">
+          <li class="dash-timeline-item dash-timeline-${escapeHtml(e.type || '')} ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type || '')}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${isDeleted ? '삭제된 논문입니다' : '이 논문 열기'}" tabindex="0" role="button">
             <span class="dash-timeline-dot"></span>
             <div class="dash-timeline-body">
               <div class="dash-timeline-top">
@@ -546,7 +546,7 @@ function renderMiniGraphSvg({ center, neighbors }) {
     const isPaper = p.node.type === 'paper'
     const labelY = p.y > cy ? p.y + 16 : p.y - 11
     return `
-      <g class="dash-graph-node ${isPaper ? 'is-paper' : 'is-concept'}" data-node-id="${escapeHtml(p.node.id || '')}">
+      <g class="dash-graph-node ${isPaper ? 'is-paper' : 'is-concept'}" data-node-id="${escapeHtml(p.node.id || '')}" tabindex="0" role="button">
         <title>${escapeHtml(p.node.label || '')} (클릭하면 연구 그래프에서 보기)</title>
         <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isPaper ? 8 : 6.5}" />
         <text x="${p.x.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle">${escapeHtml(truncateLabel(p.node.label, 13))}</text>
@@ -558,7 +558,7 @@ function renderMiniGraphSvg({ center, neighbors }) {
     <svg class="dash-graph-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
       ${lines}
       ${nodesHtml}
-      <g class="dash-graph-node is-center" data-node-id="${escapeHtml(center.id || '')}">
+      <g class="dash-graph-node is-center" data-node-id="${escapeHtml(center.id || '')}" tabindex="0" role="button">
         <title>${escapeHtml(center.label || '')} (클릭하면 연구 그래프에서 보기)</title>
         <circle cx="${cx}" cy="${cy}" r="13" />
         <text x="${cx}" y="${cy + 26}" text-anchor="middle" class="dash-graph-center-label">${escapeHtml(truncateLabel(center.label, 12))}</text>
@@ -598,6 +598,14 @@ function goToGraphNode(nodeId) {
 
 // ── 이벤트 바인딩 ──────────────────────────────────────────────────────
 function attachHandlers(root) {
+  root.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return
+    const target = event.target.closest(".dash-paper-item, .dash-question-item, .dash-timeline-item, .dash-heat-cell, .dash-graph-node")
+    if (!target) return
+    event.preventDefault()
+    target.click()
+  })
+
   root.querySelectorAll('[data-nav]').forEach(elm => {
     elm.addEventListener('click', (ev) => {
       ev.preventDefault()

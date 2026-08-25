@@ -235,6 +235,8 @@ const modalFocusableSelector = [
 
 function openOverlayModal(modal) {
   if (!modal) return
+  if (!modal.hasAttribute('role')) modal.setAttribute('role', 'dialog')
+  modal.setAttribute('aria-modal', 'true')
   const closeTimer = modalCloseTimers.get(modal)
   if (closeTimer !== undefined) {
     window.clearTimeout(closeTimer)
@@ -268,6 +270,29 @@ function closeOverlayModal(modal) {
   }, 300) // CSS 트랜지션(0.3s) 종료 후 display:none
   modalCloseTimers.set(modal, closeTimer)
 }
+
+// 열린 모달 안에서 Tab 순환을 유지한다. Escape 닫기는 각 모달의 기존
+// 취소/닫기 로직이 담당하므로 데이터 상태 변경 경로를 우회하지 않는다.
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Tab') return
+  const openModals = Array.from(document.querySelectorAll('.modal-overlay.is-visible:not(.hidden)'))
+  const modal = openModals.at(-1)
+  if (!modal) return
+  const focusable = Array.from(modal.querySelectorAll(modalFocusableSelector))
+    .filter(element => element.getClientRects().length > 0 && element.getAttribute('aria-hidden') !== 'true')
+  if (!focusable.length) { event.preventDefault(); modal.focus(); return }
+  const first = focusable[0]
+  const last = focusable.at(-1)
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+})
+
+function announceA11y(message) {
+  if (!a11yLiveRegion || !message) return
+  a11yLiveRegion.textContent = ''
+  window.requestAnimationFrame(() => { a11yLiveRegion.textContent = message })
+}
+
 const loginScreen       = $('login-screen')
 const loginForm         = $('login-form')
 const loginUsername     = $('login-username')
@@ -540,6 +565,7 @@ const progressMini          = $('translation-progress-mini')
 const progressMiniBar       = $('progress-mini-bar')
 const progressMiniText      = $('progress-mini-text')
 const toast                 = $('toast')
+const a11yLiveRegion        = $('a11y-live-region')
 const toolbarKebabBtn       = $('toolbar-kebab-btn')
 const toolbarKebabMenu      = $('toolbar-kebab-menu')
 
@@ -1946,15 +1972,38 @@ exportBtn.addEventListener('click', (e) => {
 // "안쪽"으로 처리되고, 내보내기 팝업은 형식을 실제로 골라야 바깥 클릭으로
 // 잡혀 그때 케밥 메뉴도 함께 닫힌다.
 if (toolbarKebabBtn && toolbarKebabMenu) {
+  const getMenuItems = () => Array.from(toolbarKebabMenu.querySelectorAll('button:not([disabled]), select, [tabindex]:not([tabindex="-1"])'))
+  toolbarKebabMenu.querySelectorAll('button').forEach(item => item.setAttribute('role', 'menuitem'))
+  const syncMenuState = () => toolbarKebabBtn.setAttribute('aria-expanded', String(!toolbarKebabMenu.classList.contains('hidden')))
+  const closeMenu = (restoreFocus = false) => {
+    toolbarKebabMenu.classList.add('hidden')
+    syncMenuState()
+    if (restoreFocus) toolbarKebabBtn.focus()
+  }
+  new MutationObserver(syncMenuState).observe(toolbarKebabMenu, { attributes: true, attributeFilter: ['class'] })
+
   toolbarKebabBtn.addEventListener('click', (e) => {
     e.stopPropagation()
+    const willOpen = toolbarKebabMenu.classList.contains('hidden')
     toolbarKebabMenu.classList.toggle('hidden')
+    syncMenuState()
+    if (willOpen) window.requestAnimationFrame(() => toolbarKebabMenu.querySelector('.kebab-menu-item:not(.hidden):not([disabled])')?.focus())
+  })
+
+  toolbarKebabMenu.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); closeMenu(true); return }
+    if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return
+    const visibleItems = getMenuItems().filter(item => item.getClientRects().length > 0)
+    const current = visibleItems.indexOf(document.activeElement)
+    const delta = event.key === 'ArrowDown' ? 1 : -1
+    const next = visibleItems[(current + delta + visibleItems.length) % visibleItems.length]
+    if (next) { event.preventDefault(); next.focus() }
   })
 
   document.addEventListener('click', (e) => {
     if (toolbarKebabMenu.classList.contains('hidden')) return
     if (toolbarKebabMenu.contains(e.target) || toolbarKebabBtn.contains(e.target)) return
-    toolbarKebabMenu.classList.add('hidden')
+    closeMenu()
   })
 }
 
@@ -7610,6 +7659,14 @@ if (libraryGraphSearchInput) {
       }
     }, 300)
   })
+  libraryGraphSearchInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || !libraryGraphCyInstance) return
+    const firstMatch = libraryGraphCyInstance.nodes(".kg-search-match").first()
+    if (!firstMatch || firstMatch.length === 0) return
+    event.preventDefault()
+    firstMatch.trigger("tap")
+    libraryGraphCyInstance.animate({ center: { eles: firstMatch }, zoom: 1.3 }, { duration: 300 })
+  })
 }
 
 // 추천 논문: 캐시가 있는 경우 버튼 클릭 시 접힘/펼침 토글, 없는 경우 새로 추천 요청.
@@ -11000,28 +11057,29 @@ function renderPageMemos(pageNum) {
       : 'Memo'
 
     memoEl.innerHTML = `
-      <div class="floating-memo-header">
+      <div class="floating-memo-header" tabindex="0" role="group" aria-label="${t('viewer:a11y.memoMove')}">
         <div class="floating-memo-title" title="${sentenceText}">
           <span>${icon('edit3', 12, 'style="vertical-align:-2px;margin-right:2px"')}${shortTitle}</span>
         </div>
         <div class="floating-memo-color-picker">
-          <span class="color-dot default ${!memo.color || memo.color === 'default' ? 'selected' : ''}" data-color="default" title="기본"></span>
-          <span class="color-dot yellow ${memo.color === 'yellow' ? 'selected' : ''}" data-color="yellow" title="노랑"></span>
-          <span class="color-dot green ${memo.color === 'green' ? 'selected' : ''}" data-color="green" title="초록"></span>
-          <span class="color-dot blue ${memo.color === 'blue' ? 'selected' : ''}" data-color="blue" title="파랑"></span>
-          <span class="color-dot red ${memo.color === 'red' ? 'selected' : ''}" data-color="red" title="빨강"></span>
+          <button type="button" class="color-dot default ${!memo.color || memo.color === 'default' ? 'selected' : ''}" data-color="default" title="${t('viewer:a11y.defaultColor')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.defaultColor') })}" aria-pressed="${String(!memo.color || memo.color === 'default')}"></button>
+          <button type="button" class="color-dot yellow ${memo.color === 'yellow' ? 'selected' : ''}" data-color="yellow" title="${t('viewer:a11y.yellow')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.yellow') })}" aria-pressed="${String(memo.color === 'yellow')}"></button>
+          <button type="button" class="color-dot green ${memo.color === 'green' ? 'selected' : ''}" data-color="green" title="${t('viewer:a11y.green')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.green') })}" aria-pressed="${String(memo.color === 'green')}"></button>
+          <button type="button" class="color-dot blue ${memo.color === 'blue' ? 'selected' : ''}" data-color="blue" title="${t('viewer:a11y.blue')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.blue') })}" aria-pressed="${String(memo.color === 'blue')}"></button>
+          <button type="button" class="color-dot red ${memo.color === 'red' ? 'selected' : ''}" data-color="red" title="${t('viewer:a11y.red')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.red') })}" aria-pressed="${String(memo.color === 'red')}"></button>
         </div>
         <div class="floating-memo-toggles">
-          <button class="floating-memo-action-btn collapse-btn" title="${memo.collapsed ? '메모 펼치기' : '메모 접기'}">
+          <button type="button" class="floating-memo-action-btn collapse-btn" title="${memo.collapsed ? '메모 펼치기' : '메모 접기'}">
             ${icon(memo.collapsed ? 'chevronDown' : 'chevronUp', 12)}
           </button>
-          <button class="floating-memo-action-btn hide-btn" title="메모 숨기기 (하이라이트만 표시)">
+          <button type="button" class="floating-memo-action-btn hide-btn" title="메모 숨기기 (하이라이트만 표시)">
             ${icon('eyeOff', 12)}
           </button>
         </div>
         <div class="floating-memo-actions"></div>
       </div>
       <div class="floating-memo-body"></div>
+      <button type="button" class="floating-memo-resize-handle" aria-label="${t('viewer:a11y.memoResize')}" title="${t('viewer:a11y.memoResize')}"></button>
     `
 
     updateCardContent()
@@ -11109,7 +11167,51 @@ function renderPageMemos(pageNum) {
       resizeObserver.observe(memoEl)
     }
 
+    const resizeHandle = memoEl.querySelector('.floating-memo-resize-handle')
+    resizeHandle.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      event.preventDefault(); event.stopPropagation()
+      const step = event.shiftKey ? 20 : 4
+      let width = memoEl.offsetWidth
+      let height = memoEl.offsetHeight
+      if (event.key === 'ArrowLeft') width -= step
+      if (event.key === 'ArrowRight') width += step
+      if (event.key === 'ArrowUp') height -= step
+      if (event.key === 'ArrowDown') height += step
+      width = Math.max(220, Math.min(520, width))
+      height = Math.max(120, Math.min(Math.round(window.innerHeight * 0.75), height))
+      memo.width = Math.round(width)
+      memo.height = Math.round(height)
+      memoEl.style.width = `${memo.width}px`
+      memoEl.style.height = `${memo.height}px`
+      updateMemoConnectorLine(pageWrapper, memo)
+      const allMemosObj = loadMemos(state.sessionId)
+      allMemosObj[`page_${pageNum}`] = pageMemos
+      saveMemos(state.sessionId, allMemosObj)
+      announceA11y(t('viewer:a11y.memoSize', { width: memo.width, height: memo.height }))
+    })
+
     const header = memoEl.querySelector('.floating-memo-header')
+    header.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      event.preventDefault(); event.stopPropagation()
+      const step = event.shiftKey ? 20 : 4
+      const dxPct = step / Math.max(1, pageWrapper.offsetWidth) * 100
+      const dyPct = step / Math.max(1, pageWrapper.offsetHeight) * 100
+      if (event.key === 'ArrowLeft') memo.x -= dxPct
+      if (event.key === 'ArrowRight') memo.x += dxPct
+      if (event.key === 'ArrowUp') memo.y -= dyPct
+      if (event.key === 'ArrowDown') memo.y += dyPct
+      memo.x = Math.min(Math.max(-150, memo.x), 250)
+      memo.y = Math.min(Math.max(-150, memo.y), 250)
+      memoEl.style.left = `${memo.x}%`
+      memoEl.style.top = `${memo.y}%`
+      updateMemoConnectorLine(pageWrapper, memo)
+      const allMemosObj = loadMemos(state.sessionId)
+      allMemosObj[`page_${pageNum}`] = pageMemos
+      saveMemos(state.sessionId, allMemosObj)
+      announceA11y(t('viewer:a11y.memoPosition', { x: Math.round(memoEl.offsetLeft), y: Math.round(memoEl.offsetTop) }))
+    })
     header.addEventListener('mousedown', (e) => {
       e.preventDefault(); e.stopPropagation()
       const startMouseX = e.clientX
@@ -12237,8 +12339,10 @@ function _attachFigureOverlayResizeHandles(overlay, imgPercent, inner) {
   const corners = ['nw', 'ne', 'sw', 'se']
 
   corners.forEach(pos => {
-    const handle = document.createElement('div')
+    const handle = document.createElement('button')
+    handle.type = 'button'
     handle.className = `pdf-figure-overlay-handle pdf-figure-overlay-handle-${pos}`
+    handle.setAttribute('aria-label', t('viewer:a11y.imageResize'))
 
     // 핸들에서 시작된 클릭이 overlay의 click 리스너(크롭 트리거)까지
     // 버블링되지 않도록 막는다 - 드래그 없이 핸들만 클릭했을 때 의도치
@@ -12246,6 +12350,36 @@ function _attachFigureOverlayResizeHandles(overlay, imgPercent, inner) {
     handle.addEventListener('click', (e) => {
       e.preventDefault()
       e.stopPropagation()
+    })
+
+    handle.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      event.preventDefault()
+      event.stopPropagation()
+      const stepPx = event.shiftKey ? 20 : 4
+      const dx = (stepPx / Math.max(1, inner.offsetWidth)) * 100
+      const dy = (stepPx / Math.max(1, inner.offsetHeight)) * 100
+      const fixedX = pos.includes('w') ? imgPercent.left + imgPercent.width : imgPercent.left
+      const fixedY = pos.includes('n') ? imgPercent.top + imgPercent.height : imgPercent.top
+      let movingX = pos.includes('w') ? imgPercent.left : imgPercent.left + imgPercent.width
+      let movingY = pos.includes('n') ? imgPercent.top : imgPercent.top + imgPercent.height
+      if (event.key === 'ArrowLeft') movingX -= dx
+      if (event.key === 'ArrowRight') movingX += dx
+      if (event.key === 'ArrowUp') movingY -= dy
+      if (event.key === 'ArrowDown') movingY += dy
+      movingX = Math.max(0, Math.min(100, movingX))
+      movingY = Math.max(0, Math.min(100, movingY))
+      const width = Math.max(_FIGURE_OVERLAY_MIN_SIZE_PCT, Math.abs(movingX - fixedX))
+      const height = Math.max(_FIGURE_OVERLAY_MIN_SIZE_PCT, Math.abs(movingY - fixedY))
+      imgPercent.left = Math.max(0, Math.min(movingX < fixedX ? fixedX - width : fixedX, 100 - width))
+      imgPercent.top = Math.max(0, Math.min(movingY < fixedY ? fixedY - height : fixedY, 100 - height))
+      imgPercent.width = width
+      imgPercent.height = height
+      overlay.style.left = `${imgPercent.left}%`
+      overlay.style.top = `${imgPercent.top}%`
+      overlay.style.width = `${width}%`
+      overlay.style.height = `${height}%`
+      announceA11y(t('viewer:a11y.previewSize', { width: Math.round(overlay.offsetWidth), height: Math.round(overlay.offsetHeight) }))
     })
 
     handle.addEventListener('mousedown', (e) => {
@@ -12343,6 +12477,14 @@ function renderImageOverlayLayer(textLayerDiv, pageNum) {
     overlay.style.height = `${imgPercent.height}%`
     overlay.style.pointerEvents = 'auto'
     overlay.style.cursor = 'pointer'
+    overlay.tabIndex = 0
+    overlay.setAttribute('role', 'button')
+    overlay.setAttribute('aria-label', t('viewer:a11y.imageOverlay'))
+    overlay.addEventListener('keydown', (event) => {
+      if (event.target === overlay && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault(); overlay.click()
+      }
+    })
 
     overlay.addEventListener('click', (e) => {
       e.preventDefault()
@@ -12581,8 +12723,21 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
       box.style.width  = `${r.width}px`
       box.style.height = `${r.height}px`
       box.dataset.refNum = validKeys.join(',')
+      box.tabIndex = 0
+      box.setAttribute('role', 'button')
+      box.setAttribute('aria-haspopup', 'dialog')
+      box.setAttribute('aria-expanded', 'false')
+      box.setAttribute('aria-label', t('viewer:a11y.citationTrigger', { references: validKeys.join(', ') }))
       box.addEventListener('mouseenter', () => showCitationTooltip(docId, validKeys, refMap, box))
       box.addEventListener('mouseleave', scheduleCitationTooltipHide)
+      box.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault(); event.stopPropagation()
+          showCitationTooltip(docId, validKeys, refMap, box, { focus: true })
+        } else if (event.key === 'Escape') {
+          event.preventDefault(); hideCitationTooltip(); box.focus()
+        }
+      })
       // 클릭도 항상 툴팁을 띄운다(호버가 없는 터치 기기 대응). 실제 마우스
       // 클릭은 브라우저가 클릭 직전에 mouseenter를 먼저 쏘므로, 여기서 굳이
       // "이미 열려 있으면 닫기" 토글을 넣으면 방금 호버가 연 툴팁을 클릭이
@@ -12835,8 +12990,21 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
       box.style.top    = `${r.top}px`
       box.style.width  = `${r.width}px`
       box.style.height = `${r.height}px`
+      box.tabIndex = 0
+      box.setAttribute('role', 'button')
+      box.setAttribute('aria-haspopup', 'dialog')
+      box.setAttribute('aria-expanded', 'false')
+      box.setAttribute('aria-label', t('viewer:a11y.figureTrigger', { label: targets.map(target => target.label).join(', ') }))
       box.addEventListener('mouseenter', () => showFigurePreviewTooltip(targets, box))
       box.addEventListener('mouseleave', scheduleFigurePreviewTooltipHide)
+      box.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault(); event.stopPropagation()
+          showFigurePreviewTooltip(targets, box, { focus: true })
+        } else if (event.key === 'Escape') {
+          event.preventDefault(); hideFigurePreviewTooltip(); box.focus()
+        }
+      })
       // 클릭하면 해당 그림/표/수식이 실제로 있는 페이지로 이동한다. 여러 개를
       // 한 번에 가리키는 표기("Figures 1 and 2")는 첫 번째 대상 기준으로
       // 이동하고, 나머지는 미리보기 툴팁 안의 각 항목을 클릭해 개별 이동한다.
@@ -12879,7 +13047,9 @@ function getOrCreateFigurePreviewTooltip() {
   if (figurePreviewTooltipEl) return figurePreviewTooltipEl
   const el = document.createElement('div')
   el.className = 'figure-preview-tooltip hidden'
-  el.innerHTML = `<div class="figure-preview-tooltip-items"></div><div class="figure-preview-tooltip-resize-handle" title="드래그하여 크기 조절"></div>`
+  el.setAttribute('role', 'dialog')
+  el.setAttribute('aria-label', t('viewer:a11y.figureTrigger', { label: '' }))
+  el.innerHTML = `<div class="figure-preview-tooltip-items"></div><button type="button" class="figure-preview-tooltip-resize-handle" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>`
   document.body.appendChild(el)
 
   try {
@@ -12897,6 +13067,13 @@ function getOrCreateFigurePreviewTooltip() {
     if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
   })
   el.addEventListener('mouseleave', scheduleFigurePreviewTooltipHide)
+  el.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    const trigger = figurePreviewBoxEl
+    hideFigurePreviewTooltip()
+    trigger?.focus()
+  })
   // 여러 대상이 한 툴팁에 쌓여 있을 때, 특정 항목을 클릭하면 그 항목의
   // 페이지로 이동한다 (내용은 매번 innerHTML로 다시 그려지므로 이벤트
   // 위임으로 한 번만 등록해둔다).
@@ -12909,7 +13086,8 @@ function getOrCreateFigurePreviewTooltip() {
     scrollToPage(viewerScrollContainer, target.page)
   })
 
-  el.querySelector('.figure-preview-tooltip-resize-handle').addEventListener('mousedown', (e) => {
+  const figureResizeHandle = el.querySelector('.figure-preview-tooltip-resize-handle')
+  figureResizeHandle.addEventListener('mousedown', (e) => {
     e.preventDefault()
     e.stopPropagation()
 
@@ -12956,6 +13134,25 @@ function getOrCreateFigurePreviewTooltip() {
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
   })
+  figureResizeHandle.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+    event.preventDefault()
+    const step = event.shiftKey ? 20 : 4
+    const maxWidth = Math.min(window.innerWidth * 0.9, 900)
+    const maxHeight = Math.min(window.innerHeight * 0.9, 900)
+    let width = el.offsetWidth
+    let height = el.offsetHeight
+    if (event.key === 'ArrowLeft') width -= step
+    if (event.key === 'ArrowRight') width += step
+    if (event.key === 'ArrowUp') height -= step
+    if (event.key === 'ArrowDown') height += step
+    width = Math.round(Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, width)))
+    height = Math.round(Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, height)))
+    el.style.width = `${width}px`
+    el.style.height = `${height}px`
+    localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: width }))
+    announceA11y(t('viewer:a11y.previewSize', { width, height }))
+  })
 
   figurePreviewTooltipEl = el
   return el
@@ -12980,28 +13177,31 @@ function positionFigurePreviewTooltip() {
 
 // targets: documentImages 항목 배열(1개 이상 - "Figures 1 and 2"처럼 여러 개를
 // 한 번에 가리키는 표기는 각각을 세로로 쌓아 보여준다)
-async function showFigurePreviewTooltip(targets, boxEl) {
+async function showFigurePreviewTooltip(targets, boxEl, { focus = false } = {}) {
   // 텍스트 드래그 선택 중에 마우스가 마커 박스 위를 스쳐 지나가도(mouseenter)
   // 미리보기가 뜨지 않도록 막는다 - 다른 호버 오버레이들과 동일한 가드.
   if (state.isSelectionDragging) return
   if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+  if (figurePreviewBoxEl && figurePreviewBoxEl !== boxEl) figurePreviewBoxEl.setAttribute('aria-expanded', 'false')
   figurePreviewBoxEl = boxEl
+  boxEl?.setAttribute('aria-expanded', 'true')
   figurePreviewCurrentTargets = targets
   const requestId = ++figurePreviewRequestId
 
   const tooltip = getOrCreateFigurePreviewTooltip()
   const itemsEl = tooltip.querySelector('.figure-preview-tooltip-items')
-  itemsEl.innerHTML = targets.map((t, idx) => `
-    <div class="figure-preview-tooltip-item" data-idx="${idx}">
-      <div class="figure-preview-tooltip-label">${escapeHtml(t.label)} · p.${t.page}</div>
+  itemsEl.innerHTML = targets.map((target, idx) => `
+    <button type="button" class="figure-preview-tooltip-item" data-idx="${idx}" aria-label="${escapeHtml(t('viewer:a11y.figureItem', { label: target.label, page: target.page }))}">
+      <div class="figure-preview-tooltip-label">${escapeHtml(target.label)} · p.${target.page}</div>
       <div class="figure-preview-tooltip-loading">${icon('refreshCw', 14, 'style="vertical-align:-2px;margin-right:4px"')}불러오는 중...</div>
       <img class="figure-preview-tooltip-img hidden" alt="" />
-      ${t.caption ? `<div class="figure-preview-tooltip-caption">${renderBoldText(t.caption)}</div>` : ''}
-    </div>
+      ${target.caption ? `<div class="figure-preview-tooltip-caption">${renderBoldText(target.caption)}</div>` : ''}
+    </button>
   `).join('')
 
   tooltip.classList.remove('hidden')
   positionFigurePreviewTooltip()
+  if (focus) window.requestAnimationFrame(() => itemsEl.querySelector('.figure-preview-tooltip-item')?.focus())
 
   targets.forEach(async (t, idx) => {
     const itemEl = itemsEl.querySelector(`.figure-preview-tooltip-item[data-idx="${idx}"]`)
@@ -13028,6 +13228,7 @@ async function showFigurePreviewTooltip(targets, boxEl) {
 function hideFigurePreviewTooltip() {
   if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
   if (figurePreviewTooltipEl) figurePreviewTooltipEl.classList.add('hidden')
+  figurePreviewBoxEl?.setAttribute('aria-expanded', 'false')
   figurePreviewBoxEl = null
 }
 
@@ -13071,6 +13272,8 @@ function getOrCreateCitationTooltip() {
   if (citationTooltipEl) return citationTooltipEl
   const el = document.createElement('div')
   el.className = 'citation-tooltip hidden'
+  el.setAttribute('role', 'dialog')
+  el.setAttribute('aria-label', t('viewer:a11y.citationTrigger', { references: '' }))
   el.innerHTML = `
     <div class="citation-tooltip-text"></div>
     <div class="citation-tooltip-result hidden"></div>
@@ -13086,6 +13289,13 @@ function getOrCreateCitationTooltip() {
     if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   })
   el.addEventListener('mouseleave', scheduleCitationTooltipHide)
+  el.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    const trigger = citationTooltipBoxEl
+    hideCitationTooltip()
+    trigger?.focus()
+  })
   el.querySelector('.citation-tooltip-resolve-btn').addEventListener('click', (e) => {
     e.stopPropagation()
     resolveCitationTooltip()
@@ -13145,14 +13355,16 @@ function buildCitationTooltipHtml(refKeys, refMap) {
     .join('\n')
 }
 
-function showCitationTooltip(docId, refKeys, refMap, boxEl) {
+function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = {}) {
   // 텍스트 드래그 선택 중에 마우스가 마커 박스 위를 스쳐 지나가도(mouseenter)
   // 미리보기가 뜨지 않도록 막는다 - 다른 호버 오버레이들과 동일한 가드.
   if (state.isSelectionDragging) return
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
+  if (citationTooltipBoxEl && citationTooltipBoxEl !== boxEl) citationTooltipBoxEl.setAttribute('aria-expanded', 'false')
   citationTooltipDocId = docId
   citationTooltipReferences = refKeys.map(key => ({ key, text: refMap[key] || '' }))
   citationTooltipBoxEl = boxEl
+  boxEl?.setAttribute('aria-expanded', 'true')
 
   const tooltip = getOrCreateCitationTooltip()
   tooltip.querySelector('.citation-tooltip-text').innerHTML = buildCitationTooltipHtml(refKeys, refMap)
@@ -13171,11 +13383,13 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl) {
 
   tooltip.classList.remove('hidden')
   positionCitationTooltip()
+  if (focus) window.requestAnimationFrame(() => tooltip.querySelector('button:not([disabled]), a[href]')?.focus())
 }
 
 function hideCitationTooltip() {
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   if (citationTooltipEl) citationTooltipEl.classList.add('hidden')
+  citationTooltipBoxEl?.setAttribute('aria-expanded', 'false')
   citationTooltipBoxEl = null
 }
 
@@ -13268,7 +13482,9 @@ function toggleChatSidebar() {
   const isHidden = chatSidebar.classList.toggle('hidden')
   if (chatResizer) chatResizer.classList.toggle('hidden', isHidden)
   chatToggleBtn.classList.toggle('active', !isHidden)
-  if (!isHidden) {
+  if (isHidden) {
+    chatToggleBtn.focus()
+  } else {
     chatInput.focus()
     setTimeout(() => {
       chatMessages.scrollTop = chatMessages.scrollHeight
@@ -14020,6 +14236,12 @@ function initChatListeners() {
   if (chatCloseBtn) {
     chatCloseBtn.addEventListener('click', toggleChatSidebar)
   }
+  chatSidebar?.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return
+    event.preventDefault()
+    if (!chatSidebar.classList.contains("hidden")) toggleChatSidebar()
+  })
+
 
   if (chatIncludeVisual) {
     chatIncludeVisual.addEventListener("change", () => {
@@ -14092,15 +14314,22 @@ function initChatListeners() {
     })
   }
 
-  // Load saved sidebar width
-  const savedWidth = localStorage.getItem('easypaper_chat_sidebar_width')
-  if (savedWidth && chatSidebar) {
-    chatSidebar.style.width = `${savedWidth}px`
+  const CHAT_DEFAULT_WIDTH = 390
+  const chatMaxWidth = () => Math.round(Math.min(800, window.innerWidth * 0.8))
+  const applyChatWidth = (requestedWidth, { persist = false, announce = false } = {}) => {
+    const width = Math.round(Math.max(280, Math.min(chatMaxWidth(), requestedWidth)))
+    chatSidebar.style.width = `${width}px`
+    chatResizer.setAttribute('aria-valuemax', String(chatMaxWidth()))
+    chatResizer.setAttribute('aria-valuenow', String(width))
+    if (persist) localStorage.setItem('easypaper_chat_sidebar_width', String(width))
+    if (announce) announceA11y(t('viewer:a11y.panelWidth', { width }))
+    return width
   }
 
-  // Sidebar drag resizer logic
-  let isDragging = false
+  const savedWidth = Number(localStorage.getItem('easypaper_chat_sidebar_width'))
   if (chatResizer && chatSidebar) {
+    applyChatWidth(Number.isFinite(savedWidth) && savedWidth > 0 ? savedWidth : CHAT_DEFAULT_WIDTH)
+    let isDragging = false
     chatResizer.addEventListener('mousedown', (e) => {
       e.preventDefault()
       isDragging = true
@@ -14110,17 +14339,9 @@ function initChatListeners() {
       document.body.style.cursor = 'col-resize'
       document.body.style.userSelect = 'none'
     })
-
     document.addEventListener('mousemove', (e) => {
-      if (!isDragging) return
-      const newWidth = window.innerWidth - e.clientX
-      const minWidth = 280
-      const maxWidth = Math.min(800, window.innerWidth * 0.8)
-      if (newWidth >= minWidth && newWidth <= maxWidth) {
-        chatSidebar.style.width = `${newWidth}px`
-      }
+      if (isDragging) applyChatWidth(window.innerWidth - e.clientX)
     })
-
     document.addEventListener('mouseup', () => {
       if (!isDragging) return
       isDragging = false
@@ -14129,23 +14350,39 @@ function initChatListeners() {
       if (floatingScrollNav) floatingScrollNav.classList.remove('resizing')
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
-      if (chatSidebar.style.width) {
-        localStorage.setItem('easypaper_chat_sidebar_width', parseInt(chatSidebar.style.width))
+      applyChatWidth(chatSidebar.offsetWidth, { persist: true })
+    })
+    chatResizer.addEventListener('keydown', (event) => {
+      if (event.key === 'Home') {
+        event.preventDefault(); applyChatWidth(CHAT_DEFAULT_WIDTH, { persist: true, announce: true }); return
       }
+      if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return
+      event.preventDefault()
+      const step = event.shiftKey ? 40 : 10
+      const direction = event.key === 'ArrowLeft' ? 1 : -1
+      applyChatWidth(Number(chatResizer.getAttribute('aria-valuenow')) + direction * step, { persist: true, announce: true })
     })
   }
 
-  // 지식 그래프 상세 패널 리사이저 - 채팅 사이드바 리사이저와 동일한 드래그
-  // 패턴이되, 패널이 창 오른쪽 끝이 아니라 그래프 영역(libraryGraphRow) 안에
-  // 있으므로 window.innerWidth가 아니라 그 행(row)의 오른쪽 끝을 기준으로
-  // 폭을 계산한다.
-  const savedGraphPanelWidth = localStorage.getItem('easypaper_graph_detail_panel_width')
-  if (savedGraphPanelWidth && libraryGraphDetailPanel) {
-    libraryGraphDetailPanel.style.width = `${savedGraphPanelWidth}px`
+  // 지식 그래프 상세 패널 리사이저
+  const GRAPH_DEFAULT_WIDTH = 260
+  const graphMaxWidth = () => {
+    const rowWidth = libraryGraphRow.getBoundingClientRect().width || 1028
+    return Math.max(220, Math.round(Math.min(720, rowWidth * 0.7)))
   }
-
-  let isDraggingGraphPanel = false
+  const applyGraphWidth = (requestedWidth, { persist = false, announce = false } = {}) => {
+    const width = Math.round(Math.max(220, Math.min(graphMaxWidth(), requestedWidth)))
+    libraryGraphDetailPanel.style.width = `${width}px`
+    libraryGraphResizer.setAttribute('aria-valuemax', String(graphMaxWidth()))
+    libraryGraphResizer.setAttribute('aria-valuenow', String(width))
+    if (persist) localStorage.setItem('easypaper_graph_detail_panel_width', String(width))
+    if (announce) announceA11y(t('viewer:a11y.panelWidth', { width }))
+    return width
+  }
+  const savedGraphPanelWidth = Number(localStorage.getItem('easypaper_graph_detail_panel_width'))
   if (libraryGraphResizer && libraryGraphDetailPanel && libraryGraphRow) {
+    applyGraphWidth(Number.isFinite(savedGraphPanelWidth) && savedGraphPanelWidth > 0 ? savedGraphPanelWidth : GRAPH_DEFAULT_WIDTH)
+    let isDraggingGraphPanel = false
     libraryGraphResizer.addEventListener('mousedown', (e) => {
       e.preventDefault()
       isDraggingGraphPanel = true
@@ -14153,27 +14390,27 @@ function initChatListeners() {
       document.body.style.cursor = 'col-resize'
       document.body.style.userSelect = 'none'
     })
-
     document.addEventListener('mousemove', (e) => {
       if (!isDraggingGraphPanel) return
-      const rowRect = libraryGraphRow.getBoundingClientRect()
-      const newWidth = rowRect.right - e.clientX
-      const minWidth = 220
-      const maxWidth = Math.min(720, rowRect.width * 0.7)
-      if (newWidth >= minWidth && newWidth <= maxWidth) {
-        libraryGraphDetailPanel.style.width = `${newWidth}px`
-      }
+      applyGraphWidth(libraryGraphRow.getBoundingClientRect().right - e.clientX)
     })
-
     document.addEventListener('mouseup', () => {
       if (!isDraggingGraphPanel) return
       isDraggingGraphPanel = false
       libraryGraphResizer.classList.remove('dragging')
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
-      if (libraryGraphDetailPanel.style.width) {
-        localStorage.setItem('easypaper_graph_detail_panel_width', parseInt(libraryGraphDetailPanel.style.width, 10))
+      applyGraphWidth(libraryGraphDetailPanel.offsetWidth, { persist: true })
+    })
+    libraryGraphResizer.addEventListener('keydown', (event) => {
+      if (event.key === 'Home') {
+        event.preventDefault(); applyGraphWidth(GRAPH_DEFAULT_WIDTH, { persist: true, announce: true }); return
       }
+      if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return
+      event.preventDefault()
+      const step = event.shiftKey ? 40 : 10
+      const direction = event.key === 'ArrowLeft' ? 1 : -1
+      applyGraphWidth(Number(libraryGraphResizer.getAttribute('aria-valuenow')) + direction * step, { persist: true, announce: true })
     })
   }
 
@@ -16595,7 +16832,8 @@ async function loadPDFOutline() {
       outlineContent.appendChild(infoMsg)
 
       for (let p = 1; p <= state.totalPages; p++) {
-        const div = document.createElement('div')
+        const div = document.createElement('button')
+        div.type = 'button'
         div.className = 'outline-item depth-0'
         const iconSvg = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
         div.innerHTML = `${iconSvg}<span>${t('viewer:pageLabel', { page: p })}</span>`
@@ -16610,7 +16848,8 @@ async function loadPDFOutline() {
 
     function renderTree(items, depth = 0) {
       items.forEach(item => {
-        const div = document.createElement('div')
+        const div = document.createElement('button')
+        div.type = 'button'
         div.className = `outline-item depth-${depth}`
         const iconSvg = depth === 0
           ? `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
@@ -16636,22 +16875,32 @@ async function loadPDFOutline() {
   }
 }
 
-function hideOutlineSidebar() {
+function hideOutlineSidebar({ restoreFocus = false } = {}) {
   if (outlineSidebar) {
     outlineSidebar.classList.add('hidden')
-    if (outlineToggleBtn) outlineToggleBtn.classList.remove('active')
+    if (outlineToggleBtn) {
+      outlineToggleBtn.classList.remove('active')
+      outlineToggleBtn.setAttribute('aria-expanded', 'false')
+      if (restoreFocus) outlineToggleBtn.focus()
+    }
   }
 }
 
 function showOutlineSidebar() {
   if (outlineSidebar) {
     outlineSidebar.classList.remove('hidden')
-    if (outlineToggleBtn) outlineToggleBtn.classList.add('active')
+    if (outlineToggleBtn) {
+      outlineToggleBtn.classList.add('active')
+      outlineToggleBtn.setAttribute('aria-expanded', 'true')
+    }
+    window.requestAnimationFrame(() => outlineContent?.querySelector('.outline-item:not(:disabled)')?.focus())
   }
 }
 
 // 목차 이벤트 바인딩
 if (outlineToggleBtn) {
+  outlineToggleBtn.setAttribute('aria-controls', 'outline-sidebar')
+  outlineToggleBtn.setAttribute('aria-expanded', 'false')
   outlineToggleBtn.addEventListener('click', () => {
     console.log("[Outline] Toggle button clicked. Sidebar:", outlineSidebar, "ToggleBtn:", outlineToggleBtn)
     if (!outlineSidebar) {
@@ -16668,7 +16917,10 @@ if (outlineToggleBtn) {
   console.error("[Outline] outlineToggleBtn is null!")
 }
 if (outlineCloseBtn) {
-  outlineCloseBtn.addEventListener('click', hideOutlineSidebar)
+  outlineCloseBtn.addEventListener('click', () => hideOutlineSidebar({ restoreFocus: true }))
+  outlineSidebar?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); hideOutlineSidebar({ restoreFocus: true }) }
+  })
 }
 
 // ── 번역 문장 더블클릭 수동 수정 (Inline Edit) ──────

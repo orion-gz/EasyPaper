@@ -310,7 +310,7 @@
                 <input id="library-graph-search-input" type="text" placeholder="논문/개념/메모/질문 검색" style="width: 100%; margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--bg-elevated); color: var(--text-primary); font-size: 13px;" />
                 <div id="library-graph-row" style="display: flex; align-items: stretch;">
                   <div id="library-graph-canvas" style="flex: 1 1 auto; min-width: 0; height: 600px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px;"></div>
-                  <div id="library-graph-resizer" class="chat-resizer" style="border-radius: 3px;"></div>
+                  <div id="library-graph-resizer" class="chat-resizer" style="border-radius: 3px;" role="separator" tabindex="0" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="720" aria-valuenow="260" aria-label="Resize graph details panel" data-i18n-aria-label="viewer:a11y.graphResizer"></div>
                   <div id="library-graph-detail-panel" style="flex: 0 0 auto; width: 260px; max-width: 70%; overflow-y: auto; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; padding: 16px; font-size: 13px; color: var(--text-secondary);">
                     <p>노드를 클릭하면 상세 정보가 여기에 표시됩니다.</p>
                   </div>
@@ -469,10 +469,10 @@
         <!-- 추가 메뉴(케밥): 번역 상태/모델, 번역 관리(다시 번역/중지/이어서/다운로드),
              메모 숨기기, 테마 전환을 한데 모아 툴바를 간결하게 유지한다. -->
         <div class="kebab-wrapper">
-          <button id="toolbar-kebab-btn" class="icon-btn" title="추가 메뉴">
+          <button id="toolbar-kebab-btn" class="icon-btn" title="추가 메뉴" aria-haspopup="menu" aria-expanded="false" aria-controls="toolbar-kebab-menu">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
           </button>
-          <div id="toolbar-kebab-menu" class="kebab-menu hidden">
+          <div id="toolbar-kebab-menu" class="kebab-menu hidden" role="menu" aria-label="Viewer more menu" data-i18n-aria-label="viewer:a11y.toolbarMenu">
             <!-- 번역 작업 상태 정보 -->
             <div id="translation-progress-mini" class="progress-mini hidden">
               <div class="progress-mini-bar" id="progress-mini-bar"></div>
@@ -535,14 +535,14 @@
     </header>
 
     <!-- 좌측 목차 사이드바 -->
-    <aside class="outline-sidebar hidden" id="outline-sidebar">
+    <aside class="outline-sidebar hidden" id="outline-sidebar" aria-label="Document outline" data-i18n-aria-label="viewer:a11y.outlinePanel">
       <div class="outline-header">
         <span class="outline-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg>논문 목차</span>
         <button id="outline-close-btn" class="outline-close-btn" title="목차 닫기">&times;</button>
       </div>
-      <div class="outline-content" id="outline-content">
+      <nav class="outline-content" id="outline-content" aria-label="Document outline items" data-i18n-aria-label="viewer:a11y.outlineItems">
         <!-- 목차 트리가 여기에 렌더링됨 -->
-      </div>
+      </nav>
     </aside>
 
     <!-- 메인 패널 -->
@@ -569,10 +569,10 @@
       </div>
 
       <!-- AI Chat Sidebar Resizer -->
-      <div id="chat-resizer" class="chat-resizer hidden"></div>
+      <div id="chat-resizer" class="chat-resizer hidden" role="separator" tabindex="0" aria-orientation="vertical" aria-valuemin="280" aria-valuemax="800" aria-valuenow="390" aria-label="Resize AI chat panel" data-i18n-aria-label="viewer:a11y.chatResizer"></div>
 
       <!-- AI Chat Sidebar -->
-      <aside class="chat-sidebar hidden" id="chat-sidebar">
+      <aside class="chat-sidebar hidden" id="chat-sidebar" aria-label="AI assistant" data-i18n-aria-label="viewer:a11y.chatPanel">
         <div class="chat-header" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
           <div class="chat-title-area" style="display: flex; align-items: center; gap: 4px;">
             <span class="chat-header-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></svg></span>
@@ -631,6 +631,7 @@
 
   <!-- 토스트 알림 -->
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="a11y-live-region" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <!-- 공통 테마 토글/설정/로그아웃 버튼 (로그인 & 비교 화면용 - 라이브러리/워크스페이스 화면은
        상단 탑네비의 아바타 버튼 및 사이드바 Settings/로그아웃이 같은 핸들러를 대신 호출한다) -->

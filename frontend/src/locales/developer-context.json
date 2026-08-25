@@ -3949,5 +3949,77 @@
   },
   "chat:evidence.verifyPrompt": {
     "description": "Question inserted when the user requests evidence verification."
+  },
+  "viewer:a11y.chatResizer": {
+    "description": "Accessible label for the AI chat panel resize separator."
+  },
+  "viewer:a11y.graphResizer": {
+    "description": "Accessible label for the graph details resize separator."
+  },
+  "viewer:a11y.chatPanel": {
+    "description": "Accessible label for the viewer AI assistant panel."
+  },
+  "viewer:a11y.toolbarMenu": {
+    "description": "Accessible label for the viewer overflow menu."
+  },
+  "viewer:a11y.outlinePanel": {
+    "description": "Accessible label for the document outline panel."
+  },
+  "viewer:a11y.outlineItems": {
+    "description": "Accessible label for the document outline navigation."
+  },
+  "viewer:a11y.panelWidth": {
+    "description": "Live announcement of a resized panel width."
+  },
+  "viewer:a11y.memoMove": {
+    "description": "Accessible label for the keyboard-movable memo header."
+  },
+  "viewer:a11y.memoResize": {
+    "description": "Accessible label for the keyboard memo resize handle."
+  },
+  "viewer:a11y.memoPosition": {
+    "description": "Live announcement of a moved memo position."
+  },
+  "viewer:a11y.memoSize": {
+    "description": "Live announcement of a resized memo."
+  },
+  "viewer:a11y.citationTrigger": {
+    "description": "Accessible label for an inline citation preview trigger."
+  },
+  "viewer:a11y.figureTrigger": {
+    "description": "Accessible label for an inline figure preview trigger."
+  },
+  "viewer:a11y.figureItem": {
+    "description": "Accessible label for a figure preview navigation item."
+  },
+  "viewer:a11y.figureResize": {
+    "description": "Accessible label for the figure preview resize handle."
+  },
+  "viewer:a11y.imageOverlay": {
+    "description": "Accessible label for a detected page image region."
+  },
+  "viewer:a11y.imageResize": {
+    "description": "Accessible label for a page image region resize handle."
+  },
+  "viewer:a11y.color": {
+    "description": "Accessible label for a memo color choice."
+  },
+  "viewer:a11y.defaultColor": {
+    "description": "Accessible memo color name."
+  },
+  "viewer:a11y.yellow": {
+    "description": "Accessible memo color name."
+  },
+  "viewer:a11y.green": {
+    "description": "Accessible memo color name."
+  },
+  "viewer:a11y.blue": {
+    "description": "Accessible memo color name."
+  },
+  "viewer:a11y.red": {
+    "description": "Accessible memo color name."
+  },
+  "viewer:a11y.previewSize": {
+    "description": "Live announcement of a resized figure preview."
   }
 }

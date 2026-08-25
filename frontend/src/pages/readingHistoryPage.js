@@ -717,7 +717,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     const verifiedPages = pStat ? pStat.verified_pages_count : '-'
 
     return `
-      <div class="rh-top-row ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(p.doc_id || '')}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${isDeleted ? modeCopy("삭제된 논문입니다", "삭제된 문서입니다") : ""}">
+      <div class="rh-top-row ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(p.doc_id || '')}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${isDeleted ? modeCopy("삭제된 논문입니다", "삭제된 문서입니다") : ""}" tabindex="0" role="button">
         <span class="rh-top-rank">${i + 1}</span>
         <div class="rh-top-body">
           <div class="rh-top-title" style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
@@ -979,7 +979,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
               }
             }
             return `
-              <div class="rh-timeline-entry ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${escapeHtml(hoverTitle)}">
+              <div class="rh-timeline-entry ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type)}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${escapeHtml(hoverTitle)}" tabindex="0" role="button">
                 <div class="rh-timeline-dot">${icon(TYPE_ICON[e.type] || 'clock', 13)}</div>
                 <div class="rh-timeline-row">
                   <span class="rh-timeline-time">${escapeHtml(timeLabel)}</span>
@@ -1069,6 +1069,14 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     if (entry.dataset.isDeleted === 'true') return
     openDoc(entry.dataset.docId, entry.dataset.type)
   })
+  timelineListEl.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return
+    const entry = event.target.closest(".rh-timeline-entry")
+    if (!entry) return
+    event.preventDefault()
+    entry.click()
+  })
+
 
   el.querySelector('.rh-top-list')?.addEventListener('click', (event) => {
     const row = event.target.closest('.rh-top-row')
@@ -1076,6 +1084,14 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     if (row.dataset.isDeleted === 'true') return
     openDoc(row.dataset.docId)
   })
+  el.querySelector(".rh-top-list")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return
+    const row = event.target.closest(".rh-top-row")
+    if (!row) return
+    event.preventDefault()
+    row.click()
+  })
+
 
   const calGridEl = el.querySelector('.rh-cal-grid')
   if (calGridEl) {
