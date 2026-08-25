@@ -227,6 +227,8 @@ async def classify_and_store_paper_tags(
     abstract = extract_abstract_text(pages)
     if not abstract:
         return {}
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(before, "insight")
     paper_tags = await classify_paper_tags(title, abstract, session_id=doc_id)
     if not paper_tags:
         return {}
