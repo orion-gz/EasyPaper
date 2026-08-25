@@ -118,6 +118,11 @@ async def sync_document_for_graph(doc_id: str, pages: list, doc_title: str) -> N
         return
     username = doc["username"]
 
+    # Graph sync starts with the analysis provider. Similarity linking below uses
+    # the library provider and is checked only when that secondary call is needed.
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(doc, "insight")
+
     from services.llm_client import extract_paper_concepts, find_similar_concepts
     from services.db import db_upsert_concept, db_link_paper_concept, db_get_all_concepts, db_upsert_concept_edge
     concepts = await extract_paper_concepts(
@@ -142,6 +147,7 @@ async def sync_document_for_graph(doc_id: str, pages: list, doc_title: str) -> N
 
         if is_new and existing_by_normalized:
             try:
+                ensure_processing_allowed(doc, "recommendation")
                 candidate_names = [c2["name"] for c2 in existing_by_normalized.values()]
                 matches = await find_similar_concepts(name, candidate_names, session_id=doc_id)
                 for m in matches:
@@ -194,6 +200,16 @@ async def sync_question_for_graph(chat_id: int, doc_id_or_compare_id: str, quest
 
     concept_links = db_get_concepts_for_docs(doc_ids)
     if concept_links:
+        from fastapi import HTTPException
+        from services.library import get_document
+        from services.processing_policy import ensure_documents_processing_allowed
+        documents = [doc for doc_id in doc_ids if (doc := get_document(doc_id))]
+        try:
+            ensure_documents_processing_allowed(documents, "chat")
+        except HTTPException as exc:
+            if isinstance(exc.detail, dict) and exc.detail.get("code") == "external_processing_blocked":
+                return
+            raise
         from services.llm_client import match_question_to_concepts
         seen_concept_ids = set()
         concept_by_name = {}
@@ -897,6 +913,12 @@ async def _score_one_paper(doc_id: str, title: str, concept_names: List[str]) ->
     추출 실패, LLM 오류, 응답 파싱 실패 등 어떤 이유로든 실패하면 조용히 빈
     dict를 반환해 호출부가 등장 여부 기반 값으로 대체하게 한다 - 이 함수 하나가
     실패해도 나머지 논문의 채점이나 매트릭스 자체가 막히면 안 된다."""
+    from services.library import get_document
+    from services.processing_policy import ensure_processing_allowed
+    document = get_document(doc_id)
+    if not document:
+        return {}
+    ensure_processing_allowed(document, "recommendation")
     from services.llm_client import score_paper_concept_relevance
     text = await _get_paper_text_for_scoring(doc_id)
     try:
@@ -1164,6 +1186,10 @@ async def get_ai_insights(username: str) -> List[dict]:
     rule_based_gaps = await get_knowledge_gaps(username)
     if not docs:
         return rule_based_gaps
+
+    # Cached insights cause no transfer; enforce only before generating fresh data.
+    from services.processing_policy import ensure_documents_processing_allowed
+    ensure_documents_processing_allowed(docs, "recommendation")
 
     # get_activity_timeline의 summary는 UI 카드용으로 80자로 잘려있어, 질문에서
     # 이해 부족/개념 공백을 실제로 진단하기엔 근거가 너무 짧다. 여기서는 같은

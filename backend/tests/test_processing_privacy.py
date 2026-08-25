@@ -184,3 +184,176 @@ def test_all_document_ai_entrypoints_block_external_processing(test_client, isol
             assert response.json()["code"] == "external_processing_blocked"
     finally:
         upload_router.sessions.pop(session_id, None)
+
+
+def _save_local_only_document(isolated_dirs, doc_id: str) -> None:
+    isolated_dirs["db"].db_save_document(
+        doc_id, "testuser", f"{doc_id}.pdf", "/x/nonexistent.pdf", 1,
+        {"title": f"{doc_id} title"}, processing_policy="local_only",
+    )
+
+
+@pytest.mark.asyncio
+async def test_secondary_tag_classification_enforces_analysis_provider(
+    isolated_dirs, monkeypatch,
+):
+    import services.llm_client as llm_client
+    from services.paper_tags import classify_and_store_paper_tags
+
+    _save_local_only_document(isolated_dirs, "privacy-secondary-tags")
+    monkeypatch.setattr("config.get_analysis_provider", lambda: "openai")
+    calls = []
+
+    async def fake_classify(*_args, **_kwargs):
+        calls.append(True)
+        return {}
+
+    monkeypatch.setattr(llm_client, "classify_paper_tags", fake_classify)
+    pages = [{"page_num": 1, "text": "Abstract\n" + ("meaningful research text " * 12)}]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await classify_and_store_paper_tags(
+            "privacy-secondary-tags", pages, "Private paper", force=True,
+        )
+
+    assert exc_info.value.detail["code"] == "external_processing_blocked"
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_secondary_graph_sync_enforces_analysis_provider(
+    isolated_dirs, monkeypatch,
+):
+    import services.llm_client as llm_client
+    from services.knowledge_graph import sync_document_for_graph
+
+    _save_local_only_document(isolated_dirs, "privacy-secondary-graph")
+    monkeypatch.setattr("config.get_analysis_provider", lambda: "claude")
+    calls = []
+
+    async def fake_extract(*_args, **_kwargs):
+        calls.append(True)
+        return []
+
+    monkeypatch.setattr(llm_client, "extract_paper_concepts", fake_extract)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await sync_document_for_graph(
+            "privacy-secondary-graph",
+            [{"page_num": 1, "text": "private document text"}],
+            "Private graph paper",
+        )
+
+    assert exc_info.value.detail["code"] == "external_processing_blocked"
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_secondary_question_sync_skips_external_chat_provider(
+    isolated_dirs, monkeypatch,
+):
+    import services.llm_client as llm_client
+    from services import db
+    from services.knowledge_graph import sync_question_for_graph
+
+    doc_id = "privacy-secondary-question"
+    _save_local_only_document(isolated_dirs, doc_id)
+    concept_id = db.db_upsert_concept("Private Concept", "private concept", "method")
+    db.db_link_paper_concept(doc_id, concept_id)
+    chat_id = db.db_save_chat_message(doc_id, "user", "Explain the private concept")
+    monkeypatch.setattr("config.get_chat_provider", lambda: "gemini")
+    calls = []
+
+    async def fake_match(*_args, **_kwargs):
+        calls.append(True)
+        return []
+
+    monkeypatch.setattr(llm_client, "match_question_to_concepts", fake_match)
+    await sync_question_for_graph(chat_id, doc_id, "Explain the private concept")
+
+    assert calls == []
+    with db.get_db() as conn:
+        row = conn.execute(
+            "SELECT graph_synced_at FROM chats WHERE id = ?", (chat_id,),
+        ).fetchone()
+    assert row["graph_synced_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_secondary_heatmap_scoring_enforces_library_provider(
+    isolated_dirs, monkeypatch,
+):
+    import services.llm_client as llm_client
+    from services.knowledge_graph import _score_one_paper
+
+    doc_id = "privacy-secondary-heatmap"
+    _save_local_only_document(isolated_dirs, doc_id)
+    monkeypatch.setattr("config.get_library_provider", lambda: "codex")
+    calls = []
+
+    async def fake_score(*_args, **_kwargs):
+        calls.append(True)
+        return []
+
+    monkeypatch.setattr(llm_client, "score_paper_concept_relevance", fake_score)
+    with pytest.raises(HTTPException) as exc_info:
+        await _score_one_paper(doc_id, "Private paper", ["Private Concept"])
+
+    assert exc_info.value.detail["code"] == "external_processing_blocked"
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_secondary_dashboard_insights_enforce_library_provider(
+    isolated_dirs, monkeypatch,
+):
+    import services.llm_client as llm_client
+    from services.knowledge_graph import get_ai_insights
+
+    _save_local_only_document(isolated_dirs, "privacy-secondary-dashboard")
+    monkeypatch.setattr("config.get_library_provider", lambda: "openai")
+    calls = []
+
+    async def fake_generate(*_args, **_kwargs):
+        calls.append(True)
+        return []
+
+    monkeypatch.setattr(llm_client, "generate_dashboard_insights", fake_generate)
+    with pytest.raises(HTTPException) as exc_info:
+        await get_ai_insights("testuser")
+
+    assert exc_info.value.detail["code"] == "external_processing_blocked"
+    assert calls == []
+
+
+
+@pytest.mark.asyncio
+async def test_secondary_graph_similarity_skips_external_library_provider(
+    isolated_dirs, monkeypatch,
+):
+    import services.llm_client as llm_client
+    from services import db
+    from services.knowledge_graph import sync_document_for_graph
+
+    doc_id = "privacy-secondary-similarity"
+    _save_local_only_document(isolated_dirs, doc_id)
+    db.db_upsert_concept("Existing Concept", "existing concept", "method")
+    monkeypatch.setattr("config.get_analysis_provider", lambda: "ollama")
+    monkeypatch.setattr("config.get_ollama_host", lambda: "http://127.0.0.1:11434")
+    monkeypatch.setattr("config.get_library_provider", lambda: "openai")
+    calls = []
+
+    async def fake_extract(*_args, **_kwargs):
+        return [{"concept": "New Private Concept", "kind": "method"}]
+
+    async def fake_similar(*_args, **_kwargs):
+        calls.append(True)
+        return []
+
+    monkeypatch.setattr(llm_client, "extract_paper_concepts", fake_extract)
+    monkeypatch.setattr(llm_client, "find_similar_concepts", fake_similar)
+    await sync_document_for_graph(
+        doc_id, [{"page_num": 1, "text": "private text"}], "Private paper",
+    )
+
+    assert calls == []
