@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp } from './helpers.js'
+import { mockBaseRoutes, gotoApp, reloadToLibrary } from './helpers.js'
 
 const docs = [{
   id: 'doc-card-size',
@@ -44,8 +44,7 @@ test('큰 카드, 작은 카드, 리스트 보기를 전환하고 마지막 선�
   expect(Math.abs(compactFolderHeight - compactDocHeight)).toBeLessThanOrEqual(1)
   await expect.poll(() => page.evaluate(() => localStorage.getItem('easypaper_library_view'))).toBe('compact')
 
-  await page.reload()
-  await page.locator('.sidebar-nav-item[data-page="library"]').click()
+  await reloadToLibrary(page)
   await expect(page.locator('#library-screen')).toHaveClass(/active/)
   await expect(page.locator('#library-grid')).toHaveClass(/compact-view/)
   await expect(page.getByRole('button', { name: '작은 카드 보기' })).toHaveAttribute('aria-pressed', 'true')

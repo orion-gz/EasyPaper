@@ -112,6 +112,14 @@ export async function mockBaseRoutes(page, {
   })
 }
 
+/** 새로고침 초기 라우팅이 끝난 뒤 라이브러리로 이동한다. */
+export async function reloadToLibrary(page) {
+  await page.reload()
+  await page.locator('#page-dashboard.active').waitFor({ state: 'visible' })
+  await page.locator('.sidebar-nav-item[data-page="library"]').click()
+  await page.locator('#page-library.active').waitFor({ state: 'visible' })
+}
+
 /** 로그인 상태로 앱을 열고(온보딩은 건너뜀) 라이브러리 화면이 뜰 때까지 기다린다. */
 export async function gotoApp(page, { navigateToLibrary = true } = {}) {
   await page.goto('/index.html')
