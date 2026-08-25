@@ -144,6 +144,34 @@ def _chunk_evidence(doc_id: str, revision: int, chunk: dict, page: dict) -> dict
     }
 
 
+def resolve_page_selected_text(
+    pages: list[dict], page_num: int, selected_text: str | None,
+) -> str | None:
+    """Return the canonical source substring only when it exists on the page."""
+    selection = (selected_text or "").strip()
+    if not selection:
+        return None
+    page = next(
+        (item for item in pages if int(item.get("page_num") or 0) == int(page_num)),
+        None,
+    )
+    if page is None:
+        return None
+    source = str(page.get("text") or "")
+    exact_start = source.find(selection)
+    if exact_start >= 0:
+        return source[exact_start:exact_start + len(selection)]
+
+    # Browser text selection and PDF extraction commonly disagree only on line
+    # breaks or repeated spaces. Match those boundaries flexibly, but return the
+    # original server-side substring rather than any client-provided characters.
+    parts = re.split(r"\s+", selection)
+    if not parts:
+        return None
+    match = re.search(r"\s+".join(re.escape(part) for part in parts), source)
+    return match.group(0) if match else None
+
+
 def retrieve_context(doc_id: str, pages: list[dict], question: str, current_page: int | None = None,
                      selected_text: str | None = None, budget: int = 40000, max_chunks: int = 14,
                      content_revision: int = 1) -> ContextResult:

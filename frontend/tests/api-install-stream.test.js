@@ -63,3 +63,28 @@ test("document chat parses named SSE events across chunk boundaries", async () =
   const body = JSON.parse(requests[0].options.body)
   assert.deepEqual(body.screen_context, { mode: "viewer", page_num: 2, include_visual: null })
 })
+
+
+test('standalone document chat sends no viewer page or visual context', async () => {
+  const requests = []
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, options })
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('event: done\ndata: {}\n\n'))
+        controller.close()
+      },
+    })
+    return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+
+  await new Promise((resolve, reject) => {
+    streamChatAPI('doc', [{ role: 'user', content: 'question' }],
+      () => {}, resolve, reject, null,
+      { screenContext: { mode: 'standalone', include_visual: false } })
+  })
+  const body = JSON.parse(requests[0].options.body)
+  assert.deepEqual(body.screen_context, { mode: 'standalone', include_visual: false })
+  assert.equal(body.current_page, undefined)
+  assert.equal(body.selected_text, undefined)
+})

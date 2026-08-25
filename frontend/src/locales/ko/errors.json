@@ -8,5 +8,7 @@
   "generation_failed": "생성하지 못했습니다. 다시 시도해 주세요.",
   "network": "서버에 연결할 수 없습니다.",
   "external_processing_blocked": "이 문서는 로컬 처리만 허용합니다. {{operation}} 작업에는 loopback 주소의 Ollama를 선택하세요.",
-  "invalid_processing_policy": "지원하지 않는 문서 처리 정책입니다."
+  "invalid_processing_policy": "지원하지 않는 문서 처리 정책입니다.",
+  "selected_text_requires_viewer_page": "선택한 본문은 문서 뷰어의 현재 페이지에서만 사용할 수 있습니다.",
+  "selected_text_not_on_page": "선택한 본문을 현재 {{page_num}}페이지 원문에서 찾을 수 없습니다."
 }

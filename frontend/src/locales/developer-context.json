@@ -4024,5 +4024,11 @@
   },
   "viewer:a11y.previewSize": {
     "description": "Live announcement of a resized figure preview."
+  },
+  "errors:selected_text_requires_viewer_page": {
+    "description": "Selected-text requests without an active viewer page."
+  },
+  "errors:selected_text_not_on_page": {
+    "description": "Selected text that cannot be verified against the server-side page source."
   }
 }
