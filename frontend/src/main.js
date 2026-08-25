@@ -1521,6 +1521,7 @@ function updatePageDisplay(pageNum) {
   if (pageNum === state.currentPage) return
   state.currentPage = pageNum
   pageInput.value = pageNum
+  updateChatScreenContext()
   scheduleSaveLastReadPage(pageNum)
 }
 
@@ -9749,6 +9750,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
       : 1
     pageInput.value = restorePage
     state.currentPage = restorePage
+    updateChatScreenContext()
 
     showViewer()
     hideOutlineSidebar()
@@ -9779,7 +9781,13 @@ async function openFromLibrary(doc, shouldPushState = true) {
         if (isAssistant && msg.stale) {
           renderedContent = `<span class="chat-stale-revision-badge">${t("chat:staleRevision")}</span>${renderedContent}`
         }
-        appendChatMessage(msg.role, renderedContent, true)
+        const messageElement = appendChatMessage(msg.role, renderedContent, true)
+        if (isAssistant && msg.evidence?.length) {
+          attachEvidenceToBubble(messageElement.querySelector(".message-bubble"), msg.evidence)
+        }
+        if (isAssistant && msg.verification) {
+          renderVerificationBadge(messageElement, msg.verification)
+        }
       }
 
       // 마지막 답변이 여전히 어시스턴트 것이라면(그 뒤로 새 질문을 보내지
@@ -13291,6 +13299,66 @@ function buildChatWelcomeHtml() {
   return `<div class="chat-message assistant"><div class="message-bubble">${escapeHtml(welcome)}<br><br><strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}${escapeHtml(t('chat:suggestions.label'))}</strong><ul>${examples.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div></div>`
 }
 
+function updateChatScreenContext(contextEvent = null) {
+  if (!chatPageContextChip) return
+  const page = Number(contextEvent?.page_num || state.currentPage || 1)
+  const visual = contextEvent?.visual_included
+  chatPageContextChip.textContent = visual
+    ? t("chat:screenContext.pageWithVisual", { page })
+    : t("chat:screenContext.pageIncluded", { page })
+  chatPageContextChip.classList.toggle("visual-included", Boolean(visual))
+  if (contextEvent?.visual_reason === "vision_not_supported") {
+    chatPageContextChip.title = t("chat:screenContext.visionUnsupported")
+  } else {
+    chatPageContextChip.title = t("chat:screenContext.textDescription")
+  }
+}
+
+function attachEvidenceToBubble(bubble, evidenceItems = []) {
+  if (!bubble || !evidenceItems.length) return
+  const byPage = new Map()
+  evidenceItems.forEach(item => {
+    const page = Number(item.page_num)
+    if (!byPage.has(page)) byPage.set(page, [])
+    byPage.get(page).push(item)
+  })
+  bubble.querySelectorAll("[data-page-citation]").forEach(button => {
+    const page = Number(button.dataset.pageCitation)
+    const item = byPage.get(page)?.shift()
+    if (!item) return
+    button.dataset.evidenceId = item.evidence_id
+    button.dataset.evidenceQuote = item.quote || ""
+    button.dataset.evidenceOccurrence = String(item.occurrence || 1)
+    const card = document.createElement("span")
+    card.className = "chat-evidence-card"
+    const heading = document.createElement("strong")
+    heading.textContent = item.section || t("chat:evidence.source")
+    const quote = document.createElement("span")
+    quote.textContent = (item.quote || "").slice(0, 360)
+    card.append(heading, quote)
+    if (item.translation_quote) {
+      const translationHeading = document.createElement("strong")
+      translationHeading.className = "chat-evidence-translation-heading"
+      translationHeading.textContent = t("chat:evidence.translation")
+      const translation = document.createElement("span")
+      translation.textContent = item.translation_quote.slice(0, 360)
+      card.append(translationHeading, translation)
+    }
+    button.appendChild(card)
+  })
+}
+
+function renderVerificationBadge(messageElement, verification) {
+  if (!messageElement || !verification) return
+  const badge = document.createElement("div")
+  const hasRisk = Array.isArray(verification.risks) && verification.risks.length > 0
+  badge.className = "chat-verification-badge " + (hasRisk ? "risk" : "verified")
+  badge.textContent = hasRisk
+    ? t("chat:evidence.risk", { count: verification.risks.length })
+    : t("chat:evidence.verified")
+  messageElement.appendChild(badge)
+}
+
 function resetChatUI() {
   chatMessages.innerHTML = buildChatWelcomeHtml()
   chatInput.value = ''
@@ -13494,6 +13562,8 @@ function regenerateResponse(assistantMsgEl) {
   let accumulatedText = '';
   let replyBubble = null;
   let firstToken = true;
+  let responseEvidence = [];
+  let responseVerification = null;
 
   state.chatActiveStream = streamChatAPI(
     state.sessionId,
@@ -13516,8 +13586,10 @@ function regenerateResponse(assistantMsgEl) {
 
       if (replyBubble) {
         replyBubble.innerHTML = formatChatHtml(accumulatedText);
+        attachEvidenceToBubble(replyBubble, responseEvidence);
         applyKatexToElement(replyBubble);
         if (replyBubble.parentElement) {
+          renderVerificationBadge(replyBubble.parentElement, responseVerification);
           appendActionButtons(replyBubble.parentElement, 'assistant', accumulatedText);
           renderSuggestedQuestions(replyBubble.parentElement);
         }
@@ -13538,6 +13610,19 @@ function regenerateResponse(assistantMsgEl) {
       chatInput.disabled = false;
       updateChatSendBtnIcon(false);
       chatInput.focus();
+    },
+    null,
+    {
+      currentPage: state.currentPage,
+      screenContext: {
+        mode: "viewer", page_num: state.currentPage,
+        include_visual: state.chatIncludeVisual ? true : null,
+      },
+    },
+    (eventName, payload) => {
+      if (eventName === "context") updateChatScreenContext(payload);
+      if (eventName === "evidence") responseEvidence = payload?.items || [];
+      if (eventName === "verification") responseVerification = payload;
     }
   );
 }
@@ -13603,6 +13688,18 @@ function appendActionButtons(msgEl, role, content) {
       regenerateResponse(msgEl)
     })
     actionsEl.appendChild(regenBtn)
+
+    const verifyBtn = document.createElement("button")
+    verifyBtn.type = "button"
+    verifyBtn.className = "msg-action-btn"
+    verifyBtn.innerHTML = icon("checkCircle", 12) + escapeHtml(t("chat:evidence.verifyAction"))
+    verifyBtn.title = t("chat:evidence.verifyAction")
+    verifyBtn.addEventListener("click", () => {
+      if (state.chatActiveStream) return
+      chatInput.value = t("chat:evidence.verifyPrompt")
+      sendChatMessage()
+    })
+    actionsEl.appendChild(verifyBtn)
   }
 
   msgEl.appendChild(actionsEl)
@@ -13810,6 +13907,8 @@ async function sendChatMessage() {
   let accumulatedText = ''
   let replyBubble = null
   let firstToken = true
+  let responseEvidence = []
+  let responseVerification = null
   state.chatCurrentText = ''
 
   state.chatActiveStream = streamChatAPI(
@@ -13836,7 +13935,9 @@ async function sendChatMessage() {
 
       if (replyBubble) {
         replyBubble.innerHTML = formatChatHtml(accumulatedText)
+        attachEvidenceToBubble(replyBubble, responseEvidence)
         if (replyBubble.parentElement) {
+          renderVerificationBadge(replyBubble.parentElement, responseVerification)
           appendActionButtons(replyBubble.parentElement, 'assistant', accumulatedText)
           renderSuggestedQuestions(replyBubble.parentElement)
         }
@@ -13862,7 +13963,21 @@ async function sendChatMessage() {
       chatInput.focus()
     },
     imageForThisTurn,
-    { currentPage: state.currentPage, selectedText: selectedTextForThisTurn }
+    {
+      currentPage: state.currentPage,
+      selectedText: selectedTextForThisTurn,
+      screenContext: {
+        mode: "viewer",
+        page_num: state.currentPage,
+        include_visual: state.chatIncludeVisual ? true : null,
+      },
+      verifyEvidence: /근거\s*검증|verify\s+(?:the\s+)?evidence/i.test(text),
+    },
+    (eventName, payload) => {
+      if (eventName === "context") updateChatScreenContext(payload)
+      if (eventName === "evidence") responseEvidence = payload?.items || []
+      if (eventName === "verification") responseVerification = payload
+    }
   )
 }
 
@@ -13878,7 +13993,10 @@ function initChatListeners() {
     if (!citation) return
     const page = Number(citation.dataset.pageCitation)
     if (Number.isInteger(page) && page >= 1 && page <= state.totalPages) {
-      scrollToPage(viewerScrollContainer, page)
+      const quote = citation.dataset.evidenceQuote
+      const occurrence = Number(citation.dataset.evidenceOccurrence || 1)
+      if (quote) locateTermInPdf(page, quote, occurrence)
+      else scrollToPage(viewerScrollContainer, page)
     }
   })
 
@@ -13900,6 +14018,14 @@ function initChatListeners() {
   if (chatCloseBtn) {
     chatCloseBtn.addEventListener('click', toggleChatSidebar)
   }
+
+  if (chatIncludeVisual) {
+    chatIncludeVisual.addEventListener("change", () => {
+      state.chatIncludeVisual = chatIncludeVisual.checked
+      updateChatScreenContext()
+    })
+  }
+  updateChatScreenContext()
 
   if (chatSendBtn) {
     chatSendBtn.addEventListener('click', () => {

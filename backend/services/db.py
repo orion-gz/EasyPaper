@@ -83,6 +83,7 @@ def init_db():
             role TEXT NOT NULL,
             content TEXT NOT NULL,
             content_revision INTEGER NOT NULL DEFAULT 1,
+            evidence_verification TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE
         )
@@ -168,6 +169,29 @@ def init_db():
         )
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_reparse_previews_doc ON reparse_previews(doc_id, created_at DESC)")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_evidence (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            answer_message_id INTEGER NOT NULL,
+            doc_id TEXT NOT NULL,
+            evidence_id TEXT NOT NULL,
+            content_revision INTEGER NOT NULL,
+            page_num INTEGER NOT NULL,
+            section TEXT,
+            quote TEXT NOT NULL,
+            translation_quote TEXT,
+            char_start INTEGER,
+            char_end INTEGER,
+            occurrence INTEGER NOT NULL DEFAULT 1,
+            bbox TEXT,
+            verification TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (answer_message_id) REFERENCES chats (id) ON DELETE CASCADE,
+            FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE,
+            UNIQUE(answer_message_id, evidence_id)
+        )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_evidence_answer ON chat_evidence(answer_message_id)")
 
         # 문서 채팅용 페이지·문단 전문 검색 인덱스. PDF 원문을 문단 단위로
         # 저장해 재시작 후에도 후반부 질문을 검색할 수 있다.
@@ -227,6 +251,7 @@ def init_db():
             "ALTER TABLE translations ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE page_insights ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE chats ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE chats ADD COLUMN evidence_verification TEXT",
         ):
             try:
                 cursor.execute(column_sql)
@@ -235,6 +260,11 @@ def init_db():
 
         try:
             cursor.execute("ALTER TABLE reparse_previews ADD COLUMN source_pdf_fingerprint TEXT")
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE chat_evidence ADD COLUMN translation_quote TEXT")
         except sqlite3.OperationalError:
             pass
 
@@ -913,6 +943,7 @@ def db_delete_document(doc_id: str) -> bool:
         except sqlite3.OperationalError:
             pass
         cursor.execute("DELETE FROM translations WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM chat_evidence WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM chats WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
         cursor.execute("DELETE FROM document_folders WHERE doc_id = ?", (doc_id,))
@@ -1067,28 +1098,97 @@ def db_save_chat_message(doc_id: str, role: str, content: str) -> Optional[int]:
         conn.commit()
         return cursor.lastrowid
 
+def db_save_chat_verification(answer_message_id: int, verification: Dict[str, Any]) -> None:
+    if not answer_message_id:
+        return
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE chats SET evidence_verification = ? WHERE id = ?",
+            (json.dumps(verification, ensure_ascii=False), int(answer_message_id)),
+        )
+        conn.commit()
+
+
+def db_save_chat_evidence(answer_message_id: int, doc_id: str, evidence: List[Dict[str, Any]],
+                          verification: Dict[str, Any]) -> None:
+    if not answer_message_id or not evidence:
+        return
+    created_at = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        conn.executemany(
+            """INSERT OR REPLACE INTO chat_evidence
+               (answer_message_id, doc_id, evidence_id, content_revision, page_num, section, quote,
+                translation_quote, char_start, char_end, occurrence, bbox, verification, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [(
+                int(answer_message_id), doc_id, item["evidence_id"],
+                int(item.get("content_revision") or 1), int(item["page_num"]),
+                item.get("section"), item.get("quote") or "",
+                item.get("translation_quote"), item.get("char_start"), item.get("char_end"),
+                int(item.get("occurrence") or 1),
+                json.dumps(item.get("bbox"), ensure_ascii=False) if item.get("bbox") is not None else None,
+                json.dumps(verification, ensure_ascii=False), created_at,
+            ) for item in evidence],
+        )
+        conn.commit()
+
+
+def db_get_chat_evidence(answer_message_id: int) -> List[Dict[str, Any]]:
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT evidence_id, content_revision, page_num, section, quote, translation_quote, char_start,
+                      char_end, occurrence, bbox, verification
+               FROM chat_evidence WHERE answer_message_id = ? ORDER BY id""",
+            (int(answer_message_id),),
+        ).fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["bbox"] = json.loads(item["bbox"]) if item.get("bbox") else None
+        item["verification"] = json.loads(item["verification"]) if item.get("verification") else None
+        result.append(item)
+    return result
+
+
 def db_get_chat_history(doc_id: str, include_revision: bool = False) -> List[Dict[str, Any]]:
     with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """SELECT c.role, c.content, c.content_revision,
+        rows = conn.execute(
+            """SELECT c.id, c.role, c.content, c.content_revision, c.evidence_verification,
                       COALESCE(d.content_revision, c.content_revision) AS current_revision
                FROM chats c LEFT JOIN documents d ON d.id = c.doc_id
                WHERE c.doc_id = ? ORDER BY c.id ASC""",
             (doc_id,),
-        )
-        rows = cursor.fetchall()
+        ).fetchall()
         if not include_revision:
-            return [{"role": r["role"], "content": r["content"]} for r in rows]
-        return [{
-            "role": r["role"], "content": r["content"],
-            "content_revision": int(r["content_revision"]),
-            "stale": int(r["content_revision"]) < int(r["current_revision"]),
-        } for r in rows]
+            return [{"role": row["role"], "content": row["content"]} for row in rows]
+        answer_ids = [int(row["id"]) for row in rows if row["role"] == "assistant"]
+        evidence_by_answer = {answer_id: [] for answer_id in answer_ids}
+        if answer_ids:
+            placeholders = ",".join("?" for _ in answer_ids)
+            evidence_rows = conn.execute(
+                f"""SELECT answer_message_id, evidence_id, content_revision, page_num, section, quote,
+                           translation_quote, char_start, char_end, occurrence, bbox, verification
+                    FROM chat_evidence WHERE answer_message_id IN ({placeholders}) ORDER BY id""",
+                answer_ids,
+            ).fetchall()
+            for evidence_row in evidence_rows:
+                item = dict(evidence_row)
+                answer_id = int(item.pop("answer_message_id"))
+                item["bbox"] = json.loads(item["bbox"]) if item.get("bbox") else None
+                item["verification"] = json.loads(item["verification"]) if item.get("verification") else None
+                evidence_by_answer[answer_id].append(item)
+    return [{
+        "id": int(row["id"]), "role": row["role"], "content": row["content"],
+        "content_revision": int(row["content_revision"]),
+        "stale": int(row["content_revision"]) < int(row["current_revision"]),
+        "evidence": evidence_by_answer.get(int(row["id"]), []),
+        "verification": json.loads(row["evidence_verification"]) if row["evidence_verification"] else None,
+    } for row in rows]
 
 def db_clear_chat_history(doc_id: str) -> None:
     with get_db() as conn:
         cursor = conn.cursor()
+        cursor.execute("DELETE FROM chat_evidence WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM chats WHERE doc_id = ?", (doc_id,))
         conn.commit()
 

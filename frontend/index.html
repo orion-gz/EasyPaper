@@ -598,6 +598,13 @@
               <img id="chat-quote-img" class="chat-quote-img hidden" alt="Quoted Figure" />
               <button id="chat-quote-close-btn" class="chat-quote-close-btn" title="인용 취소">&times;</button>
             </div>
+            <div class="chat-screen-context" aria-live="polite">
+              <span id="chat-page-context-chip" class="chat-context-chip"></span>
+              <label class="chat-visual-toggle">
+                <input id="chat-include-visual" type="checkbox" />
+                <span data-i18n="chat:screenContext.includeVisual">현재 페이지 이미지 포함</span>
+              </label>
+            </div>
             <textarea id="chat-input" class="chat-input-textarea" placeholder="논문에 대해 궁금한 점을 질문하세요..." data-i18n-placeholder="chat:placeholder" rows="1"></textarea>
             <div class="chat-input-footer">
               <div id="chat-sidebar-provider"></div>

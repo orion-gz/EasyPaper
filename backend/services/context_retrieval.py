@@ -6,6 +6,7 @@ is sent to telemetry or external embedding services.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from typing import Iterable
@@ -22,6 +23,7 @@ class ContextResult:
     evidence_pages: frozenset[int]
     retrieval_count: int
     strategy: str
+    evidence: tuple[dict, ...] = ()
 
 
 def _tokens(text: str) -> list[str]:
@@ -108,8 +110,43 @@ def _fts_rows(doc_id: str, query: str) -> list[dict]:
         return []
 
 
+def _chunk_evidence(doc_id: str, revision: int, chunk: dict, page: dict) -> dict:
+    content = str(chunk.get("content") or "").strip()
+    page_text = str(page.get("text") or "")
+    char_start = page_text.find(content)
+    if char_start < 0:
+        probe = content[:120]
+        char_start = page_text.find(probe) if probe else -1
+    char_end = char_start + len(content) if char_start >= 0 else None
+    occurrence = 1
+    if char_start >= 0 and content:
+        occurrence = page_text[:char_start].count(content) + 1
+    bbox = None
+    for block in page.get("blocks") or []:
+        block_text = str(block.get("text") or "") if isinstance(block, dict) else ""
+        if content[:80] and content[:80] in block_text:
+            bbox = block.get("bbox")
+            break
+    chunk_page_num = chunk.get("page_num")
+    chunk_ordinal = chunk.get("ordinal")
+    identity = f"{doc_id}:{revision}:{chunk_page_num}:{chunk_ordinal}:{char_start}:{content}"
+    evidence_id = "ev_" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
+    return {
+        "evidence_id": evidence_id,
+        "content_revision": int(revision),
+        "page_num": int(chunk.get("page_num") or 0),
+        "section": str(chunk.get("section") or ""),
+        "quote": content,
+        "char_start": char_start if char_start >= 0 else None,
+        "char_end": char_end,
+        "occurrence": occurrence,
+        "bbox": bbox,
+    }
+
+
 def retrieve_context(doc_id: str, pages: list[dict], question: str, current_page: int | None = None,
-                     selected_text: str | None = None, budget: int = 40000, max_chunks: int = 14) -> ContextResult:
+                     selected_text: str | None = None, budget: int = 40000, max_chunks: int = 14,
+                     content_revision: int = 1) -> ContextResult:
     all_chunks = chunk_pages(pages)
     total_pages = max((int(p.get("page_num") or 0) for p in pages), default=0)
     from services.document_policy import feature_enabled
@@ -152,7 +189,7 @@ def retrieve_context(doc_id: str, pages: list[dict], question: str, current_page
     for row in ranked:
         key = (int(row["page_num"]), int(row.get("ordinal") or 0))
         if key not in seen:
-            selected.append(row); seen.add(key)
+            selected.append(by_key.get(key, row)); seen.add(key)
         # Extend within the same section by one adjacent paragraph.
         neighbor = by_key.get((key[0], key[1] + 1))
         if neighbor and neighbor.get("section") == row.get("section"):
@@ -165,21 +202,44 @@ def retrieve_context(doc_id: str, pages: list[dict], question: str, current_page
         selected = all_chunks[:min(4, max_chunks)]
 
     blocks = []
-    evidence = set()
+    evidence_items = []
+    pages_by_num = {int(page.get("page_num") or 0): page for page in pages}
     if selected_text:
-        page = current_page if current_page and current_page > 0 else 0
-        blocks.append(f"--- Selected text, Page {page or '?'} ---\n{selected_text.strip()}")
-        if page:
-            evidence.add(page)
+        page_num = current_page if current_page and current_page > 0 else 0
+        selected_chunk = {
+            "page_num": page_num, "ordinal": -1,
+            "section": "Selected text", "content": selected_text.strip(),
+        }
+        selected_evidence = _chunk_evidence(
+            doc_id, content_revision, selected_chunk, pages_by_num.get(page_num, {}),
+        )
+        evidence_items.append(selected_evidence)
+        selected_id = selected_evidence["evidence_id"]
+        page_label = page_num or "?"
+        blocks.append(
+            f"[E:{selected_id}] Page {page_label} · Selected text\n"
+            f"{selected_text.strip()}"
+        )
     for row in selected:
-        page = int(row["page_num"])
-        block = f"--- Page {page} · {row.get('section') or 'Document'} ---\n{row['content'].strip()}"
-        if sum(len(b) + 2 for b in blocks) + len(block) > budget:
+        page_num = int(row["page_num"])
+        evidence_item = _chunk_evidence(
+            doc_id, content_revision, row, pages_by_num.get(page_num, {}),
+        )
+        evidence_id = evidence_item["evidence_id"]
+        section = row.get("section") or "Document"
+        content = row["content"].strip()
+        block_text = (
+            f"[E:{evidence_id}] Page {page_num} · {section}\n{content}"
+        )
+        if sum(len(item) + 2 for item in blocks) + len(block_text) > budget:
             continue
-        blocks.append(block)
-        evidence.add(page)
+        blocks.append(block_text)
+        evidence_items.append(evidence_item)
     strategy = "fts5+page-proximity+section" if fts_enabled else "lexical+page-proximity+section"
-    return ContextResult("\n\n".join(blocks), frozenset(evidence), len(selected), strategy)
+    evidence_pages = frozenset(item["page_num"] for item in evidence_items if item["page_num"] > 0)
+    return ContextResult(
+        "\n\n".join(blocks), evidence_pages, len(selected), strategy, tuple(evidence_items),
+    )
 
 
 def validate_page_citations(answer: str, evidence_pages: set[int] | frozenset[int]) -> tuple[str, list[str]]:
@@ -192,3 +252,50 @@ def validate_page_citations(answer: str, evidence_pages: set[int] | frozenset[in
         invalid.append(match.group(0))
         return "[제공된 근거에서 확인되지 않은 페이지 인용 제거]"
     return _CITATION_RE.sub(replace, answer or ""), invalid
+
+
+_EVIDENCE_CITATION_RE = re.compile(r"\[E:([A-Za-z0-9_-]+)\]")
+_NUMBER_RE = re.compile(r"(?<![A-Za-z])\d+(?:[.,]\d+)?%?")
+
+
+def validate_evidence_citations(answer: str, evidence: tuple[dict, ...] | list[dict]) -> tuple[str, list[dict], dict]:
+    """Allow only supplied evidence IDs and expose page citations to the UI."""
+    by_id = {item["evidence_id"]: item for item in evidence}
+    cited_ids = []
+    invalid_ids = []
+
+    def replace(match: re.Match) -> str:
+        evidence_id = match.group(1)
+        item = by_id.get(evidence_id)
+        if item is None:
+            invalid_ids.append(evidence_id)
+            return "[제공되지 않은 근거 ID 제거]"
+        cited_ids.append(evidence_id)
+        page_num = item["page_num"]
+        return f"[p.{page_num}]"
+
+    displayed = _EVIDENCE_CITATION_RE.sub(replace, answer or "")
+    cited = [by_id[evidence_id] for evidence_id in dict.fromkeys(cited_ids)]
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?。！？])\s+|\n+", answer or "") if part.strip()]
+    numeric_without_citation = [
+        sentence[:240] for sentence in sentences
+        if _NUMBER_RE.search(sentence) and not _EVIDENCE_CITATION_RE.search(sentence)
+    ]
+    claim_count = sum(1 for sentence in sentences if len(sentence) >= 24)
+    insufficient = claim_count >= 3 and len(set(cited_ids)) * 2 < claim_count
+    risks = []
+    if invalid_ids:
+        risks.append("invalid_evidence_id")
+    if numeric_without_citation:
+        risks.append("uncited_numeric_claim")
+    if insufficient:
+        risks.append("insufficient_citation_coverage")
+    verification = {
+        "status": "risk" if risks else "verified_structure",
+        "risks": risks,
+        "invalid_evidence_ids": list(dict.fromkeys(invalid_ids)),
+        "uncited_numeric_claims": numeric_without_citation,
+        "claim_count": claim_count,
+        "citation_count": len(set(cited_ids)),
+    }
+    return displayed, cited, verification
