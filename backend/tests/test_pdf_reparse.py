@@ -296,3 +296,253 @@ def test_document_cache_clear_removes_memory_session(test_client, isolated_dirs)
     response = test_client.post("/api/library/clear-memory/clear-cache")
     assert response.status_code == 200
     assert "clear-memory" not in sessions
+
+
+
+def _candidate_staging_payload(isolated_dirs, doc_id: str, pdf_path: Path):
+    from services.pdf_diagnostics import diagnose_pages, pdf_fingerprint
+
+    pages = [{
+        "page_num": 1,
+        "text": "Verified candidate text",
+        "parser_engine": "pdfplumber",
+    }]
+    images = [{"page": 1, "label": "Figure 1"}]
+    staging_path = isolated_dirs["library_dir"] / f"{doc_id}-candidate.json"
+    staging_path.write_text(json.dumps({
+        "pdf_fingerprint": pdf_fingerprint(str(pdf_path)),
+        "parser_engine": "pdfplumber",
+        "parser_version": "test-new",
+        "pages": pages,
+        "images": images,
+        "diagnostics": diagnose_pages(
+            pages, images, "pdfplumber", "test-new",
+        ),
+    }), encoding="utf-8")
+    return staging_path, pages, images
+
+
+def test_parser_cache_revision_activates_only_after_document_switch(isolated_dirs):
+    from services.cache import (
+        clear_document_cache, get_cached_images, get_cached_pages,
+        save_images_cache, save_pages_cache, stage_parser_revision_caches,
+    )
+
+    doc_id = "revision-cache"
+    pdf_path = _make_document(isolated_dirs, doc_id)
+    old_pages = [{"page_num": 1, "text": "old", "parser_engine": "pymupdf"}]
+    old_images = [{"page": 1, "label": "Old Figure"}]
+    new_pages = [{"page_num": 1, "text": "new", "parser_engine": "pdfplumber"}]
+    new_images = [{"page": 1, "label": "New Figure"}]
+    save_pages_cache(
+        doc_id, str(pdf_path), old_pages, "pymupdf", "test-old",
+        content_revision=1, strict=True,
+    )
+    save_images_cache(
+        doc_id, str(pdf_path), old_images, "pymupdf", "test-old",
+        content_revision=1, strict=True,
+    )
+    stage_parser_revision_caches(
+        doc_id, str(pdf_path), new_pages, new_images,
+        "pdfplumber", "test-new", 2,
+    )
+
+    assert get_cached_pages(doc_id, str(pdf_path)) == old_pages
+    assert get_cached_images(doc_id, str(pdf_path)) == old_images
+
+    with isolated_dirs["db"].get_db() as conn:
+        conn.execute(
+            """UPDATE documents SET content_revision = 2,
+               parser_engine = 'pdfplumber', parser_version = 'test-new'
+               WHERE id = ?""",
+            (doc_id,),
+        )
+        conn.commit()
+
+    assert get_cached_pages(doc_id, str(pdf_path)) == new_pages
+    assert get_cached_images(doc_id, str(pdf_path)) == new_images
+    assert clear_document_cache(doc_id)[0] == 4
+    assert get_cached_pages(
+        doc_id, str(pdf_path), "pdfplumber", "test-new", content_revision=2,
+    ) is None
+
+
+@pytest.mark.asyncio
+async def test_reparse_cache_staging_failure_preserves_active_state(
+    isolated_dirs, monkeypatch,
+):
+    from services import cache, reparse
+    from services.document_tasks import create_task, get_task, update_task
+
+    doc_id = "cache-stage-failure"
+    pdf_path = _make_document(isolated_dirs, doc_id)
+    staging_path, _pages, _images = _candidate_staging_payload(
+        isolated_dirs, doc_id, pdf_path,
+    )
+    preview_id = _insert_preview(isolated_dirs, doc_id, staging_path)
+    task = create_task(doc_id, "summary", {}, [1])
+    update_task(task["id"], status="running")
+    sessions = {
+        doc_id: {
+            "pages": [{"page_num": 1, "text": "active old text"}],
+            "username": "testuser",
+        },
+    }
+    cancelled = []
+    monkeypatch.setattr(
+        cache, "stage_parser_revision_caches",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    monkeypatch.setattr(
+        reparse, "_cancel_derived_tasks", lambda value: cancelled.append(value),
+    )
+
+    with pytest.raises(RuntimeError, match="reparse_cache_staging_failed"):
+        await reparse.apply_preview(doc_id, preview_id, sessions)
+
+    document = isolated_dirs["db"].db_get_document(doc_id)
+    assert document["content_revision"] == 1
+    assert document["parser_engine"] == "pymupdf"
+    assert sessions[doc_id]["pages"][0]["text"] == "active old text"
+    assert get_task(task["id"])["status"] == "running"
+    assert cancelled == []
+
+
+@pytest.mark.asyncio
+async def test_reparse_transaction_conflict_restores_cancelled_tasks(
+    isolated_dirs, monkeypatch,
+):
+    from services import cache, reparse
+    from services.document_tasks import (
+        create_task, get_task, request_cancel, update_task,
+    )
+    import services.document_tasks as document_tasks
+    import services.translation_job as translation_job
+
+    doc_id = "transaction-conflict"
+    pdf_path = _make_document(isolated_dirs, doc_id)
+    staging_path, _pages, _images = _candidate_staging_payload(
+        isolated_dirs, doc_id, pdf_path,
+    )
+    preview_id = _insert_preview(isolated_dirs, doc_id, staging_path)
+    task = create_task(doc_id, "summary", {}, [1])
+    update_task(task["id"], status="running")
+    sessions = {
+        doc_id: {
+            "pages": [{"page_num": 1, "text": "active old text"}],
+            "username": "testuser",
+        },
+    }
+
+    def cancel_then_conflict(value):
+        assert value == doc_id
+        request_cancel(task["id"])
+        with isolated_dirs["db"].get_db() as conn:
+            conn.execute(
+                "UPDATE documents SET content_revision = 2 WHERE id = ?",
+                (doc_id,),
+            )
+            conn.commit()
+
+    monkeypatch.setattr(reparse, "_cancel_derived_tasks", cancel_then_conflict)
+    monkeypatch.setattr(
+        translation_job, "resume_incomplete_jobs", lambda _sessions: None,
+    )
+    monkeypatch.setattr(
+        document_tasks, "recover_document_tasks", lambda _sessions: None,
+    )
+
+    with pytest.raises(RuntimeError, match="content_revision_conflict"):
+        await reparse.apply_preview(doc_id, preview_id, sessions)
+
+    restored = get_task(task["id"])
+    assert restored["status"] == "running"
+    assert restored["cancel_requested"] is False
+    assert restored["pages"][0]["status"] == "queued"
+    assert sessions[doc_id]["pages"][0]["text"] == "active old text"
+    assert cache.get_cached_pages(
+        doc_id, str(pdf_path), "pdfplumber", "test-new", content_revision=2,
+    ) is None
+
+
+
+@pytest.mark.asyncio
+async def test_reparse_cancel_failure_restores_tasks_and_discards_stage(
+    isolated_dirs, monkeypatch,
+):
+    from services import cache, reparse
+    from services.document_tasks import (
+        create_task, get_task, request_cancel, update_task,
+    )
+    import services.document_tasks as document_tasks
+    import services.translation_job as translation_job
+
+    doc_id = "cancel-failure"
+    pdf_path = _make_document(isolated_dirs, doc_id)
+    staging_path, _pages, _images = _candidate_staging_payload(
+        isolated_dirs, doc_id, pdf_path,
+    )
+    preview_id = _insert_preview(isolated_dirs, doc_id, staging_path)
+    task = create_task(doc_id, "summary", {}, [1])
+    update_task(task["id"], status="running")
+    sessions = {
+        doc_id: {
+            "pages": [{"page_num": 1, "text": "active old text"}],
+            "username": "testuser",
+        },
+    }
+
+    def partial_cancel_then_fail(_doc_id):
+        request_cancel(task["id"])
+        raise RuntimeError("worker cancellation failed")
+
+    monkeypatch.setattr(reparse, "_cancel_derived_tasks", partial_cancel_then_fail)
+    monkeypatch.setattr(
+        translation_job, "resume_incomplete_jobs", lambda _sessions: None,
+    )
+    monkeypatch.setattr(
+        document_tasks, "recover_document_tasks", lambda _sessions: None,
+    )
+
+    with pytest.raises(RuntimeError, match="worker cancellation failed"):
+        await reparse.apply_preview(doc_id, preview_id, sessions)
+
+    restored = get_task(task["id"])
+    assert restored["status"] == "running"
+    assert restored["cancel_requested"] is False
+    assert isolated_dirs["db"].db_get_document(doc_id)["content_revision"] == 1
+    assert cache.get_cached_pages(
+        doc_id, str(pdf_path), "pdfplumber", "test-new", content_revision=2,
+    ) is None
+
+
+@pytest.mark.asyncio
+async def test_reparse_cleanup_failure_does_not_mask_committed_apply(
+    isolated_dirs, monkeypatch,
+):
+    from services import cache, reparse
+
+    doc_id = "cleanup-failure"
+    pdf_path = _make_document(isolated_dirs, doc_id)
+    staging_path, pages, _images = _candidate_staging_payload(
+        isolated_dirs, doc_id, pdf_path,
+    )
+    preview_id = _insert_preview(isolated_dirs, doc_id, staging_path)
+    sessions = {
+        doc_id: {
+            "pages": [{"page_num": 1, "text": "active old text"}],
+            "username": "testuser",
+        },
+    }
+    monkeypatch.setattr(reparse, "_cancel_derived_tasks", lambda _doc_id: None)
+    monkeypatch.setattr(
+        cache, "clear_derived_session_cache",
+        lambda _doc_id: (_ for _ in ()).throw(OSError("cleanup failed")),
+    )
+
+    result = await reparse.apply_preview(doc_id, preview_id, sessions)
+
+    assert result["status"] == "applied"
+    assert result["content_revision"] == 2
+    assert isolated_dirs["db"].db_get_document(doc_id)["content_revision"] == 2
+    assert sessions[doc_id]["pages"] == pages

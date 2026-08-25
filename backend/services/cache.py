@@ -81,8 +81,23 @@ def clear_session_cache(session_id: str) -> None:
 _PAGES_CACHE_SUFFIX = "_pages_extract.json"
 
 
-def _pages_cache_path(doc_id: str) -> str:
-    return os.path.join(CACHE_DIR, f"{doc_id}{_PAGES_CACHE_SUFFIX}")
+def _pages_cache_path(doc_id: str, content_revision: int = 1) -> str:
+    revision = max(1, int(content_revision))
+    revision_part = "" if revision == 1 else f"_revision_{revision}"
+    return os.path.join(CACHE_DIR, f"{doc_id}{revision_part}{_PAGES_CACHE_SUFFIX}")
+
+
+def _document_content_revision(doc_id: str, content_revision: int | None) -> int:
+    if content_revision is not None:
+        return max(1, int(content_revision))
+    try:
+        from services.db import db_get_document
+        doc = db_get_document(doc_id)
+        if doc:
+            return max(1, int(doc.get("content_revision") or 1))
+    except Exception:
+        pass
+    return 1
 
 
 
@@ -104,9 +119,11 @@ def _document_parser_identity(doc_id: str, engine: str | None,
 
 
 def get_cached_pages(doc_id: str, pdf_path: str, engine: str | None = None,
-                     version: str | None = None) -> Optional[list]:
-    """Return cached pages only when PDF, parser, version, and schema all match."""
-    path = _pages_cache_path(doc_id)
+                     version: str | None = None,
+                     content_revision: int | None = None) -> Optional[list]:
+    """Return cached pages only when PDF, parser, version, revision, and schema match."""
+    revision = _document_content_revision(doc_id, content_revision)
+    path = _pages_cache_path(doc_id, revision)
     if not os.path.exists(path):
         return None
     try:
@@ -118,6 +135,7 @@ def get_cached_pages(doc_id: str, pdf_path: str, engine: str | None = None,
             data = json.load(f)
         if (
             data.get("cache_schema_version") != PAGES_CACHE_SCHEMA_VERSION
+            or int(data.get("content_revision") or 1) != revision
             or data.get("pdf_fingerprint") != pdf_fingerprint(pdf_path)
             or data.get("parser_engine") != expected_engine
             or data.get("parser_version") != expected_version
@@ -129,9 +147,11 @@ def get_cached_pages(doc_id: str, pdf_path: str, engine: str | None = None,
 
 
 def save_pages_cache(doc_id: str, pdf_path: str, pages: list, engine: str | None = None,
-                     version: str | None = None) -> None:
-    """Persist parser-aware page extraction output."""
+                     version: str | None = None, content_revision: int | None = None,
+                     strict: bool = False) -> None:
+    """Persist parser- and revision-aware page extraction output."""
     try:
+        revision = _document_content_revision(doc_id, content_revision)
         from services.pdf_diagnostics import (
             PAGES_CACHE_SCHEMA_VERSION, parser_identity, pdf_fingerprint,
         )
@@ -141,15 +161,17 @@ def save_pages_cache(doc_id: str, pdf_path: str, pages: list, engine: str | None
         actual_engine, actual_version = parser_identity(actual_engine)
         if version is not None:
             actual_version = version
-        atomic_write_text(_pages_cache_path(doc_id), json.dumps({
+        atomic_write_text(_pages_cache_path(doc_id, revision), json.dumps({
             "cache_schema_version": PAGES_CACHE_SCHEMA_VERSION,
+            "content_revision": revision,
             "pdf_fingerprint": pdf_fingerprint(pdf_path),
             "parser_engine": actual_engine,
             "parser_version": actual_version,
             "pages": pages,
         }, ensure_ascii=False))
     except Exception:
-        pass
+        if strict:
+            raise
 
 
 def clear_all_pages_cache() -> "tuple[int, int]":
@@ -172,14 +194,18 @@ def clear_all_pages_cache() -> "tuple[int, int]":
 _IMAGES_CACHE_SUFFIX = "_images_extract.json"
 
 
-def _images_cache_path(doc_id: str) -> str:
-    return os.path.join(CACHE_DIR, f"{doc_id}{_IMAGES_CACHE_SUFFIX}")
+def _images_cache_path(doc_id: str, content_revision: int = 1) -> str:
+    revision = max(1, int(content_revision))
+    revision_part = "" if revision == 1 else f"_revision_{revision}"
+    return os.path.join(CACHE_DIR, f"{doc_id}{revision_part}{_IMAGES_CACHE_SUFFIX}")
 
 
 def get_cached_images(doc_id: str, pdf_path: str, engine: str | None = None,
-                      version: str | None = None) -> Optional[list]:
-    """Return cached visual regions only for the matching parser identity."""
-    path = _images_cache_path(doc_id)
+                      version: str | None = None,
+                      content_revision: int | None = None) -> Optional[list]:
+    """Return cached visual regions only for the matching parser identity and revision."""
+    revision = _document_content_revision(doc_id, content_revision)
+    path = _images_cache_path(doc_id, revision)
     if not os.path.exists(path):
         return None
     try:
@@ -191,6 +217,7 @@ def get_cached_images(doc_id: str, pdf_path: str, engine: str | None = None,
             data = json.load(f)
         if (
             data.get("cache_schema_version") != PAGES_CACHE_SCHEMA_VERSION
+            or int(data.get("content_revision") or 1) != revision
             or data.get("pdf_fingerprint") != pdf_fingerprint(pdf_path)
             or data.get("parser_engine") != expected_engine
             or data.get("parser_version") != expected_version
@@ -202,24 +229,104 @@ def get_cached_images(doc_id: str, pdf_path: str, engine: str | None = None,
 
 
 def save_images_cache(doc_id: str, pdf_path: str, images: list, engine: str | None = None,
-                      version: str | None = None) -> None:
-    """Persist parser-aware image/table coordinates."""
+                      version: str | None = None, content_revision: int | None = None,
+                      strict: bool = False) -> None:
+    """Persist parser- and revision-aware image/table coordinates."""
     try:
+        revision = _document_content_revision(doc_id, content_revision)
         from services.pdf_diagnostics import (
             PAGES_CACHE_SCHEMA_VERSION, parser_identity, pdf_fingerprint,
         )
         actual_engine, actual_version = parser_identity(engine)
         if version is not None:
             actual_version = version
-        atomic_write_text(_images_cache_path(doc_id), json.dumps({
+        atomic_write_text(_images_cache_path(doc_id, revision), json.dumps({
             "cache_schema_version": PAGES_CACHE_SCHEMA_VERSION,
+            "content_revision": revision,
             "pdf_fingerprint": pdf_fingerprint(pdf_path),
             "parser_engine": actual_engine,
             "parser_version": actual_version,
             "images": images,
         }, ensure_ascii=False))
     except Exception:
-        pass
+        if strict:
+            raise
+
+
+def clear_parser_revision_cache(doc_id: str, content_revision: int) -> None:
+    """Remove only the parser caches staged for one content revision."""
+    for path in (
+        _pages_cache_path(doc_id, content_revision),
+        _images_cache_path(doc_id, content_revision),
+    ):
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except OSError:
+            pass
+
+
+def stage_parser_revision_caches(
+    doc_id: str, pdf_path: str, pages: list, images: list,
+    engine: str, version: str, content_revision: int,
+) -> None:
+    """Write and verify an inactive parser cache revision before DB activation."""
+    revision = max(2, int(content_revision))
+    clear_parser_revision_cache(doc_id, revision)
+    try:
+        save_pages_cache(
+            doc_id, pdf_path, pages, engine, version,
+            content_revision=revision, strict=True,
+        )
+        save_images_cache(
+            doc_id, pdf_path, images, engine, version,
+            content_revision=revision, strict=True,
+        )
+        if get_cached_pages(
+            doc_id, pdf_path, engine, version, content_revision=revision,
+        ) != pages:
+            raise RuntimeError("staged_pages_cache_verification_failed")
+        if get_cached_images(
+            doc_id, pdf_path, engine, version, content_revision=revision,
+        ) != images:
+            raise RuntimeError("staged_images_cache_verification_failed")
+    except Exception:
+        clear_parser_revision_cache(doc_id, revision)
+        raise
+
+
+def clear_stale_parser_caches(doc_id: str, keep_revision: int) -> None:
+    """Best-effort cleanup after the DB points at the verified revision."""
+    keep = {
+        _pages_cache_path(doc_id, keep_revision),
+        _images_cache_path(doc_id, keep_revision),
+    }
+    prefix = f"{doc_id}_"
+    for fname in os.listdir(CACHE_DIR):
+        path = os.path.join(CACHE_DIR, fname)
+        if (
+            fname.startswith(prefix)
+            and fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX))
+            and path not in keep
+        ):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+def clear_derived_session_cache(doc_id: str) -> None:
+    """Drop stale translation caches without deleting active parser revision data."""
+    prefix = f"{doc_id}_"
+    for fname in os.listdir(CACHE_DIR):
+        if not fname.startswith(prefix):
+            continue
+        if fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX)):
+            continue
+        try:
+            os.remove(os.path.join(CACHE_DIR, fname))
+        except OSError:
+            pass
 
 
 def clear_all_images_cache() -> "tuple[int, int]":
@@ -240,28 +347,22 @@ def clear_all_images_cache() -> "tuple[int, int]":
 
 
 def clear_document_cache(doc_id: str) -> "tuple[int, int]":
-    """단일 문서의 PDF 텍스트 및 이미지/표 좌표 추출 디스크 캐시를 삭제합니다.
-    (삭제한 파일 개수, 확보한 바이트 수)를 반환합니다.
-    """
+    """Delete every parser cache revision for one document."""
     count = 0
     freed_bytes = 0
-    pages_path = _pages_cache_path(doc_id)
-    if os.path.exists(pages_path):
+    prefix = f"{doc_id}_"
+    for fname in os.listdir(CACHE_DIR):
+        if not (
+            fname.startswith(prefix)
+            and fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX))
+        ):
+            continue
+        path = os.path.join(CACHE_DIR, fname)
         try:
-            freed_bytes += os.path.getsize(pages_path)
-            os.remove(pages_path)
+            freed_bytes += os.path.getsize(path)
+            os.remove(path)
             count += 1
-        except Exception:
+        except OSError:
             pass
-
-    images_path = _images_cache_path(doc_id)
-    if os.path.exists(images_path):
-        try:
-            freed_bytes += os.path.getsize(images_path)
-            os.remove(images_path)
-            count += 1
-        except Exception:
-            pass
-
     return count, freed_bytes
 
