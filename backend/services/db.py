@@ -98,6 +98,39 @@ def init_db():
         )
         """)
 
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_tasks (
+            id TEXT PRIMARY KEY,
+            doc_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'queued',
+            options TEXT NOT NULL DEFAULT '{}',
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 3,
+            last_error_code TEXT,
+            next_retry_at TEXT,
+            cancel_requested INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_task_pages (
+            task_id TEXT NOT NULL,
+            page_num INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'queued',
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            last_error_code TEXT,
+            next_retry_at TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (task_id, page_num),
+            FOREIGN KEY (task_id) REFERENCES document_tasks (id) ON DELETE CASCADE
+        )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_tasks_doc ON document_tasks(doc_id, created_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_tasks_recovery ON document_tasks(status, next_retry_at)")
+
         # 문서 채팅용 페이지·문단 전문 검색 인덱스. PDF 원문을 문단 단위로
         # 저장해 재시작 후에도 후반부 질문을 검색할 수 있다.
         try:
@@ -759,6 +792,8 @@ def db_delete_document(doc_id: str) -> bool:
         )
         cursor.execute("DELETE FROM annotations WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM memos WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM document_task_pages WHERE task_id IN (SELECT id FROM document_tasks WHERE doc_id = ?)", (doc_id,))
+        cursor.execute("DELETE FROM document_tasks WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM page_insights WHERE doc_id = ?", (doc_id,))
         try:
             cursor.execute("DELETE FROM document_chunks_fts WHERE doc_id = ?", (doc_id,))

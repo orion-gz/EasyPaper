@@ -897,6 +897,30 @@ export function installPdfParserAPI(parserId, onProgress, onSuccess, onError) {
   return es
 }
 
+export async function getDocumentTasksAPI(docId) {
+  const res = await fetch(`${API_BASE}/tasks?doc_id=${encodeURIComponent(docId)}`)
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function getDocumentTaskAPI(taskId) {
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`)
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function retryDocumentTaskAPI(taskId) {
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}/retry`, { method: 'POST' })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function cancelDocumentTaskAPI(taskId) {
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST' })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
 export async function getDocumentProcessingPolicyAPI(docId) {
   const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/processing-policy`)
   if (!res.ok) throw await apiError(res)

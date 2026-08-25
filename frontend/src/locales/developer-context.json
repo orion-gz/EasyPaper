@@ -3850,5 +3850,20 @@
   },
   "errors:invalid_processing_policy": {
     "description": "Invalid document processing policy value."
+  },
+  "viewer:task.retryAt": {
+    "description": "Persistent document task recovery UI text."
+  },
+  "viewer:task.retryWaiting": {
+    "description": "Persistent document task recovery UI text."
+  },
+  "viewer:task.transientError": {
+    "description": "Persistent document task recovery UI text."
+  },
+  "viewer:task.failedPages": {
+    "description": "Persistent document task recovery UI text."
+  },
+  "chat:retrySameQuestion": {
+    "description": "Persistent document task recovery UI text."
   }
 }

@@ -9,7 +9,7 @@ import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSet
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { icon } from './icons.js'
@@ -644,20 +644,24 @@ function showInsightJobProgress(sessionId, kind, title) {
   const retry = modal.querySelector('[data-action="retry"]')
   const close = modal.querySelector('[data-action="close"]')
   let stopped = false
+  let currentTaskId = null
   async function poll() {
     if (stopped || !modal.isConnected) return
     try {
       const status = await getInsightJobStatusAPI(sessionId, kind)
+      currentTaskId = status.task_id || currentTaskId
       const total = Math.max(1, status.eligible_pages || 0)
       const done = status.completed_pages || 0
       const pct = Math.min(100, Math.round((done / total) * 100))
       bar.style.width = `${pct}%`
-      text.textContent = `${done}/${status.eligible_pages}페이지 · ${pct}%${status.failed_pages?.length ? ` · 실패 ${status.failed_pages.length}` : ''}`
-      if (['completed', 'completed_with_errors', 'cancelled'].includes(status.status)) {
+      const retryLabel = status.status === 'retry_wait' && status.next_retry_at ? t('viewer:task.retryAt', { time: new Date(status.next_retry_at).toLocaleTimeString() }) : ''
+      const errorLabel = status.last_error_code ? ` · ${status.last_error_code}` : ''
+      text.textContent = `${done}/${status.eligible_pages || status.total_pages}페이지 · ${pct}%${status.failed_pages?.length ? ` · 실패 ${status.failed_pages.length}` : ''}${retryLabel}${errorLabel}`
+      if (['completed', 'completed_with_errors', 'succeeded', 'partial_failed', 'failed', 'cancelled'].includes(status.status)) {
         stopped = true
         cancel.classList.add('hidden')
         close.classList.remove('hidden')
-        retry.classList.toggle('hidden', status.status !== 'completed_with_errors')
+        retry.classList.toggle('hidden', !['completed_with_errors', 'partial_failed', 'failed'].includes(status.status))
         return
       }
     } catch (error) {
@@ -672,15 +676,21 @@ function showInsightJobProgress(sessionId, kind, title) {
     poll()
   })
   retry.addEventListener('click', async () => {
+    if (!currentTaskId) return
     retry.disabled = true
-    const options = getTranslationOptions()
-    await startInsightJobAPI(sessionId, kind, options.targetLang, options.sourceLang, true)
-    stopped = false
-    cancel.disabled = false
-    cancel.classList.remove('hidden')
-    retry.classList.add('hidden')
-    close.classList.add('hidden')
-    poll()
+    try {
+      await retryDocumentTaskAPI(currentTaskId)
+      stopped = false
+      retry.classList.add('hidden')
+      cancel.disabled = false
+      cancel.classList.remove('hidden')
+      close.classList.add('hidden')
+      poll()
+    } catch (error) {
+      text.textContent = error.message
+    } finally {
+      retry.disabled = false
+    }
   })
   close.addEventListener('click', () => modal.remove())
   poll()
@@ -1607,10 +1617,16 @@ function startJobPolling(sessionId) {
 
       const done  = (job.completed_pages || []).length
       const total = job.total_pages || state.totalPages
-      const isRunning = job.status === 'running' || job.status === 'pending'
+      const isRunning = ['running', 'pending'].includes(job.status) || job.task_status === 'retry_wait'
       updateProgressMiniRaw(done, total, isRunning)
+      if (job.task_status === 'retry_wait') {
+        progressMiniText.textContent = job.next_retry_at ? t('viewer:task.retryAt', { time: new Date(job.next_retry_at).toLocaleTimeString() }) : t('viewer:task.retryWaiting')
+        progressMini.setAttribute('aria-label', `${job.last_error_code || t('viewer:task.transientError')} · ${progressMiniText.textContent}`)
+      } else if (job.failed_pages?.length) {
+        progressMiniText.textContent = t('viewer:task.failedPages', { count: job.failed_pages.length })
+      }
 
-      if (job.status === 'running') {
+      if (job.status === 'running' || job.task_status === 'retry_wait') {
         cancelTransBtn.classList.remove('hidden')
         resumeTransBtn.classList.add('hidden')
       } else {
@@ -13700,7 +13716,7 @@ async function sendChatMessage() {
       state.chatActiveStream = null
 
       if (firstToken) {
-        appendChatMessage('assistant', `<span class="chat-error-text">${icon('alertTriangle', 13, 'style="vertical-align:-2px;margin-right:3px"')}답변 중 오류가 발생했습니다: ${escapeHtml(err.message)}</span>`, true)
+        appendChatMessage('assistant', `<span class="chat-error-text">${icon('alertTriangle', 13, 'style="vertical-align:-2px;margin-right:3px"')}답변 중 오류가 발생했습니다: ${escapeHtml(err.message)}</span><button type="button" class="chat-retry-message-btn" data-chat-retry="${encodeURIComponent(text)}">${t('chat:retrySameQuestion')}</button>`, true)
       } else if (replyBubble) {
         replyBubble.innerHTML += `<br><br><span style="color: var(--error);">[오류: ${err.message}]</span>`
       }
@@ -13716,6 +13732,12 @@ async function sendChatMessage() {
 
 function initChatListeners() {
   chatMessages?.addEventListener('click', event => {
+    const retryButton = event.target.closest('[data-chat-retry]')
+    if (retryButton) {
+      chatInput.value = decodeURIComponent(retryButton.dataset.chatRetry || '')
+      sendChatMessage()
+      return
+    }
     const citation = event.target.closest('[data-page-citation]')
     if (!citation) return
     const page = Number(citation.dataset.pageCitation)

@@ -36,16 +36,53 @@ def _job_path(session_id: str) -> str:
 
 
 def _load_job(session_id: str) -> Optional[dict]:
+    from services.document_tasks import latest_task, legacy_translation_view, migrate_legacy_translation
+    try:
+        task = latest_task(session_id, "translate")
+    except Exception:
+        task = None
+    if task:
+        return legacy_translation_view(task)
     path = _job_path(session_id)
     if not os.path.exists(path):
         return None
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        legacy = json.load(f)
+    try:
+        return legacy_translation_view(migrate_legacy_translation(session_id, legacy))
+    except Exception:
+        return legacy
 
 
 def _save_job(session_id: str, job: dict) -> None:
-    path = _job_path(session_id)
-    atomic_write_text(path, json.dumps(job, ensure_ascii=False, indent=2))
+    from services.document_tasks import create_task, finish_from_pages, get_task, update_page, update_task
+    task_id = job.get("task_id")
+    task = get_task(task_id) if task_id else None
+    if task is None:
+        task = create_task(
+            session_id, "translate", job.get("options") or {},
+            job.get("target_pages") or [], status="running",
+        )
+        task_id = task["id"]
+        job["task_id"] = task_id
+    completed = set(job.get("completed_pages") or [])
+    failed = set(job.get("failed_pages") or [])
+    for page in task["pages"]:
+        page_num = page["page_num"]
+        desired = "succeeded" if page_num in completed else "failed" if page_num in failed else page["status"]
+        if desired != page["status"]:
+            update_page(task_id, page_num, desired,
+                        last_error_code="generation_failed" if desired == "failed" else None)
+    legacy_status = job.get("status", "running")
+    if legacy_status == "cancelled":
+        update_task(task_id, status="cancelled", cancel_requested=True)
+    elif legacy_status in {"failed", "error"}:
+        update_task(task_id, status="failed", last_error_code=job.get("error_code") or "generation_failed")
+    elif legacy_status == "completed":
+        finish_from_pages(task_id)
+    else:
+        update_task(task_id, status="running", last_error_code=job.get("error_code"),
+                    next_retry_at=job.get("next_retry_at"))
 
 
 # ─────────────────────────────────────────────────────────
@@ -67,6 +104,7 @@ def start_job(
     ignore_refs: bool = False,
     page_numbers: Optional[list[int]] = None,
     source_lang: str = "auto",
+    durable_task_id: Optional[str] = None,
 ) -> dict:
     """
     백그라운드 번역 잡을 시작합니다.
@@ -100,6 +138,7 @@ def start_job(
     # 새 잡 세팅
     job = {
         "session_id": session_id,
+        "task_id": durable_task_id,
         "status": "running",
         "total_pages": len(target_pages),
         "target_pages": target_pages,
@@ -150,6 +189,9 @@ def resume_incomplete_jobs(sessions: dict) -> None:
         if job and job.get("status") == "running":
             pages = session.get("pages", [])
             if pages:
+                active = _running_tasks.get(session_id)
+                if active is not None and not active.done():
+                    continue
                 task = asyncio.create_task(_run_job(session_id, pages, job))
                 _running_tasks[session_id] = task
 
@@ -160,6 +202,24 @@ def resume_incomplete_jobs(sessions: dict) -> None:
 
 async def _run_job(session_id: str, pages: list, job: dict) -> None:
     """모든 페이지를 순차적으로 번역합니다."""
+    task_id = job.get("task_id")
+    if task_id:
+        from services.document_tasks import update_task, wait_for_retry
+        try:
+            ready = await wait_for_retry(task_id)
+        except asyncio.CancelledError:
+            job["status"] = "cancelled"
+            _save_job(session_id, job)
+            if _running_tasks.get(session_id) is asyncio.current_task():
+                _running_tasks.pop(session_id, None)
+            return
+        if not ready:
+            if _running_tasks.get(session_id) is asyncio.current_task():
+                _running_tasks.pop(session_id, None)
+            return
+        update_task(task_id, status="running", next_retry_at=None)
+        job["status"] = "running"
+        job["next_retry_at"] = None
     options = job.get("options", {})
     target_lang = options.get("target_lang", "ko")
     source_lang = options.get("source_lang", "auto")
@@ -272,22 +332,44 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                 # 원문 태깅 처리
                 tagged_text, src_sentences = tag_source_text(text)
 
-                translation = await _translate_page(
-                    tagged_text,
-                    target_lang=target_lang,
-                    source_lang=source_lang,
-                    style=style,
-                    ignore_math=ignore_math,
-                    ignore_table=ignore_table,
-                    ignore_refs=ignore_refs,
-                    doc_title=doc_title,
-                    prev_context=prev_context,
-                    session_id=session_id,
-                    page_num=page_num,
-                    document_mode=document_mode,
-                    document_type=document_type,
-                    page_image_b64=page_image_b64
-                )
+                from services.document_tasks import retry_async, update_page, update_task
+                task_id = job.get("task_id")
+                if task_id:
+                    update_page(task_id, page_num, "running", increment_attempt=True)
+                    update_task(task_id, status="running", increment_attempt=True)
+
+                async def translate_operation():
+                    return await _translate_page(
+                        tagged_text,
+                        target_lang=target_lang,
+                        source_lang=source_lang,
+                        style=style,
+                        ignore_math=ignore_math,
+                        ignore_table=ignore_table,
+                        ignore_refs=ignore_refs,
+                        doc_title=doc_title,
+                        prev_context=prev_context,
+                        session_id=session_id,
+                        page_num=page_num,
+                        document_mode=document_mode,
+                        document_type=document_type,
+                        page_image_b64=page_image_b64,
+                    )
+
+                def record_retry(_attempt: int, code: str, retry_at: str) -> None:
+                    job["status"] = "retry_wait"
+                    job["error_code"] = code
+                    job["next_retry_at"] = retry_at
+                    if task_id:
+                        update_page(task_id, page_num, "retry_wait", last_error_code=code,
+                                    next_retry_at=retry_at, increment_attempt=True)
+                        update_task(task_id, status="retry_wait", last_error_code=code,
+                                    next_retry_at=retry_at)
+
+                translation = await retry_async(translate_operation, on_retry=record_retry)
+                job["status"] = "running"
+                job["error_code"] = None
+                job["next_retry_at"] = None
                 # 태그 분석 및 매핑 생성
                 cleaned_translation, sentences = parse_tagged_translation(translation, src_sentences)
                 if document_mode == "general":
@@ -307,6 +389,8 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                     job["completed_pages"].append(page_num)
             except Exception as e:
                 print(f"[Job {session_id}] page {page_num} failed: {e}")
+                job["error_code"] = getattr(e, "document_task_error_code", "generation_failed")
+                job["next_retry_at"] = None
                 if page_num not in job["failed_pages"]:
                     job["failed_pages"].append(page_num)
 

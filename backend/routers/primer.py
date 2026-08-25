@@ -54,7 +54,7 @@ _last_failure_at: dict[str, float] = {}
 _RETRY_COOLDOWN_SECONDS = 15
 
 
-def _ensure_generation_started(doc_id: str, target_lang: str, source_lang: str, session: dict, current_user: str) -> None:
+def _ensure_generation_started(doc_id: str, target_lang: str, source_lang: str, session: dict, current_user: str, durable_task_id: str | None = None) -> None:
     """이 문서/언어 조합의 브리핑 생성이 이미 진행 중이 아니면 백그라운드
     태스크로 새로 시작한다. GET(캐시 미스)과 POST(재생성) 양쪽에서 공유한다."""
     from services.processing_policy import ensure_processing_allowed
@@ -76,22 +76,47 @@ def _ensure_generation_started(doc_id: str, target_lang: str, source_lang: str, 
     if last_failure is not None and (time.monotonic() - last_failure) < _RETRY_COOLDOWN_SECONDS:
         return
 
+    from services.document_tasks import create_task, get_task, update_task
+    durable = get_task(durable_task_id) if durable_task_id else None
+    if durable is None:
+        durable = create_task(doc_id, "primer", {
+            "target_lang": target_lang, "source_lang": source_lang,
+            "document_mode": document_mode, "document_type": document_type,
+        }, status="queued")
+    durable_task_id = durable["id"]
+
     async def _generate():
-        try:
+        from services.document_tasks import retry_async
+        from services.document_tasks import wait_for_retry
+        if not await wait_for_retry(durable_task_id):
+            _pending_generations.pop(task_key, None)
+            return
+        update_task(durable_task_id, status="running", increment_attempt=True)
+
+        async def generate_once():
             if document_mode == "general":
-                await generate_document_overview(
+                return await generate_document_overview(
                     doc_id, session["pages"], session["metadata"], document_type,
                     target_lang=target_lang, source_lang=source_lang, session_id=doc_id,
                 )
-            else:
-                await generate_primer(
-                    doc_id, session["pages"], session["metadata"],
-                    username=current_user, pdf_path=session["pdf_path"],
-                    target_lang=target_lang, session_id=doc_id,
-                    source_lang=source_lang,
-                )
+            return await generate_primer(
+                doc_id, session["pages"], session["metadata"],
+                username=current_user, pdf_path=session["pdf_path"],
+                target_lang=target_lang, session_id=doc_id,
+                source_lang=source_lang,
+            )
+
+        def record_retry(_attempt: int, code: str, retry_at: str) -> None:
+            update_task(durable_task_id, status="retry_wait", last_error_code=code,
+                        next_retry_at=retry_at, increment_attempt=True)
+
+        try:
+            await retry_async(generate_once, on_retry=record_retry)
+            update_task(durable_task_id, status="succeeded")
             _last_failure_at.pop(task_key, None)
         except Exception as e:
+            update_task(durable_task_id, status="failed",
+                        last_error_code=getattr(e, "document_task_error_code", "generation_failed"))
             # generate_primer()가 실패하면 캐시에 아무것도 저장하지 않은 채 여기서
             # 끝난다. 태스크가 pop되므로 쿨다운이 지난 뒤 다음 GET/재생성 요청이
             # 처음부터 다시 시도한다(pending 폴링이 이미 그 재시도를 감당하도록
