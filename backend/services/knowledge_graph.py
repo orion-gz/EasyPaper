@@ -235,8 +235,8 @@ async def _backfill_one(doc_id: str) -> None:
         from services.pdf_parser import extract_pages
         pages = get_cached_pages(doc_id, pdf_path)
         if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path)
-            save_pages_cache(doc_id, pdf_path, pages)
+            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"))
+            save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
 
         doc_title = doc.get("metadata", {}).get("title") or doc.get("filename")
         await sync_document_for_graph(doc_id, pages, doc_title)
@@ -258,8 +258,8 @@ async def _backfill_paper_tags(doc_id: str) -> None:
             return
         pages = get_cached_pages(doc_id, pdf_path)
         if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path)
-            save_pages_cache(doc_id, pdf_path, pages)
+            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"))
+            save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
         title = (doc.get("metadata") or {}).get("title") or doc.get("filename") or ""
         await classify_and_store_paper_tags(doc_id, pages, title, force=False)
     except Exception as e:
@@ -314,9 +314,12 @@ def _queue_figure_nodes(doc_ids: List[str], nodes: list, edges: list) -> None:
     재생성되면 바뀔 수 있음 - 인용 매칭처럼 완벽하지 않아도 되는 수준으로
     받아들인다). 라벨이 없는(캡션 매칭 실패) 사각형은 사용자에게 의미가
     없으므로 노드로 만들지 않는다."""
-    from services.library import get_pdf_path
+    from services.library import get_document, get_pdf_path
     from services.cache import get_cached_images
     for doc_id in doc_ids:
+        doc = get_document(doc_id)
+        if not doc:
+            continue
         pdf_path = get_pdf_path(doc_id)
         if not pdf_path:
             continue
@@ -872,16 +875,17 @@ async def _get_paper_text_for_scoring(doc_id: str) -> str:
     채점을 시도하거나 등장 여부 기반 값으로 대체할 수 있어 파이프라인을
     막지 않는다."""
     try:
-        from services.library import get_pdf_path
+        from services.library import get_document, get_pdf_path
         from services.cache import get_cached_pages, save_pages_cache
         from services.pdf_parser import extract_pages
+        doc = get_document(doc_id)
         pdf_path = get_pdf_path(doc_id)
-        if not pdf_path:
+        if not doc or not pdf_path:
             return ""
         pages = get_cached_pages(doc_id, pdf_path)
         if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path)
-            save_pages_cache(doc_id, pdf_path, pages)
+            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"))
+            save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
         return "\n".join(p.get("text", "") for p in pages[:2])
     except Exception:
         return ""

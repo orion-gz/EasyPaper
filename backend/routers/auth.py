@@ -636,6 +636,10 @@ async def clear_pages_cache(current_user: str = Depends(get_current_user)):
     from services.cache import clear_all_pages_cache, clear_all_images_cache
     pages_count, pages_bytes = clear_all_pages_cache()
     images_count, images_bytes = clear_all_images_cache()
+    from services.pdf_parser import clear_parser_memory_cache
+    clear_parser_memory_cache()
+    from routers.upload import sessions
+    sessions.clear()
     return {
         "cleared_files": pages_count + images_count,
         "freed_bytes": pages_bytes + images_bytes,

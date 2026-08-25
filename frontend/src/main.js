@@ -9,7 +9,7 @@ import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSet
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { icon } from './icons.js'
@@ -8357,6 +8357,126 @@ let libraryDetailBiblioReqToken = 0
 let libraryGraphCacheForDetail = null // fetchLibraryGraph() 결과 캐시 - 패널을 열 때마다 다시 조회하지 않도록. renderLibrary()가 무효화한다.
 const LIBRARY_DETAIL_TABS = ['overview', 'notes', 'questions', 'related']
 
+
+function chooseReparseEngine(currentEngine) {
+  const choices = (pdfParsersData || []).filter(parser => parser.installed && parser.id !== currentEngine)
+  if (!choices.length && currentEngine !== 'pymupdf') {
+    choices.push({ id: 'pymupdf', name: 'PyMuPDF' })
+  }
+  if (!choices.length) {
+    showToast(t('library:reparse.noInstalled'), 'info')
+    return Promise.resolve(null)
+  }
+  return new Promise(resolve => {
+    const modal = document.createElement('div')
+    modal.className = 'custom-confirm-modal-wrapper'
+    modal.innerHTML = `
+      <div class="custom-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="reparse-engine-title">
+        <div class="custom-confirm-modal-header">
+          <span id="reparse-engine-title" class="custom-confirm-modal-title">${t('library:reparse.selectTitle')}</span>
+        </div>
+        <div class="custom-confirm-modal-body">
+          <label class="folder-dialog-label">${t('library:reparse.selectLabel')}
+            <select class="folder-dialog-input reparse-engine-select">
+              ${choices.map(parser => `<option value="${escapeHtml(parser.id)}">${escapeHtml(parser.name || parser.id)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+        <div class="custom-confirm-modal-footer">
+          <button class="custom-confirm-btn cancel-btn">${t('library:reparse.cancel')}</button>
+          <button class="custom-confirm-btn confirm-btn primary-btn">${t('library:reparse.start')}</button>
+        </div>
+      </div>`
+    document.body.appendChild(modal)
+    const select = modal.querySelector('select')
+    const close = value => {
+      modal.classList.remove('active')
+      setTimeout(() => { modal.remove(); resolve(value) }, 180)
+    }
+    modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
+    modal.querySelector('.confirm-btn').addEventListener('click', () => close(select.value))
+    modal.addEventListener('keydown', event => { if (event.key === 'Escape') close(null) })
+    modal.addEventListener('click', event => { if (event.target === modal) close(null) })
+    setTimeout(() => { modal.classList.add('active'); select.focus() }, 10)
+  })
+}
+
+function showReparseComparison(preview) {
+  return new Promise(resolve => {
+    const current = preview.current_report || {}
+    const candidate = preview.candidate_report || {}
+    const impact = preview.impact || {}
+    const problemPreviews = (candidate.pages || []).filter(page => page.issues?.length).slice(0, 5)
+    const modal = document.createElement('div')
+    modal.className = 'custom-confirm-modal-wrapper'
+    modal.innerHTML = `
+      <div class="custom-confirm-modal reparse-comparison-modal" role="dialog" aria-modal="true" aria-labelledby="reparse-compare-title">
+        <div class="custom-confirm-modal-header">
+          <span id="reparse-compare-title" class="custom-confirm-modal-title">${t('library:reparse.compareTitle')}</span>
+        </div>
+        <div class="custom-confirm-modal-body">
+          <div class="reparse-report-grid">
+            <section><strong>${t('library:reparse.current')}</strong><span>${escapeHtml(current.parser_engine || '')}</span><span>${t('library:reparse.problemPages', { count: current.problem_page_count || 0 })}</span></section>
+            <section><strong>${t('library:reparse.candidate')}</strong><span>${escapeHtml(candidate.parser_engine || '')}</span><span>${t('library:reparse.problemPages', { count: candidate.problem_page_count || 0 })}</span></section>
+          </div>
+          <div class="reparse-problem-previews">
+            ${problemPreviews.map(page => `<article><strong>${escapeHtml(t('viewer:pageLabel', { page: page.page_num }))}</strong><small>${escapeHtml((page.issues || []).join(', '))}</small><p>${escapeHtml(page.preview || '')}</p></article>`).join('')}
+          </div>
+          <p>${escapeHtml(t('library:reparse.affected', {
+            translations: impact.translations_to_regenerate || 0,
+            insights: impact.insights_to_regenerate || 0,
+            tasks: impact.running_tasks_to_cancel || 0,
+          }))}</p>
+          <p>${escapeHtml(t('library:reparse.preserved'))}</p>
+        </div>
+        <div class="custom-confirm-modal-footer">
+          <button class="custom-confirm-btn cancel-btn">${t('library:reparse.cancel')}</button>
+          <button class="custom-confirm-btn confirm-btn primary-btn">${t('library:reparse.apply')}</button>
+        </div>
+      </div>`
+    document.body.appendChild(modal)
+    const close = value => {
+      modal.classList.remove('active')
+      setTimeout(() => { modal.remove(); resolve(value) }, 180)
+    }
+    modal.querySelector('.cancel-btn').addEventListener('click', () => close(false))
+    modal.querySelector('.confirm-btn').addEventListener('click', () => close(true))
+    modal.addEventListener('keydown', event => { if (event.key === 'Escape') close(false) })
+    modal.addEventListener('click', event => { if (event.target === modal) close(false) })
+    setTimeout(() => { modal.classList.add('active'); modal.querySelector('.cancel-btn').focus() }, 10)
+  })
+}
+
+async function runDocumentReparseFlow(doc) {
+  if (!pdfParsersData?.length) {
+    const parserInfo = await fetchPdfParsersInfoAPI()
+    pdfParsersData = parserInfo.parsers || []
+  }
+  const engine = await chooseReparseEngine(doc.parser_engine || 'pymupdf')
+  if (!engine) return
+  showToast(t('library:reparse.running'), 'info')
+  let preview = await createReparsePreviewAPI(doc.id, engine)
+  while (['queued', 'running'].includes(preview.status)) {
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    preview = await getReparsePreviewAPI(doc.id, preview.id)
+  }
+  if (preview.status !== 'succeeded') {
+    throw new Error(preview.last_error_code || t('library:reparse.failed'))
+  }
+  if (!await showReparseComparison(preview)) return
+  const applied = await applyReparsePreviewAPI(doc.id, preview.id)
+  libraryDetailDoc = {
+    ...doc,
+    content_revision: applied.content_revision,
+    parser_engine: applied.parser_engine,
+    parser_version: applied.parser_version,
+    total_pages: applied.total_pages,
+  }
+  showToast(t('library:reparse.applied', { revision: applied.content_revision }), 'success')
+  await renderLibrary()
+}
+
+
 function ensureLibraryDetailPanel() {
   if ($('lib-detail-panel')) return
 
@@ -8393,6 +8513,7 @@ function ensureLibraryDetailPanel() {
         <button id="lib-detail-more-btn" class="lib-detail-icon-btn" title="더보기">${moreIconSvg}</button>
         <div id="lib-detail-more-menu" class="lib-detail-more-menu hidden">
           <button id="lib-detail-classification-btn" class="lib-detail-more-item">${icon('layers', 13)}<span>문서 분류 변경</span></button>
+          <button id="lib-detail-reparse-btn" class="lib-detail-more-item">${icon('refreshCw', 13)}<span>${t('library:reparse.menu')}</span></button>
           <button id="lib-detail-clear-cache-btn" class="lib-detail-more-item">${icon('refreshCw', 13)}<span>PDF 추출 캐시 삭제</span></button>
           <button id="lib-detail-delete-btn" class="lib-detail-more-item danger">${icon('trash2', 13)}<span>삭제 (휴지통으로 이동)</span></button>
         </div>
@@ -8483,6 +8604,18 @@ function ensureLibraryDetailPanel() {
       showToast('문서 분류를 변경했습니다.', 'success')
     } catch (error) {
       showToast(error.message || '문서 분류 변경 실패', 'error')
+    }
+  })
+
+
+  $('lib-detail-reparse-btn')?.addEventListener('click', async () => {
+    if (!libraryDetailDoc) return
+    const doc = libraryDetailDoc
+    moreMenu?.classList.add('hidden')
+    try {
+      await runDocumentReparseFlow(doc)
+    } catch (error) {
+      showToast(error.message || t('library:reparse.failed'), 'error')
     }
   })
 
@@ -9642,7 +9775,10 @@ async function openFromLibrary(doc, shouldPushState = true) {
       for (const msg of chatHistoryList) {
         state.chatHistory.push({ role: msg.role, content: msg.content })
         const isAssistant = msg.role === 'assistant'
-        const renderedContent = isAssistant ? formatChatHtml(msg.content) : formatUserChatHtml(msg.content)
+        let renderedContent = isAssistant ? formatChatHtml(msg.content) : formatUserChatHtml(msg.content)
+        if (isAssistant && msg.stale) {
+          renderedContent = `<span class="chat-stale-revision-badge">${t("chat:staleRevision")}</span>${renderedContent}`
+        }
         appendChatMessage(msg.role, renderedContent, true)
       }
 

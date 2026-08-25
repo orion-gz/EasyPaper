@@ -174,6 +174,10 @@ def _extract_page(page: fitz.Page, page_num: int) -> Dict[str, Any]:
         "text": text_content,
         "is_two_column": is_two_column,
         "word_count": len(text_content.split()),
+        "blocks": [
+            {"bbox": [b[0], b[1], b[2], b[3]], "text": b[4], "type": 0}
+            for b in sorted_blocks
+        ],
     }
 
 
@@ -2085,3 +2089,9 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
     doc.close()
     return images_data
 
+
+
+def clear_parser_memory_cache() -> None:
+    """Discard document-specific advanced parser artifacts after cache invalidation."""
+    _build_marker_document.cache_clear()
+    _run_mineru.cache_clear()

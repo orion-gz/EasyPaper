@@ -20,5 +20,21 @@
   "privacy.items.document_metadata": "문서 메타데이터",
   "privacy.items.notes": "메모",
   "privacy.items.document_file": "문서 파일",
-  "privacy.updated": "문서 처리 정책이 저장되었습니다."
+  "privacy.updated": "문서 처리 정책이 저장되었습니다.",
+  "reparse.menu": "PDF 진단·재분석",
+  "reparse.selectTitle": "후보 파서 선택",
+  "reparse.selectLabel": "파서 엔진",
+  "reparse.start": "진단 시작",
+  "reparse.running": "후보 파서 진단을 시작했습니다.",
+  "reparse.failed": "후보 파서 진단에 실패했습니다.",
+  "reparse.compareTitle": "파싱 결과 비교",
+  "reparse.current": "현재 결과",
+  "reparse.candidate": "후보 결과",
+  "reparse.problemPages": "문제 페이지: {{count}}개",
+  "reparse.affected": "번역 {{translations}}개와 인사이트 {{insights}}개를 재생성해야 하며 실행 중 작업 {{tasks}}개를 취소합니다.",
+  "reparse.preserved": "메모·주석·채팅 기록은 보존됩니다.",
+  "reparse.apply": "후보 적용",
+  "reparse.applied": "문서 revision {{revision}}에 재분석 결과를 적용했습니다.",
+  "reparse.noInstalled": "사용 가능한 대체 파서가 설치되어 있지 않습니다.",
+  "reparse.cancel": "취소"
 }

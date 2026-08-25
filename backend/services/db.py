@@ -52,6 +52,9 @@ def init_db():
             source_language_confidence REAL,
             preferred_target_language TEXT,
             processing_policy TEXT NOT NULL DEFAULT 'inherit',
+            content_revision INTEGER NOT NULL DEFAULT 1,
+            parser_engine TEXT NOT NULL DEFAULT 'pymupdf',
+            parser_version TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY (username) REFERENCES users (username) ON DELETE CASCADE ON UPDATE CASCADE
         )
@@ -64,10 +67,11 @@ def init_db():
             doc_id TEXT NOT NULL,
             page_num INTEGER NOT NULL,
             suffix TEXT NOT NULL,
+            content_revision INTEGER NOT NULL DEFAULT 1,
             translation TEXT NOT NULL,
             saved_at TEXT NOT NULL,
             FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE,
-            UNIQUE(doc_id, page_num, suffix)
+            UNIQUE(doc_id, page_num, suffix, content_revision)
         )
         """)
         
@@ -78,6 +82,7 @@ def init_db():
             doc_id TEXT NOT NULL,
             role TEXT NOT NULL,
             content TEXT NOT NULL,
+            content_revision INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE
         )
@@ -91,10 +96,11 @@ def init_db():
             page_num INTEGER NOT NULL,
             kind TEXT NOT NULL,
             suffix TEXT NOT NULL,
+            content_revision INTEGER NOT NULL DEFAULT 1,
             content TEXT NOT NULL,
             saved_at TEXT NOT NULL,
             FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE,
-            UNIQUE(doc_id, page_num, kind, suffix)
+            UNIQUE(doc_id, page_num, kind, suffix, content_revision)
         )
         """)
 
@@ -130,6 +136,38 @@ def init_db():
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_tasks_doc ON document_tasks(doc_id, created_at DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_tasks_recovery ON document_tasks(status, next_retry_at)")
+
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS parsing_diagnostics (
+            doc_id TEXT NOT NULL,
+            content_revision INTEGER NOT NULL,
+            parser_engine TEXT NOT NULL,
+            parser_version TEXT,
+            report TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (doc_id, content_revision),
+            FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE
+        )
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reparse_previews (
+            id TEXT PRIMARY KEY,
+            doc_id TEXT NOT NULL,
+            candidate_engine TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'queued',
+            source_revision INTEGER NOT NULL,
+            source_pdf_fingerprint TEXT,
+            staging_path TEXT,
+            current_report TEXT,
+            candidate_report TEXT,
+            last_error_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE
+        )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reparse_previews_doc ON reparse_previews(doc_id, created_at DESC)")
 
         # 문서 채팅용 페이지·문단 전문 검색 인덱스. PDF 원문을 문단 단위로
         # 저장해 재시작 후에도 후반부 질문을 검색할 수 있다.
@@ -175,11 +213,80 @@ def init_db():
             "ALTER TABLE documents ADD COLUMN source_language_confidence REAL",
             "ALTER TABLE documents ADD COLUMN preferred_target_language TEXT",
             "ALTER TABLE documents ADD COLUMN processing_policy TEXT NOT NULL DEFAULT 'inherit'",
+            "ALTER TABLE documents ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE documents ADD COLUMN parser_engine TEXT NOT NULL DEFAULT 'pymupdf'",
+            "ALTER TABLE documents ADD COLUMN parser_version TEXT",
         ):
             try:
                 cursor.execute(column_sql)
             except sqlite3.OperationalError:
                 pass
+
+
+        for column_sql in (
+            "ALTER TABLE translations ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE page_insights ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE chats ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1",
+        ):
+            try:
+                cursor.execute(column_sql)
+            except sqlite3.OperationalError:
+                pass
+
+        try:
+            cursor.execute("ALTER TABLE reparse_previews ADD COLUMN source_pdf_fingerprint TEXT")
+        except sqlite3.OperationalError:
+            pass
+
+        def migrate_revision_unique(table: str, create_sql: str, copy_columns: str) -> None:
+            schema_row = cursor.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+            ).fetchone()
+            normalized = re.sub(r"\s+", "", (schema_row["sql"] if schema_row else "").lower())
+            if "content_revision)" in normalized and (
+                "unique(doc_id,page_num,suffix,content_revision)" in normalized
+                or "unique(doc_id,page_num,kind,suffix,content_revision)" in normalized
+            ):
+                return
+            old_table = f"{table}_pre_revision"
+            cursor.execute(f"ALTER TABLE {table} RENAME TO {old_table}")
+            cursor.execute(create_sql)
+            cursor.execute(
+                f"INSERT INTO {table} ({copy_columns}) SELECT {copy_columns} FROM {old_table}"
+            )
+            cursor.execute(f"DROP TABLE {old_table}")
+
+        migrate_revision_unique(
+            "translations",
+            """CREATE TABLE translations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_id TEXT NOT NULL,
+                page_num INTEGER NOT NULL,
+                suffix TEXT NOT NULL,
+                content_revision INTEGER NOT NULL DEFAULT 1,
+                translation TEXT NOT NULL,
+                saved_at TEXT NOT NULL,
+                FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE,
+                UNIQUE(doc_id, page_num, suffix, content_revision)
+            )""",
+            "id, doc_id, page_num, suffix, content_revision, translation, saved_at",
+        )
+        migrate_revision_unique(
+            "page_insights",
+            """CREATE TABLE page_insights (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_id TEXT NOT NULL,
+                page_num INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                suffix TEXT NOT NULL,
+                content_revision INTEGER NOT NULL DEFAULT 1,
+                content TEXT NOT NULL,
+                saved_at TEXT NOT NULL,
+                FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE,
+                UNIQUE(doc_id, page_num, kind, suffix, content_revision)
+            )""",
+            "id, doc_id, page_num, kind, suffix, content_revision, content, saved_at",
+        )
 
         # chats 테이블 동적 스키마 마이그레이션 (graph_synced_at 컬럼 추가).
         # 질문이 어떤 Concept과도 매칭되지 않는 것은 정상 케이스라
@@ -625,6 +732,8 @@ def db_save_document(
     source_language_confidence: Optional[float] = None,
     preferred_target_language: Optional[str] = None,
     processing_policy: str = "inherit",
+    content_revision: int = 1, parser_engine: str = "pymupdf",
+    parser_version: Optional[str] = None,
 ) -> dict:
     meta_str = json.dumps(metadata, ensure_ascii=False)
     created_at = datetime.now(timezone.utc).isoformat()
@@ -634,12 +743,12 @@ def db_save_document(
             """
             INSERT OR REPLACE INTO documents
                 (id, username, filename, pdf_path, total_pages, metadata,
-                 document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (doc_id, username, filename, pdf_path, total_pages, meta_str,
              document_mode, document_type, mode_schema_version, source_language, detected_source_language,
-             source_language_confidence, preferred_target_language, processing_policy, created_at)
+             source_language_confidence, preferred_target_language, processing_policy, int(content_revision), parser_engine, parser_version, created_at)
         )
         conn.commit()
     return {
@@ -651,13 +760,15 @@ def db_save_document(
         "source_language_confidence": source_language_confidence,
         "preferred_target_language": preferred_target_language,
         "processing_policy": processing_policy,
+        "content_revision": int(content_revision), "parser_engine": parser_engine,
+        "parser_version": parser_version,
     }
 
 def db_get_document(doc_id: str) -> Optional[dict]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, is_deleted, created_at FROM documents WHERE id = ?",
+            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, is_deleted, created_at FROM documents WHERE id = ?",
             (doc_id,)
         )
         row = cursor.fetchone()
@@ -683,7 +794,7 @@ def db_list_documents(username: Optional[str] = None, only_trash: bool = False, 
     query = (
         "SELECT id, username, filename, pdf_path, total_pages, metadata, "
         "document_mode, document_type, mode_schema_version, source_language, detected_source_language, "
-        "source_language_confidence, preferred_target_language, processing_policy, is_deleted, created_at "
+        "source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, is_deleted, created_at "
         "FROM documents"
     )
     if conditions:
@@ -736,9 +847,9 @@ def db_search_documents(username: str, query: str, only_trash: bool = False, doc
                    d.metadata, d.document_mode, d.document_type,
                    d.mode_schema_version, d.source_language, d.detected_source_language,
                    d.source_language_confidence, d.preferred_target_language, d.processing_policy,
-                   d.is_deleted, d.created_at
+                   d.content_revision, d.parser_engine, d.parser_version, d.is_deleted, d.created_at
             FROM documents d
-            LEFT JOIN translations t ON t.doc_id = d.id
+            LEFT JOIN translations t ON t.doc_id = d.id AND t.content_revision = d.content_revision
             WHERE d.username = ? AND d.is_deleted = ?
               AND (? IS NULL OR d.document_mode = ?)
               AND (
@@ -794,6 +905,8 @@ def db_delete_document(doc_id: str) -> bool:
         cursor.execute("DELETE FROM memos WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM document_task_pages WHERE task_id IN (SELECT id FROM document_tasks WHERE doc_id = ?)", (doc_id,))
         cursor.execute("DELETE FROM document_tasks WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM parsing_diagnostics WHERE doc_id = ?", (doc_id,))
+        cursor.execute("DELETE FROM reparse_previews WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM page_insights WHERE doc_id = ?", (doc_id,))
         try:
             cursor.execute("DELETE FROM document_chunks_fts WHERE doc_id = ?", (doc_id,))
@@ -829,38 +942,51 @@ def db_restore_document(doc_id: str) -> bool:
 
 # ── 번역 (Translations) ────────────────────────────────────────────────────────
 
-def db_save_translation(doc_id: str, page_num: int, translation: str, suffix: str = "") -> None:
+
+def db_get_content_revision(doc_id: str) -> int:
+    with get_db() as conn:
+        row = conn.execute("SELECT content_revision FROM documents WHERE id = ?", (doc_id,)).fetchone()
+    return int(row["content_revision"]) if row else 1
+
+
+def db_save_translation(doc_id: str, page_num: int, translation: str, suffix: str = "",
+                        content_revision: Optional[int] = None) -> None:
     saved_at = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO translations (doc_id, page_num, suffix, translation, saved_at)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (doc_id, page_num, suffix, translation, saved_at)
+        revision = content_revision
+        if revision is None:
+            row = conn.execute("SELECT content_revision FROM documents WHERE id = ?", (doc_id,)).fetchone()
+            revision = int(row["content_revision"]) if row else 1
+        conn.execute(
+            """INSERT OR REPLACE INTO translations
+               (doc_id, page_num, suffix, content_revision, translation, saved_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (doc_id, page_num, suffix, int(revision), translation, saved_at),
         )
         conn.commit()
 
-def db_get_translation(doc_id: str, page_num: int, suffix: str = "", fallback: bool = True) -> Optional[str]:
+def db_get_translation(doc_id: str, page_num: int, suffix: str = "", fallback: bool = True,
+                       content_revision: Optional[int] = None) -> Optional[str]:
     with get_db() as conn:
-        cursor = conn.cursor()
+        revision = content_revision
+        if revision is None:
+            row = conn.execute("SELECT content_revision FROM documents WHERE id = ?", (doc_id,)).fetchone()
+            revision = int(row["content_revision"]) if row else 1
         if suffix:
-            cursor.execute(
-                "SELECT translation FROM translations WHERE doc_id = ? AND page_num = ? AND suffix = ?",
-                (doc_id, page_num, suffix)
-            )
-            row = cursor.fetchone()
+            row = conn.execute(
+                """SELECT translation FROM translations
+                   WHERE doc_id = ? AND page_num = ? AND suffix = ? AND content_revision = ?""",
+                (doc_id, page_num, suffix, int(revision)),
+            ).fetchone()
             if row:
                 return row["translation"]
-        
         if fallback:
-            # Fallback: get the most recently saved translation for this page, regardless of suffix
-            cursor.execute(
-                "SELECT translation FROM translations WHERE doc_id = ? AND page_num = ? ORDER BY saved_at DESC LIMIT 1",
-                (doc_id, page_num)
-            )
-            row = cursor.fetchone()
+            row = conn.execute(
+                """SELECT translation FROM translations
+                   WHERE doc_id = ? AND page_num = ? AND content_revision = ?
+                   ORDER BY saved_at DESC LIMIT 1""",
+                (doc_id, page_num, int(revision)),
+            ).fetchone()
             if row:
                 return row["translation"]
         return None
@@ -869,8 +995,10 @@ def db_list_translated_pages(doc_id: str, suffix: str = "") -> List[int]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT page_num FROM translations WHERE doc_id = ? AND suffix = ? ORDER BY page_num ASC",
-            (doc_id, suffix)
+            """SELECT t.page_num FROM translations t JOIN documents d ON d.id = t.doc_id
+               WHERE t.doc_id = ? AND t.suffix = ? AND t.content_revision = d.content_revision
+               ORDER BY t.page_num ASC""",
+            (doc_id, suffix),
         )
         return [r["page_num"] for r in cursor.fetchall()]
 
@@ -897,8 +1025,11 @@ def db_bulk_translation_rows(doc_ids: List[str]) -> Dict[str, List[tuple]]:
             chunk = doc_ids[i:i + CHUNK]
             placeholders = ",".join("?" for _ in chunk)
             cursor.execute(
-                f"SELECT doc_id, page_num, suffix, saved_at FROM translations WHERE doc_id IN ({placeholders})",
-                chunk
+                f"""SELECT t.doc_id, t.page_num, t.suffix, t.saved_at
+                    FROM translations t JOIN documents d ON d.id = t.doc_id
+                    WHERE t.doc_id IN ({placeholders})
+                      AND t.content_revision = d.content_revision""",
+                chunk,
             )
             for row in cursor.fetchall():
                 result[row["doc_id"]].append((row["page_num"], row["suffix"], row["saved_at"]))
@@ -924,21 +1055,36 @@ def db_save_chat_message(doc_id: str, role: str, content: str) -> Optional[int]:
         if last_msg and last_msg["role"] == role and last_msg["content"] == content:
             return None
 
+        revision_row = cursor.execute(
+            "SELECT content_revision FROM documents WHERE id = ?", (doc_id,)
+        ).fetchone()
+        revision = int(revision_row["content_revision"]) if revision_row else 1
         cursor.execute(
-            "INSERT INTO chats (doc_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-            (doc_id, role, content, created_at)
+            """INSERT INTO chats (doc_id, role, content, content_revision, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (doc_id, role, content, revision, created_at),
         )
         conn.commit()
         return cursor.lastrowid
 
-def db_get_chat_history(doc_id: str) -> List[Dict[str, str]]:
+def db_get_chat_history(doc_id: str, include_revision: bool = False) -> List[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT role, content FROM chats WHERE doc_id = ? ORDER BY id ASC",
-            (doc_id,)
+            """SELECT c.role, c.content, c.content_revision,
+                      COALESCE(d.content_revision, c.content_revision) AS current_revision
+               FROM chats c LEFT JOIN documents d ON d.id = c.doc_id
+               WHERE c.doc_id = ? ORDER BY c.id ASC""",
+            (doc_id,),
         )
-        return [{"role": r["role"], "content": r["content"]} for r in cursor.fetchall()]
+        rows = cursor.fetchall()
+        if not include_revision:
+            return [{"role": r["role"], "content": r["content"]} for r in rows]
+        return [{
+            "role": r["role"], "content": r["content"],
+            "content_revision": int(r["content_revision"]),
+            "stale": int(r["content_revision"]) < int(r["current_revision"]),
+        } for r in rows]
 
 def db_clear_chat_history(doc_id: str) -> None:
     with get_db() as conn:
@@ -1053,16 +1199,19 @@ def db_list_compare_chat_sessions(username: str) -> List[Dict[str, Any]]:
 
 # ── 페이지 인사이트 (키워드/단어, 요약) ─────────────────────────────────────────
 
-def db_save_page_insight(doc_id: str, page_num: int, kind: str, content: str, suffix: str = "") -> None:
+def db_save_page_insight(doc_id: str, page_num: int, kind: str, content: str, suffix: str = "",
+                         content_revision: Optional[int] = None) -> None:
     saved_at = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO page_insights (doc_id, page_num, kind, suffix, content, saved_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (doc_id, page_num, kind, suffix, content, saved_at)
+        revision = content_revision
+        if revision is None:
+            row = conn.execute("SELECT content_revision FROM documents WHERE id = ?", (doc_id,)).fetchone()
+            revision = int(row["content_revision"]) if row else 1
+        conn.execute(
+            """INSERT OR REPLACE INTO page_insights
+               (doc_id, page_num, kind, suffix, content_revision, content, saved_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (doc_id, page_num, kind, suffix, int(revision), content, saved_at),
         )
         conn.commit()
 
@@ -1070,8 +1219,12 @@ def db_get_page_insight(doc_id: str, page_num: int, kind: str, suffix: str = "")
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT content FROM page_insights WHERE doc_id = ? AND page_num = ? AND kind = ? AND suffix = ?",
-            (doc_id, page_num, kind, suffix)
+            """SELECT content FROM page_insights
+               WHERE doc_id = ? AND page_num = ? AND kind = ? AND suffix = ?
+                 AND content_revision = COALESCE(
+                     (SELECT content_revision FROM documents WHERE id = ?), 1
+                 )""",
+            (doc_id, page_num, kind, suffix, doc_id),
         )
         row = cursor.fetchone()
         return row["content"] if row else None
@@ -1093,8 +1246,9 @@ def db_delete_page_insight(doc_id: str, page_num: int, kind: str, suffix: str = 
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "DELETE FROM page_insights WHERE doc_id = ? AND page_num = ? AND kind = ? AND suffix = ?",
-            (doc_id, page_num, kind, suffix)
+            """DELETE FROM page_insights WHERE doc_id = ? AND page_num = ? AND kind = ? AND suffix = ?
+               AND content_revision = (SELECT content_revision FROM documents WHERE id = ?)""",
+            (doc_id, page_num, kind, suffix, doc_id)
         )
         conn.commit()
 

@@ -88,7 +88,9 @@ def save_document(doc_id: str, filename: str, pdf_src_path: str,
                   document_mode: str = "research", document_type: str = "research_paper",
                   source_language: str = "auto", detected_source_language: str = "und",
                   source_language_confidence: Optional[float] = None,
-                  preferred_target_language: Optional[str] = None) -> dict:
+                  preferred_target_language: Optional[str] = None,
+                  content_revision: int = 1, parser_engine: str = "pymupdf",
+                  parser_version: Optional[str] = None) -> dict:
     """PDF를 라이브러리에 영구 저장하고 데이터베이스에 기록합니다."""
     doc_dir = os.path.join(LIBRARY_DIR, doc_id)
     os.makedirs(os.path.join(doc_dir, "translations"), exist_ok=True)
@@ -103,6 +105,8 @@ def save_document(doc_id: str, filename: str, pdf_src_path: str,
         source_language=source_language, detected_source_language=detected_source_language,
         source_language_confidence=source_language_confidence,
         preferred_target_language=preferred_target_language,
+        content_revision=content_revision, parser_engine=parser_engine,
+        parser_version=parser_version,
     )
     doc_meta["translated_pages"] = []
     return doc_meta
