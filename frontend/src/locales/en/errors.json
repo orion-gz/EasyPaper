@@ -6,5 +6,7 @@
   "unknown": "Something went wrong. Please try again.",
   "source_language_not_translatable": "{{language}} cannot be translated automatically. Choose a supported source language.",
   "generation_failed": "Generation failed. Please try again.",
-  "network": "Could not connect to the server."
+  "network": "Could not connect to the server.",
+  "external_processing_blocked": "This document allows local processing only. Select a loopback Ollama provider for {{operation}}.",
+  "invalid_processing_policy": "Unsupported document processing policy."
 }

@@ -8,5 +8,7 @@
   "themeScopeGeneral": "일반 문서 모드에만 적용",
   "accentColor": "테마 색상",
   "themeLightEnabled": "라이트 모드로 전환 ✓",
-  "themeDarkEnabled": "다크 모드로 전환 ✓"
+  "themeDarkEnabled": "다크 모드로 전환 ✓",
+  "deleteApiKey": "저장된 키 삭제",
+  "apiKeyConfigured": "설정됨 (끝자리 {{masked}})"
 }

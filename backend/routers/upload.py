@@ -70,6 +70,7 @@ def ensure_session(session_id: str) -> bool:
             "detected_source_language": doc.get("detected_source_language", "und"),
             "source_language_confidence": doc.get("source_language_confidence"),
             "preferred_target_language": doc.get("preferred_target_language"),
+            "processing_policy": doc.get("processing_policy", "inherit"),
         }
         return True
     except Exception:
@@ -237,6 +238,7 @@ async def upload_pdf(
         "detected_source_language": detected_source_language,
         "source_language_confidence": detection["confidence"],
         "preferred_target_language": target_lang,
+        "processing_policy": "inherit",
     }
 
     # translation_mode가 "auto"(기본값)가 아니면 - 페이지 번역 버튼을 누를 때(pane) 또는

@@ -170,13 +170,13 @@ export function createOnboarding({
     if (cli.antigravity) {
       detected.push({ provider: 'antigravity', label: 'Antigravity', sub: 'CLI 감지됨' })
     }
-    if (sys.openai_api_key) {
+    if (sys.api_keys?.openai?.configured) {
       detected.push({ provider: 'openai', label: 'OpenAI', sub: 'API 키 설정됨' })
     }
-    if (sys.gemini_api_key) {
+    if (sys.api_keys?.gemini?.configured) {
       detected.push({ provider: 'gemini', label: 'Gemini', sub: 'API 키 설정됨' })
     }
-    if (sys.claude_api_key) {
+    if (sys.api_keys?.claude?.configured) {
       detected.push({ provider: 'claude', label: 'Anthropic Claude', sub: 'API 키 설정됨' })
     }
     onboardingState.detected = detected
@@ -312,9 +312,9 @@ export function createOnboarding({
           analysis_model: model,
           library_provider: entry.provider,
           library_model: model,
-          openai_api_key: sys.openai_api_key,
-          gemini_api_key: sys.gemini_api_key,
-          claude_api_key: sys.claude_api_key,
+          openai_api_key: '',
+          gemini_api_key: '',
+          claude_api_key: '',
           translation_prompt_template: sys.translation_prompt_template,
         })
         // sync compact pickers so the viewer/chat UI reflects the newly selected engine immediately

@@ -65,6 +65,11 @@ def start_summary_job(session_id: str, pages: list, target_lang: str, doc_title:
 
 def _start_insight_job(session_id: str, pages: list, target_lang: str, doc_title: str, kind: str,
                        document_mode: str = "research", document_type: str = "research_paper", source_lang: str = "auto") -> dict:
+    from services.library import get_document
+    from services.processing_policy import ensure_processing_allowed
+    document = get_document(session_id)
+    if document:
+        ensure_processing_allowed(document, "insight")
     if kind not in VALID_JOB_KINDS:
         raise ValueError("unsupported insight job kind")
     key = (session_id, kind)

@@ -71,9 +71,11 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
     """
     논문 내용을 기반으로 AI 전문가와 챗을 진행하고 실시간 스트리밍 답변을 반환합니다.
     """
-    enforce_rate_limit("chat", current_user)
     session_id = data.session_id
     session = require_session_owner(session_id, current_user)
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(session, "chat")
+    enforce_rate_limit("chat", current_user)
 
     # 질문 관련 문단을 FTS5로 찾고 명시 페이지·현재 페이지·선택 영역을
     # 우선 재순위화한다. 장/절이 이어지는 인접 문단도 함께 확장한다.
@@ -175,9 +177,11 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
 async def chat_suggestions(data: ChatRequest, current_user: str = Depends(get_current_user)):
     """직전 어시스턴트 답변과 논문 본문을 참고해 후속 질문 3개를 추천합니다. 채팅
     기록(chats 테이블)에는 남기지 않는 보조 UI(추천 질문 칩) 전용 엔드포인트입니다."""
-    enforce_rate_limit("chat", current_user)
     session_id = data.session_id
     session = require_session_owner(session_id, current_user)
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(session, "chat")
+    enforce_rate_limit("chat", current_user)
 
     pages = session.get("pages", [])
     history_messages = [{"role": msg.role, "content": msg.content} for msg in data.messages]
@@ -210,7 +214,6 @@ async def chat_compare_stream(data: CompareChatRequest, current_user: str = Depe
     """여러 논문을 함께 컨텍스트로 제공해, 논문 간 비교/종합 질문에 답하는
     스트리밍 채팅입니다.
     """
-    enforce_rate_limit("chat", current_user)
     doc_ids = _dedupe_preserve_order(data.doc_ids)
     if len(doc_ids) < MIN_COMPARE_DOCS or len(doc_ids) > MAX_COMPARE_DOCS:
         raise HTTPException(
@@ -219,6 +222,9 @@ async def chat_compare_stream(data: CompareChatRequest, current_user: str = Depe
         )
 
     docs = require_owned_documents(doc_ids, current_user)
+    from services.processing_policy import ensure_documents_processing_allowed
+    ensure_documents_processing_allowed(docs, "chat")
+    enforce_rate_limit("chat", current_user)
 
     per_doc_budget = COMPARE_TOTAL_CONTEXT_CHARS // len(doc_ids)
     paper_blocks = []

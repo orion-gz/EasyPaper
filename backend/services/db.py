@@ -51,6 +51,7 @@ def init_db():
             detected_source_language TEXT NOT NULL DEFAULT 'und',
             source_language_confidence REAL,
             preferred_target_language TEXT,
+            processing_policy TEXT NOT NULL DEFAULT 'inherit',
             created_at TEXT NOT NULL,
             FOREIGN KEY (username) REFERENCES users (username) ON DELETE CASCADE ON UPDATE CASCADE
         )
@@ -140,6 +141,7 @@ def init_db():
             "ALTER TABLE documents ADD COLUMN detected_source_language TEXT NOT NULL DEFAULT 'und'",
             "ALTER TABLE documents ADD COLUMN source_language_confidence REAL",
             "ALTER TABLE documents ADD COLUMN preferred_target_language TEXT",
+            "ALTER TABLE documents ADD COLUMN processing_policy TEXT NOT NULL DEFAULT 'inherit'",
         ):
             try:
                 cursor.execute(column_sql)
@@ -589,6 +591,7 @@ def db_save_document(
     source_language: str = "auto", detected_source_language: str = "und",
     source_language_confidence: Optional[float] = None,
     preferred_target_language: Optional[str] = None,
+    processing_policy: str = "inherit",
 ) -> dict:
     meta_str = json.dumps(metadata, ensure_ascii=False)
     created_at = datetime.now(timezone.utc).isoformat()
@@ -598,12 +601,12 @@ def db_save_document(
             """
             INSERT OR REPLACE INTO documents
                 (id, username, filename, pdf_path, total_pages, metadata,
-                 document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (doc_id, username, filename, pdf_path, total_pages, meta_str,
              document_mode, document_type, mode_schema_version, source_language, detected_source_language,
-             source_language_confidence, preferred_target_language, created_at)
+             source_language_confidence, preferred_target_language, processing_policy, created_at)
         )
         conn.commit()
     return {
@@ -614,13 +617,14 @@ def db_save_document(
         "source_language": source_language, "detected_source_language": detected_source_language,
         "source_language_confidence": source_language_confidence,
         "preferred_target_language": preferred_target_language,
+        "processing_policy": processing_policy,
     }
 
 def db_get_document(doc_id: str) -> Optional[dict]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, is_deleted, created_at FROM documents WHERE id = ?",
+            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, is_deleted, created_at FROM documents WHERE id = ?",
             (doc_id,)
         )
         row = cursor.fetchone()
@@ -646,7 +650,7 @@ def db_list_documents(username: Optional[str] = None, only_trash: bool = False, 
     query = (
         "SELECT id, username, filename, pdf_path, total_pages, metadata, "
         "document_mode, document_type, mode_schema_version, source_language, detected_source_language, "
-        "source_language_confidence, preferred_target_language, is_deleted, created_at "
+        "source_language_confidence, preferred_target_language, processing_policy, is_deleted, created_at "
         "FROM documents"
     )
     if conditions:
@@ -698,7 +702,7 @@ def db_search_documents(username: str, query: str, only_trash: bool = False, doc
             SELECT DISTINCT d.id, d.username, d.filename, d.pdf_path, d.total_pages,
                    d.metadata, d.document_mode, d.document_type,
                    d.mode_schema_version, d.source_language, d.detected_source_language,
-                   d.source_language_confidence, d.preferred_target_language,
+                   d.source_language_confidence, d.preferred_target_language, d.processing_policy,
                    d.is_deleted, d.created_at
             FROM documents d
             LEFT JOIN translations t ON t.doc_id = d.id
@@ -1282,6 +1286,15 @@ def db_update_document_languages(doc_id: str, source_language: str,
         )
         conn.commit()
         return cursor.rowcount > 0
+
+
+def db_update_processing_policy(doc_id: str, policy: str) -> dict:
+    with get_db() as conn:
+        cursor = conn.execute("UPDATE documents SET processing_policy = ? WHERE id = ?", (policy, doc_id))
+        if cursor.rowcount != 1:
+            raise ValueError("document not found")
+        conn.commit()
+    return db_get_document(doc_id)
 
 
 def db_update_detected_source_language(doc_id: str, detected_source_language: str,

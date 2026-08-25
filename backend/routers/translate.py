@@ -37,8 +37,10 @@ async def translate_page(
     특정 페이지를 번역하고 SSE 스트리밍으로 반환합니다.
     이미 동일한 옵션으로 번역된 페이지는 캐시에서 즉시 반환합니다.
     """
-    enforce_rate_limit("translate", current_user)
     session = require_session_owner(session_id, current_user)
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(session, "translate")
+    enforce_rate_limit("translate", current_user)
     from services.languages import api_language_error, normalize_document_language
     try:
         target_lang = normalize_document_language(target_lang, allow_legacy=True)

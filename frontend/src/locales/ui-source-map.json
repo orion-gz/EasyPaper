@@ -1110,5 +1110,6 @@
   "페이지 오류": "common:legacy.ui.1109",
   "–페이지로 이동": "common:legacy.ui.1110",
   "페이지로 이동": "common:legacy.ui.1111",
-  "화면 테마": "settings:themeHeading"
+  "화면 테마": "settings:themeHeading",
+  "저장된 키 삭제": "settings:deleteApiKey"
 }

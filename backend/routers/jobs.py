@@ -147,6 +147,8 @@ async def restart_translation_job(
     """주어진 옵션으로 번역 작업을 중단하고 새로 재시작합니다."""
     session = require_session_owner(session_id, current_user)
     target_lang, source_lang = _validated_languages(session, data.target_lang, data.source_lang)
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(session, "translate")
     if source_lang == target_lang:
         raise HTTPException(status_code=409, detail={
             "code": "same_source_and_target_language", "params": {"language": target_lang},

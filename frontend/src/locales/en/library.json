@@ -7,5 +7,18 @@
   "subtitle.research.archive": "Manage all saved papers in one place.",
   "subtitle.research.trash": "These papers are in the trash. Restore or permanently delete them.",
   "subtitle.general.archive": "Manage all saved documents in one place.",
-  "subtitle.general.trash": "These documents are in the trash. Restore or permanently delete them."
+  "subtitle.general.trash": "These documents are in the trash. Restore or permanently delete them.",
+  "privacy.localOnly": "Local only",
+  "privacy.localProcessing": "Local processing",
+  "privacy.externalTransfer": "External transfer",
+  "privacy.policy": "Document processing policy",
+  "privacy.inherit": "Use system setting",
+  "privacy.transferItems": "Sent items: {{items}}",
+  "privacy.items.document_text": "document text",
+  "privacy.items.chat_history": "chat history",
+  "privacy.items.page_image": "page images",
+  "privacy.items.document_metadata": "document metadata",
+  "privacy.items.notes": "notes",
+  "privacy.items.document_file": "document file",
+  "privacy.updated": "Document processing policy saved."
 }
