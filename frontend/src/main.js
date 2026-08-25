@@ -1975,7 +1975,6 @@ exportBtn.addEventListener('click', (e) => {
 // 잡혀 그때 케밥 메뉴도 함께 닫힌다.
 if (toolbarKebabBtn && toolbarKebabMenu) {
   const getMenuItems = () => Array.from(toolbarKebabMenu.querySelectorAll('button:not([disabled]), select, [tabindex]:not([tabindex="-1"])'))
-  toolbarKebabMenu.querySelectorAll('button').forEach(item => item.setAttribute('role', 'menuitem'))
   const syncMenuState = () => toolbarKebabBtn.setAttribute('aria-expanded', String(!toolbarKebabMenu.classList.contains('hidden')))
   const closeMenu = (restoreFocus = false) => {
     toolbarKebabMenu.classList.add('hidden')

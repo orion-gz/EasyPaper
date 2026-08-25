@@ -469,10 +469,10 @@
         <!-- 추가 메뉴(케밥): 번역 상태/모델, 번역 관리(다시 번역/중지/이어서/다운로드),
              메모 숨기기, 테마 전환을 한데 모아 툴바를 간결하게 유지한다. -->
         <div class="kebab-wrapper">
-          <button id="toolbar-kebab-btn" class="icon-btn" title="추가 메뉴" aria-haspopup="menu" aria-expanded="false" aria-controls="toolbar-kebab-menu">
+          <button id="toolbar-kebab-btn" class="icon-btn" title="추가 메뉴" aria-haspopup="dialog" aria-expanded="false" aria-controls="toolbar-kebab-menu">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
           </button>
-          <div id="toolbar-kebab-menu" class="kebab-menu hidden" role="menu" aria-label="Viewer more menu" data-i18n-aria-label="viewer:a11y.toolbarMenu">
+          <div id="toolbar-kebab-menu" class="kebab-menu hidden" role="dialog" aria-modal="false" aria-label="Viewer more menu" data-i18n-aria-label="viewer:a11y.toolbarMenu">
             <!-- 번역 작업 상태 정보 -->
             <div id="translation-progress-mini" class="progress-mini hidden">
               <div class="progress-mini-bar" id="progress-mini-bar"></div>
