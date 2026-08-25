@@ -102,6 +102,28 @@ def _sse(event: str, payload: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _validated_selected_text(
+    pages: list[dict], current_page: int | None, selected_text: str | None,
+) -> str | None:
+    if not (selected_text or "").strip():
+        return None
+    if not current_page:
+        raise HTTPException(status_code=400, detail={
+            "code": "selected_text_requires_viewer_page",
+            "params": {},
+            "fallback": "Selected text requires an active viewer page.",
+        })
+    from services.context_retrieval import resolve_page_selected_text
+    canonical = resolve_page_selected_text(pages, current_page, selected_text)
+    if canonical is None:
+        raise HTTPException(status_code=400, detail={
+            "code": "selected_text_not_on_page",
+            "params": {"page_num": current_page},
+            "fallback": "Selected text was not found on the current document page.",
+        })
+    return canonical
+
+
 async def _semantic_verify_answer(answer: str, evidence: list[dict], session_id: str) -> dict:
     if not evidence:
         return {"mode": "structural_only", "status": "no_cited_evidence"}
@@ -151,13 +173,14 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
             "params": {"page_num": current_page, "total_pages": total_pages},
             "fallback": "The requested viewer page is outside this document.",
         })
+    selected_text = _validated_selected_text(pages, current_page, data.selected_text)
     enforce_rate_limit("chat", current_user)
     from time import perf_counter
     from services.context_retrieval import retrieve_context
     retrieval_started = perf_counter()
     context_result = retrieve_context(
         session_id, pages, latest_question, current_page=current_page,
-        selected_text=data.selected_text,
+        selected_text=selected_text,
         content_revision=int(session.get("content_revision") or 1),
     )
     paper_text = context_result.text
@@ -296,15 +319,23 @@ async def chat_suggestions(data: ChatRequest, current_user: str = Depends(get_cu
     session = require_session_owner(session_id, current_user)
     from services.processing_policy import ensure_processing_allowed
     ensure_processing_allowed(session, "chat")
-    enforce_rate_limit("chat", current_user)
 
     pages = session.get("pages", [])
+    total_pages = max((int(page.get("page_num") or 0) for page in pages), default=0)
+    if data.current_page and data.current_page > total_pages:
+        raise HTTPException(status_code=400, detail={
+            "code": "screen_page_out_of_range",
+            "params": {"page_num": data.current_page, "total_pages": total_pages},
+            "fallback": "The requested viewer page is outside this document.",
+        })
+    selected_text = _validated_selected_text(pages, data.current_page, data.selected_text)
+    enforce_rate_limit("chat", current_user)
     history_messages = [{"role": msg.role, "content": msg.content} for msg in data.messages]
     latest_question = data.messages[-1].content if data.messages else ""
     from services.context_retrieval import retrieve_context
     paper_text = retrieve_context(
         session_id, pages, latest_question, current_page=data.current_page,
-        selected_text=data.selected_text, budget=6000, max_chunks=5,
+        selected_text=selected_text, budget=6000, max_chunks=5,
     ).text
 
     filename = session.get("filename", "알 수 없음")

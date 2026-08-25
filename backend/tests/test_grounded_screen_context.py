@@ -248,3 +248,103 @@ def test_screen_page_range_is_validated_before_rate_accounting(test_client, grou
     assert response.status_code == 400
     assert response.json()["code"] == "screen_page_out_of_range"
     assert calls == []
+
+
+def test_selected_text_is_resolved_to_canonical_page_source():
+    from services.context_retrieval import resolve_page_selected_text
+
+    pages = [{"page_num": 2, "text": "Grounded accuracy\n  improves by 12 percent."}]
+    assert resolve_page_selected_text(
+        pages, 2, "Grounded accuracy improves by 12 percent.",
+    ) == "Grounded accuracy\n  improves by 12 percent."
+    assert resolve_page_selected_text(pages, 2, "invented statement") is None
+
+
+def test_forged_selected_text_is_rejected_before_rate_or_llm(
+    test_client, grounded_doc, isolated_dirs, monkeypatch,
+):
+    import routers.chat as chat_router
+    calls = []
+    monkeypatch.setattr(chat_router, "enforce_rate_limit", lambda *_args: calls.append("rate"))
+
+    async def forbidden_stream(*_args, **_kwargs):
+        calls.append("llm")
+        yield "unexpected"
+
+    monkeypatch.setattr(chat_router, "stream_chat", forbidden_stream)
+    response = test_client.post("/api/chat/stream", json={
+        "session_id": "grounded-doc",
+        "messages": [{"role": "user", "content": "question"}],
+        "selected_text": "This forged text is not in the PDF.",
+        "screen_context": {"mode": "viewer", "page_num": 1, "include_visual": False},
+    })
+    assert response.status_code == 400
+    assert response.json()["code"] == "selected_text_not_on_page"
+    assert calls == []
+    assert isolated_dirs["db"].db_get_chat_history("grounded-doc", include_revision=True) == []
+
+
+def test_standalone_chat_rejects_selected_text_without_viewer_page(
+    test_client, grounded_doc, monkeypatch,
+):
+    import routers.chat as chat_router
+    calls = []
+    monkeypatch.setattr(chat_router, "enforce_rate_limit", lambda *_args: calls.append(True))
+    response = test_client.post("/api/chat/stream", json={
+        "session_id": "grounded-doc",
+        "messages": [{"role": "user", "content": "question"}],
+        "selected_text": "Figure 1 shows the grounded accuracy result.",
+        "screen_context": {"mode": "standalone", "include_visual": False},
+    })
+    assert response.status_code == 400
+    assert response.json()["code"] == "selected_text_requires_viewer_page"
+    assert calls == []
+
+
+def test_valid_selected_text_uses_server_canonical_quote(
+    test_client, grounded_doc, monkeypatch,
+):
+    import routers.chat as chat_router
+    prompts = []
+
+    async def fake_stream(system_prompt, messages, session_id=None, page_image_b64=None):
+        prompts.append(system_prompt)
+        evidence_id = re.search(r"\[E:(ev_[A-Za-z0-9_-]+)\]", system_prompt).group(1)
+        yield "Supported [E:" + evidence_id + "]."
+
+    monkeypatch.setattr(chat_router, "stream_chat", fake_stream)
+    monkeypatch.setattr("config.get_chat_provider", lambda: "openai")
+    monkeypatch.setattr("config.get_chat_model", lambda: "model")
+    response = test_client.post("/api/chat/stream", json={
+        "session_id": "grounded-doc",
+        "messages": [{"role": "user", "content": "explain selection"}],
+        "selected_text": "Figure 1   shows the grounded accuracy result.",
+        "screen_context": {"mode": "viewer", "page_num": 1, "include_visual": False},
+    })
+    events = dict(_events(response))
+    assert response.status_code == 200
+    assert "Figure 1 shows the grounded accuracy result." in prompts[0]
+    assert events["evidence"]["items"][0]["quote"] == "Figure 1 shows the grounded accuracy result."
+
+
+def test_suggestions_reject_forged_selection_before_rate_accounting(
+    test_client, grounded_doc, monkeypatch,
+):
+    import routers.chat as chat_router
+    calls = []
+    monkeypatch.setattr(chat_router, "enforce_rate_limit", lambda *_args: calls.append("rate"))
+
+    async def forbidden_suggestions(*_args, **_kwargs):
+        calls.append("llm")
+        return []
+
+    monkeypatch.setattr(chat_router, "generate_suggested_questions", forbidden_suggestions)
+    response = test_client.post("/api/chat/suggestions", json={
+        "session_id": "grounded-doc",
+        "messages": [{"role": "user", "content": "question"}],
+        "current_page": 1,
+        "selected_text": "This forged text is not in the PDF.",
+    })
+    assert response.status_code == 400
+    assert response.json()["code"] == "selected_text_not_on_page"
+    assert calls == []

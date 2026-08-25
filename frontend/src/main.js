@@ -5707,7 +5707,7 @@ if (compareBackBtn) {
 // 떠 있고, 드로어만 그 위에 열고 닫는다.
 let chatDrawerState = { docId: null, doc: null, history: [], activeStream: null, currentText: '' }
 
-function renderChatDrawerMessage(role, content, isHtml = false) {
+function renderChatDrawerMessage(role, content, isHtml = false, showActions = true) {
   const msgEl = document.createElement('div')
   msgEl.className = `chat-message ${role}`
 
@@ -5717,7 +5717,7 @@ function renderChatDrawerMessage(role, content, isHtml = false) {
   else bubbleEl.textContent = content
   msgEl.appendChild(bubbleEl)
 
-  if (content) appendChatDrawerActionButtons(msgEl, role, content)
+  if (content && showActions) appendChatDrawerActionButtons(msgEl, role, content)
 
   chatDrawerMessages.appendChild(msgEl)
   chatDrawerMessages.scrollTop = chatDrawerMessages.scrollHeight
@@ -5751,6 +5751,20 @@ function appendChatDrawerActionButtons(msgEl, role, content) {
     }
   })
   actionsEl.appendChild(copyBtn)
+
+  if (role === 'assistant') {
+    const verifyBtn = document.createElement('button')
+    verifyBtn.type = 'button'
+    verifyBtn.className = 'msg-action-btn'
+    verifyBtn.innerHTML = icon('checkCircle', 12) + escapeHtml(t('chat:evidence.verifyAction'))
+    verifyBtn.title = t('chat:evidence.verifyAction')
+    verifyBtn.addEventListener('click', () => {
+      if (chatDrawerState.activeStream) return
+      chatDrawerInput.value = t('chat:evidence.verifyPrompt')
+      sendChatDrawerMessage()
+    })
+    actionsEl.appendChild(verifyBtn)
+  }
   msgEl.appendChild(actionsEl)
 }
 
@@ -5787,7 +5801,7 @@ function renderChatDrawerGreeting(doc) {
     `<strong>${escapeHtml(title)}</strong>에 대해 무엇이든 물어보세요.<br><br>` +
     `<strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong>` +
     `<ul><li>이 논문의 핵심 기여는 무엇인가요?</li><li>실험 설정을 요약해줄 수 있나요?</li><li>이 방법론의 한계점은 뭔가요?</li></ul>`,
-    true)
+    true, false)
 }
 
 // location.hash 대입은 popstate/hashchange를 둘 다 발생시킬 수 있어(openCompareScreen과
@@ -5820,8 +5834,16 @@ async function openChatDrawer(doc) {
       renderChatDrawerGreeting(doc)
     } else {
       savedHistory.forEach(msg => {
-        const renderedContent = msg.role === 'assistant' ? formatChatHtml(msg.content) : formatUserChatHtml(msg.content, doc.id)
-        renderChatDrawerMessage(msg.role, renderedContent, true)
+        const isAssistant = msg.role === 'assistant'
+        let renderedContent = isAssistant ? formatChatHtml(msg.content, Number(doc.total_pages) || 0) : formatUserChatHtml(msg.content, doc.id)
+        if (isAssistant && msg.stale) {
+          renderedContent = `<span class="chat-stale-revision-badge">${t("chat:staleRevision")}</span>${renderedContent}`
+        }
+        const messageElement = renderChatDrawerMessage(msg.role, renderedContent, true)
+        if (isAssistant && msg.evidence?.length) {
+          attachEvidenceToBubble(messageElement.querySelector('.message-bubble'), msg.evidence)
+        }
+        if (isAssistant && msg.verification) renderVerificationBadge(messageElement, msg.verification)
         chatDrawerState.history.push({ role: msg.role, content: msg.content })
       })
     }
@@ -5874,6 +5896,8 @@ async function sendChatDrawerMessage() {
   let accumulatedText = ''
   let replyBubble = null
   let firstToken = true
+  let responseEvidence = []
+  let responseVerification = null
   chatDrawerState.currentText = ''
 
   chatDrawerState.activeStream = streamChatAPI(
@@ -5889,7 +5913,7 @@ async function sendChatDrawerMessage() {
       }
       accumulatedText += token
       chatDrawerState.currentText = accumulatedText
-      replyBubble.innerHTML = formatChatHtml(accumulatedText)
+      replyBubble.innerHTML = formatChatHtml(accumulatedText, Number(chatDrawerState.doc?.total_pages) || 0)
       chatDrawerMessages.scrollTop = chatDrawerMessages.scrollHeight
     },
     // onDone
@@ -5897,8 +5921,12 @@ async function sendChatDrawerMessage() {
       chatDrawerState.activeStream = null
       chatDrawerState.history.push({ role: 'assistant', content: accumulatedText })
       if (replyBubble) {
-        replyBubble.innerHTML = formatChatHtml(accumulatedText)
-        if (replyBubble.parentElement) appendChatDrawerActionButtons(replyBubble.parentElement, 'assistant', accumulatedText)
+        replyBubble.innerHTML = formatChatHtml(accumulatedText, Number(chatDrawerState.doc?.total_pages) || 0)
+        attachEvidenceToBubble(replyBubble, responseEvidence)
+        if (replyBubble.parentElement) {
+          renderVerificationBadge(replyBubble.parentElement, responseVerification)
+          appendChatDrawerActionButtons(replyBubble.parentElement, 'assistant', accumulatedText)
+        }
       }
       chatDrawerInput.disabled = false
       updateChatDrawerSendBtnIcon(false)
@@ -5908,16 +5936,57 @@ async function sendChatDrawerMessage() {
     (err) => {
       removeChatDrawerTypingIndicator()
       chatDrawerState.activeStream = null
+      const retryButton = `<button type="button" class="chat-retry-message-btn" data-chat-drawer-retry="${encodeURIComponent(text)}">${t('chat:retrySameQuestion')}</button>`
       if (firstToken) {
-        renderChatDrawerMessage('assistant', `<span class="chat-error-text">${icon('alertTriangle', 13, 'style="vertical-align:-2px;margin-right:3px"')}답변 중 오류가 발생했습니다: ${escapeHtml(err.message)}</span>`, true)
+        renderChatDrawerMessage('assistant', `<span class="chat-error-text">${icon('alertTriangle', 13, 'style="vertical-align:-2px;margin-right:3px"')}답변 중 오류가 발생했습니다: ${escapeHtml(err.message)}</span>${retryButton}`, true)
       } else if (replyBubble) {
-        replyBubble.innerHTML += `<br><br><span style="color: var(--error);">[오류: ${err.message}]</span>`
+        replyBubble.innerHTML += `<br><br><span style="color: var(--error);">[오류: ${escapeHtml(err.message)}]</span>${retryButton}`
       }
       chatDrawerInput.disabled = false
       updateChatDrawerSendBtnIcon(false)
       chatDrawerInput.focus()
+    },
+    null,
+    {
+      screenContext: { mode: 'standalone', include_visual: false },
+      verifyEvidence: /근거\s*검증|verify\s+(?:the\s+)?evidence/i.test(text),
+    },
+    (eventName, payload) => {
+      if (eventName === 'evidence') responseEvidence = payload?.items || []
+      if (eventName === 'verification') responseVerification = payload
     }
   )
+}
+
+if (chatDrawerMessages) {
+  chatDrawerMessages.addEventListener('click', event => {
+    const retryButton = event.target.closest('[data-chat-drawer-retry]')
+    if (retryButton) {
+      const question = decodeURIComponent(retryButton.dataset.chatDrawerRetry || '')
+      const errorMessage = retryButton.closest('.chat-message')
+      const userMessage = errorMessage?.previousElementSibling
+      const lastHistory = chatDrawerState.history.at(-1)
+      if (lastHistory?.role === 'user' && lastHistory.content === question) {
+        chatDrawerState.history.pop()
+        if (userMessage?.classList.contains('user')) userMessage.remove()
+      }
+      errorMessage?.remove()
+      chatDrawerInput.value = question
+      sendChatDrawerMessage()
+      return
+    }
+    const citation = event.target.closest('[data-page-citation]')
+    if (!citation || !chatDrawerState.docId) return
+    const page = Number(citation.dataset.pageCitation)
+    if (!Number.isInteger(page) || page < 1) return
+    const docId = chatDrawerState.docId
+    const params = new URLSearchParams({ id: docId, page: String(page) })
+    const quote = citation.dataset.evidenceQuote
+    if (quote) params.set('quote', quote)
+    params.set('occurrence', citation.dataset.evidenceOccurrence || '1')
+    closeChatDrawer()
+    location.hash = 'viewer?' + params.toString()
+  })
 }
 
 if (chatDrawerSendBtn) {
@@ -13589,7 +13658,7 @@ function resetChatUI() {
   chatInput.style.height = 'auto'
 }
 
-function formatChatHtml(text) {
+function formatChatHtml(text, totalPages = state.totalPages) {
   if (!text) return ''
 
   // 0. 문장 정렬용 태그([S0], [S1] 등) 제거
@@ -13661,7 +13730,7 @@ function formatChatHtml(text) {
   })
 
   // sanitizer를 통과한 뒤 숫자로 검증한 단일·범위 페이지 근거만 링크한다.
-  return linkPageCitations(html, state.totalPages)
+  return linkPageCitations(html, totalPages)
 }
 
 // 인용 이미지를 로컬/서버 어디서도 복원하지 못했을 때(<img onerror>에서 호출)
@@ -16645,6 +16714,8 @@ function viewerAnnotationTargetFromParams(params) {
     memoId: params.get('memoId') || null,
     startOffset: toOptionalInt('start'),
     endOffset: toOptionalInt('end'),
+    quote: params.get('quote') || null,
+    occurrence: Math.max(1, parseInt(params.get('occurrence'), 10) || 1),
   }
 }
 
@@ -16670,6 +16741,10 @@ function findViewerAnnotationElement(target) {
 async function navigateToViewerAnnotation(target) {
   if (!target || target.page > state.totalPages) return
   scrollToPage(viewerScrollContainer, target.page, { instant: true })
+  if (target.quote) {
+    await locateTermInPdf(target.page, target.quote, target.occurrence)
+    return
+  }
 
   const hasExactAnchor = target.memoId || target.startOffset !== null
   if (!hasExactAnchor) return
