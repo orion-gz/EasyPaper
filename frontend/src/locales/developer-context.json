@@ -3863,6 +3863,9 @@
   "viewer:task.failedPages": {
     "description": "Persistent document task recovery UI text."
   },
+  "viewer:task.retryingFailed": {
+    "description": "Status shown while retrying failed translation pages."
+  },
   "chat:retrySameQuestion": {
     "description": "Persistent document task recovery UI text."
   },

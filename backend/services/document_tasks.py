@@ -284,7 +284,7 @@ def migrate_legacy_translation(doc_id: str, legacy: dict) -> dict:
 def legacy_translation_view(task: dict) -> dict:
     status_map = {
         "queued": "running", "running": "running", "retry_wait": "running",
-        "succeeded": "completed", "partial_failed": "completed", "failed": "failed", "cancelled": "cancelled",
+        "succeeded": "completed", "partial_failed": "completed_with_errors", "failed": "failed", "cancelled": "cancelled",
     }
     return {
         "task_id": task["id"], "session_id": task["doc_id"],
@@ -300,14 +300,16 @@ def legacy_translation_view(task: dict) -> dict:
 def recover_document_tasks(sessions: dict) -> None:
     """Requeue incomplete durable work after sessions have been restored."""
     for task in recoverable_tasks():
+        if task["kind"] == "parse":
+            from services.parse_job import resume_parse_task
+            resume_parse_task(task["id"], sessions)
+            continue
         session = sessions.get(task["doc_id"])
         if not session:
             continue
         if task["kind"] == "translate":
             continue
-        if task["kind"] == "parse":
-            update_task(task["id"], status="succeeded")
-        elif task["kind"] in {"keywords", "summary"}:
+        if task["kind"] in {"keywords", "summary"}:
             from services.insight_job import start_keyword_job, start_summary_job
             starter = start_keyword_job if task["kind"] == "keywords" else start_summary_job
             options = task["options"]
