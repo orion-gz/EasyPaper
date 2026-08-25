@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp } from './helpers.js'
+import { mockBaseRoutes, gotoApp, reloadToLibrary } from './helpers.js'
 
 test('category filter chips stay collapsed after reload', async ({ page }) => {
   const doc = {
@@ -34,8 +34,7 @@ test('category filter chips stay collapsed after reload', async ({ page }) => {
   ).toBeLessThanOrEqual(1)
   await expect.poll(() => page.evaluate(() => localStorage.getItem('easypaper_library_category_filters_collapsed'))).toBe('true')
 
-  await page.reload()
-  await page.locator('.sidebar-nav-item[data-page="library"]').click()
+  await reloadToLibrary(page)
   await expect(filters).toBeHidden()
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
 
