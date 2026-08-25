@@ -31,7 +31,7 @@
   --text-primary:   #f3f4f6;
   --text-secondary: #a1a1aa;
   --text-tertiary:  #86868f;
-  --text-muted:     #6b7280;
+  --text-muted:     #9ca3af;
 
   --success:        #10b981;
   --error:          #ef4444;
@@ -935,7 +935,7 @@ body:not(.light-theme) .pdf-page-inner canvas {
   transition: all 0.15s ease;
 }
 .trans-tab-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
-.trans-tab-btn.active { color: var(--accent-mid); background: var(--bg-hover); }
+.trans-tab-btn.active { color: var(--control-accent-text); background: var(--bg-hover); }
 
 .trans-tab-refresh-btn {
   margin-left: auto;
@@ -7113,3 +7113,75 @@ body.light-theme .chat-drawer {
 .chat-page-citation:hover .chat-evidence-card, .chat-page-citation:focus-visible .chat-evidence-card { display:block; }
 .chat-verification-badge { align-self:flex-start; margin:4px 0 0; padding:3px 7px; border:1px solid var(--success); border-radius:999px; color:var(--success); font-size:10px; }
 .chat-verification-badge.risk { border-color:var(--warning); color:var(--warning); }
+
+
+/* Keyboard accessibility */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+:where(button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 3px solid var(--control-accent, #4f8ef7) !important;
+  outline-offset: 2px !important;
+}
+.chat-resizer:focus-visible {
+  background: var(--accent-mid);
+}
+.outline-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+}
+.citation-marker-box:focus-visible,
+.figure-ref-marker-box:focus-visible,
+.pdf-figure-overlay:focus-visible {
+  background-color: color-mix(in srgb, var(--control-accent) 24%, transparent);
+  border-radius: 3px;
+}
+.color-dot {
+  padding: 0;
+}
+.color-dot.selected::after {
+  content: "✓";
+  display: block;
+  color: #fff;
+  font-size: 8px;
+  line-height: 8px;
+  text-align: center;
+  text-shadow: 0 1px 2px #000;
+}
+.floating-memo-resize-handle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: nwse-resize;
+}
+.floating-memo-resize-handle::after {
+  content: "↘";
+}
+.floating-memo.collapsed .floating-memo-resize-handle {
+  display: none;
+}
+.figure-preview-tooltip-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}

@@ -80,3 +80,24 @@ test('사용자가 조절한 메모 크기를 저장하고 다시 복원한다',
   await expect(memo).toHaveCSS('width', '360px')
   await expect(memo).toHaveCSS('height', '280px')
 })
+
+
+test("키보드로 메모를 이동하고 크기를 조절하면 변경 사항을 알린다", async ({ page }) => {
+  await openViewerWithMemo(page)
+
+  const memo = page.locator(`.floating-memo[data-id="memo-regression"]`)
+  const header = memo.locator(".floating-memo-header")
+  const resizeHandle = memo.locator(".floating-memo-resize-handle")
+  const beforeMove = await memo.boundingBox()
+
+  await header.focus()
+  await header.press("ArrowRight")
+  await expect.poll(async () => (await memo.boundingBox()).x).toBeGreaterThan(beforeMove.x + 3)
+  await expect(page.locator("#a11y-live-region")).toContainText("메모 위치")
+
+  const beforeResize = await memo.boundingBox()
+  await resizeHandle.focus()
+  await resizeHandle.press("Shift+ArrowRight")
+  await expect.poll(async () => (await memo.boundingBox()).width).toBeGreaterThan(beforeResize.width + 15)
+  await expect(page.locator("#a11y-live-region")).toContainText("메모 크기")
+})

@@ -260,7 +260,7 @@ function renderPaperRow(entry) {
   const selected = doc.id === selectedDocId
   const metaLine = [author, categories[0]].filter(Boolean).join(' · ')
   return `
-    <div class="notes-paper-row ${selected ? 'selected' : ''}" data-doc-id="${escapeHtml(doc.id)}">
+    <div class="notes-paper-row ${selected ? 'selected' : ''}" data-doc-id="${escapeHtml(doc.id)}" tabindex="0" role="button">
       ${renderThumb(doc.id, 40)}
       <div class="notes-paper-row-body">
         <div class="notes-paper-row-title">${escapeHtml(title)}</div>
@@ -685,6 +685,12 @@ function attachListeners(root) {
 
   root.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return
+    const row = e.target.closest(".notes-paper-row")
+    if (row && !e.target.closest("button, select, a")) {
+      e.preventDefault()
+      row.click()
+      return
+    }
     const card = e.target.closest('.notes-annotation-card')
     if (!card || e.target.closest('button, select, a')) return
     e.preventDefault()
