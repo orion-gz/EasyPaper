@@ -109,14 +109,18 @@ def restore_sessions_from_library():
     준비해둘 필요가 없다. job_status.json 존재 여부만 확인하는 건 PDF를
     열지 않는 가벼운 파일 I/O라 문서 수가 많아도 부담이 없다.
     """
+    from services.document_tasks import recoverable_tasks
+    recoverable_doc_ids = {task["doc_id"] for task in recoverable_tasks()}
     for doc in list_documents():
         doc_id = doc["id"]
         job = get_job_status(doc_id)
-        if job and job.get("status") == "running":
+        if doc_id in recoverable_doc_ids or (job and job.get("status") == "running"):
             ensure_session(doc_id)
 
-    # 미완료 번역 잡 재개 (위에서 세션이 복원된 문서만 대상)
+    # 미완료 번역 잡과 나머지 영속 작업 재개
     resume_incomplete_jobs(sessions)
+    from services.document_tasks import recover_document_tasks
+    recover_document_tasks(sessions)
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -194,10 +198,14 @@ async def upload_pdf(
     file_size_mb = total_bytes / (1024 * 1024)
 
     # PDF 파싱
+    from services.document_tasks import create_task, update_task
+    parse_task = create_task(session_id, "parse", {"filename": file.filename}, status="running")
     try:
         metadata = get_pdf_metadata(pdf_path)
         pages = extract_pages(pdf_path)
+        update_task(parse_task["id"], status="succeeded")
     except Exception as e:
+        update_task(parse_task["id"], status="failed", last_error_code="invalid_pdf")
         shutil.rmtree(session_dir, ignore_errors=True)
         raise HTTPException(status_code=422, detail=f"PDF 파싱 실패: {str(e)}")
 

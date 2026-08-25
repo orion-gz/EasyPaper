@@ -13,5 +13,9 @@
   "language.saved": "문서별 언어 설정을 저장했습니다.",
   "outline.noToc": "이 PDF에는 목차 정보가 없어 전체 페이지를 대신 표시합니다.",
   "pageLabel": "{{page}}페이지",
-  "goToPage": "{{page}}페이지로 이동"
+  "goToPage": "{{page}}페이지로 이동",
+  "task.retryAt": " · {{time}} 재시도",
+  "task.retryWaiting": "재시도 대기",
+  "task.transientError": "일시 오류",
+  "task.failedPages": "실패 {{count}}페이지"
 }

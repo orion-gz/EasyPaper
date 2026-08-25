@@ -8,5 +8,6 @@
   "suggestions.research.results": "실험 결과의 주요 수치와 의의는 무엇이야?",
   "suggestions.general.summary": "이 문서의 핵심 내용을 요약해줘.",
   "suggestions.general.procedure": "중요한 절차와 전제 조건을 설명해줘.",
-  "suggestions.general.cautions": "주의사항과 핵심 수치를 찾아줘."
+  "suggestions.general.cautions": "주의사항과 핵심 수치를 찾아줘.",
+  "retrySameQuestion": "동일 질문 다시 보내기"
 }

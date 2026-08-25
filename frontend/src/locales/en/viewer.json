@@ -13,5 +13,9 @@
   "language.saved": "Document language override saved.",
   "outline.noToc": "This PDF has no table of contents, so all pages are listed instead.",
   "pageLabel": "Page {{page}}",
-  "goToPage": "Go to page {{page}}"
+  "goToPage": "Go to page {{page}}",
+  "task.retryAt": " · Retry at {{time}}",
+  "task.retryWaiting": "Waiting to retry",
+  "task.transientError": "Temporary error",
+  "task.failedPages": "{{count}} failed pages"
 }

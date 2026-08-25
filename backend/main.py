@@ -35,6 +35,7 @@ from routers import insight as insight_router
 from routers import primer as primer_router
 from routers import languages as languages_router
 from routers import workspace as workspace_router
+from routers import tasks as tasks_router
 from services.auth import get_current_user
 
 @asynccontextmanager
@@ -80,6 +81,7 @@ app.include_router(translate.router, prefix="/api", dependencies=[Depends(get_cu
 app.include_router(chat.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Chat"])
 app.include_router(library_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Library"])
 app.include_router(jobs_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Jobs"])
+app.include_router(tasks_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Tasks"])
 app.include_router(agy_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["AGY"])
 app.include_router(insight_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Insight"])
 app.include_router(workspace_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Workspace"])
