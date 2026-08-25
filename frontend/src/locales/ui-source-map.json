@@ -1111,5 +1111,6 @@
   "–페이지로 이동": "common:legacy.ui.1110",
   "페이지로 이동": "common:legacy.ui.1111",
   "화면 테마": "settings:themeHeading",
-  "저장된 키 삭제": "settings:deleteApiKey"
+  "저장된 키 삭제": "settings:deleteApiKey",
+  "현재 페이지 이미지 포함": "chat:screenContext.includeVisual"
 }

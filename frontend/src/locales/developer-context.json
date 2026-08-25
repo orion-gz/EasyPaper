@@ -3916,5 +3916,38 @@
   },
   "library:reparse.cancel": {
     "description": "Cancel PDF reparse dialog."
+  },
+  "chat:screenContext.includeVisual": {
+    "description": "Label for manually including the current PDF page image in viewer chat."
+  },
+  "chat:screenContext.pageIncluded": {
+    "description": "Context chip showing that current-page text is included."
+  },
+  "chat:screenContext.pageWithVisual": {
+    "description": "Context chip showing that current-page text and image are included."
+  },
+  "chat:screenContext.visionUnsupported": {
+    "description": "Tooltip when the selected chat model cannot inspect page images."
+  },
+  "chat:screenContext.textDescription": {
+    "description": "Tooltip explaining default current-page text context."
+  },
+  "chat:evidence.source": {
+    "description": "Fallback heading for a document evidence hover card."
+  },
+  "chat:evidence.verified": {
+    "description": "Badge for structurally verified evidence citations."
+  },
+  "chat:evidence.risk": {
+    "description": "Badge showing the number of evidence verification risk signals."
+  },
+  "chat:evidence.translation": {
+    "description": "Heading for the translated excerpt in an evidence hover card."
+  },
+  "chat:evidence.verifyAction": {
+    "description": "Assistant message action that requests semantic evidence verification."
+  },
+  "chat:evidence.verifyPrompt": {
+    "description": "Question inserted when the user requests evidence verification."
   }
 }

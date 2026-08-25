@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { streamInstallOllamaAPI } from '../src/api.js'
+import { streamChatAPI, streamInstallOllamaAPI } from '../src/api.js'
 
 test('CLI install stream uses POST and parses SSE events', async () => {
   const requests = []
@@ -28,4 +28,38 @@ test('CLI install stream uses POST and parses SSE events', async () => {
   assert.equal(requests[0].url, '/api/settings/install-ollama')
   assert.equal(requests[0].options.method, 'POST')
   assert.deepEqual(progress, ['installing'])
+})
+
+
+test("document chat parses named SSE events across chunk boundaries", async () => {
+  const requests = []
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, options })
+    const chunks = [
+      "event: context\ndata: {\"page_num\":2,\"visual_included\":false}\n\nevent: ans",
+      "wer\ndata: {\"delta\":\"Grounded \"}\n\nevent: answer\ndata: {\"delta\":\"answer [p.2]\"}\n\n",
+      "event: evidence\ndata: {\"items\":[{\"evidence_id\":\"ev_1\",\"page_num\":2}]}\n\nevent: verification\ndata: {\"status\":\"verified_structure\"}\n\nevent: done\ndata: {\"answer_message_id\":7}\n\n",
+    ]
+    const body = new ReadableStream({
+      start(controller) {
+        chunks.forEach(chunk => controller.enqueue(new TextEncoder().encode(chunk)))
+        controller.close()
+      },
+    })
+    return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } })
+  }
+
+  const tokens = []
+  const events = []
+  await new Promise((resolve, reject) => {
+    streamChatAPI("doc", [{ role: "user", content: "question" }],
+      token => tokens.push(token), resolve, reject, null,
+      { screenContext: { mode: "viewer", page_num: 2, include_visual: null } },
+      (name, payload) => events.push([name, payload]))
+  })
+
+  assert.deepEqual(tokens, ["Grounded ", "answer [p.2]"])
+  assert.deepEqual(events.map(item => item[0]), ["context", "answer", "answer", "evidence", "verification", "done"])
+  const body = JSON.parse(requests[0].options.body)
+  assert.deepEqual(body.screen_context, { mode: "viewer", page_num: 2, include_visual: null })
 })

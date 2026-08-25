@@ -589,40 +589,89 @@ export async function deleteModelAPI(modelName) {
  *   provider가 캡처 영역을 직접 보고 답한다.
  * @returns {function} abort - 중단 함수
  */
-export function streamChatAPI(sessionId, messages, onToken, onDone, onError, imageBase64, context = {}) {
+export function streamChatAPI(sessionId, messages, onToken, onDone, onError, imageBase64, context = {}, onEvent = null) {
   const controller = new AbortController()
+  let completed = false
+  let failed = false
 
-  fetch(`${API_BASE}/chat/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const dispatchEvent = (eventName, payload) => {
+    if (typeof onEvent === "function") onEvent(eventName, payload)
+    if (eventName === "answer") {
+      if (payload?.delta) onToken(payload.delta)
+    } else if (eventName === "error") {
+      failed = true
+      onError(new Error(payload?.message || "Chat stream failed"))
+    } else if (eventName === "done" && !completed) {
+      completed = true
+      if (!failed && !payload?.failed) onDone(payload)
+    }
+  }
+
+  fetch(API_BASE + "/chat/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       session_id: sessionId,
       messages: messages,
       image_base64: imageBase64 || undefined,
       current_page: context.currentPage || undefined,
-      selected_text: context.selectedText || undefined
+      selected_text: context.selectedText || undefined,
+      screen_context: context.screenContext || undefined,
+      verify_evidence: Boolean(context.verifyEvidence),
     }),
     signal: controller.signal
   })
     .then(async (res) => {
-      if (!res.ok) { onError(await apiError(res)); return }
-
+      if (!res.ok) { failed = true; onError(await apiError(res)); return }
+      const contentType = res.headers?.get?.("content-type") || ""
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
+      if (!contentType.includes("text/event-stream")) {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          const token = decoder.decode(value, { stream: true })
+          if (token) onToken(token)
+        }
+        if (!completed && !failed) { completed = true; onDone() }
+        return
+      }
 
+      let buffer = ""
+      const consume = () => {
+        let boundary
+        while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+          const frame = buffer.slice(0, boundary).replace(/\r/g, "")
+          buffer = buffer.slice(boundary + 2)
+          if (!frame.trim()) continue
+          let eventName = "message"
+          const dataLines = []
+          frame.split("\n").forEach(line => {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim()
+            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart())
+          })
+          if (!dataLines.length) continue
+          try {
+            dispatchEvent(eventName, JSON.parse(dataLines.join("\n")))
+          } catch (error) {
+            failed = true
+            onError(error)
+          }
+        }
+      }
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
-
-        const token = decoder.decode(value, { stream: true })
-        if (token) {
-          onToken(token)
-        }
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n")
+        consume()
       }
-      onDone()
+      buffer += decoder.decode().replace(/\r\n/g, "\n")
+      consume()
+      if (!completed && !failed) { completed = true; onDone() }
     })
     .catch((err) => {
-      if (err.name !== 'AbortError') {
+      if (err.name !== "AbortError") {
+        failed = true
         onError(err)
       }
     })

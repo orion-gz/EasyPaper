@@ -1,10 +1,11 @@
 import asyncio
 import hashlib
+import json
 import re
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from routers.upload import sessions, ensure_session, require_session_owner
 from services.ownership import require_owned_documents
@@ -12,6 +13,9 @@ from services.llm_client import stream_chat, generate_suggested_questions
 from services.db import (
     db_save_chat_message,
     db_get_chat_history,
+    db_get_translation,
+    db_save_chat_evidence,
+    db_save_chat_verification,
     db_list_assistant_chat_sessions,
     db_upsert_compare_session,
     db_list_compare_chat_sessions,
@@ -44,6 +48,17 @@ class ChatRequest(BaseModel):
     image_base64: Optional[str] = Field(default=None, max_length=MAX_CHAT_IMAGE_BASE64_CHARS)
     current_page: Optional[int] = Field(default=None, ge=1)
     selected_text: Optional[str] = Field(default=None, max_length=20_000)
+    screen_context: Optional["ScreenContext"] = None
+    verify_evidence: bool = False
+
+
+class ScreenContext(BaseModel):
+    mode: Literal["viewer", "standalone"] = "viewer"
+    page_num: Optional[int] = Field(default=None, ge=1)
+    include_visual: Optional[bool] = None
+
+
+ChatRequest.model_rebuild()
 
 # ── 여러 논문 간 비교 채팅 ──────────────────────────────
 MIN_COMPARE_DOCS = 2
@@ -66,110 +81,210 @@ def _build_compare_id(doc_ids: List[str]) -> str:
 def _dedupe_preserve_order(items: List[str]) -> List[str]:
     return list(dict.fromkeys(items))
 
+_VISUAL_QUESTION_RE = re.compile(
+    r"(?:이 페이지|그림|도표|(?<![가-힣])표(?:\s*\d+|[을를이가의에서])?(?![가-힣])|차트|수식|이미지|figure|diagram|table|chart|equation|this page)",
+    re.IGNORECASE,
+)
+_MAX_RENDERED_PAGE_IMAGE_CHARS = 12 * 1024 * 1024
+
+
+def _provider_supports_vision(provider: str, model: str) -> bool:
+    provider = (provider or "").lower()
+    if provider in {"openai", "gemini", "claude", "antigravity", "claude_code", "codex"}:
+        return True
+    if provider != "ollama":
+        return False
+    normalized_model = (model or "").lower().replace("-", "").replace("_", "")
+    return any(name in normalized_model for name in ("llava", "gemma3", "qwen2.5vl", "qwen25vl", "minicpmv", "bakllava"))
+
+
+def _sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+async def _semantic_verify_answer(answer: str, evidence: list[dict], session_id: str) -> dict:
+    if not evidence:
+        return {"mode": "structural_only", "status": "no_cited_evidence"}
+    evidence_lines = []
+    for item in evidence:
+        evidence_id = item.get("evidence_id")
+        page_num = item.get("page_num")
+        quote = item.get("quote") or ""
+        evidence_lines.append(f"[{evidence_id}] Page {page_num}: {quote[:1200]}")
+    evidence_text = "\n\n".join(evidence_lines)
+    prompt = (
+        "Check whether each factual claim in the answer is supported by the supplied evidence. "
+        "Return a compact JSON object with status (supported, mixed, or unsupported) and issues.\n\n"
+        f"ANSWER:\n{answer[:12000]}\n\nEVIDENCE:\n{evidence_text}"
+    )
+    chunks = []
+    try:
+        async for token in stream_chat(
+            "You are an evidence verification model. Do not use outside knowledge.",
+            [{"role": "user", "content": prompt}],
+            session_id=f"{session_id}/evidence_verification",
+        ):
+            chunks.append(token)
+            if sum(len(chunk) for chunk in chunks) > 8000:
+                break
+        return {"mode": "semantic_model", "status": "completed", "result": "".join(chunks).strip()}
+    except Exception as exc:
+        return {"mode": "structural_only", "status": "semantic_unavailable", "detail": str(exc)[:300]}
+
+
 @router.post("/chat/stream")
 async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current_user)):
-    """
-    논문 내용을 기반으로 AI 전문가와 챗을 진행하고 실시간 스트리밍 답변을 반환합니다.
-    """
     session_id = data.session_id
     session = require_session_owner(session_id, current_user)
-    from services.processing_policy import ensure_processing_allowed
+    from services.processing_policy import ensure_processing_allowed, provider_is_local
     ensure_processing_allowed(session, "chat")
-    enforce_rate_limit("chat", current_user)
 
-    # 질문 관련 문단을 FTS5로 찾고 명시 페이지·현재 페이지·선택 영역을
-    # 우선 재순위화한다. 장/절이 이어지는 인접 문단도 함께 확장한다.
-    pages = session.get("pages", [])
     latest_question = data.messages[-1].content if data.messages else ""
+    screen = data.screen_context
+    viewer_mode = bool(screen and screen.mode == "viewer") or (screen is None and data.current_page is not None)
+    current_page = ((screen.page_num or data.current_page) if screen else data.current_page) if viewer_mode else None
+    pages = session.get("pages", [])
+    total_pages = max((int(page.get("page_num") or 0) for page in pages), default=0)
+    if current_page and current_page > total_pages:
+        raise HTTPException(status_code=400, detail={
+            "code": "screen_page_out_of_range",
+            "params": {"page_num": current_page, "total_pages": total_pages},
+            "fallback": "The requested viewer page is outside this document.",
+        })
+    enforce_rate_limit("chat", current_user)
     from time import perf_counter
     from services.context_retrieval import retrieve_context
     retrieval_started = perf_counter()
     context_result = retrieve_context(
-        session_id, pages, latest_question,
-        current_page=data.current_page, selected_text=data.selected_text,
+        session_id, pages, latest_question, current_page=current_page,
+        selected_text=data.selected_text,
+        content_revision=int(session.get("content_revision") or 1),
     )
     paper_text = context_result.text
     from services.observability import record_document_mode_event
+    document_mode = session.get("document_mode", "research")
+    document_type = session.get("document_type", "research_paper")
     record_document_mode_event(
-        current_user, "chat_retrieval",
-        session.get("document_mode", "research"),
-        session.get("document_type", "research_paper"),
+        current_user, "chat_retrieval", document_mode, document_type,
         duration_ms=round((perf_counter() - retrieval_started) * 1000),
         numeric_value=context_result.retrieval_count, status=context_result.strategy,
     )
 
-    filename = session.get("filename", "알 수 없음")
+    from config import get_chat_model, get_chat_provider
+    provider = get_chat_provider()
+    model = get_chat_model()
+    visual_requested = bool(screen and screen.include_visual is True)
+    visual_auto = bool(screen and screen.include_visual is None and _VISUAL_QUESTION_RE.search(latest_question))
+    should_attach_visual = viewer_mode and bool(current_page) and (visual_requested or visual_auto)
+    page_image = data.image_base64
+    visual_included = bool(page_image)
+    visual_reason = "quoted_image" if page_image else None
+    if should_attach_visual and not page_image:
+        if not _provider_supports_vision(provider, model):
+            visual_reason = "vision_not_supported"
+        else:
+            from services.pdf_parser import render_page_image_base64
+            rendered = await asyncio.to_thread(
+                render_page_image_base64, session["pdf_path"], int(current_page), 1.25,
+            )
+            if rendered and len(rendered) <= _MAX_RENDERED_PAGE_IMAGE_CHARS:
+                page_image = rendered
+                visual_included = True
+                visual_reason = "manual" if visual_requested else "visual_question"
+            else:
+                visual_reason = "image_too_large" if rendered else "render_failed"
 
     from services.document_policy import build_assistant_prompt
-    document_mode = session.get("document_mode", "research")
-    document_type = session.get("document_type", "research_paper")
-    system_prompt = build_assistant_prompt(
-        document_mode, document_type, filename, paper_text,
+    filename = session.get("filename", "알 수 없음")
+    system_prompt = build_assistant_prompt(document_mode, document_type, filename, paper_text)
+    system_prompt += (
+        "\n\n[EVIDENCE CITATION RULES]\n"
+        "Every factual claim based on the document must cite one or more supplied evidence IDs exactly as [E:ev_...]. "
+        "Never invent an evidence ID. Numeric claims always require a citation. If evidence is insufficient, say so."
     )
-
     history_messages = [{"role": msg.role, "content": msg.content} for msg in data.messages]
 
-    # Save user message to database
     question_chat_id = None
     if data.messages:
         latest_msg = data.messages[-1]
         question_chat_id = db_save_chat_message(session_id, latest_msg.role, latest_msg.content)
-
-        # 이미지 인용 메시지라면, 이번 요청에 실려온 이미지를 문서별 디렉터리에도
-        # 저장한다(브라우저 localStorage에만 있으면 다른 기기/브라우저에서 이
-        # 히스토리를 다시 열었을 때 이미지가 사라지고 텍스트 placeholder만
-        # 남는 문제가 있었음). 저장에 실패해도 채팅 자체는 그대로 진행된다.
         if data.image_base64:
             marker_match = _QUOTE_IMAGE_MARKER_RE.match(latest_msg.content)
             if marker_match:
                 try:
                     save_chat_quote_image(session_id, marker_match.group(1), data.image_base64)
-                except Exception as e:
-                    print(f"[chat_stream] 인용 이미지 서버 저장 실패 ({session_id}): {e}")
+                except Exception as exc:
+                    print(f"[chat_stream] quoted image save failed ({session_id}): {exc}")
 
     async def event_generator():
-        yield " "
-        full_response = []
+        context_payload = {
+            "mode": "viewer" if viewer_mode else "standalone",
+            "page_num": current_page,
+            "current_page_text_included": bool(viewer_mode and current_page in context_result.evidence_pages),
+            "visual_included": visual_included,
+            "visual_reason": visual_reason,
+            "provider": provider,
+            "evidence_count": len(context_result.evidence),
+        }
+        yield _sse("context", context_payload)
         try:
+            full_response = []
             async for token in stream_chat(
-                system_prompt, history_messages, session_id=session_id,
-                page_image_b64=data.image_base64
+                system_prompt, history_messages, session_id=session_id, page_image_b64=page_image,
             ):
                 full_response.append(token)
-
-            # 응답 전체에서 실제 제공된 근거 페이지 밖 인용을 제거한 뒤에만
-            # 클라이언트와 채팅 기록에 노출한다.
-            from services.context_retrieval import validate_page_citations
-            assistant_content, invalid_citations = validate_page_citations(
-                "".join(full_response).strip(), context_result.evidence_pages,
+            from services.context_retrieval import validate_evidence_citations
+            assistant_content, cited_evidence, verification = validate_evidence_citations(
+                "".join(full_response).strip(), context_result.evidence,
             )
+            for item in cited_evidence:
+                translated_page = db_get_translation(
+                    session_id, int(item["page_num"]), fallback=True,
+                    content_revision=int(item["content_revision"]),
+                )
+                if translated_page:
+                    item["translation_quote"] = translated_page.strip()[:800]
+            verify_requested = data.verify_evidence or bool(verification["risks"]) or bool(
+                re.search(r"근거\s*검증|verify\s+(?:the\s+)?evidence", latest_question, re.IGNORECASE)
+            )
+            if verify_requested:
+                local_only = session.get("processing_policy") == "local_only"
+                if local_only and (not provider_is_local(provider) or not model):
+                    verification["semantic"] = {
+                        "mode": "structural_only",
+                        "status": "no_allowed_local_verifier",
+                    }
+                else:
+                    verification["semantic"] = await _semantic_verify_answer(
+                        assistant_content, cited_evidence, session_id,
+                    )
+            else:
+                verification["semantic"] = {"mode": "not_run", "status": "not_required"}
             record_document_mode_event(
                 current_user, "chat_citation", document_mode, document_type,
-                status="invalid_removed" if invalid_citations else "valid",
-                numeric_value=len(invalid_citations),
+                status=verification["status"], numeric_value=len(verification["risks"]),
             )
             for offset in range(0, len(assistant_content), 240):
-                yield assistant_content[offset:offset + 240]
+                yield _sse("answer", {"delta": assistant_content[offset:offset + 240]})
+            answer_chat_id = None
             if assistant_content:
-                db_save_chat_message(session_id, "assistant", assistant_content)
-                # 지식 그래프: 이 질문을 논문의 기존 개념과 연결한다(fire-and-forget -
-                # 실패해도 채팅 응답 자체에는 영향 없음).
+                answer_chat_id = db_save_chat_message(session_id, "assistant", assistant_content)
+                if answer_chat_id is not None:
+                    db_save_chat_verification(answer_chat_id, verification)
+                    db_save_chat_evidence(answer_chat_id, session_id, cited_evidence, verification)
                 if question_chat_id is not None and document_mode == "research":
                     from services.knowledge_graph import sync_question_for_graph
-                    asyncio.create_task(
-                        sync_question_for_graph(question_chat_id, session_id, latest_msg.content)
-                    )
-        except Exception as e:
-            yield f"\n[오류 발생: {str(e)}]"
+                    asyncio.create_task(sync_question_for_graph(question_chat_id, session_id, latest_msg.content))
+            yield _sse("evidence", {"answer_message_id": answer_chat_id, "items": cited_evidence})
+            yield _sse("verification", verification)
+            yield _sse("done", {"answer_message_id": answer_chat_id})
+        except Exception as exc:
+            yield _sse("error", {"code": "chat_stream_failed", "message": str(exc)})
+            yield _sse("done", {"failed": True})
 
     return StreamingResponse(
-        event_generator(),
-        media_type="text/plain",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        }
+        event_generator(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
     )
 
 
