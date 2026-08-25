@@ -308,6 +308,56 @@ def _cancel_derived_tasks(doc_id: str) -> None:
         pass
 
 
+def _snapshot_derived_tasks(doc_id: str) -> list[dict]:
+    """Capture recoverable task/page state before quiescing derived workers."""
+    from services.document_tasks import recoverable_tasks
+    return [
+        task for task in recoverable_tasks()
+        if task["doc_id"] == doc_id and task["kind"] != "parse"
+    ]
+
+
+async def _restore_derived_tasks(task_snapshots: list[dict], sessions: dict) -> None:
+    """Restore and resume work when the revision transaction did not commit."""
+    if not task_snapshots:
+        return
+
+    # Let CancelledError handlers finish first so they cannot overwrite restoration.
+    await asyncio.sleep(0)
+    with get_db() as conn:
+        for task in task_snapshots:
+            conn.execute(
+                """UPDATE document_tasks
+                   SET status = ?, attempt_count = ?, last_error_code = ?,
+                       next_retry_at = ?, cancel_requested = ?, updated_at = ?
+                   WHERE id = ?""",
+                (
+                    task["status"], int(task["attempt_count"]),
+                    task.get("last_error_code"), task.get("next_retry_at"),
+                    1 if task.get("cancel_requested") else 0,
+                    task["updated_at"], task["id"],
+                ),
+            )
+            for page in task["pages"]:
+                conn.execute(
+                    """UPDATE document_task_pages
+                       SET status = ?, attempt_count = ?, last_error_code = ?,
+                           next_retry_at = ?, updated_at = ?
+                       WHERE task_id = ? AND page_num = ?""",
+                    (
+                        page["status"], int(page["attempt_count"]),
+                        page.get("last_error_code"), page.get("next_retry_at"),
+                        page["updated_at"], task["id"], int(page["page_num"]),
+                    ),
+                )
+        conn.commit()
+
+    from services.translation_job import resume_incomplete_jobs
+    resume_incomplete_jobs(sessions)
+    from services.document_tasks import recover_document_tasks
+    recover_document_tasks(sessions)
+
+
 async def apply_preview(doc_id: str, task_id: str, sessions: dict) -> dict:
     lock = _apply_locks.setdefault(doc_id, asyncio.Lock())
     async with lock:
@@ -349,69 +399,103 @@ async def apply_preview(doc_id: str, task_id: str, sessions: dict) -> dict:
         ):
             raise RuntimeError("content_revision_conflict")
 
-        impact = preview_impact(doc_id, int(preview["source_revision"]))
-        _cancel_derived_tasks(doc_id)
         pages = payload["pages"]
         images = payload.get("images") or []
         report = payload["diagnostics"]
         engine = payload["parser_engine"]
         version = payload["parser_version"]
+        new_revision = int(preview["source_revision"]) + 1
         from services.languages import detect_document_language
         detection = detect_document_language(pages)
         from services.context_retrieval import chunk_pages
         chunks = chunk_pages(pages)
+
+        impact = preview_impact(doc_id, int(preview["source_revision"]))
+        task_snapshots = _snapshot_derived_tasks(doc_id)
+
+        # Write and verify revision-addressed caches while the current document still
+        # points at the previous revision. A staging failure has no active-state effect.
+        from services.cache import clear_parser_revision_cache, stage_parser_revision_caches
+        try:
+            stage_parser_revision_caches(
+                doc_id, pdf_path, pages, images, engine, version, new_revision,
+            )
+        except Exception as exc:
+            raise RuntimeError("reparse_cache_staging_failed") from exc
+
+        try:
+            _cancel_derived_tasks(doc_id)
+        except Exception:
+            clear_parser_revision_cache(doc_id, new_revision)
+            await _restore_derived_tasks(task_snapshots, sessions)
+            raise
         now = _now()
 
-        with get_db() as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            doc = conn.execute(
-                "SELECT content_revision, metadata FROM documents WHERE id = ?", (doc_id,)
-            ).fetchone()
-            if not doc or int(doc["content_revision"]) != int(preview["source_revision"]):
-                conn.rollback()
-                raise RuntimeError("content_revision_conflict")
-            new_revision = int(doc["content_revision"]) + 1
-            try:
-                metadata = json.loads(doc["metadata"]) if doc["metadata"] else {}
-            except (TypeError, json.JSONDecodeError):
-                metadata = {}
-            for key in ("bibliography", "references", "reference_list"):
-                metadata.pop(key, None)
-            conn.execute(
-                """UPDATE documents
-                   SET total_pages = ?, metadata = ?, content_revision = ?,
-                       parser_engine = ?, parser_version = ?,
-                       detected_source_language = ?, source_language_confidence = ?
-                   WHERE id = ?""",
-                (
-                    len(pages), json.dumps(metadata, ensure_ascii=False), new_revision,
-                    engine, version, str(detection["language"]), float(detection["confidence"]), doc_id,
-                ),
-            )
-            conn.execute(
-                """INSERT INTO parsing_diagnostics
-                   (doc_id, content_revision, parser_engine, parser_version, report, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (doc_id, new_revision, engine, version, json.dumps(report, ensure_ascii=False), now),
-            )
-            conn.execute(
-                "UPDATE reparse_previews SET status = 'applied', updated_at = ? WHERE id = ?",
-                (now, task_id),
-            )
-            conn.execute("DELETE FROM document_chunks_fts WHERE doc_id = ?", (doc_id,))
-            conn.executemany(
-                "INSERT INTO document_chunks_fts(doc_id,page_num,ordinal,section,content) VALUES(?,?,?,?,?)",
-                [(doc_id, chunk["page_num"], chunk["ordinal"], chunk["section"], chunk["content"])
-                 for chunk in chunks],
-            )
-            conn.commit()
+        try:
+            with get_db() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                doc = conn.execute(
+                    "SELECT content_revision, metadata FROM documents WHERE id = ?", (doc_id,)
+                ).fetchone()
+                if not doc or int(doc["content_revision"]) != int(preview["source_revision"]):
+                    conn.rollback()
+                    raise RuntimeError("content_revision_conflict")
+                if new_revision != int(doc["content_revision"]) + 1:
+                    conn.rollback()
+                    raise RuntimeError("content_revision_conflict")
+                try:
+                    metadata = json.loads(doc["metadata"]) if doc["metadata"] else {}
+                except (TypeError, json.JSONDecodeError):
+                    metadata = {}
+                for key in ("bibliography", "references", "reference_list"):
+                    metadata.pop(key, None)
+                conn.execute(
+                    """UPDATE documents
+                       SET total_pages = ?, metadata = ?, content_revision = ?,
+                           parser_engine = ?, parser_version = ?,
+                           detected_source_language = ?, source_language_confidence = ?
+                       WHERE id = ?""",
+                    (
+                        len(pages), json.dumps(metadata, ensure_ascii=False), new_revision,
+                        engine, version, str(detection["language"]), float(detection["confidence"]), doc_id,
+                    ),
+                )
+                conn.execute(
+                    """INSERT INTO parsing_diagnostics
+                       (doc_id, content_revision, parser_engine, parser_version, report, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (doc_id, new_revision, engine, version, json.dumps(report, ensure_ascii=False), now),
+                )
+                conn.execute(
+                    "UPDATE reparse_previews SET status = 'applied', updated_at = ? WHERE id = ?",
+                    (now, task_id),
+                )
+                conn.execute("DELETE FROM document_chunks_fts WHERE doc_id = ?", (doc_id,))
+                conn.executemany(
+                    "INSERT INTO document_chunks_fts(doc_id,page_num,ordinal,section,content) VALUES(?,?,?,?,?)",
+                    [(doc_id, chunk["page_num"], chunk["ordinal"], chunk["section"], chunk["content"])
+                     for chunk in chunks],
+                )
+                conn.commit()
 
-        from services.cache import clear_session_cache, save_images_cache, save_pages_cache
-        clear_session_cache(doc_id)
-        save_pages_cache(doc_id, pdf_path, pages, engine, version)
-        save_images_cache(doc_id, pdf_path, images, engine, version)
-        from services.pdf_parser import clear_parser_memory_cache
-        clear_parser_memory_cache()
+        except Exception as apply_exc:
+            clear_parser_revision_cache(doc_id, new_revision)
+            try:
+                await _restore_derived_tasks(task_snapshots, sessions)
+            except Exception as restore_exc:
+                apply_exc.add_note(f"derived task restoration failed: {restore_exc}")
+            raise
+
+        # DB activation is authoritative. Cleanup failures must not turn a committed
+        # revision into an error response; inactive files are safe to remove later.
+        try:
+            from services.cache import clear_derived_session_cache, clear_stale_parser_caches
+            clear_derived_session_cache(doc_id)
+            clear_stale_parser_caches(doc_id, new_revision)
+            from services.pdf_parser import clear_parser_memory_cache
+            clear_parser_memory_cache()
+        except Exception:
+            pass
         indexed_chunks = len(chunks)
 
         existing = sessions.get(doc_id, {})
