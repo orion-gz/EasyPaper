@@ -21,6 +21,7 @@ import { compareDocsByLastRead } from './readPages.js'
 import { buildScholarSearchUrl, extractCitationTitle } from './citationSearch.js'
 import { changeLocale, getLocale, initI18n, loadFeatureNamespaces, loadNamespaces, t } from './i18n.js'
 import { saveUserLanguagePreferences, saveDocumentLanguageOverride } from './languagePreferences.js'
+import { canRetryTranslationTask, isTranslationTaskRunning, shouldRetryFailedTranslationTask } from './translationTaskState.js'
 
 const i18nReady = initI18n()
 
@@ -69,6 +70,8 @@ const state = {
   translatingPages: new Set(), // 현재 번역 중인 페이지 (폴링 중복 방지용)
   translatedPages: new Set(),  // 번역 완료된 페이지
   pollingTimer: null,          // 잡 폴링 타이머
+  translationTaskId: null,     // 현재 영속 번역 작업 ID
+  translationTaskStatus: null, // queued/running/partial_failed/...
   username: 'admin',           // 현재 로그인한 사용자명 저장
   chatHistory: [],             // AI 채팅 히스토리
   chatActiveStream: null,      // 현재 활성화된 채팅 스트림 abort 함수
@@ -1644,9 +1647,11 @@ function startJobPolling(sessionId) {
         }
       }
 
+      state.translationTaskId = job.task_id || null
+      state.translationTaskStatus = job.task_status || null
       const done  = (job.completed_pages || []).length
       const total = job.total_pages || state.totalPages
-      const isRunning = ['running', 'pending'].includes(job.status) || job.task_status === 'retry_wait'
+      const isRunning = isTranslationTaskRunning(job)
       updateProgressMiniRaw(done, total, isRunning)
       if (job.task_status === 'retry_wait') {
         progressMiniText.textContent = job.next_retry_at ? t('viewer:task.retryAt', { time: new Date(job.next_retry_at).toLocaleTimeString() }) : t('viewer:task.retryWaiting')
@@ -1660,11 +1665,8 @@ function startJobPolling(sessionId) {
         resumeTransBtn.classList.add('hidden')
       } else {
         cancelTransBtn.classList.add('hidden')
-        if (job.status !== 'completed') {
-          resumeTransBtn.classList.remove('hidden')
-        } else {
-          resumeTransBtn.classList.add('hidden')
-        }
+        const canRetry = canRetryTranslationTask(job)
+        resumeTransBtn.classList.toggle('hidden', !canRetry)
         clearInterval(state.pollingTimer)
         state.pollingTimer = null
       }
@@ -2210,8 +2212,12 @@ resumeTransBtn.addEventListener('click', async () => {
   if (!state.sessionId) return
 
   try {
-    showToast('중단된 지점부터 번역을 재개하는 중...', 'info')
-    await restartJobAPI(state.sessionId, { ...getTranslationOptions(), resumeScope: true })
+    const retryFailedTask = shouldRetryFailedTranslationTask(
+      state.translationTaskId, state.translationTaskStatus,
+    )
+    showToast(retryFailedTask ? t('viewer:task.retryingFailed') : '중단된 지점부터 번역을 재개하는 중...', 'info')
+    if (retryFailedTask) await retryDocumentTaskAPI(state.translationTaskId)
+    else await restartJobAPI(state.sessionId, { ...getTranslationOptions(), resumeScope: true })
     startJobPolling(state.sessionId)
     showToast('번역이 이어서 재개되었습니다.', 'success')
   } catch (err) {

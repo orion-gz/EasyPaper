@@ -8,6 +8,7 @@ MAX_FILE_SIZE_MB를 검사해서, 한도를 아무리 작게 잡아도 큰 업�
 
 import fitz
 import routers.upload as upload_module
+import routers.primer as primer_router
 
 
 def _minimal_pdf_bytes() -> bytes:
@@ -62,13 +63,13 @@ def test_auto_translation_job_starts_before_primer(test_client, isolated_dirs, m
         events.append("translation")
         return {"status": "running"}
 
-    async def fake_generate_primer(*args, **kwargs):
+    def fake_generate_primer(*args, **kwargs):
         events.append("primer")
         assert events[0] == "translation"
         return {}
 
     monkeypatch.setattr(upload_module, "start_job", fake_start_job)
-    monkeypatch.setattr(upload_module, "generate_primer", fake_generate_primer)
+    monkeypatch.setattr(primer_router, "_ensure_generation_started", fake_generate_primer)
 
     res = test_client.post(
         "/api/upload?translation_mode=auto&source_lang=en",
@@ -95,11 +96,11 @@ def test_auto_translation_skips_full_job_at_fifty_pages(test_client, isolated_di
         starts.append((args, kwargs))
         return {"status": "running"}
 
-    async def fake_generate_primer(*args, **kwargs):
+    def fake_generate_primer(*args, **kwargs):
         return {}
 
     monkeypatch.setattr(upload_module, "start_job", fake_start_job)
-    monkeypatch.setattr(upload_module, "generate_primer", fake_generate_primer)
+    monkeypatch.setattr(primer_router, "_ensure_generation_started", fake_generate_primer)
 
     response = test_client.post(
         "/api/upload?translation_mode=auto",
@@ -119,10 +120,10 @@ def test_auto_translation_does_not_start_for_undetermined_source(test_client, is
     starts = []
     monkeypatch.setattr(upload_module, "start_job", lambda *args, **kwargs: starts.append(kwargs))
 
-    async def no_primer(*args, **kwargs):
+    def no_primer(*args, **kwargs):
         return {}
 
-    monkeypatch.setattr(upload_module, "generate_primer", no_primer)
+    monkeypatch.setattr(primer_router, "_ensure_generation_started", no_primer)
     response = test_client.post(
         "/api/upload?translation_mode=auto",
         files={"file": ("empty.pdf", _minimal_pdf_bytes(), "application/pdf")},

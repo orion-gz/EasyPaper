@@ -1,8 +1,6 @@
 import uuid
 import os
 import shutil
-import asyncio
-import json
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import aiofiles
@@ -10,10 +8,9 @@ from services.auth import get_current_user
 
 from config import UPLOAD_DIR, MAX_FILE_SIZE_MB
 from services.pdf_parser import extract_pages, get_pdf_metadata
-from services.library import save_document, get_document, get_pdf_path as lib_pdf_path, list_documents
+from services.library import get_document, get_pdf_path as lib_pdf_path, list_documents
 from services.translation_job import start_job, resume_incomplete_jobs, get_job_status
 from services.insight_job import start_keyword_job, start_summary_job
-from services.primer import generate_primer
 from services.rate_limiter import enforce_rate_limit
 from models.schemas import UploadResponse
 
@@ -21,7 +18,6 @@ router = APIRouter()
 
 # 메모리 내 세션 저장소
 sessions: dict = {}
-LONG_DOCUMENT_PAGE_THRESHOLD = 50
 
 
 def ensure_session(session_id: str) -> bool:
@@ -218,185 +214,44 @@ async def upload_pdf(
 
     file_size_mb = total_bytes / (1024 * 1024)
 
-    # PDF 파싱
-    from services.document_tasks import create_task, update_task
-    parse_task = create_task(session_id, "parse", {"filename": file.filename}, status="running")
-    try:
-        metadata = get_pdf_metadata(pdf_path)
-        pages = extract_pages(pdf_path)
-        update_task(parse_task["id"], status="succeeded")
-    except Exception as e:
-        update_task(parse_task["id"], status="failed", last_error_code="invalid_pdf")
-        shutil.rmtree(session_dir, ignore_errors=True)
-        raise HTTPException(status_code=422, detail=f"PDF 파싱 실패: {str(e)}")
-
-    from services.languages import detect_document_language
-    detection = detect_document_language(pages)
-    detected_source_language = str(detection["language"])
-    resolved_source_language = source_lang if source_lang != "auto" else detected_source_language
-    source_supported = bool(detection["supported"]) if source_lang == "auto" else True
-
-    # 라이브러리에 영구 저장
-    save_document(
-        session_id, file.filename, pdf_path, len(pages), metadata,
-        username=current_user, document_mode=document_mode, document_type=document_type,
-        source_language=source_lang, detected_source_language=detected_source_language,
-        source_language_confidence=float(detection["confidence"]),
-        preferred_target_language=target_lang,
-        content_revision=1,
-        parser_engine=((pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf"),
-        parser_version=__import__("services.pdf_diagnostics", fromlist=["parser_version"]).parser_version(
-            (pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf"
-        ),
-    )
-
-    active_parser_engine = (pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf"
-    from services.pdf_diagnostics import diagnose_pages, parser_version
-    active_parser_version = parser_version(active_parser_engine)
-    persistent_pdf_path = lib_pdf_path(session_id)
-    detected_images = []
-    if persistent_pdf_path:
-        from services.cache import save_images_cache, save_pages_cache
-        save_pages_cache(session_id, persistent_pdf_path, pages, active_parser_engine, active_parser_version)
-        try:
-            from services.pdf_parser import extract_pdf_images
-            detected_images = await asyncio.to_thread(extract_pdf_images, persistent_pdf_path, active_parser_engine)
-            save_images_cache(
-                session_id, persistent_pdf_path, detected_images,
-                active_parser_engine, active_parser_version,
-            )
-        except Exception:
-            detected_images = []
-    initial_report = diagnose_pages(
-        pages, detected_images, active_parser_engine, active_parser_version,
-    )
-    from services.db import get_db
-    from datetime import datetime, timezone
-    with get_db() as conn:
-        conn.execute(
-            """INSERT OR REPLACE INTO parsing_diagnostics
-               (doc_id, content_revision, parser_engine, parser_version, report, created_at)
-               VALUES (?, 1, ?, ?, ?, ?)""",
-            (
-                session_id, active_parser_engine, active_parser_version,
-                json.dumps(initial_report, ensure_ascii=False),
-                datetime.now(timezone.utc).isoformat(),
-            ),
-        )
-        conn.commit()
-
-    from services.context_retrieval import index_document_chunks
-    indexed_chunks = index_document_chunks(session_id, pages)
-    from services.observability import record_document_mode_event
-    record_document_mode_event(
-        current_user, "upload", document_mode, document_type,
-        numeric_value=len(pages), status="indexed" if indexed_chunks else "fallback",
-    )
-
-    # 세션 저장 (메모리)
-    sessions[session_id] = {
-        "pdf_path": pdf_path,
+    # 원본 경로와 업로드 옵션을 먼저 영속 작업에 기록한다. 문서 행이 아직
+    # 생성되지 않은 시점에 서버가 종료되어도 이 정보만으로 실제 파싱과
+    # 라이브러리 최종화를 다시 수행할 수 있다.
+    from services.document_tasks import create_task
+    parse_options = {
         "filename": file.filename,
-        "pages": pages,
-        "total_pages": len(pages),
-        "metadata": metadata,
-        "from_library": False,
+        "file_size_mb": file_size_mb,
         "username": current_user,
+        "target_lang": target_lang,
+        "source_lang": source_lang,
+        "style": style,
+        "ignore_math": ignore_math,
+        "ignore_table": ignore_table,
+        "ignore_refs": ignore_refs,
+        "translation_mode": translation_mode,
+        "keyword_mode": keyword_mode,
+        "summary_mode": summary_mode,
         "document_mode": document_mode,
         "document_type": document_type,
-        "source_language": source_lang,
-        "detected_source_language": detected_source_language,
-        "source_language_confidence": detection["confidence"],
-        "preferred_target_language": target_lang,
-        "processing_policy": "inherit",
-        "content_revision": 1,
-        "parser_engine": (pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf",
-        "parser_version": __import__("services.pdf_diagnostics", fromlist=["parser_version"]).parser_version(
-            (pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf"
-        ),
     }
-
-    # translation_mode가 "auto"(기본값)가 아니면 - 페이지 번역 버튼을 누를 때(pane) 또는
-    # 스크롤로 페이지를 볼 때(scroll)만 번역하길 원하는 사용자이므로 - 업로드
-    # 직후 전체 문서를 자동으로 번역하는 백그라운드 잡을 시작하지 않는다.
-    # auto를 선택했더라도 50페이지 이상이면 긴 문서 보호 정책에 따라 전체 잡을
-    # 시작하지 않고, 프런트엔드가 실제로 본 페이지만 지연 번역한다. 이후
-    # 번역은 프런트엔드가 /translate/{id}/{page}를 호출해 페이지별로 트리거한다.
-    #
-    # auto 번역 잡은 선택 기능인 읽기 전 브리핑에 의존하지 않도록
-    # 업로드 응답 전에 즉시 등록한다. 이렇게 해야 primer LLM이 느리거나
-    # 멈춰도 job status가 404로 남지 않고 번역이 진행된다. 문서당 세션을
-    # 재사용하는 CLI provider의 실제 LLM 호출은 llm_client의 세션 락이
-    # 직렬화하므로 동시에 같은 세션을 쓰지 않는다.
-    translation_skipped_reason = None
-    if not source_supported:
-        translation_skipped_reason = "unsupported_source_language"
-    elif resolved_source_language == target_lang:
-        translation_skipped_reason = "same_source_and_target_language"
-    if translation_mode == "auto" and len(pages) < LONG_DOCUMENT_PAGE_THRESHOLD and translation_skipped_reason is None:
-        start_job(
-            session_id,
-            pages,
-            target_lang=target_lang,
-            source_lang=resolved_source_language,
-            style=style,
-            ignore_math=ignore_math,
-            ignore_table=ignore_table,
-            ignore_refs=ignore_refs
+    parse_task = create_task(session_id, "parse", parse_options, status="queued")
+    from services.parse_job import execute_parse_task
+    try:
+        parsed = await execute_parse_task(
+            parse_task["id"], sessions,
+            page_extractor=extract_pages,
+            metadata_reader=get_pdf_metadata,
+            translation_starter=start_job,
+            keyword_starter=start_keyword_job,
+            summary_starter=start_summary_job,
+            upload_root=UPLOAD_DIR,
         )
+    except Exception as exc:
+        shutil.rmtree(session_dir, ignore_errors=True)
+        raise HTTPException(status_code=422, detail=f"PDF 파싱 실패: {exc}") from exc
 
-    async def _run_post_upload_insights():
-        try:
-            if document_mode == "research":
-                await generate_primer(
-                    session_id,
-                    pages,
-                    metadata,
-                    username=current_user,
-                    pdf_path=pdf_path,
-                    target_lang=target_lang,
-                    source_lang=resolved_source_language,
-                    session_id=session_id,
-                )
-        except Exception as e:
-            print(f"[Upload {session_id}] Primer 생성 실패: {e}")
-
-        if keyword_mode == "auto":
-            # 일반 장문 문서는 예상 LLM 호출량을 사용자가 확인한 뒤 별도
-            # insight-jobs API로 시작한다. 20페이지 이하는 기존 자동 흐름 유지.
-            if document_mode != "general" or len(pages) <= 20:
-                start_keyword_job(
-                    session_id, pages, target_lang,
-                    metadata.get("title") or file.filename, document_mode, document_type,
-                )
-
-        if summary_mode == "auto":
-            start_summary_job(
-                session_id,
-                pages,
-                target_lang,
-                metadata.get("title") or file.filename,
-                document_mode,
-                document_type,
-            )
-
-    asyncio.create_task(_run_post_upload_insights())
-
-    return UploadResponse(
-        session_id=session_id,
-        filename=file.filename,
-        total_pages=len(pages),
-        file_size_mb=round(file_size_mb, 2),
-        metadata=metadata,
-        document_mode=document_mode,
-        document_type=document_type,
-        source_language=source_lang,
-        detected_source_language=detected_source_language,
-        source_language_confidence=float(detection["confidence"]),
-        preferred_target_language=target_lang,
-        translation_skipped_reason=translation_skipped_reason,
-    )
-
+    parsed["file_size_mb"] = round(file_size_mb, 2)
+    return UploadResponse(**parsed)
 
 
 @router.get("/session/{session_id}")

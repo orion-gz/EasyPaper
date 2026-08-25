@@ -100,6 +100,7 @@ def test_legacy_translation_json_migrates_once(isolated_dirs, monkeypatch):
     first = translation_job.get_job_status(doc_id)
     second = translation_job.get_job_status(doc_id)
     assert first["task_status"] == "partial_failed"
+    assert first["status"] == "completed_with_errors"
     assert first["failed_pages"] == [3]
     assert second["task_id"] == first["task_id"]
     assert len(list_tasks(doc_id)) == 1
@@ -151,3 +152,147 @@ def test_unsupported_retry_does_not_mutate_task(test_client, isolated_dirs):
     current = get_task(task["id"])
     assert current["status"] == "failed"
     assert current["last_error_code"] == "invalid_input"
+
+
+@pytest.mark.asyncio
+async def test_orphaned_parse_task_rebuilds_document_after_restart(isolated_dirs, monkeypatch):
+    from services import parse_job, pdf_parser
+    from services.document_tasks import create_task, get_task, recover_document_tasks
+    from services.library import get_document
+
+    doc_id = "recover-upload"
+    source_dir = isolated_dirs["upload_dir"] / doc_id
+    source_dir.mkdir()
+    source_path = source_dir / "document.pdf"
+    source_path.write_bytes(b"server-owned-pdf")
+    monkeypatch.setattr(parse_job, "UPLOAD_DIR", str(isolated_dirs["upload_dir"]))
+    monkeypatch.setattr(pdf_parser, "get_pdf_metadata", lambda _path: {"title": "Recovered"})
+    monkeypatch.setattr(
+        pdf_parser, "extract_pages",
+        lambda _path: [{"page_num": 1, "text": "A recoverable English document."}],
+    )
+    monkeypatch.setattr(pdf_parser, "extract_pdf_images", lambda *_args: [])
+    task = create_task(doc_id, "parse", {
+        "filename": "recovered.pdf",
+        "username": "testuser",
+        "translation_mode": "scroll",
+        "document_mode": "general",
+        "document_type": "report",
+        "source_lang": "en",
+        "target_lang": "ko",
+    }, status="running")
+
+    sessions = {}
+    recover_document_tasks(sessions)
+    for _ in range(100):
+        if get_task(task["id"])["status"] not in {"queued", "running", "retry_wait"}:
+            break
+        await asyncio.sleep(0.01)
+
+    recovered = get_task(task["id"])
+    assert recovered["status"] == "succeeded", (recovered["last_error_code"], recovered["options"])
+    assert recovered["attempt_count"] == 1
+    assert get_document(doc_id)["total_pages"] == 1
+    assert sessions[doc_id]["metadata"]["title"] == "Recovered"
+    assert sessions[doc_id]["pages"][0]["text"].startswith("A recoverable")
+
+
+@pytest.mark.asyncio
+async def test_parse_recovery_rejects_task_path_outside_upload_root(isolated_dirs, monkeypatch):
+    from services import parse_job
+    from services.document_tasks import create_task, get_task
+
+    outside = isolated_dirs["upload_dir"].parent / "outside.pdf"
+    outside.write_bytes(b"not-owned")
+    monkeypatch.setattr(parse_job, "UPLOAD_DIR", str(isolated_dirs["upload_dir"]))
+    task = create_task("path-tamper", "parse", {
+        "pdf_path": str(outside), "filename": "outside.pdf", "username": "testuser",
+    })
+
+    with pytest.raises(ValueError, match="invalid_parse_source_path"):
+        await parse_job.execute_parse_task(task["id"], {}, upload_root=str(isolated_dirs["upload_dir"]))
+    current = get_task(task["id"])
+    assert current["status"] == "failed"
+    assert current["last_error_code"] == "invalid_parse_source_path"
+
+
+def test_translation_retry_api_runs_only_failed_pages(test_client, isolated_dirs, monkeypatch):
+    from routers import upload
+    from services import translation_job
+    from services.document_tasks import create_task, finish_from_pages, get_task, update_page
+
+    doc_id = _doc(isolated_dirs, "retry-failed-translation")
+    upload.sessions[doc_id] = {
+        "username": "testuser",
+        "pages": [
+            {"page_num": 1, "text": "done"},
+            {"page_num": 2, "text": "retry"},
+            {"page_num": 3, "text": "done"},
+        ],
+        "metadata": {}, "filename": "paper.pdf",
+        "document_mode": "research", "document_type": "research_paper",
+    }
+    task = create_task(doc_id, "translate", {"target_lang": "ko"}, [1, 2, 3])
+    update_page(task["id"], 1, "succeeded")
+    update_page(task["id"], 2, "failed", last_error_code="generation_failed")
+    update_page(task["id"], 3, "succeeded")
+    finish_from_pages(task["id"])
+    starts = []
+    monkeypatch.setattr(translation_job, "start_job", lambda *args, **kwargs: starts.append((args, kwargs)))
+
+    try:
+        response = test_client.post(f"/api/tasks/{task['id']}/retry")
+        assert response.status_code == 200
+        assert starts[0][1]["page_numbers"] == [2]
+        assert starts[0][1]["durable_task_id"] == task["id"]
+        pages = {page["page_num"]: page["status"] for page in get_task(task["id"])["pages"]}
+        assert pages == {1: "succeeded", 2: "queued", 3: "succeeded"}
+    finally:
+        upload.sessions.pop(doc_id, None)
+
+
+@pytest.mark.asyncio
+async def test_recovered_parse_finalization_preserves_existing_results(isolated_dirs, monkeypatch):
+    from services import parse_job, pdf_parser
+    from services.document_tasks import create_task, update_task
+    from services.library import get_translation, save_translation
+
+    doc_id = "recover-finalize"
+    source_dir = isolated_dirs["upload_dir"] / doc_id
+    source_dir.mkdir()
+    (source_dir / "document.pdf").write_bytes(b"server-owned-pdf")
+    monkeypatch.setattr(parse_job, "UPLOAD_DIR", str(isolated_dirs["upload_dir"]))
+    monkeypatch.setattr(pdf_parser, "extract_pdf_images", lambda *_args: [])
+    task = create_task(doc_id, "parse", {
+        "filename": "recover.pdf", "username": "testuser",
+        "translation_mode": "auto", "document_mode": "general",
+        "document_type": "report", "source_lang": "en", "target_lang": "ko",
+    })
+    translation_starts = []
+
+    def start_translation(*_args, **_kwargs):
+        translation_starts.append(1)
+        create_task(doc_id, "translate", {"target_lang": "ko"}, [1], status="running")
+
+    dependencies = {
+        "page_extractor": lambda _path: [{"page_num": 1, "text": "First parse."}],
+        "metadata_reader": lambda _path: {"title": "First"},
+        "translation_starter": start_translation,
+        "primer_starter": lambda *_args, **_kwargs: None,
+        "keyword_starter": lambda *_args, **_kwargs: None,
+        "summary_starter": lambda *_args, **_kwargs: None,
+        "upload_root": str(isolated_dirs["upload_dir"]),
+    }
+    await parse_job.execute_parse_task(task["id"], {}, **dependencies)
+    save_translation(doc_id, 1, "preserved", "test")
+    update_task(task["id"], status="running")
+    dependencies["metadata_reader"] = lambda _path: {"title": "Recovered"}
+
+    await parse_job.execute_parse_task(task["id"], {}, **dependencies)
+    assert get_translation(doc_id, 1, "test", fallback=False) == "preserved"
+    assert translation_starts == [1]
+    with isolated_dirs["db"].get_db() as conn:
+        metric_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM document_mode_metrics WHERE event = 'upload'"
+        ).fetchone()["count"]
+    assert metric_count == 1

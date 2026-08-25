@@ -18,6 +18,7 @@
   "task.retryWaiting": "Waiting to retry",
   "task.transientError": "Temporary error",
   "task.failedPages": "{{count}} failed pages",
+  "task.retryingFailed": "Retrying failed translation items...",
   "a11y.chatResizer": "Resize AI chat panel",
   "a11y.graphResizer": "Resize graph details panel",
   "a11y.chatPanel": "AI assistant",

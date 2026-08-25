@@ -18,6 +18,7 @@
   "task.retryWaiting": "재시도 대기",
   "task.transientError": "일시 오류",
   "task.failedPages": "실패 {{count}}페이지",
+  "task.retryingFailed": "실패한 번역 항목을 다시 시도하는 중...",
   "a11y.chatResizer": "AI 채팅 패널 크기 조절",
   "a11y.graphResizer": "그래프 상세 패널 크기 조절",
   "a11y.chatPanel": "AI 어시스턴트",

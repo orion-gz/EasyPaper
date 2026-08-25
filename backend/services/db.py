@@ -794,6 +794,29 @@ def db_save_document(
         "parser_version": parser_version,
     }
 
+
+def db_finalize_document_parse(
+    doc_id: str, total_pages: int, metadata: dict,
+    detected_source_language: str, source_language_confidence: Optional[float],
+    parser_engine: str, parser_version: Optional[str],
+) -> bool:
+    """Finalize an existing document without replacing its related records."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            """UPDATE documents
+               SET total_pages = ?, metadata = ?, detected_source_language = ?,
+                   source_language_confidence = ?, parser_engine = ?, parser_version = ?
+               WHERE id = ?""",
+            (
+                int(total_pages), json.dumps(metadata, ensure_ascii=False),
+                detected_source_language, source_language_confidence,
+                parser_engine, parser_version, doc_id,
+            ),
+        )
+        conn.commit()
+    return cursor.rowcount == 1
+
+
 def db_get_document(doc_id: str) -> Optional[dict]:
     with get_db() as conn:
         cursor = conn.cursor()
