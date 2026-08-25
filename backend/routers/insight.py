@@ -57,6 +57,8 @@ async def estimate_page_insight_job(session_id: str, kind: str, target_lang: str
 @router.post("/insight-jobs/{session_id}/{kind}/start")
 async def start_page_insight_job(session_id: str, kind: str, body: InsightJobStartRequest, current_user: str = Depends(get_current_user)):
     session = require_session_owner(session_id, current_user)
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(session, "insight")
     target_lang, source_lang = _validated_languages(session, body.target_lang, body.source_lang)
     _require_insight_feature(session, kind)
     from services.insight_job import estimate_insight_job, start_keyword_job, start_summary_job, VALID_JOB_KINDS
@@ -108,6 +110,8 @@ async def get_page_insight_stream(
         raise HTTPException(status_code=400, detail=f"kind는 {VALID_KINDS} 중 하나여야 합니다.")
 
     session = require_session_owner(session_id, current_user)
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(session, "insight")
     target_lang, source_lang = _validated_languages(session, target_lang, source_lang)
     _require_insight_feature(session, kind)
     total_pages = session["total_pages"]

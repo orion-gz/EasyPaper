@@ -3799,5 +3799,56 @@
   },
   "settings:themeDarkEnabled": {
     "description": "Toast shown after switching to dark mode"
+  },
+  "library:privacy.localOnly": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.localProcessing": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.externalTransfer": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.policy": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.inherit": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.transferItems": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.items.document_text": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.items.chat_history": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.items.page_image": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.items.document_metadata": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.items.notes": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.items.document_file": {
+    "description": "Document processing privacy control UI text."
+  },
+  "library:privacy.updated": {
+    "description": "Document processing privacy control UI text."
+  },
+  "settings:deleteApiKey": {
+    "description": "Document processing privacy control UI text."
+  },
+  "settings:apiKeyConfigured": {
+    "description": "Document processing privacy control UI text."
+  },
+  "errors:external_processing_blocked": {
+    "description": "Server-enforced local-only document processing block."
+  },
+  "errors:invalid_processing_policy": {
+    "description": "Invalid document processing policy value."
   }
 }

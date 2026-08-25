@@ -50,6 +50,9 @@ class DocumentLanguagesUpdateRequest(BaseModel):
     source_language: str
     preferred_target_language: Optional[str] = None
 
+class DocumentProcessingPolicyUpdateRequest(BaseModel):
+    processing_policy: str
+
 
 MAX_LIBRARY_MIRROR_JSON_BYTES = 5 * 1024 * 1024
 
@@ -199,6 +202,8 @@ async def get_library_reading_recommendations(force: bool = False, current_user:
     /library/{doc_id}보다 먼저 등록해야 한다 - /library/search와 동일한
     이유로, 그렇지 않으면 "graph"가 doc_id 경로 파라미터로 잘못 매칭된다.
     """
+    from services.processing_policy import ensure_documents_processing_allowed
+    ensure_documents_processing_allowed(list_documents(current_user), "recommendation")
     from services.knowledge_graph import get_reading_recommendations
     return {"recommendations": await get_reading_recommendations(current_user, force=force)}
 
@@ -556,6 +561,29 @@ async def get_paper_reading_analytics_api(doc_id: str, current_user: str = Depen
         "paperId": doc_id,
         **stats,
     }
+
+
+@router.get("/library/{doc_id}/processing-policy")
+async def get_document_processing_policy(doc_id: str, current_user: str = Depends(get_current_user)):
+    doc = require_owned_document(doc_id, current_user)
+    from services.processing_policy import document_processing_status
+    return document_processing_status(doc)
+
+
+@router.patch("/library/{doc_id}/processing-policy")
+async def patch_document_processing_policy(doc_id: str, body: DocumentProcessingPolicyUpdateRequest, current_user: str = Depends(get_current_user)):
+    require_owned_document(doc_id, current_user)
+    from services.db import db_update_processing_policy
+    from services.processing_policy import document_processing_status, normalize_processing_policy
+    try:
+        policy = normalize_processing_policy(body.processing_policy)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "invalid_processing_policy", "fallback": str(exc)})
+    updated = db_update_processing_policy(doc_id, policy)
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id]["processing_policy"] = policy
+    return document_processing_status(updated)
 
 
 @router.get("/library/{doc_id}")

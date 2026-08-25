@@ -897,6 +897,22 @@ export function installPdfParserAPI(parserId, onProgress, onSuccess, onError) {
   return es
 }
 
+export async function getDocumentProcessingPolicyAPI(docId) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/processing-policy`)
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function patchDocumentProcessingPolicyAPI(docId, processingPolicy) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/processing-policy`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ processing_policy: processingPolicy })
+  })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
 export async function uninstallPdfParserAPI(parserId) {
   const res = await fetch(`${API_BASE}/settings/uninstall-pdf-parser`, {
     method: 'POST',

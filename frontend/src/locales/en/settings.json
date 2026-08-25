@@ -8,5 +8,7 @@
   "themeScopeGeneral": "Applies to general document mode only",
   "accentColor": "Accent color",
   "themeLightEnabled": "Switched to light mode ✓",
-  "themeDarkEnabled": "Switched to dark mode ✓"
+  "themeDarkEnabled": "Switched to dark mode ✓",
+  "deleteApiKey": "Delete saved key",
+  "apiKeyConfigured": "Configured (ending {{masked}})"
 }

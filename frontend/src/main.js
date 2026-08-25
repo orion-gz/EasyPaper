@@ -9,7 +9,7 @@ import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSet
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI } from './api.js'
+import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { icon } from './icons.js'
@@ -55,6 +55,8 @@ const state = {
   sourceLanguage: "auto",
   detectedSourceLanguage: "und",
   preferredTargetLanguage: null,
+  processingPolicy: "inherit",
+  processingStatus: null,
   sessionId: null,
   filename: null,
   title: null,
@@ -3164,9 +3166,18 @@ async function refreshSystemSettings() {
     }
 
     settingOllamaHost.value = sys.ollama_host || ''
-    settingOpenAIKey.value = sys.openai_api_key || ''
-    settingGeminiKey.value = sys.gemini_api_key || ''
-    settingClaudeKey.value = sys.claude_api_key || ''
+    const keyInputs = { openai: settingOpenAIKey, gemini: settingGeminiKey, claude: settingClaudeKey }
+    Object.entries(keyInputs).forEach(([provider, input]) => {
+      if (!input) return
+      const status = sys.api_keys?.[provider] || { configured: false, masked: '' }
+      input.value = ''
+      input.dataset.configured = status.configured ? 'true' : 'false'
+      input.dataset.deleteRequested = 'false'
+      input.placeholder = status.configured
+        ? t('settings:apiKeyConfigured', { masked: status.masked })
+        : ({ openai: 'sk-...', gemini: 'AIzaSy...', claude: 'sk-ant-...' }[provider] || '')
+      document.querySelector(`[data-api-key-delete="${provider}"]`)?.classList.toggle('hidden', !status.configured)
+    })
     settingOpenAlexMailto.value = sys.openalex_mailto || ''
 
     const defaultProvider = sys.default_ai_provider || sys.trans_provider || 'antigravity'
@@ -3538,9 +3549,9 @@ async function changeProviderAndModel(type, newProvider, newModel) {
       analysis_model: sys.analysis_model || sys.chat_model || '',
       library_provider: sys.library_provider || sys.analysis_provider || sys.chat_provider || 'antigravity',
       library_model: sys.library_model || sys.analysis_model || sys.chat_model || '',
-      openai_api_key: sys.openai_api_key || '',
-      gemini_api_key: sys.gemini_api_key || '',
-      claude_api_key: sys.claude_api_key || '',
+      openai_api_key: '',
+      gemini_api_key: '',
+      claude_api_key: '',
       openalex_mailto: sys.openalex_mailto || '',
       translation_prompt_template: sys.translation_prompt_template || '',
       pdf_parser_engine: sys.pdf_parser_engine || 'pymupdf'
@@ -3950,6 +3961,9 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
     openai_api_key: settingOpenAIKey ? settingOpenAIKey.value.trim() : '',
     gemini_api_key: settingGeminiKey ? settingGeminiKey.value.trim() : '',
     claude_api_key: settingClaudeKey ? settingClaudeKey.value.trim() : '',
+    delete_openai_api_key: settingOpenAIKey?.dataset.deleteRequested === 'true',
+    delete_gemini_api_key: settingGeminiKey?.dataset.deleteRequested === 'true',
+    delete_claude_api_key: settingClaudeKey?.dataset.deleteRequested === 'true',
     openalex_mailto: settingOpenAlexMailto ? settingOpenAlexMailto.value.trim() : '',
     translation_prompt_template: $('setting-prompt-template') ? $('setting-prompt-template').value : '',
     pdf_parser_engine: pdfParserEngine
@@ -3971,6 +3985,21 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
 
 ;[settingOllamaHost, settingOpenAIKey, settingGeminiKey, settingClaudeKey, settingOpenAlexMailto].forEach(el => {
   if (el) el.addEventListener('change', () => autoSaveSystemSettings())
+})
+
+;[settingOpenAIKey, settingGeminiKey, settingClaudeKey].forEach(input => {
+  input?.addEventListener('input', () => { if (input.value.trim()) input.dataset.deleteRequested = 'false' })
+})
+document.querySelectorAll('[data-api-key-delete]').forEach(button => {
+  button.addEventListener('click', async () => {
+    const input = $(`setting-${button.dataset.apiKeyDelete}-key`)
+    if (!input) return
+    input.value = ''
+    input.dataset.deleteRequested = 'true'
+    await autoSaveSystemSettings({ silent: true })
+    await refreshSystemSettings()
+    showToast(t('settings:saved'), 'success')
+  })
 })
 
 ;[settingAutoGenerateKeywords, settingAutoGenerateSummaries].forEach(el => {
@@ -8158,6 +8187,36 @@ function documentTypeChipHtml(doc, includeMode = false) {
   return `<span class="document-type-chip ${docMode}" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`
 }
 
+function processingBadgeHtml(doc) {
+  const processing = doc?.processing || doc?.processingStatus
+  if (!processing) return ''
+  const label = processing.badge === 'local_only'
+    ? t('library:privacy.localOnly')
+    : processing.badge === 'local_processing' ? t('library:privacy.localProcessing') : t('library:privacy.externalTransfer')
+  const itemLabels = {
+    document_text: t('library:privacy.items.document_text'),
+    chat_history: t('library:privacy.items.chat_history'),
+    page_image: t('library:privacy.items.page_image'),
+    document_metadata: t('library:privacy.items.document_metadata'),
+    notes: t('library:privacy.items.notes'),
+    document_file: t('library:privacy.items.document_file')
+  }
+  const items = (processing.transfer_items || []).map(item => itemLabels[item] || item).join(', ')
+  const title = items ? t('library:privacy.transferItems', { items }) : label
+  return `<span class="processing-badge ${escapeHtml(processing.badge)}" title="${escapeHtml(title)}">${escapeHtml(label)}</span>`
+}
+
+function renderViewerProcessingBadge(processing) {
+  const el = $('viewer-processing-badge')
+  if (!el) return
+  const wrapper = document.createElement('div')
+  wrapper.innerHTML = processingBadgeHtml({ processing })
+  const badge = wrapper.firstElementChild
+  if (!badge) { el.className = 'processing-badge hidden'; el.textContent = ''; return }
+  el.className = badge.className
+  el.textContent = badge.textContent
+  el.title = badge.title
+}
 function createDocCard(doc) {
   const d = prepareDocItemHtml(doc)
   const isFav = isFavoriteDoc(doc.id)
@@ -8207,6 +8266,7 @@ function createDocCard(doc) {
         <div class="lib-card-top-body">
           <div class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(d.displayTitle)}</div>
           ${documentTypeChipHtml(doc, true)}
+          ${processingBadgeHtml(doc)}
         </div>
       </div>
       ${d.tagsHtml}
@@ -8300,6 +8360,14 @@ function ensureLibraryDetailPanel() {
         <div class="lib-detail-title-block">
           <h2 id="lib-detail-title" class="lib-detail-title"></h2>
           <p id="lib-detail-subtitle" class="lib-detail-subtitle"></p>
+          <div class="lib-detail-processing-row">
+            <span id="lib-detail-processing-badge"></span>
+            <label for="lib-detail-processing-policy">${t('library:privacy.policy')}</label>
+            <select id="lib-detail-processing-policy">
+              <option value="inherit">${t('library:privacy.inherit')}</option>
+              <option value="local_only">${t('library:privacy.localOnly')}</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="lib-detail-actions">
@@ -8457,6 +8525,34 @@ function openLibraryDetailPanel(doc) {
   if (subtitleEl) {
     const date = new Date(doc.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
     subtitleEl.textContent = `등록 ${date} · ${doc.total_pages || 1}페이지`
+  }
+  const processingBadge = $('lib-detail-processing-badge')
+  if (processingBadge) processingBadge.innerHTML = processingBadgeHtml(doc)
+  const processingSelect = $('lib-detail-processing-policy')
+  if (processingSelect) {
+    processingSelect.value = doc.processing_policy || 'inherit'
+    processingSelect.onchange = async () => {
+      const previous = doc.processing_policy || 'inherit'
+      processingSelect.disabled = true
+      try {
+        const processing = await patchDocumentProcessingPolicyAPI(doc.id, processingSelect.value)
+        doc.processing_policy = processing.processing_policy
+        doc.processing = processing
+        if (processingBadge) processingBadge.innerHTML = processingBadgeHtml(doc)
+        if (state.currentDocId === doc.id) {
+          state.processingPolicy = processing.processing_policy
+          state.processingStatus = processing
+          renderViewerProcessingBadge(processing)
+        }
+        showToast(t('library:privacy.updated'), 'success')
+        await renderLibrary()
+      } catch (error) {
+        processingSelect.value = previous
+        showToast(error.message, 'error')
+      } finally {
+        processingSelect.disabled = false
+      }
+    }
   }
 
   const coverWrap = $('lib-detail-cover')
@@ -9405,6 +9501,8 @@ async function openFromLibrary(doc, shouldPushState = true) {
     state.sourceLanguage = doc.source_language || "auto"
     state.detectedSourceLanguage = doc.detected_source_language || "und"
     state.preferredTargetLanguage = doc.preferred_target_language || null
+    state.processingPolicy = doc.processing_policy || "inherit"
+    state.processingStatus = doc.processing || null
     populateLanguageControls()
 
     // 읽기 전 브리핑 게이팅: 설정에서 껐거나 이미 이 문서의 브리핑을 본 적
@@ -9490,6 +9588,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
       viewerDocumentTypeChip.className = `document-type-chip ${docMode}`
       viewerDocumentTypeChip.textContent = workspaceModeController.getTypeLabel(docMode, doc.document_type || "research_paper")
     }
+    renderViewerProcessingBadge(doc.processing)
     pageTotal.textContent = `/ ${doc.total_pages}`
     pageInput.max   = doc.total_pages
 

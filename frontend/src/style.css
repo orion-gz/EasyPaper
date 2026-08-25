@@ -7078,3 +7078,11 @@ body.light-theme .chat-drawer {
 .document-language-controls label { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .document-language-controls select { max-width:150px; background:var(--bg-elevated); color:var(--text-primary); border:1px solid var(--border); border-radius:6px; padding:3px 5px; }
 #document-language-status { max-width:230px; white-space:normal; }
+
+.processing-badge { display:inline-flex; align-items:center; width:max-content; padding:2px 7px; border-radius:999px; font-size:10px; font-weight:700; border:1px solid var(--border-strong); color:var(--text-secondary); background:var(--bg-elevated); }
+.processing-badge.local_only { color:#166534; background:#dcfce7; border-color:#86efac; }
+.processing-badge.local_processing { color:#075985; background:#e0f2fe; border-color:#7dd3fc; }
+.processing-badge.external_transfer { color:#9a3412; background:#ffedd5; border-color:#fdba74; }
+.lib-detail-processing-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:6px; font-size:11px; color:var(--text-secondary); }
+.lib-detail-processing-row select { border:1px solid var(--border-strong); border-radius:7px; background:var(--bg-elevated); color:var(--text-primary); padding:4px 7px; font-size:11px; }
+.api-key-delete-btn { margin-top:6px; padding:5px 8px; border:1px solid var(--border-strong); border-radius:7px; background:transparent; color:var(--text-secondary); cursor:pointer; font-size:11px; }

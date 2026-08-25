@@ -57,6 +57,8 @@ _RETRY_COOLDOWN_SECONDS = 15
 def _ensure_generation_started(doc_id: str, target_lang: str, source_lang: str, session: dict, current_user: str) -> None:
     """이 문서/언어 조합의 브리핑 생성이 이미 진행 중이 아니면 백그라운드
     태스크로 새로 시작한다. GET(캐시 미스)과 POST(재생성) 양쪽에서 공유한다."""
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(session, "primer")
     document_mode = session.get("document_mode", "research")
     document_type = session.get("document_type", "research_paper")
     # 기존 연구 브리핑의 task key는 유지해 쿨다운/진행 중 상태 호환성을 보존한다.
@@ -109,6 +111,8 @@ async def get_primer(doc_id: str, target_lang: str = "ko", current_user: str = D
     시작(또는 이미 진행 중이면 그대로 두고)하고 {"status": "pending"}을 반환합니다."""
     session = require_session_owner(doc_id, current_user)
     target_lang, source_lang = _validated_languages(session, target_lang)
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(session, "primer")
     if session.get("document_mode", "research") == "general":
         cached = get_cached_document_overview(
             doc_id, session.get("document_type", "other"), target_lang=target_lang, source_lang=source_lang,
@@ -129,6 +133,8 @@ async def regenerate_primer(doc_id: str, target_lang: str = "ko", current_user: 
     생성은 백그라운드로 돌리고 즉시 {"status": "pending"}을 반환한다."""
     session = require_session_owner(doc_id, current_user)
     target_lang, source_lang = _validated_languages(session, target_lang)
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(session, "primer")
     if session.get("document_mode", "research") == "general":
         invalidate_document_overview(doc_id, session.get("document_type", "other"), target_lang, source_lang)
     else:

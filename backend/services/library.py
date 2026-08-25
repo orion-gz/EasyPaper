@@ -29,6 +29,12 @@ from services.db import (
 )
 
 
+def _attach_processing_status(doc: dict) -> dict:
+    from services.processing_policy import document_processing_status
+    doc["processing"] = document_processing_status(doc)
+    return doc
+
+
 def _translation_suffix_for_doc(doc: dict, target_lang: Optional[str], style: Optional[str], ignore_math: Optional[bool], ignore_table: Optional[bool], ignore_refs: Optional[bool]) -> Optional[str]:
     if target_lang is None or style is None:
         return None
@@ -119,6 +125,7 @@ def get_document(
 
         rows = db_bulk_translation_rows([doc_id]).get(doc_id, [])
         doc["translated_pages"] = _resolve_translated_pages(rows, suffix)
+        _attach_processing_status(doc)
         return doc
     return None
 
@@ -152,6 +159,7 @@ def list_documents(
         )
         doc["translated_pages"] = _resolve_translated_pages(rows_by_doc.get(doc["id"], []), suffix)
         doc["folder_id"] = folder_map.get(doc["id"])
+        _attach_processing_status(doc)
     return docs
 
 
@@ -171,6 +179,7 @@ def search_documents(username: str, query: str, only_trash: bool = False, docume
         doc["folder_id"] = folder_map.get(doc["id"])
         pages = sorted({r[0] for r in rows_by_doc.get(doc["id"], [])})
         doc["translated_pages"] = pages
+        _attach_processing_status(doc)
     return docs
 
 

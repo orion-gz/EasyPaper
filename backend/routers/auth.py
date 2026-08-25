@@ -255,9 +255,17 @@ class SystemSettingsRequest(BaseModel):
     openai_api_key: str = ""
     gemini_api_key: str = ""
     claude_api_key: str = ""
+    delete_openai_api_key: bool = False
+    delete_gemini_api_key: bool = False
+    delete_claude_api_key: bool = False
     openalex_mailto: str = ""
     translation_prompt_template: str = ""
     pdf_parser_engine: str = "pymupdf"
+
+def _masked_key_status(value: str) -> dict:
+    value = value or ""
+    return {"configured": bool(value), "masked": ("••••" + value[-4:]) if value else ""}
+
 
 @router.get("/settings/system")
 async def get_system_settings(current_user: str = Depends(get_current_user)):
@@ -277,9 +285,11 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
         "analysis_model": get_analysis_model(),
         "library_provider": get_library_provider(),
         "library_model": get_library_model(),
-        "openai_api_key": get_openai_api_key(),
-        "gemini_api_key": get_gemini_api_key(),
-        "claude_api_key": get_claude_api_key(),
+        "api_keys": {
+            "openai": _masked_key_status(get_openai_api_key()),
+            "gemini": _masked_key_status(get_gemini_api_key()),
+            "claude": _masked_key_status(get_claude_api_key()),
+        },
         "openalex_mailto": get_openalex_mailto(),
         "translation_prompt_template": get_translation_prompt_template(),
         "pdf_parser_engine": get_pdf_parser_engine()
@@ -321,6 +331,10 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
     # 다시 올라오게 한다.
     restart_needed = venv_manager.restart_required_for_engine(pdf_parser_engine)
 
+    openai_api_key = "" if data.delete_openai_api_key else (data.openai_api_key.strip() or get_openai_api_key())
+    gemini_api_key = "" if data.delete_gemini_api_key else (data.gemini_api_key.strip() or get_gemini_api_key())
+    claude_api_key = "" if data.delete_claude_api_key else (data.claude_api_key.strip() or get_claude_api_key())
+
     update_system_settings(
         ollama_host=data.ollama_host.strip(),
         trans_provider=trans_provider,
@@ -333,9 +347,9 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
         analysis_model=data.analysis_model.strip(),
         library_provider=library_provider,
         library_model=data.library_model.strip(),
-        openai_api_key=data.openai_api_key.strip(),
-        gemini_api_key=data.gemini_api_key.strip(),
-        claude_api_key=data.claude_api_key.strip(),
+        openai_api_key=openai_api_key,
+        gemini_api_key=gemini_api_key,
+        claude_api_key=claude_api_key,
         openalex_mailto=data.openalex_mailto.strip(),
         pdf_parser_engine=pdf_parser_engine
     )

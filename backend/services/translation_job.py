@@ -172,6 +172,7 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
     doc_title = ""
     document_mode = "research"
     document_type = "research_paper"
+    doc = None
     try:
         doc = get_document(session_id)
         if doc:
@@ -180,6 +181,18 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
             document_type = doc.get("document_type", "research_paper")
     except Exception as e:
         print(f"[Job {session_id}] Failed to get document title: {e}")
+
+    if doc:
+        from fastapi import HTTPException
+        from services.processing_policy import ensure_processing_allowed
+        try:
+            ensure_processing_allowed(doc, "translate")
+        except HTTPException as exc:
+            job["status"] = "failed"
+            job["error_code"] = exc.detail.get("code", "external_processing_blocked")
+            job["updated_at"] = datetime.now(timezone.utc).isoformat()
+            _save_job(session_id, job)
+            return
 
     from services.document_policy import translation_cache_candidates
     suffix_candidates = translation_cache_candidates(
