@@ -3865,5 +3865,56 @@
   },
   "chat:retrySameQuestion": {
     "description": "Persistent document task recovery UI text."
+  },
+  "chat:staleRevision": {
+    "description": "Badge for an assistant response generated from an older document revision."
+  },
+  "library:reparse.menu": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.selectTitle": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.selectLabel": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.start": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.running": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.failed": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.compareTitle": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.current": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.candidate": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.problemPages": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.affected": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.preserved": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.apply": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.applied": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.noInstalled": {
+    "description": "PDF parsing diagnostics and candidate reparse UI."
+  },
+  "library:reparse.cancel": {
+    "description": "Cancel PDF reparse dialog."
   }
 }

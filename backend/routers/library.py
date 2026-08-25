@@ -54,6 +54,32 @@ class DocumentProcessingPolicyUpdateRequest(BaseModel):
     processing_policy: str
 
 
+class ReparsePreviewRequest(BaseModel):
+    candidate_engine: str
+
+
+
+async def _load_diagnostic_images(doc_id: str, doc: dict, pdf_path: str) -> list[dict]:
+    from services.cache import get_cached_images, save_images_cache
+    images = get_cached_images(
+        doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"),
+    )
+    if images is not None:
+        return images
+    try:
+        import asyncio
+        from services.pdf_parser import extract_pdf_images
+        images = await asyncio.to_thread(
+            extract_pdf_images, pdf_path, doc.get("parser_engine") or "pymupdf",
+        )
+        save_images_cache(
+            doc_id, pdf_path, images, doc.get("parser_engine"), doc.get("parser_version"),
+        )
+        return images
+    except Exception:
+        return []
+
+
 MAX_LIBRARY_MIRROR_JSON_BYTES = 5 * 1024 * 1024
 
 
@@ -586,6 +612,73 @@ async def patch_document_processing_policy(doc_id: str, body: DocumentProcessing
     return document_processing_status(updated)
 
 
+
+@router.get("/library/{doc_id}/parsing-diagnostics")
+async def get_document_parsing_diagnostics(doc_id: str, revision: Optional[int] = None,
+                                           current_user: str = Depends(get_current_user)):
+    doc = require_owned_document(doc_id, current_user)
+    from services.reparse import get_diagnostics, save_diagnostics
+    requested_revision = int(revision or doc.get("content_revision") or 1)
+    report = get_diagnostics(doc_id, requested_revision)
+    if report is None and requested_revision == int(doc.get("content_revision") or 1):
+        from routers.upload import require_session_owner
+        session = require_session_owner(doc_id, current_user)
+        images = await _load_diagnostic_images(doc_id, doc, session["pdf_path"])
+        from services.pdf_diagnostics import diagnose_pages
+        report = diagnose_pages(
+            session["pages"], images, doc.get("parser_engine"), doc.get("parser_version"),
+        )
+        save_diagnostics(doc_id, requested_revision, report)
+    if report is None:
+        raise HTTPException(status_code=404, detail="파싱 진단 보고서를 찾을 수 없습니다.")
+    return report
+
+
+@router.post("/library/{doc_id}/reparse-preview")
+async def create_document_reparse_preview(doc_id: str, body: ReparsePreviewRequest,
+                                          current_user: str = Depends(get_current_user)):
+    doc = require_owned_document(doc_id, current_user)
+    from routers.upload import require_session_owner
+    session = require_session_owner(doc_id, current_user)
+    images = await _load_diagnostic_images(doc_id, doc, session["pdf_path"])
+    from services.reparse import create_preview
+    try:
+        return create_preview(doc, session["pages"], session["pdf_path"], body.candidate_engine, images)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/library/{doc_id}/reparse-preview/{task_id}")
+async def get_document_reparse_preview(doc_id: str, task_id: str,
+                                       current_user: str = Depends(get_current_user)):
+    require_owned_document(doc_id, current_user)
+    from services.reparse import get_preview, preview_impact
+    preview = get_preview(task_id)
+    if not preview or preview["doc_id"] != doc_id:
+        raise HTTPException(status_code=404, detail="재분석 미리보기를 찾을 수 없습니다.")
+    preview["impact"] = preview_impact(doc_id, int(preview["source_revision"]))
+    return preview
+
+
+@router.post("/library/{doc_id}/reparse-preview/{task_id}/apply")
+async def apply_document_reparse_preview(doc_id: str, task_id: str,
+                                         current_user: str = Depends(get_current_user)):
+    require_owned_document(doc_id, current_user)
+    from routers.upload import sessions
+    from services.reparse import apply_preview
+    try:
+        return await apply_preview(doc_id, task_id, sessions)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="재분석 미리보기를 찾을 수 없습니다.")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": "reparse_preview_not_ready", "fallback": str(exc)})
+    except RuntimeError as exc:
+        code = str(exc)
+        if code in {"pdf_revision_conflict", "content_revision_conflict"}:
+            raise HTTPException(status_code=409, detail={"code": code, "fallback": "문서가 변경되어 후보 결과를 적용할 수 없습니다."})
+        raise HTTPException(status_code=500, detail={"code": "reparse_apply_failed", "fallback": code})
+
+
 @router.get("/library/{doc_id}")
 async def get_library_document(
     doc_id: str,
@@ -820,6 +913,10 @@ async def clear_library_document_cache(doc_id: str, current_user: str = Depends(
     require_owned_document(doc_id, current_user)
     from services.cache import clear_document_cache
     cleared_files, freed_bytes = clear_document_cache(doc_id)
+    from services.pdf_parser import clear_parser_memory_cache
+    clear_parser_memory_cache()
+    from routers.upload import sessions
+    sessions.pop(doc_id, None)
     return {
         "message": "PDF 추출 캐시가 삭제되었습니다.",
         "cleared_files": cleared_files,
@@ -842,19 +939,19 @@ async def get_library_document_images(doc_id: str, current_user: str = Depends(g
     import asyncio
     from services.cache import get_cached_images, save_images_cache
 
-    require_owned_document(doc_id, current_user)
+    doc = require_owned_document(doc_id, current_user)
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
 
-    images = get_cached_images(doc_id, pdf_path)
+    images = get_cached_images(doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"))
     if images is not None:
         return {"images": images}
 
     try:
         from services.pdf_parser import extract_pdf_images
-        images = await asyncio.to_thread(extract_pdf_images, pdf_path)
-        save_images_cache(doc_id, pdf_path, images)
+        images = await asyncio.to_thread(extract_pdf_images, pdf_path, doc.get("parser_engine"))
+        save_images_cache(doc_id, pdf_path, images, doc.get("parser_engine"), doc.get("parser_version"))
         return {"images": images}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"이미지 좌표 추출 실패: {str(e)}")
@@ -869,12 +966,12 @@ async def get_library_figure_image(doc_id: str, index: int, current_user: str = 
     from services.cache import get_cached_images
     from services.pdf_parser import render_image_crop_bytes
 
-    require_owned_document(doc_id, current_user)
+    doc = require_owned_document(doc_id, current_user)
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
 
-    images = get_cached_images(doc_id, pdf_path)
+    images = get_cached_images(doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"))
     if images is None or index < 0 or index >= len(images):
         raise HTTPException(status_code=404, detail="Figure 정보를 찾을 수 없습니다.")
 
@@ -897,7 +994,7 @@ async def get_library_references(doc_id: str, current_user: str = Depends(get_cu
     참고문헌이 수십~백여 개인 경우가 흔한데, 열 때마다 전부 미리 조회하면
     외부 API 레이트리밋에 바로 걸리고 대부분은 클릭되지도 않아 낭비다.
     """
-    require_owned_document(doc_id, current_user)
+    doc = require_owned_document(doc_id, current_user)
 
     from services.library import get_page_insight, save_page_insight
 
@@ -920,10 +1017,10 @@ async def get_library_references(doc_id: str, current_user: str = Depends(get_cu
         # ensure_session()/get_cached_pages()와 같은 디스크 캐시를 공유한다 -
         # 그렇지 않으면 세션이 아직 복원되지 않은 상태(서버 재시작 직후 첫
         # 열람)에서 텍스트를 한 번 더 처음부터 추출하게 된다.
-        pages = get_cached_pages(doc_id, pdf_path)
+        pages = get_cached_pages(doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"))
         if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path)
-            save_pages_cache(doc_id, pdf_path, pages)
+            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"))
+            save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
         references = extract_reference_list(pages)
     except Exception:
         references = {}
@@ -1068,10 +1165,10 @@ async def reclassify_paper_tags(
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
-    pages = get_cached_pages(doc_id, pdf_path)
+    pages = get_cached_pages(doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"))
     if pages is None:
-        pages = await asyncio.to_thread(extract_pages, pdf_path)
-        save_pages_cache(doc_id, pdf_path, pages)
+        pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"))
+        save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
     title = (doc.get("metadata") or {}).get("title") or doc.get("filename") or ""
     paper_tags = await classify_and_store_paper_tags(doc_id, pages, title, force=True)
     if not paper_tags:

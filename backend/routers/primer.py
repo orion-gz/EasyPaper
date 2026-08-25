@@ -54,6 +54,17 @@ _last_failure_at: dict[str, float] = {}
 _RETRY_COOLDOWN_SECONDS = 15
 
 
+
+def cancel_primer_generation(doc_id: str) -> bool:
+    cancelled = False
+    prefix = f"{doc_id}:"
+    for task_key, task in list(_pending_generations.items()):
+        if task_key.startswith(prefix) and not task.done():
+            task.cancel()
+            cancelled = True
+    return cancelled
+
+
 def _ensure_generation_started(doc_id: str, target_lang: str, source_lang: str, session: dict, current_user: str, durable_task_id: str | None = None) -> None:
     """이 문서/언어 조합의 브리핑 생성이 이미 진행 중이 아니면 백그라운드
     태스크로 새로 시작한다. GET(캐시 미스)과 POST(재생성) 양쪽에서 공유한다."""

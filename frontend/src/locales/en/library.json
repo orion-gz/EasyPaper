@@ -20,5 +20,21 @@
   "privacy.items.document_metadata": "document metadata",
   "privacy.items.notes": "notes",
   "privacy.items.document_file": "document file",
-  "privacy.updated": "Document processing policy saved."
+  "privacy.updated": "Document processing policy saved.",
+  "reparse.menu": "Diagnose and reparse PDF",
+  "reparse.selectTitle": "Choose candidate parser",
+  "reparse.selectLabel": "Parser engine",
+  "reparse.start": "Analyze",
+  "reparse.running": "Candidate parser analysis started.",
+  "reparse.failed": "Candidate analysis failed.",
+  "reparse.compareTitle": "Compare parsing results",
+  "reparse.current": "Current",
+  "reparse.candidate": "Candidate",
+  "reparse.problemPages": "Problem pages: {{count}}",
+  "reparse.affected": "Regenerate {{translations}} translations and {{insights}} insights; cancel {{tasks}} running tasks.",
+  "reparse.preserved": "Memos, annotations, and chat history are preserved.",
+  "reparse.apply": "Apply candidate",
+  "reparse.applied": "Reparse applied at revision {{revision}}.",
+  "reparse.noInstalled": "No alternative parser is installed.",
+  "reparse.cancel": "Cancel"
 }

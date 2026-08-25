@@ -921,6 +921,37 @@ export async function cancelDocumentTaskAPI(taskId) {
   return res.json()
 }
 
+
+
+export async function getParsingDiagnosticsAPI(docId, revision = null) {
+  const query = revision == null ? '' : '?revision=' + encodeURIComponent(revision)
+  const res = await fetch(API_BASE + '/library/' + encodeURIComponent(docId) + '/parsing-diagnostics' + query)
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function createReparsePreviewAPI(docId, candidateEngine) {
+  const res = await fetch(API_BASE + '/library/' + encodeURIComponent(docId) + '/reparse-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ candidate_engine: candidateEngine })
+  })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function getReparsePreviewAPI(docId, taskId) {
+  const res = await fetch(API_BASE + '/library/' + encodeURIComponent(docId) + '/reparse-preview/' + encodeURIComponent(taskId), { cache: 'no-store' })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function applyReparsePreviewAPI(docId, taskId) {
+  const res = await fetch(API_BASE + '/library/' + encodeURIComponent(docId) + '/reparse-preview/' + encodeURIComponent(taskId) + '/apply', { method: 'POST' })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
 export async function getDocumentProcessingPolicyAPI(docId) {
   const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/processing-policy`)
   if (!res.ok) throw await apiError(res)

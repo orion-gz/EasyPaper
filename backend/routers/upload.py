@@ -2,6 +2,7 @@ import uuid
 import os
 import shutil
 import asyncio
+import json
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import aiofiles
@@ -41,10 +42,25 @@ def ensure_session(session_id: str) -> bool:
             
     try:
         from services.cache import get_cached_pages, save_pages_cache
-        pages = get_cached_pages(session_id, pdf_path)
+        parser_engine = doc.get("parser_engine") or "pymupdf"
+        parser_version = doc.get("parser_version")
+        pages = get_cached_pages(session_id, pdf_path, parser_engine, parser_version)
         if pages is None:
-            pages = extract_pages(pdf_path)
-            save_pages_cache(session_id, pdf_path, pages)
+            if parser_engine in {"marker", "mineru"}:
+                from services.reparse import parse_document_isolated
+                payload = parse_document_isolated(pdf_path, parser_engine)
+                pages = payload["pages"]
+                parser_version = payload["parser_version"]
+                from services.cache import save_images_cache
+                save_images_cache(
+                    session_id, pdf_path, payload.get("images") or [],
+                    parser_engine, parser_version,
+                )
+            else:
+                pages = extract_pages(pdf_path, engine=parser_engine)
+                from services.pdf_diagnostics import parser_version as resolve_parser_version
+                parser_version = resolve_parser_version(parser_engine)
+            save_pages_cache(session_id, pdf_path, pages, parser_engine, parser_version)
         if doc.get("source_language", "auto") == "auto" and doc.get("detected_source_language", "und") == "und":
             from services.languages import detect_document_language
             detection = detect_document_language(pages)
@@ -71,6 +87,9 @@ def ensure_session(session_id: str) -> bool:
             "source_language_confidence": doc.get("source_language_confidence"),
             "preferred_target_language": doc.get("preferred_target_language"),
             "processing_policy": doc.get("processing_policy", "inherit"),
+            "content_revision": int(doc.get("content_revision") or 1),
+            "parser_engine": parser_engine,
+            "parser_version": parser_version,
         }
         return True
     except Exception:
@@ -121,6 +140,8 @@ def restore_sessions_from_library():
     resume_incomplete_jobs(sessions)
     from services.document_tasks import recover_document_tasks
     recover_document_tasks(sessions)
+    from services.reparse import recover_reparse_previews
+    recover_reparse_previews()
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -222,7 +243,48 @@ async def upload_pdf(
         source_language=source_lang, detected_source_language=detected_source_language,
         source_language_confidence=float(detection["confidence"]),
         preferred_target_language=target_lang,
+        content_revision=1,
+        parser_engine=((pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf"),
+        parser_version=__import__("services.pdf_diagnostics", fromlist=["parser_version"]).parser_version(
+            (pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf"
+        ),
     )
+
+    active_parser_engine = (pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf"
+    from services.pdf_diagnostics import diagnose_pages, parser_version
+    active_parser_version = parser_version(active_parser_engine)
+    persistent_pdf_path = lib_pdf_path(session_id)
+    detected_images = []
+    if persistent_pdf_path:
+        from services.cache import save_images_cache, save_pages_cache
+        save_pages_cache(session_id, persistent_pdf_path, pages, active_parser_engine, active_parser_version)
+        try:
+            from services.pdf_parser import extract_pdf_images
+            detected_images = await asyncio.to_thread(extract_pdf_images, persistent_pdf_path, active_parser_engine)
+            save_images_cache(
+                session_id, persistent_pdf_path, detected_images,
+                active_parser_engine, active_parser_version,
+            )
+        except Exception:
+            detected_images = []
+    initial_report = diagnose_pages(
+        pages, detected_images, active_parser_engine, active_parser_version,
+    )
+    from services.db import get_db
+    from datetime import datetime, timezone
+    with get_db() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO parsing_diagnostics
+               (doc_id, content_revision, parser_engine, parser_version, report, created_at)
+               VALUES (?, 1, ?, ?, ?, ?)""",
+            (
+                session_id, active_parser_engine, active_parser_version,
+                json.dumps(initial_report, ensure_ascii=False),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        conn.commit()
+
     from services.context_retrieval import index_document_chunks
     indexed_chunks = index_document_chunks(session_id, pages)
     from services.observability import record_document_mode_event
@@ -247,6 +309,11 @@ async def upload_pdf(
         "source_language_confidence": detection["confidence"],
         "preferred_target_language": target_lang,
         "processing_policy": "inherit",
+        "content_revision": 1,
+        "parser_engine": (pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf",
+        "parser_version": __import__("services.pdf_diagnostics", fromlist=["parser_version"]).parser_version(
+            (pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf"
+        ),
     }
 
     # translation_mode가 "auto"(기본값)가 아니면 - 페이지 번역 버튼을 누를 때(pane) 또는

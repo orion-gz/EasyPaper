@@ -85,33 +85,67 @@ def _pages_cache_path(doc_id: str) -> str:
     return os.path.join(CACHE_DIR, f"{doc_id}{_PAGES_CACHE_SUFFIX}")
 
 
-def get_cached_pages(doc_id: str, pdf_path: str) -> Optional[list]:
-    """PDF에서 추출한 페이지 텍스트(extract_pages 결과)의 디스크 캐시를
-    반환합니다. 캐시가 없거나, 원본 PDF의 mtime/크기가 캐시 저장 당시와
-    달라졌다면(파일이 교체된 경우 등) None을 반환해 재추출을 유도합니다.
-    """
+
+def _document_parser_identity(doc_id: str, engine: str | None,
+                              version: str | None) -> tuple[str, str]:
+    if engine is None:
+        try:
+            from services.db import db_get_document
+            doc = db_get_document(doc_id)
+            if doc:
+                engine = doc.get("parser_engine") or "pymupdf"
+                if version is None:
+                    version = doc.get("parser_version")
+        except Exception:
+            pass
+    from services.pdf_diagnostics import parser_identity
+    resolved_engine, resolved_version = parser_identity(engine)
+    return resolved_engine, version if version is not None else resolved_version
+
+
+def get_cached_pages(doc_id: str, pdf_path: str, engine: str | None = None,
+                     version: str | None = None) -> Optional[list]:
+    """Return cached pages only when PDF, parser, version, and schema all match."""
     path = _pages_cache_path(doc_id)
     if not os.path.exists(path):
         return None
     try:
+        from services.pdf_diagnostics import (
+            PAGES_CACHE_SCHEMA_VERSION, parser_identity, pdf_fingerprint,
+        )
+        expected_engine, expected_version = _document_parser_identity(doc_id, engine, version)
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        stat = os.stat(pdf_path)
-        if data.get("mtime") != stat.st_mtime or data.get("size") != stat.st_size:
+        if (
+            data.get("cache_schema_version") != PAGES_CACHE_SCHEMA_VERSION
+            or data.get("pdf_fingerprint") != pdf_fingerprint(pdf_path)
+            or data.get("parser_engine") != expected_engine
+            or data.get("parser_version") != expected_version
+        ):
             return None
         return data.get("pages")
     except Exception:
         return None
 
 
-def save_pages_cache(doc_id: str, pdf_path: str, pages: list) -> None:
-    """extract_pages() 결과를 디스크에 캐싱해, 다음 서버 재시작 이후
-    첫 열람 시에도 PDF를 다시 파싱하지 않고 즉시 불러올 수 있게 합니다."""
+def save_pages_cache(doc_id: str, pdf_path: str, pages: list, engine: str | None = None,
+                     version: str | None = None) -> None:
+    """Persist parser-aware page extraction output."""
     try:
-        stat = os.stat(pdf_path)
+        from services.pdf_diagnostics import (
+            PAGES_CACHE_SCHEMA_VERSION, parser_identity, pdf_fingerprint,
+        )
+        actual_engine = engine or next(
+            (str(page.get("parser_engine")) for page in pages if page.get("parser_engine")), None
+        )
+        actual_engine, actual_version = parser_identity(actual_engine)
+        if version is not None:
+            actual_version = version
         atomic_write_text(_pages_cache_path(doc_id), json.dumps({
-            "mtime": stat.st_mtime,
-            "size": stat.st_size,
+            "cache_schema_version": PAGES_CACHE_SCHEMA_VERSION,
+            "pdf_fingerprint": pdf_fingerprint(pdf_path),
+            "parser_engine": actual_engine,
+            "parser_version": actual_version,
             "pages": pages,
         }, ensure_ascii=False))
     except Exception:
@@ -142,34 +176,46 @@ def _images_cache_path(doc_id: str) -> str:
     return os.path.join(CACHE_DIR, f"{doc_id}{_IMAGES_CACHE_SUFFIX}")
 
 
-def get_cached_images(doc_id: str, pdf_path: str) -> Optional[list]:
-    """extract_pdf_images() 결과(그림/표 좌표)의 디스크 캐시를 반환합니다.
-    캐시가 없거나 원본 PDF의 mtime/크기가 저장 당시와 달라졌다면 None을
-    반환해 재추출을 유도합니다. get_cached_pages()와 동일한 방식이다 -
-    이 함수가 없으면 문서를 열 때마다 매번 PyMuPDF로 페이지별 표/그림
-    탐지(find_tables, get_drawings 등 비용이 큰 연산)를 처음부터 다시
-    수행하게 되어, 텍스트 추출 캐시가 있어도 열람이 계속 느리다."""
+def get_cached_images(doc_id: str, pdf_path: str, engine: str | None = None,
+                      version: str | None = None) -> Optional[list]:
+    """Return cached visual regions only for the matching parser identity."""
     path = _images_cache_path(doc_id)
     if not os.path.exists(path):
         return None
     try:
+        from services.pdf_diagnostics import (
+            PAGES_CACHE_SCHEMA_VERSION, parser_identity, pdf_fingerprint,
+        )
+        expected_engine, expected_version = _document_parser_identity(doc_id, engine, version)
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        stat = os.stat(pdf_path)
-        if data.get("mtime") != stat.st_mtime or data.get("size") != stat.st_size:
+        if (
+            data.get("cache_schema_version") != PAGES_CACHE_SCHEMA_VERSION
+            or data.get("pdf_fingerprint") != pdf_fingerprint(pdf_path)
+            or data.get("parser_engine") != expected_engine
+            or data.get("parser_version") != expected_version
+        ):
             return None
         return data.get("images")
     except Exception:
         return None
 
 
-def save_images_cache(doc_id: str, pdf_path: str, images: list) -> None:
-    """extract_pdf_images() 결과를 디스크에 캐싱합니다."""
+def save_images_cache(doc_id: str, pdf_path: str, images: list, engine: str | None = None,
+                      version: str | None = None) -> None:
+    """Persist parser-aware image/table coordinates."""
     try:
-        stat = os.stat(pdf_path)
+        from services.pdf_diagnostics import (
+            PAGES_CACHE_SCHEMA_VERSION, parser_identity, pdf_fingerprint,
+        )
+        actual_engine, actual_version = parser_identity(engine)
+        if version is not None:
+            actual_version = version
         atomic_write_text(_images_cache_path(doc_id), json.dumps({
-            "mtime": stat.st_mtime,
-            "size": stat.st_size,
+            "cache_schema_version": PAGES_CACHE_SCHEMA_VERSION,
+            "pdf_fingerprint": pdf_fingerprint(pdf_path),
+            "parser_engine": actual_engine,
+            "parser_version": actual_version,
             "images": images,
         }, ensure_ascii=False))
     except Exception:

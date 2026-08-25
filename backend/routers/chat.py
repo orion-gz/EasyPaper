@@ -341,5 +341,5 @@ async def get_compare_chat_sessions(current_user: str = Depends(get_current_user
 async def get_chat_history(session_id: str, current_user: str = Depends(get_current_user)):
     """특정 문서의 이전 채팅 히스토리를 반환합니다."""
     require_session_owner(session_id, current_user)
-    history = db_get_chat_history(session_id)
+    history = db_get_chat_history(session_id, include_revision=True)
     return {"history": history}

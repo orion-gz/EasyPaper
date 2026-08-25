@@ -9,5 +9,6 @@
   "suggestions.general.summary": "Summarize the key points of this document.",
   "suggestions.general.procedure": "Explain the important procedures and prerequisites.",
   "suggestions.general.cautions": "Identify the cautions and key figures.",
-  "retrySameQuestion": "Send same question again"
+  "retrySameQuestion": "Send same question again",
+  "staleRevision": "Based on an earlier document analysis"
 }
