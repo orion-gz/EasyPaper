@@ -478,16 +478,23 @@
               <div class="progress-mini-bar" id="progress-mini-bar"></div>
               <span id="progress-mini-text">0%</span>
             </div>
-            <div id="document-language-controls" class="document-language-controls" hidden>
-              <label><span data-i18n="viewer:source.label">Source</span><select id="document-source-lang" aria-label="Document source language" data-i18n-aria-label="viewer:source.aria"></select></label>
-              <span aria-hidden="true">→</span>
-              <label><span data-i18n="viewer:target.label">Target</span><select id="document-target-lang" aria-label="Document target language" data-i18n-aria-label="viewer:target.aria"></select></label>
-              <span id="document-language-status" role="status"></span>
-            </div>
-            <!-- AI 번역 모델 선택 드롭다운 -->
-            <div class="kebab-menu-row">
-              <span class="kebab-menu-label">번역 모델</span>
-              <div id="viewer-trans-provider"></div>
+            <div class="kebab-translation-grid">
+              <div id="document-language-controls" class="document-language-controls" hidden>
+                <div class="kebab-menu-row">
+                  <span id="document-source-lang-label" class="kebab-menu-label" data-i18n="viewer:source.label">Source</span>
+                  <select id="document-source-lang" aria-label="Document source language" data-i18n-aria-label="viewer:source.aria"></select>
+                </div>
+                <div class="kebab-menu-row">
+                  <span id="document-target-lang-label" class="kebab-menu-label" data-i18n="viewer:target.label">Target</span>
+                  <select id="document-target-lang" aria-label="Document target language" data-i18n-aria-label="viewer:target.aria"></select>
+                </div>
+              </div>
+              <!-- AI 번역 모델 선택 드롭다운 -->
+              <div class="kebab-menu-row">
+                <span class="kebab-menu-label">번역 모델</span>
+                <div id="viewer-trans-provider"></div>
+              </div>
+              <span id="document-language-status" role="status" hidden></span>
             </div>
 
             <div class="kebab-menu-divider"></div>

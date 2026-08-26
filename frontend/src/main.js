@@ -119,6 +119,113 @@ const $ = (id) => document.getElementById(id)
 
 let languageCatalog = []
 
+// Native select values and change events remain the source of truth while the viewer
+// menu presents the same button-and-popover pattern as the model picker.
+class LanguageSelectPicker {
+  constructor(select) {
+    if (!select) return
+    this.select = select
+    this.container = document.createElement('div')
+    this.container.className = 'provider-picker language-picker'
+    select.parentNode.insertBefore(this.container, select)
+    this.container.appendChild(select)
+    select.classList.add('sr-only')
+    select.setAttribute('aria-hidden', 'true')
+    select.tabIndex = -1
+    this.button = document.createElement('button')
+    this.button.type = 'button'
+    this.button.className = 'provider-picker-btn'
+    this.button.setAttribute('aria-haspopup', 'listbox')
+    this.button.setAttribute('aria-expanded', 'false')
+    this.button.setAttribute('aria-labelledby', select.id + '-label ' + select.id + '-picker-value')
+    this.button.innerHTML = '<span id="' + select.id + '-picker-value" class="picker-label"></span><span class="picker-arrow" aria-hidden="true">▾</span>'
+    this.panel = document.createElement('div')
+    this.panel.id = select.id + '-picker-panel'
+    this.panel.className = 'provider-picker-panel'
+    this.panel.setAttribute('role', 'listbox')
+    this.button.setAttribute('aria-controls', this.panel.id)
+    this.container.append(this.button, this.panel)
+    this.button.addEventListener('click', (event) => {
+      event.stopPropagation()
+      this.container.classList.contains('open') ? this.close() : this.open()
+    })
+    this.button.addEventListener('keydown', (event) => {
+      if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return
+      event.preventDefault()
+      this.open()
+      const items = [...this.panel.querySelectorAll('.picker-model-item')]
+      const selectedIndex = Math.max(0, items.findIndex(item => item.getAttribute('aria-selected') === 'true'))
+      items[event.key === 'ArrowUp' ? Math.max(0, items.length - 1) : selectedIndex]?.focus()
+    })
+    select.addEventListener('change', () => this.refresh())
+    document.addEventListener('click', (event) => {
+      if (!this.container.contains(event.target)) this.close()
+    })
+    this.refresh()
+  }
+  open() {
+    document.querySelectorAll('.language-picker.open .provider-picker-btn').forEach(button => {
+      button.setAttribute('aria-expanded', 'false')
+    })
+    document.querySelectorAll('.provider-picker.open').forEach(picker => picker.classList.remove('open'))
+    this.rebuildPanel()
+    this.container.classList.add('open')
+    this.button.setAttribute('aria-expanded', 'true')
+  }
+  close({ focus = false } = {}) {
+    this.container.classList.remove('open')
+    this.button.setAttribute('aria-expanded', 'false')
+    if (focus) this.button.focus()
+  }
+  refresh() {
+    const selected = this.select.selectedOptions[0]
+    this.button.querySelector('.picker-label').textContent = selected?.textContent || ''
+    this.button.title = this.select.getAttribute('aria-label') || selected?.textContent || ''
+    if (this.container.classList.contains('open')) this.rebuildPanel()
+  }
+  rebuildPanel() {
+    this.panel.innerHTML = ''
+    ;[...this.select.options].forEach(option => {
+      const item = document.createElement('button')
+      item.type = 'button'
+      item.className = 'picker-model-item language-picker-item' + (option.selected ? ' selected' : '')
+      item.textContent = option.textContent
+      item.dataset.value = option.value
+      item.setAttribute('role', 'option')
+      item.setAttribute('aria-selected', String(option.selected))
+      item.addEventListener('click', (event) => {
+        event.stopPropagation()
+        if (this.select.value !== option.value) {
+          this.select.value = option.value
+          this.select.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+        this.close({ focus: true })
+      })
+      item.addEventListener('keydown', (event) => {
+        const items = [...this.panel.querySelectorAll('.picker-model-item')]
+        const index = items.indexOf(item)
+        let nextIndex = null
+        if (event.key === 'ArrowDown') nextIndex = Math.min(items.length - 1, index + 1)
+        else if (event.key === 'ArrowUp') nextIndex = Math.max(0, index - 1)
+        else if (event.key === 'Home') nextIndex = 0
+        else if (event.key === 'End') nextIndex = items.length - 1
+        else if (event.key === 'Escape') {
+          event.preventDefault()
+          this.close({ focus: true })
+          return
+        }
+        if (nextIndex !== null) {
+          event.preventDefault()
+          items[nextIndex]?.focus()
+        }
+      })
+      this.panel.appendChild(item)
+    })
+  }
+}
+const documentLanguagePickers = ['document-source-lang', 'document-target-lang']
+  .map(id => new LanguageSelectPicker($(id)))
+
 function populateLanguageControls(settings = {}) {
   const sourceSelect = $('setting-source-lang')
   const targetSelect = $('setting-target-lang')
@@ -145,6 +252,7 @@ function populateLanguageControls(settings = {}) {
     documentTarget.innerHTML = options
     documentTarget.value = state.preferredTargetLanguage || targetValue
   }
+  documentLanguagePickers.forEach(picker => picker.refresh())
   renderDocumentLanguageStatus()
   for (const id of ['login-ui-locale', 'onboarding-ui-locale', 'setting-ui-locale']) {
     const select = $(id)
@@ -161,6 +269,7 @@ function renderDocumentLanguageStatus() {
   const controls = $('document-language-controls')
   if (!status || !controls) return
   controls.hidden = !state.sessionId
+  status.hidden = !state.sessionId
   if (!state.sessionId) return
   const source = state.sourceLanguage === 'auto' ? state.detectedSourceLanguage : state.sourceLanguage
   const target = state.preferredTargetLanguage || getModeSetting('targetLang', state.currentDocumentMode)
