@@ -8416,7 +8416,6 @@ function createDocCard(doc) {
         <div class="lib-card-top-body">
           <div class="doc-card-title" title="${escapeHtml(doc.filename)}">${escapeHtml(d.displayTitle)}</div>
           ${documentTypeChipHtml(doc, true)}
-          ${processingBadgeHtml(doc)}
         </div>
       </div>
       ${d.tagsHtml}
