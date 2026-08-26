@@ -152,6 +152,18 @@ test('viewer language pickers share the model picker grid and persist custom sel
   })
   expect(labelColumn.firstTrack - labelColumn.widestLabel).toBeLessThan(1)
   await expect(page.locator('#document-language-status')).toContainText('Multiple source languages detected')
+  const statusStyle = await page.locator('#document-language-status').evaluate(status => {
+    const style = getComputedStyle(status)
+    return {
+      bodyColor: getComputedStyle(document.body).color,
+      color: style.color,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+    }
+  })
+  expect(statusStyle.fontSize).toBe('12px')
+  expect(Number(statusStyle.fontWeight)).toBeGreaterThanOrEqual(700)
+  expect(statusStyle.color).not.toBe(statusStyle.bodyColor)
 
   await buttons[0].click()
   await expect(buttons[0]).toHaveAttribute('aria-expanded', 'true')

@@ -7144,7 +7144,14 @@ body.light-theme .chat-drawer {
   min-width: 0;
   max-width: 260px;
   box-sizing: border-box;
-  padding: 0 8px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
   white-space: normal;
   overflow-wrap: break-word;
 }
