@@ -4708,6 +4708,11 @@ body.toolbar-pos-bottom .kebab-menu {
   backdrop-filter: blur(3px);
   animation: popupScale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+/* 상·하단 툴바에서 채팅 패널과 케밥 메뉴가 같은 우측 영역을 쓰면
+   메뉴 안의 선택기와 채팅 닫기 버튼이 겹친다. 실측 패널 폭만큼 메뉴를 옮긴다. */
+body:not(.toolbar-pos-left):not(.toolbar-pos-right):has(.chat-sidebar:not(.hidden)) .kebab-menu {
+  right: calc(var(--chat-sidebar-offset, 0px) + 8px);
+}
 .kebab-menu .progress-mini {
   width: 100%;
   box-sizing: border-box;
