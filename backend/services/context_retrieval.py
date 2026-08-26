@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -15,6 +16,12 @@ _TOKEN_RE = re.compile(r"[A-Za-z0-9가-힣_]{2,}")
 _PAGE_RE = re.compile(r"(?:page|pages|p\.?|페이지)\s*(\d+)(?:\s*[-–~]\s*(\d+))?", re.I)
 _CITATION_RE = re.compile(r"\[(p|pp)\.(\d+)(?:\s*[-–]\s*(\d+))?\]", re.I)
 _STOP = {"the", "and", "for", "that", "with", "this", "from", "what", "which", "문서", "페이지", "내용", "대한"}
+_PDF_PUNCTUATION = str.maketrans({
+    "‘": "'", "’": "'", "‚": "'", "‛": "'",
+    "“": '"', "”": '"', "„": '"', "‟": '"',
+    "‐": "-", "‑": "-", "‒": "-", "–": "-", "—": "-", "―": "-",
+})
+_IGNORED_PDF_CHARS = {"\u00ad", "\u200b", "\u200c", "\u200d", "\ufeff"}
 
 
 @dataclass(frozen=True)
@@ -28,6 +35,87 @@ class ContextResult:
 
 def _tokens(text: str) -> list[str]:
     return [t.casefold() for t in _TOKEN_RE.findall(text or "") if t.casefold() not in _STOP]
+
+
+def _normalized_pdf_text(text: str) -> tuple[str, list[int], list[int]]:
+    """Normalize common PDF extractor differences while retaining source offsets."""
+    normalized: list[str] = []
+    starts: list[int] = []
+    ends: list[int] = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char in _IGNORED_PDF_CHARS:
+            index += 1
+            continue
+
+        # One extractor may preserve a line-end hyphen while another joins the
+        # word. Only dehyphenate when an actual line break follows the hyphen.
+        if char in "-‐‑‒–—―":
+            next_index = index + 1
+            while next_index < len(text) and text[next_index].isspace():
+                next_index += 1
+            separator = text[index + 1:next_index]
+            if ("\n" in separator or "\r" in separator) and next_index < len(text):
+                if index > 0 and text[index - 1].isalnum() and text[next_index].isalnum():
+                    index = next_index
+                    continue
+
+        transformed = unicodedata.normalize("NFKC", char).translate(_PDF_PUNCTUATION)
+        for output_char in transformed:
+            if output_char in _IGNORED_PDF_CHARS or unicodedata.category(output_char) == "Cf":
+                continue
+            if output_char.isspace():
+                if normalized and normalized[-1] != " ":
+                    normalized.append(" ")
+                    starts.append(index)
+                    ends.append(index + 1)
+                elif normalized:
+                    ends[-1] = index + 1
+                continue
+            normalized.append(output_char)
+            starts.append(index)
+            ends.append(index + 1)
+        index += 1
+
+    while normalized and normalized[-1] == " ":
+        normalized.pop()
+        starts.pop()
+        ends.pop()
+    return "".join(normalized), starts, ends
+
+
+def _normalized_source_match(source: str, selection: str) -> str | None:
+    normalized_source, starts, ends = _normalized_pdf_text(source)
+    normalized_selection, _, _ = _normalized_pdf_text(selection)
+    if not normalized_selection:
+        return None
+
+    match_start = normalized_source.find(normalized_selection)
+    match_length = len(normalized_selection)
+
+    # PDF.js can visually insert spacing between adjacent spans that is absent
+    # from cloneContents().textContent (or vice versa). For a meaningful-length
+    # selection, retry without whitespace while still returning server text.
+    if match_start < 0:
+        compact_source_chars: list[str] = []
+        compact_source_indexes: list[int] = []
+        for normalized_index, char in enumerate(normalized_source):
+            if not char.isspace():
+                compact_source_chars.append(char)
+                compact_source_indexes.append(normalized_index)
+        compact_selection = "".join(char for char in normalized_selection if not char.isspace())
+        if len(compact_selection) < 8:
+            return None
+        compact_start = "".join(compact_source_chars).find(compact_selection)
+        if compact_start < 0:
+            return None
+        match_start = compact_source_indexes[compact_start]
+        match_end = compact_source_indexes[compact_start + len(compact_selection) - 1] + 1
+    else:
+        match_end = match_start + match_length
+
+    return source[starts[match_start]:ends[match_end - 1]]
 
 
 def _section_name(text: str, fallback: str) -> str:
@@ -169,7 +257,9 @@ def resolve_page_selected_text(
     if not parts:
         return None
     match = re.search(r"\s+".join(re.escape(part) for part in parts), source)
-    return match.group(0) if match else None
+    if match:
+        return match.group(0)
+    return _normalized_source_match(source, selection)
 
 
 def retrieve_context(doc_id: str, pages: list[dict], question: str, current_page: int | None = None,

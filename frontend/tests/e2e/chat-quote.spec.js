@@ -6,11 +6,14 @@ import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 test('AI 채팅 답변 텍스트를 선택하면 Ask AI로 인용할 수 있다', async ({ page }) => {
   const docA = { id: 'doc-A', filename: 'DocA.pdf', total_pages: 1, metadata: { title: 'Document A' }, translated_pages: [] }
   await mockBaseRoutes(page, { documents: [docA] })
+  const chatRequests = []
 
   await page.route('**/api/library/doc-A/pdf', route =>
     route.fulfill({ status: 200, contentType: 'application/pdf', body: SAMPLE_PDF_A }))
-  await page.route('**/api/chat/stream', route =>
-    route.fulfill({ status: 200, contentType: 'text/plain', body: '트랜스포머 아키텍처는 셀프 어텐션 메커니즘을 핵심으로 사용하는 딥러닝 모델입니다.' }))
+  await page.route('**/api/chat/stream', async route => {
+    chatRequests.push(await route.request().postDataJSON())
+    return route.fulfill({ status: 200, contentType: 'text/plain', body: '트랜스포머 아키텍처는 셀프 어텐션 메커니즘을 핵심으로 사용하는 딥러닝 모델입니다.' })
+  })
 
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
@@ -69,6 +72,13 @@ test('AI 채팅 답변 텍스트를 선택하면 Ask AI로 인용할 수 있다'
 
   await expect(page.locator('#chat-quote-area')).not.toHaveClass(/hidden/)
   await expect(page.locator('#chat-quote-text')).toHaveText('셀프 어텐션')
+
+  await page.fill('#chat-input', '이 부분을 더 설명해줘')
+  await page.click('#chat-send-btn')
+  await expect.poll(() => chatRequests.length).toBe(2)
+
+  expect(chatRequests[1].selected_text).toBeUndefined()
+  expect(chatRequests[1].messages.at(-1).content).toContain('셀프 어텐션')
 })
 
 // 사용자 자신이 보낸 메시지는 인용 대상에서 제외되어야 한다

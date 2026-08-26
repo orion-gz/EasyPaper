@@ -11736,7 +11736,16 @@ function createSelectionMenu() {
     const selection = window.getSelection()
     const text = extractSelectionText(selection).trim()
     if (text) {
-      askAIAssistant(text)
+      const range = selection.getRangeAt(0)
+      const commonNode = range.commonAncestorContainer
+      const commonEl = commonNode.nodeType === Node.ELEMENT_NODE
+        ? commonNode
+        : commonNode.parentElement
+      const pageWrapper = commonEl?.closest('.textLayer')?.closest('.pdf-page-wrapper')
+      const sourcePage = pageWrapper ? Number.parseInt(pageWrapper.dataset.page, 10) : null
+      askAIAssistant(text, {
+        sourcePage: Number.isInteger(sourcePage) ? sourcePage : null,
+      })
     }
     selection.removeAllRanges()
     hideSelectionMenu()
@@ -11970,7 +11979,7 @@ function createAnnHoverTooltip() {
     e.preventDefault(); e.stopPropagation()
     const text = activeHoveredSpan ? activeHoveredSpan.textContent.trim() : activeHoveredText
     if (text) {
-      askAIAssistant(text)
+      askAIAssistant(text, { sourcePage: activeHoveredPageNum })
     }
     hideAnnHoverTooltip()
   })
@@ -14247,13 +14256,19 @@ async function sendChatMessage() {
   // 텍스트 placeholder만 저장되고, 이건 이번 요청에서만 사용된다.
   let imageForThisTurn = null
   let selectedTextForThisTurn = null
+  let contextPageForThisTurn = state.currentPage
 
   if (state.quotedText) {
-    selectedTextForThisTurn = typeof state.quotedText === 'string' ? state.quotedText : state.quotedText?.text
-    const fullPayload = `[인용된 본문 내용]:\n"${state.quotedText}"\n\n[질문]:\n${text}`
+    const quotedText = typeof state.quotedText === 'string' ? state.quotedText : state.quotedText?.text
+    const sourcePage = typeof state.quotedText === 'object' ? state.quotedText?.sourcePage : null
+    if (quotedText && Number.isInteger(sourcePage) && sourcePage > 0) {
+      selectedTextForThisTurn = quotedText
+      contextPageForThisTurn = sourcePage
+    }
+    const fullPayload = `[인용된 본문 내용]:\n"${quotedText}"\n\n[질문]:\n${text}`
 
     // UI에 답장/인용구 레이아웃으로 표시
-    const userMsgHtml = `<div class="message-quote"><span class="quote-symbol">❝</span><span class="quote-body">${escapeHtml(state.quotedText)}</span></div><div class="message-text">${escapeHtml(text)}</div>`
+    const userMsgHtml = `<div class="message-quote"><span class="quote-symbol">❝</span><span class="quote-body">${escapeHtml(quotedText)}</span></div><div class="message-text">${escapeHtml(text)}</div>`
     appendChatMessage('user', userMsgHtml, true)
     state.chatHistory.push({ role: 'user', content: fullPayload })
 
@@ -14353,11 +14368,11 @@ async function sendChatMessage() {
     },
     imageForThisTurn,
     {
-      currentPage: state.currentPage,
+      currentPage: contextPageForThisTurn,
       selectedText: selectedTextForThisTurn,
       screenContext: {
         mode: "viewer",
-        page_num: state.currentPage,
+        page_num: contextPageForThisTurn,
         include_visual: null,
       },
       verifyEvidence: /근거\s*검증|verify\s+(?:the\s+)?evidence/i.test(text),
@@ -14596,14 +14611,19 @@ function initChatListeners() {
 // AI Chat Sidebar 리스너 초기화 실행
 initChatListeners()
 
-function askAIAssistant(text) {
+function askAIAssistant(text, { sourcePage = null } = {}) {
   if (!state.sessionId) {
     showToast('논문을 먼저 업로드하거나 선택해주세요.', 'error');
     return;
   }
 
   // 인용구 보관 및 영역 업데이트
-  state.quotedText = text;
+  // 원문 선택만 서버의 selected_text 검증 대상으로 보낸다. 번역문과 AI 답변은
+  // 현재 PDF 페이지 원문에 존재하지 않으므로 질문의 인용 문맥으로만 유지한다.
+  state.quotedText = {
+    text,
+    sourcePage: Number.isInteger(sourcePage) && sourcePage > 0 ? sourcePage : null,
+  };
   state.quotedImage = null;
   state.quotedImagePage = null;
 

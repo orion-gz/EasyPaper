@@ -260,6 +260,28 @@ def test_selected_text_is_resolved_to_canonical_page_source():
     assert resolve_page_selected_text(pages, 2, "invented statement") is None
 
 
+def test_selected_text_tolerates_common_pdf_extractor_differences():
+    from services.context_retrieval import resolve_page_selected_text
+
+    pages = [{
+        "page_num": 8,
+        "text": "The ﬁnal docu-\nment uses “grounded evidence” safely.",
+    }]
+    assert resolve_page_selected_text(
+        pages, 8, 'The final document uses "grounded evidence" safely.',
+    ) == "The ﬁnal docu-\nment uses “grounded evidence” safely."
+
+
+def test_selected_text_tolerates_missing_pdf_span_spaces_but_rejects_forgery():
+    from services.context_retrieval import resolve_page_selected_text
+
+    pages = [{"page_num": 8, "text": "Grounded evidence remains server canonical."}]
+    assert resolve_page_selected_text(
+        pages, 8, "Groundedevidenceremainsservercanonical.",
+    ) == "Grounded evidence remains server canonical."
+    assert resolve_page_selected_text(pages, 8, "inventedselection") is None
+
+
 def test_forged_selected_text_is_rejected_before_rate_or_llm(
     test_client, grounded_doc, isolated_dirs, monkeypatch,
 ):
