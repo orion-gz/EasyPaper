@@ -106,7 +106,7 @@ test('English locale has no visible Korean UI in the PDF viewer', async ({ page 
 test('viewer language pickers share the model picker grid and persist custom selections', async ({ page }) => {
   const doc = {
     id: 'doc-language-picker', filename: 'Languages.pdf', total_pages: 1,
-    source_language: 'en', detected_source_language: 'en', preferred_target_language: 'fr',
+    source_language: 'auto', detected_source_language: 'mul', preferred_target_language: 'fr',
     metadata: { title: 'Language picker document' }, translated_pages: [],
   }
   let languagePayload = null
@@ -144,6 +144,14 @@ test('viewer language pickers share the model picker grid and persist custom sel
   expect(Math.max(...boxes.map(box => box.width)) - Math.min(...boxes.map(box => box.width))).toBeLessThan(1)
   expect(Math.max(...boxes.map(box => box.x)) - Math.min(...boxes.map(box => box.x))).toBeLessThan(1)
   expect(Math.abs((boxes[1].y - boxes[0].y) - (boxes[2].y - boxes[1].y))).toBeLessThan(1)
+  const labelColumn = await page.locator('.kebab-translation-grid').evaluate(grid => {
+    const firstTrack = parseFloat(getComputedStyle(grid).gridTemplateColumns)
+    const widestLabel = Math.max(...[...grid.querySelectorAll('.kebab-menu-label')]
+      .map(label => label.getBoundingClientRect().width))
+    return { firstTrack, widestLabel }
+  })
+  expect(labelColumn.firstTrack - labelColumn.widestLabel).toBeLessThan(1)
+  await expect(page.locator('#document-language-status')).toContainText('Multiple source languages detected')
 
   await buttons[0].click()
   await expect(buttons[0]).toHaveAttribute('aria-expanded', 'true')

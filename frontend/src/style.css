@@ -7135,7 +7135,15 @@ body.light-theme .chat-drawer {
 }
 
 .document-language-controls { font-size:11px; color:var(--text-muted); }
-#document-language-status { grid-column:1 / -1; max-width:100%; white-space:normal; }
+#document-language-status {
+  align-self: stretch;
+  min-width: 0;
+  max-width: 260px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
 #document-language-status[hidden] { display:none; }
 
 .processing-badge { display:inline-flex; align-items:center; width:max-content; padding:2px 7px; border-radius:999px; font-size:10px; font-weight:700; border:1px solid var(--border-strong); color:var(--text-secondary); background:var(--bg-elevated); }
