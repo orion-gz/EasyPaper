@@ -103,6 +103,60 @@ test('English locale has no visible Korean UI in the PDF viewer', async ({ page 
   await expect.poll(() => visibleKoreanUi(page)).toEqual([])
 })
 
+test('viewer language pickers share the model picker grid and persist custom selections', async ({ page }) => {
+  const doc = {
+    id: 'doc-language-picker', filename: 'Languages.pdf', total_pages: 1,
+    source_language: 'en', detected_source_language: 'en', preferred_target_language: 'fr',
+    metadata: { title: 'Language picker document' }, translated_pages: [],
+  }
+  let languagePayload = null
+  await mockBaseRoutes(page, {
+    documents: [doc],
+    languageSettings: { ui_locale: 'en', default_source_language: 'auto', target_language: 'fr' },
+  })
+  await page.route('**/api/library/doc-language-picker/pdf', route => route.fulfill({
+    status: 200, contentType: 'application/pdf', body: SAMPLE_PDF_A,
+  }))
+  await page.route('**/api/library/doc-language-picker/languages', route => {
+    languagePayload = route.request().postDataJSON()
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        source_language: languagePayload.source_language,
+        preferred_target_language: languagePayload.preferred_target_language,
+      }),
+    })
+  })
+
+  await gotoApp(page)
+  await page.evaluate(() => { location.hash = '#viewer?id=doc-language-picker' })
+  await expect(page.locator('#viewer-screen')).toHaveClass(/active/)
+  await page.locator('#toolbar-kebab-btn').click()
+
+  const buttons = [
+    page.locator('#document-source-lang').locator('..').locator('.provider-picker-btn'),
+    page.locator('#document-target-lang').locator('..').locator('.provider-picker-btn'),
+    page.locator('#viewer-trans-provider .provider-picker-btn'),
+  ]
+  const boxes = await Promise.all(buttons.map(button => button.boundingBox()))
+  expect(boxes.every(Boolean)).toBe(true)
+  expect(Math.max(...boxes.map(box => box.width)) - Math.min(...boxes.map(box => box.width))).toBeLessThan(1)
+  expect(Math.max(...boxes.map(box => box.x)) - Math.min(...boxes.map(box => box.x))).toBeLessThan(1)
+  expect(Math.abs((boxes[1].y - boxes[0].y) - (boxes[2].y - boxes[1].y))).toBeLessThan(1)
+
+  await buttons[0].click()
+  await expect(buttons[0]).toHaveAttribute('aria-expanded', 'true')
+  await page.locator('#document-source-lang-picker-panel [data-value="ja"]').click()
+  await expect(buttons[0]).toContainText('Japanese')
+  await expect(buttons[0]).toHaveAttribute('aria-expanded', 'false')
+  await expect.poll(() => languagePayload).toEqual({
+    source_language: 'ja',
+    preferred_target_language: 'fr',
+  })
+})
+
+
 test('Korean locale renders every workspace route in Korean', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('easypaper_ui_locale', 'en'))
   await mockBaseRoutes(page, { documents: [], languageSettings: { ui_locale: 'ko', default_source_language: 'auto', target_language: 'ko' } })

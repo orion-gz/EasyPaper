@@ -4741,17 +4741,29 @@ body.toolbar-pos-bottom .kebab-menu {
   backdrop-filter: blur(3px);
   animation: popupScale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+/* 상·하단 툴바에서 채팅 패널과 케밥 메뉴가 같은 우측 영역을 쓰면
+   메뉴 안의 선택기와 채팅 닫기 버튼이 겹친다. 실측 패널 폭만큼 메뉴를 옮긴다. */
+body:not(.toolbar-pos-left):not(.toolbar-pos-right):has(.chat-sidebar:not(.hidden)) .kebab-menu {
+  right: calc(var(--chat-sidebar-offset, 0px) + 8px);
+}
 .kebab-menu .progress-mini {
   width: 100%;
   box-sizing: border-box;
   justify-content: center;
 }
-.kebab-menu-row {
-  display: flex;
+.kebab-translation-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 160px);
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px 10px;
   padding: 4px 8px;
+}
+.kebab-translation-grid .kebab-menu-row,
+.kebab-translation-grid .document-language-controls {
+  display: contents;
+}
+.kebab-translation-grid .document-language-controls[hidden] {
+  display: none;
 }
 .kebab-menu-label {
   flex-shrink: 0;
@@ -4760,11 +4772,27 @@ body.toolbar-pos-bottom .kebab-menu {
   font-weight: 500;
   white-space: nowrap;
 }
-.kebab-menu-row .provider-picker {
+.kebab-translation-grid .provider-picker {
+  width: 100%;
   min-width: 0;
 }
-.kebab-menu-row .provider-picker-btn {
+.kebab-translation-grid .provider-picker-btn {
+  width: 100%;
   min-width: 0;
+}
+.language-picker-item {
+  width: 100%;
+  border: 0;
+  position: relative;
+  background: transparent;
+  font-family: var(--font-sans);
+  text-align: left;
+}
+.language-picker-item:hover {
+  background: var(--bg-hover);
+}
+.language-picker-item.selected {
+  background: rgba(126, 196, 232, 0.15);
 }
 .kebab-menu-divider {
   height: 1px;
@@ -7106,11 +7134,9 @@ body.light-theme .chat-drawer {
   text-transform: uppercase;
 }
 
-.document-language-controls { display:flex; flex-direction:column; align-items:stretch; gap:6px; padding:6px 0; font-size:11px; color:var(--text-muted); }
-.document-language-controls > span[aria-hidden] { display:none; }
-.document-language-controls label { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.document-language-controls select { max-width:150px; background:var(--bg-elevated); color:var(--text-primary); border:1px solid var(--border); border-radius:6px; padding:3px 5px; }
-#document-language-status { max-width:230px; white-space:normal; }
+.document-language-controls { font-size:11px; color:var(--text-muted); }
+#document-language-status { grid-column:1 / -1; max-width:100%; white-space:normal; }
+#document-language-status[hidden] { display:none; }
 
 .processing-badge { display:inline-flex; align-items:center; width:max-content; padding:2px 7px; border-radius:999px; font-size:10px; font-weight:700; border:1px solid var(--border-strong); color:var(--text-secondary); background:var(--bg-elevated); }
 .processing-badge.local_only { color:#166534; background:#dcfce7; border-color:#86efac; }
