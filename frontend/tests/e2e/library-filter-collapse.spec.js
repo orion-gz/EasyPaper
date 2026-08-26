@@ -16,22 +16,22 @@ test('category filter chips stay collapsed after reload', async ({ page }) => {
 
   const filters = page.locator('#library-category-filters')
   const toggle = page.locator('#library-category-filter-toggle')
+  const sort = page.locator('#library-sort-select')
+  const viewToggle = page.locator('#library-view-toggle')
   await expect(filters).toBeVisible()
   await expect(toggle).toHaveAttribute('aria-expanded', 'true')
-  const expandedPositions = await Promise.all([filters.boundingBox(), toggle.boundingBox()])
-  expect(expandedPositions[1].x - (expandedPositions[0].x + expandedPositions[0].width)).toBeLessThanOrEqual(4)
+  const expandedPositions = await Promise.all([toggle.boundingBox(), sort.boundingBox(), viewToggle.boundingBox()])
+  expect(expandedPositions[1].x - (expandedPositions[0].x + expandedPositions[0].width)).toBeLessThanOrEqual(8)
+  expect(expandedPositions[0].x + expandedPositions[0].width).toBeLessThan(expandedPositions[1].x)
+  expect(expandedPositions[1].x + expandedPositions[1].width).toBeLessThan(expandedPositions[2].x)
 
   await toggle.click()
   await expect(filters).toBeHidden()
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
-  const collapsedPositions = await Promise.all([
-    page.locator('.library-category-filter-group').boundingBox(),
-    toggle.boundingBox(),
-  ])
-  expect(
-    collapsedPositions[0].x + collapsedPositions[0].width
-      - (collapsedPositions[1].x + collapsedPositions[1].width),
-  ).toBeLessThanOrEqual(1)
+  const collapsedPositions = await Promise.all([toggle.boundingBox(), sort.boundingBox(), viewToggle.boundingBox()])
+  expect(collapsedPositions[1].x - (collapsedPositions[0].x + collapsedPositions[0].width)).toBeLessThanOrEqual(8)
+  expect(Math.abs(collapsedPositions[1].x - expandedPositions[1].x)).toBeLessThanOrEqual(1)
+  expect(Math.abs(collapsedPositions[2].x - expandedPositions[2].x)).toBeLessThanOrEqual(1)
   await expect.poll(() => page.evaluate(() => localStorage.getItem('easypaper_library_category_filters_collapsed'))).toBe('true')
 
   await reloadToLibrary(page)

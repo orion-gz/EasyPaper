@@ -5159,7 +5159,6 @@ function updateLibraryCategoryFilterVisibility(hasCategories = libraryCategoryFi
   if (!libraryCategoryFilters || !libraryCategoryFilterToggle) return
   libraryCategoryFilterToggle.classList.toggle('hidden', !hasCategories)
   libraryCategoryFilters.classList.toggle('hidden', hasCategories && libraryCategoryFiltersCollapsed)
-  libraryCategoryFilterToggle.closest('.library-category-filter-group')?.classList.toggle('collapsed', hasCategories && libraryCategoryFiltersCollapsed)
   libraryCategoryFilterToggle.setAttribute('aria-expanded', String(!libraryCategoryFiltersCollapsed))
   libraryCategoryFilterToggle.setAttribute('aria-label', libraryCategoryFiltersCollapsed ? '카테고리 필터 펼치기' : '카테고리 필터 접기')
   libraryCategoryFilterToggle.title = libraryCategoryFiltersCollapsed ? '카테고리 필터 펼치기' : '카테고리 필터 접기'
