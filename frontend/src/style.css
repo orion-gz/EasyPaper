@@ -3154,6 +3154,10 @@ body.light-theme .chat-input-area {
   border-color: var(--accent-mid);
 }
 
+#chat-sidebar .chat-input-box:focus-within {
+  border-color: var(--border-strong);
+}
+
 #chat-input,
 .chat-input-textarea {
   flex: 1;
@@ -7192,6 +7196,10 @@ body.light-theme .chat-drawer {
 :where(button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 3px solid var(--control-accent, #4f8ef7) !important;
   outline-offset: 2px !important;
+}
+#chat-input:focus-visible,
+.floating-memo-textarea:focus-visible {
+  outline: none !important;
 }
 .chat-resizer:focus-visible {
   background: var(--accent-mid);
