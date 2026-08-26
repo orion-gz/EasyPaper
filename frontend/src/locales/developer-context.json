@@ -3920,21 +3920,6 @@
   "library:reparse.cancel": {
     "description": "Cancel PDF reparse dialog."
   },
-  "chat:screenContext.includeVisual": {
-    "description": "Label for manually including the current PDF page image in viewer chat."
-  },
-  "chat:screenContext.pageIncluded": {
-    "description": "Context chip showing that current-page text is included."
-  },
-  "chat:screenContext.pageWithVisual": {
-    "description": "Context chip showing that current-page text and image are included."
-  },
-  "chat:screenContext.visionUnsupported": {
-    "description": "Tooltip when the selected chat model cannot inspect page images."
-  },
-  "chat:screenContext.textDescription": {
-    "description": "Tooltip explaining default current-page text context."
-  },
   "chat:evidence.source": {
     "description": "Fallback heading for a document evidence hover card."
   },
