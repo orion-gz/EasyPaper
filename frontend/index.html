@@ -35,6 +35,13 @@
       <div class="orb orb-2"></div>
       <div class="orb orb-3"></div>
     </div>
+    <label class="login-language-selector">
+      <span data-i18n="ui.language">화면 언어</span>
+      <select id="login-ui-locale" class="form-select">
+        <option value="ko">한국어</option>
+        <option value="en">English</option>
+      </select>
+    </label>
     <div class="upload-container">
       <div class="logo">
         <span class="logo-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M12 9 Q12 13 16 13 Q12 13 12 17 Q12 13 8 13 Q12 13 12 9 Z" fill="currentColor"/></svg></span>
@@ -42,9 +49,6 @@
       </div>
       <h1 class="upload-title"><span data-i18n="login.heading">Academic paper translation</span><br /><span class="gradient-text" data-i18n="login.secure">Secure sign-in</span></h1>
       
-      <label style="align-self:flex-end;font-size:12px;color:var(--text-secondary)"><span data-i18n="ui.language">화면 언어</span>
-        <select id="login-ui-locale" class="form-select" style="display:inline-block;width:auto;margin-left:8px"><option value="ko">한국어</option><option value="en">English</option></select>
-      </label>
       <div class="drop-zone" style="max-width: 400px; cursor: default; border: 1px solid var(--border-strong);">
         <form id="login-form" class="drop-zone-inner" style="padding: 36px 32px; gap: 20px; width: 100%;">
           <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">

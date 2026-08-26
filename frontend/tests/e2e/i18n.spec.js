@@ -9,6 +9,12 @@ test('stored locale is applied on the unauthenticated login screen', async ({ pa
   await expect(page.locator('#login-screen')).toHaveClass(/active/)
   await expect(page.locator('#login-ui-locale')).toHaveValue('en')
   await expect(page.locator('#login-form button[type="submit"]')).toHaveText('Sign in')
+  const localeBox = await page.locator('.login-language-selector').boundingBox()
+  const themeBox = await page.locator('#global-theme-toggle-btn').boundingBox()
+  expect(localeBox).not.toBeNull()
+  expect(themeBox).not.toBeNull()
+  expect(Math.abs(localeBox.y - themeBox.y)).toBeLessThanOrEqual(1)
+  expect(localeBox.x + localeBox.width).toBeLessThan(themeBox.x)
   await expect.poll(() => visibleKoreanUi(page)).toEqual([])
 })
 

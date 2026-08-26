@@ -2202,6 +2202,39 @@ body.light-theme .toast.error { color: #dc2626; }
   gap: 12px;
 }
 
+.login-language-selector {
+  position: fixed;
+  top: 24px;
+  right: 78px;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.login-language-selector .form-select {
+  width: auto;
+  min-width: 104px;
+  padding: 11px 36px 11px 12px;
+  background-position: right 12px center;
+  box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 480px) {
+  .global-theme-toggle {
+    top: 16px;
+    right: 16px;
+  }
+
+  .login-language-selector {
+    top: 16px;
+    right: 70px;
+  }
+}
+
 /* 로그인 인풋 포커스 스타일 */
 #login-username:focus, #login-password:focus {
   border-color: var(--control-accent) !important;
