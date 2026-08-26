@@ -81,6 +81,17 @@ test('사용자가 조절한 메모 크기를 저장하고 다시 복원한다',
   await expect(memo).toHaveCSS('height', '280px')
 })
 
+test('뷰어 메모 입력창에 포커스 테두리를 표시하지 않는다', async ({ page }) => {
+  await openViewerWithMemo(page)
+
+  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  await memo.locator('.edit-btn').click()
+
+  const textarea = memo.locator('.floating-memo-textarea')
+  await expect(textarea).toBeFocused()
+  await expect.poll(() => textarea.evaluate(element => getComputedStyle(element).outlineStyle)).toBe('none')
+})
+
 
 test("키보드로 메모를 이동하고 크기를 조절하면 변경 사항을 알린다", async ({ page }) => {
   await openViewerWithMemo(page)
