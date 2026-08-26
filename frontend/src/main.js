@@ -618,8 +618,6 @@ const primerContinueBtn    = $('primer-continue-btn')
 const chatInput          = $('chat-input')
 const chatInputExpandBtn = $('chat-input-expand-btn')
 const chatSendBtn        = $('chat-send-btn')
-const chatPageContextChip = $('chat-page-context-chip')
-const chatIncludeVisual   = $('chat-include-visual')
 
 
 // ── 설정 기본값 및 옵션 헬퍼 ──────────────────────────
@@ -1552,7 +1550,6 @@ function updatePageDisplay(pageNum) {
   if (pageNum === state.currentPage) return
   state.currentPage = pageNum
   pageInput.value = pageNum
-  updateChatScreenContext()
   scheduleSaveLastReadPage(pageNum)
 }
 
@@ -5755,7 +5752,12 @@ function appendChatDrawerActionButtons(msgEl, role, content) {
     const verifyBtn = document.createElement('button')
     verifyBtn.type = 'button'
     verifyBtn.className = 'msg-action-btn'
-    verifyBtn.innerHTML = icon('checkCircle', 12) + escapeHtml(t('chat:evidence.verifyAction'))
+    verifyBtn.innerHTML = icon('checkCircle', 12, 'style="vertical-align:-2px;margin-right:3px"') + escapeHtml(t('chat:evidence.verifyAction'))
+    verifyBtn.style.background = 'none'
+    verifyBtn.style.border = 'none'
+    verifyBtn.style.color = 'var(--text-muted)'
+    verifyBtn.style.fontSize = '11px'
+    verifyBtn.style.cursor = 'pointer'
     verifyBtn.title = t('chat:evidence.verifyAction')
     verifyBtn.addEventListener('click', () => {
       if (chatDrawerState.activeStream) return
@@ -9882,7 +9884,6 @@ async function openFromLibrary(doc, shouldPushState = true) {
       : 1
     pageInput.value = restorePage
     state.currentPage = restorePage
-    updateChatScreenContext()
 
     showViewer()
     hideOutlineSidebar()
@@ -13590,21 +13591,6 @@ function buildChatWelcomeHtml() {
   return `<div class="chat-message assistant"><div class="message-bubble">${escapeHtml(welcome)}<br><br><strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}${escapeHtml(t('chat:suggestions.label'))}</strong><ul>${examples.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div></div>`
 }
 
-function updateChatScreenContext(contextEvent = null) {
-  if (!chatPageContextChip) return
-  const page = Number(contextEvent?.page_num || state.currentPage || 1)
-  const visual = contextEvent?.visual_included
-  chatPageContextChip.textContent = visual
-    ? t("chat:screenContext.pageWithVisual", { page })
-    : t("chat:screenContext.pageIncluded", { page })
-  chatPageContextChip.classList.toggle("visual-included", Boolean(visual))
-  if (contextEvent?.visual_reason === "vision_not_supported") {
-    chatPageContextChip.title = t("chat:screenContext.visionUnsupported")
-  } else {
-    chatPageContextChip.title = t("chat:screenContext.textDescription")
-  }
-}
-
 function attachEvidenceToBubble(bubble, evidenceItems = []) {
   if (!bubble || !evidenceItems.length) return
   const byPage = new Map()
@@ -13907,11 +13893,10 @@ function regenerateResponse(assistantMsgEl) {
       currentPage: state.currentPage,
       screenContext: {
         mode: "viewer", page_num: state.currentPage,
-        include_visual: state.chatIncludeVisual ? true : null,
+        include_visual: null,
       },
     },
     (eventName, payload) => {
-      if (eventName === "context") updateChatScreenContext(payload);
       if (eventName === "evidence") responseEvidence = payload?.items || [];
       if (eventName === "verification") responseVerification = payload;
     }
@@ -13983,7 +13968,12 @@ function appendActionButtons(msgEl, role, content) {
     const verifyBtn = document.createElement("button")
     verifyBtn.type = "button"
     verifyBtn.className = "msg-action-btn"
-    verifyBtn.innerHTML = icon("checkCircle", 12) + escapeHtml(t("chat:evidence.verifyAction"))
+    verifyBtn.innerHTML = icon("checkCircle", 12, 'style="vertical-align:-2px;margin-right:3px"') + escapeHtml(t("chat:evidence.verifyAction"))
+    verifyBtn.style.background = "none"
+    verifyBtn.style.border = "none"
+    verifyBtn.style.color = "var(--text-muted)"
+    verifyBtn.style.fontSize = "11px"
+    verifyBtn.style.cursor = "pointer"
     verifyBtn.title = t("chat:evidence.verifyAction")
     verifyBtn.addEventListener("click", () => {
       if (state.chatActiveStream) return
@@ -14260,12 +14250,11 @@ async function sendChatMessage() {
       screenContext: {
         mode: "viewer",
         page_num: state.currentPage,
-        include_visual: state.chatIncludeVisual ? true : null,
+        include_visual: null,
       },
       verifyEvidence: /근거\s*검증|verify\s+(?:the\s+)?evidence/i.test(text),
     },
     (eventName, payload) => {
-      if (eventName === "context") updateChatScreenContext(payload)
       if (eventName === "evidence") responseEvidence = payload?.items || []
       if (eventName === "verification") responseVerification = payload
     }
@@ -14315,14 +14304,6 @@ function initChatListeners() {
     if (!chatSidebar.classList.contains("hidden")) toggleChatSidebar()
   })
 
-
-  if (chatIncludeVisual) {
-    chatIncludeVisual.addEventListener("change", () => {
-      state.chatIncludeVisual = chatIncludeVisual.checked
-      updateChatScreenContext()
-    })
-  }
-  updateChatScreenContext()
 
   if (chatSendBtn) {
     chatSendBtn.addEventListener('click', () => {
