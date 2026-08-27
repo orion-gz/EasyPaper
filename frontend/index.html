@@ -856,6 +856,7 @@
     <div class="modal-content settings-dialog">
       <div class="modal-header">
         <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>EasyPaper 설정</h2>
+        <span id="settings-mode-badge" class="settings-mode-badge" aria-live="polite">연구 모드</span>
         <button id="close-settings-btn" class="close-btn">&times;</button>
       </div>
       
@@ -884,16 +885,8 @@
             <label for="setting-source-lang" data-i18n="settings:sourceLanguage">기본 원문 언어</label>
             <select id="setting-source-lang" class="form-select"></select>
           </div>
-          <div class="settings-mode-context">
-            <span class="settings-mode-eyebrow">설정 적용 대상</span>
-            <span id="settings-mode-badge" class="settings-mode-badge" aria-live="polite">연구 모드</span>
-            <strong id="settings-mode-title">연구 모드 설정</strong>
-            <p id="settings-mode-description">논문 번역과 학술 읽기에 적용되는 설정입니다.</p>
-          </div>
-
           <div class="settings-section-heading">
-            <strong id="settings-translation-heading">논문 번역</strong>
-            <span>현재 모드에만 저장됩니다.</span>
+            <strong id="settings-translation-heading">번역</strong>
           </div>
           <div class="form-group">
             <label for="setting-target-lang" data-i18n="settings:targetLanguage">번역 대상 언어</label>
@@ -912,7 +905,6 @@
           
           <div class="form-group">
             <label for="setting-translation-mode">번역 모드</label>
-            <small id="setting-translation-mode-scope" class="setting-scope-hint"></small>
             <select id="setting-translation-mode" class="form-select">
               <option value="auto">업로드 시 자동 번역 (50페이지 미만)</option>
               <option value="pane">번역 버튼으로 한 페이지씩 번역</option>
@@ -943,7 +935,6 @@
 
           <div class="settings-section-heading">
             <strong data-i18n="settings:themeHeading">화면 테마</strong>
-            <span id="settings-theme-scope" data-i18n="settings:themeScopeResearch">연구 모드에만 적용</span>
           </div>
 
           <div class="form-group">
@@ -960,7 +951,6 @@
 
           <div class="settings-section-heading settings-section-heading-common">
             <strong>PDF 뷰어 및 화면</strong>
-            <span>두 모드에 공통으로 적용됩니다.</span>
           </div>
 
           <div class="form-group">
@@ -986,7 +976,7 @@
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
             <label>뷰어 편의 설정</label>
             <div class="toggle-switch-group">
-              <span class="settings-subsection-label">공통 읽기 동작</span>
+              <span class="settings-subsection-label" data-i18n="settings:viewerReadingBehavior">읽기 동작</span>
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-disable-hover-tooltip" />
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
@@ -1002,7 +992,7 @@
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
                 <span class="toggle-switch-label">스크롤 시 상단 툴바 자동 숨김<small>아래로 스크롤하면 숨겨지고, 위로 스크롤하면 다시 표시됨</small></span>
               </label>
-              <span class="settings-subsection-label" id="settings-reading-tools-label">연구 모드 읽기 도구</span>
+              <span class="settings-subsection-label" id="settings-reading-tools-label" data-i18n="settings:viewerReadingTools">읽기 도구</span>
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-disable-insights" />
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
@@ -1027,7 +1017,7 @@
           </div>
 
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
-            <label id="settings-automation-title">논문 처리 시 자동 생성</label>
+            <label id="settings-automation-title">문서 처리 시 자동 생성</label>
             <div class="toggle-switch-group">
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-auto-generate-keywords" />

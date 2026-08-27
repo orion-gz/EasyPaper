@@ -484,9 +484,7 @@ function initializeSettingsInformationArchitecture() {
   syncSettingsNavOrientation()
   narrowSettingsViewport.addEventListener?.('change', syncSettingsNavOrientation)
 
-  const modeContext = $('settings-mode-badge')?.closest('.settings-mode-context')
   const translationHeading = $('settings-translation-heading')?.closest('.settings-section-heading')
-  if (modeContext) translationBody?.appendChild(modeContext)
   if (translationHeading) translationBody?.appendChild(translationHeading)
   for (const id of ['setting-target-lang', 'setting-trans-style', 'setting-translation-mode', 'setting-ignore-math']) {
     moveSettingsGroup(id, translationBody)
@@ -579,9 +577,7 @@ function activateSettingsCategory(paneId, { focus = false } = {}) {
 initializeSettingsInformationArchitecture()
 
 // 설정 폼 및 엘리먼트
-const settingsModeTitle = $('settings-mode-title')
 const settingsModeBadge = $('settings-mode-badge')
-const settingsModeDescription = $('settings-mode-description')
 const settingsTranslationHeading = $('settings-translation-heading')
 const settingsAutomationTitle = $('settings-automation-title')
 const settingsKeywordsLabel = $('settings-keywords-label')
@@ -589,11 +585,9 @@ const settingsKeywordsDescription = $('settings-keywords-description')
 const settingsReadingToolsLabel = $('settings-reading-tools-label')
 const settingUiLocale = $('setting-ui-locale')
 const settingSourceLang = $('setting-source-lang')
-const settingsThemeScope = $('settings-theme-scope')
 const settingTargetLang   = $('setting-target-lang')
 const settingTransStyle   = $('setting-trans-style')
 const settingTranslationMode = $('setting-translation-mode')
-const settingTranslationModeScope = $('setting-translation-mode-scope')
 let settingsTranslationModeContext = 'research'
 const settingIgnoreMath   = $('setting-ignore-math')
 const settingIgnoreTable  = $('setting-ignore-table')
@@ -1028,24 +1022,10 @@ function syncModeSettings(documentMode) {
   settingDisablePrimer.checked = !getModeSetting('disablePrimer', settingsTranslationModeContext)
   updateAccentSettingsUI(getModeSetting('accentColor', settingsTranslationModeContext))
 
-  if (settingTranslationModeScope) {
-    settingTranslationModeScope.textContent = isGeneral ? '일반 문서 모드에만 적용' : '연구 모드에만 적용'
-  }
-  if (settingsThemeScope) {
-    const themeScopeKey = isGeneral ? 'settings:themeScopeGeneral' : 'settings:themeScopeResearch'
-    settingsThemeScope.dataset.i18n = themeScopeKey
-    settingsThemeScope.textContent = isGeneral
-      ? t('settings:themeScopeGeneral')
-      : t('settings:themeScopeResearch')
-  }
-  settingsModeTitle.textContent = isGeneral ? '일반 문서 모드 설정' : '연구 모드 설정'
   settingsModeBadge.textContent = isGeneral ? '일반 문서 모드' : '연구 모드'
-  settingsModeDescription.textContent = isGeneral
-    ? '책, 기술 문서, 보고서처럼 다양한 문서의 번역과 읽기에 적용됩니다.'
-    : '논문 번역과 학술 읽기에 적용되는 기존 설정입니다.'
-  settingsTranslationHeading.textContent = isGeneral ? '일반 문서 번역' : '논문 번역'
-  settingsAutomationTitle.textContent = isGeneral ? '문서 처리 시 자동 생성' : '논문 처리 시 자동 생성'
-  settingsReadingToolsLabel.textContent = isGeneral ? '일반 문서 모드 읽기 도구' : '연구 모드 읽기 도구'
+  settingsTranslationHeading.textContent = '번역'
+  settingsAutomationTitle.textContent = '문서 처리 시 자동 생성'
+  settingsReadingToolsLabel.textContent = t('settings:viewerReadingTools')
   settingsKeywordsLabel.textContent = isGeneral ? '고급 어휘 자동 생성' : '키워드·단어 자동 생성'
   settingsKeywordsDescription.textContent = isGeneral
     ? '어려운 표현과 전문 용어를 페이지별로 정리합니다.'

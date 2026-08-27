@@ -53,6 +53,8 @@
   "고급 어휘·키워드": "common:legacy.ui.0052",
   "공식 문서": "common:legacy.ui.0053",
   "공통 읽기 동작": "common:legacy.ui.0054",
+  "읽기 동작": "settings:viewerReadingBehavior",
+  "읽기 도구": "settings:viewerReadingTools",
   "과": "common:legacy.ui.0055",
   "관련 노드가 없습니다.": "common:legacy.ui.0056",
   "관련 논문": "common:legacy.ui.0057",
