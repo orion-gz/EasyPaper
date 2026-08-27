@@ -449,6 +449,135 @@ async function maybeShowOnboarding() {
 const tabBtns           = document.querySelectorAll('.tab-btn')
 const tabPanes          = document.querySelectorAll('.tab-pane')
 
+const settingsCategoryMeta = {
+  'tab-general': [() => t('settings:categoryGeneral'), () => t('settings:categoryGeneralDescription')],
+  'tab-translation': [() => t('settings:categoryTranslation'), () => t('settings:categoryTranslationDescription')],
+  'tab-viewer': [() => t('settings:categoryViewer'), () => t('settings:categoryViewerDescription')],
+  'tab-automation': [() => t('settings:categoryAutomation'), () => t('settings:categoryAutomationDescription')],
+  'tab-model': [() => t('settings:categoryModel'), () => t('settings:categoryModelDescription')],
+  'tab-account': [() => t('settings:categoryAccount'), () => t('settings:categoryAccountDescription')],
+  'tab-data-system': [() => t('settings:categoryDataSystem'), () => t('settings:categoryDataSystemDescription')],
+  'tab-info': [() => t('settings:categoryInfo'), () => t('settings:categoryInfoDescription')],
+}
+
+function settingsCategoryBody(name) {
+  return document.querySelector(`[data-settings-category-body="${name}"]`)
+}
+
+function moveSettingsGroup(controlId, destination) {
+  const control = $(controlId)
+  const group = control?.closest('.form-group')
+  if (group && destination) destination.appendChild(group)
+  return group
+}
+
+function initializeSettingsInformationArchitecture() {
+  const translationBody = settingsCategoryBody('translation')
+  const viewerBody = settingsCategoryBody('viewer')
+  const automationBody = settingsCategoryBody('automation')
+  const dataSystemBody = settingsCategoryBody('data-system')
+  const settingsNav = document.querySelector('.settings-nav')
+  const narrowSettingsViewport = window.matchMedia('(max-width: 720px)')
+  const syncSettingsNavOrientation = () => {
+    settingsNav?.setAttribute('aria-orientation', narrowSettingsViewport.matches ? 'horizontal' : 'vertical')
+  }
+  syncSettingsNavOrientation()
+  narrowSettingsViewport.addEventListener?.('change', syncSettingsNavOrientation)
+
+  const modeContext = $('settings-mode-badge')?.closest('.settings-mode-context')
+  const translationHeading = $('settings-translation-heading')?.closest('.settings-section-heading')
+  if (modeContext) translationBody?.appendChild(modeContext)
+  if (translationHeading) translationBody?.appendChild(translationHeading)
+  for (const id of ['setting-target-lang', 'setting-trans-style', 'setting-translation-mode', 'setting-ignore-math']) {
+    moveSettingsGroup(id, translationBody)
+  }
+  moveSettingsGroup('setting-prompt-template', translationBody)
+  $('tab-advanced')?.remove()
+
+  const viewerHeading = $('setting-default-zoom')?.closest('.form-group')?.previousElementSibling
+  if (viewerHeading?.classList.contains('settings-section-heading')) viewerBody?.appendChild(viewerHeading)
+  for (const id of ['setting-default-zoom', 'setting-toolbar-position', 'setting-disable-hover-tooltip']) {
+    moveSettingsGroup(id, viewerBody)
+  }
+  moveSettingsGroup('setting-auto-generate-keywords', automationBody)
+  moveSettingsGroup('clear-cache-btn', dataSystemBody)
+
+  for (const id of ['system-update-section', 'tauri-update-section']) {
+    const section = $(id)
+    if (section && dataSystemBody) dataSystemBody.appendChild(section)
+  }
+
+  const rowControlIds = [
+    'setting-ui-locale', 'setting-source-lang', 'setting-accent-swatches',
+    'setting-target-lang', 'setting-trans-style', 'setting-translation-mode',
+    'setting-ignore-math', 'setting-default-zoom', 'setting-toolbar-position',
+    'setting-disable-hover-tooltip', 'setting-auto-generate-keywords',
+    'setting-ollama-host', 'setting-openai-key', 'setting-gemini-key',
+    'setting-claude-key', 'setting-openalex-mailto', 'change-current-password',
+    'change-new-username', 'change-new-password', 'change-new-password-confirm',
+  ]
+  for (const id of rowControlIds) $(id)?.closest('.form-group')?.classList.add('settings-row')
+  for (const id of ['setting-accent-swatches', 'setting-ignore-math', 'setting-disable-hover-tooltip', 'setting-auto-generate-keywords']) {
+    $(id)?.closest('.form-group')?.classList.add('settings-row-stacked')
+  }
+
+  $('clear-cache-btn')?.closest('.form-group')?.classList.add('settings-action-card', 'settings-action-card-danger')
+  $('system-update-section')?.classList.add('settings-action-card')
+  $('tauri-update-section')?.classList.add('settings-action-card')
+  $('setting-skip-login-checkbox')?.closest('.form-group')?.classList.add('settings-action-card', 'settings-action-card-danger')
+  $('setting-prompt-template')?.closest('.form-group')?.classList.add('settings-stack-card')
+  $('tab-info')?.querySelector('.form-group')?.classList.add('settings-action-card')
+  $('change-credentials-form')?.querySelector('.form-actions')?.classList.add('settings-action-footer')
+
+  for (const [paneId, [getTitle, getDescription]] of Object.entries(settingsCategoryMeta)) {
+    const pane = $(paneId)
+    const button = document.querySelector(`.settings-nav .tab-btn[data-tab="${paneId}"]`)
+    if (!pane) continue
+    pane.setAttribute('role', 'tabpanel')
+    if (button?.id) pane.setAttribute('aria-labelledby', button.id)
+    const header = document.createElement('header')
+    header.className = 'settings-category-header'
+    header.innerHTML = `<h3>${getTitle()}</h3><p>${getDescription()}</p>`
+    const titleKey = button?.dataset.i18n
+    if (titleKey) {
+      header.querySelector('h3').dataset.i18n = titleKey
+      header.querySelector('p').dataset.i18n = `${titleKey}Description`
+    }
+    pane.prepend(header)
+  }
+
+  const versionLabel = $('current-version-label')
+  const infoBody = $('tab-info')?.querySelector('.modal-form')
+  if (versionLabel && infoBody) {
+    const versionCard = document.createElement('section')
+    versionCard.className = 'settings-action-card settings-version-card'
+    versionCard.innerHTML = `<div><strong data-i18n="settings:versionHistoryTitle">${t('settings:versionHistoryTitle')}</strong><p data-i18n="settings:versionHistoryDescription">${t('settings:versionHistoryDescription')}</p></div>`
+    versionLabel.classList.add('settings-version-link')
+    versionCard.appendChild(versionLabel)
+    infoBody.appendChild(versionCard)
+  }
+}
+
+function activateSettingsCategory(paneId, { focus = false } = {}) {
+  const activeButton = Array.from(tabBtns).find(button => button.dataset.tab === paneId) || tabBtns[0]
+  if (!activeButton) return
+  tabBtns.forEach(button => {
+    const active = button === activeButton
+    button.classList.toggle('active', active)
+    button.setAttribute('aria-selected', String(active))
+    button.tabIndex = active ? 0 : -1
+  })
+  tabPanes.forEach(pane => {
+    const active = pane.id === activeButton.dataset.tab
+    pane.classList.toggle('active', active)
+    pane.setAttribute('aria-hidden', String(!active))
+  })
+  if (focus) activeButton.focus()
+  $('settings-modal')?.querySelector('.settings-content')?.scrollTo({ top: 0 })
+}
+
+initializeSettingsInformationArchitecture()
+
 // 설정 폼 및 엘리먼트
 const settingsModeTitle = $('settings-mode-title')
 const settingsModeBadge = $('settings-mode-badge')
@@ -2883,19 +3012,13 @@ class ProviderModelPicker {
               this.container.classList.remove('open')
 
               // 1. 설정 모달 열기
+              await loadFeatureNamespaces('settings')
               if (settingsModal) {
                 openOverlayModal(settingsModal)
               }
 
-              // 2. '모델 설정' 탭 활성화 처리
-              const modelTabBtn = document.querySelector('.tab-btn[data-tab="tab-model"]')
-              const modelTabPane = $('tab-model')
-              if (modelTabBtn && modelTabPane) {
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'))
-                document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'))
-                modelTabBtn.classList.add('active')
-                modelTabPane.classList.add('active')
-              }
+              // 2. 외부 진입 식별자(tab-model)를 유지해 AI·모델 카테고리 활성화
+              activateSettingsCategory('tab-model')
 
               // 3. Ollama 다운로드 섹션 보이기 및 스크롤
               if (pullModelSection) {
@@ -3763,14 +3886,11 @@ async function changeProviderAndModel(type, newProvider, newModel) {
 
 // ── EasyPaper 설정 모달 이벤트 ──────────────────────────
 globalSettingsBtn.addEventListener('click', async () => {
-  await loadNamespaces(['settings', 'errors'])
+  await loadFeatureNamespaces('settings')
   openOverlayModal(settingsModal)
 
-  // 1. 기본적으로 첫 번째 탭(일반 설정)을 활성화
-  tabBtns.forEach(b => b.classList.remove('active'))
-  tabPanes.forEach(p => p.classList.remove('active'))
-  tabBtns[0].classList.add('active')
-  tabPanes[0].classList.add('active')
+  // 1. 기본 진입 카테고리는 일반
+  activateSettingsCategory('tab-general')
 
   // 2. 일반 설정값 로드
   syncModeSettings(workspaceModeController.getMode())
@@ -3814,16 +3934,19 @@ settingsModal.addEventListener('click', (e) => {
   }
 })
 
-// 탭 버튼 클릭 이벤트 바인딩
-tabBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    tabBtns.forEach(b => b.classList.remove('active'))
-    tabPanes.forEach(p => p.classList.remove('active'))
-
-    btn.classList.add('active')
-    const paneId = btn.dataset.tab
-    const pane = $(paneId)
-    if (pane) pane.classList.add('active')
+// 카테고리 클릭 및 roving tabindex 키보드 내비게이션
+tabBtns.forEach((btn, index) => {
+  btn.addEventListener('click', () => activateSettingsCategory(btn.dataset.tab))
+  btn.addEventListener('keydown', (event) => {
+    const lastIndex = tabBtns.length - 1
+    let nextIndex = null
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') nextIndex = index === lastIndex ? 0 : index + 1
+    else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') nextIndex = index === 0 ? lastIndex : index - 1
+    else if (event.key === 'Home') nextIndex = 0
+    else if (event.key === 'End') nextIndex = lastIndex
+    if (nextIndex === null) return
+    event.preventDefault()
+    activateSettingsCategory(tabBtns[nextIndex].dataset.tab, { focus: true })
   })
 })
 

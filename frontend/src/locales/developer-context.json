@@ -4021,5 +4021,62 @@
   },
   "errors:selected_text_not_on_page": {
     "description": "Selected text that cannot be verified against the server-side page source."
+  },
+  "settings:categoryNavigation": {
+    "description": "Settings information architecture label or description for categoryNavigation."
+  },
+  "settings:categoryGeneral": {
+    "description": "Settings information architecture label or description for categoryGeneral."
+  },
+  "settings:categoryTranslation": {
+    "description": "Settings information architecture label or description for categoryTranslation."
+  },
+  "settings:categoryViewer": {
+    "description": "Settings information architecture label or description for categoryViewer."
+  },
+  "settings:categoryAutomation": {
+    "description": "Settings information architecture label or description for categoryAutomation."
+  },
+  "settings:categoryModel": {
+    "description": "Settings information architecture label or description for categoryModel."
+  },
+  "settings:categoryAccount": {
+    "description": "Settings information architecture label or description for categoryAccount."
+  },
+  "settings:categoryDataSystem": {
+    "description": "Settings information architecture label or description for categoryDataSystem."
+  },
+  "settings:categoryInfo": {
+    "description": "Settings information architecture label or description for categoryInfo."
+  },
+  "settings:categoryGeneralDescription": {
+    "description": "Settings information architecture label or description for categoryGeneralDescription."
+  },
+  "settings:categoryTranslationDescription": {
+    "description": "Settings information architecture label or description for categoryTranslationDescription."
+  },
+  "settings:categoryViewerDescription": {
+    "description": "Settings information architecture label or description for categoryViewerDescription."
+  },
+  "settings:categoryAutomationDescription": {
+    "description": "Settings information architecture label or description for categoryAutomationDescription."
+  },
+  "settings:categoryModelDescription": {
+    "description": "Settings information architecture label or description for categoryModelDescription."
+  },
+  "settings:categoryAccountDescription": {
+    "description": "Settings information architecture label or description for categoryAccountDescription."
+  },
+  "settings:categoryDataSystemDescription": {
+    "description": "Settings information architecture label or description for categoryDataSystemDescription."
+  },
+  "settings:categoryInfoDescription": {
+    "description": "Settings information architecture label or description for categoryInfoDescription."
+  },
+  "settings:versionHistoryTitle": {
+    "description": "Settings information architecture label or description for versionHistoryTitle."
+  },
+  "settings:versionHistoryDescription": {
+    "description": "Settings information architecture label or description for versionHistoryDescription."
   }
 }
