@@ -406,6 +406,9 @@ def init_db():
             doc_id TEXT PRIMARY KEY,
             data TEXT NOT NULL,
             updated_at TEXT NOT NULL,
+            revision INTEGER NOT NULL DEFAULT 0,
+            item_versions TEXT NOT NULL DEFAULT '{}',
+            tombstones TEXT NOT NULL DEFAULT '{}',
             FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE
         )
         """)
@@ -414,6 +417,31 @@ def init_db():
             doc_id TEXT PRIMARY KEY,
             data TEXT NOT NULL,
             updated_at TEXT NOT NULL,
+            revision INTEGER NOT NULL DEFAULT 0,
+            item_versions TEXT NOT NULL DEFAULT '{}',
+            tombstones TEXT NOT NULL DEFAULT '{}',
+            FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE
+        )
+        """)
+        for table in ("annotations", "memos"):
+            for column_sql in (
+                f"ALTER TABLE {table} ADD COLUMN revision INTEGER NOT NULL DEFAULT 0",
+                f"ALTER TABLE {table} ADD COLUMN item_versions TEXT NOT NULL DEFAULT '{{}}'",
+                f"ALTER TABLE {table} ADD COLUMN tombstones TEXT NOT NULL DEFAULT '{{}}'",
+            ):
+                try:
+                    cursor.execute(column_sql)
+                except sqlite3.OperationalError:
+                    pass
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS annotation_mutations (
+            resource TEXT NOT NULL,
+            doc_id TEXT NOT NULL,
+            client_id TEXT NOT NULL,
+            mutation_id TEXT NOT NULL,
+            result TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (resource, doc_id, client_id, mutation_id),
             FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE
         )
         """)
@@ -2008,53 +2036,23 @@ def db_search_graph_nodes(doc_ids: List[str], query: str) -> Dict[str, List[str]
 # ── 메모 / 하이라이트 서버 미러 ───────────────────────────────────────────────
 
 def db_get_annotations(doc_id: str) -> Optional[Dict[str, Any]]:
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT data, updated_at FROM annotations WHERE doc_id = ?", (doc_id,))
-        row = cursor.fetchone()
-        if not row:
-            return None
-        return {"data": json.loads(row["data"]), "updated_at": row["updated_at"]}
+    from services.annotation_sync import get_snapshot
+    return get_snapshot("annotations", doc_id)
 
 
 def db_put_annotations(doc_id: str, data: dict) -> None:
-    updated_at = datetime.now(timezone.utc).isoformat()
-    data_str = json.dumps(data, ensure_ascii=False)
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO annotations (doc_id, data, updated_at) VALUES (?, ?, ?)
-            ON CONFLICT(doc_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
-            """,
-            (doc_id, data_str, updated_at)
-        )
-        conn.commit()
+    from services.annotation_sync import legacy_merge
+    legacy_merge("annotations", doc_id, data)
 
 
 def db_get_memos(doc_id: str) -> Optional[Dict[str, Any]]:
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT data, updated_at FROM memos WHERE doc_id = ?", (doc_id,))
-        row = cursor.fetchone()
-        if not row:
-            return None
-        return {"data": json.loads(row["data"]), "updated_at": row["updated_at"]}
+    from services.annotation_sync import get_snapshot
+    return get_snapshot("memos", doc_id)
 
 
 def db_put_memos(doc_id: str, data: dict) -> None:
-    updated_at = datetime.now(timezone.utc).isoformat()
-    data_str = json.dumps(data, ensure_ascii=False)
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO memos (doc_id, data, updated_at) VALUES (?, ?, ?)
-            ON CONFLICT(doc_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
-            """,
-            (doc_id, data_str, updated_at)
-        )
-        conn.commit()
+    from services.annotation_sync import legacy_merge
+    legacy_merge("memos", doc_id, data)
 
 
 def db_get_memo_counts_for_docs(doc_ids: List[str]) -> Dict[str, int]:

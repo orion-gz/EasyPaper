@@ -17,14 +17,16 @@ def test_get_annotations_with_no_saved_data_returns_empty_shape(test_client, iso
     _create_doc_owned_by(isolated_dirs, "doc-anno-empty", "testuser")
     res = test_client.get("/api/library/doc-anno-empty/annotations")
     assert res.status_code == 200
-    assert res.json() == {"data": {}, "updated_at": None}
+    assert res.json() == {"data": {}, "updated_at": None, "revision": 0,
+                          "item_versions": {}, "tombstones": {}}
 
 
 def test_get_memos_with_no_saved_data_returns_empty_shape(test_client, isolated_dirs):
     _create_doc_owned_by(isolated_dirs, "doc-memo-empty", "testuser")
     res = test_client.get("/api/library/doc-memo-empty/memos")
     assert res.status_code == 200
-    assert res.json() == {"data": {}, "updated_at": None}
+    assert res.json() == {"data": {}, "updated_at": None, "revision": 0,
+                          "item_versions": {}, "tombstones": {}}
 
 
 def test_put_then_get_annotations_round_trips(test_client, isolated_dirs):

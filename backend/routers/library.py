@@ -9,7 +9,7 @@ from services.library import (
     patch_document_metadata,
     get_chat_quote_image_path, list_folders, create_folder, update_folder, delete_folder, move_documents_to_folder
 )
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import json
 import re
 
@@ -26,7 +26,7 @@ def _document_translation_suffix(doc, target_lang, style, ignore_math, ignore_ta
     )
 
 
-from typing import Optional
+from typing import Literal, Optional
 
 class FolderCreateRequest(BaseModel):
     name: str
@@ -92,6 +92,37 @@ class LibraryMirrorPayload(BaseModel):
         encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         if len(encoded) > MAX_LIBRARY_MIRROR_JSON_BYTES:
             raise ValueError("주석 또는 메모 데이터는 5MiB 이하여야 합니다.")
+        return value
+
+
+class LibrarySyncMutation(BaseModel):
+    mutation_id: str = Field(min_length=1, max_length=128)
+    operation: Literal["upsert", "delete"]
+    item_id: str = Field(min_length=1, max_length=128)
+    page_key: str = Field(min_length=1, max_length=64)
+    base_version: int = Field(default=0, ge=0)
+    item: Optional[dict] = None
+
+    @model_validator(mode="after")
+    def require_upsert_item(self):
+        if self.operation == "upsert" and not isinstance(self.item, dict):
+            raise ValueError("upsert 작업에는 item이 필요합니다.")
+        return self
+
+
+class LibrarySyncPayload(BaseModel):
+    client_id: str = Field(min_length=1, max_length=128)
+    mutations: list[LibrarySyncMutation] = Field(min_length=1, max_length=1000)
+
+    @field_validator("mutations")
+    @classmethod
+    def limit_serialized_size(cls, value):
+        encoded = json.dumps(
+            [mutation.model_dump() for mutation in value], ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if len(encoded) > MAX_LIBRARY_MIRROR_JSON_BYTES:
+            raise ValueError("주석 또는 메모 동기화 데이터는 5MiB 이하여야 합니다.")
         return value
 
 
@@ -1072,42 +1103,56 @@ async def resolve_library_reference(doc_id: str, ref_num: str, current_user: str
 
 @router.get("/library/{doc_id}/annotations")
 async def get_library_annotations(doc_id: str, current_user: str = Depends(get_current_user)):
-    """문서의 하이라이트/주석 서버 미러 데이터를 반환합니다.
-
-    localStorage가 원본(source of truth)이며 이 데이터는 다중 기기 동기화를
-    위한 best-effort 백업일 뿐이다. 저장된 적이 없으면 빈 데이터를 반환한다.
-    """
+    """서버 기준 하이라이트/주석 snapshot을 반환합니다."""
     require_owned_document(doc_id, current_user)
     from services.db import db_get_annotations
     result = db_get_annotations(doc_id)
-    return result or {"data": {}, "updated_at": None}
+    return result or {"data": {}, "updated_at": None, "revision": 0,
+                      "item_versions": {}, "tombstones": {}}
 
 
 @router.put("/library/{doc_id}/annotations")
 async def put_library_annotations(doc_id: str, payload: LibraryMirrorPayload, current_user: str = Depends(get_current_user)):
-    """하이라이트/주석 서버 미러를 통째로 덮어씁니다(전체 블롭 upsert)."""
+    """구버전 클라이언트 데이터를 삭제 없이 안전하게 병합합니다."""
     require_owned_document(doc_id, current_user)
     from services.db import db_put_annotations
     db_put_annotations(doc_id, payload.data)
     return {"status": "ok"}
 
 
+@router.patch("/library/{doc_id}/annotations")
+async def patch_library_annotations(doc_id: str, payload: LibrarySyncPayload, current_user: str = Depends(get_current_user)):
+    require_owned_document(doc_id, current_user)
+    from services.annotation_sync import apply_mutations
+    return apply_mutations("annotations", doc_id, payload.client_id,
+                           [mutation.model_dump() for mutation in payload.mutations])
+
+
 @router.get("/library/{doc_id}/memos")
 async def get_library_memos(doc_id: str, current_user: str = Depends(get_current_user)):
-    """문서의 메모 서버 미러 데이터를 반환합니다. (annotations와 동일한 성격)"""
+    """서버 기준 메모 snapshot을 반환합니다."""
     require_owned_document(doc_id, current_user)
     from services.db import db_get_memos
     result = db_get_memos(doc_id)
-    return result or {"data": {}, "updated_at": None}
+    return result or {"data": {}, "updated_at": None, "revision": 0,
+                      "item_versions": {}, "tombstones": {}}
 
 
 @router.put("/library/{doc_id}/memos")
 async def put_library_memos(doc_id: str, payload: LibraryMirrorPayload, current_user: str = Depends(get_current_user)):
-    """메모 서버 미러를 통째로 덮어씁니다(전체 블롭 upsert)."""
+    """구버전 클라이언트 데이터를 삭제 없이 안전하게 병합합니다."""
     require_owned_document(doc_id, current_user)
     from services.db import db_put_memos
     db_put_memos(doc_id, payload.data)
     return {"status": "ok"}
+
+
+@router.patch("/library/{doc_id}/memos")
+async def patch_library_memos(doc_id: str, payload: LibrarySyncPayload, current_user: str = Depends(get_current_user)):
+    require_owned_document(doc_id, current_user)
+    from services.annotation_sync import apply_mutations
+    return apply_mutations("memos", doc_id, payload.client_id,
+                           [mutation.model_dump() for mutation in payload.mutations])
 
 
 @router.get("/library/tags/ontology")

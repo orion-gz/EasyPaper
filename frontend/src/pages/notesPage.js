@@ -3,17 +3,12 @@
 // 보여준다. 이 페이지에서는 주석을 새로 만들거나 편집할 수 없다 - 오직
 // 뷰어에서 이미 만든 것을 조회하고, 클릭하면 해당 논문 뷰어로 이동한다.
 //
-// 데이터 출처: 메모/하이라이트/언더라인은 서버 DB가 아니라 문서(세션)별
-// localStorage(`easypaper_annotations_<id>`, `easypaper_memos_<id>`)에만
-// 저장된다(main.js의 loadAnnotations/loadMemos/saveAnnotations/saveMemos와
-// 동일한 키·형태를 그대로 읽는다 - import는 하지 않고 패턴만 따라한다).
-// 로컬이 비어있는 문서에 한해서만 서버 미러(fetchLibraryAnnotations/
-// fetchLibraryMemos)로 폴백한다("로컬이 있으면 항상 로컬 우선, 병합 없음"
-// - main.js의 hydrateAnnotationsAndMemosFromServer와 동일한 정책이지만,
-// 여기서는 표시 전용이라 로컬에 다시 써넣지는 않는다).
+// 데이터 출처는 서버 snapshot이며 localStorage는 즉시 표시와 오프라인 작업
+// 보존에 사용한다. 화면을 열 때 각 문서를 동기화한 결과를 집계한다.
 
 import '../styles/notes.css'
-import { fetchLibrary, fetchLibraryAnnotations, fetchLibraryMemos, fetchPrimer } from '../library.js'
+import { fetchLibrary, fetchPrimer } from '../library.js'
+import { syncDocumentAnnotations } from '../annotationSync.js'
 import { icon } from '../icons.js'
 import { lastActivityIso } from '../readPages.js'
 import { formatTranslationHtml, formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
@@ -90,26 +85,15 @@ function readLocalMemos(docId) {
 }
 
 async function getDocAnnotationsAndMemos(docId) {
-  let annotationsByPage = readLocalAnnotations(docId)
-  let memosByPage = readLocalMemos(docId)
-
-  if (Object.keys(annotationsByPage).length === 0) {
-    try {
-      const server = await fetchLibraryAnnotations(docId)
-      if (server && server.data && Object.keys(server.data).length) annotationsByPage = server.data
-    } catch {
-      // best-effort - 조회 실패해도 목록 표시는 계속 진행
+  try {
+    const synced = await syncDocumentAnnotations(docId)
+    return {
+      annotationsByPage: synced.annotations.data,
+      memosByPage: synced.memos.data,
     }
+  } catch {
+    return { annotationsByPage: readLocalAnnotations(docId), memosByPage: readLocalMemos(docId) }
   }
-  if (Object.keys(memosByPage).length === 0) {
-    try {
-      const server = await fetchLibraryMemos(docId)
-      if (server && server.data && Object.keys(server.data).length) memosByPage = server.data
-    } catch {
-      // best-effort
-    }
-  }
-  return { annotationsByPage, memosByPage }
 }
 
 // 새 데이터는 createdAt을 사용하고, 구버전 메모는 `memo_${Date.now()}` ID에서
