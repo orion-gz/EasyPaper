@@ -7396,3 +7396,337 @@ body.light-theme .chat-drawer {
   text-align: left;
   font: inherit;
 }
+
+/* ── 설정 정보 구조: 카테고리 내비게이션 + 공통 행/작업 카드 ── */
+.settings-dialog {
+  width: min(960px, calc(100vw - 48px));
+  max-width: 960px;
+  height: min(760px, calc(100vh - 48px));
+  max-height: 760px;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-dialog > .modal-header {
+  flex: 0 0 auto;
+  padding: 20px 24px;
+}
+
+.settings-shell {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+
+.settings-nav.modal-tabs {
+  min-width: 0;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  border-bottom: 0;
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+}
+
+.settings-nav .tab-btn {
+  width: 100%;
+  padding: 10px 12px;
+  flex: 0 0 auto;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-size: 13px;
+}
+
+.settings-nav .tab-btn:hover {
+  background: var(--bg-hover);
+}
+
+.settings-nav .tab-btn.active {
+  border-left-color: var(--control-accent);
+  background: var(--control-accent-soft);
+  color: var(--control-accent);
+}
+
+.settings-content {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+.settings-content .tab-pane {
+  max-height: none;
+  overflow: visible;
+}
+
+.settings-category-header {
+  padding: 26px 28px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-category-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.settings-category-header p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.settings-content .modal-form {
+  padding: 22px 28px 28px;
+  gap: 0;
+}
+
+.settings-content .modal-form > .form-group,
+.settings-content .modal-form > .settings-mode-context,
+.settings-content .modal-form > .settings-section-heading,
+.settings-content .modal-form > .settings-action-card,
+.settings-content .modal-form > details {
+  margin: 0;
+  padding-top: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-content .modal-form > :last-child {
+  border-bottom: 0;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 210px) minmax(220px, 1fr);
+  align-items: center;
+  column-gap: 28px;
+  row-gap: 8px;
+}
+
+.settings-row > * {
+  min-width: 0;
+  grid-column: 2;
+}
+
+.settings-row > :first-child {
+  grid-column: 1;
+  grid-row: 1 / span 4;
+  align-self: start;
+  padding-top: 10px;
+}
+
+.settings-row .form-select,
+.settings-row > input,
+.settings-row > textarea {
+  width: 100%;
+  max-width: 380px;
+  justify-self: end;
+}
+
+.settings-row .toggle-switch-group,
+.settings-row .accent-swatch-group,
+.settings-row .accent-picker-row {
+  width: 100%;
+  max-width: 380px;
+  justify-self: end;
+}
+
+.settings-row .toggle-switch {
+  justify-content: space-between;
+}
+
+.settings-row .toggle-switch-label {
+  flex: 1;
+  order: -1;
+}
+
+.settings-action-card,
+.settings-stack-card {
+  margin: 18px 28px;
+  padding: 18px !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.settings-content .modal-form > .settings-action-card,
+.settings-content .modal-form > .settings-stack-card {
+  margin: 0;
+}
+
+.settings-action-card > label:first-child,
+.settings-action-card > h3:first-child {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.settings-action-card-danger {
+  border-color: color-mix(in srgb, var(--error) 34%, var(--border-strong)) !important;
+  background: color-mix(in srgb, var(--error) 6%, var(--bg-elevated));
+}
+
+.settings-action-card-danger .btn,
+.settings-action-card .api-key-delete-btn {
+  color: var(--error) !important;
+  border-color: color-mix(in srgb, var(--error) 34%, var(--border-strong)) !important;
+  background: color-mix(in srgb, var(--error) 8%, transparent) !important;
+}
+
+.settings-action-footer {
+  margin: 18px 0 0;
+  padding: 14px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.settings-action-footer .btn { min-width: 160px; }
+
+.settings-version-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-version-card strong {
+  color: var(--text-primary);
+  font-size: 13.5px;
+}
+
+.settings-version-card p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.settings-version-link {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--control-accent) !important;
+  cursor: pointer;
+  text-decoration: none !important;
+}
+
+.settings-mode-context {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 4px 12px;
+}
+
+.settings-mode-context .settings-mode-eyebrow,
+.settings-mode-context > strong,
+.settings-mode-context > p {
+  grid-column: 1;
+}
+
+.settings-mode-context .settings-mode-badge {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  margin: 0;
+}
+
+#setting-prompt-template {
+  box-sizing: border-box;
+}
+
+#system-update-run-btn:not(:disabled),
+#tauri-update-install-btn:not(:disabled) {
+  background: var(--control-accent) !important;
+  border-color: var(--control-accent) !important;
+  color: #fff !important;
+}
+
+@media (max-width: 720px) {
+  .settings-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+    max-height: none;
+  }
+
+  .settings-dialog > .modal-header {
+    padding: 16px 18px 12px;
+  }
+
+  .settings-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-nav.modal-tabs {
+    padding: 8px 12px;
+    flex-direction: row;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .settings-nav .tab-btn {
+    width: auto;
+    padding: 9px 12px;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+  }
+
+  .settings-nav .tab-btn.active {
+    border-bottom-color: var(--control-accent);
+  }
+
+  .settings-category-header {
+    padding: 20px 18px 14px;
+  }
+
+  .settings-content .modal-form {
+    padding: 14px 18px 22px;
+  }
+
+  .settings-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .settings-row > *,
+  .settings-row > :first-child {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+    max-width: none;
+    padding-top: 0;
+  }
+
+  .settings-row .form-select,
+  .settings-row > input,
+  .settings-row > textarea,
+  .settings-row .toggle-switch-group,
+  .settings-row .accent-swatch-group,
+  .settings-row .accent-picker-row {
+    width: 100%;
+    max-width: none;
+  }
+
+  .settings-version-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-version-link {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+  }
+}

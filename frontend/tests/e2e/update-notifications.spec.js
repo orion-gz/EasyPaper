@@ -81,7 +81,7 @@ test('설정 화면에서 업데이트 확인 버튼을 누르면 새 업데이�
   await gotoApp(page)
   await page.waitForTimeout(600)
   await page.click('#sidebar-settings-btn')
-  await page.click('.tab-btn[data-tab="tab-info"]')
+  await page.click('.tab-btn[data-tab="tab-data-system"]')
   await page.waitForTimeout(400)
 
   // 확인 전에는 실행 버튼이 비활성 상태여야 한다
@@ -106,7 +106,7 @@ test('설정 화면에서 업데이트 확인 결과 이미 최신 버전이면 
   await gotoApp(page)
   await page.waitForTimeout(600)
   await page.click('#sidebar-settings-btn')
-  await page.click('.tab-btn[data-tab="tab-info"]')
+  await page.click('.tab-btn[data-tab="tab-data-system"]')
   await page.waitForTimeout(400)
 
   await page.click('#system-update-check-btn')
@@ -127,7 +127,7 @@ test('업데이트 실행 후 확인을 다시 누르지 않고는 실행 버튼
   await gotoApp(page)
   await page.waitForTimeout(600)
   await page.click('#sidebar-settings-btn')
-  await page.click('.tab-btn[data-tab="tab-info"]')
+  await page.click('.tab-btn[data-tab="tab-data-system"]')
   await page.waitForTimeout(400)
 
   await page.click('#system-update-check-btn')
@@ -157,7 +157,7 @@ test('설정 화면에서 업데이트 확인 주기를 변경하면 저장된�
   await gotoApp(page)
   await page.waitForTimeout(600)
   await page.click('#sidebar-settings-btn')
-  await page.click('.tab-btn[data-tab="tab-info"]')
+  await page.click('.tab-btn[data-tab="tab-data-system"]')
   await page.waitForTimeout(400)
 
   await expect(page.locator('#setting-update-check-interval')).toHaveValue('weekly')

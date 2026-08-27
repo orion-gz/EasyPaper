@@ -853,20 +853,25 @@
 
   <!-- EasyPaper 통합 설정 모달 -->
   <div id="settings-modal" class="modal-overlay hidden">
-    <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-content settings-dialog">
       <div class="modal-header">
         <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>EasyPaper 설정</h2>
         <button id="close-settings-btn" class="close-btn">&times;</button>
       </div>
       
-      <!-- 탭 내비게이션 -->
-      <div class="modal-tabs">
-        <button class="tab-btn active" data-tab="tab-general">일반 설정</button>
-        <button class="tab-btn" data-tab="tab-model">모델 설정</button>
-        <button class="tab-btn" data-tab="tab-account">계정 설정</button>
-        <button class="tab-btn" data-tab="tab-advanced">고급 설정</button>
-        <button class="tab-btn" data-tab="tab-info">정보</button>
-      </div>
+      <div class="settings-shell">
+        <nav class="modal-tabs settings-nav" aria-label="Settings categories" data-i18n-aria-label="settings:categoryNavigation" role="tablist" aria-orientation="vertical">
+          <button class="tab-btn active" id="settings-nav-general" data-tab="tab-general" data-i18n="settings:categoryGeneral" role="tab" aria-controls="tab-general" aria-selected="true">General</button>
+          <button class="tab-btn" id="settings-nav-translation" data-tab="tab-translation" data-i18n="settings:categoryTranslation" role="tab" aria-controls="tab-translation" aria-selected="false" tabindex="-1">Translation</button>
+          <button class="tab-btn" id="settings-nav-viewer" data-tab="tab-viewer" data-i18n="settings:categoryViewer" role="tab" aria-controls="tab-viewer" aria-selected="false" tabindex="-1">Viewer</button>
+          <button class="tab-btn" id="settings-nav-automation" data-tab="tab-automation" data-i18n="settings:categoryAutomation" role="tab" aria-controls="tab-automation" aria-selected="false" tabindex="-1">Automation</button>
+          <button class="tab-btn" id="settings-nav-model" data-tab="tab-model" data-i18n="settings:categoryModel" role="tab" aria-controls="tab-model" aria-selected="false" tabindex="-1">AI &amp; Models</button>
+          <button class="tab-btn" id="settings-nav-account" data-tab="tab-account" data-i18n="settings:categoryAccount" role="tab" aria-controls="tab-account" aria-selected="false" tabindex="-1">Account &amp; Security</button>
+          <button class="tab-btn" id="settings-nav-data-system" data-tab="tab-data-system" data-i18n="settings:categoryDataSystem" role="tab" aria-controls="tab-data-system" aria-selected="false" tabindex="-1">Data &amp; System</button>
+          <button class="tab-btn" id="settings-nav-info" data-tab="tab-info" data-i18n="settings:categoryInfo" role="tab" aria-controls="tab-info" aria-selected="false" tabindex="-1">About</button>
+        </nav>
+
+        <main class="settings-content">
       
       <!-- 일반 설정 탭 -->
       <div id="tab-general" class="tab-pane active">
@@ -1050,6 +1055,18 @@
           </div>
           
         </form>
+      </div>
+
+      <div id="tab-translation" class="tab-pane" role="tabpanel" aria-labelledby="settings-nav-translation">
+        <div class="modal-form" data-settings-category-body="translation"></div>
+      </div>
+
+      <div id="tab-viewer" class="tab-pane" role="tabpanel" aria-labelledby="settings-nav-viewer">
+        <div class="modal-form" data-settings-category-body="viewer"></div>
+      </div>
+
+      <div id="tab-automation" class="tab-pane" role="tabpanel" aria-labelledby="settings-nav-automation">
+        <div class="modal-form" data-settings-category-body="automation"></div>
       </div>
 
       <!-- 모델 설정 탭 -->
@@ -1354,6 +1371,10 @@
         </form>
       </div>
 
+      <div id="tab-data-system" class="tab-pane" role="tabpanel" aria-labelledby="settings-nav-data-system">
+        <div class="modal-form" data-settings-category-body="data-system"></div>
+      </div>
+
       <!-- 정보 탭 -->
       <div id="tab-info" class="tab-pane">
         <div class="modal-form">
@@ -1447,7 +1468,8 @@
           </div>
         </div>
       </div>
-
+        </main>
+      </div>
     </div>
   </div>
 
