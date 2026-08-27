@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { formatMarkdownLatexHtml, linkPageCitations } from '../src/textFormat.js'
+import { prepareMemoMarkdown } from '../src/memoMarkdown.js'
 
 const passthrough = html => html
 
@@ -67,4 +68,26 @@ test('유효한 단일·범위 페이지 인용만 이동 버튼으로 만든다
   assert.match(html, /data-page-citation="4" data-page-citation-end="6"/)
   assert.match(html, /\[p\.12\]/)
   assert.match(html, /\[pp\.8-7\]/)
+})
+
+test('메모 콜아웃 마커를 blockquote 안의 안전한 HTML로 변환한다', () => {
+  const source = [
+    '> [!WARNING] 직접 지정한 제목 <script>',
+    '> - 첫 항목',
+    '>   1. 중첩 항목',
+  ].join('\n')
+  const prepared = prepareMemoMarkdown(source)
+
+  assert.match(prepared, /class="memo-callout-marker" data-callout="warning"/)
+  assert.match(prepared, /직접 지정한 제목 &lt;script&gt;/)
+  assert.match(prepared, /> - 첫 항목/)
+  assert.match(prepared, />   1\. 중첩 항목/)
+})
+
+test('코드 블록 안의 콜아웃 문법은 변환하지 않는다', () => {
+  const source = '```md\n> [!NOTE] 예시\n```\n\n> [!TIP] 실제 팁'
+  const prepared = prepareMemoMarkdown(source)
+
+  assert.match(prepared, /```md\n> \[!NOTE\] 예시\n```/)
+  assert.match(prepared, /data-callout="tip"/)
 })

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
-async function openViewerWithMemo(page) {
+async function openViewerWithMemo(page, memoOverrides = {}) {
   const doc = {
     id: 'doc-memo',
     filename: 'Memo.pdf',
@@ -26,7 +26,7 @@ async function openViewerWithMemo(page) {
   })
 
   await gotoApp(page)
-  await page.evaluate(() => {
+  await page.evaluate((overrides) => {
     localStorage.setItem('easypaper_hydrated_doc-memo', '1')
     localStorage.setItem('easypaper_memos_doc-memo', JSON.stringify({
       page_1: [{
@@ -37,10 +37,11 @@ async function openViewerWithMemo(page) {
         content: '메모 내용',
         x: 10,
         y: 10,
+        ...overrides,
       }],
     }))
     location.hash = '#viewer?id=doc-memo'
-  })
+  }, memoOverrides)
 
   await expect(page.locator('.floating-memo[data-id="memo-regression"]')).toBeVisible()
   await expect(page.locator('#trans-content-1 .trans-text')).toContainText('Cached translation')
@@ -64,6 +65,7 @@ test('사용자가 조절한 메모 크기를 저장하고 다시 복원한다',
   await openViewerWithMemo(page)
 
   const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  await memo.locator('.auto-size-btn').click()
   await memo.evaluate(el => {
     el.style.width = '360px'
     el.style.height = '280px'
@@ -146,4 +148,51 @@ test("키보드로 메모를 이동하고 크기를 조절하면 변경 사항�
   await resizeHandle.press("Shift+ArrowRight")
   await expect.poll(async () => (await memo.boundingBox()).width).toBeGreaterThan(beforeResize.width + 15)
   await expect(page.locator("#a11y-live-region")).toContainText("메모 크기")
+})
+
+test('자동 크기 모드에서 입력 내용에 맞춰 높이를 늘리고 줄인다', async ({ page }) => {
+  await openViewerWithMemo(page, { content: '짧은 메모' })
+
+  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  await expect(memo).toHaveClass(/auto-size/)
+  await memo.locator('.edit-btn').click()
+  const textarea = memo.locator('.floating-memo-textarea')
+  const initialHeight = (await memo.boundingBox()).height
+
+  await textarea.fill(Array.from({ length: 12 }, (_, index) => `길이가 긴 자동 크기 메모 ${index + 1}`).join('\n'))
+  await expect.poll(async () => (await memo.boundingBox()).height).toBeGreaterThan(initialHeight + 80)
+  await expect.poll(async () => (await memo.boundingBox()).width).toBeLessThanOrEqual(422)
+
+  const expandedHeight = (await memo.boundingBox()).height
+  await textarea.fill('다시 짧게')
+  await expect.poll(async () => (await memo.boundingBox()).height).toBeLessThan(expandedHeight - 80)
+})
+
+test('코드블록, 콜아웃, 중첩 목록과 표를 메모에서 렌더링한다', async ({ page }) => {
+  await openViewerWithMemo(page, {
+    content: [
+      '> [!WARNING] 확인 필요',
+      '> 중요한 내용입니다.',
+      '',
+      '```js',
+      'const answer = 42',
+      '```',
+      '',
+      '- 상위 항목',
+      '  - 하위 항목',
+      '1. 첫 단계',
+      '   1. 하위 단계',
+      '',
+      '| 항목 | 값 |',
+      '| --- | --- |',
+      '| 정답 | 42 |',
+    ].join('\n'),
+  })
+
+  const rendered = page.locator('.floating-memo-render')
+  await expect(rendered.locator('pre code')).toContainText('const answer = 42')
+  await expect(rendered.locator('blockquote .memo-callout-marker')).toContainText('확인 필요')
+  await expect(rendered.locator('ul ul')).toContainText('하위 항목')
+  await expect(rendered.locator('ol ol')).toContainText('하위 단계')
+  await expect(rendered.locator('table')).toContainText('정답')
 })

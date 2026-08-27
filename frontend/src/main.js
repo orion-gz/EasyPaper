@@ -15,6 +15,7 @@ import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
 import { icon } from './icons.js'
 import { formatTranslationHtml, applyKatexToElement, linkPageCitations } from './textFormat.js'
+import { prepareMemoMarkdown } from './memoMarkdown.js'
 import { createSelectionRect, resolveDragSelection } from './library-selection.js'
 import { globalAnalyticsTracker } from './readingAnalytics.js'
 import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
@@ -11141,15 +11142,66 @@ function renderPageMemos(pageNum) {
 
     if (isHidden) return // 카드/커넥터는 그리지 않고 하이라이트만 남긴다
 
+    // 높이를 저장한 기존 메모는 사용자가 직접 조절한 것으로 간주해 그대로
+    // 복원한다. 높이 저장값이 없는 기존/신규 메모는 자동 크기 모드로 시작한다.
+    let memoAutoSize = memo.autoSize === true
+      || (memo.autoSize !== false && !Number.isFinite(memo.height))
     const memoEl = document.createElement('div')
-    memoEl.className = `floating-memo color-${memo.color || 'default'}${memo.collapsed ? ' collapsed' : ''}`
+    memoEl.className = `floating-memo color-${memo.color || 'default'}${memo.collapsed ? ' collapsed' : ''}${memoAutoSize ? ' auto-size' : ''}`
     memoEl.setAttribute('data-id', memo.id)
     memoEl.style.left = `${memo.x}%`
     memoEl.style.top = `${memo.y}%`
-    if (Number.isFinite(memo.width)) memoEl.style.width = `${memo.width}px`
-    if (!memo.collapsed && Number.isFinite(memo.height)) memoEl.style.height = `${memo.height}px`
+    if (!memoAutoSize && Number.isFinite(memo.width)) memoEl.style.width = `${memo.width}px`
+    if (!memoAutoSize && !memo.collapsed && Number.isFinite(memo.height)) memoEl.style.height = `${memo.height}px`
 
     let isEditing = !memo.content.trim()
+
+    function persistMemoChange() {
+      const allMemosObj = loadMemos(state.sessionId)
+      allMemosObj[`page_${pageNum}`] = pageMemos
+      saveMemos(state.sessionId, allMemosObj)
+    }
+
+    function resizeTextareaToContent(textarea) {
+      if (!memoAutoSize || !textarea) return
+      textarea.style.height = '0px'
+      textarea.style.height = `${textarea.scrollHeight}px`
+    }
+
+    function updateAutoSizeButton() {
+      const button = memoEl.querySelector('.auto-size-btn')
+      if (!button) return
+      const label = memoAutoSize ? '수동 크기 조절 사용' : '내용에 맞게 자동 조절'
+      button.classList.toggle('active', memoAutoSize)
+      button.setAttribute('aria-pressed', String(memoAutoSize))
+      button.setAttribute('aria-label', label)
+      button.title = label
+      button.innerHTML = icon(memoAutoSize ? 'shrink' : 'expand', 12)
+    }
+
+    function setMemoAutoSize(enabled, { save = true } = {}) {
+      if (memoAutoSize === enabled) return
+      const currentWidth = memoEl.offsetWidth
+      const currentHeight = memoEl.offsetHeight
+      memoAutoSize = enabled
+      memo.autoSize = enabled
+      memoEl.classList.toggle('auto-size', enabled)
+      if (enabled) {
+        delete memo.width
+        delete memo.height
+        memoEl.style.width = ''
+        memoEl.style.height = ''
+        resizeTextareaToContent(memoEl.querySelector('.floating-memo-textarea'))
+      } else {
+        memo.width = currentWidth
+        memo.height = currentHeight
+        memoEl.style.width = `${currentWidth}px`
+        memoEl.style.height = `${currentHeight}px`
+      }
+      updateAutoSizeButton()
+      if (save) persistMemoChange()
+      requestAnimationFrame(() => updateMemoConnectorLine(pageWrapper, memo))
+    }
 
     function updateCardContent() {
       const body = memoEl.querySelector('.floating-memo-body')
@@ -11165,13 +11217,13 @@ function renderPageMemos(pageNum) {
 
         const textarea = body.querySelector('.floating-memo-textarea')
         textarea.focus()
+        resizeTextareaToContent(textarea)
 
         textarea.addEventListener('input', () => {
           memo.content = textarea.value
-          const allMemosObj = loadMemos(state.sessionId)
-          allMemosObj[`page_${pageNum}`] = pageMemos
-          saveMemos(state.sessionId, allMemosObj)
-          updateMemoConnectorLine(pageWrapper, memo)
+          resizeTextareaToContent(textarea)
+          persistMemoChange()
+          requestAnimationFrame(() => updateMemoConnectorLine(pageWrapper, memo))
         })
 
         textarea.addEventListener('blur', () => {
@@ -11210,7 +11262,7 @@ function renderPageMemos(pageNum) {
         let renderedHtml = memo.content
         if (marked && typeof marked.parse === 'function') {
           try {
-            renderedHtml = marked.parse(memo.content)
+            renderedHtml = marked.parse(prepareMemoMarkdown(memo.content))
           } catch (e) {
             console.error("Markdown parsing failed:", e)
           }
@@ -11297,6 +11349,9 @@ function renderPageMemos(pageNum) {
           <button type="button" class="color-dot red ${memo.color === 'red' ? 'selected' : ''}" data-color="red" title="${t('viewer:a11y.red')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.red') })}" aria-pressed="${String(memo.color === 'red')}"></button>
         </div>
         <div class="floating-memo-toggles">
+          <button type="button" class="floating-memo-action-btn auto-size-btn${memoAutoSize ? ' active' : ''}" aria-pressed="${String(memoAutoSize)}">
+            ${icon(memoAutoSize ? 'shrink' : 'expand', 12)}
+          </button>
           <button type="button" class="floating-memo-action-btn collapse-btn" title="${memo.collapsed ? '메모 펼치기' : '메모 접기'}">
             ${icon(memo.collapsed ? 'chevronDown' : 'chevronUp', 12)}
           </button>
@@ -11310,7 +11365,14 @@ function renderPageMemos(pageNum) {
       <button type="button" class="floating-memo-resize-handle" aria-label="${t('viewer:a11y.memoResize')}" title="${t('viewer:a11y.memoResize')}"></button>
     `
 
+    updateAutoSizeButton()
     updateCardContent()
+
+    const autoSizeBtn = memoEl.querySelector('.auto-size-btn')
+    autoSizeBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      setMemoAutoSize(!memoAutoSize)
+    })
 
     const collapseBtn = memoEl.querySelector('.collapse-btn')
     collapseBtn.addEventListener('click', (e) => {
@@ -11321,7 +11383,9 @@ function renderPageMemos(pageNum) {
       saveMemos(state.sessionId, allMemosObj)
 
       memoEl.classList.toggle('collapsed', memo.collapsed)
-      memoEl.style.height = memo.collapsed || !Number.isFinite(memo.height) ? '' : `${memo.height}px`
+      memoEl.style.height = memo.collapsed || memoAutoSize || !Number.isFinite(memo.height)
+        ? ''
+        : `${memo.height}px`
       collapseBtn.innerHTML = icon(memo.collapsed ? 'chevronDown' : 'chevronUp', 12)
       collapseBtn.title = memo.collapsed ? '메모 펼치기' : '메모 접기'
       setTimeout(() => updateMemoConnectorLine(pageWrapper, memo), 0)
@@ -11379,6 +11443,10 @@ function renderPageMemos(pageNum) {
         if (nextWidth === observedWidth && nextHeight === observedHeight) return
         observedWidth = nextWidth
         observedHeight = nextHeight
+        if (memoAutoSize) {
+          updateMemoConnectorLine(pageWrapper, memo)
+          return
+        }
         memo.width = nextWidth
         memo.height = nextHeight
         updateMemoConnectorLine(pageWrapper, memo)
@@ -11396,9 +11464,13 @@ function renderPageMemos(pageNum) {
     }
 
     const resizeHandle = memoEl.querySelector('.floating-memo-resize-handle')
+    resizeHandle.addEventListener('pointerdown', () => {
+      setMemoAutoSize(false)
+    })
     resizeHandle.addEventListener('keydown', (event) => {
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
       event.preventDefault(); event.stopPropagation()
+      setMemoAutoSize(false, { save: false })
       const step = event.shiftKey ? 20 : 4
       let width = memoEl.offsetWidth
       let height = memoEl.offsetHeight
