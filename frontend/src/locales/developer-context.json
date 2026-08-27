@@ -3785,11 +3785,11 @@
   "settings:themeHeading": {
     "description": "Heading for document-mode-specific display theme settings"
   },
-  "settings:themeScopeResearch": {
-    "description": "Research-mode-only theme scope label"
+  "settings:viewerReadingBehavior": {
+    "description": "Label for reading behavior settings shared by the active mode"
   },
-  "settings:themeScopeGeneral": {
-    "description": "General-document-mode-only theme scope label"
+  "settings:viewerReadingTools": {
+    "description": "Label for reading tools shown for the active mode"
   },
   "settings:accentColor": {
     "description": "Accent color setting label"
