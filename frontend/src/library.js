@@ -250,6 +250,35 @@ export async function putLibraryMemos(docId, data) {
   return res.json()
 }
 
+export async function patchLibraryAnnotations(docId, payload, options = {}) {
+  return patchLibrarySyncResource(docId, 'annotations', payload, options)
+}
+
+export async function patchLibraryMemos(docId, payload, options = {}) {
+  return patchLibrarySyncResource(docId, 'memos', payload, options)
+}
+
+async function patchLibrarySyncResource(docId, resource, payload, options = {}) {
+  const res = await fetch(`${API_BASE}/library/${docId}/${resource}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    keepalive: options.keepalive === true,
+  })
+  if (!res.ok) {
+    let message = resource === 'annotations' ? 'Annotation sync failed' : 'Memo sync failed'
+    try {
+      const err = await res.json()
+      message = err.detail || message
+    } catch {
+      // JSON이 아닌 경우 기본 메시지 사용
+    }
+    throw new Error(message)
+  }
+  invalidateLibraryGetCache()
+  return res.json()
+}
+
 export async function searchLibrary(query, documentMode = null) {
   const params = new URLSearchParams({ q: query })
   if (documentMode) params.set("document_mode", documentMode)

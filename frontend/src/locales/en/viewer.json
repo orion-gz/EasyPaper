@@ -42,5 +42,7 @@
   "a11y.green": "Green",
   "a11y.blue": "Blue",
   "a11y.red": "Red",
-  "a11y.previewSize": "Preview size {{width}} by {{height}} pixels"
+  "a11y.previewSize": "Preview size {{width}} by {{height}} pixels",
+  "sync.conflict": "A sync conflict occurred, so both versions were preserved.",
+  "sync.delayed": "Annotation sync is delayed due to a network problem."
 }

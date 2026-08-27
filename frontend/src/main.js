@@ -11,7 +11,8 @@ import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, 
 import DOMPurify from 'dompurify'
 import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryAnnotations, putLibraryAnnotations, fetchLibraryMemos, putLibraryMemos, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
+import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
+import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
 import { icon } from './icons.js'
 import { formatTranslationHtml, applyKatexToElement, linkPageCitations } from './textFormat.js'
 import { createSelectionRect, resolveDragSelection } from './library-selection.js'
@@ -4971,7 +4972,22 @@ async function flushReadingHeartbeat({ keepalive = false } = {}) {
 
 setInterval(tickReadingHeartbeat, READING_HEARTBEAT_TICK_SECONDS * 1000)
 setInterval(flushReadingHeartbeat, READING_HEARTBEAT_FLUSH_MS)
-window.addEventListener('beforeunload', () => { flushReadingHeartbeat({ keepalive: true }); globalAnalyticsTracker.stopSession() })
+window.addEventListener('beforeunload', () => {
+  flushReadingHeartbeat({ keepalive: true })
+  if (state.sessionId && hasPendingAnnotationSync(state.sessionId)) {
+    syncAnnotationsNow(state.sessionId, { keepalive: true, refresh: false })
+  }
+  globalAnalyticsTracker.stopSession()
+})
+window.addEventListener('pagehide', () => {
+  if (state.sessionId && hasPendingAnnotationSync(state.sessionId)) {
+    syncAnnotationsNow(state.sessionId, { keepalive: true, refresh: false })
+  }
+})
+window.addEventListener('online', () => { if (state.sessionId) syncAnnotationsNow(state.sessionId) })
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state.sessionId) syncAnnotationsNow(state.sessionId)
+})
 
 // ── 초기화 ────────────────────────────────────────
 i18nReady.then(() => checkAuthentication()).catch(console.error)
@@ -9837,31 +9853,69 @@ async function loadDocumentReferences(docId) {
 // 것과 동일한 패턴으로, 같은 문서를 여는 재진입 호출을 걸러낸다.
 let docOpeningId = null
 
-// 하이라이트/메모는 localStorage가 원본이고 서버 저장은 다중 기기 동기화를
-// 위한 best-effort 백업일 뿐이다. 로컬에 이미 데이터가 있으면(가장 흔한
-// 케이스: 같은 브라우저에서 계속 쓰던 문서) 절대 덮어쓰지 않고, 로컬에 해당
-// 키가 아예 없을 때만(다른 브라우저/설치에서 처음 여는 경우) 서버 데이터를
-// 채워 넣는다 - 병합 로직 없음, 로컬이 있으면 항상 로컬이 우선한다. 문서당
-// 한 번만 시도하도록 마커를 남긴다(매번 열 때마다 재조회하지 않기 위함).
-async function hydrateAnnotationsAndMemosFromServer(docId) {
-  const marker = `easypaper_hydrated_${docId}`
-  if (localStorage.getItem(marker)) return
-  try {
-    if (!localStorage.getItem(`easypaper_annotations_${docId}`)) {
-      const server = await fetchLibraryAnnotations(docId).catch(() => null)
-      if (server?.data && Object.keys(server.data).length) {
-        localStorage.setItem(`easypaper_annotations_${docId}`, JSON.stringify(server.data))
-      }
-    }
-    if (!localStorage.getItem(`easypaper_memos_${docId}`)) {
-      const server = await fetchLibraryMemos(docId).catch(() => null)
-      if (server?.data && Object.keys(server.data).length) {
-        localStorage.setItem(`easypaper_memos_${docId}`, JSON.stringify(server.data))
-      }
-    }
-  } finally {
-    localStorage.setItem(marker, '1')
+const annotationSyncTimers = new Map()
+const annotationSyncInFlight = new Map()
+let deferredAnnotationRefresh = false
+let annotationSyncDelayNotified = false
+
+function refreshSyncedAnnotationView() {
+  const active = document.activeElement
+  if (active?.classList?.contains('floating-memo-textarea')) {
+    deferredAnnotationRefresh = true
+    return
   }
+  deferredAnnotationRefresh = false
+  document.querySelectorAll('.pdf-page-wrapper[data-page]').forEach(wrapper => {
+    const pageNum = Number(wrapper.dataset.page)
+    const textLayer = wrapper.querySelector('.textLayer')
+    if (textLayer) reRenderPageAnnotations(textLayer, pageNum)
+    renderPageMemos(pageNum)
+  })
+  document.dispatchEvent(new CustomEvent('easypaper:annotations-synced'))
+}
+
+async function syncAnnotationsNow(docId, { keepalive = false, refresh = true } = {}) {
+  if (!docId) return null
+  if (!navigator.onLine && !keepalive) {
+    if (!annotationSyncDelayNotified && state.sessionId === docId) {
+      annotationSyncDelayNotified = true
+      showToast(t('viewer:sync.delayed'), 'warning')
+    }
+    return null
+  }
+  if (annotationSyncInFlight.has(docId)) return annotationSyncInFlight.get(docId)
+  const promise = syncDocumentAnnotations(docId, { keepalive })
+    .then(result => {
+      annotationSyncDelayNotified = false
+      const conflicts = [...result.annotations.conflicts, ...result.memos.conflicts]
+      if (conflicts.length) showToast(t('viewer:sync.conflict'), 'warning')
+      if (refresh && state.sessionId === docId) refreshSyncedAnnotationView()
+      return result
+    })
+    .catch(error => {
+      console.warn('Annotation sync delayed; local queue retained:', error)
+      if (!annotationSyncDelayNotified && state.sessionId === docId) {
+        annotationSyncDelayNotified = true
+        showToast(t('viewer:sync.delayed'), 'warning')
+      }
+      return null
+    })
+    .finally(() => annotationSyncInFlight.delete(docId))
+  annotationSyncInFlight.set(docId, promise)
+  return promise
+}
+
+function scheduleAnnotationSync(docId) {
+  if (!docId) return
+  clearTimeout(annotationSyncTimers.get(docId))
+  annotationSyncTimers.set(docId, setTimeout(() => {
+    annotationSyncTimers.delete(docId)
+    syncAnnotationsNow(docId)
+  }, 1000))
+}
+
+async function hydrateAnnotationsAndMemosFromServer(docId) {
+  await syncAnnotationsNow(docId, { refresh: false })
 }
 
 async function openFromLibrary(doc, shouldPushState = true) {
@@ -9876,6 +9930,10 @@ async function openFromLibrary(doc, shouldPushState = true) {
     // 섞여 들어가는 경쟁 조건이 있었다.
     if (state.chatActiveStream) { state.chatActiveStream(); state.chatActiveStream = null }
 
+    const previousDocId = state.sessionId
+    if (previousDocId && previousDocId !== doc.id && hasPendingAnnotationSync(previousDocId)) {
+      syncAnnotationsNow(previousDocId, { keepalive: true, refresh: false })
+    }
     if (shouldPushState) {
       history.pushState({ screen: 'viewer', docId: doc.id }, '', `#viewer?id=${doc.id}`)
     }
@@ -10296,27 +10354,17 @@ function applyModeTheme(mode) {
 function loadAnnotations(sessionId) {
   try {
     const data = localStorage.getItem(`easypaper_annotations_${sessionId}`)
-    return data ? JSON.parse(data) : {}
+    return ensureLocalResourceIds('annotations', sessionId, data ? JSON.parse(data) : {})
   } catch {
     return {}
   }
 }
 
 // 로컬 스토리지에 어노테이션 정보 저장하기
-// localStorage 쓰기는 항상 동기로 즉시 수행하고(이 함수의 호출부 다수가
-// mousemove/keydown 같은 동기 이벤트 핸들러라 async로 바꾸면 입력 지연이
-// 생긴다), 서버 미러 동기화는 디바운스해 fire-and-forget으로 보낸다. 서버는
-// 항상 전체 블롭을 덮어쓰므로(시퀀스 번호 불필요) 마지막에 도착한 요청이
-// 이기고 다음 저장 때 자연히 정합성이 맞춰진다.
-const _annotationMirrorTimers = {}
 function saveAnnotations(sessionId, annotations) {
-  localStorage.setItem(`easypaper_annotations_${sessionId}`, JSON.stringify(annotations))
   if (!sessionId) return
-  clearTimeout(_annotationMirrorTimers[sessionId])
-  _annotationMirrorTimers[sessionId] = setTimeout(() => {
-    delete _annotationMirrorTimers[sessionId]
-    putLibraryAnnotations(sessionId, annotations).catch(err => console.warn('서버 동기화 실패(로컬은 유지됨):', err))
-  }, 1000)
+  recordLocalResourceChange('annotations', sessionId, annotations)
+  scheduleAnnotationSync(sessionId)
 }
 
 // textLayer 내 텍스트 전체에 대한 선택 위치(Character Offset) 구하기
@@ -10713,22 +10761,16 @@ function loadMemos(sessionId) {
   if (!sessionId) return {}
   const key = `easypaper_memos_${sessionId}`
   try {
-    return JSON.parse(localStorage.getItem(key)) || {}
+    return ensureLocalResourceIds('memos', sessionId, JSON.parse(localStorage.getItem(key)) || {})
   } catch (e) {
     return {}
   }
 }
 
-const _memoMirrorTimers = {}
 function saveMemos(sessionId, memos) {
   if (!sessionId) return
-  const key = `easypaper_memos_${sessionId}`
-  localStorage.setItem(key, JSON.stringify(memos))
-  clearTimeout(_memoMirrorTimers[sessionId])
-  _memoMirrorTimers[sessionId] = setTimeout(() => {
-    delete _memoMirrorTimers[sessionId]
-    putLibraryMemos(sessionId, memos).catch(err => console.warn('서버 동기화 실패(로컬은 유지됨):', err))
-  }, 1000)
+  recordLocalResourceChange('memos', sessionId, memos)
+  scheduleAnnotationSync(sessionId)
 }
 
 // ── 하이라이트/밑줄/메모 삭제 실행취소(Ctrl+Z) ──────────────────────
@@ -11139,6 +11181,10 @@ function renderPageMemos(pageNum) {
               isEditing = false
               updateCardContent()
               updateMemoConnectorLine(pageWrapper, memo)
+              if (deferredAnnotationRefresh) {
+                deferredAnnotationRefresh = false
+                syncAnnotationsNow(state.sessionId)
+              }
             }
           }, 150)
         })

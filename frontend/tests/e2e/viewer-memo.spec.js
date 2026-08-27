@@ -93,6 +93,41 @@ test('뷰어 메모 입력창에 포커스 테두리를 표시하지 않는다',
 })
 
 
+test('메모 편집 중 원격 snapshot은 입력 DOM 교체를 편집 종료까지 미룬다', async ({ page }) => {
+  await openViewerWithMemo(page)
+  await page.route('**/api/library/doc-memo/annotations', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ data: {}, updated_at: null, revision: 0, item_versions: {}, tombstones: {} }),
+  }))
+  await page.route('**/api/library/doc-memo/memos', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({
+      data: { page_1: [{
+        id: 'memo-regression', pageNum: 1, sentenceIdx: 0, sentenceText: 'memo anchor',
+        content: '다른 기기 메모', x: 10, y: 10,
+      }] },
+      updated_at: '2026-08-27T00:00:00Z', revision: 2,
+      item_versions: { 'memo-regression': 2 }, tombstones: {},
+    }),
+  }))
+
+  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  await memo.locator('.edit-btn').click()
+  const textarea = memo.locator('.floating-memo-textarea')
+  await expect(textarea).toBeFocused()
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  await expect.poll(() => page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('easypaper_memos_doc-memo') || '{}')
+    return saved.page_1?.[0]?.content
+  })).toBe('다른 기기 메모')
+  await expect(textarea).toBeVisible()
+  await expect(textarea).toHaveValue('메모 내용')
+
+  await textarea.blur()
+  await expect(memo.locator('.floating-memo-render')).toContainText('다른 기기 메모')
+})
+
+
 test("키보드로 메모를 이동하고 크기를 조절하면 변경 사항을 알린다", async ({ page }) => {
   await openViewerWithMemo(page)
 
