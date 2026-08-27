@@ -113,7 +113,7 @@ def test_does_not_restart_generation_within_cooldown_after_a_recent_failure():
     assert task_key not in primer_router._pending_generations
 
 
-def test_rejects_invalid_target_and_unresolved_source(test_client, monkeypatch):
+def test_rejects_invalid_target(test_client, monkeypatch):
     monkeypatch.setattr(primer_router, "require_session_owner", lambda *_: {
         "pages": [], "metadata": {}, "pdf_path": "/x",
         "source_language": "auto", "detected_source_language": "und",
@@ -121,6 +121,24 @@ def test_rejects_invalid_target_and_unresolved_source(test_client, monkeypatch):
     invalid = test_client.get("/api/library/doc/primer?target_lang=xx")
     assert invalid.status_code == 400
     assert invalid.json()["code"] == "unsupported_target_language"
-    unresolved = test_client.get("/api/library/doc/primer?target_lang=fr")
-    assert unresolved.status_code == 409
-    assert unresolved.json()["code"] == "source_language_not_translatable"
+
+
+@pytest.mark.parametrize("detected", ["und", "mul"])
+def test_returns_cached_primer_for_unresolved_or_mixed_source(
+    test_client, isolated_dirs, monkeypatch, detected,
+):
+    monkeypatch.setattr(primer_router, "require_session_owner", lambda *_: {
+        "pages": [], "metadata": {}, "pdf_path": "/x",
+        "source_language": "auto", "detected_source_language": detected,
+    })
+    isolated_dirs["library"].save_page_insight(
+        "doc-special-source", 0, "primer_v2", '{"hook": "cached hook"}',
+        suffix=f"document-insights-v1:{detected}:fr",
+    )
+
+    response = test_client.get(
+        "/api/library/doc-special-source/primer?target_lang=fr"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"hook": "cached hook"}

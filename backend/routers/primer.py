@@ -16,8 +16,7 @@ router = APIRouter()
 
 def _validated_languages(session: dict, target_value: str) -> tuple[str, str]:
     from services.languages import (
-        DOCUMENT_LANGUAGE_CODES, api_language_error, normalize_document_language,
-        resolve_source_language,
+        api_language_error, normalize_document_language, resolve_source_language,
     )
     try:
         target = normalize_document_language(target_value, allow_legacy=True)
@@ -28,12 +27,11 @@ def _validated_languages(session: dict, target_value: str) -> tuple[str, str]:
         source = resolve_source_language(session, requested_source)
     except ValueError:
         raise HTTPException(status_code=400, detail=api_language_error(requested_source, source=True))
-    if source not in DOCUMENT_LANGUAGE_CODES:
-        raise HTTPException(status_code=409, detail={
-            "code": "source_language_not_translatable",
-            "params": {"language": source},
-            "fallback": "The source language cannot be used for briefing generation.",
-        })
+    # Primer/overview prompts include the source excerpts themselves, so unlike
+    # translation they can safely let the LLM infer an undetermined or mixed
+    # source language. Upload-time generation already uses ``und``/``mul``;
+    # rejecting those values here made the generated cache impossible to read
+    # from both the Library and Viewer.
     return target, source
 
 # 캐시가 없는 문서(구버전 등)는 이 자리에서 생성해야 하는데, 계보/실험 흐름/
