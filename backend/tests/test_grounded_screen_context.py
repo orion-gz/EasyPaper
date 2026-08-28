@@ -282,6 +282,21 @@ def test_selected_text_tolerates_missing_pdf_span_spaces_but_rejects_forgery():
     assert resolve_page_selected_text(pages, 8, "inventedselection") is None
 
 
+def test_selected_text_tolerates_pdf_span_punctuation_differences():
+    from services.context_retrieval import resolve_page_selected_text
+
+    pages = [{
+        "page_num": 9,
+        "text": "The model's two stages—retrieval, then reranking—improve accuracy.",
+    }]
+    assert resolve_page_selected_text(
+        pages, 9, "The models two stages retrieval then reranking improve accuracy.",
+    ) == "The model's two stages—retrieval, then reranking—improve accuracy."
+    assert resolve_page_selected_text(
+        pages, 9, "The models two stages generation then reranking improve accuracy.",
+    ) is None
+
+
 def test_forged_selected_text_is_rejected_before_rate_or_llm(
     test_client, grounded_doc, isolated_dirs, monkeypatch,
 ):

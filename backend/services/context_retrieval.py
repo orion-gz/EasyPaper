@@ -98,20 +98,46 @@ def _normalized_source_match(source: str, selection: str) -> str | None:
     # from cloneContents().textContent (or vice versa). For a meaningful-length
     # selection, retry without whitespace while still returning server text.
     if match_start < 0:
-        compact_source_chars: list[str] = []
-        compact_source_indexes: list[int] = []
-        for normalized_index, char in enumerate(normalized_source):
-            if not char.isspace():
-                compact_source_chars.append(char)
-                compact_source_indexes.append(normalized_index)
-        compact_selection = "".join(char for char in normalized_selection if not char.isspace())
-        if len(compact_selection) < 8:
+        def compact_match(ignore_punctuation: bool = False) -> tuple[int, int] | None:
+            def retained(char: str) -> bool:
+                if char.isspace():
+                    return False
+                return not (ignore_punctuation and unicodedata.category(char).startswith("P"))
+
+            source_chars: list[str] = []
+            source_indexes: list[int] = []
+            for normalized_index, char in enumerate(normalized_source):
+                if retained(char):
+                    source_chars.append(char)
+                    source_indexes.append(normalized_index)
+            selection_chars = [char for char in normalized_selection if retained(char)]
+            if len(selection_chars) < 8:
+                return None
+            compact_start = "".join(source_chars).find("".join(selection_chars))
+            if compact_start < 0:
+                return None
+            compact_end = compact_start + len(selection_chars) - 1
+            source_start = source_indexes[compact_start]
+            source_end = source_indexes[compact_end] + 1
+            if ignore_punctuation:
+                if unicodedata.category(normalized_selection[0]).startswith("P"):
+                    while source_start > 0 and unicodedata.category(normalized_source[source_start - 1]).startswith("P"):
+                        source_start -= 1
+                if unicodedata.category(normalized_selection[-1]).startswith("P"):
+                    while source_end < len(normalized_source) and unicodedata.category(normalized_source[source_end]).startswith("P"):
+                        source_end += 1
+            return source_start, source_end
+
+        compact_bounds = compact_match()
+        # PyMuPDF and PDF.js do not always agree on whether punctuation at a
+        # text-span boundary is part of the extracted text. Ignore punctuation
+        # only after the stricter whitespace-insensitive match fails. Symbols
+        # (for example mathematical operators) remain significant.
+        if compact_bounds is None:
+            compact_bounds = compact_match(ignore_punctuation=True)
+        if compact_bounds is None:
             return None
-        compact_start = "".join(compact_source_chars).find(compact_selection)
-        if compact_start < 0:
-            return None
-        match_start = compact_source_indexes[compact_start]
-        match_end = compact_source_indexes[compact_start + len(compact_selection) - 1] + 1
+        match_start, match_end = compact_bounds
     else:
         match_end = match_start + match_length
 
