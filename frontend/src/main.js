@@ -11533,7 +11533,8 @@ function renderPageMemos(pageNum) {
         textarea.addEventListener('blur', () => {
           setTimeout(() => {
             const exists = memoEl.parentNode !== null
-            if (exists) {
+            const currentTextarea = memoEl.querySelector('.floating-memo-textarea')
+            if (exists && isEditing && currentTextarea === textarea) {
               isEditing = false
               updateCardContent()
               updateMemoConnectorLine(pageWrapper, memo)
