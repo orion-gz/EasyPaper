@@ -5310,13 +5310,8 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
   } else if (pageId === 'graph') {
     await renderLibraryGraphTab()
   } else if (pageId === 'dashboard') {
-    if (workspaceModeController.getMode() === "general") {
-      const { renderGeneralDocumentHomePage } = await import("./pages/generalDocumentHomePage.js")
-      await renderGeneralDocumentHomePage()
-      return
-    }
     const { renderDashboardPage } = await import('./pages/dashboardPage.js')
-    await renderDashboardPage()
+    await renderDashboardPage(workspaceModeController.getMode())
   } else if (pageId === 'history') {
     const { renderReadingHistoryPage } = await import('./pages/readingHistoryPage.js')
     await renderReadingHistoryPage(workspaceModeController.getMode())

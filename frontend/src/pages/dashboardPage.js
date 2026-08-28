@@ -98,6 +98,14 @@ const STAT_DEFS = [
   { key: 'total_notes', label: '메모', iconName: 'edit3', tint: 6, weekly: (c7) => c7?.notes || 0 },
 ]
 
+const GENERAL_STAT_DEFS = [
+  { key: 'total_papers', label: '문서', iconName: 'bookOpen', tint: 1, weekly: (c7) => c7?.uploadedPapers || 0 },
+  { key: 'read_papers', label: '읽은 문서', iconName: 'checkCircle', tint: 2, weekly: (c7) => c7?.papersRead || 0 },
+  { key: 'read_pages', label: '읽은 페이지 수', iconName: 'fileText', tint: 3, weekly: (c7, wp) => wp || 0 },
+  { key: 'total_questions', label: '질문', iconName: 'messageCircle', tint: 5, weekly: (c7) => c7?.questions || 0 },
+  { key: 'total_notes', label: '메모', iconName: 'edit3', tint: 6, weekly: (c7) => c7?.notes || 0 },
+]
+
 function renderStatCard(def, value, curr7, weeklyPagesRead) {
   const delta = def.weekly ? def.weekly(curr7, weeklyPagesRead) : null
   const deltaHtml = delta === null ? '' : `
@@ -120,11 +128,12 @@ function renderStatCard(def, value, curr7, weeklyPagesRead) {
   `
 }
 
-function renderStatGrid(stats, curr7, weeklyPagesRead) {
+function renderStatGrid(stats, curr7, weeklyPagesRead, isGeneralDocumentMode = false) {
   const safeStats = stats || {}
+  const definitions = isGeneralDocumentMode ? GENERAL_STAT_DEFS : STAT_DEFS
   return `
     <div class="dash-stat-grid">
-      ${STAT_DEFS.map(def => renderStatCard(def, safeStats[def.key], curr7, weeklyPagesRead)).join('')}
+      ${definitions.map(def => renderStatCard(def, safeStats[def.key], curr7, weeklyPagesRead)).join('')}
     </div>
   `
 }
@@ -162,12 +171,12 @@ function renderInsightsCard(insights) {
 }
 
 // ── 이번 주 활동 ── Reading History 통계 엔진과 동일한 주간 집계 데이터를 공유하여 시각화한다.
-function renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs) {
+function renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs, isGeneralDocumentMode = false) {
   const safeDocs = Array.isArray(docs) ? docs : []
   const totalCompletedCount = stats?.read_papers ?? safeDocs.filter(d => d?.metadata?.read === true).length
   const totalSeconds = readingStats?.total_seconds || 0
   const rows = [
-    { iconName: 'bookOpen', label: '읽은 논문', value: curr7?.papersRead || 0, total: totalCompletedCount, kind: 'count' },
+    { iconName: 'bookOpen', label: isGeneralDocumentMode ? '읽은 문서' : '읽은 논문', value: curr7?.papersRead || 0, total: totalCompletedCount, kind: 'count' },
     { iconName: 'fileText', label: '읽은 페이지', value: weeklyPagesRead || 0, total: stats?.total_pages || 0, kind: 'count' },
     { iconName: 'messageCircle', label: '질문', value: curr7?.questions || 0, total: stats?.total_questions || 0, kind: 'count' },
     { iconName: 'clock', label: '읽은 시간', value: weeklySeconds || 0, total: totalSeconds, kind: 'duration' },
@@ -211,9 +220,12 @@ function computeDepthRatio(analyticsSummary) {
   return { deepCount, skimCount, deepPct, skimPct: 100 - deepPct }
 }
 
-function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySeconds, analyticsSummary, weeklyCategoryStats) {
+function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySeconds, analyticsSummary, weeklyCategoryStats, docs = [], isGeneralDocumentMode = false) {
   const streak = computeStreakDays(events)
   const focusTopic = heatmap[0]
+  const recentDocument = docs
+    .filter(d => hasReadActivity(d?.metadata))
+    .sort((a, b) => new Date(lastActivityIso(b.metadata, b.created_at)) - new Date(lastActivityIso(a.metadata, a.created_at)))[0]
   const score = analyticsSummary?.overall_avg_score || 0.0
   const scorePct = Math.max(0, Math.min(100, score))
   const depthRatio = computeDepthRatio(analyticsSummary)
@@ -281,7 +293,7 @@ function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySec
       <div class="dash-summary-grid">
         <div class="dash-summary-box">
           <div class="dash-summary-value">${formatNumber(streak)}<span class="dash-summary-unit">일</span></div>
-          <div class="dash-summary-label">연구 연속일</div>
+          <div class="dash-summary-label">${isGeneralDocumentMode ? '문서 읽기 연속일' : '연구 연속일'}</div>
         </div>
         <div class="dash-summary-box">
           <div class="dash-summary-value dash-summary-value-text">${formatDuration(weeklySeconds)}</div>
@@ -289,8 +301,10 @@ function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySec
           <div class="dash-summary-delta">${deltaDurationHtml(weeklySeconds, prevWeeklySeconds, t('dashboard:comparedLastWeek'))}</div>
         </div>
         <div class="dash-summary-box">
-          <div class="dash-summary-value dash-summary-value-text">${focusTopic ? escapeHtml(truncateLabel(focusTopic.name, 12)) : '—'}</div>
-          <div class="dash-summary-label">집중 주제</div>
+          <div class="dash-summary-value dash-summary-value-text">${isGeneralDocumentMode
+            ? escapeHtml(truncateLabel(recentDocument?.metadata?.title || recentDocument?.filename || '—', 12))
+            : (focusTopic ? escapeHtml(truncateLabel(focusTopic.name, 12)) : '—')}</div>
+          <div class="dash-summary-label">${isGeneralDocumentMode ? '최근 읽은 문서' : '집중 주제'}</div>
         </div>
       </div>
       ${categoryMixHtml}
@@ -311,7 +325,7 @@ function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySec
 // 고정되어 보이는 문제가 있었다.
 
 
-function renderRecentPapersCard(docs) {
+function renderRecentPapersCard(docs, isGeneralDocumentMode = false) {
   const read = docs
     .filter(d => (d.metadata && d.metadata.read) || Number.isInteger(d.metadata?.last_page))
     .sort((a, b) => new Date(lastActivityIso(b.metadata, b.created_at)).getTime() - new Date(lastActivityIso(a.metadata, a.created_at)).getTime())
@@ -320,10 +334,10 @@ function renderRecentPapersCard(docs) {
   return `
     <div class="dash-card dash-card-list">
       <div class="dash-card-head">
-        <h3>${icon('bookOpen', 15)}최근 읽은 논문</h3>
+        <h3>${icon('bookOpen', 15)}${isGeneralDocumentMode ? '최근 읽은 문서' : '최근 읽은 논문'}</h3>
         <a href="#" class="dash-link" data-nav="library">전체보기 ›</a>
       </div>
-      ${read.length === 0 ? emptyNote('아직 읽음으로 표시한 논문이 없습니다.') : `
+      ${read.length === 0 ? emptyNote(isGeneralDocumentMode ? '아직 읽음으로 표시한 문서가 없습니다.' : '아직 읽음으로 표시한 논문이 없습니다.') : `
       <ul class="dash-paper-list">
         ${read.map(d => {
           const title = (d.metadata && d.metadata.title) || d.filename
@@ -464,13 +478,13 @@ function renderHeatmapCard(heatmap) {
 // 미니 리스트로 보여준다.
 const TIMELINE_TYPE_LABEL = { uploaded: '업로드', read: '읽음', browsed: '열람', question: '질문', note: '메모' }
 
-function renderTimelineCard(events) {
+function renderTimelineCard(events, isGeneralDocumentMode = false) {
   const safeEvents = Array.isArray(events) ? events : []
   const recent = safeEvents.filter(e => e && isWithinDaysLocal(e.timestamp, 7)).slice(0, 7)
   return `
     <div class="dash-card">
       <div class="dash-card-head">
-        <h3>${icon('clock', 15)}연구 타임라인</h3>
+        <h3>${icon('clock', 15)}${isGeneralDocumentMode ? '문서 활동 타임라인' : '연구 타임라인'}</h3>
         <a href="#" class="dash-link" data-nav="history">전체보기 ›</a>
       </div>
       <div class="dash-card-tag dash-card-tag-inline">최근 7일</div>
@@ -689,25 +703,27 @@ function attachHandlers(root) {
 }
 
 // ── 진입점 ──────────────────────────────────────────────────────────
-export async function renderDashboardPage() {
+export async function renderDashboardPage(documentMode = 'research') {
   const el = document.getElementById('page-dashboard')
   if (!el) return
   const generation = ++renderGeneration
+  const isGeneralDocumentMode = documentMode === 'general'
   const isCurrent = () => generation === renderGeneration && el.classList.contains('active')
+    && document.body.dataset.workspaceMode === documentMode
 
   el.innerHTML = `<div class="dash-loading">${icon('refreshCw', 20)}<span>대시보드를 불러오는 중...</span></div>`
 
   let dashboard, timelineData, libraryData, graphData, readingStats, cachedRecs, analyticsSummary, weeklyReadingStats
   try {
     const results = await Promise.all([
-      fetchLibraryDashboard().catch(() => null),
+      isGeneralDocumentMode ? Promise.resolve(null) : fetchLibraryDashboard().catch(() => null),
       fetchLibraryTimeline().catch(() => ({ events: [] })),
-      fetchLibrary().catch(() => ({ documents: [] })),
-      fetchLibraryGraph().catch(() => null),
-      fetchReadingTimeStats().catch(() => null),
-      fetchCachedReadingRecommendations().catch(() => ({ recommendations: null })),
-      fetchReadingAnalyticsSummary().catch(() => null),
-      fetchReadingTimeStats(7).catch(() => null),
+      fetchLibrary({ documentMode }).catch(() => ({ documents: [] })),
+      isGeneralDocumentMode ? Promise.resolve(null) : fetchLibraryGraph().catch(() => null),
+      fetchReadingTimeStats(null, documentMode).catch(() => null),
+      isGeneralDocumentMode ? Promise.resolve({ recommendations: null }) : fetchCachedReadingRecommendations().catch(() => ({ recommendations: null })),
+      fetchReadingAnalyticsSummary(null, documentMode).catch(() => null),
+      fetchReadingTimeStats(7, documentMode).catch(() => null),
     ])
     dashboard = results[0]
     timelineData = results[1]
@@ -728,12 +744,24 @@ export async function renderDashboardPage() {
   if (!isCurrent()) return
 
   try {
-    const events = (timelineData && Array.isArray(timelineData.events)) ? timelineData.events : []
     const docs = (libraryData && Array.isArray(libraryData.documents)) ? libraryData.documents : []
-    const stats = (dashboard && dashboard.stats) ? dashboard.stats : {}
+    const visibleDocIds = new Set(docs.map(doc => doc.id))
+    const events = ((timelineData && Array.isArray(timelineData.events)) ? timelineData.events : [])
+      .filter(event => !isGeneralDocumentMode || !event.doc_id || visibleDocIds.has(event.doc_id))
+    const stats = isGeneralDocumentMode ? {
+      total_papers: docs.length,
+      read_papers: docs.filter(doc => doc?.metadata?.read === true).length,
+      read_pages: docs.reduce((total, doc) => total + readPageCount(doc), 0),
+      total_pages: docs.reduce((total, doc) => total + (Number(doc?.total_pages) || 0), 0),
+      total_questions: events.filter(event => event?.type === 'question').length,
+      total_notes: events.filter(event => event?.type === 'note').length,
+    } : ((dashboard && dashboard.stats) ? dashboard.stats : {})
     const heatmap = (dashboard && Array.isArray(dashboard.heatmap)) ? dashboard.heatmap : []
     const insights = (dashboard && Array.isArray(dashboard.insights)) ? dashboard.insights : []
-    const recentQuestions = (dashboard && Array.isArray(dashboard.recent_questions)) ? dashboard.recent_questions : []
+    const recentQuestions = isGeneralDocumentMode
+      ? events.filter(event => event?.type === 'question')
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      : ((dashboard && Array.isArray(dashboard.recent_questions)) ? dashboard.recent_questions : [])
 
     const docsById = new Map(docs.map(d => [d.id, d]))
     const tKey = todayKey()
@@ -748,22 +776,22 @@ export async function renderDashboardPage() {
     const weeklyPagesRead = curr7.pagesRead
 
     el.innerHTML = `
-      <div class="dash-root">
-        ${renderStatGrid(stats, curr7, weeklyPagesRead)}
+      <div class="dash-root ${isGeneralDocumentMode ? 'is-general' : ''}">
+        ${renderStatGrid(stats, curr7, weeklyPagesRead, isGeneralDocumentMode)}
         <div class="dash-row dash-row-3">
-          ${renderInsightsCard(insights)}
-          ${renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs)}
-          ${renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySeconds, analyticsSummary, weeklyReadingStats?.total_seconds_by_category)}
+          ${isGeneralDocumentMode ? '' : renderInsightsCard(insights)}
+          ${renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs, isGeneralDocumentMode)}
+          ${renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySeconds, analyticsSummary, weeklyReadingStats?.total_seconds_by_category, docs, isGeneralDocumentMode)}
         </div>
         <div class="dash-row dash-row-recent">
-          ${renderRecentPapersCard(docs)}
+          ${renderRecentPapersCard(docs, isGeneralDocumentMode)}
           ${renderRecentQuestionsCard(recentQuestions)}
-          ${renderRecommendationsCard(cachedRecs && cachedRecs.recommendations)}
+          ${isGeneralDocumentMode ? '' : renderRecommendationsCard(cachedRecs && cachedRecs.recommendations)}
         </div>
         <div class="dash-row dash-row-bottom">
-          ${renderHeatmapCard(heatmap)}
-          ${renderTimelineCard(events)}
-          ${renderGraphPreviewCard(graphData, heatmap)}
+          ${isGeneralDocumentMode ? '' : renderHeatmapCard(heatmap)}
+          ${renderTimelineCard(events, isGeneralDocumentMode)}
+          ${isGeneralDocumentMode ? '' : renderGraphPreviewCard(graphData, heatmap)}
         </div>
       </div>
     `
