@@ -8,11 +8,21 @@ let renderGeneration = 0
 
 const DOCUMENT_TYPES = {
   technical: { label: '기술 문서', icon: 'code' },
-  book: { label: '책', icon: 'bookOpen' },
-  article: { label: '아티클', icon: 'fileText' },
-  report: { label: '보고서', icon: 'activity' },
-  manual: { label: '매뉴얼', icon: 'listChecks' },
+  academic_book: { label: () => t('common:documentTypes.academicBook', { fallback: '전공 서적·학술 문서' }), icon: 'award' },
+  general_book: { label: () => t('common:documentTypes.generalBook', { fallback: '일반·교양서' }), icon: 'bookOpen' },
+  literary_work: { label: () => t('common:documentTypes.literaryWork', { fallback: '문학·서사' }), icon: 'edit3' },
+  article: { label: () => t('common:documentTypes.article', { fallback: '기사·칼럼' }), icon: 'fileText' },
+  report: { label: () => t('common:documentTypes.report', { fallback: '분석 보고서' }), icon: 'activity' },
+  manual: { label: () => t('common:documentTypes.manual', { fallback: '매뉴얼·가이드' }), icon: 'listChecks' },
+  legal_policy: { label: () => t('common:documentTypes.legalPolicy', { fallback: '법률·정책 문서' }), icon: 'clipboard' },
+  presentation: { label: () => t('common:documentTypes.presentation', { fallback: '발표·강의 자료' }), icon: 'layers' },
   other: { label: '기타', icon: 'folder' },
+  book: { label: () => t('common:documentTypes.legacyBook', { fallback: '책(재분류 필요)' }), icon: 'bookOpen', deprecated: true },
+}
+
+
+function documentTypeName(definition) {
+  return typeof definition.label === 'function' ? definition.label() : definition.label
 }
 
 
@@ -29,7 +39,7 @@ function renderStatCard(type, count) {
     <div class="document-home-stat-card">
       <span class="document-home-stat-icon" aria-hidden="true">${icon(definition.icon, 18)}</span>
       <span class="document-home-stat-copy">
-        <span>${definition.label}</span>
+        <span>${documentTypeName(definition)}</span>
         <strong>${count.toLocaleString('ko-KR')}</strong>
       </span>
     </div>`
@@ -45,9 +55,9 @@ function renderRecentDocument(doc) {
       <span class="document-home-recent-icon" aria-hidden="true">${icon(type.icon, 19)}</span>
       <span class="document-home-recent-copy">
         <strong title="${escapeHtml(title)}">${escapeHtml(title)}</strong>
-        <small>${escapeHtml(doc.filename || type.label)} · ${pages.toLocaleString('ko-KR')}페이지</small>
+        <small>${escapeHtml(doc.filename || documentTypeName(type))} · ${pages.toLocaleString('ko-KR')}페이지</small>
       </span>
-      <span class="document-home-type-chip">${type.label}</span>
+      <span class="document-home-type-chip">${documentTypeName(type)}</span>
       <span class="document-home-row-arrow" aria-hidden="true">${icon('chevronDown', 16)}</span>
     </button>`
 }
@@ -114,7 +124,9 @@ export async function renderGeneralDocumentHomePage() {
           </div>
         </div>
         <div class="document-home-stat-grid">
-          ${Object.keys(DOCUMENT_TYPES).map(type => renderStatCard(type, counts[type] || 0)).join('')}
+          ${Object.keys(DOCUMENT_TYPES)
+            .filter(type => !DOCUMENT_TYPES[type].deprecated || counts[type])
+            .map(type => renderStatCard(type, counts[type] || 0)).join('')}
         </div>
       </section>
 

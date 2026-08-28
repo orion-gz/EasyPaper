@@ -39,6 +39,11 @@ test('document types use registry and safe fallback', () => {
   assert.equal(documentTypeLabel(registry, 'general', 'manual'), '매뉴얼')
   assert.equal(defaultDocumentType('research'), 'research_paper')
   assert.ok(getDocumentTypes(null, 'general').some(item => item.value === 'technical'))
+  const fallbackTypes = getDocumentTypes(null, 'general')
+  assert.equal(fallbackTypes.length, 10)
+  assert.ok(fallbackTypes.some(item => item.value === 'academic_book'))
+  assert.ok(!fallbackTypes.some(item => item.value === 'book'))
+  assert.equal(documentTypeLabel(null, 'general', 'book'), '책(재분류 필요)')
 })
 
 

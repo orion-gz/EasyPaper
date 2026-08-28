@@ -1163,5 +1163,14 @@
   "chatInput.expand": "입력창 확장",
   "chatInput.collapse": "입력창 축소",
   "addMenu.open": "추가 메뉴 열기",
-  "addMenu.close": "추가 메뉴 닫기"
+  "addMenu.close": "추가 메뉴 닫기",
+  "documentTypes.academicBook": "전공 서적·학술 문서",
+  "documentTypes.generalBook": "일반·교양서",
+  "documentTypes.literaryWork": "문학·서사",
+  "documentTypes.article": "기사·칼럼",
+  "documentTypes.report": "분석 보고서",
+  "documentTypes.manual": "매뉴얼·가이드",
+  "documentTypes.legalPolicy": "법률·정책 문서",
+  "documentTypes.presentation": "발표·강의 자료",
+  "documentTypes.legacyBook": "책(재분류 필요)"
 }

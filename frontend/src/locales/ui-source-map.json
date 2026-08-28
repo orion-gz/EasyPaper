@@ -1115,5 +1115,14 @@
   "–페이지로 이동": "common:legacy.ui.1110",
   "페이지로 이동": "common:legacy.ui.1111",
   "화면 테마": "settings:themeHeading",
-  "저장된 키 삭제": "settings:deleteApiKey"
+  "저장된 키 삭제": "settings:deleteApiKey",
+  "전공 서적·학술 문서": "common:documentTypes.academicBook",
+  "일반·교양서": "common:documentTypes.generalBook",
+  "문학·서사": "common:documentTypes.literaryWork",
+  "기사·칼럼": "common:documentTypes.article",
+  "분석 보고서": "common:documentTypes.report",
+  "매뉴얼·가이드": "common:documentTypes.manual",
+  "법률·정책 문서": "common:documentTypes.legalPolicy",
+  "발표·강의 자료": "common:documentTypes.presentation",
+  "책(재분류 필요)": "common:documentTypes.legacyBook"
 }

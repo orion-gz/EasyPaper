@@ -1163,5 +1163,14 @@
   "chatInput.expand": "Expand input",
   "chatInput.collapse": "Collapse input",
   "addMenu.open": "Open add menu",
-  "addMenu.close": "Close add menu"
+  "addMenu.close": "Close add menu",
+  "documentTypes.academicBook": "Academic book or scholarly document",
+  "documentTypes.generalBook": "General nonfiction",
+  "documentTypes.literaryWork": "Literary work",
+  "documentTypes.article": "Article or column",
+  "documentTypes.report": "Analytical report",
+  "documentTypes.manual": "Manual or guide",
+  "documentTypes.legalPolicy": "Legal or policy document",
+  "documentTypes.presentation": "Presentation or lecture material",
+  "documentTypes.legacyBook": "Book (reclassification needed)"
 }
