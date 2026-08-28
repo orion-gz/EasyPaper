@@ -92,6 +92,22 @@ export async function cancelInsightJobAPI(sessionId, kind) {
   return res.json()
 }
 
+const uploadRecoveryDelays = [400, 800, 1600, 3200, 5000]
+
+async function recoverCompletedUpload(uploadId, onProgress) {
+  onProgress?.(100, 'verifying')
+  for (const delay of uploadRecoveryDelays) {
+    await new Promise(resolve => setTimeout(resolve, delay))
+    try {
+      const session = await getSession(uploadId)
+      return { ...session, file_size_mb: session.file_size_mb || 0 }
+    } catch {
+      // The server may still be finishing parsing after the connection closed.
+    }
+  }
+  return null
+}
+
 export async function uploadPDF(file, options, onProgress) {
   const formData = new FormData()
   formData.append('file', file)
@@ -99,19 +115,19 @@ export async function uploadPDF(file, options, onProgress) {
   const { targetLang, sourceLang = "auto", style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode, documentMode, documentType } = options
   const query = `?target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}&keyword_mode=${encodeURIComponent(keywordMode || 'manual')}&summary_mode=${encodeURIComponent(summaryMode || 'manual')}`
   const classificationQuery = "&document_mode=" + encodeURIComponent(documentMode || "research") + "&document_type=" + encodeURIComponent(documentType || "research_paper")
+  const uploadId = crypto.randomUUID()
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', `${API_BASE}/upload${query}${classificationQuery}`)
+    xhr.open('POST', `${API_BASE}/upload${query}${classificationQuery}&upload_id=${encodeURIComponent(uploadId)}`)
 
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100))
-      }
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100), 'uploading')
     })
 
     xhr.addEventListener('load', () => {
       if (xhr.status === 200) {
+        onProgress?.(100, 'processing')
         resolve(JSON.parse(xhr.responseText))
       } else {
         try {
@@ -123,7 +139,13 @@ export async function uploadPDF(file, options, onProgress) {
       }
     })
 
-    xhr.addEventListener('error', () => reject(new Error(errorMessage({ code: 'network' }))))
+    const recoverOrReject = async () => {
+      const recovered = await recoverCompletedUpload(uploadId, onProgress)
+      if (recovered) resolve(recovered)
+      else reject(new Error(errorMessage({ code: 'network' })))
+    }
+    xhr.addEventListener('error', recoverOrReject)
+    xhr.addEventListener('timeout', recoverOrReject)
     xhr.send(formData)
   })
 }
