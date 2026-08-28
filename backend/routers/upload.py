@@ -143,6 +143,7 @@ def restore_sessions_from_library():
 @router.post("/upload", response_model=UploadResponse)
 async def upload_pdf(
     file: UploadFile = File(...),
+    upload_id: str | None = None,
     target_lang: str = "ko",
     source_lang: str = "auto",
     style: str = "academic",
@@ -181,8 +182,18 @@ async def upload_pdf(
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="PDF 파일만 업로드 가능합니다.")
 
-    # 세션 ID 생성
-    session_id = str(uuid.uuid4())
+    # 클라이언트가 알고 있는 ID를 사용하면 응답 전송이 끊겨도
+    # GET /session/{id}로 실제 저장 성공 여부를 확인할 수 있다.
+    if upload_id:
+        try:
+            session_id = str(uuid.UUID(upload_id))
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=400, detail="유효하지 않은 업로드 ID입니다.")
+        from services.db import db_get_document
+        if session_id in sessions or db_get_document(session_id):
+            raise HTTPException(status_code=409, detail="이미 사용된 업로드 ID입니다.")
+    else:
+        session_id = str(uuid.uuid4())
     session_dir = os.path.join(UPLOAD_DIR, session_id)
     os.makedirs(session_dir, exist_ok=True)
     pdf_path = os.path.join(session_dir, "document.pdf")

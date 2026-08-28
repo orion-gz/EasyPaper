@@ -7,6 +7,7 @@ MAX_FILE_SIZE_MB를 검사해서, 한도를 아무리 작게 잡아도 큰 업�
 """
 
 import fitz
+import uuid
 import routers.upload as upload_module
 import routers.primer as primer_router
 
@@ -49,6 +50,30 @@ def test_upload_accepts_file_within_size_limit(test_client, isolated_dirs, monke
     body = res.json()
     assert body["filename"] == "small.pdf"
     assert body["session_id"] in upload_module.sessions
+
+
+def test_upload_uses_valid_client_upload_id(test_client, isolated_dirs, monkeypatch):
+    upload_dir = isolated_dirs["upload_dir"]
+    monkeypatch.setattr(upload_module, "UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(upload_module, "MAX_FILE_SIZE_MB", 50)
+    upload_id = str(uuid.uuid4())
+
+    response = test_client.post(
+        f"/api/upload?translation_mode=scroll&upload_id={upload_id}",
+        files={"file": ("identified.pdf", _minimal_pdf_bytes(), "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["session_id"] == upload_id
+
+
+def test_upload_rejects_invalid_client_upload_id(test_client):
+    response = test_client.post(
+        "/api/upload?upload_id=not-a-uuid",
+        files={"file": ("invalid.pdf", _minimal_pdf_bytes(), "application/pdf")},
+    )
+
+    assert response.status_code == 400
 
 
 def test_auto_translation_job_starts_before_primer(test_client, isolated_dirs, monkeypatch):

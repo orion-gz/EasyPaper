@@ -772,11 +772,7 @@ const uploadPopup        = $('upload-popup')
 const uploadPopupTitle   = $('upload-popup-title')
 const uploadPopupMinimize = $('upload-popup-minimize')
 const uploadPopupClose   = $('upload-popup-close')
-const uploadItemName     = $('upload-item-name')
-const uploadItemStatus   = $('upload-item-status')
-const uploadItemProgressBar = $('upload-item-progress-bar')
-const uploadItemSpinner  = $('upload-item-spinner')
-const uploadItemSuccessIcon = $('upload-item-success-icon')
+const uploadPopupBody    = $('upload-popup-body')
 const docTitle          = $('doc-title')
 const viewerDocumentTypeChip = $("viewer-document-type-chip")
 const docTitleEditBtn   = $('doc-title-edit-btn')
@@ -1140,135 +1136,146 @@ fileInput.addEventListener('change', (e) => {
 
 // ── 파일 처리 ─────────────────────────────────────
 async function beginClassifiedUpload(files, targetFolderId = null) {
-  const selected = await workspaceModeController.chooseUploadClassification(Array.from(files))
-  if (!selected) { fileInput.value = ""; return }
-  await handleFiles(files, targetFolderId, selected)
-}
-
-async function handleFiles(files, targetFolderId = null, classification = null) {
   const pdfFiles = Array.from(files).filter(file => file.name.toLowerCase().endsWith('.pdf'))
-
   if (pdfFiles.length === 0) {
+    fileInput.value = ''
     showToast('PDF 파일만 업로드 가능합니다', 'error')
     return
   }
+  const selected = await workspaceModeController.chooseUploadClassifications(pdfFiles)
+  if (!selected) { fileInput.value = ''; return }
+  await handleFiles(selected, targetFolderId)
+}
 
-  const rememberedTypeOptions = classification?.documentType
-    ? (loadDocumentTypeOptions()[classification.documentType] || {})
-    : {}
+function createUploadPopupRow(file) {
+  const row = document.createElement('div')
+  row.className = 'upload-item-row'
+  row.innerHTML = `
+    <div class="upload-item-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></div>
+    <div class="upload-item-info">
+      <div class="upload-item-name"></div>
+      <div class="upload-item-status">준비 중...</div>
+      <div class="upload-item-progress-container"><div class="upload-item-progress-bar-wrap"><div class="upload-item-progress-bar"></div></div></div>
+    </div>
+    <div class="upload-item-circle-progress"><div class="spinner" style="width:16px;height:16px"></div><span class="upload-success-icon hidden">✓</span><span class="upload-error-icon hidden">!</span></div>`
+  row.querySelector('.upload-item-name').textContent = file.name
+  return {
+    element: row,
+    status: row.querySelector('.upload-item-status'),
+    bar: row.querySelector('.upload-item-progress-bar'),
+    spinner: row.querySelector('.spinner'),
+    success: row.querySelector('.upload-success-icon'),
+    error: row.querySelector('.upload-error-icon'),
+  }
+}
+
+async function handleFiles(uploadItems, targetFolderId = null) {
   const isLibraryActive = libraryScreen.classList.contains('active')
-
-  // Show upload popup
-  uploadPopup.classList.remove('hidden')
-  uploadPopup.classList.remove('minimized')
+  uploadPopup.classList.remove('hidden', 'minimized')
   if (uploadPopupMinimize) uploadPopupMinimize.textContent = '−'
+  uploadPopupBody.replaceChildren()
 
-  let successCount = 0
-  let lastSessionId = null
-  let lastFilename = ""
-  let lastTotalPages = 0
-  let lastTitle = ""
+  const rows = uploadItems.map(({ file }) => {
+    const row = createUploadPopupRow(file)
+    uploadPopupBody.appendChild(row.element)
+    return row
+  })
+  uploadPopupTitle.textContent = `파일 업로드 중 (0/${uploadItems.length})`
 
-  for (let i = 0; i < pdfFiles.length; i++) {
-    const file = pdfFiles[i]
-    uploadPopupTitle.textContent = `파일 업로드 중 (${i + 1}/${pdfFiles.length})`
-    uploadItemName.textContent = file.name
-    uploadItemStatus.textContent = '준비 중...'
-    uploadItemProgressBar.style.width = '0%'
-    uploadItemSpinner.classList.remove('hidden')
-    uploadItemSuccessIcon.classList.add('hidden')
-
+  let completedCount = 0
+  const uploadResults = await Promise.all(uploadItems.map(async (item, index) => {
+    const { file, classification } = item
+    const row = rows[index]
+    const rememberedTypeOptions = loadDocumentTypeOptions()[classification.documentType] || {}
     try {
       const result = await uploadPDF(file, {
-        ...getTranslationOptions(classification?.documentMode || workspaceModeController.getMode()),
+        ...getTranslationOptions(classification.documentMode),
         ...rememberedTypeOptions,
-        translationMode: getTranslationMode(classification?.documentMode || workspaceModeController.getMode()),
-        keywordMode: getKeywordMode(classification?.documentMode || workspaceModeController.getMode()),
-        summaryMode: getSummaryMode(classification?.documentMode || workspaceModeController.getMode()),
-        documentMode: classification?.documentMode || workspaceModeController.getMode(),
-        documentType: classification?.documentType || defaultDocumentType(workspaceModeController.getMode())
-      }, (pct) => {
-        uploadItemProgressBar.style.width = `${pct}%`
-        uploadItemStatus.textContent = `업로드 중... ${pct}%`
+        translationMode: getTranslationMode(classification.documentMode),
+        keywordMode: getKeywordMode(classification.documentMode),
+        summaryMode: getSummaryMode(classification.documentMode),
+        documentMode: classification.documentMode,
+        documentType: classification.documentType,
+      }, (pct, phase) => {
+        row.bar.style.width = `${pct}%`
+        row.status.textContent = phase === 'verifying'
+          ? t('common:legacy.ui.0801')
+          : (pct >= 100 || phase === 'processing' ? '분석 및 저장 중...' : `업로드 중... ${pct}%`)
       })
-
-      uploadItemProgressBar.style.width = '100%'
-      uploadItemStatus.textContent = '분석 및 저장 중...'
-
-      lastSessionId = result.session_id
-      lastFilename = result.filename
-      lastTotalPages = result.total_pages
-      lastTitle = (result.metadata && result.metadata.title) ? result.metadata.title : result.filename
-      const uploadedDocumentMode = classification?.documentMode || workspaceModeController.getMode()
-      if (isLongDocument(result.total_pages) && getTranslationMode(uploadedDocumentMode) === 'auto') {
-        showToast(
-          '50페이지 이상 문서는 전체 자동 번역 대신 보는 페이지부터 번역됩니다.',
-          'info',
-        )
-      }
-      successCount++
-      if (result.document_mode === 'general' && getKeywordMode(result.document_mode) === 'auto' && result.total_pages > 20) {
-        const uploadLanguageOptions = getTranslationOptions(result.document_mode)
-        const estimate = await estimateInsightJobAPI(result.session_id, 'keywords', uploadLanguageOptions.targetLang, uploadLanguageOptions.sourceLang)
-        const confirmed = await showCustomConfirm(
-          `빈 페이지와 기존 캐시를 제외하고 최대 ${estimate.estimated_calls}회의 AI 호출이 예상됩니다. 전체 고급 어휘 생성을 시작할까요?`,
-          { title: '장문 어휘 생성', confirmText: '생성 시작', danger: false },
-        )
-        if (confirmed) {
-          await startInsightJobAPI(result.session_id, 'keywords', uploadLanguageOptions.targetLang, uploadLanguageOptions.sourceLang, true)
-          showInsightJobProgress(result.session_id, 'keywords', `${lastTitle} · 고급 어휘`)
+      if (targetFolderId) {
+        try {
+          await moveLibraryDocuments([result.session_id], targetFolderId)
+        } catch {
+          showToast(t('common:legacy.ui.0751'), 'warning')
         }
       }
-      if (classification?.documentType) {
-        saveDocumentTypeOptions(classification.documentType, { ...rememberedTypeOptions, ...getTranslationOptions(classification.documentMode) })
-        patchWorkspaceSettingsAPI({ document_type_options: loadDocumentTypeOptions() }).catch(() => {
-          showToast('문서 종류별 옵션을 서버에 저장하지 못했습니다.', 'warning')
-        })
-      }
-      if (targetFolderId) await moveLibraryDocuments([result.session_id], targetFolderId)
-
-      if (isLibraryActive) {
-        await renderLibrary()
-      }
-
-      // Mark file upload as success in popup
-      uploadItemStatus.textContent = '업로드 완료'
-      uploadItemSpinner.classList.add('hidden')
-      uploadItemSuccessIcon.classList.remove('hidden')
-    } catch (err) {
-      showToast(`"${file.name}" 업로드 실패: ${err.message}`, 'error')
-      uploadItemStatus.textContent = '업로드 실패'
-      uploadItemSpinner.classList.add('hidden')
+      row.bar.style.width = '100%'
+      row.status.textContent = '업로드 완료'
+      row.spinner.classList.add('hidden')
+      row.success.classList.remove('hidden')
+      return { ...item, result, rememberedTypeOptions }
+    } catch (error) {
+      showToast(`"${file.name}" 업로드 실패: ${error.message}`, 'error')
+      row.status.textContent = '업로드 실패'
+      row.spinner.classList.add('hidden')
+      row.error.classList.remove('hidden')
+      return null
+    } finally {
+      completedCount++
+      uploadPopupTitle.textContent = `파일 업로드 중 (${completedCount}/${uploadItems.length})`
     }
+  }))
+
+  const successes = uploadResults.filter(Boolean)
+  fileInput.value = ''
+
+  for (const uploaded of successes) {
+    const { classification, result, rememberedTypeOptions } = uploaded
+    const title = result.metadata?.title || result.filename
+    if (isLongDocument(result.total_pages) && getTranslationMode(classification.documentMode) === 'auto') {
+      showToast('50페이지 이상 문서는 전체 자동 번역 대신 보는 페이지부터 번역됩니다.', 'info')
+    }
+    if (result.document_mode === 'general' && getKeywordMode(result.document_mode) === 'auto' && result.total_pages > 20) {
+      const languageOptions = getTranslationOptions(result.document_mode)
+      const estimate = await estimateInsightJobAPI(result.session_id, 'keywords', languageOptions.targetLang, languageOptions.sourceLang)
+      const confirmed = await showCustomConfirm(
+        `빈 페이지와 기존 캐시를 제외하고 최대 ${estimate.estimated_calls}회의 AI 호출이 예상됩니다. 전체 고급 어휘 생성을 시작할까요?`,
+        { title: '장문 어휘 생성', confirmText: '생성 시작', danger: false },
+      )
+      if (confirmed) {
+        await startInsightJobAPI(result.session_id, 'keywords', languageOptions.targetLang, languageOptions.sourceLang, true)
+        showInsightJobProgress(result.session_id, 'keywords', `${title} · 고급 어휘`)
+      }
+    }
+    saveDocumentTypeOptions(classification.documentType, { ...rememberedTypeOptions, ...getTranslationOptions(classification.documentMode) })
   }
+  if (successes.length) {
+    patchWorkspaceSettingsAPI({ document_type_options: loadDocumentTypeOptions() }).catch(() => {
+      showToast('문서 종류별 옵션을 서버에 저장하지 못했습니다.', 'warning')
+    })
+  }
+  if (isLibraryActive && successes.length) await renderLibrary()
 
-  fileInput.value = '' // reset input value
+  if (successes.length > 0) {
+    uploadPopupTitle.textContent = `업로드 완료 (${successes.length}/${uploadItems.length})`
+    showToast(`${successes.length}개의 문서가 라이브러리에 추가되었습니다 ✓`, 'success')
+    if (successes.length === uploadItems.length) setTimeout(() => uploadPopup.classList.add('hidden'), 1500)
 
-  if (successCount > 0) {
-    uploadPopupTitle.textContent = `업로드 완료 (${successCount}/${pdfFiles.length})`
-    const uploadedNoun = classification?.documentMode === 'general' ? '문서' : '논문'
-    showToast(`${successCount}개의 ${uploadedNoun}가 라이브러리에 추가되었습니다 ✓`, 'success')
-
-    // 업로드 성공 시 1.5초 후 팝업 자동 닫기
-    setTimeout(() => {
-      uploadPopup.classList.add('hidden')
-    }, 1500)
-
-    if (!isLibraryActive && pdfFiles.length === 1 && successCount === 1) {
-      state.sessionId  = lastSessionId
-      loadDocumentImages(lastSessionId)
-      state.filename   = lastFilename
-      state.totalPages = lastTotalPages
-      state.title      = lastTitle
-      history.pushState({ screen: 'viewer', docId: lastSessionId }, '', `#viewer?id=${lastSessionId}`)
-
-      await loadPDF(`/api/pdf-file/${state.sessionId}`)
-      docTitle.textContent = lastTitle
-      docTitle.title = lastFilename
-      pageTotal.textContent = `/ ${state.totalPages}`
-      pageInput.max   = state.totalPages
+    if (!isLibraryActive && uploadItems.length === 1 && successes.length === 1) {
+      const { result } = successes[0]
+      const title = result.metadata?.title || result.filename
+      state.sessionId = result.session_id
+      loadDocumentImages(result.session_id)
+      state.filename = result.filename
+      state.totalPages = result.total_pages
+      state.title = title
+      history.pushState({ screen: 'viewer', docId: result.session_id }, '', `#viewer?id=${result.session_id}`)
+      await loadPDF(`/api/pdf-file/${result.session_id}`)
+      docTitle.textContent = title
+      docTitle.title = result.filename
+      pageTotal.textContent = `/ ${result.total_pages}`
+      pageInput.max = result.total_pages
       pageInput.value = 1
-
       showViewer()
       await initScrollViewer()
       hideOutlineSidebar()

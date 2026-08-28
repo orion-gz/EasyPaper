@@ -3750,7 +3750,7 @@ body.light-theme .provider-picker-panel {
 .upload-popup-body {
   padding: 16px 20px;
   background: rgba(0, 0, 0, 0.15);
-  max-height: 200px;
+  max-height: min(420px, 60vh);
   overflow-y: auto;
   transition: max-height 0.3s;
 }
@@ -3763,6 +3763,16 @@ body.light-theme .provider-picker-panel {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.upload-item-row + .upload-item-row {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.upload-error-icon {
+  color: var(--error);
+  font-size: 18px;
+  font-weight: 700;
 }
 .upload-item-icon {
   font-size: 24px;

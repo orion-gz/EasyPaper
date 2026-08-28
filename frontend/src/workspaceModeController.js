@@ -47,6 +47,7 @@ export function createWorkspaceModeController({
   let pendingUpload = null
   let selectedType = null
   let classificationMode = mode
+  let classificationContext = ''
 
   const modal = document.getElementById('document-type-modal')
   const optionRoot = document.getElementById('document-type-options')
@@ -171,7 +172,7 @@ export function createWorkspaceModeController({
     confirmBtn.disabled = true
     modeChip.textContent = classificationMode === 'research' ? '연구 모드' : '일반 문서 모드'
     if (uploadModeSwitch) uploadModeSwitch.textContent = classificationMode === 'research' ? '일반 문서 모드로 전환' : '연구 모드로 전환'
-    summary.textContent = ''
+    summary.textContent = classificationContext
     optionRoot.innerHTML = ''
     getDocumentTypes(registry, classificationMode).forEach(type => {
       const button = document.createElement('button')
@@ -184,16 +185,18 @@ export function createWorkspaceModeController({
         selectedType = type.value
         optionRoot.querySelectorAll('[role="radio"]').forEach(item => item.setAttribute('aria-checked', String(item === button)))
         confirmBtn.disabled = false
-        summary.textContent = `${classificationMode === 'research' ? '연구' : '일반 문서'} · ${type.label}`
+        const classification = `${classificationMode === 'research' ? '연구' : '일반 문서'} · ${type.label}`
+        summary.textContent = classificationContext ? `${classificationContext} · ${classification}` : classification
       })
       optionRoot.appendChild(button)
     })
   }
 
-  function chooseClassification(initialMode, purpose = 'upload', files = []) {
+  function chooseClassification(initialMode, purpose = 'upload', context = '') {
     classificationMode = initialMode === 'general' ? 'general' : 'research'
+    classificationContext = context
     if (!modal || !optionRoot) {
-      return Promise.resolve({ documentMode: classificationMode, documentType: defaultDocumentType(classificationMode), files })
+      return Promise.resolve({ documentMode: classificationMode, documentType: defaultDocumentType(classificationMode) })
     }
     if (pendingUpload) closeUploadModal(null)
     const title = modal.querySelector('.modal-header h2')
@@ -206,7 +209,23 @@ export function createWorkspaceModeController({
     return new Promise(resolve => { pendingUpload = resolve })
   }
 
-  function chooseUploadClassification(files) { return chooseClassification(mode, 'upload', files) }
+  function chooseUploadClassification(files) {
+    const file = Array.from(files || [])[0]
+    return chooseClassification(mode, 'upload', file?.name || '')
+  }
+  async function chooseUploadClassifications(files) {
+    const selected = []
+    const list = Array.from(files)
+    for (let index = 0; index < list.length; index++) {
+      const file = list[index]
+      const pending = chooseClassification(mode, 'upload', `${index + 1}/${list.length} · ${file.name}`)
+      if (confirmBtn) confirmBtn.textContent = index === list.length - 1 ? '업로드' : '다음'
+      const result = await pending
+      if (!result) return null
+      selected.push({ file, classification: result })
+    }
+    return selected
+  }
   function chooseDocumentClassification(currentMode) { return chooseClassification(currentMode, 'change') }
 
   confirmBtn?.addEventListener('click', () => {
@@ -223,7 +242,7 @@ export function createWorkspaceModeController({
   modal?.addEventListener('click', event => { if (event.target === modal) closeUploadModal(null) })
 
   return {
-    initialize, setMode, chooseUploadClassification, chooseDocumentClassification, getPageLabel,
+    initialize, setMode, chooseUploadClassification, chooseUploadClassifications, chooseDocumentClassification, getPageLabel,
     getMode: () => mode,
     getRegistry: () => registry,
     getTypeLabel: (docMode, type) => documentTypeLabel(registry, docMode, type),
