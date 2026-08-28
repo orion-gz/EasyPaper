@@ -84,6 +84,13 @@ export function createWorkspaceModeController({
       if (tooltip) tooltip.textContent = label
     })
     const search = document.getElementById('workspace-search-input')
+    const librarySearch = document.getElementById('library-search-input')
+    if (librarySearch) {
+      librarySearch.placeholder = mode === 'general'
+        ? '문서 제목, 파일명, 번역된 내용 검색...'
+        : '논문 제목, 파일명, 번역된 내용 검색...'
+    }
+
     if (search) {
       search.dataset.i18nPlaceholder = copy.search.key
       search.placeholder = copy.search.value
