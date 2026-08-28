@@ -5097,7 +5097,7 @@ body.light-theme .pdf-sentence.pdf-sentence-has-memo.color-red {
   animation: popupScale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .floating-memo.auto-size {
-  width: fit-content;
+  width: min(380px, calc(90vw - 20px));
   max-width: min(420px, 90vw);
   height: auto;
   min-height: 0;

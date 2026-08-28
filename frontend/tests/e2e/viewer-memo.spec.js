@@ -66,6 +66,7 @@ test('사용자가 조절한 메모 크기를 저장하고 다시 복원한다',
 
   const memo = page.locator('.floating-memo[data-id="memo-regression"]')
   await memo.locator('.auto-size-btn').click()
+  await expect(page.locator('.floating-memo')).toHaveCount(1)
   await memo.evaluate(el => {
     el.style.width = '360px'
     el.style.height = '280px'
@@ -91,6 +92,12 @@ test('뷰어 메모 입력창에 포커스 테두리를 표시하지 않는다',
 
   const textarea = memo.locator('.floating-memo-textarea')
   await expect(textarea).toBeFocused()
+  await textarea.fill('굵게')
+  await textarea.selectText()
+  await textarea.press('ControlOrMeta+b')
+  await expect(textarea).toHaveValue('**굵게**')
+  await textarea.press('ControlOrMeta+i')
+  await expect(textarea).toHaveValue('***굵게***')
   await expect.poll(() => textarea.evaluate(element => getComputedStyle(element).outlineStyle)).toBe('none')
 })
 
@@ -138,10 +145,13 @@ test("키보드로 메모를 이동하고 크기를 조절하면 변경 사항�
   const resizeHandle = memo.locator(".floating-memo-resize-handle")
   const beforeMove = await memo.boundingBox()
 
+  await memo.evaluate(el => { el.dataset.instanceMarker = 'before-move' })
   await header.focus()
   await header.press("ArrowRight")
   await expect.poll(async () => (await memo.boundingBox()).x).toBeGreaterThan(beforeMove.x + 3)
   await expect(page.locator("#a11y-live-region")).toContainText("메모 위치")
+  await page.waitForTimeout(1500)
+  await expect(memo).toHaveAttribute('data-instance-marker', 'before-move')
 
   const beforeResize = await memo.boundingBox()
   await resizeHandle.focus()
@@ -157,7 +167,10 @@ test('자동 크기 모드에서 입력 내용에 맞춰 높이를 늘리고 줄
   await expect(memo).toHaveClass(/auto-size/)
   await memo.locator('.edit-btn').click()
   const textarea = memo.locator('.floating-memo-textarea')
-  const initialHeight = (await memo.boundingBox()).height
+  const initialBox = await memo.boundingBox()
+  const initialHeight = initialBox.height
+  await memo.evaluate(el => { el.style.left = '150%' })
+  await expect.poll(async () => (await memo.boundingBox()).width).toBe(initialBox.width)
 
   await textarea.fill(Array.from({ length: 12 }, (_, index) => `길이가 긴 자동 크기 메모 ${index + 1}`).join('\n'))
   await expect.poll(async () => (await memo.boundingBox()).height).toBeGreaterThan(initialHeight + 80)

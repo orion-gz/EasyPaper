@@ -9986,6 +9986,21 @@ function refreshSyncedAnnotationView() {
   document.dispatchEvent(new CustomEvent('easypaper:annotations-synced'))
 }
 
+function getAnnotationViewFingerprint(docId) {
+  const withoutVersions = data => Object.fromEntries(Object.entries(data).map(([pageKey, items]) => [
+    pageKey,
+    items.map(item => {
+      const value = { ...item }
+      delete value.version
+      return value
+    }),
+  ]))
+  return JSON.stringify({
+    annotations: withoutVersions(loadAnnotations(docId)),
+    memos: withoutVersions(loadMemos(docId)),
+  })
+}
+
 async function syncAnnotationsNow(docId, { keepalive = false, refresh = true } = {}) {
   if (!docId) return null
   if (!navigator.onLine && !keepalive) {
@@ -9995,13 +10010,21 @@ async function syncAnnotationsNow(docId, { keepalive = false, refresh = true } =
     }
     return null
   }
+  const annotationViewBeforeSync = refresh && state.sessionId === docId
+    ? getAnnotationViewFingerprint(docId)
+    : null
   if (annotationSyncInFlight.has(docId)) return annotationSyncInFlight.get(docId)
   const promise = syncDocumentAnnotations(docId, { keepalive })
     .then(result => {
       annotationSyncDelayNotified = false
       const conflicts = [...result.annotations.conflicts, ...result.memos.conflicts]
       if (conflicts.length) showToast(t('viewer:sync.conflict'), 'warning')
-      if (refresh && state.sessionId === docId) refreshSyncedAnnotationView()
+      const annotationViewAfterSync = annotationViewBeforeSync === null
+        ? null
+        : getAnnotationViewFingerprint(docId)
+      if (refresh && state.sessionId === docId && annotationViewBeforeSync !== annotationViewAfterSync) {
+        refreshSyncedAnnotationView()
+      }
       return result
     })
     .catch(error => {
@@ -11173,6 +11196,8 @@ function renderPageMemos(pageNum) {
   const pageMemos = allMemos[`page_${pageNum}`] || []
 
   pageMemos.forEach(memo => {
+    if (!Number.isFinite(memo.x)) memo.x = 10
+    if (!Number.isFinite(memo.y)) memo.y = 10
     // 개별 "숨기기"(memo.hidden) 또는 툴바의 "전체 숨기기"(allMemosHidden) 중
     // 하나라도 켜져 있으면 카드는 그리지 않고 PDF 본문의 하이라이트만 남긴다.
     // 전체 숨기기는 순수 화면 표시 상태라 하이라이트를 클릭해도 개별 메모만
@@ -11279,6 +11304,23 @@ function renderPageMemos(pageNum) {
       textarea.style.height = `${textarea.scrollHeight}px`
     }
 
+    function applyMemoMarkdownShortcut(event, textarea) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return false
+      const shortcuts = { b: ["**", "**", "굵은 텍스트"], i: ["*", "*", "기울임 텍스트"], k: ["[", "](url)", "링크 텍스트"], e: ["`", "`", "코드"] }
+      const shortcut = !event.shiftKey && shortcuts[event.key.toLowerCase()]
+      if (!shortcut) return false
+      event.preventDefault()
+      event.stopPropagation()
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      const content = textarea.value.slice(start, end) || shortcut[2]
+      textarea.setRangeText(shortcut[0] + content + shortcut[1], start, end, "select")
+      const contentStart = start + shortcut[0].length
+      textarea.setSelectionRange(contentStart, contentStart + content.length)
+      textarea.dispatchEvent(new Event("input", { bubbles: true }))
+      return true
+    }
+
     function updateAutoSizeButton() {
       const button = memoEl.querySelector('.auto-size-btn')
       if (!button) return
@@ -11337,6 +11379,10 @@ function renderPageMemos(pageNum) {
           requestAnimationFrame(() => updateMemoConnectorLine(pageWrapper, memo))
         })
 
+        textarea.addEventListener('keydown', (event) => {
+          applyMemoMarkdownShortcut(event, textarea)
+        })
+
         textarea.addEventListener('blur', () => {
           setTimeout(() => {
             const exists = memoEl.parentNode !== null
@@ -11346,7 +11392,7 @@ function renderPageMemos(pageNum) {
               updateMemoConnectorLine(pageWrapper, memo)
               if (deferredAnnotationRefresh) {
                 deferredAnnotationRefresh = false
-                syncAnnotationsNow(state.sessionId)
+                refreshSyncedAnnotationView()
               }
             }
           }, 150)
@@ -11480,6 +11526,9 @@ function renderPageMemos(pageNum) {
     updateCardContent()
 
     const autoSizeBtn = memoEl.querySelector('.auto-size-btn')
+    memoEl.querySelectorAll('button').forEach(button => {
+      button.addEventListener('mousedown', (event) => event.stopPropagation())
+    })
     autoSizeBtn.addEventListener('click', (e) => {
       e.stopPropagation()
       setMemoAutoSize(!memoAutoSize)
@@ -11624,6 +11673,7 @@ function renderPageMemos(pageNum) {
       announceA11y(t('viewer:a11y.memoPosition', { x: Math.round(memoEl.offsetLeft), y: Math.round(memoEl.offsetTop) }))
     })
     header.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button, input, textarea, a')) return
       e.preventDefault(); e.stopPropagation()
       const startMouseX = e.clientX
       const startMouseY = e.clientY
