@@ -25,7 +25,7 @@ test('연구와 일반 문서 워크스페이스의 번역 모드를 따로 저�
   await page.locator('#close-settings-btn').click()
 
   await page.locator('#workspace-mode-switch [data-workspace-mode="general"]').click()
-  await expect(page.locator('.document-home')).toBeVisible()
+  await expect(page.locator('.dash-root.is-general')).toBeVisible()
   await page.locator('#sidebar-settings-btn').click()
   await expect(page.locator('#settings-modal')).toBeVisible()
   await page.locator('[data-tab="tab-translation"]').click()
@@ -61,7 +61,7 @@ test('설정 화면이 현재 워크스페이스 모드의 값과 항목 구성�
   await page.locator('#close-settings-btn').click()
   await expect(page.locator('#settings-modal')).toBeHidden()
   await page.locator('#workspace-mode-switch [data-workspace-mode="general"]').click()
-  await expect(page.locator('.document-home')).toBeVisible()
+  await expect(page.locator('.dash-root.is-general')).toBeVisible()
   await page.locator('#sidebar-settings-btn').click()
   await expect(page.locator('#settings-modal')).toBeVisible()
   await page.locator('[data-tab="tab-translation"]').click()
@@ -134,7 +134,7 @@ test('워크스페이스 모드별 테마와 강조색을 독립적으로 적용
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent-mid').trim())).toBe('#e0677a')
 
   await page.locator('#workspace-mode-switch [data-workspace-mode="general"]').click()
-  await expect(page.locator('.document-home')).toBeVisible()
+  await expect(page.locator('.dash-root.is-general')).toBeVisible()
   await expect(page.locator('body')).not.toHaveClass(/light-theme/)
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent-mid').trim())).toBe('#1c9c6b')
 
