@@ -4078,5 +4078,14 @@
   },
   "settings:versionHistoryDescription": {
     "description": "Settings information architecture label or description for versionHistoryDescription."
-  }
+  },
+  "common:documentTypes.academicBook": { "description": "General-document classification for textbooks, monographs, and scholarly learning material." },
+  "common:documentTypes.generalBook": { "description": "General-document classification for nonfiction and general-interest books." },
+  "common:documentTypes.literaryWork": { "description": "General-document classification for literary and narrative works." },
+  "common:documentTypes.article": { "description": "General-document classification for news articles and opinion columns." },
+  "common:documentTypes.report": { "description": "General-document classification for analytical reports." },
+  "common:documentTypes.manual": { "description": "General-document classification for manuals and procedural guides." },
+  "common:documentTypes.legalPolicy": { "description": "General-document classification for legal and policy documents." },
+  "common:documentTypes.presentation": { "description": "General-document classification for presentations and lecture materials." },
+  "common:documentTypes.legacyBook": { "description": "Legacy book classification prompting the user to choose a more specific type." }
 }

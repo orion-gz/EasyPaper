@@ -249,8 +249,8 @@ def _primer_cache_suffix(source_lang: str, target_lang: str) -> str:
 
 
 def _overview_cache_suffix(source_lang: str, target_lang: str, document_type: str) -> str:
-    from services.document_policy import INSIGHT_PROMPT_VERSION
-    return f"{INSIGHT_PROMPT_VERSION}:{source_lang}:{target_lang}:{document_type}"
+    from services.document_policy import get_policy
+    return f"{get_policy('general', document_type).insight_prompt_version}:{source_lang}:{target_lang}:{document_type}"
 
 
 def _string_list(value, limit: int = 8) -> list[str]:

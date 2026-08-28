@@ -4,6 +4,8 @@ import pytest
 
 from services.document_policy import (
     build_assistant_prompt,
+    build_translation_policy,
+    get_policy,
     registry_payload,
     translation_cache_candidates,
     translation_cache_suffix,
@@ -18,9 +20,14 @@ def test_registry_has_all_research_and_general_types():
     assert {item["value"] for item in by_mode["research"]["types"]} == {
         "research_paper", "review_survey", "thesis", "preprint", "academic_report",
     }
-    assert {item["value"] for item in by_mode["general"]["types"]} == {
-        "technical", "book", "article", "report", "manual", "other",
+    assert {item["value"] for item in by_mode["general"]["types"] if item["selectable"]} == {
+        "technical", "academic_book", "general_book", "literary_work", "article",
+        "report", "manual", "legal_policy", "presentation", "other",
     }
+    legacy_book = next(item for item in by_mode["general"]["types"] if item["value"] == "book")
+    assert legacy_book["deprecated"] is True
+    assert legacy_book["selectable"] is False
+    assert legacy_book["replacement_types"] == ["academic_book", "general_book", "literary_work"]
     assert by_mode["general"]["features"]["research_graph"] is False
 
 
@@ -29,6 +36,10 @@ def test_mode_type_validation_rejects_cross_mode_type():
         validate_classification("general", "research_paper")
     with pytest.raises(ValueError):
         validate_classification("research", "manual")
+
+    assert validate_classification("general", "book").deprecated is True
+    with pytest.raises(ValueError):
+        validate_classification("general", "book", allow_deprecated=False)
 
 
 def test_cache_suffix_separates_mode_type_and_prompt_version():
@@ -432,3 +443,39 @@ def test_translation_integrity_rejects_missing_protected_literals():
     source = "Run `npm install` at https://example.test and wait 30s."
     with pytest.raises(TranslationIntegrityError):
         assert_translation_integrity(source, "설치를 실행하고 기다리세요.")
+
+
+def test_general_document_types_have_distinct_english_task_rules():
+    academic = get_policy("general", "academic_book")
+    literary = get_policy("general", "literary_work")
+    legal = get_policy("general", "legal_policy")
+
+    assert "derivations" in academic.assistant_rules
+    assert "Do not force a contribution-method-results framing" in academic.assistant_rules
+    assert "do not reveal events" in literary.assistant_rules
+    assert "legal advice" in legal.assistant_rules
+    assert len({academic.question_rules, literary.question_rules, legal.question_rules}) == 3
+
+
+def test_type_rules_are_in_translation_and_assistant_prompts():
+    translation = build_translation_policy("general", "academic_book")
+    assistant = build_assistant_prompt("general", "literary_work", "Novel", "--- Page 3 ---\nText")
+
+    assert "definitions, notation, equations" in translation
+    assert "Document-type analysis rules" in assistant
+    assert "do not reveal events" in assistant
+
+
+def test_prompt_versions_only_change_affected_type_caches():
+    research = translation_cache_suffix(
+        "research", "research_paper", "ko", "academic", False, True, False,
+    )
+    technical = translation_cache_suffix(
+        "general", "technical", "ko", "academic", False, True, False,
+    )
+    academic = translation_cache_suffix(
+        "general", "academic_book", "ko", "academic", False, True, False,
+    )
+    assert "document-modes-v1" in research
+    assert "technical-v2" in technical
+    assert "academic-book-v1" in academic

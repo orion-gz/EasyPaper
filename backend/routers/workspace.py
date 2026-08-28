@@ -88,7 +88,7 @@ async def patch_document_classification(
 
     doc = require_owned_document(doc_id, current_user)
     try:
-        validate_classification(body.document_mode, body.document_type)
+        validate_classification(body.document_mode, body.document_type, allow_deprecated=False)
         if body.document_mode == "general" and not feature_enabled("general_document_mode"):
             raise ValueError("일반 문서 모드가 아직 활성화되지 않았습니다.")
     except ValueError as exc:

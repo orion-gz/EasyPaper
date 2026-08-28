@@ -171,7 +171,7 @@ async def upload_pdf(
 
     from services.document_policy import feature_enabled, validate_classification
     try:
-        validate_classification(document_mode, document_type)
+        validate_classification(document_mode, document_type, allow_deprecated=False)
         if document_mode == "general" and not feature_enabled("general_document_mode"):
             raise ValueError("일반 문서 모드가 아직 활성화되지 않았습니다.")
     except ValueError as exc:
