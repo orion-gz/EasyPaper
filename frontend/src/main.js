@@ -11291,6 +11291,7 @@ function renderPageMemos(pageNum) {
     if (!memoAutoSize && !memo.collapsed && Number.isFinite(memo.height)) memoEl.style.height = `${memo.height}px`
 
     let isEditing = !memo.content.trim()
+    let memoEditStartContent = memo.content
 
     function persistMemoChange() {
       const allMemosObj = loadMemos(state.sessionId)
@@ -11304,21 +11305,147 @@ function renderPageMemos(pageNum) {
       textarea.style.height = `${textarea.scrollHeight}px`
     }
 
-    function applyMemoMarkdownShortcut(event, textarea) {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) return false
-      const shortcuts = { b: ["**", "**", "굵은 텍스트"], i: ["*", "*", "기울임 텍스트"], k: ["[", "](url)", "링크 텍스트"], e: ["`", "`", "코드"] }
-      const shortcut = !event.shiftKey && shortcuts[event.key.toLowerCase()]
-      if (!shortcut) return false
-      event.preventDefault()
-      event.stopPropagation()
+    function dispatchMemoTextareaInput(textarea) {
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+
+    function toggleMemoInlineFormat(textarea, prefix, suffix, placeholder) {
       const start = textarea.selectionStart
       const end = textarea.selectionEnd
-      const content = textarea.value.slice(start, end) || shortcut[2]
-      textarea.setRangeText(shortcut[0] + content + shortcut[1], start, end, "select")
-      const contentStart = start + shortcut[0].length
-      textarea.setSelectionRange(contentStart, contentStart + content.length)
-      textarea.dispatchEvent(new Event("input", { bubbles: true }))
-      return true
+      const selected = textarea.value.slice(start, end)
+      const outside = start >= prefix.length
+        && textarea.value.slice(start - prefix.length, start) === prefix
+        && textarea.value.slice(end, end + suffix.length) === suffix
+        && textarea.value.slice(start - prefix.length - 1, start - prefix.length) !== prefix[0]
+        && textarea.value.slice(end + suffix.length, end + suffix.length + 1) !== suffix[suffix.length - 1]
+      if (selected.startsWith(prefix) && selected.endsWith(suffix)) {
+        const content = selected.slice(prefix.length, -suffix.length)
+        textarea.setRangeText(content, start, end, 'select')
+        textarea.setSelectionRange(start, start + content.length)
+      } else if (outside) {
+        textarea.setRangeText(selected, start - prefix.length, end + suffix.length, 'select')
+        textarea.setSelectionRange(start - prefix.length, end - prefix.length)
+      } else {
+        const content = selected || placeholder
+        textarea.setRangeText(prefix + content + suffix, start, end, 'select')
+        textarea.setSelectionRange(start + prefix.length, start + prefix.length + content.length)
+      }
+      dispatchMemoTextareaInput(textarea)
+    }
+
+    function memoSelectedLineRange(textarea) {
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      const lineStart = textarea.value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+      const nextNewline = textarea.value.indexOf('\n', end)
+      return [lineStart, nextNewline === -1 ? textarea.value.length : nextNewline]
+    }
+
+    function transformMemoLines(textarea, transform) {
+      const [start, end] = memoSelectedLineRange(textarea)
+      const lines = textarea.value.slice(start, end).split('\n')
+      textarea.setRangeText(lines.map(transform).join('\n'), start, end, 'select')
+      dispatchMemoTextareaInput(textarea)
+    }
+
+    function toggleMemoLinePrefix(textarea, createPrefix, pattern) {
+      const [start, end] = memoSelectedLineRange(textarea)
+      const lines = textarea.value.slice(start, end).split('\n')
+      const remove = lines.every(line => !line.trim() || pattern.test(line))
+      textarea.setRangeText(lines.map((line, index) => {
+        pattern.lastIndex = 0
+        if (remove) return line.replace(pattern, '$1')
+        const indent = line.match(/^\s*/)[0]
+        return indent + createPrefix(index) + line.slice(indent.length)
+      }).join('\n'), start, end, 'select')
+      dispatchMemoTextareaInput(textarea)
+    }
+
+    function applyMemoMarkdownShortcut(event, textarea) {
+      const caret = textarea.selectionStart
+      if (event.key === '[' && !event.ctrlKey && !event.metaKey && !event.altKey
+          && caret === textarea.selectionEnd && textarea.value.slice(caret - 1, caret) === '[') {
+        event.preventDefault()
+        textarea.setRangeText('[]]', caret, caret, 'end')
+        textarea.setSelectionRange(caret + 1, caret + 1)
+        dispatchMemoTextareaInput(textarea)
+        return 'handled'
+      }
+      if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+          && caret === textarea.selectionEnd) {
+        const lineStart = textarea.value.lastIndexOf('\n', Math.max(0, caret - 1)) + 1
+        const match = textarea.value.slice(lineStart, caret).match(/^(\s*)(?:(\d+)\.|([-+*])|(-\s+\[[ xX]\]))\s+(.*)$/)
+        if (match) {
+          event.preventDefault()
+          if (!match[5].trim()) textarea.setRangeText('', lineStart, caret, 'end')
+          else {
+            const marker = match[2] ? String(Number(match[2]) + 1) + '.' : match[4] ? '- [ ]' : match[3]
+            textarea.setRangeText('\n' + match[1] + marker + ' ', caret, caret, 'end')
+          }
+          dispatchMemoTextareaInput(textarea)
+          return 'handled'
+        }
+      }
+      if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault()
+        transformMemoLines(textarea, line => event.shiftKey
+          ? (line.startsWith('  ') ? line.slice(2) : line.replace(/^ /, ''))
+          : '  ' + line)
+        return 'handled'
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        return 'cancel'
+      }
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return null
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        const [start, end] = memoSelectedLineRange(textarea)
+        const line = textarea.value.slice(start, end)
+        if (/^\s*-\s+\[[ xX]\]/.test(line)) {
+          textarea.setRangeText(line.replace(/^(\s*-\s+\[)([ xX])(\])/, (_, before, mark, after) => (
+            before + (mark === ' ' ? 'x' : ' ') + after
+          )), start, end, 'end')
+          dispatchMemoTextareaInput(textarea)
+          return 'handled'
+        }
+        return 'finish'
+      }
+      const key = event.key.toLowerCase()
+      let format = null
+      if (!event.shiftKey && key === 'b') format = ['**', '**', '굵은 텍스트']
+      else if (!event.shiftKey && key === 'i') format = ['*', '*', '기울임 텍스트']
+      else if (!event.shiftKey && key === 'k') format = ['[', '](url)', '링크 텍스트']
+      else if (!event.shiftKey && key === 'e') format = ['`', '`', '코드']
+      else if (event.shiftKey && key === 'x') format = ['~~', '~~', '취소선']
+      else if (event.shiftKey && key === 'c') format = ['```\n', '\n```', '코드 블록']
+      if (format) {
+        event.preventDefault()
+        event.stopPropagation()
+        toggleMemoInlineFormat(textarea, ...format)
+        return 'handled'
+      }
+      if (event.shiftKey && event.code === 'Digit7') {
+        event.preventDefault()
+        toggleMemoLinePrefix(textarea, index => String(index + 1) + '. ', /^(\s*)\d+\.\s+/)
+        return 'handled'
+      }
+      if (event.shiftKey && event.code === 'Digit8') {
+        event.preventDefault()
+        toggleMemoLinePrefix(textarea, () => '- ', /^(\s*)[-+*]\s+/)
+        return 'handled'
+      }
+      if (event.shiftKey && key === 'l') {
+        event.preventDefault()
+        toggleMemoLinePrefix(textarea, () => '- [ ] ', /^(\s*)-\s+\[[ xX]\]\s+/)
+        return 'handled'
+      }
+      if (event.shiftKey && event.code === 'Period') {
+        event.preventDefault()
+        toggleMemoLinePrefix(textarea, () => '> ', /^(\s*)>\s+/)
+        return 'handled'
+      }
+      return null
     }
 
     function updateAutoSizeButton() {
@@ -11380,7 +11507,27 @@ function renderPageMemos(pageNum) {
         })
 
         textarea.addEventListener('keydown', (event) => {
-          applyMemoMarkdownShortcut(event, textarea)
+          const action = applyMemoMarkdownShortcut(event, textarea)
+          if (action === 'cancel') {
+            memo.content = memoEditStartContent
+            persistMemoChange()
+            isEditing = false
+            updateCardContent()
+          } else if (action === 'finish') {
+            isEditing = false
+            updateCardContent()
+          }
+        })
+
+        textarea.addEventListener('paste', (event) => {
+          const pasted = event.clipboardData?.getData('text/plain')?.trim()
+          const start = textarea.selectionStart
+          const end = textarea.selectionEnd
+          const selected = textarea.value.slice(start, end)
+          if (!selected || !/^https?:\/\/\S+$/i.test(pasted || '')) return
+          event.preventDefault()
+          textarea.setRangeText('[' + selected + '](' + pasted + ')', start, end, 'end')
+          dispatchMemoTextareaInput(textarea)
         })
 
         textarea.addEventListener('blur', () => {
@@ -11465,6 +11612,7 @@ function renderPageMemos(pageNum) {
             allMemosObj[`page_${pageNum}`] = pageMemos
             saveMemos(state.sessionId, allMemosObj)
           }
+          memoEditStartContent = memo.content
           isEditing = true
           updateCardContent()
         })
@@ -11566,6 +11714,7 @@ function renderPageMemos(pageNum) {
       if (isEditing) return
       if (e.target.closest('a')) return
       e.stopPropagation()
+      memoEditStartContent = memo.content
       isEditing = true
       updateCardContent()
     })
