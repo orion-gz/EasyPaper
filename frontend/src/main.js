@@ -6578,7 +6578,8 @@ function renderFolderNavigation(docs) {
   const crumb = $('library-breadcrumb')
   if (!crumb) return
   const path = folderPath(activeLibraryFolderId)
-  crumb.innerHTML = `<button data-folder-id="" class="library-breadcrumb-root">${icon('home', 14)}<span>전체 논문</span></button>${path.map((f, index) => `<span class="library-breadcrumb-separator">›</span><button data-folder-id="${escapeHtml(f.id)}" ${index === path.length - 1 ? 'aria-current="page"' : ''}>${icon('folder', 14)}<span>${escapeHtml(f.name)}</span></button>`).join('')}`
+  const rootLabel = workspaceModeController.getMode() === 'general' ? '전체 문서' : '전체 논문'
+  crumb.innerHTML = `<button data-folder-id="" class="library-breadcrumb-root">${icon('home', 14)}<span>${rootLabel}</span></button>${path.map((f, index) => `<span class="library-breadcrumb-separator">›</span><button data-folder-id="${escapeHtml(f.id)}" ${index === path.length - 1 ? 'aria-current="page"' : ''}>${icon('folder', 14)}<span>${escapeHtml(f.name)}</span></button>`).join('')}`
   crumb.querySelectorAll('button').forEach(el => {
     const id = el.dataset.folderId || null
     el.addEventListener('click', () => navigateLibraryFolder(id))
@@ -6973,7 +6974,12 @@ async function renderLibrary() {
 
   // 탭 전환 등으로 목록을 새로 불러올 때는 검색 상태를 초기화한다 - 검색
   // 결과가 다른 탭의 목록과 뒤섞여 보이는 것을 방지
-  if (librarySearchInput) librarySearchInput.value = ''
+  if (librarySearchInput) {
+    librarySearchInput.value = ''
+    librarySearchInput.placeholder = workspaceModeController.getMode() === 'general'
+      ? '문서 제목, 파일명, 번역된 내용 검색...'
+      : '논문 제목, 파일명, 번역된 내용 검색...'
+  }
   if (librarySearchClearBtn) librarySearchClearBtn.classList.add('hidden')
   if (librarySearchStatus) librarySearchStatus.classList.add('hidden')
   // #library-filter-row의 display:flex는 CSS 클래스가 아닌 인라인 스타일로만
@@ -8123,7 +8129,7 @@ function renderLibrarySearchResults(docs, query) {
     el.className = 'lib-empty'
     el.innerHTML = `<div style="margin-bottom:16px;color:var(--text-muted)">${icon('book', 48)}</div>
       <p>"${escapeHtml(query)}"에 대한 검색 결과가 없습니다</p>
-      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">논문 제목, 파일명, 번역된 본문 내용을 검색합니다</p>`
+      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">${workspaceModeController.getMode() === 'general' ? '문서 제목, 파일명, 번역된 본문 내용을 검색합니다' : '논문 제목, 파일명, 번역된 본문 내용을 검색합니다'}</p>`
     libraryGrid.appendChild(el)
   } else {
     const createItem = libraryViewMode === 'list' ? createDocListRow : createDocCard
