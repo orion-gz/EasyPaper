@@ -80,3 +80,19 @@ test('connection loss recovers a completed server upload by id', async () => {
     Object.defineProperty(globalThis, 'crypto', { configurable: true, value: originalCrypto })
   }
 })
+
+test('malformed success response rejects instead of leaving upload pending', async () => {
+  const originalXHR = globalThis.XMLHttpRequest
+  globalThis.XMLHttpRequest = MockXHR
+  MockXHR.instances = []
+  try {
+    const promise = uploadPDF(new Blob(['pdf']), options)
+    const xhr = MockXHR.instances[0]
+    xhr.status = 200
+    xhr.responseText = '{invalid json'
+    xhr.emit('load')
+    await assert.rejects(promise)
+  } finally {
+    globalThis.XMLHttpRequest = originalXHR
+  }
+})

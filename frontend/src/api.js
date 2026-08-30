@@ -127,8 +127,13 @@ export async function uploadPDF(file, options, onProgress) {
 
     xhr.addEventListener('load', () => {
       if (xhr.status === 200) {
-        onProgress?.(100, 'processing')
-        resolve(JSON.parse(xhr.responseText))
+        try {
+          const result = JSON.parse(xhr.responseText)
+          onProgress?.(100, 'processing')
+          resolve(result)
+        } catch {
+          reject(new Error(errorMessage({ code: 'unknown' })))
+        }
       } else {
         try {
           const err = JSON.parse(xhr.responseText)

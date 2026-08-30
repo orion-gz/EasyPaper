@@ -195,7 +195,13 @@ async def upload_pdf(
     else:
         session_id = str(uuid.uuid4())
     session_dir = os.path.join(UPLOAD_DIR, session_id)
-    os.makedirs(session_dir, exist_ok=True)
+    # The directory is the atomic reservation for an upload ID. Checking the
+    # in-memory/DB state above is not sufficient because two requests can pass
+    # that check before either one persists its session.
+    try:
+        os.makedirs(session_dir, exist_ok=False)
+    except FileExistsError:
+        raise HTTPException(status_code=409, detail="이미 사용된 업로드 ID입니다.")
     pdf_path = os.path.join(session_dir, "document.pdf")
 
     # 파일 저장 (스트리밍) - await file.read()로 전체를 한 번에 읽으면 크기

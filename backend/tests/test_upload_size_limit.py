@@ -76,6 +76,24 @@ def test_upload_rejects_invalid_client_upload_id(test_client):
     assert response.status_code == 400
 
 
+def test_upload_rejects_client_id_with_existing_directory(test_client, isolated_dirs, monkeypatch):
+    upload_dir = isolated_dirs["upload_dir"]
+    monkeypatch.setattr(upload_module, "UPLOAD_DIR", str(upload_dir))
+    upload_id = str(uuid.uuid4())
+    reserved_dir = upload_dir / upload_id
+    reserved_dir.mkdir()
+    marker = reserved_dir / "document.pdf"
+    marker.write_bytes(b"existing upload")
+
+    response = test_client.post(
+        f"/api/upload?upload_id={upload_id}",
+        files={"file": ("duplicate.pdf", _minimal_pdf_bytes(), "application/pdf")},
+    )
+
+    assert response.status_code == 409
+    assert marker.read_bytes() == b"existing upload"
+
+
 def test_auto_translation_job_starts_before_primer(test_client, isolated_dirs, monkeypatch):
     """선택 기능인 primer가 느려도 auto 번역 job은 먼저 등록되어야 한다."""
     upload_dir = isolated_dirs["upload_dir"]
