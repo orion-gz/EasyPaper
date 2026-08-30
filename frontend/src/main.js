@@ -1648,11 +1648,11 @@ function renderInsightContent(contentEl, kind, text) {
 function translatePage(pageNum) {
   if (state.translatingPages.has(pageNum) || state.translatedPages.has(pageNum)) return
   if (!state.sessionId) return
-  state.translatingPages.add(pageNum)
 
   const statusEl  = $(`trans-status-${pageNum}`)
   const contentEl = $(`trans-content-${pageNum}`)
   if (!contentEl) return
+  state.translatingPages.add(pageNum)
 
   // 스피너 + 대기 상태 표시
   contentEl.innerHTML = `
@@ -1857,11 +1857,12 @@ function startJobPolling(sessionId) {
     pollInFlight = true
     try {
       const job = await getJobStatus(sessionId)
-      if (!job) return
+      if (!job || state.sessionId !== sessionId) return
 
       for (const pageNum of (job.completed_pages || [])) {
         if (state.translatedPages.has(pageNum)) continue
         const data = await getPageTranslation(sessionId, pageNum, getTranslationOptions())
+        if (state.sessionId !== sessionId) return
         if (data?.translation) {
           state.translationCache[pageNum] = data.translation
           state.translationSentences[pageNum] = data.sentences || []
@@ -9964,6 +9965,7 @@ async function loadDocumentReferences(docId) {
 // 두 번 렌더링되는 등의 중복 문제가 생겼다. 비교 화면의 openCompareScreen에 적용한
 // 것과 동일한 패턴으로, 같은 문서를 여는 재진입 호출을 걸러낸다.
 let docOpeningId = null
+let documentOpenGeneration = 0
 
 const annotationSyncTimers = new Map()
 const annotationSyncInFlight = new Map()
@@ -10056,6 +10058,8 @@ async function hydrateAnnotationsAndMemosFromServer(docId) {
 async function openFromLibrary(doc, shouldPushState = true) {
   await loadFeatureNamespaces('viewer')
   if (docOpeningId === doc.id) return
+  const myOpenGeneration = ++documentOpenGeneration
+  const isCurrentOpen = () => myOpenGeneration === documentOpenGeneration
   docOpeningId = doc.id
   try {
     // 이전 문서에서 진행 중이던 채팅 스트림이 있으면 반드시 먼저 취소한다.
@@ -10111,6 +10115,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
           updateLibraryDocMetadata(doc.id, { primer_shown: true }).catch(() => {})
         } else {
           const gateResult = await showPrimerModal(doc, { mode: 'gate' })
+          if (!isCurrentOpen()) return
           state.currentDocMetadata.primer_shown = true
           updateLibraryDocMetadata(doc.id, { primer_shown: true }).catch(() => {})
           // 브리핑의 인용 그래프에서 내 라이브러리의 다른 논문으로 바로 이동한
@@ -10130,6 +10135,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
     // (아래 loadPDF에서 페이지를 렌더링하며 바로 참조한다) 서버 미러 데이터를
     // 먼저 끌어와야 다른 기기에서 저장한 하이라이트/메모가 반영된다.
     await hydrateAnnotationsAndMemosFromServer(doc.id)
+    if (!isCurrentOpen()) return
 
     // 논문을 여는 시점 자체를 "마지막으로 읽은 시각"으로 기록한다(fire-and-forget).
     // 스크롤로 페이지가 바뀔 때만 last_read_at이 갱신되면, 열자마자 바로 나가거나
@@ -10165,7 +10171,8 @@ async function openFromLibrary(doc, shouldPushState = true) {
       return null
     })
 
-    await loadPDF(`/api/library/${doc.id}/pdf`)
+    const loadedPages = await loadPDF(`/api/library/${doc.id}/pdf`)
+    if (!isCurrentOpen() || loadedPages === null) return
     docTitle.textContent  = displayTitle
     docTitle.title        = doc.filename
     if (viewerDocumentTypeChip) {
@@ -10200,12 +10207,14 @@ async function openFromLibrary(doc, shouldPushState = true) {
       })(),
       loadPDFOutline(),
     ])
+    if (!isCurrentOpen()) return
 
     // 채팅 기록 반영 (PDF 로딩과 병렬로 이미 완료됐을 가능성이 높음)
     // 주의: 변수명을 "history"로 쓰면 이 함수 맨 위에서 쓰는 전역 history(window.history)
     // 객체를 가려버려("Cannot access 'history' before initialization") 함수 전체가
     // 조용히 실패하므로 반드시 다른 이름을 사용해야 한다.
     const chatRes = await chatHistoryPromise
+    if (!isCurrentOpen()) return
     const chatHistoryList = chatRes?.history || []
     if (chatHistoryList.length > 0) {
       for (const msg of chatHistoryList) {

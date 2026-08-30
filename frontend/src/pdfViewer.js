@@ -14,6 +14,7 @@ let currentScale = 1.5
 let pageObserver = null
 let pageVisibilityObserver = null
 let visiblePageHeights = {}
+let loadGeneration = 0
 // renderScrollView가 호출될 때마다(문서 전환, 줌 변경) 증가하는 세대 카운터.
 // pdf-page-wrapper DOM 노드는 문서를 바꿔도 새로 만들지 않고 재사용하는데,
 // 이전 문서/줌에 대한 _renderPage 호출이 비동기 대기 중일 때 사용자가 빠르게
@@ -34,7 +35,19 @@ async function loadPDFJS() {
 
 export async function loadPDF(url) {
   await loadPDFJS()
-  pdfDoc = await pdfjsLib.getDocument(url).promise
+  const myGeneration = ++loadGeneration
+  const loadingTask = pdfjsLib.getDocument(url)
+  const nextPdfDoc = await loadingTask.promise
+  if (myGeneration !== loadGeneration) {
+    await nextPdfDoc.destroy().catch(() => {})
+    return null
+  }
+  const previousPdfDoc = pdfDoc
+  renderGeneration++
+  pdfDoc = nextPdfDoc
+  if (previousPdfDoc && previousPdfDoc !== nextPdfDoc) {
+    previousPdfDoc.destroy().catch(() => {})
+  }
   figureCropCache.clear()
   return pdfDoc.numPages
 }
@@ -101,6 +114,13 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
   const rendered = new Set()
 
   let wrappers = container.querySelectorAll('.pdf-page-wrapper')
+
+  const wrapperShapeMatches = wrappers.length === numPages
+    && Array.from(wrappers).every((wrapper, index) => Number(wrapper.dataset.page) === index + 1)
+  if (!wrapperShapeMatches) {
+    container.querySelectorAll('.pdf-page-wrapper').forEach(wrapper => wrapper.remove())
+    wrappers = container.querySelectorAll('.pdf-page-wrapper')
+  }
 
   if (wrappers.length === 0) {
     // ─── placeholder 생성 (기존에 없는 경우만) ───────────────────────────
