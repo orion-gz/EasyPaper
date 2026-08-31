@@ -2402,6 +2402,26 @@ body.light-theme .pdf-annotation-underline {
   -webkit-text-fill-color: transparent;
 }
 
+.onboarding-header-actions,
+.onboarding-locale-label {
+  display: flex;
+  align-items: center;
+}
+
+.onboarding-header-actions {
+  gap: 12px;
+}
+
+.onboarding-locale-label {
+  gap: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.onboarding-locale-label .form-select {
+  width: auto;
+}
+
 .close-btn {
   background: none;
   border: none;
