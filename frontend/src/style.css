@@ -5081,7 +5081,6 @@ body.light-theme .pdf-sentence.pdf-sentence-has-memo.color-red {
   min-width: 220px;
   max-width: min(640px, 90vw);
   min-height: 160px;
-  max-height: min(720px, 85vh);
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -5540,7 +5539,6 @@ body.light-theme .custom-confirm-modal {
    그대로 유지되어 헤더 아래에 빈 공간만 남는다. */
 .floating-memo.collapsed {
   min-height: 0;
-  max-height: none;
   resize: none;
 }
 .floating-memo.collapsed::after {
