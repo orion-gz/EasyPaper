@@ -23,7 +23,56 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install and test backend
+        working-directory: backend
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pytest -p no:cacheprovider -q
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify release versions
+        shell: bash
+        run: |
+          package_version=$(node -p "require('./package.json').version")
+          tauri_version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          cargo_version=$(sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' src-tauri/Cargo.toml | head -n1)
+          test "$package_version" = "$tauri_version"
+          test "$package_version" = "$cargo_version"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            test "${{ github.ref_name }}" = "v$package_version"
+          fi
+
+      - name: Install and test frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run test:unit
+          npm run build
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
   release:
+    needs: quality-gate
     permissions:
       contents: write
     strategy:
@@ -148,5 +197,18 @@ jobs:
           args: ${{ matrix.args }}
           # 태그 push만 즉시 게시하고, workflow_dispatch 수동 빌드는 검토 전
           # 실수로 공개되지 않도록 초안으로 남긴다.
-          releaseDraft: ${{ github.ref_type != 'tag' }}
+          releaseDraft: true
           prerelease: false
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release edit "$RELEASE_TAG" --draft=false
