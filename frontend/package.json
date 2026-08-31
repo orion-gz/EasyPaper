@@ -15,7 +15,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.61.1",
-    "vite": "^5.3.1"
+    "vite": "8.2.2"
   },
   "allowScripts": {
     "esbuild@0.21.5": true
@@ -27,7 +27,7 @@
     "@tauri-apps/plugin-updater": "^2.10.1",
     "cytoscape": "^3.34.0",
     "cytoscape-fcose": "^2.2.0",
-    "dompurify": "^3.4.12",
+    "dompurify": "3.4.14",
     "i18next": "^26.4.0",
     "marked": "^18.0.5"
   }
