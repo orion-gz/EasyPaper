@@ -11325,22 +11325,56 @@ function renderPageMemos(pageNum) {
       const start = textarea.selectionStart
       const end = textarea.selectionEnd
       const selected = textarea.value.slice(start, end)
-      const outside = start >= prefix.length
+      const lastFormat = textarea._memoLastInlineFormat
+      if (lastFormat?.prefix === prefix
+          && lastFormat.suffix === suffix
+          && textarea.value.slice(lastFormat.start, lastFormat.end) === lastFormat.wrapped) {
+        textarea.setRangeText(lastFormat.content, lastFormat.start, lastFormat.end, 'select')
+        textarea.setSelectionRange(lastFormat.start, lastFormat.start + lastFormat.content.length)
+        textarea._memoLastInlineFormat = null
+        dispatchMemoTextareaInput(textarea)
+        return
+      }
+      const directlyWrapped = start >= prefix.length
         && textarea.value.slice(start - prefix.length, start) === prefix
         && textarea.value.slice(end, end + suffix.length) === suffix
-        && textarea.value.slice(start - prefix.length - 1, start - prefix.length) !== prefix[0]
-        && textarea.value.slice(end + suffix.length, end + suffix.length + 1) !== suffix[suffix.length - 1]
       if (selected.startsWith(prefix) && selected.endsWith(suffix)) {
         const content = selected.slice(prefix.length, -suffix.length)
         textarea.setRangeText(content, start, end, 'select')
         textarea.setSelectionRange(start, start + content.length)
-      } else if (outside) {
+        textarea._memoLastInlineFormat = null
+      } else if (directlyWrapped) {
         textarea.setRangeText(selected, start - prefix.length, end + suffix.length, 'select')
         textarea.setSelectionRange(start - prefix.length, end - prefix.length)
+        textarea._memoLastInlineFormat = null
       } else {
+        // Safari/macOS에서는 Command 단축키 처리 뒤 선택 영역이 커서로 접힐 수
+        // 있다. 이 경우에도 커서를 감싼 가장 가까운 Markdown 마커를 찾아
+        // 중첩 마커를 추가하지 않고 기존 서식을 해제한다.
+        const prefixStart = textarea.value.lastIndexOf(prefix, Math.max(0, start - prefix.length))
+        const suffixStart = textarea.value.indexOf(suffix, end)
+        const wrapsSelection = prefixStart !== -1
+          && suffixStart !== -1
+          && prefixStart + prefix.length <= start
+          && suffixStart >= end
+        if (wrapsSelection) {
+          const contentStart = prefixStart + prefix.length
+          const content = textarea.value.slice(contentStart, suffixStart)
+          const selectionStart = Math.max(prefixStart, start - prefix.length)
+          const selectionEnd = Math.max(selectionStart, end - prefix.length)
+          textarea.setRangeText(content, prefixStart, suffixStart + suffix.length, 'select')
+          textarea.setSelectionRange(selectionStart, Math.min(prefixStart + content.length, selectionEnd))
+          textarea._memoLastInlineFormat = null
+          dispatchMemoTextareaInput(textarea)
+          return
+        }
         const content = selected || placeholder
-        textarea.setRangeText(prefix + content + suffix, start, end, 'select')
+        const wrapped = prefix + content + suffix
+        textarea.setRangeText(wrapped, start, end, 'select')
         textarea.setSelectionRange(start + prefix.length, start + prefix.length + content.length)
+        textarea._memoLastInlineFormat = {
+          prefix, suffix, start, end: start + wrapped.length, wrapped, content,
+        }
       }
       dispatchMemoTextareaInput(textarea)
     }
