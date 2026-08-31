@@ -96,8 +96,16 @@ test('뷰어 메모 입력창에 포커스 테두리를 표시하지 않는다',
   await textarea.selectText()
   await textarea.press('ControlOrMeta+b')
   await expect(textarea).toHaveValue('**굵게**')
+  await textarea.evaluate(element => element.setSelectionRange(4, 4))
+  await textarea.press('ControlOrMeta+b')
+  await expect(textarea).toHaveValue('굵게')
+
+  await textarea.selectText()
   await textarea.press('ControlOrMeta+i')
-  await expect(textarea).toHaveValue('***굵게***')
+  await expect(textarea).toHaveValue('*굵게*')
+  await textarea.evaluate(element => element.setSelectionRange(3, 3))
+  await textarea.press('ControlOrMeta+i')
+  await expect(textarea).toHaveValue('굵게')
   await expect.poll(() => textarea.evaluate(element => getComputedStyle(element).outlineStyle)).toBe('none')
 })
 
@@ -204,25 +212,62 @@ test('메모 Markdown 서식과 줄 단축키를 토글한다', async ({ page })
   await textarea.selectText()
   await textarea.press('ControlOrMeta+Shift+7')
   await expect(textarea).toHaveValue('1. 첫째\n2. 둘째')
+  await textarea.press('ControlOrMeta+Shift+7')
+  await expect(textarea).toHaveValue('첫째\n둘째')
 
   await textarea.fill('할 일')
   await textarea.selectText()
   await textarea.press('ControlOrMeta+Shift+l')
   await expect(textarea).toHaveValue('- [ ] 할 일')
+  await textarea.press('ControlOrMeta+Shift+l')
+  await expect(textarea).toHaveValue('할 일')
 
   await textarea.fill('인용')
   await textarea.selectText()
   await textarea.press('ControlOrMeta+Shift+.')
   await expect(textarea).toHaveValue('> 인용')
+  await textarea.press('ControlOrMeta+Shift+.')
+  await expect(textarea).toHaveValue('인용')
 
   await textarea.fill('코드')
   await textarea.selectText()
   await textarea.press('ControlOrMeta+Shift+c')
   await expect(textarea).toHaveValue('```\n코드\n```')
+  await textarea.evaluate(element => element.setSelectionRange(6, 6))
+  await textarea.press('ControlOrMeta+Shift+c')
+  await expect(textarea).toHaveValue('코드')
+
+  for (const [shortcut, formatted] of [
+    ['ControlOrMeta+k', '[링크](url)'],
+    ['ControlOrMeta+e', '`링크`'],
+  ]) {
+    await textarea.fill('링크')
+    await textarea.selectText()
+    await textarea.press(shortcut)
+    await expect(textarea).toHaveValue(formatted)
+    const caret = formatted.indexOf('링크') + '링크'.length
+    await textarea.evaluate((element, position) => element.setSelectionRange(position, position), caret)
+    await textarea.press(shortcut)
+    await expect(textarea).toHaveValue('링크')
+  }
 
   await textarea.fill('[')
   await textarea.press('[')
   await expect(textarea).toHaveValue('[[]]')
+})
+
+test('메모 편집 중 Control/Cmd+Z는 브라우저 기본 실행 취소를 유지한다', async ({ page }) => {
+  await openViewerWithMemo(page)
+  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  await memo.locator('.edit-btn').click()
+  const textarea = memo.locator('.floating-memo-textarea')
+
+  await textarea.fill('실행 취소 전')
+  await textarea.press('End')
+  await textarea.type(' 추가')
+  await expect(textarea).toHaveValue('실행 취소 전 추가')
+  await textarea.press('ControlOrMeta+z')
+  await expect(textarea).toHaveValue('실행 취소 전 추')
 })
 
 test('메모 목록 자동 편집과 완료 및 취소를 지원한다', async ({ page }) => {
