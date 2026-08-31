@@ -69,19 +69,19 @@ test('사용자가 조절한 메모 크기를 저장하고 다시 복원한다',
   await expect(page.locator('.floating-memo')).toHaveCount(1)
   await memo.evaluate(el => {
     el.style.width = '360px'
-    el.style.height = '280px'
+    el.style.height = '900px'
   })
 
   await expect.poll(() => page.evaluate(() => {
     const saved = JSON.parse(localStorage.getItem('easypaper_memos_doc-memo') || '{}')
     const memoData = saved.page_1?.[0]
     return { width: memoData?.width, height: memoData?.height }
-  })).toEqual({ width: 360, height: 280 })
+  })).toEqual({ width: 360, height: 900 })
 
   await page.reload()
   await expect(memo).toBeVisible()
   await expect(memo).toHaveCSS('width', '360px')
-  await expect(memo).toHaveCSS('height', '280px')
+  await expect(memo).toHaveCSS('height', '900px')
 })
 
 test('뷰어 메모 입력창에 포커스 테두리를 표시하지 않는다', async ({ page }) => {
