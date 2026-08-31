@@ -10243,6 +10243,9 @@ async function openFromLibrary(doc, shouldPushState = true) {
         }
       }
     }
+  } catch (err) {
+    console.error('논문 열기 실패:', err)
+    showToast('논문을 불러오지 못했습니다.', 'error')
   } finally {
     if (docOpeningId === doc.id) docOpeningId = null
   }
