@@ -132,10 +132,14 @@ async def _resolve_recommended_titles(titles: list, exclude_title_words: list) -
     return results
 
 
-def _pick_primary_figure(pdf_path: str) -> Optional[dict]:
+def _pick_primary_figure(doc_id: str, pdf_path: str) -> Optional[dict]:
+    from services.cache import get_cached_images, save_images_cache
     from services.pdf_parser import extract_pdf_images
     try:
-        images = extract_pdf_images(pdf_path)
+        images = get_cached_images(doc_id, pdf_path)
+        if images is None:
+            images = extract_pdf_images(pdf_path)
+            save_images_cache(doc_id, pdf_path, images)
     except Exception as e:
         print(f"[primer] Figure 추출 실패: {e}")
         return None
@@ -185,7 +189,7 @@ async def generate_primer(
 
     async def _run_figure() -> Optional[dict]:
         try:
-            picked = await asyncio.to_thread(_pick_primary_figure, pdf_path)
+            picked = await asyncio.to_thread(_pick_primary_figure, doc_id, pdf_path)
             if picked and save_primer_figure(doc_id, pdf_path, picked["page"], picked):
                 return {"page": picked["page"], "label": picked.get("label")}
         except Exception as e:
