@@ -31,16 +31,18 @@ def extract_pages(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str,
 
 def _extract_pages_pymupdf(pdf_path: str) -> List[Dict[str, Any]]:
     doc = fitz.open(pdf_path)
-    pages = []
+    try:
+        pages = []
 
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        page_data = _extract_page(page, page_num + 1)
-        page_data["parser_engine"] = "pymupdf"
-        pages.append(page_data)
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            page_data = _extract_page(page, page_num + 1)
+            page_data["parser_engine"] = "pymupdf"
+            pages.append(page_data)
 
-    doc.close()
-    return pages
+        return pages
+    finally:
+        doc.close()
 
 
 def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
@@ -594,33 +596,35 @@ def _extract_paper_title(doc: fitz.Document) -> str:
 def get_pdf_metadata(pdf_path: str) -> Dict[str, Any]:
     """PDF 메타데이터를 반환합니다."""
     doc = fitz.open(pdf_path)
-    meta = doc.metadata or {}
-    page_count = len(doc)
-    
-    # 1. 문서 텍스트 분석을 통한 실제 논문 제목 추출 시도
-    extracted_title = _extract_paper_title(doc)
-    
-    # 2. 메타데이터 제목 획득
-    meta_title = meta.get("title", "").strip()
-    
-    # 3. 우선순위 결정: 추출된 제목이 있으면 최우선 사용, 없으면 메타데이터 제목 사용
-    # 단, 메타데이터 제목이 무의미한 템플릿(Word, untitled 등)인 경우도 필터링
-    title = ""
-    if extracted_title:
-        title = extracted_title
-    elif meta_title:
-        lower_meta = meta_title.lower()
-        invalid_keywords = ["microsoft", "word", "untitled", "layout", "template", "document", "pdf", "page"]
-        if not any(k in lower_meta for k in invalid_keywords) and len(meta_title) >= 4:
-            title = meta_title
-            
-    doc.close()
-    return {
-        "title": title,
-        "author": meta.get("author", ""),
-        "subject": meta.get("subject", ""),
-        "total_pages": page_count,
-    }
+    try:
+        meta = doc.metadata or {}
+        page_count = len(doc)
+
+        # 1. 문서 텍스트 분석을 통한 실제 논문 제목 추출 시도
+        extracted_title = _extract_paper_title(doc)
+
+        # 2. 메타데이터 제목 획득
+        meta_title = meta.get("title", "").strip()
+
+        # 3. 우선순위 결정: 추출된 제목이 있으면 최우선 사용, 없으면 메타데이터 제목 사용
+        # 단, 메타데이터 제목이 무의미한 템플릿(Word, untitled 등)인 경우도 필터링
+        title = ""
+        if extracted_title:
+            title = extracted_title
+        elif meta_title:
+            lower_meta = meta_title.lower()
+            invalid_keywords = ["microsoft", "word", "untitled", "layout", "template", "document", "pdf", "page"]
+            if not any(k in lower_meta for k in invalid_keywords) and len(meta_title) >= 4:
+                title = meta_title
+
+        return {
+            "title": title,
+            "author": meta.get("author", ""),
+            "subject": meta.get("subject", ""),
+            "total_pages": page_count,
+        }
+    finally:
+        doc.close()
 
 
 def merge_bboxes(rects: list, threshold: float = 15.0) -> list:
@@ -1783,6 +1787,13 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
             engine = "pymupdf"
 
     doc = fitz.open(pdf_path)
+    try:
+        return _extract_pdf_images_from_doc(doc, pdf_path, engine)
+    finally:
+        doc.close()
+
+
+def _extract_pdf_images_from_doc(doc, pdf_path: str, engine: str) -> List[Dict[str, Any]]:
     images_data = []
 
     # ── 1단계: 모든 페이지의 캡션과 후보 사각형을 먼저 수집 ──
@@ -2086,7 +2097,6 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
                 "caption": None,
             })
 
-    doc.close()
     return images_data
 
 
