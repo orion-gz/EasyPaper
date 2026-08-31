@@ -121,14 +121,19 @@ const $ = (id) => document.getElementById(id)
 
 let languageCatalog = []
 
-// Native select values and change events remain the source of truth while the viewer
-// menu presents the same button-and-popover pattern as the model picker.
-class LanguageSelectPicker {
+// Native select values and change events remain the source of truth while every
+// dropdown presents the same button-and-popover pattern as the model picker.
+class CustomSelectPicker {
   constructor(select) {
-    if (!select) return
+    if (!select || select.dataset.customSelectReady === 'true') return
     this.select = select
+    select.dataset.customSelectReady = 'true'
+    select._customSelectPicker = this
     this.container = document.createElement('div')
-    this.container.className = 'provider-picker language-picker'
+    this.container.className = 'provider-picker custom-select-picker'
+    if (select.classList.contains('form-select') || select.classList.contains('folder-dialog-input')) {
+      this.container.classList.add('picker-full-wrap')
+    }
     select.parentNode.insertBefore(this.container, select)
     this.container.appendChild(select)
     select.classList.add('sr-only')
@@ -136,13 +141,17 @@ class LanguageSelectPicker {
     select.tabIndex = -1
     this.button = document.createElement('button')
     this.button.type = 'button'
-    this.button.className = 'provider-picker-btn'
+    this.button.className = 'provider-picker-btn' + (this.container.classList.contains('picker-full-wrap') ? ' picker-full' : '')
     this.button.setAttribute('aria-haspopup', 'listbox')
     this.button.setAttribute('aria-expanded', 'false')
-    this.button.setAttribute('aria-labelledby', select.id + '-label ' + select.id + '-picker-value')
-    this.button.innerHTML = '<span id="' + select.id + '-picker-value" class="picker-label"></span><span class="picker-arrow" aria-hidden="true">▾</span>'
+    const pickerId = select.id || 'custom-select-' + CustomSelectPicker.nextId++
+    const label = select.id ? document.querySelector(`label[for="${CSS.escape(select.id)}"]`) : null
+    if (label && !label.id) label.id = pickerId + '-label'
+    const labelledBy = select.getAttribute('aria-labelledby') || label?.id || ''
+    this.button.setAttribute('aria-labelledby', [labelledBy, pickerId + '-picker-value'].filter(Boolean).join(' '))
+    this.button.innerHTML = '<span id="' + pickerId + '-picker-value" class="picker-label"></span><span class="picker-arrow" aria-hidden="true">▾</span>'
     this.panel = document.createElement('div')
-    this.panel.id = select.id + '-picker-panel'
+    this.panel.id = pickerId + '-picker-panel'
     this.panel.className = 'provider-picker-panel'
     this.panel.setAttribute('role', 'listbox')
     this.button.setAttribute('aria-controls', this.panel.id)
@@ -160,13 +169,15 @@ class LanguageSelectPicker {
       items[event.key === 'ArrowUp' ? Math.max(0, items.length - 1) : selectedIndex]?.focus()
     })
     select.addEventListener('change', () => this.refresh())
+    this.observer = new MutationObserver(() => this.refresh())
+    this.observer.observe(select, { attributes: true, childList: true, subtree: true })
     document.addEventListener('click', (event) => {
       if (!this.container.contains(event.target)) this.close()
     })
     this.refresh()
   }
   open() {
-    document.querySelectorAll('.language-picker.open .provider-picker-btn').forEach(button => {
+    document.querySelectorAll('.custom-select-picker.open .provider-picker-btn').forEach(button => {
       button.setAttribute('aria-expanded', 'false')
     })
     document.querySelectorAll('.provider-picker.open').forEach(picker => picker.classList.remove('open'))
@@ -183,6 +194,7 @@ class LanguageSelectPicker {
     const selected = this.select.selectedOptions[0]
     this.button.querySelector('.picker-label').textContent = selected?.textContent || ''
     this.button.title = this.select.getAttribute('aria-label') || selected?.textContent || ''
+    this.button.disabled = this.select.disabled
     if (this.container.classList.contains('open')) this.rebuildPanel()
   }
   rebuildPanel() {
@@ -190,9 +202,10 @@ class LanguageSelectPicker {
     ;[...this.select.options].forEach(option => {
       const item = document.createElement('button')
       item.type = 'button'
-      item.className = 'picker-model-item language-picker-item' + (option.selected ? ' selected' : '')
+      item.className = 'picker-model-item custom-select-item' + (option.selected ? ' selected' : '')
       item.textContent = option.textContent
       item.dataset.value = option.value
+      item.disabled = option.disabled
       item.setAttribute('role', 'option')
       item.setAttribute('aria-selected', String(option.selected))
       item.addEventListener('click', (event) => {
@@ -225,8 +238,22 @@ class LanguageSelectPicker {
     })
   }
 }
+CustomSelectPicker.nextId = 1
+
+function enhanceSelects(root = document) {
+  if (root.matches?.('select')) new CustomSelectPicker(root)
+  root.querySelectorAll?.('select:not([data-custom-select-ready="true"])').forEach(select => new CustomSelectPicker(select))
+}
+
+enhanceSelects()
+new MutationObserver(mutations => {
+  mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
+    if (node.nodeType === Node.ELEMENT_NODE) enhanceSelects(node)
+  }))
+}).observe(document.body, { childList: true, subtree: true })
+
 const documentLanguagePickers = ['document-source-lang', 'document-target-lang']
-  .map(id => new LanguageSelectPicker($(id)))
+  .map(id => $(id)?._customSelectPicker)
 
 function populateLanguageControls(settings = {}) {
   const sourceSelect = $('setting-source-lang')
