@@ -1183,8 +1183,13 @@ async def get_full_changelog(current_user: str = Depends(get_current_user)):
     그대로 서빙한다.
     """
     import os
-    changelog_path = os.path.join(get_project_root(), "CHANGELOG.md")
-    if not os.path.exists(changelog_path):
+    import sys
+
+    candidates = [os.path.join(get_project_root(), "CHANGELOG.md")]
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        candidates.append(os.path.join(sys._MEIPASS, "CHANGELOG.md"))
+    changelog_path = next((path for path in candidates if os.path.isfile(path)), None)
+    if changelog_path is None:
         return {"content": ""}
     with open(changelog_path, "r", encoding="utf-8") as f:
         return {"content": f.read()}

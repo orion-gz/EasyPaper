@@ -29,6 +29,8 @@ a = Analysis(
         # 사용자가 커스터마이징하기 전 기본 템플릿 파일을 그대로 들고 있으면
         # 첫 실행 UX가 서버/Docker 배포와 동일해진다.
         (os.path.join(BACKEND_DIR, "translation_prompt.txt"), "."),
+        # 패키징된 데스크탑 앱에서도 설정 화면의 전체 변경 이력을 제공한다.
+        (os.path.join(BACKEND_DIR, "..", "CHANGELOG.md"), "."),
         # frontend/dist를 _internal/frontend/dist에 둔다(PyInstaller는 datas
         # 목적지가 onedir 최상위 밖을 가리키는 것을 허용하지 않는다). main.py는
         # EASYPAPER_FRONTEND_DIST 환경변수가 있으면 그 경로를 그대로 쓰도록
