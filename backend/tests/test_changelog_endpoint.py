@@ -1,5 +1,6 @@
 """GET /settings/changelog 테스트 - 저장소 루트 CHANGELOG.md를 그대로 서빙하는지 확인."""
 
+import sys
 from unittest.mock import patch
 
 
@@ -16,3 +17,18 @@ def test_get_changelog_returns_empty_string_when_file_missing(test_client, tmp_p
         res = test_client.get("/api/settings/changelog")
     assert res.status_code == 200
     assert res.json()["content"] == ""
+
+
+def test_get_changelog_uses_pyinstaller_bundle_path(test_client, tmp_path):
+    bundled_changelog = tmp_path / "CHANGELOG.md"
+    bundled_changelog.write_text("# Changelog\n\n## Desktop release", encoding="utf-8")
+
+    with (
+        patch("routers.auth.get_project_root", return_value=str(tmp_path / "missing")),
+        patch.object(sys, "frozen", True, create=True),
+        patch.object(sys, "_MEIPASS", str(tmp_path), create=True),
+    ):
+        res = test_client.get("/api/settings/changelog")
+
+    assert res.status_code == 200
+    assert res.json()["content"] == "# Changelog\n\n## Desktop release"

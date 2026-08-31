@@ -544,13 +544,18 @@ function initializeSettingsInformationArchitecture() {
     pane.prepend(header)
   }
 
-  const versionLabel = $('current-version-label')
+  // Tauri에서는 git 커밋 해시 대신 앱 패키지 버전을 사용한다. 데스크탑 전용
+  // 라벨을 공통 버전/변경 이력 카드로 옮겨 두 화면에서 같은 진입점을 제공한다.
+  const versionLabel = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+    ? $('tauri-current-version-label')
+    : $('current-version-label')
   const infoBody = $('tab-info')?.querySelector('.modal-form')
   if (versionLabel && infoBody) {
     const versionCard = document.createElement('section')
     versionCard.className = 'settings-action-card settings-version-card'
     versionCard.innerHTML = `<div><strong data-i18n="settings:versionHistoryTitle">${t('settings:versionHistoryTitle')}</strong><p data-i18n="settings:versionHistoryDescription">${t('settings:versionHistoryDescription')}</p></div>`
     versionLabel.classList.add('settings-version-link')
+    versionLabel.title = t('settings:versionHistoryTitle')
     versionCard.appendChild(versionLabel)
     infoBody.appendChild(versionCard)
   }
@@ -4703,8 +4708,9 @@ if (fullChangelogModal) {
   })
 }
 
-if (currentVersionLabel) {
-  currentVersionLabel.addEventListener('click', async () => {
+const fullChangelogTrigger = isTauriDesktop ? tauriCurrentVersionLabel : currentVersionLabel
+if (fullChangelogTrigger) {
+  fullChangelogTrigger.addEventListener('click', async () => {
     if (!fullChangelogModal) return
     openOverlayModal(fullChangelogModal)
     fullChangelogLoading.classList.remove('hidden')
