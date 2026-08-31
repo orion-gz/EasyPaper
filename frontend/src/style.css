@@ -3645,6 +3645,47 @@ body.light-theme .provider-picker-panel {
   left: 0;
 }
 
+/* Native selects enhanced with the model-picker interaction and visual language. */
+.custom-select-picker {
+  max-width: 100%;
+}
+.custom-select-picker.picker-full-wrap {
+  min-width: 0;
+}
+.custom-select-picker .provider-picker-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.custom-select-picker .provider-picker-panel {
+  min-width: max(100%, 180px);
+}
+.custom-select-item {
+  position: relative;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-sans);
+  text-align: left;
+}
+.custom-select-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.custom-select-item:focus-visible {
+  outline: 2px solid var(--accent-mid);
+  outline-offset: -2px;
+}
+.settings-row .custom-select-picker,
+.login-language-selector .custom-select-picker {
+  width: 100%;
+}
+.lib-sort-dropdown .custom-select-picker .provider-picker-btn,
+.notes-sort-wrap .custom-select-picker .provider-picker-btn,
+.notes-annotation-toolbar .custom-select-picker .provider-picker-btn {
+  min-width: 0;
+  height: 32px;
+}
+
 /* ── Category Filters for Library ── */
 .category-filter-btn {
   padding: 6px 14px;
@@ -4813,20 +4854,6 @@ body:not(.toolbar-pos-left):not(.toolbar-pos-right):has(.chat-sidebar:not(.hidde
 .kebab-translation-grid .provider-picker-btn {
   width: 100%;
   min-width: 0;
-}
-.language-picker-item {
-  width: 100%;
-  border: 0;
-  position: relative;
-  background: transparent;
-  font-family: var(--font-sans);
-  text-align: left;
-}
-.language-picker-item:hover {
-  background: var(--bg-hover);
-}
-.language-picker-item.selected {
-  background: rgba(126, 196, 232, 0.15);
 }
 .kebab-menu-divider {
   height: 1px;
