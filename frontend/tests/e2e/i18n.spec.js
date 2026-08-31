@@ -32,6 +32,7 @@ test('locale selector updates onboarding immediately without reload', async ({ p
   await mockBaseRoutes(page, { workspaceSettings: { onboarding_version: 0 }, languageSettings: { ui_locale: 'ko', default_source_language: 'auto', target_language: 'ko' } })
   await page.goto('/index.html')
   await expect(page.locator('#onboarding-modal')).not.toHaveClass(/hidden/)
+  await expect(page.locator('.onboarding-header-actions > .onboarding-locale-label + #onboarding-close-btn')).toBeVisible()
   await expect(page.locator('#onboarding-purpose h3')).toHaveText('EasyPaper를 어떤 용도로 사용하시나요?')
   await page.selectOption('#onboarding-ui-locale', 'en')
   await expect(page.locator('#onboarding-purpose h3')).toHaveText('How will you use EasyPaper?')
