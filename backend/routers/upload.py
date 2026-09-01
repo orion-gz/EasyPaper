@@ -42,7 +42,12 @@ def ensure_session(session_id: str) -> bool:
         parser_version = doc.get("parser_version")
         pages = get_cached_pages(session_id, pdf_path, parser_engine, parser_version)
         if pages is None:
-            if parser_engine in {"marker", "mineru"}:
+            if doc.get("content_kind") == "html_article":
+                from services.web_import import pages_from_manifest
+                pages = pages_from_manifest(pdf_path)
+                parser_engine = "readability"
+                parser_version = str(doc.get("content_schema_version") or 1)
+            elif parser_engine in {"marker", "mineru"}:
                 from services.reparse import parse_document_isolated
                 payload = parse_document_isolated(pdf_path, parser_engine)
                 pages = payload["pages"]
@@ -86,6 +91,9 @@ def ensure_session(session_id: str) -> bool:
             "content_revision": int(doc.get("content_revision") or 1),
             "parser_engine": parser_engine,
             "parser_version": parser_version,
+            "content_kind": doc.get("content_kind", "pdf"),
+            "source_origin": doc.get("source_origin", "local"),
+            "source_url": doc.get("source_url"),
         }
         return True
     except Exception:
@@ -286,6 +294,10 @@ async def get_session(session_id: str, current_user: str = Depends(get_current_u
         "detected_source_language": session.get("detected_source_language", "und"),
         "source_language_confidence": session.get("source_language_confidence"),
         "preferred_target_language": session.get("preferred_target_language"),
+        "source_origin": session.get("source_origin", "local"),
+        "content_kind": session.get("content_kind", "pdf"),
+        "source_url": session.get("source_url"),
+        "total_units": session.get("total_pages", 0),
     }
 
 

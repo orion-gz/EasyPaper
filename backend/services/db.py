@@ -55,6 +55,13 @@ def init_db():
             content_revision INTEGER NOT NULL DEFAULT 1,
             parser_engine TEXT NOT NULL DEFAULT 'pymupdf',
             parser_version TEXT,
+            source_origin TEXT NOT NULL DEFAULT 'local',
+            content_kind TEXT NOT NULL DEFAULT 'pdf',
+            source_url TEXT,
+            canonical_url TEXT,
+            fetched_at TEXT,
+            content_schema_version INTEGER NOT NULL DEFAULT 1,
+            content_unit_count INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             FOREIGN KEY (username) REFERENCES users (username) ON DELETE CASCADE ON UPDATE CASCADE
         )
@@ -240,12 +247,21 @@ def init_db():
             "ALTER TABLE documents ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE documents ADD COLUMN parser_engine TEXT NOT NULL DEFAULT 'pymupdf'",
             "ALTER TABLE documents ADD COLUMN parser_version TEXT",
+            "ALTER TABLE documents ADD COLUMN source_origin TEXT NOT NULL DEFAULT 'local'",
+            "ALTER TABLE documents ADD COLUMN content_kind TEXT NOT NULL DEFAULT 'pdf'",
+            "ALTER TABLE documents ADD COLUMN source_url TEXT",
+            "ALTER TABLE documents ADD COLUMN canonical_url TEXT",
+            "ALTER TABLE documents ADD COLUMN fetched_at TEXT",
+            "ALTER TABLE documents ADD COLUMN content_schema_version INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE documents ADD COLUMN content_unit_count INTEGER NOT NULL DEFAULT 0",
         ):
             try:
                 cursor.execute(column_sql)
             except sqlite3.OperationalError:
                 pass
 
+
+        cursor.execute("UPDATE documents SET content_unit_count = total_pages WHERE content_unit_count = 0")
 
         for column_sql in (
             "ALTER TABLE translations ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1",
@@ -792,6 +808,10 @@ def db_save_document(
     processing_policy: str = "inherit",
     content_revision: int = 1, parser_engine: str = "pymupdf",
     parser_version: Optional[str] = None,
+    source_origin: str = "local", content_kind: str = "pdf",
+    source_url: Optional[str] = None, canonical_url: Optional[str] = None,
+    fetched_at: Optional[str] = None, content_schema_version: int = 1,
+    content_unit_count: Optional[int] = None,
 ) -> dict:
     meta_str = json.dumps(metadata, ensure_ascii=False)
     created_at = datetime.now(timezone.utc).isoformat()
@@ -801,12 +821,12 @@ def db_save_document(
             """
             INSERT OR REPLACE INTO documents
                 (id, username, filename, pdf_path, total_pages, metadata,
-                 document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, source_origin, content_kind, source_url, canonical_url, fetched_at, content_schema_version, content_unit_count, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (doc_id, username, filename, pdf_path, total_pages, meta_str,
              document_mode, document_type, mode_schema_version, source_language, detected_source_language,
-             source_language_confidence, preferred_target_language, processing_policy, int(content_revision), parser_engine, parser_version, created_at)
+             source_language_confidence, preferred_target_language, processing_policy, int(content_revision), parser_engine, parser_version, source_origin, content_kind, source_url, canonical_url, fetched_at, int(content_schema_version), int(content_unit_count if content_unit_count is not None else total_pages), created_at)
         )
         conn.commit()
     return {
@@ -820,6 +840,10 @@ def db_save_document(
         "processing_policy": processing_policy,
         "content_revision": int(content_revision), "parser_engine": parser_engine,
         "parser_version": parser_version,
+        "source_origin": source_origin, "content_kind": content_kind,
+        "source_url": source_url, "canonical_url": canonical_url, "fetched_at": fetched_at,
+        "content_schema_version": int(content_schema_version),
+        "content_unit_count": int(content_unit_count if content_unit_count is not None else total_pages),
     }
 
 
@@ -849,7 +873,7 @@ def db_get_document(doc_id: str) -> Optional[dict]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, is_deleted, created_at FROM documents WHERE id = ?",
+            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, source_origin, content_kind, source_url, canonical_url, fetched_at, content_schema_version, content_unit_count, is_deleted, created_at FROM documents WHERE id = ?",
             (doc_id,)
         )
         row = cursor.fetchone()
@@ -875,7 +899,7 @@ def db_list_documents(username: Optional[str] = None, only_trash: bool = False, 
     query = (
         "SELECT id, username, filename, pdf_path, total_pages, metadata, "
         "document_mode, document_type, mode_schema_version, source_language, detected_source_language, "
-        "source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, is_deleted, created_at "
+        "source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, source_origin, content_kind, source_url, canonical_url, fetched_at, content_schema_version, content_unit_count, is_deleted, created_at "
         "FROM documents"
     )
     if conditions:
@@ -928,7 +952,7 @@ def db_search_documents(username: str, query: str, only_trash: bool = False, doc
                    d.metadata, d.document_mode, d.document_type,
                    d.mode_schema_version, d.source_language, d.detected_source_language,
                    d.source_language_confidence, d.preferred_target_language, d.processing_policy,
-                   d.content_revision, d.parser_engine, d.parser_version, d.is_deleted, d.created_at
+                   d.content_revision, d.parser_engine, d.parser_version, d.source_origin, d.content_kind, d.source_url, d.canonical_url, d.fetched_at, d.content_schema_version, d.content_unit_count, d.is_deleted, d.created_at
             FROM documents d
             LEFT JOIN translations t ON t.doc_id = d.id AND t.content_revision = d.content_revision
             WHERE d.username = ? AND d.is_deleted = ?

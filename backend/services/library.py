@@ -32,6 +32,11 @@ from services.db import (
 def _attach_processing_status(doc: dict) -> dict:
     from services.processing_policy import document_processing_status
     doc["processing"] = document_processing_status(doc)
+    kind = doc.get("content_kind") or "pdf"
+    doc["source_origin"] = doc.get("source_origin") or "local"
+    doc["content_kind"] = kind
+    doc["total_units"] = int(doc.get("content_unit_count") or doc.get("total_pages") or 0)
+    doc["capabilities"] = {"translation": True, "search": True, "annotations": True, "memos": True, "chat": True, "export_pdf": True, "coordinate_crop": kind == "pdf", "text_anchor_capture": kind == "html_article", "original_site": kind == "html_article"}
     return doc
 
 

@@ -3,6 +3,9 @@ uvicorn[standard]==0.30.6
 python-multipart>=0.0.18
 pymupdf==1.24.10
 httpx==0.27.2
+beautifulsoup4==4.15.0
+readability-lxml==0.8.1
+lxml_html_clean==0.4.3
 pydantic==2.8.2
 aiofiles==23.2.1
 python-dotenv==1.0.1

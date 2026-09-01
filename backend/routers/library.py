@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, Response
+from pathlib import Path
+import mimetypes
 from services.ownership import require_owned_document
 from services.auth import get_current_user
 from services.library import (
@@ -831,9 +833,9 @@ async def export_annotated_pdf(
     전달받는다(서버는 이 데이터를 저장하지 않고 즉시 PDF 생성에만 사용).
     """
     doc = require_owned_document(doc_id, current_user)
-    pdf_path = get_pdf_path(doc_id)
+    pdf_path = doc.get("pdf_path") if doc.get("content_kind") == "html_article" else get_pdf_path(doc_id)
     if not pdf_path:
-        raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
+        raise HTTPException(status_code=404, detail="문서 파일을 찾을 수 없습니다.")
 
     suffix = _document_translation_suffix(
         doc, payload.target_lang, payload.style, payload.ignore_math,
@@ -850,10 +852,15 @@ async def export_annotated_pdf(
             translations[str(page_num)] = text
 
     try:
-        from services.pdf_export import generate_annotated_pdf
-        pdf_bytes = generate_annotated_pdf(
-            pdf_path, payload.annotations, translations, payload.memos
-        )
+        if doc.get("content_kind") == "html_article":
+            from services.pdf_export import generate_article_pdf
+            manifest = json.loads(Path(pdf_path).read_text(encoding="utf-8"))
+            pdf_bytes = generate_article_pdf(manifest, translations, payload.memos, payload.annotations, str(Path(pdf_path).parent))
+        else:
+            from services.pdf_export import generate_annotated_pdf
+            pdf_bytes = generate_annotated_pdf(
+                pdf_path, payload.annotations, translations, payload.memos
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF 생성 실패: {str(e)}")
 
@@ -1385,3 +1392,28 @@ async def update_document_languages(
         sessions[doc_id]["source_language"] = source_language
         sessions[doc_id]["preferred_target_language"] = target_language
     return {"source_language": source_language, "preferred_target_language": target_language}
+
+@router.get("/library/{doc_id}/article")
+async def get_article_manifest(doc_id: str, current_user: str = Depends(get_current_user)):
+    doc = require_owned_document(doc_id, current_user)
+    if doc.get("content_kind") != "html_article":
+        raise HTTPException(status_code=404, detail="웹 아티클이 아닙니다.")
+    path = Path(doc["pdf_path"])
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="저장된 아티클을 찾을 수 없습니다.") from exc
+
+
+@router.get("/library/{doc_id}/article/assets/{asset_name}")
+async def get_article_asset(doc_id: str, asset_name: str, current_user: str = Depends(get_current_user)):
+    doc = require_owned_document(doc_id, current_user)
+    if doc.get("content_kind") != "html_article" or not re.fullmatch(r"[A-Za-z0-9._-]+", asset_name):
+        raise HTTPException(status_code=404, detail="자산을 찾을 수 없습니다.")
+    manifest_path = Path(doc["pdf_path"]).resolve()
+    asset = (manifest_path.parent / "assets" / asset_name).resolve()
+    assets_root = (manifest_path.parent / "assets").resolve()
+    if asset.parent != assets_root or not asset.is_file():
+        raise HTTPException(status_code=404, detail="자산을 찾을 수 없습니다.")
+    media_type = mimetypes.guess_type(asset.name)[0] or "application/octet-stream"
+    return FileResponse(asset, media_type=media_type, headers={"Cache-Control": "private, max-age=86400"})

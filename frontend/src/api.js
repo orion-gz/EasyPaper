@@ -1056,3 +1056,32 @@ export async function uninstallPdfParserAPI(parserId) {
 
 
 
+
+export async function importURL(url, options, onProgress) {
+  onProgress?.(10, 'checking')
+  const payload = {
+    url,
+    target_lang: options.targetLang,
+    source_lang: options.sourceLang || 'auto',
+    style: options.style,
+    ignore_math: Boolean(options.ignoreMath),
+    ignore_table: Boolean(options.ignoreTable),
+    ignore_refs: Boolean(options.ignoreRefs),
+    translation_mode: options.translationMode || 'auto',
+    keyword_mode: options.keywordMode || 'manual',
+    summary_mode: options.summaryMode || 'manual',
+    document_mode: options.documentMode || 'research',
+    document_type: options.documentType || 'research_paper',
+  }
+  onProgress?.(30, 'downloading')
+  const res = await fetch(`${API_BASE}/import-url`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  if (!res.ok) throw await apiError(res)
+  onProgress?.(100, 'complete')
+  return res.json()
+}
+
+export async function getArticleAPI(docId) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/article`, { cache: 'no-store' })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}

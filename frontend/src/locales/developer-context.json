@@ -4079,13 +4079,112 @@
   "settings:versionHistoryDescription": {
     "description": "Settings information architecture label or description for versionHistoryDescription."
   },
-  "common:documentTypes.academicBook": { "description": "General-document classification for textbooks, monographs, and scholarly learning material." },
-  "common:documentTypes.generalBook": { "description": "General-document classification for nonfiction and general-interest books." },
-  "common:documentTypes.literaryWork": { "description": "General-document classification for literary and narrative works." },
-  "common:documentTypes.article": { "description": "General-document classification for news articles and opinion columns." },
-  "common:documentTypes.report": { "description": "General-document classification for analytical reports." },
-  "common:documentTypes.manual": { "description": "General-document classification for manuals and procedural guides." },
-  "common:documentTypes.legalPolicy": { "description": "General-document classification for legal and policy documents." },
-  "common:documentTypes.presentation": { "description": "General-document classification for presentations and lecture materials." },
-  "common:documentTypes.legacyBook": { "description": "Legacy book classification prompting the user to choose a more specific type." }
+  "common:documentTypes.academicBook": {
+    "description": "General-document classification for textbooks, monographs, and scholarly learning material."
+  },
+  "common:documentTypes.generalBook": {
+    "description": "General-document classification for nonfiction and general-interest books."
+  },
+  "common:documentTypes.literaryWork": {
+    "description": "General-document classification for literary and narrative works."
+  },
+  "common:documentTypes.article": {
+    "description": "General-document classification for news articles and opinion columns."
+  },
+  "common:documentTypes.report": {
+    "description": "General-document classification for analytical reports."
+  },
+  "common:documentTypes.manual": {
+    "description": "General-document classification for manuals and procedural guides."
+  },
+  "common:documentTypes.legalPolicy": {
+    "description": "General-document classification for legal and policy documents."
+  },
+  "common:documentTypes.presentation": {
+    "description": "General-document classification for presentations and lecture materials."
+  },
+  "common:documentTypes.legacyBook": {
+    "description": "Legacy book classification prompting the user to choose a more specific type."
+  },
+  "library:source.local": {
+    "description": "Document source picker option for a local PDF."
+  },
+  "library:source.localHelp": {
+    "description": "Help text for choosing a local PDF."
+  },
+  "library:source.web": {
+    "description": "Document source picker option for a web URL."
+  },
+  "library:source.webHelp": {
+    "description": "Help text for supported URL content."
+  },
+  "library:source.urlLabel": {
+    "description": "Accessible label for the document URL input."
+  },
+  "library:import.running": {
+    "description": "Title shown while importing a web document."
+  },
+  "library:import.checking": {
+    "description": "Progress message while validating a URL."
+  },
+  "library:import.downloading": {
+    "description": "Progress message while downloading and extracting web content."
+  },
+  "library:import.analyzed": {
+    "description": "Progress message after document analysis."
+  },
+  "library:import.processing": {
+    "description": "Generic web import progress message."
+  },
+  "library:import.complete": {
+    "description": "Web import completion status."
+  },
+  "library:import.added": {
+    "description": "Toast shown after adding a web document."
+  },
+  "library:import.failed": {
+    "description": "Web import failure status."
+  },
+  "library:article.openOriginal": {
+    "description": "Button opening the original article in a browser."
+  },
+  "library:article.translationPending": {
+    "description": "Placeholder while an article unit has no translation."
+  },
+  "library:article.snapshot": {
+    "description": "Web article viewer label for article.snapshot."
+  },
+  "library:article.original": {
+    "description": "Web article viewer label for article.original."
+  },
+  "library:article.search": {
+    "description": "Web article viewer label for article.search."
+  },
+  "library:article.zoomOut": {
+    "description": "Web article viewer label for article.zoomOut."
+  },
+  "library:article.zoomIn": {
+    "description": "Web article viewer label for article.zoomIn."
+  },
+  "library:article.embedFailed": {
+    "description": "Web article viewer label for article.embedFailed."
+  },
+  "library:article.embedBlocked": {
+    "description": "Web article viewer label for article.embedBlocked."
+  },
+  "library:article.highlight": {
+    "description": "Web article viewer label for article.highlight."
+  },
+  "library:article.underline": {
+    "description": "Web article viewer label for article.underline."
+  },
+  "library:article.memo": {
+    "description": "Web article viewer label for article.memo."
+  },
+  "library:article.memoPrompt": {
+    "description": "Web article viewer label for article.memoPrompt."
+  },
+  "library:article.capture": {
+    "description": "Button capturing the current saved article section for AI chat."
+  }
 }

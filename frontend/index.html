@@ -654,6 +654,19 @@
     </button>
   </div>
 
+  <div id="document-source-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="document-source-title">
+    <div class="modal-content document-source-modal-content">
+      <div class="modal-header"><h2 id="document-source-title">문서 추가</h2><button type="button" id="document-source-close" class="close-btn" aria-label="닫기">&times;</button></div>
+      <div class="document-source-body"><button type="button" id="document-source-local" class="document-source-card"><strong data-i18n="library:source.local">로컬 파일</strong><span data-i18n="library:source.localHelp">기기에서 PDF 선택</span></button><button type="button" id="document-source-web" class="document-source-card"><strong data-i18n="library:source.web">웹에서 가져오기</strong><span data-i18n="library:source.webHelp">PDF 또는 아티클 URL</span></button></div>
+    </div>
+  </div>
+  <div id="url-import-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="url-import-title">
+    <div class="modal-content document-source-modal-content">
+      <div class="modal-header"><h2 id="url-import-title">웹에서 가져오기</h2><button type="button" id="url-import-close" class="close-btn" aria-label="닫기">&times;</button></div>
+      <form id="url-import-form" class="url-import-form"><label for="url-import-input" data-i18n="library:source.urlLabel">문서 URL</label><input id="url-import-input" type="url" required inputmode="url" autocomplete="url" placeholder="https://example.com/article"><p id="url-import-error" class="url-import-error hidden" role="alert"></p><div class="document-type-modal-actions"><button type="button" id="url-import-cancel" class="btn btn-secondary">취소</button><button type="submit" class="btn btn-primary">다음</button></div></form>
+    </div>
+  </div>
+
   <div id="document-type-modal" class="modal-overlay hidden">
     <div class="modal-content document-type-modal-content">
       <div class="modal-header"><h2>PDF 업로드</h2><button id="document-type-close-btn" class="close-btn">&times;</button></div>
