@@ -16,7 +16,7 @@ async function openArticle(page) {
 
 test('문서 추가 소스 모달은 키보드 포커스를 가두고 Escape로 닫힌다', async ({ page }) => {
   await mockBaseRoutes(page); await gotoApp(page); await page.locator('#lib-upload-btn').click(); await page.locator('#lib-add-paper-btn').click()
-  await expect(page.locator('#document-source-modal')).toBeVisible(); await expect(page.locator('#document-source-local')).toBeFocused()
+  await expect(page.locator('#document-source-modal')).toBeVisible(); await expect(page.locator('#document-source-modal')).toHaveClass(/is-visible/); await expect(page.locator('#document-source-local')).toBeFocused()
   await page.locator('#document-source-close').focus(); await page.keyboard.press('Tab'); await expect(page.locator('#document-source-local')).toBeFocused()
   await page.keyboard.press('Escape'); await expect(page.locator('#document-source-modal')).toBeHidden()
 })

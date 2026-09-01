@@ -17723,13 +17723,15 @@ if (viewerScrollContainer) {
 
 function setModalVisible(modal, visible, focusTarget = null) {
   if (!modal) return
-  if (visible && !modal._returnFocus) modal._returnFocus = document.activeElement
-  modal.classList.toggle('hidden', !visible)
-  if (visible) requestAnimationFrame(() => focusTarget?.focus())
-  else if (modal._returnFocus) {
-    const returnFocus = modal._returnFocus
-    modal._returnFocus = null
-    requestAnimationFrame(() => returnFocus?.focus())
+  if (visible) {
+    openOverlayModal(modal)
+    if (focusTarget) {
+      requestAnimationFrame(() => {
+        if (modal.classList.contains('is-visible')) focusTarget.focus()
+      })
+    }
+  } else {
+    closeOverlayModal(modal)
   }
 }
 
