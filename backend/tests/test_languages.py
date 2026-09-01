@@ -126,6 +126,15 @@ def test_mixed_language_single_page_is_mul():
     assert detect_document_language([{"text": text}])["language"] == "mul"
 
 
+def test_short_foreign_fragments_do_not_make_english_paper_multilingual():
+    english = "This paper presents a reliable language detection method for multilingual documents. " * 12
+    text = (english + "\n\n" + "서울대학교 컴퓨터공학부 인공지능 연구실 소속 연구자 일동\n\n"
+            + english + "\n\n" + "東京大学情報科学研究科人工知能研究室所属研究者一同")
+    result = detect_document_language([{"text": text}])
+    assert result["language"] == "en"
+    assert result["supported"] is True
+
+
 def test_detection_exception_is_logged_and_upload_remains_allowed(monkeypatch, caplog):
     class BrokenDetector:
         def compute_language_confidence_values(self, _text):

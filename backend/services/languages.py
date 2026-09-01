@@ -183,15 +183,25 @@ def _language_code(language, text: str) -> str | None:
     return None
 
 
-def _confident_sample_codes(detector, samples: Iterable[str]) -> set[str]:
-    codes: set[str] = set()
+def _confident_sample_sizes(detector, samples: Iterable[str]) -> dict[str, int]:
+    """Return confidently detected languages weighted by alphabetic content."""
+    sizes: dict[str, int] = {}
     for sample in samples:
         values = detector.compute_language_confidence_values(sample)
         if values and float(values[0].value) >= 0.55:
             code = _language_code(values[0].language, sample)
             if code:
-                codes.add(code)
-    return codes
+                sizes[code] = sizes.get(code, 0) + sum(char.isalpha() for char in sample)
+    return sizes
+
+
+def _is_meaningfully_multilingual(detector, samples: Iterable[str]) -> bool:
+    """Ignore short foreign fragments such as names, affiliations, and citations."""
+    sizes = sorted(_confident_sample_sizes(detector, samples).values(), reverse=True)
+    if len(sizes) < 2:
+        return False
+    total = sum(sizes)
+    return sizes[1] >= 120 and sizes[1] / max(1, total) >= 0.20
 
 
 def detect_document_language(pages: Iterable[dict]) -> dict[str, object]:
@@ -209,10 +219,14 @@ def detect_document_language(pages: Iterable[dict]) -> dict[str, object]:
         code = _language_code(best.language, text)
         if confidence < 0.35:
             return {"language": "und", "confidence": round(confidence, 4), "supported": False}
-        confident_pages = _confident_sample_codes(detector, page_samples)
         chunks = [chunk.strip() for chunk in re.split(r"\n\s*\n|\n", text)
                   if sum(char.isalpha() for char in chunk) >= 40]
-        if len(confident_pages | _confident_sample_codes(detector, chunks[:40])) > 1:
+        # A single confidently classified line used to mark the whole document
+        # as multilingual. Academic PDFs commonly contain foreign author names,
+        # affiliations, and references, so require a substantial second-language
+        # share instead. Prefer line/paragraph chunks to retain mixed-page signal.
+        language_samples = chunks[:80] if len(chunks) > 1 else page_samples
+        if _is_meaningfully_multilingual(detector, language_samples):
             return {"language": "mul", "confidence": round(confidence, 4), "supported": False}
         if code is None:
             return {"language": "und", "confidence": round(confidence, 4), "supported": False}
