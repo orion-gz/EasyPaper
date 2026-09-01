@@ -94,9 +94,9 @@ export async function cancelInsightJobAPI(sessionId, kind) {
 
 const uploadRecoveryDelays = [400, 800, 1600, 3200, 5000]
 
-async function recoverCompletedUpload(uploadId, onProgress) {
-  onProgress?.(100, 'verifying')
-  for (const delay of uploadRecoveryDelays) {
+async function recoverCompletedUpload(uploadId, onProgress, verifyingPercent = 100, delays = uploadRecoveryDelays) {
+  onProgress?.(verifyingPercent, 'verifying')
+  for (const delay of delays) {
     await new Promise(resolve => setTimeout(resolve, delay))
     try {
       const session = await getSession(uploadId)
@@ -1058,9 +1058,11 @@ export async function uninstallPdfParserAPI(parserId) {
 
 
 export async function importURL(url, options, onProgress) {
+  const uploadId = crypto.randomUUID()
   onProgress?.(10, 'checking')
   const payload = {
     url,
+    upload_id: uploadId,
     target_lang: options.targetLang,
     source_lang: options.sourceLang || 'auto',
     style: options.style,
@@ -1074,10 +1076,29 @@ export async function importURL(url, options, onProgress) {
     document_type: options.documentType || 'research_paper',
   }
   onProgress?.(30, 'downloading')
-  const res = await fetch(`${API_BASE}/import-url`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-  if (!res.ok) throw await apiError(res)
-  onProgress?.(100, 'complete')
-  return res.json()
+  let progress = 30
+  const progressTimer = setInterval(() => {
+    progress = Math.min(85, progress + 5)
+    onProgress?.(progress, 'processing')
+  }, 800)
+  try {
+    let res
+    try {
+      res = await fetch(`${API_BASE}/import-url`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    } catch (networkError) {
+      clearInterval(progressTimer)
+      const remoteRecoveryDelays = [1000, 2000, 3000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000]
+      const recovered = await recoverCompletedUpload(uploadId, onProgress, 90, remoteRecoveryDelays)
+      if (recovered) return recovered
+      throw networkError
+    }
+    if (!res.ok) throw await apiError(res)
+    const result = await res.json()
+    onProgress?.(100, 'complete')
+    return result
+  } finally {
+    clearInterval(progressTimer)
+  }
 }
 
 export async function getArticleAPI(docId) {

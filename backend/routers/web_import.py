@@ -41,12 +41,22 @@ def _validate_options(body: UrlImportRequest) -> tuple[str, str]:
 async def import_url(body: UrlImportRequest, current_user: str = Depends(get_current_user)):
     enforce_rate_limit("upload", current_user)
     target_lang, source_lang = _validate_options(body)
+    if body.upload_id:
+        try:
+            doc_id = str(uuid.UUID(body.upload_id))
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=400, detail={"code": "invalid_upload_id"})
+        from routers.upload import sessions
+        from services.db import db_get_document
+        if doc_id in sessions or db_get_document(doc_id):
+            raise HTTPException(status_code=409, detail={"code": "upload_id_conflict"})
+    else:
+        doc_id = str(uuid.uuid4())
     try:
         fetched = await asyncio.to_thread(fetch_url, body.url)
     except WebImportError as exc:
         raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
 
-    doc_id = str(uuid.uuid4())
     if fetched.kind == "remote_pdf":
         session_dir = Path(UPLOAD_DIR) / doc_id
         try:
@@ -54,7 +64,7 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
             pdf_path = session_dir / "document.pdf"
             partial_path = session_dir / "document.pdf.part"
             shutil.copyfile(fetched.temp_path, partial_path)
-            with partial_path.open("rb") as source:
+            with partial_path.open("rb+") as source:
                 os.fsync(source.fileno())
             os.replace(partial_path, pdf_path)
             downloaded_size = pdf_path.stat().st_size
@@ -68,7 +78,7 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
             filename = Path(fetched.final_url.split("?", 1)[0]).name or "remote-document.pdf"
             if not filename.lower().endswith(".pdf"):
                 filename += ".pdf"
-            options = body.model_dump(exclude={"url"}) | {"filename": filename, "username": current_user, "source_lang": source_lang, "target_lang": target_lang, "file_size_mb": downloaded_size / 1048576}
+            options = body.model_dump(exclude={"url", "upload_id"}) | {"filename": filename, "username": current_user, "source_lang": source_lang, "target_lang": target_lang, "file_size_mb": downloaded_size / 1048576}
             task = create_task(doc_id, "parse", options, status="queued")
             parsed = await execute_parse_task(task["id"], sessions, page_extractor=extract_pages, metadata_reader=get_pdf_metadata, translation_starter=start_job, keyword_starter=start_keyword_job, summary_starter=start_summary_job, upload_root=UPLOAD_DIR)
             from services.db import get_db

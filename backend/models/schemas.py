@@ -26,6 +26,7 @@ class UploadResponse(BaseModel):
 
 class UrlImportRequest(BaseModel):
     url: str
+    upload_id: Optional[str] = None
     target_lang: str = "ko"
     source_lang: str = "auto"
     style: str = "academic"
