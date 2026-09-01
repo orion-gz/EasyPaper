@@ -111,9 +111,14 @@ button.document-type-chip:hover { background: color-mix(in srgb, var(--document-
 .onboarding-purpose-cards strong, .onboarding-purpose-cards span { display: block; }
 .onboarding-purpose-cards span { margin-top: 5px; color: var(--text-muted); font-size: 11px; line-height: 1.4; }
 
-@media (max-width: 760px) {
+/* shell.css가 사이드바를 축소 폭으로 전환하는 시점부터 사이드바 스위치 대신
+   상단 compact 스위치를 노출해 버튼이 좁은 사이드바 안에서 눌리지 않게 한다. */
+@media (max-width: 1100px) {
   .workspace-mode-switch:not(.workspace-mode-switch-compact) { display: none; }
   .workspace-mode-switch-compact { display: grid; width: 118px; }
+}
+
+@media (max-width: 760px) {
   .document-type-options { grid-template-columns: 1fr; }
 }
 
