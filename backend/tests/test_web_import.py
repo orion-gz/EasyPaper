@@ -1,4 +1,6 @@
 import httpx
+import json
+from pathlib import Path
 import pytest
 
 from services import web_import
@@ -36,3 +38,27 @@ def test_extracts_sanitized_stable_article_units(tmp_path):
     assert "onclick" not in serialized
     assert "javascript:" not in serialized
     assert manifest["blocks"][0]["id"] == "block-1"
+
+
+def test_fetch_streams_large_octet_pdf_to_temp_file(monkeypatch, tmp_path):
+    monkeypatch.setattr(web_import, "_validate_url", lambda url: None)
+    payload = b"%PDF-1.7\n" + b"x" * (11 * 1024 * 1024)
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, headers={"content-type": "application/octet-stream"}, content=payload, request=request))
+    with httpx.Client(transport=transport) as client:
+        result = web_import.fetch_url("https://example.test/download", client)
+    try:
+        assert result.kind == "remote_pdf"
+        assert result.content is None
+        assert result.temp_path and Path(result.temp_path).stat().st_size == len(payload)
+    finally:
+        result.cleanup()
+    assert not Path(result.temp_path).exists()
+
+
+def test_manifest_rebuilds_pages_without_cache(tmp_path):
+    manifest = {"units": [{"index": 1, "id": "section-1", "title": "Intro", "text": "Recovered text"}]}
+    path = tmp_path / "article.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    pages = web_import.pages_from_manifest(path)
+    assert pages[0]["text"] == "Recovered text"
+    assert pages[0]["unit_id"] == "section-1"

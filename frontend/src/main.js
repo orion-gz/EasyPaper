@@ -9,6 +9,7 @@ import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSet
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
+import { mountArticleViewer } from './articleViewer.js'
 import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
@@ -1123,6 +1124,7 @@ function showCompareScreen() {
 }
 
 function resetState() {
+  state.articleViewer?.destroy?.()
   globalAnalyticsTracker.stopSession()
   // 폴링 중단
   if (state.pollingTimer) { clearInterval(state.pollingTimer); state.pollingTimer = null }
@@ -10214,6 +10216,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
       showViewer()
       hideOutlineSidebar()
       await renderArticleDocument(doc)
+      await restoreArticleChatHistory(await chatHistoryPromise, doc)
       return
     }
 
@@ -17719,8 +17722,15 @@ if (viewerScrollContainer) {
 }
 
 function setModalVisible(modal, visible, focusTarget = null) {
-  modal?.classList.toggle('hidden', !visible)
+  if (!modal) return
+  if (visible && !modal._returnFocus) modal._returnFocus = document.activeElement
+  modal.classList.toggle('hidden', !visible)
   if (visible) requestAnimationFrame(() => focusTarget?.focus())
+  else if (modal._returnFocus) {
+    const returnFocus = modal._returnFocus
+    modal._returnFocus = null
+    requestAnimationFrame(() => returnFocus?.focus())
+  }
 }
 
 function openDocumentSourceModal() {
@@ -17791,32 +17801,48 @@ $('url-import-form')?.addEventListener('submit', async event => {
   }
 })
 
+async function restoreArticleChatHistory(chatRes, doc) {
+  const messages = chatRes?.history || []
+  for (const msg of messages) {
+    state.chatHistory.push({ role: msg.role, content: msg.content })
+    const assistant = msg.role === 'assistant'
+    let rendered = assistant ? formatChatHtml(msg.content) : formatUserChatHtml(msg.content)
+    if (assistant && msg.stale) rendered = `<span class="chat-stale-revision-badge">${t("chat:staleRevision")}</span>${rendered}`
+    const element = appendChatMessage(msg.role, rendered, true)
+    if (assistant && msg.evidence?.length) attachEvidenceToBubble(element.querySelector('.message-bubble'), msg.evidence)
+    if (assistant && msg.verification) renderVerificationBadge(element, msg.verification)
+  }
+  const last = messages[messages.length - 1]
+  if (last?.role === 'assistant') { const questions = loadSuggestedQuestionsCache(doc.id); if (questions?.length) renderSuggestedQuestionChips(chatMessages.lastElementChild, questions) }
+}
+
 async function renderArticleDocument(doc) {
+  state.articleViewer?.destroy?.()
   const manifest = await getArticleAPI(doc.id)
-  const root = document.createElement('article')
-  root.className = 'article-viewer'
-  const bar = document.createElement('div')
-  bar.className = 'article-origin-bar'
-  if (manifest.source_url) {
-    const link = document.createElement('a')
-    link.className = 'btn btn-secondary'; link.href = manifest.source_url
-    link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = t('library:article.openOriginal')
-    bar.appendChild(link)
-  }
-  root.appendChild(bar)
-  const byId = new Map((manifest.blocks || []).map(block => [block.id, block]))
-  for (const unit of manifest.units || []) {
-    const pair = document.createElement('section')
-    pair.className = 'article-unit'; pair.id = unit.id
-    const label = document.createElement('h2'); label.className = 'article-unit-title'; label.textContent = `${unit.index}. ${unit.title}`
-    const original = document.createElement('div'); original.className = 'article-pane article-original'
-    const raw = unit.block_ids.map(id => byId.get(id)?.html || '').join('')
-    original.innerHTML = DOMPurify.sanitize(raw, { ADD_ATTR: ['data-block-id', 'data-original-url'] })
-    for (const img of original.querySelectorAll('img[src^="assets/"]')) img.src = `/api/library/${encodeURIComponent(doc.id)}/article/${img.getAttribute('src')}`
-    const translated = document.createElement('div'); translated.className = 'article-pane article-translation'
-    const cached = await getPageTranslation(doc.id, unit.index, getTranslationOptions(doc.document_mode || 'research')).catch(() => null)
-    translated.textContent = cached?.translation || t('library:article.translationPending')
-    pair.append(label, original, translated); root.appendChild(pair)
-  }
-  viewerScrollContainer.replaceChildren(root)
+  state.currentContentKind = 'html_article'
+  state.articleViewer = await mountArticleViewer({
+    container: viewerScrollContainer, doc, manifest,
+    sanitize: html => DOMPurify.sanitize(html, { ADD_ATTR: ['data-block-id', 'data-original-url'] }),
+    getTranslation: page => getPageTranslation(doc.id, page, getTranslationOptions(doc.document_mode || 'research')).catch(() => null),
+    loadAnnotations: () => loadAnnotations(doc.id), saveAnnotations: value => saveAnnotations(doc.id, value),
+    loadMemos: () => loadMemos(doc.id), saveMemos: value => saveMemos(doc.id, value),
+    renderMarkdown: value => sanitizeMarkedHtml(marked.parse(value)),
+    labels: {
+      snapshot: t('library:article.snapshot'), original: t('library:article.original'), search: t('library:article.search'),
+      zoomOut: t('library:article.zoomOut'), zoomIn: t('library:article.zoomIn'), openOriginal: t('library:article.openOriginal'),
+      embedFailed: t('library:article.embedFailed'), embedBlocked: t('library:article.embedBlocked'),
+      translationPending: t('library:article.translationPending'), highlight: t('library:article.highlight'),
+      underline: t('library:article.underline'), memo: t('library:article.memo'), memoPrompt: t('library:article.memoPrompt'), capture: t('library:article.capture'),
+    },
+    onCurrentUnit: index => { state.currentPage = index; pageInput.value = index },
+    onCapture: (dataUrl, index) => askAIAssistantImage(dataUrl, index),
+    onOutline: items => {
+      outlineContent?.replaceChildren()
+      for (const item of items) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'outline-item depth-0'; button.textContent = item.title
+        button.addEventListener('click', () => viewerScrollContainer.querySelector(`#${CSS.escape(item.unit_id)}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+        outlineContent?.appendChild(button)
+      }
+    },
+  })
 }

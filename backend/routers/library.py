@@ -855,7 +855,7 @@ async def export_annotated_pdf(
         if doc.get("content_kind") == "html_article":
             from services.pdf_export import generate_article_pdf
             manifest = json.loads(Path(pdf_path).read_text(encoding="utf-8"))
-            pdf_bytes = generate_article_pdf(manifest, translations, payload.memos)
+            pdf_bytes = generate_article_pdf(manifest, translations, payload.memos, payload.annotations, str(Path(pdf_path).parent))
         else:
             from services.pdf_export import generate_annotated_pdf
             pdf_bytes = generate_annotated_pdf(

@@ -20,6 +20,8 @@ import io
 import re
 from html import escape as html_escape
 from typing import Optional
+from pathlib import Path
+import mimetypes
 
 import fitz
 from matplotlib import mathtext
@@ -317,22 +319,55 @@ def generate_annotated_pdf(
     return result
 
 
-def generate_article_pdf(manifest: dict, translations: dict, memos: dict) -> bytes:
-    """Render an immutable article snapshot as source/translation page pairs."""
-    out = fitz.open()
-    blocks = {block.get("id"): block for block in manifest.get("blocks", [])}
+def _embed_article_assets(html: str, article_dir: Path) -> str:
+    def replace(match):
+        relative = match.group(1)
+        if not re.fullmatch(r"assets/[A-Za-z0-9._-]+", relative):
+            return 'src=""'
+        path = (article_dir / relative).resolve()
+        assets = (article_dir / "assets").resolve()
+        if path.parent != assets or not path.is_file():
+            return 'src=""'
+        media = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f'src="data:{media};base64,{encoded}"'
+    return re.sub(r'src=["\'](assets/[A-Za-z0-9._-]+)["\']', replace, html)
+
+
+def _build_article_annotation_html(annotations: dict) -> Optional[str]:
+    entries = []
+    for key, items in annotations.items():
+        if not key.startswith("section_"):
+            continue
+        for item in items or []:
+            text = (item.get("text") or item.get("anchor", {}).get("exact") or "").strip()
+            if text:
+                entries.append((key.replace("section_", ""), item.get("type", "highlight"), text, item.get("color") or "#eab308"))
+    if not entries:
+        return None
+    parts = ['<div style="font-family:sans-serif"><h2>Annotations</h2>']
+    for section, kind, text, color in entries:
+        decoration = f'background:{color}55' if kind == "highlight" else f'text-decoration:underline 2px {color}'
+        parts.append(f'<p><b>Section {html_escape(section)}</b> · {html_escape(kind)}<br><span style="{decoration}">{html_escape(text)}</span></p>')
+    parts.append('</div>')
+    return ''.join(parts)
+
+
+def generate_article_pdf(manifest: dict, translations: dict, memos: dict, annotations: Optional[dict] = None, article_dir: Optional[str] = None) -> bytes:
+    """Render article source/translation pairs with cached assets and append resources."""
+    out = fitz.open(); blocks = {block.get("id"): block for block in manifest.get("blocks", [])}
+    base = Path(article_dir) if article_dir else Path(".")
     for unit in manifest.get("units", []):
         page = out.new_page(width=842, height=595)
-        page.insert_text((36, 28), str(unit.get("title") or ""), fontsize=9, color=(0.35, 0.35, 0.35), fontname=_KOREAN_TEXTBOX_FONT)
-        source = "\n\n".join(str(blocks.get(block_id, {}).get("text") or "") for block_id in unit.get("block_ids", []))
+        title = html_escape(str(unit.get("title") or ""))
+        page.insert_text((36, 28), title, fontsize=9, color=(0.35, 0.35, 0.35), fontname=_KOREAN_TEXTBOX_FONT)
+        source_html = ''.join(str(blocks.get(block_id, {}).get("html") or "") for block_id in unit.get("block_ids", []))
+        source_html = _embed_article_assets(source_html, base)
         translated = translations.get(str(unit.get("index"))) or "(번역 없음)"
-        page.insert_textbox(fitz.Rect(36, 48, 405, 555), source, fontsize=9, lineheight=1.25, fontname=_KOREAN_TEXTBOX_FONT)
-        page.insert_textbox(fitz.Rect(437, 48, 806, 555), translated, fontsize=9, lineheight=1.25, fontname=_KOREAN_TEXTBOX_FONT)
-    memo_html = _build_memo_html(memos or {})
-    if memo_html:
-        memo_doc = _run_story_pages(memo_html)
-        out.insert_pdf(memo_doc)
-        memo_doc.close()
-    result = out.tobytes(garbage=4, deflate=True)
-    out.close()
-    return result
+        left = f'<div style="font-family:sans-serif;font-size:9pt;line-height:1.35">{source_html}</div>'
+        page.insert_htmlbox(fitz.Rect(36, 48, 405, 555), left, scale_low=0)
+        page.insert_htmlbox(fitz.Rect(437, 48, 806, 555), _build_page_translation_html(translated), scale_low=0)
+    for appendix_html in (_build_article_annotation_html(annotations or {}), _build_memo_html(memos or {})):
+        if appendix_html:
+            appendix = _run_story_pages(appendix_html); out.insert_pdf(appendix); appendix.close()
+    result = out.tobytes(garbage=4, deflate=True); out.close(); return result

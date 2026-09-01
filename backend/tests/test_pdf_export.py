@@ -184,3 +184,20 @@ def test_generate_pdf_handles_invalid_page_key_gracefully(sample_pdf):
     doc = fitz.open("pdf", result)
     assert doc.page_count == 2
     doc.close()
+
+
+def test_generate_article_pdf_includes_pairs_annotations_and_memos(tmp_path):
+    import fitz
+    from PIL import Image
+    from services.pdf_export import generate_article_pdf
+    article_dir = tmp_path / "article"; assets = article_dir / "assets"; assets.mkdir(parents=True)
+    Image.new("RGB", (20, 20), "red").save(assets / "figure.png")
+    manifest = {"blocks": [{"id": "block-1", "html": '<h1 data-block-id="block-1">Source title</h1><p>Source body</p><img src="assets/figure.png">', "text": "Source title Source body"}], "units": [{"index": 1, "id": "section-1", "title": "Source title", "block_ids": ["block-1"]}]}
+    result = generate_article_pdf(manifest, {"1": "Translated body"}, {"section_1": [{"content": "Memo body", "sentenceText": "Source body"}]}, {"section_1": [{"type": "highlight", "text": "Source body", "color": "#eab308"}]}, str(article_dir))
+    pdf = fitz.open(stream=result, filetype="pdf")
+    text = "\n".join(page.get_text() for page in pdf)
+    assert pdf.page_count >= 3
+    assert "Source title" in text
+    assert "Translated body" in text
+    assert "Source body" in text
+    assert "Memo body" in text

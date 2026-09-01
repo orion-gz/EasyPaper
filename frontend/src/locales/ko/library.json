@@ -51,5 +51,17 @@
   "import.added": "웹 문서를 라이브러리에 추가했습니다 ✓",
   "import.failed": "가져오기 실패",
   "article.openOriginal": "브라우저에서 원본 열기",
-  "article.translationPending": "번역 대기 중…"
+  "article.translationPending": "번역 대기 중…",
+  "article.snapshot": "저장된 스냅샷",
+  "article.original": "원본 사이트",
+  "article.search": "검색",
+  "article.zoomOut": "축소",
+  "article.zoomIn": "확대",
+  "article.embedFailed": "사이트를 불러오지 못했습니다. 브라우저에서 원본을 열어주세요.",
+  "article.embedBlocked": "이 사이트는 앱 안에서 표시할 수 없습니다. 브라우저에서 원본을 열어주세요.",
+  "article.highlight": "하이라이트",
+  "article.underline": "밑줄",
+  "article.memo": "메모",
+  "article.memoPrompt": "메모 내용",
+  "article.capture": "구간 캡처"
 }

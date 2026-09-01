@@ -52,7 +52,13 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
         try:
             session_dir.mkdir(parents=True, exist_ok=False)
             pdf_path = session_dir / "document.pdf"
-            pdf_path.write_bytes(fetched.content)
+            partial_path = session_dir / "document.pdf.part"
+            shutil.copyfile(fetched.temp_path, partial_path)
+            with partial_path.open("rb") as source:
+                os.fsync(source.fileno())
+            os.replace(partial_path, pdf_path)
+            downloaded_size = pdf_path.stat().st_size
+            fetched.cleanup()
             from services.document_tasks import create_task
             from services.parse_job import execute_parse_task
             from services.pdf_parser import extract_pages, get_pdf_metadata
@@ -62,7 +68,7 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
             filename = Path(fetched.final_url.split("?", 1)[0]).name or "remote-document.pdf"
             if not filename.lower().endswith(".pdf"):
                 filename += ".pdf"
-            options = body.model_dump(exclude={"url"}) | {"filename": filename, "username": current_user, "source_lang": source_lang, "target_lang": target_lang, "file_size_mb": len(fetched.content) / 1048576}
+            options = body.model_dump(exclude={"url"}) | {"filename": filename, "username": current_user, "source_lang": source_lang, "target_lang": target_lang, "file_size_mb": downloaded_size / 1048576}
             task = create_task(doc_id, "parse", options, status="queued")
             parsed = await execute_parse_task(task["id"], sessions, page_extractor=extract_pages, metadata_reader=get_pdf_metadata, translation_starter=start_job, keyword_starter=start_keyword_job, summary_starter=start_summary_job, upload_root=UPLOAD_DIR)
             from services.db import get_db
@@ -71,12 +77,17 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
             with get_db() as conn:
                 conn.execute("UPDATE documents SET source_origin='web', source_url=?, canonical_url=?, fetched_at=?, content_unit_count=total_pages WHERE id=?", (body.url, fetched.final_url, fetched_at, doc_id))
                 conn.commit()
-            parsed.update(file_size_mb=round(len(fetched.content) / 1048576, 2), source_origin="web", content_kind="pdf", source_url=body.url, canonical_url=fetched.final_url, fetched_at=fetched_at, total_units=parsed["total_pages"], capabilities=_capabilities("pdf"))
+            parsed.update(file_size_mb=round(downloaded_size / 1048576, 2), source_origin="web", content_kind="pdf", source_url=body.url, canonical_url=fetched.final_url, fetched_at=fetched_at, total_units=parsed["total_pages"], capabilities=_capabilities("pdf"))
             return UploadResponse(**parsed)
         except HTTPException:
+            fetched.cleanup()
             shutil.rmtree(session_dir, ignore_errors=True)
             raise
         except Exception as exc:
+            fetched.cleanup()
+            from services.db import db_delete_document
+            db_delete_document(doc_id)
+            shutil.rmtree(Path(LIBRARY_DIR) / doc_id, ignore_errors=True)
             shutil.rmtree(session_dir, ignore_errors=True)
             raise HTTPException(status_code=422, detail={"code": "invalid_pdf", "message": f"PDF 처리 실패: {exc}"}) from exc
 
@@ -84,7 +95,11 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
     final_dir = Path(LIBRARY_DIR) / doc_id
     try:
         article_dir = staging / "article"
-        manifest, pages = await asyncio.to_thread(extract_article, fetched, article_dir)
+        try:
+            downloaded_size = Path(fetched.temp_path).stat().st_size if fetched.temp_path else len(fetched.content or b"")
+            manifest, pages = await asyncio.to_thread(extract_article, fetched, article_dir)
+        finally:
+            fetched.cleanup()
         (staging / "translations").mkdir(parents=True, exist_ok=True)
         staging.rename(final_dir)
         manifest_path = final_dir / "article" / "article.json"
@@ -102,7 +117,7 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
         if body.translation_mode == "auto" and len(pages) < 50 and (source_lang if source_lang != "auto" else detection["language"]) != target_lang:
             from services.translation_job import start_job
             start_job(doc_id, pages, target_lang=target_lang, source_lang=source_lang if source_lang != "auto" else detection["language"], style=body.style, ignore_math=body.ignore_math, ignore_table=body.ignore_table, ignore_refs=body.ignore_refs)
-        return UploadResponse(session_id=doc_id, filename=f"{manifest['title']}.html", total_pages=len(pages), file_size_mb=round(len(fetched.content) / 1048576, 2), metadata=metadata, document_mode=body.document_mode, document_type=body.document_type, source_language=source_lang, detected_source_language=str(detection["language"]), source_language_confidence=float(detection["confidence"]), preferred_target_language=target_lang, source_origin="web", content_kind="html_article", source_url=body.url, canonical_url=manifest["canonical_url"], fetched_at=manifest["fetched_at"], total_units=len(pages), capabilities=_capabilities("html_article"))
+        return UploadResponse(session_id=doc_id, filename=f"{manifest['title']}.html", total_pages=len(pages), file_size_mb=round(downloaded_size / 1048576, 2), metadata=metadata, document_mode=body.document_mode, document_type=body.document_type, source_language=source_lang, detected_source_language=str(detection["language"]), source_language_confidence=float(detection["confidence"]), preferred_target_language=target_lang, source_origin="web", content_kind="html_article", source_url=body.url, canonical_url=manifest["canonical_url"], fetched_at=manifest["fetched_at"], total_units=len(pages), capabilities=_capabilities("html_article"))
     except WebImportError as exc:
         shutil.rmtree(staging, ignore_errors=True); shutil.rmtree(final_dir, ignore_errors=True)
         raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc

@@ -51,5 +51,17 @@
   "import.added": "Web document added to the library ✓",
   "import.failed": "Import failed",
   "article.openOriginal": "Open original in browser",
-  "article.translationPending": "Translation pending…"
+  "article.translationPending": "Translation pending…",
+  "article.snapshot": "Saved snapshot",
+  "article.original": "Original site",
+  "article.search": "Search",
+  "article.zoomOut": "Zoom out",
+  "article.zoomIn": "Zoom in",
+  "article.embedFailed": "The site did not load. Open the original in your browser.",
+  "article.embedBlocked": "This site cannot be embedded. Open the original in your browser.",
+  "article.highlight": "Highlight",
+  "article.underline": "Underline",
+  "article.memo": "Memo",
+  "article.memoPrompt": "Memo text",
+  "article.capture": "Capture section"
 }
