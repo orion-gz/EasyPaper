@@ -33,6 +33,11 @@ _UNDERLINE_DEFAULT_COLOR = (0.93, 0.26, 0.26)  # 빨강
 # "??"로만 표시되므로, 한글이 섞인 텍스트는 반드시 이 폰트를 써야 한다.
 _KOREAN_TEXTBOX_FONT = "korea"
 
+# 원문과 번역을 나란히 배치할 때 번역 영역이 원문보다 넓어 보이지 않도록
+# 원문 폭의 90%만 사용한다. 번역 내용은 insert_htmlbox가 남은 영역에 맞춰
+# 자동 축소하므로 페이지별 1:1 페어링은 그대로 유지된다.
+_TRANSLATION_WIDTH_RATIO = 0.9
+
 # 번역 텍스트 안의 "**볼드**" 및 "$인라인 수식$"/"$$블록 수식$$" 를 찾기 위한
 # 패턴. $$...$$를 $...$보다 먼저 시도해야 블록 수식이 인라인으로 잘못
 # 쪼개지지 않는다.
@@ -237,7 +242,7 @@ def _build_memo_html(memos: dict) -> Optional[str]:
 
 def _add_translation_pair_pages(out_doc: fitz.Document, src_doc: fitz.Document, translations: dict) -> None:
     """뷰어 화면(원문 | 번역 나란히 배치)과 동일한 모양으로, 원본 페이지마다
-    같은 크기의 출력 페이지를 만들어 왼쪽엔 원본 페이지를(show_pdf_page로
+    원문보다 조금 좁은 번역 영역을 두고 왼쪽엔 원본 페이지를(show_pdf_page로
     벡터 그대로 삽입 - 래스터화하지 않으므로 텍스트 선택/검색 그대로 유지),
     오른쪽엔 그 페이지의 번역 전문을 배치한다.
 
@@ -251,11 +256,12 @@ def _add_translation_pair_pages(out_doc: fitz.Document, src_doc: fitz.Document, 
         sr = src_page.rect
         translation_text = (translations.get(str(page_idx + 1)) or "").strip()
 
-        pair_page = out_doc.new_page(width=sr.width * 2, height=sr.height)
+        translation_width = sr.width * _TRANSLATION_WIDTH_RATIO
+        pair_page = out_doc.new_page(width=sr.width + translation_width, height=sr.height)
         left_rect = fitz.Rect(0, 0, sr.width, sr.height)
         pair_page.show_pdf_page(left_rect, src_doc, page_idx)
 
-        right_rect = fitz.Rect(sr.width, 0, sr.width * 2, sr.height) + (16, 16, -16, -16)
+        right_rect = fitz.Rect(sr.width, 0, sr.width + translation_width, sr.height) + (16, 16, -16, -16)
         if not translation_text:
             pair_page.insert_textbox(
                 right_rect,

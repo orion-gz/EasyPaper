@@ -79,8 +79,8 @@ def test_generate_pdf_pairs_original_and_translation_per_page(sample_pdf):
     src = fitz.open(sample_pdf)
     src_page_width = src[0].rect.width
     src.close()
-    # 출력 페이지는 원본 폭의 2배(좌: 원문, 우: 번역)여야 한다
-    assert doc[0].rect.width == pytest.approx(src_page_width * 2, rel=0.01)
+    # 번역 영역은 원문보다 조금 좁은 90% 폭을 사용해야 한다.
+    assert doc[0].rect.width == pytest.approx(src_page_width * 1.9, rel=0.01)
 
     page1_text = doc[0].get_text()
     assert "self-attention mechanisms" in page1_text  # 왼쪽: 원문 그대로(벡터 삽입, 텍스트 추출 가능)
