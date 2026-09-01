@@ -1125,4 +1125,9 @@
   "법률·정책 문서": "common:documentTypes.legalPolicy",
   "발표·강의 자료": "common:documentTypes.presentation",
   "책(재분류 필요)": "common:documentTypes.legacyBook"
+  ,"로컬 파일": "library:source.local"
+  ,"기기에서 PDF 선택": "library:source.localHelp"
+  ,"웹에서 가져오기": "library:source.web"
+  ,"PDF 또는 아티클 URL": "library:source.webHelp"
+  ,"문서 URL": "library:source.urlLabel"
 }

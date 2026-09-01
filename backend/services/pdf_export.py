@@ -315,3 +315,24 @@ def generate_annotated_pdf(
     out_doc.close()
     src_doc.close()
     return result
+
+
+def generate_article_pdf(manifest: dict, translations: dict, memos: dict) -> bytes:
+    """Render an immutable article snapshot as source/translation page pairs."""
+    out = fitz.open()
+    blocks = {block.get("id"): block for block in manifest.get("blocks", [])}
+    for unit in manifest.get("units", []):
+        page = out.new_page(width=842, height=595)
+        page.insert_text((36, 28), str(unit.get("title") or ""), fontsize=9, color=(0.35, 0.35, 0.35), fontname=_KOREAN_TEXTBOX_FONT)
+        source = "\n\n".join(str(blocks.get(block_id, {}).get("text") or "") for block_id in unit.get("block_ids", []))
+        translated = translations.get(str(unit.get("index"))) or "(번역 없음)"
+        page.insert_textbox(fitz.Rect(36, 48, 405, 555), source, fontsize=9, lineheight=1.25, fontname=_KOREAN_TEXTBOX_FONT)
+        page.insert_textbox(fitz.Rect(437, 48, 806, 555), translated, fontsize=9, lineheight=1.25, fontname=_KOREAN_TEXTBOX_FONT)
+    memo_html = _build_memo_html(memos or {})
+    if memo_html:
+        memo_doc = _run_story_pages(memo_html)
+        out.insert_pdf(memo_doc)
+        memo_doc.close()
+    result = out.tobytes(garbage=4, deflate=True)
+    out.close()
+    return result

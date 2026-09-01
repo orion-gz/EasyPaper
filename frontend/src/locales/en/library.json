@@ -36,5 +36,20 @@
   "reparse.apply": "Apply candidate",
   "reparse.applied": "Reparse applied at revision {{revision}}.",
   "reparse.noInstalled": "No alternative parser is installed.",
-  "reparse.cancel": "Cancel"
+  "reparse.cancel": "Cancel",
+  "source.local": "Local file",
+  "source.localHelp": "Choose a PDF from this device",
+  "source.web": "Import from web",
+  "source.webHelp": "PDF or article URL",
+  "source.urlLabel": "Document URL",
+  "import.running": "Importing web document",
+  "import.checking": "Checking URL...",
+  "import.downloading": "Downloading and processing content...",
+  "import.analyzed": "Document analysis complete",
+  "import.processing": "Processing...",
+  "import.complete": "Import complete",
+  "import.added": "Web document added to the library ✓",
+  "import.failed": "Import failed",
+  "article.openOriginal": "Open original in browser",
+  "article.translationPending": "Translation pending…"
 }

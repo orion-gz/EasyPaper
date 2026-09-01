@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 from config import CORS_ORIGINS, UPLOAD_DIR, APP_HOST, APP_PORT
 
-from routers import upload, translate, chat
+from routers import upload, translate, chat, web_import
 from routers import library as library_router
 from routers import jobs as jobs_router
 from routers import auth as auth_router
@@ -77,6 +77,7 @@ app.add_middleware(
 # 라우터 등록
 app.include_router(auth_router.router, prefix="/api", tags=["Auth"])
 app.include_router(upload.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Upload"])
+app.include_router(web_import.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Web import"])
 app.include_router(translate.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Translate"])
 app.include_router(chat.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Chat"])
 app.include_router(library_router.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Library"])

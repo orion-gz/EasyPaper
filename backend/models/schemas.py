@@ -15,6 +15,28 @@ class UploadResponse(BaseModel):
     source_language_confidence: Optional[float] = None
     preferred_target_language: Optional[str] = None
     translation_skipped_reason: Optional[str] = None
+    source_origin: str = "local"
+    content_kind: str = "pdf"
+    source_url: Optional[str] = None
+    canonical_url: Optional[str] = None
+    fetched_at: Optional[str] = None
+    total_units: Optional[int] = None
+    capabilities: dict = {}
+
+
+class UrlImportRequest(BaseModel):
+    url: str
+    target_lang: str = "ko"
+    source_lang: str = "auto"
+    style: str = "academic"
+    ignore_math: bool = False
+    ignore_table: bool = True
+    ignore_refs: bool = False
+    translation_mode: str = "auto"
+    keyword_mode: str = "manual"
+    summary_mode: str = "manual"
+    document_mode: str = "research"
+    document_type: str = "research_paper"
 
 
 class PageInfo(BaseModel):

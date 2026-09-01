@@ -9,7 +9,7 @@ import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSet
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
-import { uploadPDF, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI } from './api.js'
+import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
@@ -10204,6 +10204,19 @@ async function openFromLibrary(doc, shouldPushState = true) {
       return null
     })
 
+    if (doc.content_kind === "html_article") {
+      docTitle.textContent = displayTitle
+      docTitle.title = doc.filename
+      pageTotal.textContent = `/ ${doc.total_units || doc.total_pages}`
+      pageInput.max = doc.total_units || doc.total_pages
+      pageInput.value = 1
+      state.currentPage = 1
+      showViewer()
+      hideOutlineSidebar()
+      await renderArticleDocument(doc)
+      return
+    }
+
     const loadedPages = await loadPDF(`/api/library/${doc.id}/pdf`)
     if (!isCurrentOpen() || loadedPages === null) return
     docTitle.textContent  = displayTitle
@@ -10319,7 +10332,7 @@ function setLibraryAddMenuOpen(open) {
   libUploadBtn.setAttribute('aria-label', label)
 }
 libUploadBtn.addEventListener('click', () => setLibraryAddMenuOpen(!document.querySelector('.lib-add-fab-wrap')?.classList.contains('open')))
-$('lib-add-paper-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); fileInput.click() })
+$('lib-add-paper-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); openDocumentSourceModal() })
 $('lib-add-folder-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); openCreateFolderDialog() })
 
 // ── 테마 토글 기능 ──────────────────────────────
@@ -17703,4 +17716,107 @@ if (viewerScrollContainer) {
       finishEdit(true)
     })
   })
+}
+
+function setModalVisible(modal, visible, focusTarget = null) {
+  modal?.classList.toggle('hidden', !visible)
+  if (visible) requestAnimationFrame(() => focusTarget?.focus())
+}
+
+function openDocumentSourceModal() {
+  setModalVisible($('document-source-modal'), true, $('document-source-local'))
+}
+
+function closeDocumentSourceModal() { setModalVisible($('document-source-modal'), false) }
+function closeUrlImportModal() { setModalVisible($('url-import-modal'), false) }
+
+$('document-source-close')?.addEventListener('click', closeDocumentSourceModal)
+$('document-source-local')?.addEventListener('click', () => { closeDocumentSourceModal(); fileInput.click() })
+$('document-source-web')?.addEventListener('click', () => {
+  closeDocumentSourceModal()
+  setModalVisible($('url-import-modal'), true, $('url-import-input'))
+})
+$('url-import-close')?.addEventListener('click', closeUrlImportModal)
+$('url-import-cancel')?.addEventListener('click', closeUrlImportModal)
+
+for (const modal of [$('document-source-modal'), $('url-import-modal')].filter(Boolean)) {
+  modal.addEventListener('click', event => { if (event.target === modal) setModalVisible(modal, false) })
+  modal.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); setModalVisible(modal, false); return }
+    if (event.key !== 'Tab') return
+    const focusable = [...modal.querySelectorAll('button:not([disabled]),input:not([disabled])')]
+    if (!focusable.length) return
+    const first = focusable[0], last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  })
+}
+
+$('url-import-form')?.addEventListener('submit', async event => {
+  event.preventDefault()
+  const input = $('url-import-input')
+  const error = $('url-import-error')
+  const url = input.value.trim()
+  if (!input.checkValidity()) { input.reportValidity(); return }
+  error.classList.add('hidden')
+  const selected = await workspaceModeController.chooseUploadClassifications([{ name: new URL(url).hostname }])
+  if (!selected?.length) return
+  closeUrlImportModal()
+  const classification = selected[0].classification
+  const targetFolderId = state.currentWorkspacePage === 'library' ? activeLibraryFolderId : null
+  uploadPopup.classList.remove('hidden', 'minimized')
+  uploadPopupBody.replaceChildren()
+  const row = createUploadPopupRow({ name: url })
+  uploadPopupBody.appendChild(row.element)
+  uploadPopupTitle.textContent = t('library:import.running')
+  try {
+    const remembered = loadDocumentTypeOptions()[classification.documentType] || {}
+    const result = await importURL(url, { ...getTranslationOptions(classification.documentMode), ...remembered, translationMode: getTranslationMode(classification.documentMode), keywordMode: getKeywordMode(classification.documentMode), summaryMode: getSummaryMode(classification.documentMode), documentMode: classification.documentMode, documentType: classification.documentType }, (_pct, phase) => {
+      const labels = { checking: t('library:import.checking'), downloading: t('library:import.downloading'), complete: t('library:import.analyzed') }
+      row.status.textContent = labels[phase] || t('library:import.processing')
+      row.bar.style.width = `${_pct}%`
+    })
+    if (targetFolderId) await moveLibraryDocuments([result.session_id], targetFolderId)
+    row.spinner.classList.add('hidden'); row.success.classList.remove('hidden')
+    row.status.textContent = t('library:import.complete'); row.bar.style.width = '100%'
+    uploadPopupTitle.textContent = t('library:import.complete')
+    showToast(t('library:import.added'), 'success')
+    input.value = ''
+    if (libraryScreen.classList.contains('active')) await renderLibrary()
+  } catch (err) {
+    row.spinner.classList.add('hidden'); row.error.classList.remove('hidden')
+    row.status.textContent = err.message; uploadPopupTitle.textContent = t('library:import.failed')
+    error.textContent = err.message; error.classList.remove('hidden')
+    setModalVisible($('url-import-modal'), true, input)
+  }
+})
+
+async function renderArticleDocument(doc) {
+  const manifest = await getArticleAPI(doc.id)
+  const root = document.createElement('article')
+  root.className = 'article-viewer'
+  const bar = document.createElement('div')
+  bar.className = 'article-origin-bar'
+  if (manifest.source_url) {
+    const link = document.createElement('a')
+    link.className = 'btn btn-secondary'; link.href = manifest.source_url
+    link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = t('library:article.openOriginal')
+    bar.appendChild(link)
+  }
+  root.appendChild(bar)
+  const byId = new Map((manifest.blocks || []).map(block => [block.id, block]))
+  for (const unit of manifest.units || []) {
+    const pair = document.createElement('section')
+    pair.className = 'article-unit'; pair.id = unit.id
+    const label = document.createElement('h2'); label.className = 'article-unit-title'; label.textContent = `${unit.index}. ${unit.title}`
+    const original = document.createElement('div'); original.className = 'article-pane article-original'
+    const raw = unit.block_ids.map(id => byId.get(id)?.html || '').join('')
+    original.innerHTML = DOMPurify.sanitize(raw, { ADD_ATTR: ['data-block-id', 'data-original-url'] })
+    for (const img of original.querySelectorAll('img[src^="assets/"]')) img.src = `/api/library/${encodeURIComponent(doc.id)}/article/${img.getAttribute('src')}`
+    const translated = document.createElement('div'); translated.className = 'article-pane article-translation'
+    const cached = await getPageTranslation(doc.id, unit.index, getTranslationOptions(doc.document_mode || 'research')).catch(() => null)
+    translated.textContent = cached?.translation || t('library:article.translationPending')
+    pair.append(label, original, translated); root.appendChild(pair)
+  }
+  viewerScrollContainer.replaceChildren(root)
 }
