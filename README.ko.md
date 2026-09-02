@@ -8,11 +8,13 @@
 
 [English README](./README.md)
 
-[![Release](https://img.shields.io/github/v/release/orion-gz/EasyPaper?display_name=tag&label=release&color=4f7cff)](https://github.com/orion-gz/EasyPaper/releases/latest)
-[![Last commit](https://img.shields.io/github/last-commit/orion-gz/EasyPaper?label=last%20commit)](https://github.com/orion-gz/EasyPaper/commits/main)
-[![Stars](https://img.shields.io/github/stars/orion-gz/EasyPaper?label=stars)](https://github.com/orion-gz/EasyPaper/stargazers)
-[![Issues](https://img.shields.io/github/issues/orion-gz/EasyPaper?label=issues)](https://github.com/orion-gz/EasyPaper/issues)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-4f7cff)](https://github.com/orion-gz/EasyPaper/pulls)
+[![Last Commit](https://shieldcn.dev/github/last-commit/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/commits/main)
+[![Open Issues](https://shieldcn.dev/github/issues/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/issues)
+[![Stars](https://shieldcn.dev/github/stars/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/stargazers)
+[![Changelog](https://shieldcn.dev/badge/changelog-keep_a_changelog-4f7cff.svg)](./CHANGELOG.md)
+[![PRs Welcome](https://shieldcn.dev/badge/PRs-welcome-4f7cff.svg)](https://github.com/orion-gz/EasyPaper/pulls)
+
+[![Download Desktop App](https://shieldcn.dev/github/v/release/orion-gz/EasyPaper.svg?label=Download%20Desktop%20App)](https://github.com/orion-gz/EasyPaper/releases/latest)
 
 </div>
 
