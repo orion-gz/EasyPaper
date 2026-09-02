@@ -1,7 +1,7 @@
 {
   "name": "easypaper-desktop",
   "private": true,
-  "version": "0.1.28",
+  "version": "0.1.29",
   "description": "EasyPaper Tauri 데스크탑 스파이크 (src-tauri/ 스캐폴딩 전용, frontend/의 웹 앱 패키지와는 별개)",
   "scripts": {
     "tauri": "tauri"
