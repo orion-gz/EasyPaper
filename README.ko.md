@@ -71,13 +71,16 @@ EasyPaper는 PDF를 AI로 번역하고, 읽고, 주석을 남기고, 문서 내�
 
 첫 실행 시 온보딩에서 AI Provider 를 선택하고 설정합니다. 서명되지 않은 데스크톱 빌드는 운영체제 보안 경고를 표시할 수 있습니다.
 
-> [!IMPORTANT] 주의사항
+> [!IMPORTANT]
+> **주의사항**
 > macOS: 앱이 완전히 서명되지 않은 상태라 최신 macOS(Ventura 이후)에서는
 > 우클릭 → 열기로 우회되지 않고 "앱이 손상되었기 때문에 열 수 없습니다" 라는
 > 오해의 소지가 있는 메시지가 뜹니다. 실제로 파일이 손상된 게 아니라 다운로드
 > 시 붙는 quarantine 속성 때문이니, 터미널에서 아래 명령으로 지운 뒤 다시
 > 실행하세요.
-> ```xattr -cr /Applications/EasyPaper.app```
+> ```bash
+> xattr -cr /Applications/EasyPaper.app
+> ```
 > Windows: "Windows의 PC 보호" 화면에서 추가 정보 → 실행을 선택하면
 > 정상적으로 설치됩니다.
 
