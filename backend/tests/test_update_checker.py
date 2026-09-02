@@ -15,6 +15,7 @@ from services.update_checker import (
     set_update_check_interval,
     get_post_update_notice,
     _get_changelog,
+    get_repository_changelog_markdown,
     VALID_INTERVALS,
 )
 
@@ -107,6 +108,37 @@ async def test_check_for_update_handles_fetch_failure_gracefully(monkeypatch):
     assert result["ok"] is False
     assert result["update_available"] is False
     assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_repository_changelog_markdown_groups_commits_by_date(monkeypatch):
+    import services.update_checker as uc
+
+    async def fake_run_git(*args, timeout=30.0):
+        assert args[-1] == "HEAD"
+        return 0, (
+            "2026-09-02\x1fbbb2222\x1ffix: latest change\n"
+            "2026-09-01\x1faaa1111\x1ffeat: earlier change"
+        ), ""
+
+    monkeypatch.setattr(uc, "_run_git", fake_run_git)
+    content = await get_repository_changelog_markdown()
+
+    assert "## 2026-09-02" in content
+    assert "- fix: latest change (`bbb2222`)" in content
+    assert "## 2026-09-01" in content
+    assert content.index("2026-09-02") < content.index("2026-09-01")
+
+
+@pytest.mark.asyncio
+async def test_repository_changelog_markdown_returns_none_without_git(monkeypatch):
+    import services.update_checker as uc
+
+    async def fake_run_git(*args, timeout=30.0):
+        return 1, "", "not a git repository"
+
+    monkeypatch.setattr(uc, "_run_git", fake_run_git)
+    assert await get_repository_changelog_markdown() is None
 
 
 @pytest.mark.asyncio

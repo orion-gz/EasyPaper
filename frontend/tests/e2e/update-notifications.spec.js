@@ -172,7 +172,7 @@ test('현재 버전 텍스트를 클릭하면 CHANGELOG.md 전체 내용을 보�
   await mockUpdateEndpoints(page, { postUpdateShow: false, updateAvailable: false })
   await page.route('**/api/settings/changelog', route => route.fulfill({
     status: 200, contentType: 'application/json',
-    body: JSON.stringify({ content: '# Changelog\n\n## 2026-07-22\n\n- feat: 새 기능 추가 (#110)\n- fix: 버그 수정 (#111)\n' }),
+    body: JSON.stringify({ version: 'abc1234', version_date: '2026-07-22', content: '# Changelog\n\n## 2026-07-22\n\n- feat: 새 기능 추가 (#110)\n- fix: 버그 수정 (#111)\n' }),
   }))
 
   await gotoApp(page)
@@ -181,6 +181,7 @@ test('현재 버전 텍스트를 클릭하면 CHANGELOG.md 전체 내용을 보�
   await page.click('.tab-btn[data-tab="tab-info"]')
   await page.waitForTimeout(400)
 
+  await expect(page.locator('#current-version-label')).toHaveText('현재 버전: 2026-07-22 · abc1234')
   await expect(page.locator('#full-changelog-modal')).toHaveClass(/hidden/)
   await page.click('#current-version-label')
   await expect(page.locator('#full-changelog-modal')).not.toHaveClass(/hidden/)
