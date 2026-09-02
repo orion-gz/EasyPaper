@@ -795,6 +795,8 @@
   "현재 폴더로 이동했습니다.": "common:legacy.ui.0791",
   "현재 Ollama API 주소가 이 서버(localhost)가 아닌 원격 호스트를 가리키고 있어, 여기서 직접 설치할 수 없습니다. 해당 원격 서버에서 직접 설치해 주세요.": "common:legacy.ui.0792",
   "형식의 중괄호 태그들은 시스템 치환용 매개변수이므로 형태를 그대로 유지해 주세요.": "common:legacy.ui.0793",
+  "UI 배율": "settings:uiScale",
+  "전체 인터페이스 크기를 조절합니다.": "settings:uiScaleDescription",
   "화면 언어": "common:legacy.ui.0794",
   "화면에 맞추기": "common:legacy.ui.0795",
   "화이트/다크 모드 전환": "common:legacy.ui.0796",

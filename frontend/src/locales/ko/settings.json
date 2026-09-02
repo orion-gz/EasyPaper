@@ -1,5 +1,8 @@
 {
   "uiLanguage": "화면 언어",
+  "uiScale": "UI 배율",
+  "uiScaleDescription": "전체 인터페이스 크기를 조절합니다.",
+  "uiScaleSaved": "UI 배율이 저장되었습니다.",
   "sourceLanguage": "기본 원문 언어",
   "targetLanguage": "번역 대상 언어",
   "saved": "언어 설정이 저장되었습니다.",
