@@ -25,6 +25,19 @@ def test_magic_bytes_override_content_type(monkeypatch):
     assert result.kind == "remote_pdf"
 
 
+def test_rejects_amazon_waf_challenge_response(monkeypatch):
+    monkeypatch.setattr(web_import, "_validate_url", lambda url: None)
+    transport = httpx.MockTransport(lambda request: httpx.Response(
+        202,
+        headers={"content-type": "text/html", "x-amzn-waf-action": "challenge"},
+        request=request,
+    ))
+    with httpx.Client(transport=transport) as client:
+        with pytest.raises(WebImportError) as exc:
+            web_import.fetch_url("https://example.test/challenge", client)
+    assert exc.value.code == "challenge_page"
+
+
 def test_extracts_sanitized_stable_article_units(tmp_path):
     html = b"""<!doctype html><html><head><title>Useful article</title><link rel='canonical' href='/canonical'></head><body><article><h1>Useful article</h1><p onclick='bad()'>""" + (b"A useful paragraph. " * 20) + b"""</p><script>alert(1)</script><h2>Details</h2><p>Second section with enough meaningful content for extraction and translation.</p><a href='javascript:alert(1)'>bad</a></article></body></html>"""
     result = FetchResult("web_article", "https://example.test/post", "text/html", {"x-frame-options": "DENY"}, html)

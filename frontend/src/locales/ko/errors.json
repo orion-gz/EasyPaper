@@ -7,6 +7,7 @@
   "source_language_not_translatable": "{{language}} 언어는 자동 번역할 수 없습니다. 지원하는 원문 언어를 선택하세요.",
   "generation_failed": "생성하지 못했습니다. 다시 시도해 주세요.",
   "network": "서버에 연결할 수 없습니다.",
+  "challenge_page": "이 사이트는 EasyPaper에서 처리할 수 없는 브라우저 확인을 요구합니다. 브라우저에서 원본 페이지를 열어주세요.",
   "external_processing_blocked": "이 문서는 로컬 처리만 허용합니다. {{operation}} 작업에는 loopback 주소의 Ollama를 선택하세요.",
   "invalid_processing_policy": "지원하지 않는 문서 처리 정책입니다.",
   "selected_text_requires_viewer_page": "선택한 본문은 문서 뷰어의 현재 페이지에서만 사용할 수 있습니다.",

@@ -100,6 +100,8 @@ def fetch_url(url: str, client: httpx.Client | None = None) -> FetchResult:
             try:
                 with client.stream("GET", current, headers={"User-Agent": "EasyPaper/1 URL Importer", "Accept": "application/pdf,text/html;q=0.9"}) as response:
                     _validate_peer(response)
+                    if response.headers.get("x-amzn-waf-action", "").lower() == "challenge":
+                        raise WebImportError("challenge_page", "사이트의 봇 확인 페이지는 가져올 수 없습니다.")
                     if response.status_code in {301, 302, 303, 307, 308}:
                         if redirect_count >= MAX_REDIRECTS:
                             raise WebImportError("too_many_redirects", "리디렉션 횟수가 너무 많습니다.")

@@ -17770,6 +17770,7 @@ $('url-import-form')?.addEventListener('submit', async event => {
   const url = input.value.trim()
   if (!input.checkValidity()) { input.reportValidity(); return }
   error.classList.add('hidden')
+  input.removeAttribute('aria-invalid')
   const selected = await workspaceModeController.chooseUploadClassifications([{ name: new URL(url).hostname }])
   if (!selected?.length) return
   closeUrlImportModal()
@@ -17798,7 +17799,8 @@ $('url-import-form')?.addEventListener('submit', async event => {
     row.spinner.classList.add('hidden'); row.error.classList.remove('hidden')
     row.status.textContent = err.message; uploadPopupTitle.textContent = t('library:import.failed')
     error.textContent = err.message; error.classList.remove('hidden')
-    setModalVisible($('url-import-modal'), true, input)
+    input.setAttribute('aria-invalid', 'true')
+    setModalVisible($('url-import-modal'), true, error)
   }
 })
 
