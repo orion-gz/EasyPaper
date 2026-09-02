@@ -63,6 +63,25 @@ def test_graph_endpoint_excludes_other_users_documents(test_client, isolated_dir
         assert "doc-other-graph-1" not in edge["target"]
 
 
+def test_graph_endpoint_excludes_general_mode_documents(test_client, isolated_dirs):
+    db = isolated_dirs["db"]
+    db.db_save_document(
+        "doc-general-graph", "testuser", "manual.pdf", "/x/nonexistent.pdf", 3,
+        {"title": "General Manual", "graph_synced_at": "2026-01-01T00:00:00+00:00"},
+        "general", "manual",
+    )
+    _create_doc_owned_by(
+        isolated_dirs, "doc-research-graph", "testuser",
+        {"title": "Research Paper", "graph_synced_at": "2026-01-01T00:00:00+00:00"},
+    )
+
+    data = test_client.get("/api/library/graph").json()
+    paper_doc_ids = {node["doc_id"] for node in data["nodes"] if node["type"] == "paper"}
+
+    assert "doc-research-graph" in paper_doc_ids
+    assert "doc-general-graph" not in paper_doc_ids
+
+
 def test_graph_endpoint_reflects_concepts_and_citation_edges(test_client, isolated_dirs):
     db = isolated_dirs["db"]
     _create_doc_owned_by(
