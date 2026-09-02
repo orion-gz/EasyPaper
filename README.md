@@ -26,7 +26,7 @@ EasyPaper is a web and desktop workspace for translating, reading, annotating, a
 | Research mode | Papers, surveys, theses, preprints, and academic reports | Paper structure, methods, evidence, citations, research graphs, comparisons, and pre-reading briefs |
 | General document mode | Technical documentation, books, articles, reports, manuals, policies, presentations, and other general documents | Document-aware translation, summaries, vocabulary, focused Q&A, full-text search, and document overviews |
 
-Both modes currently accept PDF files. General document mode lets you work with PDF exports of documents such as DOCX files while preserving the purpose and structure appropriate to the selected document type.
+Both modes currently accept PDF files. General document mode lets you use features appropriate to the purpose and type of each document.
 
 <details>
 <summary>More screenshots</summary>
@@ -43,8 +43,8 @@ Both modes currently accept PDF files. General document mode lets you work with 
 | Annotations and floating memos | Citation reference overlay |
 | <img src="./image/library.png" alt="Document library"> | <img src="./image/ai_chats.png" alt="AI Chats"> |
 | Library | AI Chats |
-| <img src="./image/heatmap.png" alt="Research graph heatmap"> | <img src="./image/reading_history.png" alt="Reading history"> |
-| Research graph heatmap | Reading history |
+| <img src="./image/heatmap.png" alt="Research graph heatmap"> | <img src="./image/reading_history.png" alt="Reading records"> |
+| Research graph heatmap | Reading records |
 
 </details>
 
@@ -61,7 +61,7 @@ Both modes currently accept PDF files. General document mode lets you work with 
 
 ### Desktop app
 
-Download the installer for your platform from the [latest release](https://github.com/orion-gz/EasyPaper/releases/latest). The Tauri desktop app includes the backend sidecar, so Python and Node.js are not required.
+You can download the installer for your platform from the [latest release](https://github.com/orion-gz/EasyPaper/releases/latest). The Tauri desktop app includes the backend sidecar, so no additional Python or Node.js installation is required.
 
 | OS | Installer |
 |---|---|
@@ -69,11 +69,19 @@ Download the installer for your platform from the [latest release](https://githu
 | macOS (Apple Silicon) | `_aarch64.dmg` |
 | Linux | `.AppImage`, `.deb`, or `.rpm` |
 
-At first launch, choose and configure an AI provider in the onboarding flow. Unsigned desktop builds can trigger an operating-system security warning.
+At first launch, choose and configure an AI Provider in the onboarding flow. Unsigned desktop builds can trigger an operating-system security warning.
+
+> [!IMPORTANT] Note
+> macOS: Because the app is not fully signed, recent versions of macOS (Ventura and later) may show the misleading message “The application cannot be opened because it is damaged” instead of allowing you to bypass the warning with right-click → Open. The file is not actually damaged; this is caused by the quarantine attribute added during download. Remove it in Terminal with the command below, then try again.
+> ```bash
+> xattr -cr /Applications/EasyPaper.app
+> ```
+> Windows: On the “Windows protected your PC” screen, select More info → Run anyway to install normally.
 
 ### Run from source
 
 Requirements: Python 3.8+, Node.js 16+, and npm. Ollama is optional.
+The scripts below make setup and startup straightforward.
 
 ```bash
 git clone https://github.com/orion-gz/EasyPaper.git
@@ -118,7 +126,7 @@ npm run build
 npm run test:e2e
 ```
 
-## CLI providers
+## CLI-based AI Providers
 
 EasyPaper detects installed and authenticated `agy`, `claude`, and `codex` CLIs at startup. Select any detected provider from the model picker; API providers and Ollama remain available as alternatives.
 
