@@ -5,9 +5,10 @@
 [![badge](https://shieldcn.dev/badge/README-Korean.svg?theme=blue)](./README.ko.md)
 
 [![Stars](https://shieldcn.dev/github/stars/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/stargazers)
-<picture><source media="(prefers-color-scheme: dark)" srcset="https://www.shieldcn.dev/github/release/orion-gz/EasyPaper.svg?size=sm&amp;mode=dark"><img alt="Release" src="https://www.shieldcn.dev/github/release/orion-gz/EasyPaper.svg?size=sm&amp;mode=light"></picture> ![CI](https://www.shieldcn.dev/github/ci/orion-gz/EasyPaper.svg?variant=secondary&size=sm&color=white)
+[![badge](https://shieldcn.dev/github/orion-gz/EasyPaper/release.svg)](https://github.com/orion-gz/EasyPaper/releases) [![badge](https://shieldcn.dev/github/orion-gz/EasyPaper/ci.svg)](https://github.com/orion-gz/EasyPaper/actions)
 [![Last Commit](https://shieldcn.dev/github/last-commit/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/commits/main)
 
+![Runs on MacOS](https://shieldcn.dev/badge/Runs%20on-MacOS-000000.svg?mode=light&logo=apple&logoColor=fff) ![Runs on Windows](https://shieldcn.dev/badge/Runs%20on-Windows-0078D4.svg?logo=windows&logoColor=fff) ![Runs on Linux](https://shieldcn.dev/badge/Runs%20on-Linux-FCC624.svg?logo=linux&logoColor=000)
 
 </div>
 
