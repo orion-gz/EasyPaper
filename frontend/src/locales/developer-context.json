@@ -266,6 +266,15 @@
   "settings:uiLanguage": {
     "description": "Interface language"
   },
+  "settings:uiScale": {
+    "description": "Label for the interface scale selector shared by browser and desktop builds"
+  },
+  "settings:uiScaleDescription": {
+    "description": "Helper text explaining that interface scale changes the entire UI"
+  },
+  "settings:uiScaleSaved": {
+    "description": "Toast shown after an interface scale is saved and applied"
+  },
   "settings:sourceLanguage": {
     "description": "Default source language"
   },

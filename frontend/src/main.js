@@ -25,8 +25,10 @@ import { buildScholarSearchUrl, extractCitationTitle } from './citationSearch.js
 import { changeLocale, getLocale, initI18n, loadFeatureNamespaces, loadNamespaces, t } from './i18n.js'
 import { saveUserLanguagePreferences, saveDocumentLanguageOverride } from './languagePreferences.js'
 import { canRetryTranslationTask, isTranslationTaskRunning, shouldRetryFailedTranslationTask } from './translationTaskState.js'
+import { applyUiScale, loadUiScale, saveUiScale } from './uiScale.js'
 
 const i18nReady = initI18n()
+applyUiScale(loadUiScale())
 
 
 // ── 글로벌 API 인터셉터 (인증 만료/실패 대응) ─────────
@@ -534,7 +536,7 @@ function initializeSettingsInformationArchitecture() {
   }
 
   const rowControlIds = [
-    'setting-ui-locale', 'setting-source-lang', 'setting-accent-swatches',
+    'setting-ui-locale', 'setting-ui-scale', 'setting-source-lang', 'setting-accent-swatches',
     'setting-target-lang', 'setting-trans-style', 'setting-translation-mode',
     'setting-ignore-math', 'setting-default-zoom', 'setting-toolbar-position',
     'setting-disable-hover-tooltip', 'setting-auto-generate-keywords',
@@ -618,6 +620,7 @@ const settingsKeywordsLabel = $('settings-keywords-label')
 const settingsKeywordsDescription = $('settings-keywords-description')
 const settingsReadingToolsLabel = $('settings-reading-tools-label')
 const settingUiLocale = $('setting-ui-locale')
+const settingUiScale = $('setting-ui-scale')
 const settingSourceLang = $('setting-source-lang')
 const settingTargetLang   = $('setting-target-lang')
 const settingTransStyle   = $('setting-trans-style')
@@ -641,6 +644,15 @@ const settingAutoGenerateSummaries = $('setting-auto-generate-summaries')
 for (const id of ['login-ui-locale', 'onboarding-ui-locale', 'setting-ui-locale']) {
   const selector = $(id)
   if (selector) selector.addEventListener('change', (event) => handleLocaleSelector(event).catch(console.error))
+}
+if (settingUiScale) {
+  settingUiScale.value = String(loadUiScale())
+  settingUiScale.addEventListener('change', () => {
+    const scale = saveUiScale(settingUiScale.value)
+    settingUiScale.value = String(scale)
+    applyUiScale(scale)
+    showToast(t('settings:uiScaleSaved'), 'success')
+  })
 }
 document.addEventListener('easypaper:locale-changed', () => { if (languageCatalog.length) populateLanguageControls(); renderDocumentLanguageStatus() })
 i18nReady.then(() => populateLanguageControls()).catch(console.error)

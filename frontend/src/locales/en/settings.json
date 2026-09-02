@@ -1,5 +1,8 @@
 {
   "uiLanguage": "Interface language",
+  "uiScale": "UI scale",
+  "uiScaleDescription": "Adjust the size of the entire interface.",
+  "uiScaleSaved": "UI scale saved.",
   "sourceLanguage": "Default source language",
   "targetLanguage": "Translation target language",
   "saved": "Language settings saved.",
