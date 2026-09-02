@@ -1,20 +1,12 @@
 <div align="center">
 
-<img src="./frontend/public/icon-192.png" width="88" height="88" alt="EasyPaper 아이콘"><br>
+![EasyPaper](https://shieldcn.dev/header/surface.svg?title=EasyPaper&subtitle=Workspace+for+documents+with+AI&mode=dark)
 
-# EasyPaper
+[![badge](https://shieldcn.dev/badge/README-English.svg?theme=blue)](./README.md)
 
-연구 논문과 일반 문서를 위한 AI 기반 번역·읽기 도구
-
-[English README](./README.md)
-
-[![Last Commit](https://shieldcn.dev/github/last-commit/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/commits/main)
-[![Open Issues](https://shieldcn.dev/github/issues/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/issues)
 [![Stars](https://shieldcn.dev/github/stars/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/stargazers)
-[![Changelog](https://shieldcn.dev/badge/changelog-keep_a_changelog-4f7cff.svg)](./CHANGELOG.md)
-[![PRs Welcome](https://shieldcn.dev/badge/PRs-welcome-4f7cff.svg)](https://github.com/orion-gz/EasyPaper/pulls)
-
-[![Download Desktop App](https://shieldcn.dev/github/v/release/orion-gz/EasyPaper.svg?label=Download%20Desktop%20App)](https://github.com/orion-gz/EasyPaper/releases/latest)
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://www.shieldcn.dev/github/release/orion-gz/EasyPaper.svg?size=sm&amp;mode=dark"><img alt="Release" src="https://www.shieldcn.dev/github/release/orion-gz/EasyPaper.svg?size=sm&amp;mode=light"></picture> ![CI](https://www.shieldcn.dev/github/ci/orion-gz/EasyPaper.svg?variant=secondary&size=sm&color=white)
+[![Last Commit](https://shieldcn.dev/github/last-commit/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/commits/main)
 
 </div>
 
