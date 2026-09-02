@@ -176,6 +176,9 @@
   "errors:network": {
     "description": "Could not connect to the server."
   },
+  "errors:challenge_page": {
+    "description": "The remote site requires browser verification and cannot be imported."
+  },
   "library:document.count_one": {
     "description": "{{count}} document"
   },

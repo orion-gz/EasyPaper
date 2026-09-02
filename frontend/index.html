@@ -663,7 +663,7 @@
   <div id="url-import-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="url-import-title">
     <div class="modal-content document-source-modal-content">
       <div class="modal-header"><h2 id="url-import-title">웹에서 가져오기</h2><button type="button" id="url-import-close" class="close-btn" aria-label="닫기">&times;</button></div>
-      <form id="url-import-form" class="url-import-form"><label for="url-import-input" data-i18n="library:source.urlLabel">문서 URL</label><input id="url-import-input" type="url" required inputmode="url" autocomplete="url" placeholder="https://example.com/article"><p id="url-import-error" class="url-import-error hidden" role="alert"></p><div class="document-type-modal-actions"><button type="button" id="url-import-cancel" class="btn btn-secondary">취소</button><button type="submit" class="btn btn-primary">다음</button></div></form>
+      <form id="url-import-form" class="url-import-form"><label for="url-import-input" data-i18n="library:source.urlLabel">문서 URL</label><input id="url-import-input" type="url" required inputmode="url" autocomplete="url" placeholder="https://example.com/article" aria-describedby="url-import-error"><p id="url-import-error" class="url-import-error hidden" role="alert" aria-live="assertive" tabindex="-1"></p><div class="document-type-modal-actions"><button type="button" id="url-import-cancel" class="btn btn-secondary">취소</button><button type="submit" class="btn btn-primary">다음</button></div></form>
     </div>
   </div>
 

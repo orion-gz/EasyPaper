@@ -7,6 +7,7 @@
   "source_language_not_translatable": "{{language}} cannot be translated automatically. Choose a supported source language.",
   "generation_failed": "Generation failed. Please try again.",
   "network": "Could not connect to the server.",
+  "challenge_page": "This site requires a browser verification that EasyPaper cannot complete. Open the page in your browser instead.",
   "external_processing_blocked": "This document allows local processing only. Select a loopback Ollama provider for {{operation}}.",
   "invalid_processing_policy": "Unsupported document processing policy.",
   "selected_text_requires_viewer_page": "Selected text can only be used from the current document viewer page.",

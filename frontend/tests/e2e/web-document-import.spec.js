@@ -40,3 +40,25 @@ test('HTML 선택 하이라이트를 section anchor로 저장하고 다시 열 �
   expect(stored.section_1[0].anchor).toMatchObject({ unit_id: 'section-1', block_id: 'block-1', exact: 'Unique searchable source text' })
   await page.reload(); await page.evaluate(() => { location.hash = '#viewer?id=web-1' }); await expect(page.locator('.article-highlight')).toContainText('Unique searchable source text')
 })
+
+test('봇 확인으로 차단된 URL 오류를 가져오기 모달에 표시한다', async ({ page }) => {
+  await mockBaseRoutes(page)
+  await page.route('**/api/import-url', route => route.fulfill({
+    status: 422, contentType: 'application/json',
+    body: JSON.stringify({ detail: { code: 'challenge_page' } }),
+  }))
+  await gotoApp(page)
+  await page.locator('#lib-upload-btn').click()
+  await page.locator('#lib-add-paper-btn').click()
+  await page.locator('#document-source-web').click()
+  await page.locator('#url-import-input').fill('https://computer.howstuffworks.com/computer-memory.htm#pt1')
+  await page.locator('#url-import-form').press('Enter')
+  await expect(page.locator('#document-type-modal')).toBeVisible()
+  await page.locator('#document-type-options button').first().click()
+  await page.locator('#document-type-confirm-btn').click()
+  const error = page.locator('#url-import-error')
+  await expect(page.locator('#url-import-modal')).toBeVisible()
+  await expect(error).toContainText('브라우저 확인을 요구합니다')
+  await expect(page.locator('#url-import-input')).toHaveAttribute('aria-invalid', 'true')
+  await expect(error).toBeFocused()
+})
