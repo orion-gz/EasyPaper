@@ -6149,6 +6149,70 @@ body.light-theme .viewer-read-btn.active svg {
   color: #059669;
 }
 
+/* 케밥 메뉴로 이동한 읽기 완료 항목은 다른 메뉴 액션과 같은 행 레이아웃을
+   유지하면서 완료 상태만 초록색으로 강조한다. */
+.kebab-menu-item.viewer-read-btn {
+  width: 100%;
+  height: auto;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.kebab-menu-item.viewer-read-btn:hover {
+  border-color: transparent;
+  background: var(--bg-hover);
+}
+.kebab-menu-item.viewer-read-btn.active {
+  border-color: transparent;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.viewer-document-info-dialog {
+  max-width: 520px;
+}
+.viewer-document-info-body {
+  padding: 20px 28px 28px;
+}
+.viewer-document-info-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+.viewer-document-info-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+}
+.viewer-document-info-row:last-child {
+  border-bottom: 0;
+}
+.viewer-document-info-row dt {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.viewer-document-info-row dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 520px) {
+  .viewer-document-info-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 12px 0;
+  }
+}
+
 /* ── Integrated Quoted Box Styling inside Chat Input ── */
 .chat-input-box .chat-quote-area {
   border-top-left-radius: 19px;
