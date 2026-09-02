@@ -4736,7 +4736,7 @@ async function refreshSettingsAppInfo() {
       currentVersionLabel.textContent = `현재 버전: ${formatVersionLabel(info.version, info.version_date)}`
     }
   } catch (err) {
-    console.warn('버전 및 변경 이력 조회 실패:', err)
+    console.warn(t('settings:versionHistoryLoadFailed'), err)
   }
 }
 

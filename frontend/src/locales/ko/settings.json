@@ -29,5 +29,6 @@
   "categoryDataSystemDescription": "캐시를 정리하고 서버 또는 데스크톱 앱을 업데이트합니다.",
   "categoryInfoDescription": "EasyPaper 프로젝트와 버전 정보를 확인합니다.",
   "versionHistoryTitle": "버전 및 변경 이력",
-  "versionHistoryDescription": "현재 버전을 확인하고 전체 변경 이력을 열 수 있습니다."
+  "versionHistoryDescription": "현재 버전을 확인하고 전체 변경 이력을 열 수 있습니다.",
+  "versionHistoryLoadFailed": "버전 및 변경 이력 조회 실패"
 }
