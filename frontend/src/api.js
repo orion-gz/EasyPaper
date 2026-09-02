@@ -93,6 +93,33 @@ export async function cancelInsightJobAPI(sessionId, kind) {
 }
 
 const uploadRecoveryDelays = [400, 800, 1600, 3200, 5000]
+const uploadPollInterval = 1000
+
+async function waitForUpload(uploadId, onProgress) {
+  onProgress?.(100, "processing")
+  let consecutiveNetworkErrors = 0
+  while (true) {
+    try {
+      const res = await fetch(`${API_BASE}/upload/${encodeURIComponent(uploadId)}/status`, { cache: "no-store" })
+      if (!res.ok) throw await apiError(res)
+      const task = await res.json()
+      consecutiveNetworkErrors = 0
+      if (task.status === "succeeded" && task.result) return task.result
+      if (["failed", "partial_failed", "cancelled"].includes(task.status)) {
+        const terminalError = new Error(errorMessage({ code: task.error_code || "unknown" }))
+        terminalError.uploadTerminal = true
+        throw terminalError
+      }
+    } catch (error) {
+      if (error.uploadTerminal) throw error
+      consecutiveNetworkErrors += 1
+      if (consecutiveNetworkErrors >= 5) throw error
+      onProgress?.(100, "verifying")
+    }
+    await new Promise(resolve => setTimeout(resolve, uploadPollInterval))
+  }
+}
+
 
 async function recoverCompletedUpload(uploadId, onProgress, verifyingPercent = 100, delays = uploadRecoveryDelays) {
   onProgress?.(verifyingPercent, 'verifying')
@@ -125,29 +152,32 @@ export async function uploadPDF(file, options, onProgress) {
       if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100), 'uploading')
     })
 
-    xhr.addEventListener('load', () => {
-      if (xhr.status === 200) {
+    xhr.addEventListener("load", async () => {
+      if (xhr.status === 202) {
         try {
-          const result = JSON.parse(xhr.responseText)
-          onProgress?.(100, 'processing')
-          resolve(result)
-        } catch {
-          reject(new Error(errorMessage({ code: 'unknown' })))
+          const accepted = JSON.parse(xhr.responseText)
+          resolve(await waitForUpload(accepted.session_id || uploadId, onProgress))
+        } catch (error) {
+          reject(error)
         }
       } else {
         try {
           const err = JSON.parse(xhr.responseText)
           reject(new Error(errorMessage(err)))
         } catch {
-          reject(new Error(errorMessage({ code: 'unknown' })))
+          reject(new Error(errorMessage({ code: "unknown" })))
         }
       }
     })
 
     const recoverOrReject = async () => {
-      const recovered = await recoverCompletedUpload(uploadId, onProgress)
-      if (recovered) resolve(recovered)
-      else reject(new Error(errorMessage({ code: 'network' })))
+      try {
+        resolve(await waitForUpload(uploadId, onProgress))
+      } catch {
+        const recovered = await recoverCompletedUpload(uploadId, onProgress)
+        if (recovered) resolve(recovered)
+        else reject(new Error(errorMessage({ code: "network" })))
+      }
     }
     xhr.addEventListener('error', recoverOrReject)
     xhr.addEventListener('timeout', recoverOrReject)
