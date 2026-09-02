@@ -26,6 +26,7 @@ import { changeLocale, getLocale, initI18n, loadFeatureNamespaces, loadNamespace
 import { saveUserLanguagePreferences, saveDocumentLanguageOverride } from './languagePreferences.js'
 import { canRetryTranslationTask, isTranslationTaskRunning, shouldRetryFailedTranslationTask } from './translationTaskState.js'
 import { applyUiScale, loadUiScale, saveUiScale } from './uiScale.js'
+import { adaptiveBriefingSummary, hasAdaptiveBriefing, renderAdaptiveBriefingHtml } from './adaptiveBriefing.js'
 
 const i18nReady = initI18n()
 applyUiScale(loadUiScale())
@@ -872,6 +873,7 @@ const primerRegenerateBtn  = $('primer-regenerate-btn')
 const primerLoading        = $('primer-loading')
 const primerError          = $('primer-error')
 const primerBody           = $('primer-body')
+const primerAdaptiveSections = $('primer-adaptive-sections')
 const primerTitle          = $('primer-title')
 const primerEyebrow        = $('primer-eyebrow')
 const primerHookSection    = $('primer-hook-section')
@@ -7935,7 +7937,7 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
       try {
         const targetLang = getTranslationOptions().targetLang
         const primer = await fetchPrimer(nodeData.doc_id, targetLang)
-        const text = primer.hook || primer.feynman || primer.lineage || ''
+        const text = adaptiveBriefingSummary(primer) || primer.hook || primer.feynman || primer.lineage || ''
         summaryEl.innerHTML = text
           ? escapeHtml(text).replace(/\n/g, '<br>')
           : `<p class="rg-detail-loading">아직 생성된 요약이 없습니다.</p>`
@@ -9409,7 +9411,7 @@ async function loadLibraryDetailOverview(doc) {
     const targetLang = getTranslationOptions().targetLang
     const data = await fetchPrimer(doc.id, targetLang)
     if (myToken !== libraryDetailSummaryReqToken) return
-    const text = data.hook || data.feynman || data.lineage || ''
+    const text = adaptiveBriefingSummary(data) || data.hook || data.feynman || data.lineage || ''
     if (summaryEl) {
       summaryEl.innerHTML = text
         ? escapeHtml(text).replace(/\n/g, '<br>')
@@ -9865,6 +9867,19 @@ function setPrimerModeCopy(isOverview) {
 
 function renderPrimerContent(doc, data, mode) {
   const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+  const isAdaptive = hasAdaptiveBriefing(data)
+  if (primerAdaptiveSections) {
+    primerAdaptiveSections.classList.toggle('hidden', !isAdaptive)
+    primerAdaptiveSections.innerHTML = isAdaptive ? renderAdaptiveBriefingHtml(data, { suggestedQuestions: t('common:briefing.suggestedQuestions') }) : ''
+  }
+  primerTabsBar?.classList.toggle('hidden', isAdaptive)
+  document.querySelectorAll('.primer-tab-panel').forEach(panel => panel.classList.toggle('hidden', isAdaptive))
+  if (isAdaptive) {
+    primerTitle.textContent = displayTitle
+    if (primerEyebrow) primerEyebrow.textContent = data.length_policy === 'long' ? t('common:briefing.sampledTitle') : t('common:briefing.title')
+    applyKatexToElement(primerAdaptiveSections)
+    return
+  }
   const isOverview = data.document_overview === true
   setPrimerModeCopy(isOverview)
   primerTitle.textContent = displayTitle

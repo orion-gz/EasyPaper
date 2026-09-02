@@ -109,8 +109,8 @@ def test_upload_rejects_client_id_with_existing_directory(test_client, isolated_
     assert marker.read_bytes() == b"existing upload"
 
 
-def test_auto_translation_job_starts_before_primer(test_client, isolated_dirs, monkeypatch):
-    """선택 기능인 primer가 느려도 auto 번역 job은 먼저 등록되어야 한다."""
+def test_auto_ai_jobs_wait_for_classification_confirmation(test_client, isolated_dirs, monkeypatch):
+    """No translation or briefing starts before classification is confirmed."""
     upload_dir = isolated_dirs["upload_dir"]
     monkeypatch.setattr(upload_module, "UPLOAD_DIR", str(upload_dir))
     monkeypatch.setattr(upload_module, "MAX_FILE_SIZE_MB", 50)
@@ -135,8 +135,8 @@ def test_auto_translation_job_starts_before_primer(test_client, isolated_dirs, m
     )
 
     body = _await_upload(test_client, res)
-    assert events
-    assert events[0] == "translation"
+    assert events == []
+    assert body["classification_status"] == "pending"
 
 
 def test_auto_translation_skips_full_job_at_fifty_pages(test_client, isolated_dirs, monkeypatch):

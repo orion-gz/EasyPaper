@@ -11,12 +11,16 @@ def representative_text(pages: list[dict], limit: int = 6000) -> str:
     if not pages:
         return ""
     indices = sorted({0, len(pages) - 1, *range(0, len(pages), max(1, len(pages) // 6))})
-    chunks = []
+    candidates = []
     for index in indices:
         text = (pages[index].get("text") or "").strip()
         if text:
-            chunks.append(text[:1000])
-    return "\n\n".join(chunks)[:limit]
+            candidates.append(text)
+    if not candidates:
+        return ""
+    separator_budget = max(0, 2 * (len(candidates) - 1))
+    per_excerpt = max(1, (limit - separator_budget) // len(candidates))
+    return "\n\n".join(text[:per_excerpt] for text in candidates)[:limit]
 
 
 def _normalize(raw: Any) -> dict:

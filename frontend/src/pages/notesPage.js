@@ -13,6 +13,8 @@ import { icon } from '../icons.js'
 import { lastActivityIso } from '../readPages.js'
 import { formatTranslationHtml, formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
 import { documentTypeLabel } from '../documentModes.js'
+import { t } from '../i18n.js'
+import { hasAdaptiveBriefing, renderAdaptiveBriefingHtml } from '../adaptiveBriefing.js'
 
 let renderGeneration = 0
 let activeDocumentMode = 'research'
@@ -348,6 +350,9 @@ function renderSummaryTabContent(docId) {
     return `<div class="notes-empty"><p style="color:var(--error)">브리핑을 불러오지 못했습니다.</p></div>`
   }
   const data = cached.data || {}
+  if (hasAdaptiveBriefing(data)) {
+    return `<div class="notes-primer-content primer-adaptive-sections">${renderAdaptiveBriefingHtml(data, { suggestedQuestions: t('common:briefing.suggestedQuestions') })}</div>`
+  }
   if (!primerHasAnyContent(data)) {
     return `<div class="notes-empty"><p>${notesCopy("이 논문에는 아직 생성된 브리핑이 없습니다.<br/>뷰어에서 논문을 열면 자동으로 생성됩니다.", "이 문서에는 아직 생성된 브리핑이 없습니다.<br/>뷰어에서 문서를 열면 자동으로 생성됩니다.")}</p></div>`
   }

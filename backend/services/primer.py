@@ -48,6 +48,7 @@ from services.llm_client import generate_reading_primer, stream_page_insight
 
 _PRIMER_CACHE_KIND = "primer_v2"
 _OVERVIEW_CACHE_KIND = "document_overview_v2"
+_ADAPTIVE_CACHE_KIND = "adaptive_briefing_v3"
 _RECOMMENDATION_LIMIT = 5
 _LIBRARY_MATCH_THRESHOLD = 0.7
 _DUPLICATE_TITLE_THRESHOLD = 0.6
@@ -401,3 +402,56 @@ def invalidate_primer_cache(doc_id: str, target_lang: str = "ko", source_lang: s
     덮어써지지만, 캐시를 먼저 지워둬야 재생성이 끝나기 전에 들어오는 GET
     요청이 낡은 캐시를 즉시 반환해버리지 않고 올바르게 pending을 반환한다."""
     delete_page_insight(doc_id, 0, _PRIMER_CACHE_KIND, suffix=_primer_cache_suffix(source_lang, target_lang))
+
+
+def _adaptive_cache_suffix(source_lang: str, target_lang: str, document_type: str) -> str:
+    from services.briefing_policy import BRIEFING_PROMPT_VERSION
+    return f"{BRIEFING_PROMPT_VERSION}:{source_lang}:{target_lang}:{document_type}"
+
+
+async def generate_adaptive_document_briefing(
+    doc_id: str, pages: list, metadata: dict, document_mode: str, document_type: str,
+    target_lang: str = "ko", source_lang: str = "auto", session_id: str | None = None,
+) -> dict:
+    """Generate and cache the common v3 briefing contract for every document type."""
+    from services.adaptive_briefing import generate_adaptive_briefing
+    from services.briefing_policy import select_briefing_excerpts
+
+    excerpts, length_policy, sampled_pages = select_briefing_excerpts(pages, document_type)
+    if not excerpts:
+        raise RuntimeError("문서 브리핑을 생성할 텍스트가 없습니다.")
+    result = await generate_adaptive_briefing(
+        metadata.get("title") or "", excerpts, document_mode, document_type, length_policy,
+        target_lang=target_lang, source_lang=source_lang, session_id=session_id,
+    )
+    result["sampled_pages"] = sampled_pages
+    save_page_insight(
+        doc_id, 0, _ADAPTIVE_CACHE_KIND, json.dumps(result, ensure_ascii=False),
+        suffix=_adaptive_cache_suffix(source_lang, target_lang, document_type),
+    )
+    return result
+
+
+def get_cached_adaptive_briefing(
+    doc_id: str, document_type: str, target_lang: str = "ko", source_lang: str = "auto",
+) -> Optional[dict]:
+    content = get_page_insight(
+        doc_id, 0, _ADAPTIVE_CACHE_KIND,
+        suffix=_adaptive_cache_suffix(source_lang, target_lang, document_type),
+    )
+    if not content:
+        return None
+    try:
+        value = json.loads(content)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) and value.get("schema_version") == 3 else None
+
+
+def invalidate_adaptive_briefing(
+    doc_id: str, document_type: str, target_lang: str = "ko", source_lang: str = "auto",
+) -> None:
+    delete_page_insight(
+        doc_id, 0, _ADAPTIVE_CACHE_KIND,
+        suffix=_adaptive_cache_suffix(source_lang, target_lang, document_type),
+    )

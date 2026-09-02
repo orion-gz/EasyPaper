@@ -4222,5 +4222,14 @@
   },
   "viewer:documentInfo.processing": {
     "description": "Label for the local or external data processing badge."
-  }
+  },
+  "common:briefing.suggestedQuestions": {
+    "description": "Heading above AI-suggested questions in an adaptive document briefing."
+  },
+  "common:briefing.sampledTitle": {
+    "description": "Eyebrow for a long-document briefing generated from representative excerpts."
+  },
+  "common:briefing.title": {
+    "description": "Eyebrow for an adaptive document briefing."
+    }
 }
