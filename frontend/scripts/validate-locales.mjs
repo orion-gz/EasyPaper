@@ -54,7 +54,9 @@ for (const namespaceFile of namespaces) { const namespace=namespaceFile.replace(
 const hardcoded = new Set(), html = readFileSync(join(frontendRoot,'index.html'),'utf8').replace(/<!--[\s\S]*?-->/g,'')
 for (const match of html.matchAll(/(?:title|placeholder|aria-label)="([^"]*[가-힣][^"]*)"|>([^<>]*[가-힣][^<>]*)</g)) { const value=(match[1]||match[2]||'').replace(/\s+/g,' ').trim(); if(value) hardcoded.add('index.html\0'+value) }
 for (const file of sourceFiles.filter(file => file.endsWith('.js'))) {
-  const rel=relative(frontendRoot,file), source=readFileSync(file,'utf8')
+  // Baseline entries use POSIX paths; normalize Windows separators before
+  // comparing so the same source string maps to the same entry on every CI OS.
+  const rel=relative(frontendRoot,file).replaceAll('\\','/'), source=readFileSync(file,'utf8')
   // Quoted JavaScript strings cannot contain raw newlines. Keeping this scan
   // line-bound prevents a closing quote on a later line from turning comments
   // and unrelated code into one large, false-positive UI literal.
