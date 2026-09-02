@@ -114,3 +114,38 @@ async def patch_document_classification(
         "translated_pages": [],
     })
     return updated
+
+
+class DocumentClassificationConfirmation(BaseModel):
+    document_mode: str
+    document_type: str
+
+
+@router.get("/library/{doc_id}/classification")
+async def get_document_classification(doc_id: str, current_user: str = Depends(get_current_user)):
+    from services.document_classification import classification_payload
+    from services.ownership import require_owned_document
+    return classification_payload(require_owned_document(doc_id, current_user))
+
+
+@router.post("/library/{doc_id}/classification/confirm")
+async def confirm_document_classification(doc_id: str, body: DocumentClassificationConfirmation, current_user: str = Depends(get_current_user)):
+    from services.document_policy import MODE_SCHEMA_VERSION, validate_classification
+    from services.db import db_update_document_classification
+    from services.ownership import require_owned_document
+    from routers.upload import ensure_session, sessions
+    try:
+        validate_classification(body.document_mode, body.document_type, allow_deprecated=False)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    doc = require_owned_document(doc_id, current_user)
+    if doc.get("classification_status") == "confirmed":
+        return {"status": "confirmed", "document_mode": doc["document_mode"], "document_type": doc["document_type"]}
+    if not ensure_session(doc_id):
+        raise HTTPException(status_code=409, detail="문서 원문을 복원할 수 없습니다.")
+    db_update_document_classification(doc_id, body.document_mode, body.document_type, MODE_SCHEMA_VERSION)
+    sessions[doc_id]["document_mode"] = body.document_mode
+    sessions[doc_id]["document_type"] = body.document_type
+    from services.parse_job import start_processing_after_classification
+    start_processing_after_classification(doc_id, sessions)
+    return {"status": "confirmed", "document_mode": body.document_mode, "document_type": body.document_type}
