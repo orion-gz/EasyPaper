@@ -6,6 +6,22 @@ MAX_FILE_SIZE_MB를 검사해서, 한도를 아무리 작게 잡아도 큰 업�
 전부 소비한 뒤에야 거부되는 DoS 벡터였다.
 """
 
+import time
+
+
+def _await_upload(test_client, response):
+    assert response.status_code == 202
+    session_id = response.json()["session_id"]
+    for _ in range(200):
+        status = test_client.get(f"/api/upload/{session_id}/status")
+        assert status.status_code == 200
+        body = status.json()
+        if body["status"] == "succeeded":
+            return body["result"]
+        assert body["status"] not in {"failed", "partial_failed", "cancelled"}, body
+        time.sleep(0.01)
+    raise AssertionError("upload parsing did not finish")
+
 import fitz
 import uuid
 import routers.upload as upload_module
@@ -46,8 +62,7 @@ def test_upload_accepts_file_within_size_limit(test_client, isolated_dirs, monke
         files={"file": ("small.pdf", _minimal_pdf_bytes(), "application/pdf")},
     )
 
-    assert res.status_code == 200
-    body = res.json()
+    body = _await_upload(test_client, res)
     assert body["filename"] == "small.pdf"
     assert body["session_id"] in upload_module.sessions
 
@@ -63,8 +78,8 @@ def test_upload_uses_valid_client_upload_id(test_client, isolated_dirs, monkeypa
         files={"file": ("identified.pdf", _minimal_pdf_bytes(), "application/pdf")},
     )
 
-    assert response.status_code == 200
-    assert response.json()["session_id"] == upload_id
+    body = _await_upload(test_client, response)
+    assert body["session_id"] == upload_id
 
 
 def test_upload_rejects_invalid_client_upload_id(test_client):
@@ -119,7 +134,7 @@ def test_auto_translation_job_starts_before_primer(test_client, isolated_dirs, m
         files={"file": ("paper.pdf", _minimal_pdf_bytes(), "application/pdf")},
     )
 
-    assert res.status_code == 200
+    body = _await_upload(test_client, res)
     assert events
     assert events[0] == "translation"
 
@@ -150,10 +165,10 @@ def test_auto_translation_skips_full_job_at_fifty_pages(test_client, isolated_di
         files={"file": ("long.pdf", _minimal_pdf_bytes(), "application/pdf")},
     )
 
-    assert response.status_code == 200
-    assert response.json()["total_pages"] == 50
+    body = _await_upload(test_client, response)
+    assert body["total_pages"] == 50
     assert starts == []
-    upload_module.sessions.pop(response.json()["session_id"], None)
+    upload_module.sessions.pop(body["session_id"], None)
 
 
 def test_auto_translation_does_not_start_for_undetermined_source(test_client, isolated_dirs, monkeypatch):
@@ -171,8 +186,8 @@ def test_auto_translation_does_not_start_for_undetermined_source(test_client, is
         "/api/upload?translation_mode=auto",
         files={"file": ("empty.pdf", _minimal_pdf_bytes(), "application/pdf")},
     )
-    assert response.status_code == 200
-    assert response.json()["detected_source_language"] == "und"
-    assert response.json()["translation_skipped_reason"] == "unsupported_source_language"
+    body = _await_upload(test_client, response)
+    assert body["detected_source_language"] == "und"
+    assert body["translation_skipped_reason"] == "unsupported_source_language"
     assert starts == []
-    upload_module.sessions.pop(response.json()["session_id"], None)
+    upload_module.sessions.pop(body["session_id"], None)

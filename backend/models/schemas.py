@@ -23,6 +23,13 @@ class UploadResponse(BaseModel):
     total_units: Optional[int] = None
     capabilities: dict = {}
 
+class UploadAcceptedResponse(BaseModel):
+    session_id: str
+    task_id: str
+    status: str = "queued"
+    filename: str
+    file_size_mb: float
+
 
 class UrlImportRequest(BaseModel):
     url: str

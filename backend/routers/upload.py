@@ -12,7 +12,7 @@ from services.library import get_document, get_pdf_path as lib_pdf_path, list_do
 from services.translation_job import start_job, resume_incomplete_jobs, get_job_status
 from services.insight_job import start_keyword_job, start_summary_job
 from services.rate_limiter import enforce_rate_limit
-from models.schemas import UploadResponse
+from models.schemas import UploadAcceptedResponse
 
 router = APIRouter()
 
@@ -148,7 +148,7 @@ def restore_sessions_from_library():
     recover_reparse_previews()
 
 
-@router.post("/upload", response_model=UploadResponse)
+@router.post("/upload", response_model=UploadAcceptedResponse, status_code=202)
 async def upload_pdf(
     file: UploadFile = File(...),
     upload_id: str | None = None,
@@ -260,23 +260,51 @@ async def upload_pdf(
         "document_type": document_type,
     }
     parse_task = create_task(session_id, "parse", parse_options, status="queued")
-    from services.parse_job import execute_parse_task
-    try:
-        parsed = await execute_parse_task(
-            parse_task["id"], sessions,
-            page_extractor=extract_pages,
-            metadata_reader=get_pdf_metadata,
-            translation_starter=start_job,
-            keyword_starter=start_keyword_job,
-            summary_starter=start_summary_job,
-            upload_root=UPLOAD_DIR,
-        )
-    except Exception as exc:
-        shutil.rmtree(session_dir, ignore_errors=True)
-        raise HTTPException(status_code=422, detail=f"PDF 파싱 실패: {exc}") from exc
+    from services.parse_job import resume_parse_task
+    resume_parse_task(
+        parse_task["id"], sessions,
+        page_extractor=extract_pages,
+        metadata_reader=get_pdf_metadata,
+        translation_starter=start_job,
+        keyword_starter=start_keyword_job,
+        summary_starter=start_summary_job,
+        upload_root=UPLOAD_DIR,
+    )
+    return UploadAcceptedResponse(
+        session_id=session_id, task_id=parse_task["id"], status="queued",
+        filename=file.filename, file_size_mb=round(file_size_mb, 2),
+    )
 
-    parsed["file_size_mb"] = round(file_size_mb, 2)
-    return UploadResponse(**parsed)
+
+@router.get("/upload/{session_id}/status")
+async def get_upload_status(session_id: str, current_user: str = Depends(get_current_user)):
+    """Return durable parse state even before the document row exists."""
+    from services.document_tasks import latest_task
+
+    task = latest_task(session_id, "parse")
+    if not task or task.get("options", {}).get("username") != current_user:
+        raise HTTPException(status_code=404, detail="업로드 작업을 찾을 수 없습니다.")
+
+    response = {
+        "session_id": session_id, "task_id": task["id"],
+        "status": task["status"], "error_code": task.get("last_error_code"),
+    }
+    if task["status"] == "succeeded":
+        session = require_session_owner(session_id, current_user)
+        response["result"] = {
+            "session_id": session_id, "filename": session["filename"],
+            "total_pages": session["total_pages"],
+            "file_size_mb": round(float(task["options"].get("file_size_mb") or 0), 2),
+            "metadata": session["metadata"],
+            "document_mode": session.get("document_mode", "research"),
+            "document_type": session.get("document_type", "research_paper"),
+            "source_language": session.get("source_language", "auto"),
+            "detected_source_language": session.get("detected_source_language", "und"),
+            "source_language_confidence": session.get("source_language_confidence"),
+            "preferred_target_language": session.get("preferred_target_language"),
+            "translation_skipped_reason": session.get("translation_skipped_reason"),
+        }
+    return response
 
 
 @router.get("/session/{session_id}")
@@ -294,6 +322,7 @@ async def get_session(session_id: str, current_user: str = Depends(get_current_u
         "detected_source_language": session.get("detected_source_language", "und"),
         "source_language_confidence": session.get("source_language_confidence"),
         "preferred_target_language": session.get("preferred_target_language"),
+        "translation_skipped_reason": session.get("translation_skipped_reason"),
         "source_origin": session.get("source_origin", "local"),
         "content_kind": session.get("content_kind", "pdf"),
         "source_url": session.get("source_url"),

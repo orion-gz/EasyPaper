@@ -196,6 +196,7 @@ async def execute_parse_task(
         translation_skipped_reason = "unsupported_source_language"
     elif resolved_source_language == target_lang:
         translation_skipped_reason = "same_source_and_target_language"
+    sessions[doc_id]["translation_skipped_reason"] = translation_skipped_reason
 
     from services.document_tasks import latest_task
     if translation_starter is None:
@@ -279,7 +280,7 @@ async def execute_parse_task(
     }
 
 
-def resume_parse_task(task_id: str, sessions: dict) -> asyncio.Task | None:
+def resume_parse_task(task_id: str, sessions: dict, **execute_kwargs) -> asyncio.Task | None:
     """Resume an orphaned upload directly from its server-owned source file."""
     existing = _running_parse_tasks.get(task_id)
     if existing is not None and not existing.done():
@@ -287,7 +288,7 @@ def resume_parse_task(task_id: str, sessions: dict) -> asyncio.Task | None:
     task = get_task(task_id)
     if not task or task["status"] not in {"queued", "running", "retry_wait"}:
         return None
-    worker = asyncio.create_task(execute_parse_task(task_id, sessions))
+    worker = asyncio.create_task(execute_parse_task(task_id, sessions, **execute_kwargs))
     _running_parse_tasks[task_id] = worker
 
     def _finished(done: asyncio.Task) -> None:
