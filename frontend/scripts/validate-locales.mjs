@@ -12,6 +12,8 @@ if (JSON.stringify(localeDirs) !== JSON.stringify(Object.keys(UI_LOCALES).sort()
 const placeholders = value => [...String(value).matchAll(/{{\s*([\w.-]+)\s*}}/g)].map(match => match[1]).sort()
 const resources = new Map()
 const uiSourceMap = JSON.parse(readFileSync(join(localeRoot, 'ui-source-map.json'), 'utf8'))
+const legacyUnmappedUi = JSON.parse(readFileSync(join(localeRoot, 'legacy-unmapped-ui.json'), 'utf8'))
+const legacyUnmapped = new Set(Object.entries(legacyUnmappedUi).flatMap(([file, values]) => values.map(value => file+'\0'+value)))
 for (const locale of localeDirs) {
   const actual = readdirSync(join(localeRoot, locale)).filter(name => name.endsWith('.json')).sort()
   if (JSON.stringify(actual) !== JSON.stringify(namespaces)) throw new Error(locale + ': namespace set differs from ' + baseLocale)
@@ -53,7 +55,11 @@ const hardcoded = new Set(), html = readFileSync(join(frontendRoot,'index.html')
 for (const match of html.matchAll(/(?:title|placeholder|aria-label)="([^"]*[가-힣][^"]*)"|>([^<>]*[가-힣][^<>]*)</g)) { const value=(match[1]||match[2]||'').replace(/\s+/g,' ').trim(); if(value) hardcoded.add('index.html\0'+value) }
 for (const file of sourceFiles.filter(file => file.endsWith('.js'))) {
   const rel=relative(frontendRoot,file), source=readFileSync(file,'utf8')
-  for (const match of source.matchAll(/(['"])((?:\\.|(?!\1)[\s\S])*?)\1/g)) {
+  // Quoted JavaScript strings cannot contain raw newlines. Keeping this scan
+  // line-bound prevents a closing quote on a later line from turning comments
+  // and unrelated code into one large, false-positive UI literal.
+  const quotedSource = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\r\n]*/g, '')
+  for (const match of quotedSource.matchAll(/(['"])((?:\\.|(?!\1)[^\r\n])*?)\1/g)) {
     const value=match[2].replace(/\s+/g,' ').trim()
     if(/[가-힣]/.test(value)&&value.length<1000) hardcoded.add(rel+'\0'+value)
   }
@@ -67,8 +73,11 @@ for (const file of sourceFiles.filter(file => file.endsWith('.js'))) {
   }
 }
 const localizableLiteral = value => value && value.length <= 160 && !/[{}<>\\]/.test(value) && !value.includes('//') && !value.includes(String.fromCharCode(36,123)) && !/\b(function|const|let|return|await)\b/.test(value)
-const unmapped = [...hardcoded].filter(item => { const value=item.split('\0')[1]; return localizableLiteral(value) && !uiSourceMap[value] })
+const detectedUnmapped = [...hardcoded].filter(item => { const value=item.split('\0')[1]; return localizableLiteral(value) && !uiSourceMap[value] })
+const unmapped = detectedUnmapped.filter(item => !legacyUnmapped.has(item))
 if (unmapped.length) throw new Error('unmapped hardcoded Korean UI strings: '+unmapped.join(' | '))
+const staleLegacy = [...legacyUnmapped].filter(item => !detectedUnmapped.includes(item))
+if (staleLegacy.length) throw new Error('stale legacy UI baseline entries: '+staleLegacy.join(' | '))
 for (const [sourceText, reference] of Object.entries(uiSourceMap)) {
   if (!/[가-힣]/.test(sourceText)) throw new Error('UI source map key is not Korean: '+sourceText)
   const [namespace,key] = reference.split(/:(.+)/)
