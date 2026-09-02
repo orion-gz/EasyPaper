@@ -71,7 +71,8 @@ You can download the installer for your platform from the [latest release](https
 
 At first launch, choose and configure an AI Provider in the onboarding flow. Unsigned desktop builds can trigger an operating-system security warning.
 
-> [!IMPORTANT] Note
+> [!IMPORTANT]
+> **Note**
 > macOS: Because the app is not fully signed, recent versions of macOS (Ventura and later) may show the misleading message “The application cannot be opened because it is damaged” instead of allowing you to bypass the warning with right-click → Open. The file is not actually damaged; this is caused by the quarantine attribute added during download. Remove it in Terminal with the command below, then try again.
 > ```bash
 > xattr -cr /Applications/EasyPaper.app
