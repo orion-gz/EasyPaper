@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request, Response, HTTPException, status, Depends
 from fastapi.responses import StreamingResponse
+import asyncio
 import json
 import os
 import sys
@@ -1175,23 +1176,32 @@ async def post_update_notice_endpoint(current_user: str = Depends(get_current_us
 
 @router.get("/settings/changelog")
 async def get_full_changelog(current_user: str = Depends(get_current_user)):
-    """저장소 루트의 CHANGELOG.md 전체 내용을 반환합니다.
+    """현재 버전과 저장소 커밋에서 자동 생성한 변경 이력을 반환합니다.
 
-    설정 화면에서 버전 텍스트를 클릭하면 지금까지의 전체 변경 이력을 보여주는
-    용도 - 업데이트 확인 시 뜨는 changelog(현재~최신 사이의 diff)와 달리
-    이건 프로젝트 전체 누적 이력이라 git 조회가 아니라 이 파일 자체를
-    그대로 서빙한다.
+    Git 메타데이터가 없는 PyInstaller 배포본에서는 빌드에 포함된
+    CHANGELOG.md를 대신 사용한다.
     """
     import os
     import sys
+    from services.update_checker import (
+        get_current_version,
+        get_current_version_date,
+        get_repository_changelog_markdown,
+    )
+
+    version, version_date, generated_content = await asyncio.gather(
+        get_current_version(), get_current_version_date(), get_repository_changelog_markdown(),
+    )
+    if generated_content:
+        return {"version": version, "version_date": version_date, "content": generated_content}
 
     candidates = [os.path.join(get_project_root(), "CHANGELOG.md")]
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         candidates.append(os.path.join(sys._MEIPASS, "CHANGELOG.md"))
     changelog_path = next((path for path in candidates if os.path.isfile(path)), None)
     if changelog_path is None:
-        return {"content": ""}
+        return {"version": version, "version_date": version_date, "content": ""}
     with open(changelog_path, "r", encoding="utf-8") as f:
-        return {"content": f.read()}
+        return {"version": version, "version_date": version_date, "content": f.read()}
 
 

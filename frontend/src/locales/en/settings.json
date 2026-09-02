@@ -29,5 +29,6 @@
   "categoryDataSystemDescription": "Clear caches and update the server or desktop app.",
   "categoryInfoDescription": "View EasyPaper project and version information.",
   "versionHistoryTitle": "Version and changelog",
-  "versionHistoryDescription": "View the current version and open the complete changelog."
+  "versionHistoryDescription": "View the current version and open the complete changelog.",
+  "versionHistoryLoadFailed": "Failed to load version and changelog"
 }

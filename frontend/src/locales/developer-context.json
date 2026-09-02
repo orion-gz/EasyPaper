@@ -4082,6 +4082,9 @@
   "settings:versionHistoryDescription": {
     "description": "Settings information architecture label or description for versionHistoryDescription."
   },
+  "settings:versionHistoryLoadFailed": {
+    "description": "Console warning shown when the settings information version and changelog request fails."
+  },
   "common:documentTypes.academicBook": {
     "description": "General-document classification for textbooks, monographs, and scholarly learning material."
   },

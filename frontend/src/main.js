@@ -605,6 +605,7 @@ function activateSettingsCategory(paneId, { focus = false } = {}) {
   })
   if (focus) activeButton.focus()
   $('settings-modal')?.querySelector('.settings-content')?.scrollTo({ top: 0 })
+  if (activeButton.dataset.tab === 'tab-info') refreshSettingsAppInfo()
 }
 
 initializeSettingsInformationArchitecture()
@@ -4725,6 +4726,19 @@ const fullChangelogModal   = $('full-changelog-modal')
 const fullChangelogCloseBtn = $('full-changelog-close-btn')
 const fullChangelogLoading = $('full-changelog-loading')
 const fullChangelogContent = $('full-changelog-content')
+let fullChangelogMarkdown = ''
+
+async function refreshSettingsAppInfo() {
+  try {
+    const info = await getFullChangelogAPI()
+    fullChangelogMarkdown = info.content || ''
+    if (!isTauriDesktop && currentVersionLabel && info.version) {
+      currentVersionLabel.textContent = `현재 버전: ${formatVersionLabel(info.version, info.version_date)}`
+    }
+  } catch (err) {
+    console.warn(t('settings:versionHistoryLoadFailed'), err)
+  }
+}
 
 function closeFullChangelogModal() {
   if (fullChangelogModal) closeOverlayModal(fullChangelogModal)
@@ -4747,9 +4761,9 @@ if (fullChangelogTrigger) {
     fullChangelogContent.innerHTML = ''
 
     try {
-      const res = await getFullChangelogAPI()
-      fullChangelogContent.innerHTML = res.content
-        ? sanitizeMarkedHtml(marked.parse(res.content))
+      await refreshSettingsAppInfo()
+      fullChangelogContent.innerHTML = fullChangelogMarkdown
+        ? sanitizeMarkedHtml(marked.parse(fullChangelogMarkdown))
         : '<p>변경 이력을 찾을 수 없습니다.</p>'
     } catch (err) {
       fullChangelogContent.innerHTML = `<p>변경 이력을 불러오지 못했습니다: ${escapeHtml(err.message || '')}</p>`

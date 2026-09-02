@@ -906,7 +906,7 @@ export async function getPostUpdateNoticeAPI() {
 }
 
 /**
- * 저장소 루트 CHANGELOG.md 전체 내용을 조회합니다.
+ * 현재 실행 버전과 Git 이력에서 자동 생성된 전체 변경 이력을 조회합니다.
  */
 export async function getFullChangelogAPI() {
   const res = await fetch(`${API_BASE}/settings/changelog`, { cache: 'no-store' })

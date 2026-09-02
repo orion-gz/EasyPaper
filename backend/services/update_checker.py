@@ -161,6 +161,42 @@ async def _get_changelog(from_ref: str, to_ref: str) -> list[dict]:
     return entries
 
 
+async def get_repository_changelog_markdown() -> Optional[str]:
+    """현재 체크아웃의 커밋 이력을 날짜별 Markdown으로 생성합니다.
+
+    CHANGELOG.md를 사람이 매번 갱신하지 않아도 설정 > 정보에 현재 실행 중인
+    코드까지 반영하기 위한 값이다. Git 메타데이터가 없는 패키지 실행 환경에서는
+    호출자가 번들된 CHANGELOG.md를 사용할 수 있도록 None을 반환한다.
+    """
+    code, out, _ = await _run_git(
+        "log", "--no-merges", "--date=short",
+        "--pretty=format:%cd%x1f%h%x1f%s", "HEAD",
+    )
+    if code != 0 or not out:
+        return None
+
+    lines = [
+        "# Changelog", "",
+        "EasyPaper의 Git 커밋 이력에서 자동 생성된 변경 이력입니다.", "",
+    ]
+    current_date = None
+    for line in out.splitlines():
+        parts = line.split("\x1f", 2)
+        if len(parts) != 3:
+            continue
+        date, sha, subject = (part.strip() for part in parts)
+        if not subject:
+            continue
+        if date != current_date:
+            if current_date is not None:
+                lines.append("")
+            lines.extend([f"## {date}", ""])
+            current_date = date
+        lines.append(f"- {subject} (`{sha}`)")
+
+    return "\n".join(lines).rstrip() + "\n" if current_date else None
+
+
 def get_update_check_config() -> dict:
     interval = db_get_meta("update_check_interval") or DEFAULT_INTERVAL
     if interval not in VALID_INTERVALS:
