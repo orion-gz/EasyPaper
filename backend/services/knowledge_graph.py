@@ -65,6 +65,16 @@ _QUESTION_BACKFILL_BATCH_SIZE = 20
 _TAG_BACKFILL_CONCURRENCY = 3
 
 
+def _list_research_documents(username: str) -> list:
+    """Research Graph에 표시할 연구 문서만 반환한다.
+
+    일반 문서 모드의 파일은 같은 사용자가 소유하더라도 Research Graph의
+    노드·집계·검색 결과에 포함되지 않아야 한다.
+    """
+    from services.library import list_documents
+    return list_documents(username=username, document_mode="research")
+
+
 def _build_category_edges(docs: list) -> list:
     """Connect papers only when a versioned primary topic overlaps."""
     from services.paper_tags import iter_tag_records
@@ -368,8 +378,7 @@ async def get_graph_data(username: str) -> dict:
     보안 경계다(routers/library.py의 _require_owned_document 패턴과 동일한
     "존재 자체를 노출하지 않는다" 원칙 - 여기서는 다른 사용자 문서는 애초에
     쿼리 결과에 들어오지도 않는다)."""
-    from services.library import list_documents
-    docs = list_documents(username=username)
+    docs = _list_research_documents(username)
     doc_ids = [d["id"] for d in docs]
 
     nodes = []
@@ -488,8 +497,7 @@ async def get_related_questions(username: str, node_id: str) -> List[dict]:
     반환한다. node_id는 "concept:{id}" 또는 "paper:{doc_id}" 형태. 다른
     사용자 데이터가 섞이지 않도록, concept 조회는 이 사용자가 소유한 문서
     범위로 한 번 더 필터링한다."""
-    from services.library import list_documents
-    owned_doc_ids = {d["id"] for d in list_documents(username=username)}
+    owned_doc_ids = {d["id"] for d in _list_research_documents(username)}
 
     if node_id.startswith("paper:"):
         doc_id = node_id.split(":", 1)[1]
@@ -510,13 +518,12 @@ async def get_related_questions(username: str, node_id: str) -> List[dict]:
 async def search_graph_nodes(username: str, query: str) -> dict:
     """이 사용자가 소유한 범위 안에서 논문/개념/메모/질문을 검색해 매칭된
     그래프 노드 id를 반환한다."""
-    from services.library import list_documents
     from services.db import db_search_graph_nodes
-    doc_ids = [d["id"] for d in list_documents(username=username)]
+    doc_ids = [d["id"] for d in _list_research_documents(username)]
     return db_search_graph_nodes(doc_ids, query)
 
 
-async def get_activity_timeline(username: str) -> List[dict]:
+async def get_activity_timeline(username: str, document_mode: Optional[str] = None) -> List[dict]:
     """업로드/읽음/질문/메모를 시간순(최신순)으로 병합한 활동 타임라인을
     반환한다. 삭제된 논문의 활동도 타임라인에 유지되며 holds is_deleted=True."""
     from services.library import list_documents
@@ -525,7 +532,11 @@ async def get_activity_timeline(username: str) -> List[dict]:
         db_get_related_questions_for_doc, get_db,
     )
 
-    docs = list_documents(username=username, include_deleted=True)
+    docs = list_documents(
+        username=username,
+        include_deleted=True,
+        document_mode=document_mode,
+    )
     titles_by_doc = {d["id"]: (d.get("metadata") or {}).get("title") or d["filename"] for d in docs}
     deleted_by_doc = {d["id"]: bool(d.get("is_deleted")) for d in docs}
     manually_read_by_doc = {d["id"]: bool((d.get("metadata") or {}).get("read")) for d in docs}
@@ -745,7 +756,7 @@ async def get_activity_timeline(username: str) -> List[dict]:
 
 
 def _reading_recommendations_cache_key(username: str) -> str:
-    return f"reading_recommendations:{username}"
+    return f"reading_recommendations:{username}:research"
 
 
 def _read_reading_recommendations_cache(username: str) -> Optional[List[dict]]:
@@ -798,8 +809,7 @@ async def get_reading_recommendations(username: str, force: bool = False) -> Lis
             return cached
 
     from services.db import db_set_meta
-    from services.library import list_documents
-    docs = list_documents(username=username)
+    docs = _list_research_documents(username)
     if len(docs) < 2:
         return []  # 근거가 너무 적으면 추천하지 않는다
 
@@ -845,9 +855,8 @@ async def get_concept_heatmap(username: str) -> List[dict]:
     활동량(paper_count + question_count) 순으로 정렬한다. 1차의
     db_get_concepts_for_docs와 2차의 db_get_question_count_for_concepts를
     그대로 조합할 뿐 새 SQL이 필요 없다."""
-    from services.library import list_documents
     from services.db import db_get_concepts_for_docs, db_get_question_count_for_concepts
-    doc_ids = [d["id"] for d in list_documents(username=username)]
+    doc_ids = [d["id"] for d in _list_research_documents(username)]
     concept_links = db_get_concepts_for_docs(doc_ids)
 
     by_concept = {}
@@ -881,7 +890,7 @@ HEATMAP_MATRIX_CACHE_HOURS = 24
 
 
 def _heatmap_matrix_cache_key(username: str) -> str:
-    return f"heatmap_matrix:{username}"
+    return f"heatmap_matrix:{username}:research"
 
 
 async def _get_paper_text_for_scoring(doc_id: str) -> str:
@@ -970,10 +979,9 @@ async def get_concept_paper_matrix(username: str, concept_limit: int = 12, paper
             except Exception:
                 pass  # 캐시가 손상됐으면 무시하고 새로 계산
 
-    from services.library import list_documents
     from services.db import db_get_concepts_for_docs, db_get_question_count_for_concepts, db_get_question_doc_concept_counts
 
-    docs = {d["id"]: d for d in list_documents(username=username)}
+    docs = {d["id"]: d for d in _list_research_documents(username)}
     doc_ids = list(docs.keys())
     concept_links = db_get_concepts_for_docs(doc_ids)
 
@@ -1068,10 +1076,9 @@ async def get_knowledge_gaps(username: str) -> List[dict]:
     1. 논문 여러 편에 등장하는 개념인데 관련 질문이 하나도 없음
     2. 읽음 표시된 논문인데 메모가 하나도 없음
     각각 상위 5개까지만 반환해 너무 많은 항목으로 압도하지 않는다."""
-    from services.library import list_documents
     from services.db import db_get_memo_counts_for_docs
 
-    docs = list_documents(username=username)
+    docs = _list_research_documents(username)
     doc_ids = [d["id"] for d in docs]
 
     heatmap = await get_concept_heatmap(username)
@@ -1101,7 +1108,7 @@ async def get_knowledge_gaps(username: str) -> List[dict]:
 
 
 def _ai_insights_cache_key(username: str) -> str:
-    return f"ai_insights:{username}"
+    return f"ai_insights:{username}:research"
 
 
 def _resolve_ai_insight_title(doc: dict) -> str:
@@ -1163,8 +1170,7 @@ async def get_ai_insights(username: str) -> List[dict]:
     카드가 비지 않게 한다."""
     from services.db import db_get_meta, db_set_meta
 
-    from services.library import list_documents
-    docs = list_documents(username=username)
+    docs = _list_research_documents(username)
     titles_by_doc = {d["id"]: _resolve_ai_insight_title(d) for d in docs}
     title_signature = [[doc_id, title] for doc_id, title in sorted(titles_by_doc.items())]
 
@@ -1259,12 +1265,11 @@ async def get_dashboard_summary(username: str) -> dict:
     """지식 그래프 탭의 "대시보드" 뷰에 필요한 데이터를 한 번에 모은다.
     새 집계 로직 없이 get_concept_heatmap/get_ai_insights/
     get_activity_timeline을 조합할 뿐이다."""
-    from services.library import list_documents
-    docs = list_documents(username=username)  # 이미 created_at DESC 정렬됨
+    docs = _list_research_documents(username)  # 이미 created_at DESC 정렬됨
 
     heatmap = await get_concept_heatmap(username)
     insights = await get_ai_insights(username)
-    timeline = await get_activity_timeline(username)
+    timeline = await get_activity_timeline(username, document_mode="research")
 
     recent_questions = [e for e in timeline if e["type"] == "question"][:10]
     recent_notes = [e for e in timeline if e["type"] == "note"][:10]
