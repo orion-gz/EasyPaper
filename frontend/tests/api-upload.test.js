@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { uploadPDF } from '../src/api.js'
+import { importURL, uploadPDF } from '../src/api.js'
 
 const options = {
   targetLang: 'ko', sourceLang: 'auto', style: 'academic',
@@ -94,5 +94,41 @@ test('malformed success response rejects instead of leaving upload pending', asy
     await assert.rejects(promise)
   } finally {
     globalThis.XMLHttpRequest = originalXHR
+  }
+})
+
+test('URL import sends a recoverable id and restores a completed session after disconnect', async () => {
+  const originalCrypto = globalThis.crypto
+  const originalFetch = globalThis.fetch
+  const originalSetInterval = globalThis.setInterval
+  const originalClearInterval = globalThis.clearInterval
+  const originalSetTimeout = globalThis.setTimeout
+  const uploadId = "123e4567-e89b-42d3-a456-426614174002"
+  Object.defineProperty(globalThis, "crypto", { configurable: true, value: { randomUUID: () => uploadId } })
+  globalThis.setInterval = () => 1
+  globalThis.clearInterval = () => {}
+  globalThis.setTimeout = handler => { handler(); return 0 }
+  let requestCount = 0
+  globalThis.fetch = async (url, init) => {
+    requestCount++
+    if (requestCount === 1) {
+      assert.equal(url, "/api/import-url")
+      assert.equal(JSON.parse(init.body).upload_id, uploadId)
+      throw new TypeError("connection closed")
+    }
+    assert.equal(url, `/api/session/${uploadId}`)
+    return new Response(JSON.stringify({ session_id: uploadId, filename: "remote.pdf", total_pages: 30, metadata: {} }), { status: 200, headers: { "Content-Type": "application/json" } })
+  }
+  try {
+    const phases = []
+    const result = await importURL("https://arxiv.org/pdf/1611.08024", options, (percent, phase) => phases.push([percent, phase]))
+    assert.equal(result.session_id, uploadId)
+    assert.deepEqual(phases, [[10, "checking"], [30, "downloading"], [90, "verifying"]])
+  } finally {
+    globalThis.fetch = originalFetch
+    globalThis.setInterval = originalSetInterval
+    globalThis.clearInterval = originalClearInterval
+    globalThis.setTimeout = originalSetTimeout
+    Object.defineProperty(globalThis, "crypto", { configurable: true, value: originalCrypto })
   }
 })
