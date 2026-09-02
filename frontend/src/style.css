@@ -729,6 +729,9 @@ body:not(.light-theme) .pdf-page-inner canvas {
   left: 0;
   overflow: hidden;
   line-height: 1;
+  text-size-adjust: none;
+  -webkit-text-size-adjust: none;
+  transform-origin: 0 0;
   z-index: 2 !important;
   pointer-events: auto !important;
   user-select: text !important;
@@ -2263,9 +2266,11 @@ body.light-theme .toast.error { color: #dc2626; }
 
 /* ── PDF 텍스트 하이라이트 & 밑줄 스타일 ── */
 .pdf-annotation-highlight {
-  background-color: rgba(255, 235, 59, 0.4); /* Soft yellow highlight */
+  position: absolute;
+  pointer-events: none !important;
+  box-sizing: border-box;
+  background-color: rgba(255, 235, 59, 0.4);
   border-radius: 2px;
-  color: transparent !important;
 }
 
 body.light-theme .pdf-annotation-highlight {
@@ -2273,8 +2278,10 @@ body.light-theme .pdf-annotation-highlight {
 }
 
 .pdf-annotation-underline {
-  border-bottom: 2px solid rgba(239, 68, 68, 0.85); /* Premium red underline */
-  color: transparent !important;
+  position: absolute;
+  pointer-events: none !important;
+  box-sizing: border-box;
+  border-bottom: 2px solid rgba(239, 68, 68, 0.85);
 }
 
 body.light-theme .pdf-annotation-underline {

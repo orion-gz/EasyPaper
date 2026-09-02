@@ -10604,10 +10604,8 @@ function applyAnnotationToRange(range, type, textLayerDiv, pageNum, color) {
   const text = range.toString()
   const chosenColor = color || (type === 'highlight' ? state.activeHighlightColor : state.activeUnderlineColor)
 
-  // 1. DOM에 스타일 적용 (텍스트 노드 분할)
-  applyAnnotationToRangeWithoutSave(range, type, chosenColor, offsets.startOffset, offsets.endOffset)
-
-  // 2. LocalStorage에 저장
+  // PDF.js textLayer DOM은 native caret/드래그 계산에 그대로 사용되므로
+  // 노드를 span으로 분할하지 않고 offset만 저장한 뒤 overlay에 표시한다.
   const annotations = loadAnnotations(state.sessionId)
   if (!annotations[`page_${pageNum}`]) {
     annotations[`page_${pageNum}`] = []
@@ -10621,112 +10619,65 @@ function applyAnnotationToRange(range, type, textLayerDiv, pageNum, color) {
     createdAt: new Date().toISOString()
   })
   saveAnnotations(state.sessionId, annotations)
+  reRenderPageAnnotations(textLayerDiv, pageNum)
   globalAnalyticsTracker.trackInteraction(type, pageNum)
   showToast(type === 'highlight' ? '하이라이트가 추가되었습니다 ✓' : '밑줄이 추가되었습니다 ✓', 'success')
 }
 
-// 저장 없이 DOM 상에 직접 span을 감싸서 스타일 입히는 헬퍼
-function applyAnnotationToRangeWithoutSave(range, type, color, overallStartOffset, overallEndOffset) {
-  const textNodes = []
-  const commonAncestor = range.commonAncestorContainer
-
-  if (commonAncestor.nodeType === 3) { // 3 is Text Node
-    if (range.intersectsNode(commonAncestor)) {
-      textNodes.push(commonAncestor)
-    }
-  } else {
-    const treeWalker = document.createTreeWalker(
-      commonAncestor,
-      4 // 4 is NodeFilter.SHOW_TEXT
-    )
-    while (treeWalker.nextNode()) {
-      const node = treeWalker.currentNode
-      if (range.intersectsNode(node)) {
-        textNodes.push(node)
+// 로컬 스토리지에 저장된 캐릭터 오프셋들로부터 어노테이션들을 복원하는 함수
+function domOffsetsToVtmRange(textLayerDiv, vtm, startOffset, endOffset) {
+  let currentPos = 0
+  let charStart = null
+  let charEnd = null
+  const walker = document.createTreeWalker(textLayerDiv, NodeFilter.SHOW_TEXT)
+  while (walker.nextNode()) {
+    const node = walker.currentNode
+    const nextPos = currentPos + node.length
+    const nr = vtm.nodeRanges.find(item => item.node === node)
+    if (nr) {
+      if (charStart === null && startOffset >= currentPos && startOffset <= nextPos) {
+        charStart = nr.start + Math.min(node.length, startOffset - currentPos)
+      }
+      if (charEnd === null && endOffset >= currentPos && endOffset <= nextPos) {
+        charEnd = nr.start + Math.min(node.length, endOffset - currentPos)
       }
     }
+    currentPos = nextPos
   }
-
-  textNodes.forEach((node) => {
-    let startOffset = 0
-    let endOffset = node.length
-
-    if (node === range.startContainer) {
-      startOffset = range.startOffset
-    }
-    if (node === range.endContainer) {
-      endOffset = range.endOffset
-    }
-
-    if (startOffset >= endOffset) return
-
-    const span = document.createElement('span')
-    if (type === 'highlight') {
-      span.className = 'pdf-annotation-highlight'
-      const baseColor = color || '#eab308'
-      span.style.backgroundColor = hexToRgba(baseColor, 0.4)
-    } else {
-      span.className = 'pdf-annotation-underline'
-      const baseColor = color || '#ef4444'
-      span.style.borderBottomColor = baseColor
-    }
-
-    // 호버 툴팁 매칭 및 간편 삭제 처리를 위해 데이터셋 부여
-    if (overallStartOffset !== undefined && overallStartOffset !== null) {
-      span.dataset.startOffset = overallStartOffset
-    }
-    if (overallEndOffset !== undefined && overallEndOffset !== null) {
-      span.dataset.endOffset = overallEndOffset
-    }
-
-    const subRange = document.createRange()
-    subRange.setStart(node, startOffset)
-    subRange.setEnd(node, endOffset)
-
-    try {
-      subRange.surroundContents(span)
-    } catch (e) {
-      console.warn("Failed to surround subrange:", e)
-    }
-  })
+  return charStart !== null && charEnd !== null && charStart < charEnd
+    ? { charStart, charEnd }
+    : null
 }
 
-// 로컬 스토리지에 저장된 캐릭터 오프셋들로부터 어노테이션들을 복원하는 함수
-function applyAnnotationsFromOffsets(textLayerDiv, annotations) {
+function applyAnnotationsFromOffsets(textLayerDiv, annotations, pageNum) {
+  const pageWrapper = textLayerDiv.closest(".pdf-page-wrapper")
+  const overlay = pageWrapper ? getOrCreateOverlay(pageWrapper) : null
+  if (!overlay) return
+  overlay.querySelectorAll(".pdf-annotation-highlight, .pdf-annotation-underline").forEach(el => el.remove())
   if (!annotations || annotations.length === 0) return
 
+  const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+  if (!vtm) return
   annotations.forEach(ann => {
-    let currentPos = 0
-    const range = document.createRange()
-    let startNode = null, startNodeOffset = 0
-    let endNode = null, endNodeOffset = 0
-
-    const walker = document.createTreeWalker(textLayerDiv, NodeFilter.SHOW_TEXT)
-    while (walker.nextNode()) {
-      const node = walker.currentNode
-      const nextPos = currentPos + node.length
-
-      if (!startNode && ann.startOffset >= currentPos && ann.startOffset <= nextPos) {
-        startNode = node
-        startNodeOffset = ann.startOffset - currentPos
-      }
-      if (!endNode && ann.endOffset >= currentPos && ann.endOffset <= nextPos) {
-        endNode = node
-        endNodeOffset = ann.endOffset - currentPos
-      }
-
-      currentPos = nextPos
-    }
-
-    if (startNode && endNode) {
-      try {
-        range.setStart(startNode, startNodeOffset)
-        range.setEnd(endNode, endNodeOffset)
-        applyAnnotationToRangeWithoutSave(range, ann.type, ann.color, ann.startOffset, ann.endOffset)
-      } catch (e) {
-        console.warn("Failed to restore annotation:", ann, e)
-      }
-    }
+    const vtmRange = domOffsetsToVtmRange(textLayerDiv, vtm, ann.startOffset, ann.endOffset)
+    if (!vtmRange) return
+    const rects = getSentenceRects(vtmRange, vtm, textLayerDiv)
+    rects.forEach(rect => {
+      const box = document.createElement("div")
+      box.className = ann.type === "underline" ? "pdf-annotation-underline" : "pdf-annotation-highlight"
+      box.style.left = rect.left + "px"
+      box.style.top = rect.top + "px"
+      box.style.width = rect.width + "px"
+      box.style.height = rect.height + "px"
+      if (ann.type === "underline") box.style.borderBottomColor = ann.color || "#ef4444"
+      else box.style.backgroundColor = hexToRgba(ann.color || "#eab308", 0.4)
+      box.dataset.startOffset = ann.startOffset
+      box.dataset.endOffset = ann.endOffset
+      box.dataset.vtmStart = vtmRange.charStart
+      box.dataset.vtmEnd = vtmRange.charEnd
+      box.dataset.annotationText = ann.text || vtm.fullText.substring(vtmRange.charStart, vtmRange.charEnd)
+      overlay.appendChild(box)
+    })
   })
 }
 
@@ -12255,23 +12206,25 @@ function createSelectionMenu() {
     hideSelectionMenu()
   })
 
-  menu.querySelector('.ask-ai-btn').addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation();
+  menu.querySelector(".ask-ai-btn").addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation()
     const selection = window.getSelection()
-    const text = extractSelectionText(selection).trim()
-    if (text) {
+    const nativeText = extractSelectionText(selection).trim()
+    let text = nativeText
+    let sourcePage = null
+    if (nativeText && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0)
       const commonNode = range.commonAncestorContainer
-      const commonEl = commonNode.nodeType === Node.ELEMENT_NODE
-        ? commonNode
-        : commonNode.parentElement
-      const pageWrapper = commonEl?.closest('.textLayer')?.closest('.pdf-page-wrapper')
-      const sourcePage = pageWrapper ? Number.parseInt(pageWrapper.dataset.page, 10) : null
-      askAIAssistant(text, {
-        sourcePage: Number.isInteger(sourcePage) ? sourcePage : null,
-      })
+      const commonEl = commonNode.nodeType === Node.ELEMENT_NODE ? commonNode : commonNode.parentElement
+      const pageWrapper = commonEl?.closest(".textLayer")?.closest(".pdf-page-wrapper")
+      sourcePage = pageWrapper ? Number.parseInt(pageWrapper.dataset.page, 10) : null
+    } else if (state.hoverSelectedRange && state.hoverSelectedPageNum != null) {
+      const vtm = state.virtualTextMaps && state.virtualTextMaps[state.hoverSelectedPageNum]
+      text = vtm ? vtm.fullText.substring(state.hoverSelectedRange.charStart, state.hoverSelectedRange.charEnd).trim() : ""
+      sourcePage = state.hoverSelectedPageNum
     }
-    selection.removeAllRanges()
+    if (text) askAIAssistant(text, { sourcePage: Number.isInteger(sourcePage) ? sourcePage : null })
+    if (selection) selection.removeAllRanges()
     hideSelectionMenu()
   })
 
@@ -12296,7 +12249,21 @@ function lookupMemoForSentence(pageNum, sentenceIdx) {
   return pageMemos.find(m => m.sentenceIdx === sentenceIdx) || null
 }
 
-// 하이라이트/밑줄 span의 화면 위치로부터 소속 문장의 sentenceIdx를 역추적
+function findAnnotationOverlayAtPoint(pageNum, x, y) {
+  const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+  if (!vtm) return null
+  const charIdx = estimateCharIdxFromPoint(x, y, vtm)
+  if (charIdx < 0) return null
+  const pageWrapper = viewerScrollContainer.querySelector(".pdf-page-wrapper[data-page=\"" + pageNum + "\"]")
+  if (!pageWrapper) return null
+  return Array.from(pageWrapper.querySelectorAll(".pdf-annotation-highlight, .pdf-annotation-underline")).find(box => {
+    const start = Number(box.dataset.vtmStart)
+    const end = Number(box.dataset.vtmEnd)
+    return Number.isFinite(start) && Number.isFinite(end) && charIdx >= start && charIdx < end
+  }) || null
+}
+
+// 하이라이트/밑줄 overlay의 화면 위치로부터 소속 문장의 sentenceIdx를 역추적
 function resolveSentenceIdxFromSpan(span, pageNum) {
   const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
   const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum]
@@ -12501,7 +12468,7 @@ function createAnnHoverTooltip() {
 
   tooltip.querySelector('.ask-ai-ann-btn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation()
-    const text = activeHoveredSpan ? activeHoveredSpan.textContent.trim() : activeHoveredText
+    const text = activeHoveredSpan ? (activeHoveredSpan.dataset.annotationText || activeHoveredText) : activeHoveredText
     if (text) {
       askAIAssistant(text, { sourcePage: activeHoveredPageNum })
     }
@@ -12549,7 +12516,7 @@ function showAnnHoverTooltipForSpan(annSpan) {
   activeHoveredPageNum = (pageNum != null && !isNaN(pageNum)) ? pageNum : null
   activeHoveredSentenceIdx = sentenceIdx
   activeHoveredMemo = lookupMemoForSentence(activeHoveredPageNum, sentenceIdx)
-  activeHoveredText = annSpan.textContent.trim()
+  activeHoveredText = annSpan.dataset.annotationText || annSpan.textContent.trim()
 
   positionAndShowAnnHoverTooltip(annSpan.getBoundingClientRect())
 }
@@ -12694,6 +12661,7 @@ function handleAnnotate(type, color) {
         hideSelectionMenu();
         state.hoverSelectedPageNum = null;
         state.hoverSelectedSentenceIdx = null;
+        state.hoverSelectedRange = null
       } catch(err) {
         console.warn('handleAnnotate VTM path failed:', err);
       }
@@ -12789,11 +12757,11 @@ function reRenderPageAnnotations(textLayerDiv, pageNum) {
 
   textLayerDiv.normalize()
 
-  const annotations = loadAnnotations(state.sessionId)
-  applyAnnotationsFromOffsets(textLayerDiv, annotations[`page_${pageNum}`] || [])
-
-  // DOM 구조 변경 후 VirtualTextMap 및 문장 매핑 상태 재생성
+  // 이전 버전이 만든 중첩 span을 정리한 뒤 VTM을 먼저 갱신한다.
   segmentPdfElements(textLayerDiv, pageNum)
+
+  const annotations = loadAnnotations(state.sessionId)
+  applyAnnotationsFromOffsets(textLayerDiv, annotations["page_" + pageNum] || [], pageNum)
 
   // Restore floating memos for the page
   renderPageMemos(pageNum)
@@ -12855,6 +12823,7 @@ function hideSelectionMenuWithDelay() {
     state.hoverSelectedPdfElements = null
     state.hoverSelectedPageNum = null
     state.hoverSelectedSentenceIdx = null
+    state.hoverSelectedRange = null
   }, 250)
 }
 
@@ -12945,7 +12914,7 @@ window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   if (!state.sessionId) return
   const annotations = loadAnnotations(state.sessionId)
   if (annotations[`page_${pageNum}`]) {
-    applyAnnotationsFromOffsets(textLayerDiv, annotations[`page_${pageNum}`])
+    applyAnnotationsFromOffsets(textLayerDiv, annotations["page_" + pageNum], pageNum)
   }
 
   renderImageOverlayLayer(textLayerDiv, pageNum)
@@ -15471,11 +15440,18 @@ document.addEventListener('mousedown', (e) => {
   state.hoverSelectedPdfElements = null;
   state.hoverSelectedPageNum = null;
   state.hoverSelectedSentenceIdx = null;
+  state.hoverSelectedRange = null
   if (sentenceHoverTimer) {
     clearTimeout(sentenceHoverTimer);
     sentenceHoverTimer = null;
   }
-  if (e.target.closest('.pdf-figure-overlay')) return;
+  if (e.target.closest(".pdf-figure-overlay")) return;
+  if (e.target.closest(".textLayer")) {
+    viewerScrollContainer?.querySelectorAll(".pdf-highlight-overlay").forEach(overlay => {
+      clearOverlayBoxes(overlay, "sentence-hover-box", "sentence-equation-box")
+    })
+    hideSelectionMenu()
+  }
   if (selectionMenu && !selectionMenu.contains(e.target)) {
     setTimeout(() => {
       const selection = window.getSelection();
@@ -16048,7 +16024,7 @@ function getOrCreateOverlay(pageWrapper) {
     overlay = document.createElement('div');
     overlay.className = 'pdf-highlight-overlay';
     // .pdf-page-wrapper 내에서 canvas/textLayer와 동일한 절대 좌표계
-    const inner = pageWrapper.querySelector('.page') || pageWrapper;
+    const inner = pageWrapper.querySelector(".pdf-page-inner") || pageWrapper;
     inner.appendChild(overlay);
   }
   return overlay;
@@ -16664,9 +16640,30 @@ function estimateCharIdxFromPoint(x, y, vtm) {
       range.selectNode(nr.node);
       const rect = range.getBoundingClientRect();
       if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-        const ratio = rect.width > 0 ? (x - rect.left) / rect.width : 0;
-        const charLen = nr.end - nr.start;
-        return nr.start + Math.round(ratio * charLen);
+        // 비례폭 글꼴·ligature에서는 스팬 폭을 글자 수로 균등 분할할 수 없다.
+        // 실제 문자별 DOM Range를 VTM 수명 동안 캐시해 가장 가까운 caret을 찾는다.
+        if (!vtm.charRectCache) vtm.charRectCache = new WeakMap();
+        let charRects = vtm.charRectCache.get(nr.node);
+        if (!charRects) {
+          charRects = [];
+          for (let i = 0; i < nr.node.length; i++) {
+            const charRange = document.createRange();
+            charRange.setStart(nr.node, i);
+            charRange.setEnd(nr.node, i + 1);
+            const charRect = charRange.getBoundingClientRect();
+            if (charRect.width > 0 || charRect.height > 0) charRects.push({ offset: i, left: charRect.left - rect.left, width: charRect.width });
+          }
+          vtm.charRectCache.set(nr.node, charRects);
+        }
+        let best = null;
+        let bestDistance = Infinity;
+        for (const item of charRects) {
+          const centerX = rect.left + item.left + item.width / 2;
+          const distance = Math.abs(x - centerX);
+          if (distance < bestDistance) { best = item; bestDistance = distance; }
+        }
+        if (best) return nr.start + best.offset + (x > rect.left + best.left + best.width / 2 ? 1 : 0);
+        return nr.start;
       }
     } catch(e) { /* no-op */ }
   }
@@ -16781,56 +16778,56 @@ function detectSentenceAtMouse(e) {
 }
 
 // 700ms 드웰 후 문장 전체를 자동 선택하고 선택 메뉴 표시하는 헬퍼
+function createDomRangeFromVtmRange(vtm, charStart, charEnd) {
+  let startNode = null, startOff = 0, endNode = null, endOff = 0
+  for (const nr of vtm.nodeRanges) {
+    if (startNode === null && nr.end > charStart) {
+      startNode = nr.node
+      startOff = Math.max(0, charStart - nr.start)
+    }
+    if (nr.start < charEnd) {
+      endNode = nr.node
+      endOff = Math.min(nr.node.length, charEnd - nr.start)
+    }
+  }
+  if (!startNode || !endNode) return null
+  try {
+    const range = document.createRange()
+    range.setStart(startNode, startOff)
+    range.setEnd(endNode, endOff)
+    return range
+  } catch (e) {
+    return null
+  }
+}
+
+// hover는 시각적 overlay와 내부 범위만 갱신한다. native Selection은 사용자의
+// 실제 드래그에만 맡겨 hover 직후에도 caret이 끊기지 않게 한다.
 function startDwellSelection(pageNum, sentenceRange) {
-  if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null; }
+  if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null }
 
   sentenceHoverTimer = setTimeout(() => {
-    if (state.isSelectionDragging) return;
-    const curSel = window.getSelection();
-    if (curSel && !curSel.isCollapsed) return;
+    if (state.isSelectionDragging) return
+    const selection = window.getSelection()
+    if (selection && !selection.isCollapsed) return
 
-    const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
-    if (!vtm) return;
+    const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
+    if (!vtm) return
+    const range = createDomRangeFromVtmRange(vtm, sentenceRange.charStart, sentenceRange.charEnd)
+    if (!range) return
 
-    const { nodeRanges } = vtm;
-    const srStart = sentenceRange.charStart;
-    const srEnd   = sentenceRange.charEnd;
+    state.hoverSelectedPageNum = pageNum
+    state.hoverSelectedSentenceIdx = sentenceRange.sentenceIdx
+    state.hoverSelectedRange = { charStart: sentenceRange.charStart, charEnd: sentenceRange.charEnd }
 
-    // 시작 노드 찾기
-    let startNode = null, startOff = 0;
-    let endNode = null, endOff = 0;
-    for (const nr of nodeRanges) {
-      if (startNode === null && nr.end > srStart) {
-        startNode = nr.node;
-        startOff  = Math.max(0, srStart - nr.start);
-      }
-      if (nr.start < srEnd) {
-        endNode = nr.node;
-        endOff  = Math.min(nr.node.length, srEnd - nr.start);
-      }
-    }
-
-    if (startNode && endNode) {
-      try {
-        const range = document.createRange();
-        range.setStart(startNode, startOff);
-        range.setEnd(endNode, endOff);
-        curSel.removeAllRanges();
-        curSel.addRange(range);
-
-        state.hoverSelectedPageNum = pageNum;
-        state.hoverSelectedSentenceIdx = sentenceRange.sentenceIdx;
-
-        const selRect = range.getBoundingClientRect();
-        const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`);
-        const textLayerDiv = pw && pw.querySelector('.textLayer');
-        const hasExistingAnnotation = textLayerDiv
-          ? selectionOverlapsExistingAnnotation(range, textLayerDiv, pageNum)
-          : true;
-        showSelectionMenu(selRect, true, hasExistingAnnotation);
-      } catch(e) { /* no-op */ }
-    }
-  }, 700);
+    const pw = viewerScrollContainer.querySelector(".pdf-page-wrapper[data-page=\"" + pageNum + "\"]")
+    const textLayerDiv = pw && pw.querySelector(".textLayer")
+    const hasExistingAnnotation = textLayerDiv
+      ? selectionOverlapsExistingAnnotation(range, textLayerDiv, pageNum)
+      : true
+    const rect = range.getBoundingClientRect()
+    showSelectionMenu(rect, true, hasExistingAnnotation)
+  }, 700)
 }
 
 if (viewerScrollContainer) {
@@ -16845,9 +16842,9 @@ if (viewerScrollContainer) {
 
     if (state.isSelectionDragging) return;
 
-    // 어노테이션 스팬 툴팁
-    const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
-    if (annSpan) showAnnHoverTooltipForSpan(annSpan);
+    // overlay는 pointer-events:none으로 native 드래그를 방해하지 않는다.
+    // 주석 hover 대상은 아래에서 textLayer 문자 위치로 판정한다.
+    let annSpan = null;
 
     // 번역 패널 호버는 mouseover로 처리됨 (기존 trans-sentence 방식 유지)
     if (e.target.closest('.trans-page-block')) return;
@@ -16872,6 +16869,8 @@ if (viewerScrollContainer) {
     }
 
     const { pageNum, sentenceRange } = detected;
+    annSpan = findAnnotationOverlayAtPoint(pageNum, e.clientX, e.clientY);
+    if (annSpan) showAnnHoverTooltipForSpan(annSpan);
     const isSame = (currentHoverPage === pageNum && currentHoverSentenceIdx === sentenceRange.sentenceIdx);
 
     // 하이라이트/밑줄 span 위가 아니면서 해당 문장에 메모가 있는 경우 - 메모 전용 호버 툴팁 노출
