@@ -8,6 +8,12 @@ const documentFixture = {
   total_pages: 1,
   metadata: { title: "Accessible document" },
   translated_pages: [],
+  document_mode: "research",
+  document_type: "research_paper",
+  processing: {
+    badge: "external_transfer",
+    transfer_items: ["document_text"],
+  },
 }
 
 async function openViewer(page) {
@@ -41,7 +47,6 @@ test("뷰어 툴바를 Tab만으로 논리적인 순서로 이동하고 포커�
   const tabOrder = [
     "#back-btn",
     "#logo-btn",
-    "#viewer-read-toggle-btn",
     "#outline-toggle-btn",
     "#doc-title-edit-btn",
     "#page-input",
@@ -92,7 +97,7 @@ test("메뉴와 개요를 키보드로 열고 Escape로 원래 트리거에 복�
   await menuButton.focus()
   await menuButton.press("Enter")
   await expect(menuButton).toHaveAttribute("aria-expanded", "true")
-  await expect(page.locator("#translation-scope-btn")).toBeFocused()
+  await expect(page.locator("#viewer-read-toggle-btn")).toBeFocused()
   await page.keyboard.press("Escape")
   await expect(menuButton).toBeFocused()
   await expect(menuButton).toHaveAttribute("aria-expanded", "false")
@@ -104,6 +109,27 @@ test("메뉴와 개요를 키보드로 열고 Escape로 원래 트리거에 복�
   await page.keyboard.press("Escape")
   await expect(outlineButton).toBeFocused()
   await expect(outlineButton).toHaveAttribute("aria-expanded", "false")
+})
+
+test("케밥 메뉴의 정보 항목이 문서 정보 다이얼로그를 연다", async ({ page }) => {
+  await openViewer(page)
+
+  const menuButton = page.locator("#toolbar-kebab-btn")
+  await menuButton.click()
+  await page.locator("#viewer-document-info-btn").click()
+
+  const modal = page.locator("#viewer-document-info-modal")
+  await expect(modal).toBeVisible()
+  await expect(modal).toHaveAttribute("role", "dialog")
+  await expect(page.locator("#viewer-document-info-name")).toHaveText("Accessible document")
+  await expect(page.locator("#viewer-document-info-filename")).toHaveText("Accessible.pdf")
+  await expect(page.locator("#viewer-document-type-chip")).not.toBeEmpty()
+  await expect(page.locator("#viewer-processing-badge")).toHaveText("외부 전송")
+  await expect(page.locator("#toolbar-kebab-menu")).toBeHidden()
+
+  await page.keyboard.press("Escape")
+  await expect(modal).toBeHidden()
+  await expect(menuButton).toBeFocused()
 })
 
 test("채팅 패널과 리사이저를 키보드로 조작하고 닫을 때 포커스를 복귀한다", async ({ page }) => {

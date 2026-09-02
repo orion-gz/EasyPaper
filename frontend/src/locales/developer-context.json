@@ -4192,5 +4192,26 @@
   },
   "library:article.capture": {
     "description": "Button capturing the current saved article section for AI chat."
+  },
+  "viewer:documentInfo.open": {
+    "description": "Tooltip for opening the viewer document information dialog."
+  },
+  "viewer:documentInfo.menu": {
+    "description": "Kebab menu item that opens document information."
+  },
+  "viewer:documentInfo.title": {
+    "description": "Title of the viewer document information dialog."
+  },
+  "viewer:documentInfo.name": {
+    "description": "Label for the displayed document title."
+  },
+  "viewer:documentInfo.filename": {
+    "description": "Label for the original document filename."
+  },
+  "viewer:documentInfo.type": {
+    "description": "Label for the document type badge."
+  },
+  "viewer:documentInfo.processing": {
+    "description": "Label for the local or external data processing badge."
   }
 }

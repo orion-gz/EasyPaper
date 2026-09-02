@@ -1130,4 +1130,9 @@
   ,"웹에서 가져오기": "library:source.web"
   ,"PDF 또는 아티클 URL": "library:source.webHelp"
   ,"문서 URL": "library:source.urlLabel"
+  ,"문서 정보 보기": "viewer:documentInfo.open"
+  ,"문서 정보": "viewer:documentInfo.title"
+  ,"제목": "viewer:documentInfo.name"
+  ,"파일명": "viewer:documentInfo.filename"
+  ,"데이터 처리": "viewer:documentInfo.processing"
 }

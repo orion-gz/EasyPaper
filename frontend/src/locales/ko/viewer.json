@@ -44,5 +44,12 @@
   "a11y.red": "빨강",
   "a11y.previewSize": "미리보기 크기 너비 {{width}}픽셀, 높이 {{height}}픽셀",
   "sync.conflict": "동기화 충돌이 있어 두 버전을 모두 보존했습니다.",
-  "sync.delayed": "네트워크 문제로 주석 동기화가 지연되고 있습니다."
+  "sync.delayed": "네트워크 문제로 주석 동기화가 지연되고 있습니다.",
+  "documentInfo.open": "문서 정보 보기",
+  "documentInfo.menu": "정보",
+  "documentInfo.title": "문서 정보",
+  "documentInfo.name": "제목",
+  "documentInfo.filename": "파일명",
+  "documentInfo.type": "문서 종류",
+  "documentInfo.processing": "데이터 처리"
 }

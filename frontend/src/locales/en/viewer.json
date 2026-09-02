@@ -44,5 +44,12 @@
   "a11y.red": "Red",
   "a11y.previewSize": "Preview size {{width}} by {{height}} pixels",
   "sync.conflict": "A sync conflict occurred, so both versions were preserved.",
-  "sync.delayed": "Annotation sync is delayed due to a network problem."
+  "sync.delayed": "Annotation sync is delayed due to a network problem.",
+  "documentInfo.open": "View document information",
+  "documentInfo.menu": "Information",
+  "documentInfo.title": "Document information",
+  "documentInfo.name": "Title",
+  "documentInfo.filename": "Filename",
+  "documentInfo.type": "Document type",
+  "documentInfo.processing": "Data processing"
 }

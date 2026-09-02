@@ -835,6 +835,11 @@ const toast                 = $('toast')
 const a11yLiveRegion        = $('a11y-live-region')
 const toolbarKebabBtn       = $('toolbar-kebab-btn')
 const toolbarKebabMenu      = $('toolbar-kebab-menu')
+const viewerDocumentInfoBtn = $('viewer-document-info-btn')
+const viewerDocumentInfoModal = $('viewer-document-info-modal')
+const viewerDocumentInfoCloseBtn = $('viewer-document-info-close-btn')
+const viewerDocumentInfoName = $('viewer-document-info-name')
+const viewerDocumentInfoFilename = $('viewer-document-info-filename')
 
 // AI Chat Sidebar DOM references
 const chatToggleBtn      = $('chat-toggle-btn')
@@ -2268,6 +2273,24 @@ if (toolbarKebabBtn && toolbarKebabMenu) {
   })
 }
 
+if (viewerDocumentInfoBtn && viewerDocumentInfoModal) {
+  const closeViewerDocumentInfo = () => closeOverlayModal(viewerDocumentInfoModal)
+  viewerDocumentInfoBtn.addEventListener('click', () => {
+    if (viewerDocumentInfoName) viewerDocumentInfoName.textContent = state.title || state.filename || '-'
+    if (viewerDocumentInfoFilename) viewerDocumentInfoFilename.textContent = state.filename || '-'
+    toolbarKebabMenu?.classList.add('hidden')
+    toolbarKebabBtn?.focus()
+    openOverlayModal(viewerDocumentInfoModal)
+  })
+  viewerDocumentInfoCloseBtn?.addEventListener('click', closeViewerDocumentInfo)
+  viewerDocumentInfoModal.addEventListener('click', event => {
+    if (event.target === viewerDocumentInfoModal) closeViewerDocumentInfo()
+  })
+  viewerDocumentInfoModal.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeViewerDocumentInfo()
+  })
+}
+
 const viewerClearCacheBtn = $('viewer-clear-cache-btn')
 if (viewerClearCacheBtn) {
   viewerClearCacheBtn.addEventListener('click', async () => {
@@ -2514,6 +2537,7 @@ if (viewerReadToggleBtn) {
       state.currentDocMetadata.read = nextReadState
       state.currentDocMetadata.read_at = payload.read_at
       viewerReadToggleBtn.classList.toggle('active', nextReadState)
+      toolbarKebabMenu?.classList.add('hidden')
       showToast(nextReadState ? '읽은 논문으로 표시되었습니다.' : '보관함으로 이동되었습니다.', 'success')
       await loadLibraryCount()
     } catch (err) {
@@ -10208,6 +10232,12 @@ async function openFromLibrary(doc, shouldPushState = true) {
     state.pageInsightCache = {}
     // 번역이 완료된 페이지 번호만 기록하고 번역본 로드는 lazy-load에 위임
     state.translatedPages  = new Set(doc.translated_pages || [])
+    if (viewerDocumentTypeChip) {
+      const docMode = doc.document_mode || "research"
+      viewerDocumentTypeChip.className = `document-type-chip ${docMode}`
+      viewerDocumentTypeChip.textContent = workspaceModeController.getTypeLabel(docMode, doc.document_type || "research_paper")
+    }
+    renderViewerProcessingBadge(doc.processing)
 
     // 채팅 내역 초기화
     state.chatHistory = []
@@ -10238,12 +10268,6 @@ async function openFromLibrary(doc, shouldPushState = true) {
     if (!isCurrentOpen() || loadedPages === null) return
     docTitle.textContent  = displayTitle
     docTitle.title        = doc.filename
-    if (viewerDocumentTypeChip) {
-      const docMode = doc.document_mode || "research"
-      viewerDocumentTypeChip.className = `document-type-chip ${docMode}`
-      viewerDocumentTypeChip.textContent = workspaceModeController.getTypeLabel(docMode, doc.document_type || "research_paper")
-    }
-    renderViewerProcessingBadge(doc.processing)
     pageTotal.textContent = `/ ${doc.total_pages}`
     pageInput.max   = doc.total_pages
 
