@@ -574,11 +574,10 @@ function initializeSettingsInformationArchitecture() {
     pane.prepend(header)
   }
 
-  // Tauri에서는 git 커밋 해시 대신 앱 패키지 버전을 사용한다. 데스크탑 전용
-  // 라벨을 공통 버전/변경 이력 카드로 옮겨 두 화면에서 같은 진입점을 제공한다.
-  const versionLabel = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-    ? $('tauri-current-version-label')
-    : $('current-version-label')
+  // 정보 화면은 실행 환경과 관계없이 백엔드가 제공하는 동일한 버전과 변경
+  // 이력을 보여준다. Tauri 패키지 버전은 데이터·시스템의 앱 업데이트 카드에만
+  // 표시해 웹의 Git 버전/CHANGELOG 정보와 섞이지 않게 한다.
+  const versionLabel = $('current-version-label')
   const infoBody = $('tab-info')?.querySelector('.modal-form')
   if (versionLabel && infoBody) {
     const versionCard = document.createElement('section')
@@ -4496,7 +4495,10 @@ async function loadTauriAppVersion() {
 
 function resetTauriUpdateState() {
   pendingTauriUpdate = null
-  if (tauriUpdateInstallBtn) tauriUpdateInstallBtn.disabled = true
+  if (tauriUpdateInstallBtn) {
+    tauriUpdateInstallBtn.disabled = true
+    tauriUpdateInstallBtn.classList.add('hidden')
+  }
   if (tauriUpdateNotesBox) tauriUpdateNotesBox.classList.add('hidden')
 }
 
@@ -4525,7 +4527,10 @@ async function checkTauriUpdate({ silent = false } = {}) {
         tauriUpdateNotes.textContent = update.body || '세부 변경 내역이 제공되지 않았습니다.'
       }
       if (tauriUpdateNotesBox) tauriUpdateNotesBox.classList.remove('hidden')
-      if (tauriUpdateInstallBtn) tauriUpdateInstallBtn.disabled = false
+      if (tauriUpdateInstallBtn) {
+        tauriUpdateInstallBtn.disabled = false
+        tauriUpdateInstallBtn.classList.remove('hidden')
+      }
       if (tauriUpdateStatus) {
         tauriUpdateStatus.style.color = '#10b981'
         tauriUpdateStatus.textContent = '새 업데이트가 있습니다.'
@@ -4768,7 +4773,7 @@ async function refreshSettingsAppInfo() {
   try {
     const info = await getFullChangelogAPI()
     fullChangelogMarkdown = info.content || ''
-    if (!isTauriDesktop && currentVersionLabel && info.version) {
+    if (currentVersionLabel && info.version) {
       currentVersionLabel.textContent = `현재 버전: ${formatVersionLabel(info.version, info.version_date)}`
     }
   } catch (err) {
@@ -4787,7 +4792,7 @@ if (fullChangelogModal) {
   })
 }
 
-const fullChangelogTrigger = isTauriDesktop ? tauriCurrentVersionLabel : currentVersionLabel
+const fullChangelogTrigger = currentVersionLabel
 if (fullChangelogTrigger) {
   fullChangelogTrigger.addEventListener('click', async () => {
     if (!fullChangelogModal) return
