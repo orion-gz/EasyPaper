@@ -1,302 +1,101 @@
 <div align="center">
 
-<img src="./frontend/public/icon-192.png" width="88" height="88" alt="EasyPaper 아이콘"><br>
+<img src="./frontend/public/icon-192.png" width="88" height="88" alt="EasyPaper icon"><br>
 
 # EasyPaper
 
-**학술 PDF 논문을 AI로 번역하고, 논문 내용을 바탕으로 바로 대화하는 통합 서비스 — 웹 & 데스크톱 앱**
+AI-assisted reading and translation for research papers and general documents.
 
-[![Last Commit](https://shieldcn.dev/github/last-commit/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/commits/main)
-[![Open Issues](https://shieldcn.dev/github/issues/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/issues)
-[![Stars](https://shieldcn.dev/github/stars/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/stargazers)
-[![Changelog](https://shieldcn.dev/badge/changelog-keep_a_changelog-4f7cff.svg)](./CHANGELOG.md)
-[![PRs Welcome](https://shieldcn.dev/badge/PRs-welcome-4f7cff.svg)](https://github.com/orion-gz/EasyPaper/pulls)
+[한국어 README](./README.ko.md)
 
-[![Python](https://shieldcn.dev/badge/Python-3.8%2B-3776AB.svg?logo=python&logoColor=white)](backend/requirements.txt)
-[![FastAPI](https://shieldcn.dev/badge/FastAPI-0.115-009688.svg?logo=fastapi&logoColor=white)](backend/requirements.txt)
-[![Vite](https://shieldcn.dev/badge/Vite-5-646CFF.svg?logo=vite&logoColor=white)](frontend/package.json)
-[![SQLite](https://shieldcn.dev/badge/SQLite-DB-003B57.svg?logo=sqlite&logoColor=white)](backend/services/db.py)
-[![Docker Ready](https://shieldcn.dev/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](./Dockerfile)
-[![Platform](https://shieldcn.dev/badge/platform-Windows_%7C_macOS_%7C_Linux-lightgrey.svg)](#-빠른-시작)
+[![Release](https://img.shields.io/github/v/release/orion-gz/EasyPaper?display_name=tag&label=release&color=4f7cff)](https://github.com/orion-gz/EasyPaper/releases/latest)
+[![Last commit](https://img.shields.io/github/last-commit/orion-gz/EasyPaper?label=last%20commit)](https://github.com/orion-gz/EasyPaper/commits/main)
+[![Stars](https://img.shields.io/github/stars/orion-gz/EasyPaper?label=stars)](https://github.com/orion-gz/EasyPaper/stargazers)
+[![Issues](https://img.shields.io/github/issues/orion-gz/EasyPaper?label=issues)](https://github.com/orion-gz/EasyPaper/issues)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-4f7cff)](https://github.com/orion-gz/EasyPaper/pulls)
 
-[![Download Desktop App](https://shieldcn.dev/github/v/release/orion-gz/EasyPaper.svg?label=%E2%AC%87%EF%B8%8F%20Download%20Desktop%20App)](https://github.com/orion-gz/EasyPaper/releases/latest)
+[![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)](backend/requirements.txt)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](backend/requirements.txt)
+[![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)](frontend/package.json)
+[![SQLite](https://img.shields.io/badge/SQLite-DB-003B57?logo=sqlite&logoColor=white)](backend/services/db.py)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](Dockerfile)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#quick-start)
 
 </div>
 
-<br>
-
-논문을 업로드하면 원문 옆에 AI 번역본이 나란히 표시되고, 궁금한 내용을 그 자리에서 바로 질문할 수 있습니다. 사이드바 기반 Research Workspace를 통해 내 라이브러리, 읽기 전 브리핑, 독립 AI Chats 대화, 개인화 지식 그래프(Research Graph), 독서 활동 분석(Reading History)까지 한곳에서 통합 활용할 수 있습니다. 번역·어시스턴트 모델로는 로컬 Ollama, 외부 API(Gemini/Claude/OpenAI), CLI 기반 엔진(Antigravity/Claude Code/Codex)을 모두 지원합니다. Windows/macOS/Linux용 네이티브 데스크톱 앱과 직접 구동하는 웹 앱 두 가지 방식으로 모두 사용할 수 있습니다.
-
-<br>
+EasyPaper is a web and desktop workspace for translating, reading, annotating, and discussing PDFs with AI. Use local Ollama, Gemini, Claude, OpenAI, or supported CLI providers including Antigravity, Claude Code, and Codex.
 
 <p align="center">
-  <img src="./image/dashboard.png" alt="EasyPaper Research Workspace 대시보드" width="100%">
-  <sub>연구 워크스페이스 대시보드 — 활동 요약, AI 인사이트, 지도교수 관점 맞춤 추천 논문을 한눈에 확인</sub>
+  <img src="./image/dashboard_research_mode.png" alt="EasyPaper research mode dashboard" width="100%">
+  <sub>Research mode workspace</sub>
 </p>
 
+## Two reading modes
+
+| Mode | For | What it emphasizes |
+|---|---|---|
+| Research mode | Papers, surveys, theses, preprints, and academic reports | Paper structure, methods, evidence, citations, research graphs, comparisons, and pre-reading briefs |
+| General document mode | Technical documentation, books, articles, reports, manuals, policies, presentations, and other general documents | Document-aware translation, summaries, vocabulary, focused Q&A, full-text search, and document overviews |
+
+Both modes currently accept PDF files. General document mode lets you work with PDF exports of documents such as DOCX files while preserving the purpose and structure appropriate to the selected document type.
+
 <details>
-<summary><b>Research Workspace 주요 기능 스크린샷</b> — 뷰어, 라이브러리, AI Chats, 지식 그래프, 독서 분석, 브리핑</summary>
+<summary>More screenshots</summary>
+
 <br>
 
-<table>
-<tr>
-<td width="50%"><img src="./image/viewer1.webp" alt="듀얼 패널 뷰어 + AI 어시스턴트"><br><sub align="center"><b>듀얼 패널 뷰어</b>: 원문 · 번역 · AI 채팅 및 수식 렌더링</sub></td>
-<td width="50%"><img src="./image/library.png" alt="내 라이브러리 화면"><br><sub align="center"><b>내 라이브러리</b>: AI 카테고리 자동 태깅 및 카드/리스트 보관함</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="./image/ai_chats.png" alt="AI Chats 독립 대화 화면"><br><sub align="center"><b>AI Chats</b>: 여러 논문을 아우르는 독립 대화 및 우측 드로어</sub></td>
-<td width="50%"><img src="./image/research_graph.png" alt="Research Graph 지식 그래프"><br><sub align="center"><b>Research Graph</b>: 논문×개념 매트릭스 히트맵 및 지식 그래프</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="./image/reading_history.png" alt="Reading History 독서 분석"><br><sub align="center"><b>Reading History</b>: 독서 캘린더 히트맵 및 활동 타임라인 분석</sub></td>
-<td width="50%"><img src="./image/notes.png" alt="읽기 전 브리핑 및 노트 요약"><br><sub align="center"><b>읽기 전 브리핑 & 노트</b>: 논문 브리핑 및 Floating 메모 요약</sub></td>
-</tr>
-</table>
+| | |
+|---|---|
+| <img src="./image/dashboard_research_mode.png" alt="Research mode dashboard"> | <img src="./image/dashboard_doc_mode.png" alt="General document mode dashboard"> |
+| Research mode dashboard | General document mode dashboard |
+| <img src="./image/viewer_ai_assistant.png" alt="Viewer with AI assistant"> | <img src="./image/viewer_image_overlay.png" alt="Viewer image overlay"> |
+| Viewer and AI assistant | Figure and image reference overlay |
+| <img src="./image/viewer_memo.png" alt="Viewer memo"> | <img src="./image/viewer_ref_overlay.png" alt="Viewer reference overlay"> |
+| Annotations and floating memos | Citation reference overlay |
+| <img src="./image/library.png" alt="Document library"> | <img src="./image/ai_chats.png" alt="AI Chats"> |
+| Library | AI Chats |
+| <img src="./image/heatmap.png" alt="Research graph heatmap"> | <img src="./image/reading_history.png" alt="Reading history"> |
+| Research graph heatmap | Reading history |
 
 </details>
 
-<details>
-<summary><b>정밀 참조 오버레이 미리보기</b> — Figure · Table · 수식 · 참고문헌 참조</summary>
-<br>
+## Features
 
-<table>
-<tr>
-<td width="50%"><img src="./image/figure_overlay.png" alt="Figure 참조 호버 오버레이"><br><sub align="center">본문에서 그림 번호를 참조하면 해당 Figure를 바로 미리보기</sub></td>
-<td width="50%"><img src="./image/table_overlay.png" alt="Table 참조 호버 오버레이"><br><sub align="center">Table 참조도 동일하게 원문 위치를 크롭해 보여줍니다</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="./image/eq_overlay.png" alt="수식 참조 호버 오버레이"><br><sub align="center">수식 번호 참조 시 해당 수식만 정확히 크롭해 표시</sub></td>
-<td width="50%"><img src="./image/reference_overlay.png" alt="참고문헌 호버 오버레이"><br><sub align="center">인용 번호 마우스 오버 시 참고문헌 원문 + 검색 링크 표시</sub></td>
-</tr>
-</table>
+- Side-by-side source and AI translation with sentence-level alignment
+- Context-aware AI chat, pre-reading briefs, summaries, and vocabulary support
+- Research workspace with library, AI Chats, research graph, reading analytics, and recommendations
+- Annotations, highlights, floating memos, and annotated PDF export
+- Reference, figure, table, and equation overlays for research PDFs
+- Native desktop apps for Windows, macOS, and Linux, plus a self-hosted web app
 
-</details>
+## Quick start
 
-<br>
+### Desktop app
 
-## 목차
+Download the installer for your platform from the [latest release](https://github.com/orion-gz/EasyPaper/releases/latest). The Tauri desktop app includes the backend sidecar, so Python and Node.js are not required.
 
-- [빠른 시작](#-빠른-시작)
-- [주요 기능](#-주요-기능)
-- [필수 요구사항](#-필수-요구사항)
-- [수동 설치 방법](#-수동-설치-방법)
-- [초기 로그인 계정](#-초기-로그인-계정)
-- [테스트](#-테스트)
-- [데이터 백업 및 복원](#-데이터-백업-및-복원)
-- [상시 구동 — systemd 서비스 등록](#-상시-구동--systemd-서비스-등록-선택-사항)
-- [Docker로 실행하기](#-docker로-실행하기)
-- [CLI 기반 AI 엔진](#-cli-기반-ai-엔진-antigravity--claude-code--codex)
+| OS | Installer |
+|---|---|
+| Windows | `.msi` or `.exe` |
+| macOS (Apple Silicon) | `_aarch64.dmg` |
+| Linux | `.AppImage`, `.deb`, or `.rpm` |
 
----
+At first launch, choose and configure an AI provider in the onboarding flow. Unsigned desktop builds can trigger an operating-system security warning.
 
-<a id="-빠른-시작"></a>
-## 🚀 빠른 시작
+### Run from source
 
-EasyPaper는 **① 설치 없이 바로 쓰는 네이티브 데스크톱 앱**과 **② 직접 구동하는 웹 앱**, 두 가지 방식 중 편한 쪽으로 사용할 수 있습니다.
+Requirements: Python 3.8+, Node.js 16+, and npm. Ollama is optional.
 
-### 1. 데스크톱 앱으로 설치하기 (권장)
-
-Tauri 기반 네이티브 앱으로, Python/Node.js 설치 없이 바로 실행됩니다. 번역 엔진(FastAPI 백엔드)이 앱 안에 사이드카로 내장되어 있어 별도 서버 구동 과정이 필요 없습니다.
-
-1. **[⬇️ 최신 릴리스 다운로드](https://github.com/orion-gz/EasyPaper/releases/latest)** 에서 운영체제에 맞는 설치 파일을 받습니다.
-
-   | OS | 파일 |
-   |---|---|
-   | Windows | `.msi` / `.exe` |
-   | macOS (Apple Silicon) | `_aarch64.dmg` |
-   | Linux | `.AppImage` / `.deb` / `.rpm` |
-
-   > macOS Intel(x64) 빌드는 GitHub Actions의 `macos-13` 러너 용량 문제로 현재 배포되지 않습니다. 추후 안정화되면 다시 추가될 예정입니다.
-
-2. 설치 후 앱을 실행하면 첫 화면에서 AI 엔진(Ollama/Gemini/Claude/OpenAI/CLI) 온보딩 마법사가 안내합니다.
-3. 이후 새 버전이 배포되면 앱이 자동으로 감지하여, 설정 화면의 버튼 한 번으로 업데이트를 내려받고 설치할 수 있습니다.
-
-> ⚠️ 아직 macOS 공증(Notarization)·Windows Authenticode 코드사이닝을 적용하지 않아, 설치 시 운영체제 보안 경고가 뜹니다. 아래 안내를 따라주세요.
->
-> **macOS**: 앱이 완전히 서명되지 않은 상태라 최신 macOS(Ventura 이후)에서는 우클릭 → 열기로 우회되지 않고 **"앱이 손상되었기 때문에 열 수 없습니다"** 라는 오해의 소지가 있는 메시지가 뜹니다. 실제로 파일이 손상된 게 아니라 다운로드 시 붙는 quarantine 속성 때문이니, 터미널에서 아래 명령으로 지운 뒤 다시 실행하세요.
-> ```bash
-> xattr -cr /Applications/EasyPaper.app
-> ```
->
-> **Windows**: "Windows의 PC 보호" 화면에서 **추가 정보 → 실행**을 선택하면 정상적으로 설치됩니다.
-
-### 2. 소스에서 웹 앱으로 직접 실행하기
-
-설치와 실행에 필요한 모든 스크립트는 `scripts/` 폴더에 모여 있습니다 — macOS·Linux용은 `scripts/sh/`, Windows용은 `scripts/bat/`에 있습니다.
-
-**macOS / Linux**
 ```bash
-# 1. 저장소 클론
 git clone https://github.com/orion-gz/EasyPaper.git
 cd EasyPaper
-
-# 2. 설치 스크립트 실행
-# (Python 가상환경 생성, 의존성 패키지 설치, .env 파일 생성, 프론트엔드 빌드 포함)
 ./scripts/sh/setup.sh
-
-# 3. 서버 시작
 ./scripts/sh/start.sh
 ```
 
-**Windows**
+On Windows, run `scripts\bat\setup.bat`, then `scripts\bat\start.bat`. Open `http://localhost:8000` after the server starts.
 
-`scripts\bat\setup.bat` 파일을 더블클릭하거나(또는 명령 프롬프트에서 실행), 완료 후 `scripts\bat\start.bat`을 실행하면 됩니다.
-```bat
-git clone https://github.com/orion-gz/EasyPaper.git
-cd EasyPaper
-scripts\bat\setup.bat
-scripts\bat\start.bat
-```
-
-서버 구동 후 브라우저에서 `http://localhost:8000` 에 접속합니다.
-
-설치 및 생성된 모든 가상 환경과 빌드 데이터, systemd 서비스(Linux)를 완전히 지우고 원복하려면 다음 삭제 스크립트를 실행합니다:
-```bash
-./scripts/sh/cleanup.sh      # macOS / Linux
-scripts\bat\cleanup.bat      # Windows
-```
-
-> 💡 Docker로 바로 실행하고 싶다면 [Docker로 실행하기](#-docker로-실행하기) 섹션을 참고하세요.
-
----
-
-<a id="-주요-기능"></a>
-## ✨ 주요 기능
-
-1. **통합 Research Workspace** — 대시보드, 라이브러리, AI Chats, Research Graph, Reading History 등을 아우르는 사이드바 기반 연구 통합 워크스페이스를 제공합니다.
-2. **듀얼 패널 뷰어 & 1:1 정밀 문장 매칭** — 원본 PDF와 AI 번역본을 나란히 보며 패널 너비를 자유롭게 조절할 수 있으며, LLM 의미론적 태깅 정렬 방식(Semantic Tag Alignment)을 통해 원문-번역문 양방향 마우스 오버 하이라이트 및 클릭 스크롤 정밀 매칭을 지원합니다.
-3. **읽기 전 브리핑 (Pre-reading Briefing)** — 논문을 새로 열었을 때 핵심 개요, 연구 계보, 파인만 방식 설명, 용어집, 질문거리를 한눈에 정리해 주어 핵심 맥락을 즉시 파악할 수 있도록 돕습니다.
-4. **인용 · 그림 · 표 · 수식 참조 오버레이** — 본문의 인용 번호, Figure/Table/수식 참조 마우스 오버 시 원문에서 정밀 크롭한 호버 미리보기를 보여줍니다. 인용 참고문헌 원문+검색 링크(OpenAlex/Google Scholar), 서브패널 그림 합치기, 수식 행 재구성 크롭 및 호버 오버레이 드래그 리사이즈를 지원합니다.
-5. **독립 AI Chats & 우측 슬라이드 드로어** — 뷰어 외부에서도 여러 논문을 통합해 대화할 수 있는 독립 AI Chats 화면 및 우측 슬라이드 드로어를 제공합니다. 논문 질문, 후속 질문 추천, 복수 논문 비교 질문 및 답변 생성 대기 상태의 선형 프로그레스 바를 제공합니다.
-6. **개인화 지식 그래프 (Research Graph)** — 논문 간 연관성 및 연구 개념을 시각화하는 논문×개념 매트릭스 히트맵과 개념별 깊이 분석(LLM 점수 기반)을 지원합니다. 노드 및 카드 클릭 시 상세 콘텐츠 확인과 관련 논문 대화 세션 즉시 이동이 가능합니다.
-7. **독서 활동 분석 (Reading History & Analytics)** — 독서 활동 캘린더/히트맵과 기간 필터(7일/전체 등)를 제공합니다. EMA(지수 이동 평균) 기반 독서 속도 추정과 실제 읽은 페이지 수 검증을 통해 정확한 독서 현황을 대시보드 활동 요약으로 확인할 수 있습니다.
-8. **AI 인사이트 & 맞춤 논문 추천** — 대시보드에서 독서 패턴과 라이브러리를 바탕으로 한 지도교수 관점의 LLM 기반 맞춤 인사이트와 추천 논문 리스트(자동 캐싱, 주간 갱신, 수동 다시 받기, 구글 스칼라 연동)를 제공합니다.
-9. **AI 카테고리 자동 태깅 & 전체 검색** — 업로드 시 AI가 논문 초록과 본문을 분석해 카테고리 태그(예: `VLM`, `VLA`, `GAN`, `CNN`, `Optimizer` 등)를 자동 부여하며, 파일명·제목·번역 본문을 아우르는 통합 검색을 지원합니다.
-10. **번역 포함 PDF 내보내기 & 자유 배치 Floating 메모** — 원문과 번역문이 뷰어처럼 페어링되고 메모·하이라이트·밑줄이 포함된 PDF 내보내기를 지원합니다. 논문 및 번역문 위 어디서든 Markdown & LaTeX 수식 렌더링, 5색 테마 피커를 갖춘 Floating 메모를 작성할 수 있습니다.
-11. **통합 모델 선택기 (로컬 & API & CLI)** — Ollama, Gemini, Claude, OpenAI 외에도 Antigravity(`agy`), Claude Code(`claude`), Codex(`codex`) 등 CLI 기반 AI 엔진을 자동 탐지하여 UI에서 자유롭게 전환할 수 있습니다.
-12. **네이티브 데스크톱 앱 (Windows/macOS/Linux)** — Tauri 기반 데스크톱 앱으로 배포되어 별도 서버 설정 없이 사이드카 백엔드로 실행되며, 앱 내 원클릭 자동 업데이트 감지 및 설치를 지원합니다.
-
----
-
-<a id="-필수-요구사항"></a>
-## 📋 필수 요구사항
-
-- **Python 3.8+**
-- **Node.js 16+** & **npm**
-- **Ollama** *(선택 사항 — 로컬 모델을 직접 실행하려는 경우에만 필요)*
-
----
-
-<a id="-수동-설치-방법"></a>
-## 🛠️ 수동 설치 방법
-
-스크립트를 사용하지 않고 직접 환경을 구축하려는 경우:
-
-### 백엔드
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python main.py
-```
-- API 서버: `http://localhost:8000`
-- API 문서 (Swagger): `http://localhost:8000/docs`
-
-### 프론트엔드
-```bash
-cd frontend
-npm install
-npm run build # 프로덕션 빌드 — 백엔드가 정적 파일로 서빙
-# 또는
-npm run dev # 개발 서버 시작 (http://localhost:5173)
-```
-
----
-
-<a id="-초기-로그인-계정"></a>
-## 🔑 초기 로그인 계정
-
-| 항목 | 값 |
-|------|-----|
-| 아이디 | `admin` |
-| 비밀번호 | `admin` |
-
-로그인 후 화면 우측 상단의 설정 아이콘을 눌러 언제든지 아이디와 비밀번호를 변경할 수 있습니다. 변경된 정보는 해시 처리되어 `backend/.env`에 안전하게 저장됩니다.
-
----
-
-<a id="-테스트"></a>
-## 🧪 테스트
-
-백엔드 테스트는 pytest로 작성되어 있으며, 실제 프로젝트 데이터(DB/업로드/라이브러리)는 건드리지 않고 임시 디렉터리에서 격리 실행됩니다.
-
-```bash
-cd backend
-.venv/bin/pip install -r requirements-dev.txt   # 최초 1회
-.venv/bin/python -m pytest tests/ -v
-```
-
-프론트엔드 E2E 테스트는 Playwright로 작성되어 있으며, 실제 백엔드 없이 `/api/**` 응답을 목(mock)으로 대체해 빌드된 `dist/`를 대상으로 실행됩니다.
-
-```bash
-cd frontend
-npm install                # 최초 1회
-npm run build               # dist/ 생성
-npx playwright install chromium   # 최초 1회, 브라우저 바이너리 설치
-npm run test:e2e
-```
-
----
-
-<a id="-데이터-백업-및-복원"></a>
-## 💾 데이터 백업 및 복원
-
-DB(`easypaper.db`) + 논문 라이브러리(`library/`) + 업로드 원본(`uploads/`)을 타임스탬프가 찍힌 압축 파일로 `backups/`에 저장합니다. 재생성 가능한 `cache/`는 백업 대상에서 제외됩니다. 기본적으로 최신 10개만 보관하고 오래된 백업은 자동으로 정리됩니다(`EASYPAPER_BACKUP_KEEP` 환경변수로 조절 가능).
-
-**macOS / Linux**
-```bash
-./scripts/sh/backup.sh
-./scripts/sh/restore.sh backups/easypaper_backup_20260101_120000.tar.gz
-```
-
-**Windows**
-```bat
-scripts\bat\backup.bat
-scripts\bat\restore.bat backups\easypaper_backup_20260101_120000.zip
-```
-
-주기적으로 자동 백업하려면 `backup.sh`/`backup.bat`을 각 OS의 스케줄러(Linux/macOS는 `cron`, Windows는 작업 스케줄러)에 등록하세요.
-
----
-
-<a id="-상시-구동--systemd-서비스-등록-선택-사항"></a>
-## 🖥️ 상시 구동 — systemd 서비스 등록 (선택 사항)
-
-Linux 서버에서 EasyPaper를 백그라운드 데몬으로 상시 실행하려면 제공된 `easypaper.service` 파일을 활용하세요.
-
-**1. 서비스 파일 편집** — `easypaper.service`를 열어 경로(예: `/home/ubuntu/...`)와 `User=` 값을 실제 서버 환경에 맞게 수정합니다.
-
-**2. 서비스 등록 및 시작:**
-```bash
-sudo cp easypaper.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable easypaper
-sudo systemctl start easypaper
-```
-
-**3. 로그 확인:**
-```bash
-sudo journalctl -u easypaper -f
-```
-
----
-
-<a id="-docker로-실행하기"></a>
-## 🐳 Docker로 실행하기
-
-Python/Node.js를 직접 설치하지 않고 Docker만으로 실행할 수도 있습니다. 프론트엔드 빌드와 백엔드 실행이 하나의 이미지에 담겨 있으며, 문서 DB·업로드·라이브러리·설정 값은 모두 `/data` 볼륨에 영속화되어 컨테이너를 재생성해도 유지됩니다.
+## Docker
 
 ```bash
 git clone https://github.com/orion-gz/EasyPaper.git
@@ -304,52 +103,34 @@ cd EasyPaper
 docker compose up -d --build
 ```
 
-서버 구동 후 브라우저에서 `http://localhost:8000`에 접속합니다. 초기 로그인 계정은 위의 `admin` / `admin`과 동일합니다.
+Open `http://localhost:8000`. Data is persisted in the `/data` volume. To stop the service, run `docker compose down`.
 
-기본값은 호스트에 설치된 Ollama(`http://host.docker.internal:11434`)를 바라봅니다. Gemini/Claude/OpenAI API를 쓰려면 로그인 후 설정 화면에서 API 키를 입력하면 됩니다(볼륨에 저장되어 유지됨). `docker-compose.yml`의 `environment`에 직접 `GEMINI_API_KEY` 등을 추가해도 됩니다.
+## Initial account
 
-### Docker 안에서 CLI 기반 엔진(Antigravity/Claude Code/Codex) 쓰기
+| Field | Value |
+|---|---|
+| Username | `admin` |
+| Password | `admin` |
 
-이미지에는 세 CLI가 모두 미리 설치되어 있지만, 로그인(OAuth) 자격증명은 이미지에 절대 포함되지 않습니다. 대신 컨테이너가 호스트의 로그인 정보를 볼륨으로 그대로 재사용합니다(`docker-compose.yml`에 이미 설정되어 있음). 그래서 **먼저 호스트(컨테이너 밖)에서 CLI를 정상적으로 설치하고 로그인**해야 합니다:
+Change these credentials in Settings after signing in.
+
+## Testing
 
 ```bash
-# 예: Claude Code
-npm install -g @anthropic-ai/claude-code
-claude auth login
+cd backend
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest tests/ -v
 ```
 
-(또는 EasyPaper를 네이티브로 한 번 실행해서 설정 화면의 "설치" 버튼으로 설치·로그인해도 됩니다.) 로그인이 끝난 뒤 `docker compose up -d`로 컨테이너를 (재)시작하면, 호스트에서 완료한 로그인이 컨테이너 안으로 그대로 반영되어 별도 설정 없이 바로 사용할 수 있습니다. 호스트에 설치/로그인하지 않은 CLI는 그냥 "미설치" 상태로 표시될 뿐이라 안전합니다.
-
-> Claude Code가 컨테이너 안에서 `~/.claude.json 파일을 찾을 수 없습니다` 같은 백업 복원 안내를 한 번 출력할 수 있는데, 인증 자체에는 영향이 없습니다(무시해도 됩니다). 완전히 없애고 싶다면 `docker-compose.yml`에 `${HOME}/.claude.json:/root/.claude.json` 마운트를 추가하세요 — 단, 호스트에 그 파일이 실제로 존재할 때만 추가해야 합니다(존재하지 않는 파일 경로를 마운트하면 Docker가 그 자리에 빈 디렉터리를 만들어버려 이후 네이티브 설치가 깨질 수 있습니다).
-
-**로그 확인**
 ```bash
-docker compose logs -f
+cd frontend
+npm install
+npm run build
+npm run test:e2e
 ```
 
-**중지 (데이터는 볼륨에 남아 유지됨)**
-```bash
-docker compose down
-```
+## CLI providers
 
-**데이터까지 완전히 삭제**
-```bash
-docker compose down -v
-```
+EasyPaper detects installed and authenticated `agy`, `claude`, and `codex` CLIs at startup. Select any detected provider from the model picker; API providers and Ollama remain available as alternatives.
 
----
-
-<a id="-cli-기반-ai-엔진-antigravity--claude-code--codex"></a>
-## 🤖 CLI 기반 AI 엔진 (Antigravity / Claude Code / Codex)
-
-EasyPaper는 Google Antigravity(`agy`), Anthropic Claude Code(`claude`), OpenAI Codex(`codex`) CLI를 서브프로세스로 연동하는 전용 LLM Provider를 내장하고 있습니다.
-
-로컬 또는 서버 환경에 해당 CLI 프로그램이 설치되어 로그인까지 완료되어 있다면, EasyPaper가 기동 시 이를 자동으로 감지하여 라이브러리·뷰어의 모델 선택 드롭다운에 해당 공급자를 바로 활성화합니다. 별도의 추가 설정은 필요하지 않습니다.
-
-> CLI 엔진을 사용하지 않는 경우: 설정 화면 또는 `.env`에서 Ollama, Gemini, OpenAI, Claude API 중 원하는 방식으로 자유롭게 사용할 수 있습니다.
-
----
-
-<div align="center">
-<sub>변경 이력은 <a href="./CHANGELOG.md">CHANGELOG.md</a>에서 확인할 수 있습니다.</sub>
-</div>
+See [CHANGELOG.md](./CHANGELOG.md) for release notes.
