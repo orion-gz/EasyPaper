@@ -26,7 +26,7 @@ EasyPaper는 PDF를 AI로 번역하고, 읽고, 주석을 남기고, 문서 내�
 | 연구 모드 | 논문, 서베이, 학위 논문, 프리프린트, 학술 보고서 | 논문 구조·방법론·근거·인용 분석, 연구 그래프, 논문 비교, 읽기 전 브리핑 |
 | 일반 문서 모드 | 기술 문서, 서적, 기사, 보고서, 매뉴얼, 정책 문서, 발표 자료 등 | 문서 유형별 번역, 요약, 어휘, 문서 중심 질의응답, 전문 검색, 문서 개요 |
 
-현재 두 모드 모두 PDF를 입력으로 사용합니다. 일반 문서 모드에서는 DOCX 등으로 작성한 문서를 PDF로 내보낸 뒤에도 문서 목적과 유형에 맞는 기능을 활용할 수 있습니다.
+현재 두 모드 모두 PDF를 입력으로 사용합니다. 일반 문서 모드에서는 문서 목적과 유형에 맞는 기능을 활용할 수 있습니다.
 
 <details>
 <summary>추가 스크린샷</summary>
@@ -43,8 +43,8 @@ EasyPaper는 PDF를 AI로 번역하고, 읽고, 주석을 남기고, 문서 내�
 | 주석과 플로팅 메모 | 인용 참고문헌 오버레이 |
 | <img src="./image/library.png" alt="문서 라이브러리"> | <img src="./image/ai_chats.png" alt="AI Chats"> |
 | 라이브러리 | AI Chats |
-| <img src="./image/heatmap.png" alt="연구 그래프 히트맵"> | <img src="./image/reading_history.png" alt="읽기 이력"> |
-| 연구 그래프 히트맵 | 읽기 이력 |
+| <img src="./image/heatmap.png" alt="연구 그래프 히트맵"> | <img src="./image/reading_history.png" alt="읽은 기록"> |
+| 연구 그래프 히트맵 | 읽은 기록 |
 
 </details>
 
@@ -61,7 +61,7 @@ EasyPaper는 PDF를 AI로 번역하고, 읽고, 주석을 남기고, 문서 내�
 
 ### 데스크톱 앱
 
-[최신 릴리스](https://github.com/orion-gz/EasyPaper/releases/latest)에서 설치 파일을 받으세요. Tauri 기반 앱에는 백엔드 사이드카가 포함되어 있어 Python과 Node.js 설치가 필요하지 않습니다.
+[최신 릴리스](https://github.com/orion-gz/EasyPaper/releases/latest)에서 설치 파일을 받을 수 있습니다. Tauri 기반 앱에는 백엔드 사이드카가 포함되어 있어 Python과 Node.js 추가 설치가 필요하지 않습니다.
 
 | OS | 설치 파일 |
 |---|---|
@@ -69,11 +69,22 @@ EasyPaper는 PDF를 AI로 번역하고, 읽고, 주석을 남기고, 문서 내�
 | macOS (Apple Silicon) | `_aarch64.dmg` |
 | Linux | `.AppImage`, `.deb`, 또는 `.rpm` |
 
-첫 실행 시 온보딩에서 AI 공급자를 선택하고 설정합니다. 서명되지 않은 데스크톱 빌드는 운영체제 보안 경고를 표시할 수 있습니다.
+첫 실행 시 온보딩에서 AI Provider 를 선택하고 설정합니다. 서명되지 않은 데스크톱 빌드는 운영체제 보안 경고를 표시할 수 있습니다.
 
-### 소스에서 실행
+> [!IMPORTANT] 주의사항
+> macOS: 앱이 완전히 서명되지 않은 상태라 최신 macOS(Ventura 이후)에서는
+> 우클릭 → 열기로 우회되지 않고 "앱이 손상되었기 때문에 열 수 없습니다" 라는
+> 오해의 소지가 있는 메시지가 뜹니다. 실제로 파일이 손상된 게 아니라 다운로드
+> 시 붙는 quarantine 속성 때문이니, 터미널에서 아래 명령으로 지운 뒤 다시
+> 실행하세요.
+> ```xattr -cr /Applications/EasyPaper.app```
+> Windows: "Windows의 PC 보호" 화면에서 추가 정보 → 실행을 선택하면
+> 정상적으로 설치됩니다.
+
+### 소스로 실행하기
 
 Python 3.8+, Node.js 16+, npm이 필요합니다. Ollama는 선택 사항입니다.
+아래 스크립트를 통해 쉽게 실행할 수 있습니다.
 
 ```bash
 git clone https://github.com/orion-gz/EasyPaper.git
@@ -118,7 +129,7 @@ npm run build
 npm run test:e2e
 ```
 
-## CLI 기반 AI 공급자
+## CLI 기반 AI Provider
 
 EasyPaper는 시작 시 설치·로그인된 `agy`, `claude`, `codex` CLI를 감지합니다. 감지된 공급자는 모델 선택기에서 바로 사용할 수 있으며 API 공급자와 Ollama도 함께 지원합니다.
 
