@@ -1,27 +1,13 @@
 <div align="center">
 
-<img src="./frontend/public/icon-192.png" width="88" height="88" alt="EasyPaper icon"><br>
+![EasyPaper](https://shieldcn.dev/header/surface.svg?title=EasyPaper&subtitle=Workspace+for+documents+with+AI&mode=dark)
 
-# EasyPaper
+[![badge](https://shieldcn.dev/badge/README-Korean.svg?theme=blue)](./README.ko.md)
 
-AI-assisted reading and translation for research papers and general documents.
-
-[한국어 README](./README.ko.md)
-
-[![Last Commit](https://shieldcn.dev/github/last-commit/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/commits/main)
-[![Open Issues](https://shieldcn.dev/github/issues/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/issues)
 [![Stars](https://shieldcn.dev/github/stars/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/stargazers)
-[![Changelog](https://shieldcn.dev/badge/changelog-keep_a_changelog-4f7cff.svg)](./CHANGELOG.md)
-[![PRs Welcome](https://shieldcn.dev/badge/PRs-welcome-4f7cff.svg)](https://github.com/orion-gz/EasyPaper/pulls)
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://www.shieldcn.dev/github/release/orion-gz/EasyPaper.svg?size=sm&amp;mode=dark"><img alt="Release" src="https://www.shieldcn.dev/github/release/orion-gz/EasyPaper.svg?size=sm&amp;mode=light"></picture> ![CI](https://www.shieldcn.dev/github/ci/orion-gz/EasyPaper.svg?variant=secondary&size=sm&color=white)
+[![Last Commit](https://shieldcn.dev/github/last-commit/orion-gz/EasyPaper.svg)](https://github.com/orion-gz/EasyPaper/commits/main)
 
-[![Python](https://shieldcn.dev/badge/Python-3.8%2B-3776AB.svg?logo=python&logoColor=white)](backend/requirements.txt)
-[![FastAPI](https://shieldcn.dev/badge/FastAPI-0.115-009688.svg?logo=fastapi&logoColor=white)](backend/requirements.txt)
-[![Vite](https://shieldcn.dev/badge/Vite-5-646CFF.svg?logo=vite&logoColor=white)](frontend/package.json)
-[![SQLite](https://shieldcn.dev/badge/SQLite-DB-003B57.svg?logo=sqlite&logoColor=white)](backend/services/db.py)
-[![Docker Ready](https://shieldcn.dev/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](./Dockerfile)
-[![Platform](https://shieldcn.dev/badge/platform-Windows_%7C_macOS_%7C_Linux-lightgrey.svg)](#quick-start)
-
-[![Download Desktop App](https://shieldcn.dev/github/v/release/orion-gz/EasyPaper.svg?label=Download%20Desktop%20App)](https://github.com/orion-gz/EasyPaper/releases/latest)
 
 </div>
 
