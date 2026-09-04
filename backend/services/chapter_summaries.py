@@ -152,6 +152,29 @@ def invalidate_chapter_summary(document: dict, chapter: dict, target_lang: str) 
     delete_page_insight(document["id"], 0, CHAPTER_CACHE_KIND, suffix=_cache_suffix(document, chapter, target_lang))
 
 
+def _string_list(value: object, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()][:limit]
+
+
+def _term_list(value: object, limit: int = 12) -> list[dict | str]:
+    if not isinstance(value, list):
+        return []
+    terms = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            terms.append(item.strip())
+        elif isinstance(item, dict):
+            name = str(item.get("term") or item.get("name") or "").strip()
+            definition = str(item.get("definition") or item.get("description") or "").strip()
+            if name or definition:
+                terms.append({"term": name, "definition": definition})
+        if len(terms) >= limit:
+            break
+    return terms
+
+
 def _chapter_text(pages: list[dict], chapter: dict) -> str:
     chunks = []
     for index, page in enumerate(pages):
@@ -182,9 +205,9 @@ Return only a JSON array with one object: [{{"headline":"...","summary":"...","k
     result = {
         "chapter": chapter, "headline": str(value.get("headline") or "").strip(),
         "summary": str(value.get("summary") or "").strip(),
-        "key_points": [str(item).strip() for item in (value.get("key_points") or []) if str(item).strip()][:12],
-        "terms": (value.get("terms") or [])[:12],
-        "limitations": [str(item).strip() for item in (value.get("limitations") or []) if str(item).strip()][:8],
+        "key_points": _string_list(value.get("key_points"), 12),
+        "terms": _term_list(value.get("terms")),
+        "limitations": _string_list(value.get("limitations"), 8),
     }
     if not result["summary"]:
         raise RuntimeError("chapter_summary_empty")
@@ -295,9 +318,9 @@ Return only a JSON array with one object: [{{"headline":"...","summary":"...","k
     result = {
         "headline": str(value.get("headline") or "").strip(),
         "summary": str(value.get("summary") or "").strip(),
-        "key_points": (value.get("key_points") or [])[:20],
-        "chapter_connections": (value.get("chapter_connections") or [])[:20],
-        "limitations": (value.get("limitations") or [])[:12],
+        "key_points": _string_list(value.get("key_points"), 20),
+        "chapter_connections": _string_list(value.get("chapter_connections"), 20),
+        "limitations": _string_list(value.get("limitations"), 12),
         "chapter_count": len(summaries),
     }
     if not result["summary"]:

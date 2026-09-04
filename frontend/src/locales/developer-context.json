@@ -4297,5 +4297,29 @@
   },
   "viewer:chapter.fullStart": {
     "description": "Confirmation button for the high-cost detailed full summary."
+  },
+  "viewer:chapter.keyPoints": {
+    "description": "Chapter summary detail label: chapter.keyPoints"
+  },
+  "viewer:chapter.terms": {
+    "description": "Chapter summary detail label: chapter.terms"
+  },
+  "viewer:chapter.limitations": {
+    "description": "Chapter summary detail label: chapter.limitations"
+  },
+  "viewer:chapter.connections": {
+    "description": "Chapter summary detail label: chapter.connections"
+  },
+  "viewer:chapter.retry": {
+    "description": "Chapter/full summary retry and cancellation UI: chapter.retry"
+  },
+  "viewer:chapter.cancel": {
+    "description": "Chapter/full summary retry and cancellation UI: chapter.cancel"
+  },
+  "viewer:chapter.cancelled": {
+    "description": "Chapter/full summary retry and cancellation UI: chapter.cancelled"
+  },
+  "viewer:chapter.cancelFailed": {
+    "description": "Chapter/full summary retry and cancellation UI: chapter.cancelFailed"
   }
 }

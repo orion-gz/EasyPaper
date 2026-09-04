@@ -10,7 +10,7 @@ import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabul
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
-import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
+import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
@@ -27,6 +27,8 @@ import { saveUserLanguagePreferences, saveDocumentLanguageOverride } from './lan
 import { canRetryTranslationTask, isTranslationTaskRunning, shouldRetryFailedTranslationTask } from './translationTaskState.js'
 import { applyUiScale, loadUiScale, saveUiScale } from './uiScale.js'
 import { adaptiveBriefingSummary, hasAdaptiveBriefing, renderAdaptiveBriefingHtml } from './adaptiveBriefing.js'
+import { classificationModalMarkup, recommendedClassification } from './classificationConfirmationView.js'
+import { renderChapterSummaryHtml, renderFullSummaryHtml } from './chapterSummaryView.js'
 
 const i18nReady = initI18n()
 applyUiScale(loadUiScale())
@@ -1194,11 +1196,7 @@ async function requireClassificationConfirmation(docId) {
     modal.id = 'classification-confirmation-modal'
     modal.className = 'modal-overlay hidden'
     modal.setAttribute('aria-labelledby', 'classification-confirmation-title')
-    modal.innerHTML = `<div class="custom-confirm-modal" style="max-width:620px">
-      <div class="custom-confirm-modal-header"><span id="classification-confirmation-title" class="custom-confirm-modal-title"></span></div>
-      <div class="custom-confirm-modal-body"><p class="classification-status"></p><p class="classification-reason"></p><div class="classification-options" role="radiogroup"></div></div>
-      <div class="custom-confirm-modal-footer"><button type="button" class="custom-confirm-btn confirm-btn primary-btn" disabled></button></div>
-    </div>`
+    modal.innerHTML = classificationModalMarkup()
     document.body.appendChild(modal)
   }
   const title = modal.querySelector('#classification-confirmation-title')
@@ -1219,8 +1217,7 @@ async function requireClassificationConfirmation(docId) {
         ? t('common:classification.failed')
         : t('common:classification.recommended')
       reason.textContent = payload.recommendation?.reason || (payload.error ? t('common:classification.manual') : '')
-      const recommended = payload.recommendation
-      selected = recommended ? { document_mode: recommended.document_mode, document_type: recommended.document_type } : payload.current
+      selected = recommendedClassification(payload)
       optionsRoot.replaceChildren()
       payload.types.forEach(type => {
         const label = document.createElement('label')
@@ -17694,11 +17691,11 @@ async function loadPDFOutline() {
         response = await getChapterSummaryAPI(state.sessionId, chapter.id)
       }
       result.hidden = false
-      result.innerHTML = `<strong>${escapeHtml(response.summary.headline || chapter.title)}</strong><p>${escapeHtml(response.summary.summary || '')}</p>`
+      result.innerHTML = renderChapterSummaryHtml(response.summary, { title: chapter.title, keyPoints: t('viewer:chapter.keyPoints'), terms: t('viewer:chapter.terms'), limitations: t('viewer:chapter.limitations') })
       button.textContent = t('viewer:chapter.viewAgain')
     } catch (error) {
       showToast(error.message || t('viewer:chapter.failed'), 'error')
-      button.textContent = t('viewer:chapter.summarize')
+      button.textContent = t('viewer:chapter.retry')
     } finally { button.disabled = false }
   }
 
@@ -17714,7 +17711,24 @@ async function loadPDFOutline() {
       fullButton.type = 'button'; fullButton.className = 'btn btn-secondary'
       fullButton.style.cssText = 'margin:6px 10px 12px; width:calc(100% - 20px); font-size:11px;'
       fullButton.textContent = t('viewer:chapter.full')
+      const cancelFullButton = document.createElement('button')
+      cancelFullButton.type = 'button'; cancelFullButton.className = 'btn btn-secondary'; cancelFullButton.hidden = true
+      cancelFullButton.style.cssText = 'margin:0 10px 12px;width:calc(100% - 20px);font-size:11px;'
+      cancelFullButton.textContent = t('viewer:chapter.cancel')
+      let activeFullTaskId = null
+      let fullCancelRequested = false
+      cancelFullButton.addEventListener('click', async () => {
+        if (!activeFullTaskId) return
+        cancelFullButton.disabled = true
+        try {
+          await cancelDocumentTaskAPI(activeFullTaskId)
+          fullCancelRequested = true
+          showToast(t('viewer:chapter.cancelled'), 'info')
+        }
+        catch (error) { showToast(error.message || t('viewer:chapter.cancelFailed'), 'error'); cancelFullButton.disabled = false }
+      })
       fullButton.addEventListener('click', async () => {
+        fullCancelRequested = false
         try {
           const estimate = await getFullSummaryEstimateAPI(state.sessionId)
           const accepted = await showCustomConfirm(
@@ -17724,6 +17738,9 @@ async function loadPDFOutline() {
           if (!accepted) return
           fullButton.disabled = true; fullButton.textContent = t('viewer:chapter.fullRunning')
           let status = await startFullSummaryAPI(state.sessionId)
+          activeFullTaskId = status.task_id || null
+          cancelFullButton.hidden = !activeFullTaskId
+          cancelFullButton.disabled = false
           while (status.status !== 'completed') {
             if (['failed', 'cancelled'].includes(status.status)) throw new Error(t('viewer:chapter.fullTaskFailed'))
             await new Promise(resolve => setTimeout(resolve, 1500))
@@ -17731,12 +17748,16 @@ async function loadPDFOutline() {
           }
           const panel = document.createElement('div'); panel.className = 'outline-summary-result'
           panel.style.cssText = 'margin:0 10px 12px;padding:10px;font-size:12px;line-height:1.5;border:1px solid var(--border);border-radius:8px;'
-          panel.innerHTML = `<strong>${escapeHtml(status.summary.headline || t('viewer:chapter.fullTitle'))}</strong><p>${escapeHtml(status.summary.summary || '')}</p>`
+          panel.innerHTML = renderFullSummaryHtml(status.summary, { title: t('viewer:chapter.fullTitle'), keyPoints: t('viewer:chapter.keyPoints'), connections: t('viewer:chapter.connections'), limitations: t('viewer:chapter.limitations') })
           fullButton.after(panel); fullButton.textContent = t('viewer:chapter.fullView')
-        } catch (error) { showToast(error.message || t('viewer:chapter.fullFailed'), 'error'); fullButton.textContent = t('viewer:chapter.full') }
-        finally { fullButton.disabled = false }
+        } catch (error) {
+          if (!fullCancelRequested) showToast(error.message || t('viewer:chapter.fullFailed'), 'error')
+          fullButton.textContent = t('viewer:chapter.retry')
+        } finally {
+          fullButton.disabled = false; cancelFullButton.hidden = true; activeFullTaskId = null; fullCancelRequested = false
+        }
       })
-      outlineContent.appendChild(fullButton)
+      outlineContent.append(fullButton, cancelFullButton)
       chapterData.chapters.forEach(chapter => {
         const row = document.createElement('div'); row.className = 'outline-chapter-row'
         row.style.cssText = 'border-bottom:1px solid var(--border);padding:4px 8px;'

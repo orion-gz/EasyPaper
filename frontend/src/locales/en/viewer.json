@@ -66,5 +66,13 @@
   "chapter.unavailable": "Chapter summaries are unavailable because the chapter structure could not be confirmed.",
   "chapter.fullConfirm": "Generate {{missing}} of {{count}} chapters? Estimated {{calls}} LLM calls and about {{tokens}} input tokens.",
   "chapter.fullTitle": "Detailed full summary",
-  "chapter.fullStart": "Start summary"
+  "chapter.fullStart": "Start summary",
+  "chapter.keyPoints": "Key points",
+  "chapter.terms": "Key terms",
+  "chapter.limitations": "Limitations and cautions",
+  "chapter.connections": "Chapter connections",
+  "chapter.retry": "Retry",
+  "chapter.cancel": "Cancel full summary",
+  "chapter.cancelled": "The full summary task was cancelled.",
+  "chapter.cancelFailed": "Failed to cancel the full summary."
 }

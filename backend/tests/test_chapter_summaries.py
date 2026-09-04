@@ -100,3 +100,82 @@ async def test_full_summary_status_uses_language_from_latest_task(monkeypatch):
     assert seen == ["en"]
     assert response["target_lang"] == "en"
     assert response["status"] == "completed"
+
+
+def test_real_pdf_toc_boundaries_take_precedence(tmp_path):
+    import fitz
+    pdf_path = tmp_path / "toc.pdf"
+    document = fitz.open()
+    for _ in range(6):
+        document.new_page()
+    document.set_toc([[1, "Chapter One", 1], [2, "Section 1.1", 2], [1, "Chapter Two", 4]])
+    document.save(pdf_path)
+    document.close()
+
+    result = summaries.detect_chapters(_document(), [], str(pdf_path))
+    assert result["status"] == "available"
+    assert [(item["title"], item["start_page"], item["end_page"]) for item in result["chapters"]] == [
+        ("Chapter One", 1, 3), ("Chapter Two", 4, 6),
+    ]
+    assert all(item["source"] == "toc" for item in result["chapters"])
+
+
+@pytest.mark.asyncio
+async def test_generated_chapter_summary_is_cached_and_normalized(isolated_dirs, monkeypatch):
+    isolated_dirs["db"].db_save_document(
+        "doc-1", "testuser", "paper.pdf", "/x.pdf", 2, {}, document_type="thesis",
+    )
+    async def fake_llm(*_args, **_kwargs):
+        return [{"headline": "H", "summary": "S", "key_points": "invalid", "terms": [{"name": "T", "description": "D"}], "limitations": ["L"]}]
+    monkeypatch.setattr("services.llm_client._llm_json_array_with_retry", fake_llm)
+    document = _document(total_pages=2)
+    chapter = {"id": "one", "title": "One", "start_page": 1, "end_page": 2, "source": "toc"}
+    result = await summaries._generate_chapter(document, [{"page_num": 1, "text": "content"}], chapter, "ko", "doc-1")
+    assert result["key_points"] == []
+    assert result["terms"] == [{"term": "T", "definition": "D"}]
+    assert summaries.get_cached_chapter_summary(document, chapter, "ko") == result
+    assert summaries.get_cached_chapter_summary(_document(total_pages=2, content_revision=2), chapter, "ko") is None
+
+
+@pytest.mark.asyncio
+async def test_running_chapter_task_can_be_cancelled(isolated_dirs, monkeypatch):
+    import asyncio
+    from services.document_tasks import get_task, request_cancel
+    isolated_dirs["db"].db_save_document("doc-1", "testuser", "paper.pdf", "/x.pdf", 1, {}, document_type="thesis")
+    entered = asyncio.Event()
+    async def slow_generate(*_args, **_kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+    monkeypatch.setattr(summaries, "_generate_chapter", slow_generate)
+    chapter = {"id": "one", "title": "One", "start_page": 1, "end_page": 1, "source": "toc"}
+    task = summaries.start_chapter_summary(_document(total_pages=1), [{"page_num": 1, "text": "content"}], chapter, "ko")
+    await entered.wait()
+    request_cancel(task["id"])
+    assert summaries.cancel_summary_task(task["id"])
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert get_task(task["id"])["status"] == "cancelled"
+
+
+def test_chapter_router_returns_cached_summary_without_starting(test_client, monkeypatch):
+    from routers import chapters as router
+    document = _document(id="route-doc", total_pages=2)
+    chapter = {"id": "one", "title": "One", "start_page": 1, "end_page": 2, "source": "toc"}
+    monkeypatch.setattr(router, "require_owned_document", lambda *_: document)
+    monkeypatch.setattr(router, "require_session_owner", lambda *_: {"pages": [], "pdf_path": "/x.pdf"})
+    monkeypatch.setattr(router, "detect_chapters", lambda *_: {"status": "available", "reason": None, "chapters": [chapter]})
+    monkeypatch.setattr(router, "get_cached_chapter_summary", lambda *_: {"chapter": chapter, "summary": "cached"})
+    response = test_client.get("/api/library/route-doc/chapters/one/summary")
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["summary"]["summary"] == "cached"
+
+
+def test_chapter_router_reports_unconfirmed_structure(test_client, monkeypatch):
+    from routers import chapters as router
+    monkeypatch.setattr(router, "require_owned_document", lambda *_: _document(id="route-doc"))
+    monkeypatch.setattr(router, "require_session_owner", lambda *_: {"pages": [], "pdf_path": "/x.pdf"})
+    monkeypatch.setattr(router, "detect_chapters", lambda *_: {"status": "unavailable", "reason": "chapter_structure_unconfirmed", "chapters": []})
+    response = test_client.get("/api/library/route-doc/full-summary/estimate")
+    assert response.status_code == 409
+    assert response.json()["code"] == "chapter_structure_unconfirmed"

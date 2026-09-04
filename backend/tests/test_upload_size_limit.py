@@ -136,7 +136,7 @@ def test_auto_ai_jobs_wait_for_classification_confirmation(test_client, isolated
 
     body = _await_upload(test_client, res)
     assert events == []
-    assert body["classification_status"] == "pending"
+    assert upload_module.sessions[body["session_id"]]["classification_status"] == "pending"
 
 
 def test_auto_translation_skips_full_job_at_fifty_pages(test_client, isolated_dirs, monkeypatch):

@@ -50,3 +50,28 @@ async def test_durable_classification_stores_result_and_task(isolated_dirs, monk
     assert get_task(task["id"])["status"] == "succeeded"
     assert stored["classification_status"] == "needs_confirmation"
     assert stored["classification_result"]["document_type"] == "manual"
+
+
+@pytest.mark.asyncio
+async def test_pending_classification_recovers_after_restart(isolated_dirs, monkeypatch):
+    import asyncio
+    from services import document_classification as classification
+    from services.document_tasks import create_task, get_task, recover_document_tasks
+
+    isolated_dirs["db"].db_save_document(
+        "recover-classification", "testuser", "paper.pdf", "/x.pdf", 1, {}, classification_status="pending",
+    )
+    task = create_task("recover-classification", "classification", {"title": "Recovered"}, status="running")
+    async def recommend(*_args, **_kwargs):
+        return {"document_mode": "research", "document_type": "research_paper", "confidence": 0.8, "reason": "methods", "alternatives": []}
+    monkeypatch.setattr(classification, "recommend_classification", recommend)
+    sessions = {"recover-classification": {
+        "pages": [{"page_num": 1, "text": "Methods"}], "filename": "paper.pdf", "classification_status": "pending",
+    }}
+    recover_document_tasks(sessions)
+    for _ in range(30):
+        if get_task(task["id"])["status"] == "succeeded":
+            break
+        await asyncio.sleep(0)
+    assert get_task(task["id"])["status"] == "succeeded"
+    assert isolated_dirs["db"].db_get_document("recover-classification")["classification_status"] == "needs_confirmation"
