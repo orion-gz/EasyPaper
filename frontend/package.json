@@ -10,6 +10,7 @@
     "test:unit": "node --test tests/*.test.js",
     "preview": "vite preview",
     "test:e2e": "playwright test",
+    "test:e2e:webkit": "playwright test --config playwright.webkit.config.js",
     "test:e2e:ui": "playwright test --ui"
   },
   "devDependencies": {
@@ -30,6 +31,7 @@
     "dompurify": "3.4.14",
     "html2canvas": "^1.4.1",
     "i18next": "^26.4.0",
-    "marked": "^18.0.5"
+    "marked": "^18.0.5",
+    "pdfjs-dist": "^6.3.289"
   }
 }
