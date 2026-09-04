@@ -415,14 +415,32 @@ async def generate_adaptive_document_briefing(
 ) -> dict:
     """Generate and cache the common v3 briefing contract for every document type."""
     from services.adaptive_briefing import generate_adaptive_briefing
-    from services.briefing_policy import select_briefing_excerpts
+    from services.briefing_policy import build_chapter_guided_excerpts, select_briefing_excerpts
 
     excerpts, length_policy, sampled_pages = select_briefing_excerpts(pages, document_type)
+    chapters = []
+    if document_type == "academic_book":
+        from services.chapter_summaries import detect_chapters
+        from services.library import get_document, get_pdf_path
+        document = get_document(doc_id) or {
+            "id": doc_id, "total_pages": len(pages), "document_type": document_type,
+        }
+        detected = detect_chapters(document, pages, get_pdf_path(doc_id) or "")
+        if detected["status"] == "available":
+            chapters = detected["chapters"]
+            guided = build_chapter_guided_excerpts(pages, chapters)
+            if guided:
+                excerpts = guided
+                sampled_pages = sorted({
+                    page for chapter in chapters
+                    for page in (chapter["start_page"], chapter["end_page"])
+                })
     if not excerpts:
         raise RuntimeError("문서 브리핑을 생성할 텍스트가 없습니다.")
     result = await generate_adaptive_briefing(
         metadata.get("title") or "", excerpts, document_mode, document_type, length_policy,
         target_lang=target_lang, source_lang=source_lang, session_id=session_id,
+        chapters=chapters,
     )
     result["sampled_pages"] = sampled_pages
     save_page_insight(

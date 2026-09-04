@@ -20,6 +20,10 @@ export function adaptiveBriefingSummary(data) {
 function itemText(item) {
   if (typeof item === 'string' || typeof item === 'number') return escape(item)
   if (!item || typeof item !== 'object') return ''
+  if (item.title && item.focus) {
+    const pages = item.pages ? `<small class="primer-adaptive-pages">${escape(item.pages)}</small>` : ''
+    return `<span class="primer-adaptive-roadmap"><strong>${escape(item.title)}</strong>${pages}<span>${escape(item.focus)}</span></span>`
+  }
   return Object.entries(item)
     .filter(([, value]) => value !== null && value !== undefined && value !== '')
     .map(([key, value]) => `<span class="primer-adaptive-field"><strong>${escape(key)}</strong> ${escape(value)}</span>`)
