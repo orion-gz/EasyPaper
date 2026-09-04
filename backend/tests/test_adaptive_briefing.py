@@ -57,7 +57,8 @@ def test_long_research_document_keeps_research_sections():
     )
     assert value["document_mode"] == "research"
     assert value["document_type"] == "research_paper"
-    assert value["sections"][0]["title"] == "가설–방법–결과"
+    assert value["sections"][0]["title"] == "wrong"
+    assert value["sections"][0]["kind"] == "triples"
 
 
 def test_unknown_or_cross_type_sections_are_dropped():
@@ -67,3 +68,33 @@ def test_unknown_or_cross_type_sections_are_dropped():
     )
     assert value["sections"] == []
 
+
+
+def test_short_manual_prioritizes_type_specific_heading_pages():
+    pages = [{"page_num": page, "text": f"ordinary page {page}"} for page in range(1, 21)]
+    pages[9]["text"] = "WARNING: disconnect power\nImportant safety details"
+    text, policy, sampled = select_briefing_excerpts(pages, "manual")
+    assert policy == "short"
+    assert 10 in sampled
+    assert "Important safety details" in text
+    assert len(text) <= MAX_LONG_DOCUMENT_CHARS
+
+
+def test_policy_kind_cannot_be_changed_by_model():
+    value = normalize_briefing({"sections": [{
+        "id": "definitions", "title": "Definitions", "kind": "prose", "items": [{"term": "A"}],
+    }]}, "general", "legal_policy", "short")
+    assert value["sections"][0]["kind"] == "glossary"
+    assert value["sections"][0]["title"] == "Definitions"
+
+
+def test_all_type_contracts_keep_only_their_policy_sections():
+    research_types = {"research_paper", "review_survey", "thesis", "preprint", "academic_report"}
+    for document_type in EXPECTED_TYPES:
+        section = section_policy(document_type)[0]
+        value = normalize_briefing({"sections": [{
+            "id": section.id, "title": "Localized", "kind": "prose", "content": "evidence",
+        }]}, "research" if document_type in research_types else "general", document_type, "short")
+        assert value["sections"] == [{
+            "id": section.id, "title": "Localized", "kind": section.kind, "content": "evidence", "items": [],
+        }]

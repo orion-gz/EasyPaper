@@ -263,11 +263,11 @@ async def execute_parse_task(
                 resolved_source_language,
             )
 
-    # Follow-up LLM work is intentionally deferred until classification confirmation.
-    async def _classify() -> None:
-        from services.document_classification import classify_and_store
-        await classify_and_store(doc_id, metadata.get("title") or options.get("filename", "document.pdf"), pages)
-    asyncio.create_task(_classify())
+    # Classification is durable; all other AI work waits for explicit confirmation.
+    from services.document_classification import start_classification_task
+    start_classification_task(
+        doc_id, metadata.get("title") or options.get("filename", "document.pdf"), pages,
+    )
     await asyncio.sleep(0)
     update_task(task_id, status="succeeded", last_error_code=None)
     return {
@@ -324,7 +324,12 @@ def start_processing_after_classification(doc_id: str, sessions: dict) -> None:
     resolved = session.get("detected_source_language", source) if source == "auto" else source
     target = session.get("preferred_target_language") or options.get("target_lang", "ko")
     pages = session["pages"]
-    if options.get("translation_mode", "auto") == "auto" and len(pages) < LONG_DOCUMENT_PAGE_THRESHOLD and latest_task(doc_id, "translate") is None:
+    if (
+        options.get("translation_mode", "auto") == "auto"
+        and len(pages) < LONG_DOCUMENT_PAGE_THRESHOLD
+        and resolved not in {"und", "mul", target}
+        and latest_task(doc_id, "translate") is None
+    ):
         from services.translation_job import start_job
         start_job(doc_id, pages, target_lang=target, source_lang=resolved, style=options.get("style", "academic"), ignore_math=bool(options.get("ignore_math", False)), ignore_table=bool(options.get("ignore_table", True)), ignore_refs=bool(options.get("ignore_refs", False)))
     if latest_task(doc_id, "primer") is None:

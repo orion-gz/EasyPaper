@@ -13,7 +13,7 @@ import httpx
 
 from services.db import get_db
 
-TASK_KINDS = {"parse", "translate", "keywords", "summary", "primer", "chapter_summary", "full_summary"}
+TASK_KINDS = {"parse", "translate", "keywords", "summary", "primer", "chapter_summary", "full_summary", "classification"}
 TASK_STATUSES = {"queued", "running", "retry_wait", "succeeded", "partial_failed", "failed", "cancelled"}
 PAGE_STATUSES = {"queued", "running", "retry_wait", "succeeded", "failed", "cancelled"}
 RECOVERABLE_STATUSES = {"queued", "running", "retry_wait"}
@@ -308,6 +308,14 @@ def recover_document_tasks(sessions: dict) -> None:
         if not session:
             continue
         if task["kind"] == "translate":
+            continue
+        if task["kind"] == "classification":
+            from services.document_classification import start_classification_task
+            options = task["options"]
+            start_classification_task(
+                task["doc_id"], options.get("title") or session.get("filename", ""),
+                session["pages"], durable_task_id=task["id"],
+            )
             continue
         if task["kind"] in {"keywords", "summary"}:
             from services.insight_job import start_keyword_job, start_summary_job

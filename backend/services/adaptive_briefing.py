@@ -26,7 +26,7 @@ Write in {target_name} ({target_lang}). Do not invent unsupported claims, chapte
 Document mode/type: {document_mode}/{document_type}. Length policy: {length_policy}.
 {spoiler_rule}
 
-Use only these section ids and titles, omitting unsupported sections:
+Use only these section ids, translating each supplied title into the requested output language. Omit unsupported sections:
 {section_lines}
 
 Return ONLY a JSON array with one object using this exact contract:

@@ -87,3 +87,16 @@ async def test_full_summary_requires_explicit_confirmation():
     with pytest.raises(HTTPException) as error:
         await start_document_full_summary("doc", FullSummaryStartRequest(confirmed=False), "user")
     assert error.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_full_summary_status_uses_language_from_latest_task(monkeypatch):
+    from routers import chapters as router
+    seen = []
+    monkeypatch.setattr(router, "require_owned_document", lambda *_: {"id": "doc", "preferred_target_language": "ko"})
+    monkeypatch.setattr(router, "latest_full_summary_task", lambda *_: {"status": "succeeded", "options": {"target_lang": "en"}})
+    monkeypatch.setattr(router, "get_cached_full_summary", lambda _doc, lang: seen.append(lang) or {"summary": "done"})
+    response = await router.full_summary_status("doc", "user")
+    assert seen == ["en"]
+    assert response["target_lang"] == "en"
+    assert response["status"] == "completed"

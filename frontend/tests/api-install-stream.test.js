@@ -88,3 +88,22 @@ test('standalone document chat sends no viewer page or visual context', async ()
   assert.equal(body.current_page, undefined)
   assert.equal(body.selected_text, undefined)
 })
+
+
+test('chapter summary completion automatically retries the original chat request', async () => {
+  let requestCount = 0
+  globalThis.fetch = async () => {
+    requestCount += 1
+    const frame = requestCount === 1
+      ? 'event: chapter_summary\ndata: {"status":"running"}\n\nevent: done\ndata: {"deferred":true,"retry_original":true}\n\n'
+      : 'event: answer\ndata: {"delta":"ready"}\n\nevent: done\ndata: {}\n\n'
+    const body = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(frame)); controller.close() } })
+    return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+  const tokens = []
+  await new Promise((resolve, reject) => {
+    streamChatAPI('doc', [{ role: 'user', content: '3장 요약' }], token => tokens.push(token), resolve, reject)
+  })
+  assert.equal(requestCount, 2)
+  assert.deepEqual(tokens, ['ready'])
+})

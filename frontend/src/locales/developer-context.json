@@ -4273,5 +4273,29 @@
   },
   "viewer:chapter.fullTitle": {
     "description": "Progressive chapter summary UI: fullTitle"
+  },
+  "common:classification.title": {
+    "description": "Document classification confirmation UI: classification.title"
+  },
+  "common:classification.confirm": {
+    "description": "Document classification confirmation UI: classification.confirm"
+  },
+  "common:classification.pending": {
+    "description": "Document classification confirmation UI: classification.pending"
+  },
+  "common:classification.failed": {
+    "description": "Document classification confirmation UI: classification.failed"
+  },
+  "common:classification.recommended": {
+    "description": "Document classification confirmation UI: classification.recommended"
+  },
+  "common:classification.manual": {
+    "description": "Document classification confirmation UI: classification.manual"
+  },
+  "chat:chapterSummaryPreparing": {
+    "description": "Shown while a requested chapter summary is generated before automatically retrying chat."
+  },
+  "viewer:chapter.fullStart": {
+    "description": "Confirmation button for the high-cost detailed full summary."
   }
 }

@@ -104,6 +104,38 @@ def section_policy(document_type: str) -> tuple[BriefingSection, ...]:
     return SECTION_POLICIES.get(document_type, SECTION_POLICIES["other"])
 
 
+_TYPE_HEADING_TERMS: dict[str, tuple[str, ...]] = {
+    "thesis": ("chapter", "introduction", "literature review", "method", "result", "conclusion", "장", "연구 방법", "결론"),
+    "technical": ("overview", "architecture", "install", "configuration", "api", "input", "output", "troubleshoot", "구조", "설치", "설정", "오류"),
+    "academic_book": ("chapter", "part", "definition", "theorem", "example", "장", "부", "정의", "정리", "예제"),
+    "general_book": ("chapter", "part", "introduction", "conclusion", "장", "부", "서론", "결론"),
+    "literary_work": ("chapter", "part", "prologue", "epilogue", "장", "부", "서문", "에필로그"),
+    "article": ("headline", "introduction", "background", "analysis", "opinion", "source", "배경", "분석", "출처"),
+    "report": ("executive summary", "methodology", "baseline", "results", "forecast", "risk", "요약", "방법론", "결과", "전망", "위험"),
+    "manual": ("prerequisite", "installation", "procedure", "warning", "verify", "troubleshoot", "전제", "설치", "절차", "경고", "검증", "문제 해결"),
+    "legal_policy": ("scope", "definition", "rights", "duties", "prohibition", "exception", "procedure", "적용 범위", "정의", "권리", "의무", "금지", "예외", "절차"),
+    "presentation": ("agenda", "overview", "objective", "result", "conclusion", "목차", "목적", "결과", "결론"),
+    "other": ("overview", "purpose", "introduction", "summary", "conclusion", "개요", "목적", "서론", "요약", "결론"),
+}
+
+
+def _short_type_positions(nonempty: list[tuple[int, dict]], document_type: str) -> list[int]:
+    terms = _TYPE_HEADING_TERMS.get(document_type, ())
+    matches = []
+    for position, (_, page) in enumerate(nonempty):
+        heading_text = "\n".join((page.get("text") or "").splitlines()[:35]).casefold()
+        if any(re.search(rf"(?:^|\n)\s*{re.escape(term.casefold())}(?:\b|\s|[:：])", heading_text) for term in terms):
+            matches.append(position)
+    candidates = [0, *matches, len(nonempty) - 1]
+    positions = []
+    for position in candidates:
+        if position not in positions:
+            positions.append(position)
+        if len(positions) >= MAX_LONG_DOCUMENT_SEGMENTS:
+            break
+    return sorted(positions)
+
+
 def select_briefing_excerpts(pages: list[dict], document_type: str) -> tuple[str, str, list[int]]:
     nonempty = [(index, page) for index, page in enumerate(pages) if (page.get("text") or "").strip()]
     if not nonempty:
@@ -133,7 +165,8 @@ def select_briefing_excerpts(pages: list[dict], document_type: str) -> tuple[str
             detected = detect_sections(pages)
             text = "\n\n".join(value for value in detected.values() if value)
             return text[:MAX_LONG_DOCUMENT_CHARS], "short", [page.get("page_num", index + 1) for index, page in nonempty]
-        selected = nonempty
+        positions = _short_type_positions(nonempty, document_type)
+        selected = [nonempty[position] for position in positions]
         per_segment = max(400, MAX_LONG_DOCUMENT_CHARS // max(1, len(selected)))
     chunks, used, page_numbers = [], 0, []
     for index, page in selected:
@@ -158,11 +191,11 @@ def normalize_briefing(value: dict, document_mode: str, document_type: str, leng
         if not isinstance(raw, dict) or raw.get("id") not in allowed:
             continue
         policy = allowed[raw["id"]]
-        kind = raw.get("kind") if raw.get("kind") in {"prose", "bullets", "triples", "glossary", "citation_graph"} else policy.kind
+        kind = policy.kind
         content = str(raw.get("content") or "").strip()
         items = raw.get("items") if isinstance(raw.get("items"), list) else []
         if content or items:
-            sections.append({"id": policy.id, "title": policy.title, "kind": kind, "content": content, "items": items})
+            sections.append({"id": policy.id, "title": str(raw.get("title") or policy.title).strip()[:120], "kind": kind, "content": content, "items": items})
     return {
         "schema_version": BRIEFING_SCHEMA_VERSION,
         "document_mode": document_mode,

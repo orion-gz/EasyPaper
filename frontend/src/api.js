@@ -57,6 +57,20 @@ export async function patchWorkspaceSettingsAPI(payload) {
 }
 
 
+export async function getDocumentClassificationAPI(docId) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/classification`, { cache: 'no-store' })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function confirmDocumentClassificationAPI(docId, payload) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/classification/confirm`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
 export async function patchDocumentClassificationAPI(docId, payload) {
   const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/classification`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
@@ -651,39 +665,28 @@ export function streamChatAPI(sessionId, messages, onToken, onDone, onError, ima
   let completed = false
   let failed = false
 
-  const dispatchEvent = (eventName, payload) => {
-    if (typeof onEvent === "function") onEvent(eventName, payload)
-    if (eventName === "answer") {
-      if (payload?.delta) onToken(payload.delta)
-    } else if (eventName === "error") {
-      failed = true
-      onError(new Error(payload?.message || "Chat stream failed"))
-    } else if (eventName === "done" && !completed) {
-      completed = true
-      if (!failed && !payload?.failed) onDone(payload)
-    }
-  }
-
-  fetch(API_BASE + "/chat/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_id: sessionId,
-      messages: messages,
-      image_base64: imageBase64 || undefined,
-      current_page: context.currentPage || undefined,
-      selected_text: context.selectedText || undefined,
-      screen_context: context.screenContext || undefined,
-      verify_evidence: Boolean(context.verifyEvidence),
-    }),
-    signal: controller.signal
+  const requestBody = JSON.stringify({
+    session_id: sessionId,
+    messages,
+    image_base64: imageBase64 || undefined,
+    current_page: context.currentPage || undefined,
+    selected_text: context.selectedText || undefined,
+    screen_context: context.screenContext || undefined,
+    verify_evidence: Boolean(context.verifyEvidence),
   })
-    .then(async (res) => {
+
+  const runRequest = async () => {
+    let retryOriginal = false
+    try {
+      const res = await fetch(API_BASE + '/chat/stream', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: requestBody,
+        signal: controller.signal,
+      })
       if (!res.ok) { failed = true; onError(await apiError(res)); return }
-      const contentType = res.headers?.get?.("content-type") || ""
+      const contentType = res.headers?.get?.('content-type') || ''
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-      if (!contentType.includes("text/event-stream")) {
+      if (!contentType.includes('text/event-stream')) {
         while (true) {
           const { value, done } = await reader.read()
           if (done) break
@@ -694,48 +697,59 @@ export function streamChatAPI(sessionId, messages, onToken, onDone, onError, ima
         return
       }
 
-      let buffer = ""
+      let buffer = ''
+      const dispatchEvent = (eventName, payload) => {
+        if (typeof onEvent === 'function') onEvent(eventName, payload)
+        if (eventName === 'answer') {
+          if (payload?.delta) onToken(payload.delta)
+        } else if (eventName === 'error') {
+          failed = true
+          onError(new Error(payload?.message || 'Chat stream failed'))
+        } else if (eventName === 'done' && payload?.retry_original) {
+          retryOriginal = true
+        } else if (eventName === 'done' && !completed) {
+          completed = true
+          if (!failed && !payload?.failed) onDone(payload)
+        }
+      }
       const consume = () => {
         let boundary
-        while ((boundary = buffer.indexOf("\n\n")) !== -1) {
-          const frame = buffer.slice(0, boundary).replace(/\r/g, "")
+        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+          const frame = buffer.slice(0, boundary).replace(/\r/g, '')
           buffer = buffer.slice(boundary + 2)
           if (!frame.trim()) continue
-          let eventName = "message"
+          let eventName = 'message'
           const dataLines = []
-          frame.split("\n").forEach(line => {
-            if (line.startsWith("event:")) eventName = line.slice(6).trim()
-            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart())
+          frame.split('\n').forEach(line => {
+            if (line.startsWith('event:')) eventName = line.slice(6).trim()
+            else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
           })
           if (!dataLines.length) continue
-          try {
-            dispatchEvent(eventName, JSON.parse(dataLines.join("\n")))
-          } catch (error) {
-            failed = true
-            onError(error)
-          }
+          dispatchEvent(eventName, JSON.parse(dataLines.join('\n')))
         }
       }
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
-        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n")
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
         consume()
       }
-      buffer += decoder.decode().replace(/\r\n/g, "\n")
+      buffer += decoder.decode().replace(/\r\n/g, '\n')
       consume()
-      if (!completed && !failed) { completed = true; onDone() }
-    })
-    .catch((err) => {
-      if (err.name !== "AbortError") {
-        failed = true
-        onError(err)
+      if (retryOriginal && !failed && !controller.signal.aborted) {
+        await runRequest()
+      } else if (!completed && !failed) {
+        completed = true
+        onDone()
       }
-    })
+    } catch (error) {
+      if (error.name !== 'AbortError' && !failed) { failed = true; onError(error) }
+    }
+  }
 
+  runRequest()
   return () => controller.abort()
 }
-
 
 /**
  * 직전 어시스턴트 답변과 논문 본문을 참고해 후속 질문 3개를 추천받습니다.

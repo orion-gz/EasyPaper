@@ -1,6 +1,7 @@
 """AI-backed recommendation and confirmation state for newly parsed documents."""
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -70,6 +71,50 @@ async def classify_and_store(doc_id: str, title: str, pages: list[dict]) -> dict
     db_update_document_classification_recommendation(doc_id, "needs_confirmation", result=result)
     return result
 
+
+
+_running: dict[str, asyncio.Task] = {}
+
+def start_classification_task(
+    doc_id: str, title: str, pages: list[dict], *, durable_task_id: str | None = None,
+) -> dict:
+    """Start or resume one durable classification recommendation."""
+    from services.document_tasks import create_task, get_task, latest_task, update_task
+    active = latest_task(doc_id, "classification")
+    if active and active["status"] in {"queued", "running", "retry_wait"} and active["id"] != durable_task_id:
+        return active
+    task = get_task(durable_task_id) if durable_task_id else None
+    if not task:
+        task = create_task(doc_id, "classification", {"title": title}, status="queued")
+    if task["id"] in _running and not _running[task["id"]].done():
+        return task
+
+    async def worker() -> None:
+        from services.document_tasks import retry_async
+        from services.db import db_update_document_classification_recommendation
+        update_task(task["id"], status="running", increment_attempt=True)
+        try:
+            from services.db import db_get_document
+            from services.processing_policy import ensure_processing_allowed
+            document = db_get_document(doc_id) or {}
+            ensure_processing_allowed(document, "classification")
+            result = await retry_async(lambda: recommend_classification(title, pages, session_id=doc_id))
+            current = get_task(task["id"])
+            if current and current["cancel_requested"]:
+                return
+            db_update_document_classification_recommendation(doc_id, "needs_confirmation", result=result)
+            update_task(task["id"], status="succeeded")
+        except asyncio.CancelledError:
+            update_task(task["id"], status="cancelled", cancel_requested=True)
+            raise
+        except Exception as exc:
+            db_update_document_classification_recommendation(doc_id, "failed", error=str(exc)[:500])
+            update_task(task["id"], status="failed", last_error_code=getattr(exc, "document_task_error_code", "generation_failed"))
+        finally:
+            _running.pop(task["id"], None)
+
+    _running[task["id"]] = asyncio.create_task(worker())
+    return task
 
 def classification_payload(doc: dict) -> dict:
     return {

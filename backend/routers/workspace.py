@@ -146,6 +146,7 @@ async def confirm_document_classification(doc_id: str, body: DocumentClassificat
     db_update_document_classification(doc_id, body.document_mode, body.document_type, MODE_SCHEMA_VERSION)
     sessions[doc_id]["document_mode"] = body.document_mode
     sessions[doc_id]["document_type"] = body.document_type
+    sessions[doc_id]["classification_status"] = "confirmed"
     from services.parse_job import start_processing_after_classification
     start_processing_after_classification(doc_id, sessions)
     return {"status": "confirmed", "document_mode": body.document_mode, "document_type": body.document_type}

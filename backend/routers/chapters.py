@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from routers.upload import require_session_owner
 from services.auth import get_current_user
 from services.chapter_summaries import (
-    detect_chapters, estimate_full_summary, find_chapter, get_cached_chapter_summary,
+    active_chapter_task, detect_chapters, estimate_full_summary, find_chapter, get_cached_chapter_summary,
     get_cached_full_summary, invalidate_chapter_summary, invalidate_full_summary, latest_full_summary_task,
     start_chapter_summary, start_full_summary,
 )
@@ -48,7 +48,11 @@ async def list_document_chapters(doc_id: str, current_user: str = Depends(get_cu
     chapters = []
     for chapter in detected["chapters"]:
         item = dict(chapter)
-        item["summary_status"] = "completed" if get_cached_chapter_summary(document, chapter, target_lang) else "not_started"
+        if get_cached_chapter_summary(document, chapter, target_lang):
+            item["summary_status"] = "completed"
+        else:
+            active = active_chapter_task(doc_id, chapter["id"])
+            item["summary_status"] = active["status"] if active else "not_started"
         chapters.append(item)
     return {**detected, "chapters": chapters, "target_lang": target_lang}
 
@@ -103,9 +107,9 @@ async def start_document_full_summary(doc_id: str, body: FullSummaryStartRequest
 @router.get("/library/{doc_id}/full-summary/status")
 async def full_summary_status(doc_id: str, current_user: str = Depends(get_current_user)):
     document = require_owned_document(doc_id, current_user)
-    target_lang = _language(document)
+    task = latest_full_summary_task(doc_id)
+    target_lang = _language(document, task["options"].get("target_lang") if task else None)
     cached = get_cached_full_summary(document, target_lang)
     if cached:
-        return {"status": "completed", "summary": cached}
-    task = latest_full_summary_task(doc_id)
-    return {"status": task["status"] if task else "not_started", "task": task}
+        return {"status": "completed", "summary": cached, "target_lang": target_lang}
+    return {"status": task["status"] if task else "not_started", "task": task, "target_lang": target_lang}

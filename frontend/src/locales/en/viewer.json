@@ -65,5 +65,6 @@
   "chapter.summarize": "Summarize",
   "chapter.unavailable": "Chapter summaries are unavailable because the chapter structure could not be confirmed.",
   "chapter.fullConfirm": "Generate {{missing}} of {{count}} chapters? Estimated {{calls}} LLM calls and about {{tokens}} input tokens.",
-  "chapter.fullTitle": "Detailed full summary"
+  "chapter.fullTitle": "Detailed full summary",
+  "chapter.fullStart": "Start summary"
 }

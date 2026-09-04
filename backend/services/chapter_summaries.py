@@ -77,7 +77,7 @@ def _html_outline(manifest_path: str, total_pages: int) -> list[dict]:
 
 
 _CHAPTER_HEADING_RE = re.compile(
-    r"^(?:chapter\s+\d+|part\s+[ivx\d]+|제?\s*\d+\s*장|\d+\.(?!\d)\s+\S).{0,180}$",
+    r"^(?:chapter\s+\d+|part\s+[ivx\d]+|제?\s*\d+\s*장|\d+\.(?!\d)\s+\S|introduction|background|methods?|results?|discussion|conclusions?|서론|배경|연구\s*방법|결과|논의|결론).{0,180}$",
     re.IGNORECASE,
 )
 
@@ -204,10 +204,16 @@ def _active_task(doc_id: str, kind: str, chapter_id: str | None = None) -> Optio
     return None
 
 
+def active_chapter_task(doc_id: str, chapter_id: str) -> Optional[dict]:
+    return _active_task(doc_id, "chapter_summary", chapter_id)
+
+
 def start_chapter_summary(
     document: dict, pages: list[dict], chapter: dict, target_lang: str,
     *, durable_task_id: str | None = None,
 ) -> dict:
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(document, "insight")
     active = _active_task(document["id"], "chapter_summary", chapter["id"])
     if active and active["id"] != durable_task_id:
         return active
@@ -307,6 +313,8 @@ def start_full_summary(
     document: dict, pages: list[dict], chapters: list[dict], target_lang: str,
     *, durable_task_id: str | None = None,
 ) -> dict:
+    from services.processing_policy import ensure_processing_allowed
+    ensure_processing_allowed(document, "insight")
     active = _active_task(document["id"], "full_summary")
     if active and active["id"] != durable_task_id:
         return active
@@ -342,6 +350,14 @@ def start_full_summary(
 
     _running[task["id"]] = asyncio.create_task(worker())
     return task
+
+
+def cancel_summary_task(task_id: str) -> bool:
+    running = _running.get(task_id)
+    if running and not running.done():
+        running.cancel()
+        return True
+    return False
 
 
 def latest_full_summary_task(doc_id: str) -> Optional[dict]:

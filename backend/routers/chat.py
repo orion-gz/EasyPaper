@@ -180,12 +180,27 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
                 chapter_context = get_cached_chapter_summary(document, chapter, target_lang)
                 if not chapter_context:
                     task = start_chapter_summary(document, pages, chapter, target_lang)
-                    for _ in range(240):
-                        current = get_task(task["id"])
-                        if not current or current["status"] not in {"queued", "running", "retry_wait"}:
-                            break
-                        await asyncio.sleep(0.25)
-                    chapter_context = get_cached_chapter_summary(document, chapter, target_lang)
+
+                    async def deferred_chapter_stream():
+                        last_status = None
+                        while True:
+                            current = get_task(task["id"])
+                            task_status = current["status"] if current else "failed"
+                            if task_status != last_status:
+                                yield _sse("chapter_summary", {
+                                    "status": task_status, "task_id": task["id"], "chapter": chapter,
+                                })
+                                last_status = task_status
+                            if task_status not in {"queued", "running", "retry_wait"}:
+                                break
+                            await asyncio.sleep(0.75)
+                        if task_status == "succeeded":
+                            yield _sse("done", {"deferred": True, "retry_original": True})
+                        else:
+                            yield _sse("error", {"message": "Chapter summary generation failed.", "task_id": task["id"]})
+                            yield _sse("done", {"failed": True})
+
+                    return StreamingResponse(deferred_chapter_stream(), media_type="text/event-stream")
     total_pages = max((int(page.get("page_num") or 0) for page in pages), default=0)
     if current_page and current_page > total_pages:
         raise HTTPException(status_code=400, detail={

@@ -10,7 +10,7 @@ import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabul
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
-import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
+import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
@@ -1187,6 +1187,76 @@ fileInput.addEventListener('change', (e) => {
   }
 })
 
+async function requireClassificationConfirmation(docId) {
+  let modal = document.getElementById('classification-confirmation-modal')
+  if (!modal) {
+    modal = document.createElement('div')
+    modal.id = 'classification-confirmation-modal'
+    modal.className = 'modal-overlay hidden'
+    modal.setAttribute('aria-labelledby', 'classification-confirmation-title')
+    modal.innerHTML = `<div class="custom-confirm-modal" style="max-width:620px">
+      <div class="custom-confirm-modal-header"><span id="classification-confirmation-title" class="custom-confirm-modal-title"></span></div>
+      <div class="custom-confirm-modal-body"><p class="classification-status"></p><p class="classification-reason"></p><div class="classification-options" role="radiogroup"></div></div>
+      <div class="custom-confirm-modal-footer"><button type="button" class="custom-confirm-btn confirm-btn primary-btn" disabled></button></div>
+    </div>`
+    document.body.appendChild(modal)
+  }
+  const title = modal.querySelector('#classification-confirmation-title')
+  const status = modal.querySelector('.classification-status')
+  const reason = modal.querySelector('.classification-reason')
+  const optionsRoot = modal.querySelector('.classification-options')
+  const confirm = modal.querySelector('.confirm-btn')
+  title.textContent = t('common:classification.title')
+  confirm.textContent = t('common:classification.confirm')
+  openOverlayModal(modal)
+
+  return new Promise((resolve, reject) => {
+    let stopped = false
+    let selected = null
+    const close = value => { stopped = true; closeOverlayModal(modal); resolve(value) }
+    const render = payload => {
+      status.textContent = payload.status === 'failed'
+        ? t('common:classification.failed')
+        : t('common:classification.recommended')
+      reason.textContent = payload.recommendation?.reason || (payload.error ? t('common:classification.manual') : '')
+      const recommended = payload.recommendation
+      selected = recommended ? { document_mode: recommended.document_mode, document_type: recommended.document_type } : payload.current
+      optionsRoot.replaceChildren()
+      payload.types.forEach(type => {
+        const label = document.createElement('label')
+        label.className = 'document-type-option'
+        const input = document.createElement('input')
+        input.type = 'radio'; input.name = 'confirmed-document-type'; input.value = type.value
+        input.checked = type.mode === selected.document_mode && type.value === selected.document_type
+        input.addEventListener('change', () => { selected = { document_mode: type.mode, document_type: type.value }; confirm.disabled = false })
+        const copy = document.createElement('span')
+        copy.innerHTML = `<strong>${escapeHtml(type.label)}</strong><small>${escapeHtml(type.description || '')}</small>`
+        label.append(input, copy); optionsRoot.appendChild(label)
+      })
+      confirm.disabled = !selected
+    }
+    const poll = async () => {
+      try {
+        while (!stopped) {
+          const payload = await getDocumentClassificationAPI(docId)
+          if (payload.status === 'confirmed') { close(payload.current); return }
+          if (payload.status !== 'pending') { render(payload); return }
+          status.textContent = t('common:classification.pending')
+          reason.textContent = ''; optionsRoot.replaceChildren(); confirm.disabled = true
+          await new Promise(done => setTimeout(done, 700))
+        }
+      } catch (error) { stopped = true; closeOverlayModal(modal); reject(error) }
+    }
+    confirm.onclick = async () => {
+      if (!selected) return
+      confirm.disabled = true
+      try { close(await confirmDocumentClassificationAPI(docId, selected)) }
+      catch (error) { confirm.disabled = false; showToast(error.message, 'error') }
+    }
+    poll()
+  })
+}
+
 // ── 파일 처리 ─────────────────────────────────────
 async function beginClassifiedUpload(files, targetFolderId = null) {
   const pdfFiles = Array.from(files).filter(file => file.name.toLowerCase().endsWith('.pdf'))
@@ -1284,8 +1354,12 @@ async function handleFiles(uploadItems, targetFolderId = null) {
 
   for (const uploaded of successes) {
     const { classification, result, rememberedTypeOptions } = uploaded
+    const confirmedClassification = await requireClassificationConfirmation(result.session_id)
+    result.document_mode = confirmedClassification.document_mode
+    result.document_type = confirmedClassification.document_type
+    result.classification_status = "confirmed"
     const title = result.metadata?.title || result.filename
-    if (isLongDocument(result.total_pages) && getTranslationMode(classification.documentMode) === 'auto') {
+    if (isLongDocument(result.total_pages) && getTranslationMode(result.document_mode) === 'auto') {
       showToast('50페이지 이상 문서는 전체 자동 번역 대신 보는 페이지부터 번역됩니다.', 'info')
     }
     if (result.document_mode === 'general' && getKeywordMode(result.document_mode) === 'auto' && result.total_pages > 20) {
@@ -1300,7 +1374,7 @@ async function handleFiles(uploadItems, targetFolderId = null) {
         showInsightJobProgress(result.session_id, 'keywords', `${title} · 고급 어휘`)
       }
     }
-    saveDocumentTypeOptions(classification.documentType, { ...rememberedTypeOptions, ...getTranslationOptions(classification.documentMode) })
+    saveDocumentTypeOptions(result.document_type, { ...rememberedTypeOptions, ...getTranslationOptions(result.document_mode) })
   }
   if (successes.length) {
     patchWorkspaceSettingsAPI({ document_type_options: loadDocumentTypeOptions() }).catch(() => {
@@ -6277,6 +6351,7 @@ async function sendChatDrawerMessage() {
     },
     (eventName, payload) => {
       if (eventName === 'evidence') responseEvidence = payload?.items || []
+      if (eventName === 'chapter_summary' && payload?.status === 'queued') showToast(t('chat:chapterSummaryPreparing'), 'info')
       if (eventName === 'verification') responseVerification = payload
     }
   )
@@ -10167,6 +10242,12 @@ async function openFromLibrary(doc, shouldPushState = true) {
   const isCurrentOpen = () => myOpenGeneration === documentOpenGeneration
   docOpeningId = doc.id
   try {
+    if (doc.classification_status && doc.classification_status !== 'confirmed') {
+      const confirmed = await requireClassificationConfirmation(doc.id)
+      doc.document_mode = confirmed.document_mode
+      doc.document_type = confirmed.document_type
+      doc.classification_status = 'confirmed'
+    }
     // 이전 문서에서 진행 중이던 채팅 스트림이 있으면 반드시 먼저 취소한다.
     // 이 함수는 popstate/hashchange 라우팅(handleRouting)에서 resetState()를
     // 거치지 않고 직접 호출될 수 있어서, 취소하지 않으면 이전 문서의 스트림
@@ -14578,6 +14659,7 @@ function regenerateResponse(assistantMsgEl) {
     },
     (eventName, payload) => {
       if (eventName === "evidence") responseEvidence = payload?.items || [];
+      if (eventName === 'chapter_summary' && payload?.status === 'queued') showToast(t('chat:chapterSummaryPreparing'), 'info')
       if (eventName === "verification") responseVerification = payload;
     }
   );
@@ -17635,7 +17717,10 @@ async function loadPDFOutline() {
       fullButton.addEventListener('click', async () => {
         try {
           const estimate = await getFullSummaryEstimateAPI(state.sessionId)
-          const accepted = window.confirm(t('viewer:chapter.fullConfirm', { count: estimate.chapter_count, missing: estimate.missing_chapter_count, calls: estimate.estimated_llm_calls, tokens: estimate.estimated_input_tokens.toLocaleString() }))
+          const accepted = await showCustomConfirm(
+            t('viewer:chapter.fullConfirm', { count: estimate.chapter_count, missing: estimate.missing_chapter_count, calls: estimate.estimated_llm_calls, tokens: estimate.estimated_input_tokens.toLocaleString() }),
+            { title: t('viewer:chapter.fullTitle'), confirmText: t('viewer:chapter.fullStart'), danger: false },
+          )
           if (!accepted) return
           fullButton.disabled = true; fullButton.textContent = t('viewer:chapter.fullRunning')
           let status = await startFullSummaryAPI(state.sessionId)
