@@ -6,7 +6,7 @@ import re
 
 
 BRIEFING_SCHEMA_VERSION = 3
-BRIEFING_PROMPT_VERSION = "adaptive-briefing-v3"
+BRIEFING_PROMPT_VERSION = "adaptive-briefing-v4"
 LONG_DOCUMENT_PAGE_THRESHOLD = 50
 MAX_LONG_DOCUMENT_SEGMENTS = 16
 MAX_LONG_DOCUMENT_CHARS = 16_000
@@ -54,9 +54,12 @@ SECTION_POLICIES: dict[str, tuple[BriefingSection, ...]] = {
         ("verification", "검증", "bullets"), ("troubleshooting", "오류 해결", "bullets"),
     )),
     "academic_book": tuple(BriefingSection(*item) for item in (
-        ("prerequisites", "선수 지식", "bullets"), ("chapter_structure", "장 구조", "bullets"),
-        ("core_concepts", "핵심 개념", "glossary"), ("definitions_theorems", "정의·정리", "bullets"),
-        ("examples", "예제", "bullets"), ("chapter_connections", "장 간 연결", "prose"),
+        ("book_identity", "이 책은 무엇을 다루는가", "prose"),
+        ("learning_map", "전체 학습 지도", "prose"),
+        ("chapter_roadmap", "장별 안내", "bullets"),
+        ("prerequisites", "선수 지식", "bullets"),
+        ("core_concepts", "핵심 개념", "glossary"),
+        ("reading_strategy", "읽는 방법", "bullets"),
     )),
     "general_book": tuple(BriefingSection(*item) for item in (
         ("thesis", "중심 논지", "prose"), ("chapter_claims", "장별 주장", "bullets"),
@@ -97,6 +100,48 @@ SECTION_POLICIES: dict[str, tuple[BriefingSection, ...]] = {
         ("structure", "구조", "bullets"), ("key_content", "핵심 내용", "bullets"),
         ("cautions", "주의점", "bullets"), ("terms", "용어", "glossary"),
     )),
+}
+
+
+# Structurally valid output can still be useless. These anchors express the
+# minimum orientation each type must provide before the briefing is cached.
+QUALITY_REQUIRED_SECTIONS: dict[str, tuple[str, ...]] = {
+    "research_paper": ("research_question",),
+    "review_survey": ("scope",),
+    "thesis": ("research_questions",),
+    "preprint": ("claims",),
+    "academic_report": ("purpose_scope",),
+    "technical": ("architecture",),
+    "academic_book": ("book_identity", "learning_map", "chapter_roadmap"),
+    "general_book": ("thesis",),
+    "literary_work": ("style_mood",),
+    "article": ("claim",),
+    "report": ("methodology",),
+    "manual": ("steps",),
+    "legal_policy": ("scope",),
+    "presentation": ("purpose",),
+    "other": ("purpose",),
+}
+
+ORIENTATION_RULES: dict[str, str] = {
+    "academic_book": ("Start with the forest, then the trees. Explain what the book teaches and its "
+        "overall progression before listing concepts. In chapter_roadmap, create exactly one item for "
+        "every confirmed chapter, in source order. Each item must have title, pages, and focus, and "
+        "must retain the supplied chapter title."),
+    "research_paper": "Orient the reader to the problem, approach, evidence, and limits before details.",
+    "review_survey": "Orient the reader to the scope, organizing taxonomy, comparisons, and open questions.",
+    "thesis": "Orient the reader to the central questions and how the chapter sequence builds the argument.",
+    "preprint": "Separate the claimed contribution from evidence and items still requiring verification.",
+    "academic_report": "Explain the report purpose and decision-relevant findings before individual metrics.",
+    "technical": "Explain the system purpose and architecture before setup commands and troubleshooting.",
+    "general_book": "Explain the central thesis and chapter progression before examples or action items.",
+    "literary_work": "Provide a spoiler-safe orientation to viewpoint, characters, themes, and style.",
+    "article": "Explain the central claim, source basis, and perspective before secondary details.",
+    "report": "Explain the analytical question, method, baseline, and main result before forecasts.",
+    "manual": "Explain the goal, prerequisites, ordered procedure, verification, and warnings.",
+    "legal_policy": "Explain scope and affected parties before rights, duties, exceptions, and procedures.",
+    "presentation": "Explain the purpose and slide-level argument flow before individual visual details.",
+    "other": "Explain the document purpose, intended reader, and structure before details.",
 }
 
 
@@ -181,6 +226,77 @@ def select_briefing_excerpts(pages: list[dict], document_type: str) -> tuple[str
         if used >= MAX_LONG_DOCUMENT_CHARS:
             break
     return "\n\n".join(chunks)[:MAX_LONG_DOCUMENT_CHARS], "long" if is_long else "short", page_numbers
+
+
+def build_chapter_guided_excerpts(pages: list[dict], chapters: list[dict]) -> str:
+    """Build a whole-book map plus a small opening excerpt for every confirmed chapter."""
+    if not chapters:
+        return ""
+    toc = ["[CONFIRMED CHAPTER MAP]"]
+    for index, chapter in enumerate(chapters, 1):
+        toc.append(
+            f"{index}. {chapter['title']} (pages {chapter['start_page']}-{chapter['end_page']})"
+        )
+    toc.append("[END CHAPTER MAP]")
+    prefix = "\n".join(toc)
+    remaining = max(0, MAX_LONG_DOCUMENT_CHARS - len(prefix) - 2)
+    per_chapter = max(180, remaining // max(1, len(chapters)))
+    page_map = {
+        int(page.get("page_num") or index + 1): (page.get("text") or "").strip()
+        for index, page in enumerate(pages)
+    }
+    chunks = [prefix]
+    for chapter in chapters:
+        texts = []
+        for page_num in range(chapter["start_page"], min(chapter["end_page"], chapter["start_page"] + 2) + 1):
+            if page_map.get(page_num):
+                texts.append(page_map[page_num])
+            if sum(map(len, texts)) >= per_chapter:
+                break
+        excerpt = "\n".join(texts)[:per_chapter]
+        chunks.append(
+            f"[CHAPTER OPENING: {chapter['title']} | pages "
+            f"{chapter['start_page']}-{chapter['end_page']}]\n{excerpt or '[no extractable opening text]'}"
+        )
+    return "\n\n".join(chunks)[:MAX_LONG_DOCUMENT_CHARS]
+
+
+def briefing_quality_issues(value: dict, document_type: str, chapters: list[dict] | None = None) -> list[str]:
+    """Return actionable quality defects; an empty list means the response is cacheable."""
+    issues = []
+    if len(str(value.get("headline") or "").strip()) < 8:
+        issues.append("headline must identify the document and its purpose")
+    sections = {
+        section.get("id"): section for section in value.get("sections", [])
+        if isinstance(section, dict)
+    }
+    for section_id in QUALITY_REQUIRED_SECTIONS.get(document_type, ("purpose",)):
+        section = sections.get(section_id) or {}
+        if not str(section.get("content") or "").strip() and not section.get("items"):
+            issues.append(f"required section {section_id!r} is missing or empty")
+    nonempty_count = sum(
+        bool(str(section.get("content") or "").strip() or section.get("items"))
+        for section in sections.values()
+    )
+    minimum_sections = 3 if document_type == "academic_book" else 2
+    if nonempty_count < minimum_sections:
+        issues.append(f"briefing needs at least {minimum_sections} evidence-backed sections")
+    confirmed = chapters or []
+    if document_type == "academic_book" and confirmed:
+        roadmap = sections.get("chapter_roadmap") or {}
+        items = roadmap.get("items") if isinstance(roadmap.get("items"), list) else []
+        if len(items) != len(confirmed):
+            issues.append(
+                f"chapter_roadmap must contain exactly {len(confirmed)} items; received {len(items)}"
+            )
+        rendered = "\n".join(
+            str(item.get("title") or "") if isinstance(item, dict) else str(item)
+            for item in items
+        ).casefold()
+        missing_titles = [chapter["title"] for chapter in confirmed if chapter["title"].casefold() not in rendered]
+        if missing_titles:
+            issues.append("chapter_roadmap omits confirmed titles: " + ", ".join(missing_titles[:8]))
+    return issues
 
 
 def normalize_briefing(value: dict, document_mode: str, document_type: str, length_policy: str) -> dict:

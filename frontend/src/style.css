@@ -7880,3 +7880,7 @@ body.light-theme .chat-drawer {
 .primer-adaptive-triples > li { padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-secondary); }
 .primer-adaptive-field { display: block; line-height: 1.55; }
 .primer-adaptive-field strong { margin-right: 6px; color: var(--control-accent); }
+.primer-adaptive-roadmap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; }
+.primer-adaptive-roadmap > strong { color: var(--text-primary); }
+.primer-adaptive-roadmap > small { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.primer-adaptive-roadmap > span { grid-column: 1 / -1; line-height: 1.55; }

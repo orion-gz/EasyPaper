@@ -29,3 +29,19 @@ test('escapes section content and labels', () => {
   assert.doesNotMatch(html, /<script>/)
   assert.match(html, /&lt;script&gt;/)
 })
+
+
+test('renders academic book roadmap as title, pages, and focus without raw field labels', () => {
+  const html = renderAdaptiveBriefingHtml({
+    schema_version: 3,
+    sections: [{
+      id: 'chapter_roadmap', title: '장별 안내', kind: 'bullets', content: '',
+      items: [{ title: 'Chapter 1: Foundations', pages: '1–32', focus: '인터넷의 기본 구조' }],
+    }],
+  })
+  assert.match(html, /Chapter 1: Foundations/)
+  assert.match(html, /1–32/)
+  assert.match(html, /인터넷의 기본 구조/)
+  assert.doesNotMatch(html, />title</)
+  assert.doesNotMatch(html, />focus</)
+})
