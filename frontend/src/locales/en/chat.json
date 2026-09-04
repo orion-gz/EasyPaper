@@ -16,5 +16,6 @@
   "evidence.risk": "{{count}} evidence risk signals",
   "evidence.translation": "Translation evidence",
   "evidence.verifyAction": "Verify evidence",
-  "evidence.verifyPrompt": "Verify the evidence for the previous answer."
+  "evidence.verifyPrompt": "Verify the evidence for the previous answer.",
+  "chapterSummaryPreparing": "Preparing the requested chapter summary; your question will resume automatically."
 }

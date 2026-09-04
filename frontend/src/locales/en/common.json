@@ -1172,5 +1172,14 @@
   "documentTypes.manual": "Manual or guide",
   "documentTypes.legalPolicy": "Legal or policy document",
   "documentTypes.presentation": "Presentation or lecture material",
-  "documentTypes.legacyBook": "Book (reclassification needed)"
+  "documentTypes.legacyBook": "Book (reclassification needed)",
+  "briefing.suggestedQuestions": "Suggested questions",
+  "briefing.sampledTitle": "Sampled document briefing",
+  "briefing.title": "Document briefing",
+  "classification.title": "Confirm AI document classification",
+  "classification.confirm": "Confirm classification",
+  "classification.pending": "AI is analyzing the document type…",
+  "classification.failed": "Automatic classification failed. Select the document type manually.",
+  "classification.recommended": "Review the recommended document type.",
+  "classification.manual": "The evidence was insufficient, so your selection is required."
 }

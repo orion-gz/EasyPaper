@@ -4222,5 +4222,104 @@
   },
   "viewer:documentInfo.processing": {
     "description": "Label for the local or external data processing badge."
+  },
+  "common:briefing.suggestedQuestions": {
+    "description": "Heading above AI-suggested questions in an adaptive document briefing."
+  },
+  "common:briefing.sampledTitle": {
+    "description": "Eyebrow for a long-document briefing generated from representative excerpts."
+  },
+  "common:briefing.title": {
+    "description": "Eyebrow for an adaptive document briefing."
+  },
+  "viewer:chapter.summarizing": {
+    "description": "Progressive chapter summary UI: summarizing"
+  },
+  "viewer:chapter.taskFailed": {
+    "description": "Progressive chapter summary UI: taskFailed"
+  },
+  "viewer:chapter.viewAgain": {
+    "description": "Progressive chapter summary UI: viewAgain"
+  },
+  "viewer:chapter.failed": {
+    "description": "Progressive chapter summary UI: failed"
+  },
+  "viewer:chapter.full": {
+    "description": "Progressive chapter summary UI: full"
+  },
+  "viewer:chapter.fullRunning": {
+    "description": "Progressive chapter summary UI: fullRunning"
+  },
+  "viewer:chapter.fullTaskFailed": {
+    "description": "Progressive chapter summary UI: fullTaskFailed"
+  },
+  "viewer:chapter.fullView": {
+    "description": "Progressive chapter summary UI: fullView"
+  },
+  "viewer:chapter.fullFailed": {
+    "description": "Progressive chapter summary UI: fullFailed"
+  },
+  "viewer:chapter.view": {
+    "description": "Progressive chapter summary UI: view"
+  },
+  "viewer:chapter.summarize": {
+    "description": "Progressive chapter summary UI: summarize"
+  },
+  "viewer:chapter.unavailable": {
+    "description": "Progressive chapter summary UI: unavailable"
+  },
+  "viewer:chapter.fullConfirm": {
+    "description": "Progressive chapter summary UI: fullConfirm"
+  },
+  "viewer:chapter.fullTitle": {
+    "description": "Progressive chapter summary UI: fullTitle"
+  },
+  "common:classification.title": {
+    "description": "Document classification confirmation UI: classification.title"
+  },
+  "common:classification.confirm": {
+    "description": "Document classification confirmation UI: classification.confirm"
+  },
+  "common:classification.pending": {
+    "description": "Document classification confirmation UI: classification.pending"
+  },
+  "common:classification.failed": {
+    "description": "Document classification confirmation UI: classification.failed"
+  },
+  "common:classification.recommended": {
+    "description": "Document classification confirmation UI: classification.recommended"
+  },
+  "common:classification.manual": {
+    "description": "Document classification confirmation UI: classification.manual"
+  },
+  "chat:chapterSummaryPreparing": {
+    "description": "Shown while a requested chapter summary is generated before automatically retrying chat."
+  },
+  "viewer:chapter.fullStart": {
+    "description": "Confirmation button for the high-cost detailed full summary."
+  },
+  "viewer:chapter.keyPoints": {
+    "description": "Chapter summary detail label: chapter.keyPoints"
+  },
+  "viewer:chapter.terms": {
+    "description": "Chapter summary detail label: chapter.terms"
+  },
+  "viewer:chapter.limitations": {
+    "description": "Chapter summary detail label: chapter.limitations"
+  },
+  "viewer:chapter.connections": {
+    "description": "Chapter summary detail label: chapter.connections"
+  },
+  "viewer:chapter.retry": {
+    "description": "Chapter/full summary retry and cancellation UI: chapter.retry"
+  },
+  "viewer:chapter.cancel": {
+    "description": "Chapter/full summary retry and cancellation UI: chapter.cancel"
+  },
+  "viewer:chapter.cancelled": {
+    "description": "Chapter/full summary retry and cancellation UI: chapter.cancelled"
+  },
+  "viewer:chapter.cancelFailed": {
+    "description": "Chapter/full summary retry and cancellation UI: chapter.cancelFailed"
   }
 }

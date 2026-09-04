@@ -290,7 +290,7 @@ async def test_recovered_parse_finalization_preserves_existing_results(isolated_
 
     await parse_job.execute_parse_task(task["id"], {}, **dependencies)
     assert get_translation(doc_id, 1, "test", fallback=False) == "preserved"
-    assert translation_starts == [1]
+    assert translation_starts == []  # deferred until classification confirmation
     with isolated_dirs["db"].get_db() as conn:
         metric_count = conn.execute(
             "SELECT COUNT(*) AS count FROM document_mode_metrics WHERE event = 'upload'"

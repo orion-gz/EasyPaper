@@ -357,3 +357,19 @@ async def test_secondary_graph_similarity_skips_external_library_provider(
     )
 
     assert calls == []
+
+
+@pytest.mark.parametrize("operation", ["translate", "insight", "primer"])
+def test_ai_processing_requires_classification_confirmation(operation):
+    with pytest.raises(HTTPException) as exc_info:
+        ensure_processing_allowed({"processing_policy": "inherit", "classification_status": "pending"}, operation)
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "classification_confirmation_required"
+
+
+def test_classification_operation_is_allowed_while_pending(monkeypatch):
+    monkeypatch.setattr("config.get_analysis_provider", lambda: "ollama")
+    status = ensure_processing_allowed(
+        {"processing_policy": "inherit", "classification_status": "pending"}, "classification",
+    )
+    assert status["processing_policy"] == "inherit"

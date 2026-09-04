@@ -48,6 +48,9 @@ def init_db():
             document_type TEXT NOT NULL DEFAULT 'research_paper',
             mode_schema_version INTEGER NOT NULL DEFAULT 1,
             source_language TEXT NOT NULL DEFAULT 'auto',
+            classification_status TEXT NOT NULL DEFAULT 'confirmed',
+            classification_result TEXT,
+            classification_error TEXT,
             detected_source_language TEXT NOT NULL DEFAULT 'und',
             source_language_confidence REAL,
             preferred_target_language TEXT,
@@ -240,6 +243,9 @@ def init_db():
             "ALTER TABLE documents ADD COLUMN document_type TEXT NOT NULL DEFAULT 'research_paper'",
             "ALTER TABLE documents ADD COLUMN mode_schema_version INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE documents ADD COLUMN source_language TEXT NOT NULL DEFAULT 'auto'",
+            "ALTER TABLE documents ADD COLUMN classification_status TEXT NOT NULL DEFAULT 'confirmed'",
+            "ALTER TABLE documents ADD COLUMN classification_result TEXT",
+            "ALTER TABLE documents ADD COLUMN classification_error TEXT",
             "ALTER TABLE documents ADD COLUMN detected_source_language TEXT NOT NULL DEFAULT 'und'",
             "ALTER TABLE documents ADD COLUMN source_language_confidence REAL",
             "ALTER TABLE documents ADD COLUMN preferred_target_language TEXT",
@@ -802,6 +808,7 @@ def db_save_document(
     doc_id: str, username: str, filename: str, pdf_path: str, total_pages: int,
     metadata: dict, document_mode: str = "research",
     document_type: str = "research_paper", mode_schema_version: int = 1,
+    classification_status: str = "confirmed",
     source_language: str = "auto", detected_source_language: str = "und",
     source_language_confidence: Optional[float] = None,
     preferred_target_language: Optional[str] = None,
@@ -821,11 +828,11 @@ def db_save_document(
             """
             INSERT OR REPLACE INTO documents
                 (id, username, filename, pdf_path, total_pages, metadata,
-                 document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, source_origin, content_kind, source_url, canonical_url, fetched_at, content_schema_version, content_unit_count, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 document_mode, document_type, mode_schema_version, classification_status, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, source_origin, content_kind, source_url, canonical_url, fetched_at, content_schema_version, content_unit_count, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (doc_id, username, filename, pdf_path, total_pages, meta_str,
-             document_mode, document_type, mode_schema_version, source_language, detected_source_language,
+             document_mode, document_type, mode_schema_version, classification_status, source_language, detected_source_language,
              source_language_confidence, preferred_target_language, processing_policy, int(content_revision), parser_engine, parser_version, source_origin, content_kind, source_url, canonical_url, fetched_at, int(content_schema_version), int(content_unit_count if content_unit_count is not None else total_pages), created_at)
         )
         conn.commit()
@@ -833,7 +840,7 @@ def db_save_document(
         "id": doc_id, "username": username, "filename": filename,
         "pdf_path": pdf_path, "total_pages": total_pages, "metadata": metadata,
         "document_mode": document_mode, "document_type": document_type,
-        "mode_schema_version": mode_schema_version, "created_at": created_at,
+        "mode_schema_version": mode_schema_version, "classification_status": classification_status, "created_at": created_at,
         "source_language": source_language, "detected_source_language": detected_source_language,
         "source_language_confidence": source_language_confidence,
         "preferred_target_language": preferred_target_language,
@@ -873,13 +880,14 @@ def db_get_document(doc_id: str) -> Optional[dict]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, source_origin, content_kind, source_url, canonical_url, fetched_at, content_schema_version, content_unit_count, is_deleted, created_at FROM documents WHERE id = ?",
+            "SELECT id, username, filename, pdf_path, total_pages, metadata, document_mode, document_type, mode_schema_version, classification_status, classification_result, classification_error, source_language, detected_source_language, source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, source_origin, content_kind, source_url, canonical_url, fetched_at, content_schema_version, content_unit_count, is_deleted, created_at FROM documents WHERE id = ?",
             (doc_id,)
         )
         row = cursor.fetchone()
         if row:
             doc = dict(row)
             doc["metadata"] = json.loads(doc["metadata"]) if doc["metadata"] else {}
+            doc["classification_result"] = json.loads(doc["classification_result"]) if doc.get("classification_result") else None
             return doc
         return None
 
@@ -898,7 +906,7 @@ def db_list_documents(username: Optional[str] = None, only_trash: bool = False, 
 
     query = (
         "SELECT id, username, filename, pdf_path, total_pages, metadata, "
-        "document_mode, document_type, mode_schema_version, source_language, detected_source_language, "
+        "document_mode, document_type, mode_schema_version, classification_status, classification_result, classification_error, source_language, detected_source_language, "
         "source_language_confidence, preferred_target_language, processing_policy, content_revision, parser_engine, parser_version, source_origin, content_kind, source_url, canonical_url, fetched_at, content_schema_version, content_unit_count, is_deleted, created_at "
         "FROM documents"
     )
@@ -913,6 +921,7 @@ def db_list_documents(username: Optional[str] = None, only_trash: bool = False, 
         for row in cursor.fetchall():
             doc = dict(row)
             doc["metadata"] = json.loads(doc["metadata"]) if doc["metadata"] else {}
+            doc["classification_result"] = json.loads(doc["classification_result"]) if doc.get("classification_result") else None
             docs.append(doc)
         return docs
 
@@ -1571,11 +1580,23 @@ def db_document_has_mode_sensitive_data(doc_id: str) -> bool:
 def db_update_document_classification(doc_id: str, document_mode: str, document_type: str, mode_schema_version: int = 1) -> bool:
     with get_db() as conn:
         cursor = conn.execute(
-            "UPDATE documents SET document_mode = ?, document_type = ?, mode_schema_version = ? WHERE id = ?",
+            "UPDATE documents SET document_mode = ?, document_type = ?, mode_schema_version = ?, classification_status = 'confirmed', classification_error = NULL WHERE id = ?",
             (document_mode, document_type, mode_schema_version, doc_id),
         )
         conn.commit()
         return cursor.rowcount == 1
+
+def db_update_document_classification_recommendation(doc_id: str, status: str, result: Optional[dict] = None, error: Optional[str] = None) -> bool:
+    if status not in {"pending", "needs_confirmation", "confirmed", "failed"}:
+        raise ValueError("invalid_classification_status")
+    with get_db() as conn:
+        cursor = conn.execute(
+            "UPDATE documents SET classification_status = ?, classification_result = ?, classification_error = ? WHERE id = ?",
+            (status, json.dumps(result, ensure_ascii=False) if result else None, error, doc_id),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
+
 
 
 def db_get_workspace_settings(username: str) -> dict:

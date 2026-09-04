@@ -30,13 +30,13 @@ def fake_generation(monkeypatch):
     def fake_require_session_owner(doc_id, current_user):
         return {"pages": [], "metadata": {"title": "My Paper"}, "pdf_path": "/x/paper.pdf", "source_language": "auto", "detected_source_language": "en"}
 
-    async def fake_generate_primer(doc_id, pages, metadata, username, pdf_path, target_lang, session_id, source_lang="auto"):
+    async def fake_generate_primer(doc_id, pages, metadata, document_mode, document_type, target_lang, session_id, source_lang="auto"):
         calls["count"] += 1
         await asyncio.sleep(2)  # 두 번째 요청이 들어올 때까지 완료되지 않게 함
         return {"hook": "done"}
 
     monkeypatch.setattr(primer_router, "require_session_owner", fake_require_session_owner)
-    monkeypatch.setattr(primer_router, "generate_primer", fake_generate_primer)
+    monkeypatch.setattr(primer_router, "generate_adaptive_document_briefing", fake_generate_primer)
     primer_router._pending_generations.clear()
     primer_router._last_failure_at.clear()
     return calls
