@@ -51,5 +51,19 @@
   "documentInfo.name": "Title",
   "documentInfo.filename": "Filename",
   "documentInfo.type": "Document type",
-  "documentInfo.processing": "Data processing"
+  "documentInfo.processing": "Data processing",
+  "chapter.summarizing": "Summarizing…",
+  "chapter.taskFailed": "The chapter summary task did not complete.",
+  "chapter.viewAgain": "View again",
+  "chapter.failed": "Chapter summary failed.",
+  "chapter.full": "Detailed full summary",
+  "chapter.fullRunning": "Summarizing document…",
+  "chapter.fullTaskFailed": "The full summary task did not complete.",
+  "chapter.fullView": "View full summary",
+  "chapter.fullFailed": "Full summary failed.",
+  "chapter.view": "View summary",
+  "chapter.summarize": "Summarize",
+  "chapter.unavailable": "Chapter summaries are unavailable because the chapter structure could not be confirmed.",
+  "chapter.fullConfirm": "Generate {{missing}} of {{count}} chapters? Estimated {{calls}} LLM calls and about {{tokens}} input tokens.",
+  "chapter.fullTitle": "Detailed full summary"
 }

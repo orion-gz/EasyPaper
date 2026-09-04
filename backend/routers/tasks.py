@@ -46,7 +46,7 @@ async def cancel_document_task(task_id: str, current_user: str = Depends(get_cur
 @router.post("/tasks/{task_id}/retry")
 async def retry_document_task(task_id: str, current_user: str = Depends(get_current_user)):
     previous = _owned_task(task_id, current_user)
-    if previous["kind"] not in {"translate", "keywords", "summary", "primer"}:
+    if previous["kind"] not in {"translate", "keywords", "summary", "primer", "chapter_summary", "full_summary"}:
         raise HTTPException(status_code=409, detail="이 작업 종류는 수동 재시도를 지원하지 않습니다.")
     failed_pages = previous["failed_pages"] or [
         page["page_num"] for page in previous["pages"] if page["status"] == "cancelled"
@@ -79,4 +79,11 @@ async def retry_document_task(task_id: str, current_user: str = Depends(get_curr
             task["doc_id"], options.get("target_lang", "ko"), options.get("source_lang", "auto"),
             session, current_user, durable_task_id=task_id,
         )
+    elif task["kind"] in {"chapter_summary", "full_summary"}:
+        from services.chapter_summaries import recover_summary_task
+        from services.db import db_get_document
+        document = db_get_document(task["doc_id"])
+        if not document:
+            raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
+        recover_summary_task(task, document, session["pages"], session.get("pdf_path", ""))
     return get_task(task_id)

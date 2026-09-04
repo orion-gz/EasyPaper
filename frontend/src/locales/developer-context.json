@@ -4231,5 +4231,47 @@
   },
   "common:briefing.title": {
     "description": "Eyebrow for an adaptive document briefing."
-    }
+  },
+  "viewer:chapter.summarizing": {
+    "description": "Progressive chapter summary UI: summarizing"
+  },
+  "viewer:chapter.taskFailed": {
+    "description": "Progressive chapter summary UI: taskFailed"
+  },
+  "viewer:chapter.viewAgain": {
+    "description": "Progressive chapter summary UI: viewAgain"
+  },
+  "viewer:chapter.failed": {
+    "description": "Progressive chapter summary UI: failed"
+  },
+  "viewer:chapter.full": {
+    "description": "Progressive chapter summary UI: full"
+  },
+  "viewer:chapter.fullRunning": {
+    "description": "Progressive chapter summary UI: fullRunning"
+  },
+  "viewer:chapter.fullTaskFailed": {
+    "description": "Progressive chapter summary UI: fullTaskFailed"
+  },
+  "viewer:chapter.fullView": {
+    "description": "Progressive chapter summary UI: fullView"
+  },
+  "viewer:chapter.fullFailed": {
+    "description": "Progressive chapter summary UI: fullFailed"
+  },
+  "viewer:chapter.view": {
+    "description": "Progressive chapter summary UI: view"
+  },
+  "viewer:chapter.summarize": {
+    "description": "Progressive chapter summary UI: summarize"
+  },
+  "viewer:chapter.unavailable": {
+    "description": "Progressive chapter summary UI: unavailable"
+  },
+  "viewer:chapter.fullConfirm": {
+    "description": "Progressive chapter summary UI: fullConfirm"
+  },
+  "viewer:chapter.fullTitle": {
+    "description": "Progressive chapter summary UI: fullTitle"
+  }
 }

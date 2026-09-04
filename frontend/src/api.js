@@ -1136,3 +1136,35 @@ export async function getArticleAPI(docId) {
   if (!res.ok) throw await apiError(res)
   return res.json()
 }
+
+export async function getDocumentChaptersAPI(docId) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/chapters`, { cache: 'no-store' })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function getChapterSummaryAPI(docId, chapterId) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/chapters/${encodeURIComponent(chapterId)}/summary`, { cache: 'no-store' })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function getFullSummaryEstimateAPI(docId) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/full-summary/estimate`, { cache: 'no-store' })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function startFullSummaryAPI(docId) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/full-summary/start`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmed: true }),
+  })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function getFullSummaryStatusAPI(docId) {
+  const res = await fetch(`${API_BASE}/library/${encodeURIComponent(docId)}/full-summary/status`, { cache: 'no-store' })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}

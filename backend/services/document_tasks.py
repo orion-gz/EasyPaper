@@ -13,7 +13,7 @@ import httpx
 
 from services.db import get_db
 
-TASK_KINDS = {"parse", "translate", "keywords", "summary", "primer"}
+TASK_KINDS = {"parse", "translate", "keywords", "summary", "primer", "chapter_summary", "full_summary"}
 TASK_STATUSES = {"queued", "running", "retry_wait", "succeeded", "partial_failed", "failed", "cancelled"}
 PAGE_STATUSES = {"queued", "running", "retry_wait", "succeeded", "failed", "cancelled"}
 RECOVERABLE_STATUSES = {"queued", "running", "retry_wait"}
@@ -326,3 +326,11 @@ def recover_document_tasks(sessions: dict) -> None:
                 task["doc_id"], options.get("target_lang", "ko"), options.get("source_lang", "auto"),
                 session, session.get("username", "admin"), durable_task_id=task["id"],
             )
+        elif task["kind"] in {"chapter_summary", "full_summary"}:
+            from services.chapter_summaries import recover_summary_task
+            from services.db import db_get_document
+            document = db_get_document(task["doc_id"])
+            if document:
+                recover_summary_task(
+                    task, document, session["pages"], session.get("pdf_path", document.get("pdf_path", "")),
+                )

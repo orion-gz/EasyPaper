@@ -166,6 +166,26 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
     viewer_mode = bool(screen and screen.mode == "viewer") or (screen is None and data.current_page is not None)
     current_page = ((screen.page_num or data.current_page) if screen else data.current_page) if viewer_mode else None
     pages = session.get("pages", [])
+    chapter_context = None
+    if re.search(r"(?:요약|설명|정리|summari[sz]e|explain)", latest_question, re.IGNORECASE):
+        from services.chapter_summaries import detect_chapters, get_cached_chapter_summary, match_chapter_request, start_chapter_summary
+        from services.db import db_get_document
+        from services.document_tasks import get_task
+        document = db_get_document(session_id)
+        if document:
+            detected = detect_chapters(document, pages, session.get("pdf_path", ""))
+            chapter = match_chapter_request(latest_question, detected.get("chapters", []))
+            if chapter:
+                target_lang = document.get("preferred_target_language") or "ko"
+                chapter_context = get_cached_chapter_summary(document, chapter, target_lang)
+                if not chapter_context:
+                    task = start_chapter_summary(document, pages, chapter, target_lang)
+                    for _ in range(240):
+                        current = get_task(task["id"])
+                        if not current or current["status"] not in {"queued", "running", "retry_wait"}:
+                            break
+                        await asyncio.sleep(0.25)
+                    chapter_context = get_cached_chapter_summary(document, chapter, target_lang)
     total_pages = max((int(page.get("page_num") or 0) for page in pages), default=0)
     if current_page and current_page > total_pages:
         raise HTTPException(status_code=400, detail={
@@ -184,6 +204,13 @@ async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current
         content_revision=int(session.get("content_revision") or 1),
     )
     paper_text = context_result.text
+    if chapter_context:
+        chapter = chapter_context.get("chapter", {})
+        paper_text = (
+            f"[CACHED CHAPTER SUMMARY: {chapter.get('title', '')}, pages "
+            f"{chapter.get('start_page', '?')}-{chapter.get('end_page', '?')}]\n"
+            f"{chapter_context.get('summary', '')}\n\n{paper_text}"
+        )
     from services.observability import record_document_mode_event
     document_mode = session.get("document_mode", "research")
     document_type = session.get("document_type", "research_paper")

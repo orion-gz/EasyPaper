@@ -51,5 +51,19 @@
   "documentInfo.name": "제목",
   "documentInfo.filename": "파일명",
   "documentInfo.type": "문서 종류",
-  "documentInfo.processing": "데이터 처리"
+  "documentInfo.processing": "데이터 처리",
+  "chapter.summarizing": "요약 중…",
+  "chapter.taskFailed": "장 요약 작업이 완료되지 않았습니다.",
+  "chapter.viewAgain": "다시 보기",
+  "chapter.failed": "장 요약에 실패했습니다.",
+  "chapter.full": "정밀 전체 요약",
+  "chapter.fullRunning": "전체 요약 중…",
+  "chapter.fullTaskFailed": "정밀 전체 요약이 완료되지 않았습니다.",
+  "chapter.fullView": "정밀 전체 요약 보기",
+  "chapter.fullFailed": "정밀 전체 요약에 실패했습니다.",
+  "chapter.view": "요약 보기",
+  "chapter.summarize": "요약",
+  "chapter.unavailable": "장 구조를 확인할 수 없어 장 요약은 제공하지 않습니다.",
+  "chapter.fullConfirm": "장 {{count}}개 중 {{missing}}개를 생성합니다. 예상 LLM 호출 {{calls}}회, 입력 약 {{tokens}}토큰입니다. 시작할까요?",
+  "chapter.fullTitle": "정밀 전체 요약"
 }

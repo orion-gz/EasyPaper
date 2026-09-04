@@ -10,7 +10,7 @@ import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabul
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
-import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI } from './api.js'
+import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
@@ -17601,57 +17601,87 @@ async function loadPDFOutline() {
   if (!outlineContent) return
   outlineContent.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:20px;">목차 로드 중...</div>'
 
+  const waitForSummary = async (chapter, button, result) => {
+    button.disabled = true
+    button.textContent = t('viewer:chapter.summarizing')
+    try {
+      let response = await getChapterSummaryAPI(state.sessionId, chapter.id)
+      while (response.status !== 'completed') {
+        if (['failed', 'cancelled'].includes(response.status)) throw new Error(t('viewer:chapter.taskFailed'))
+        await new Promise(resolve => setTimeout(resolve, 1200))
+        response = await getChapterSummaryAPI(state.sessionId, chapter.id)
+      }
+      result.hidden = false
+      result.innerHTML = `<strong>${escapeHtml(response.summary.headline || chapter.title)}</strong><p>${escapeHtml(response.summary.summary || '')}</p>`
+      button.textContent = t('viewer:chapter.viewAgain')
+    } catch (error) {
+      showToast(error.message || t('viewer:chapter.failed'), 'error')
+      button.textContent = t('viewer:chapter.summarize')
+    } finally { button.disabled = false }
+  }
+
   try {
-    const outline = await getPDFOutline()
+    const [outline, chapterData] = await Promise.all([
+      getPDFOutline(),
+      getDocumentChaptersAPI(state.sessionId).catch(() => ({ status: 'unavailable', chapters: [] })),
+    ])
     outlineContent.innerHTML = ''
 
-    if (!outline || outline.length === 0) {
-      // 목차 메타데이터가 존재하지 않는 경우를 대비한 전체 페이지 리스트 폴백(Fallback) 렌더링
-      const infoMsg = document.createElement('div')
-      infoMsg.style.cssText = 'font-size:11px; color:var(--text-muted); padding:4px 10px 12px; border-bottom:1px dashed var(--border); margin-bottom:8px; line-height:1.4;'
-      infoMsg.innerHTML = `${icon('info', 12, 'style="vertical-align:-2px;margin-right:3px"')}${t('viewer:outline.noToc')}`
-      outlineContent.appendChild(infoMsg)
-
-      for (let p = 1; p <= state.totalPages; p++) {
-        const div = document.createElement('button')
-        div.type = 'button'
-        div.className = 'outline-item depth-0'
-        const iconSvg = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
-        div.innerHTML = `${iconSvg}<span>${t('viewer:pageLabel', { page: p })}</span>`
-        div.addEventListener('click', () => {
-          scrollToPage(viewerScrollContainer, p)
-        })
-        div.title = t('viewer:goToPage', { page: p })
-        outlineContent.appendChild(div)
-      }
+    if (chapterData.status === 'available') {
+      const fullButton = document.createElement('button')
+      fullButton.type = 'button'; fullButton.className = 'btn btn-secondary'
+      fullButton.style.cssText = 'margin:6px 10px 12px; width:calc(100% - 20px); font-size:11px;'
+      fullButton.textContent = t('viewer:chapter.full')
+      fullButton.addEventListener('click', async () => {
+        try {
+          const estimate = await getFullSummaryEstimateAPI(state.sessionId)
+          const accepted = window.confirm(t('viewer:chapter.fullConfirm', { count: estimate.chapter_count, missing: estimate.missing_chapter_count, calls: estimate.estimated_llm_calls, tokens: estimate.estimated_input_tokens.toLocaleString() }))
+          if (!accepted) return
+          fullButton.disabled = true; fullButton.textContent = t('viewer:chapter.fullRunning')
+          let status = await startFullSummaryAPI(state.sessionId)
+          while (status.status !== 'completed') {
+            if (['failed', 'cancelled'].includes(status.status)) throw new Error(t('viewer:chapter.fullTaskFailed'))
+            await new Promise(resolve => setTimeout(resolve, 1500))
+            status = await getFullSummaryStatusAPI(state.sessionId)
+          }
+          const panel = document.createElement('div'); panel.className = 'outline-summary-result'
+          panel.style.cssText = 'margin:0 10px 12px;padding:10px;font-size:12px;line-height:1.5;border:1px solid var(--border);border-radius:8px;'
+          panel.innerHTML = `<strong>${escapeHtml(status.summary.headline || t('viewer:chapter.fullTitle'))}</strong><p>${escapeHtml(status.summary.summary || '')}</p>`
+          fullButton.after(panel); fullButton.textContent = t('viewer:chapter.fullView')
+        } catch (error) { showToast(error.message || t('viewer:chapter.fullFailed'), 'error'); fullButton.textContent = t('viewer:chapter.full') }
+        finally { fullButton.disabled = false }
+      })
+      outlineContent.appendChild(fullButton)
+      chapterData.chapters.forEach(chapter => {
+        const row = document.createElement('div'); row.className = 'outline-chapter-row'
+        row.style.cssText = 'border-bottom:1px solid var(--border);padding:4px 8px;'
+        const nav = document.createElement('button'); nav.type = 'button'; nav.className = 'outline-item depth-0'
+        nav.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${escapeHtml(chapter.title)}</span><small>${chapter.start_page}–${chapter.end_page}</small>`
+        nav.addEventListener('click', () => scrollToPage(viewerScrollContainer, chapter.start_page))
+        nav.title = t('viewer:goToPage', { page: chapter.start_page })
+        const summary = document.createElement('button'); summary.type = 'button'; summary.className = 'btn btn-secondary'
+        summary.style.cssText = 'font-size:10px;margin:2px 0 4px;'; summary.textContent = chapter.summary_status === 'completed' ? t('viewer:chapter.view') : t('viewer:chapter.summarize')
+        const result = document.createElement('div'); result.hidden = true; result.style.cssText = 'font-size:11px;line-height:1.45;padding:8px 2px;'
+        summary.addEventListener('click', () => waitForSummary(chapter, summary, result))
+        row.append(nav, summary, result); outlineContent.appendChild(row)
+      })
       return
     }
 
-    function renderTree(items, depth = 0) {
-      items.forEach(item => {
-        const div = document.createElement('button')
-        div.type = 'button'
-        div.className = `outline-item depth-${depth}`
-        const iconSvg = depth === 0
-          ? `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
-          : `<svg width="5" height="5" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.4; margin-right:8px; flex-shrink:0; margin-left:4px;"><circle cx="12" cy="12" r="10"/></svg>`
-        div.innerHTML = `${iconSvg}<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(item.title)}</span>`
-        if (item.pageNum) {
-          div.addEventListener('click', () => {
-            scrollToPage(viewerScrollContainer, item.pageNum)
-          })
-          div.title = t('viewer:goToPage', { page: item.pageNum })
-        }
-        outlineContent.appendChild(div)
-        if (item.items && item.items.length > 0) {
-          renderTree(item.items, depth + 1)
-        }
-      })
-    }
-
-    renderTree(outline)
+    const infoMsg = document.createElement('div')
+    infoMsg.style.cssText = 'font-size:11px; color:var(--text-muted); padding:4px 10px 12px; border-bottom:1px dashed var(--border); margin-bottom:8px; line-height:1.4;'
+    infoMsg.innerHTML = `${icon('info', 12, 'style="vertical-align:-2px;margin-right:3px"')}${t('viewer:outline.noToc')} ${t('viewer:chapter.unavailable')}`
+    outlineContent.appendChild(infoMsg)
+    const flat = outline?.length ? outline : Array.from({ length: state.totalPages }, (_, index) => ({ title: t('viewer:pageLabel', { page: index + 1 }), pageNum: index + 1 }))
+    const renderTree = (items, depth = 0) => items.forEach(item => {
+      const button = document.createElement('button'); button.type = 'button'; button.className = `outline-item depth-${depth}`
+      button.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.title)}</span>`
+      if (item.pageNum) button.addEventListener('click', () => scrollToPage(viewerScrollContainer, item.pageNum))
+      outlineContent.appendChild(button); if (item.items?.length) renderTree(item.items, depth + 1)
+    })
+    renderTree(flat)
   } catch (err) {
-    console.error("Outline load error:", err)
+    console.error('Outline load error:', err)
     outlineContent.innerHTML = '<div style="font-size:12px; color:var(--error); text-align:center; padding:20px;">목차 로드 실패</div>'
   }
 }
