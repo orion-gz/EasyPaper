@@ -5,11 +5,11 @@
  * - IntersectionObserver 기반 lazy 렌더링
  */
 
-const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs'
-const WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 let pdfjsLib = null
 let pdfDoc = null
+let pdfLoadingTask = null
 let currentScale = 1.5
 let pageObserver = null
 let pageVisibilityObserver = null
@@ -27,27 +27,39 @@ let renderGeneration = 0
 
 async function loadPDFJS() {
   if (pdfjsLib) return pdfjsLib
-  const mod = await import(/* @vite-ignore */ PDFJS_CDN)
-  pdfjsLib = mod
-  pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_CDN
+  pdfjsLib = await import('pdfjs-dist/build/pdf.mjs')
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
   return pdfjsLib
 }
 
 export async function loadPDF(url) {
   await loadPDFJS()
   const myGeneration = ++loadGeneration
-  const loadingTask = pdfjsLib.getDocument(url)
-  const nextPdfDoc = await loadingTask.promise
+  // WebKit은 파괴된 worker의 진행 중인 렌더를 즉시 reject할 수 있다.
+  // 새 문서가 로드되기 시작한 시점부터 기존 렌더를 오래된 작업으로 표시해
+  // 정상적인 취소가 페이지 오류나 콘솔 오류로 노출되지 않게 한다.
+  renderGeneration++
+  const previousLoadingTask = pdfLoadingTask
+  const loadingTask = pdfjsLib.getDocument({ url })
+  pdfLoadingTask = loadingTask
+
+  if (previousLoadingTask && previousLoadingTask !== loadingTask) {
+    previousLoadingTask.destroy().catch(() => {})
+  }
+
+  let nextPdfDoc
+  try {
+    nextPdfDoc = await loadingTask.promise
+  } catch (error) {
+    if (myGeneration !== loadGeneration) return null
+    throw error
+  }
   if (myGeneration !== loadGeneration) {
-    await nextPdfDoc.destroy().catch(() => {})
+    await loadingTask.destroy().catch(() => {})
     return null
   }
-  const previousPdfDoc = pdfDoc
   renderGeneration++
   pdfDoc = nextPdfDoc
-  if (previousPdfDoc && previousPdfDoc !== nextPdfDoc) {
-    previousPdfDoc.destroy().catch(() => {})
-  }
   figureCropCache.clear()
   return pdfDoc.numPages
 }
@@ -267,34 +279,22 @@ async function _renderPage(wrapper, pageNum, generation) {
 
     // 텍스트 레이어 렌더링
     try {
-      if (pdfjsLib.TextLayer) {
-        // PDF.js 4.x
-        try {
-          const textContent = await page.getTextContent()
-          const tl = new pdfjsLib.TextLayer({
-            textContentSource: textContent,
-            container: textLayerDiv,
-            viewport,
-          })
-          await tl.render()
-        } catch (err) {
-          console.warn("TextLayer with getTextContent failed, trying streamTextContent fallback:", err)
-          const tl = new pdfjsLib.TextLayer({
-            textContentSource: page.streamTextContent(),
-            container: textLayerDiv,
-            viewport,
-          })
-          await tl.render()
-        }
-      } else if (pdfjsLib.renderTextLayer) {
-        // PDF.js 3.x fallback
+      try {
         const textContent = await page.getTextContent()
-        await pdfjsLib.renderTextLayer({
-          textContent,
+        const textLayer = new pdfjsLib.TextLayer({
+          textContentSource: textContent,
           container: textLayerDiv,
           viewport,
-          textDivs: [],
-        }).promise
+        })
+        await textLayer.render()
+      } catch (err) {
+        console.warn("TextLayer with getTextContent failed, trying streamTextContent fallback:", err)
+        const textLayer = new pdfjsLib.TextLayer({
+          textContentSource: page.streamTextContent(),
+          container: textLayerDiv,
+          viewport,
+        })
+        await textLayer.render()
       }
 
       // 텍스트 레이어 렌더 완료 콜백 호출

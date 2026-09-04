@@ -724,18 +724,29 @@ body:not(.light-theme) .pdf-page-inner canvas {
 
 /* ── PDF.js 텍스트 레이어 (드래그 선택) ── */
 .textLayer {
+  color-scheme: only light;
   position: absolute;
-  top: 0;
-  left: 0;
-  overflow: hidden;
+  inset: 0;
+  text-align: initial;
+  overflow: clip;
+  opacity: 1;
   line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
   text-size-adjust: none;
   -webkit-text-size-adjust: none;
+  forced-color-adjust: none;
   transform-origin: 0 0;
+  caret-color: CanvasText;
   z-index: 2 !important;
   pointer-events: auto !important;
   user-select: text !important;
   -webkit-user-select: text !important;
+  --user-unit: 1;
+  --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 
 .textLayer > span,
@@ -748,6 +759,26 @@ body:not(.light-theme) .pdf-page-inner canvas {
   pointer-events: auto !important;
   user-select: text !important;
   -webkit-user-select: text !important;
+}
+
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.textLayer .markedContent {
+  display: contents;
+}
+
+.textLayer span[role="img"] {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: default;
 }
 
 .textLayer .highlight {
