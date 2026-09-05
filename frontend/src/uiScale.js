@@ -17,6 +17,12 @@ export function saveUiScale(value, storage = localStorage) {
   return scale
 }
 
+export function syncUiScaleControl(control, storage = localStorage) {
+  const scale = loadUiScale(storage)
+  if (control) control.value = String(scale)
+  return scale
+}
+
 export function applyUiScale(value, root = document.documentElement) {
   const scale = normalizeUiScale(value)
   root.style.zoom = String(scale)
