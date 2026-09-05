@@ -3952,6 +3952,7 @@ globalSettingsBtn.addEventListener('click', async () => {
 
   // 2. 일반 설정값 로드
   syncModeSettings(workspaceModeController.getMode())
+  settingUiScale.value = String(loadUiScale())
   settingDefaultZoom.value = localStorage.getItem('easypaper_default_zoom') || '1.5'
   settingToolbarPosition.value = getToolbarPosition()
   // 아래 항목은 모드와 관계없는 공통 뷰어 설정이다.
