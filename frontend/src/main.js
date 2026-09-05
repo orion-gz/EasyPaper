@@ -10,7 +10,7 @@ import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabul
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
-import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI } from './api.js'
+import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
 import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
@@ -26,6 +26,9 @@ import { changeLocale, getLocale, initI18n, loadFeatureNamespaces, loadNamespace
 import { saveUserLanguagePreferences, saveDocumentLanguageOverride } from './languagePreferences.js'
 import { canRetryTranslationTask, isTranslationTaskRunning, shouldRetryFailedTranslationTask } from './translationTaskState.js'
 import { applyUiScale, loadUiScale, saveUiScale } from './uiScale.js'
+import { adaptiveBriefingSummary, hasAdaptiveBriefing, renderAdaptiveBriefingHtml } from './adaptiveBriefing.js'
+import { classificationModalMarkup, recommendedClassification } from './classificationConfirmationView.js'
+import { renderChapterSummaryHtml, renderFullSummaryHtml } from './chapterSummaryView.js'
 
 const i18nReady = initI18n()
 applyUiScale(loadUiScale())
@@ -872,6 +875,7 @@ const primerRegenerateBtn  = $('primer-regenerate-btn')
 const primerLoading        = $('primer-loading')
 const primerError          = $('primer-error')
 const primerBody           = $('primer-body')
+const primerAdaptiveSections = $('primer-adaptive-sections')
 const primerTitle          = $('primer-title')
 const primerEyebrow        = $('primer-eyebrow')
 const primerHookSection    = $('primer-hook-section')
@@ -1185,6 +1189,71 @@ fileInput.addEventListener('change', (e) => {
   }
 })
 
+async function requireClassificationConfirmation(docId) {
+  let modal = document.getElementById('classification-confirmation-modal')
+  if (!modal) {
+    modal = document.createElement('div')
+    modal.id = 'classification-confirmation-modal'
+    modal.className = 'modal-overlay hidden'
+    modal.setAttribute('aria-labelledby', 'classification-confirmation-title')
+    modal.innerHTML = classificationModalMarkup()
+    document.body.appendChild(modal)
+  }
+  const title = modal.querySelector('#classification-confirmation-title')
+  const status = modal.querySelector('.classification-status')
+  const reason = modal.querySelector('.classification-reason')
+  const optionsRoot = modal.querySelector('.classification-options')
+  const confirm = modal.querySelector('.confirm-btn')
+  title.textContent = t('common:classification.title')
+  confirm.textContent = t('common:classification.confirm')
+  openOverlayModal(modal)
+
+  return new Promise((resolve, reject) => {
+    let stopped = false
+    let selected = null
+    const close = value => { stopped = true; closeOverlayModal(modal); resolve(value) }
+    const render = payload => {
+      status.textContent = payload.status === 'failed'
+        ? t('common:classification.failed')
+        : t('common:classification.recommended')
+      reason.textContent = payload.recommendation?.reason || (payload.error ? t('common:classification.manual') : '')
+      selected = recommendedClassification(payload)
+      optionsRoot.replaceChildren()
+      payload.types.forEach(type => {
+        const label = document.createElement('label')
+        label.className = 'document-type-option'
+        const input = document.createElement('input')
+        input.type = 'radio'; input.name = 'confirmed-document-type'; input.value = type.value
+        input.checked = type.mode === selected.document_mode && type.value === selected.document_type
+        input.addEventListener('change', () => { selected = { document_mode: type.mode, document_type: type.value }; confirm.disabled = false })
+        const copy = document.createElement('span')
+        copy.innerHTML = `<strong>${escapeHtml(type.label)}</strong><small>${escapeHtml(type.description || '')}</small>`
+        label.append(input, copy); optionsRoot.appendChild(label)
+      })
+      confirm.disabled = !selected
+    }
+    const poll = async () => {
+      try {
+        while (!stopped) {
+          const payload = await getDocumentClassificationAPI(docId)
+          if (payload.status === 'confirmed') { close(payload.current); return }
+          if (payload.status !== 'pending') { render(payload); return }
+          status.textContent = t('common:classification.pending')
+          reason.textContent = ''; optionsRoot.replaceChildren(); confirm.disabled = true
+          await new Promise(done => setTimeout(done, 700))
+        }
+      } catch (error) { stopped = true; closeOverlayModal(modal); reject(error) }
+    }
+    confirm.onclick = async () => {
+      if (!selected) return
+      confirm.disabled = true
+      try { close(await confirmDocumentClassificationAPI(docId, selected)) }
+      catch (error) { confirm.disabled = false; showToast(error.message, 'error') }
+    }
+    poll()
+  })
+}
+
 // ── 파일 처리 ─────────────────────────────────────
 async function beginClassifiedUpload(files, targetFolderId = null) {
   const pdfFiles = Array.from(files).filter(file => file.name.toLowerCase().endsWith('.pdf'))
@@ -1282,8 +1351,12 @@ async function handleFiles(uploadItems, targetFolderId = null) {
 
   for (const uploaded of successes) {
     const { classification, result, rememberedTypeOptions } = uploaded
+    const confirmedClassification = await requireClassificationConfirmation(result.session_id)
+    result.document_mode = confirmedClassification.document_mode
+    result.document_type = confirmedClassification.document_type
+    result.classification_status = "confirmed"
     const title = result.metadata?.title || result.filename
-    if (isLongDocument(result.total_pages) && getTranslationMode(classification.documentMode) === 'auto') {
+    if (isLongDocument(result.total_pages) && getTranslationMode(result.document_mode) === 'auto') {
       showToast('50페이지 이상 문서는 전체 자동 번역 대신 보는 페이지부터 번역됩니다.', 'info')
     }
     if (result.document_mode === 'general' && getKeywordMode(result.document_mode) === 'auto' && result.total_pages > 20) {
@@ -1298,7 +1371,7 @@ async function handleFiles(uploadItems, targetFolderId = null) {
         showInsightJobProgress(result.session_id, 'keywords', `${title} · 고급 어휘`)
       }
     }
-    saveDocumentTypeOptions(classification.documentType, { ...rememberedTypeOptions, ...getTranslationOptions(classification.documentMode) })
+    saveDocumentTypeOptions(result.document_type, { ...rememberedTypeOptions, ...getTranslationOptions(result.document_mode) })
   }
   if (successes.length) {
     patchWorkspaceSettingsAPI({ document_type_options: loadDocumentTypeOptions() }).catch(() => {
@@ -2817,6 +2890,10 @@ const PROVIDER_CONFIG = [
   {
     id: 'antigravity', label: 'Antigravity', icon: icon('zap', 13),
     models: [
+      // Gemini 3.8 Flash
+      { value: 'Gemini 3.8 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.8 Flash' },
+      { value: 'Gemini 3.8 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.8 Flash' },
+      { value: 'Gemini 3.8 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.8 Flash' },
       // Gemini 3.7 Flash
       { value: 'Gemini 3.7 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.7 Flash' },
       { value: 'Gemini 3.7 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.7 Flash' },
@@ -2871,6 +2948,13 @@ const PROVIDER_CONFIG = [
   {
     id: 'codex', label: 'Codex', icon: icon('code', 13),
     models: [
+      // GPT-6 Astra
+      { value: 'gpt-6-astra|low',    label: 'Astra · Low',    group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|medium', label: 'Astra · Medium', group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|high',   label: 'Astra · High',   group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|xhigh',  label: 'Astra · xHigh',  group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|max',    label: 'Astra · Max',    group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|ultra',  label: 'Astra · Ultra',  group: 'GPT-6 Astra' },
       // GPT-5.6 Terra
       { value: 'gpt-5.6-terra|low',    label: 'Terra · Low',    group: 'GPT-5.6 Terra' },
       { value: 'gpt-5.6-terra|medium', label: 'Terra · Medium', group: 'GPT-5.6 Terra' },
@@ -4004,6 +4088,7 @@ globalSettingsBtn.addEventListener('click', async () => {
 
   // 2. 일반 설정값 로드
   syncModeSettings(workspaceModeController.getMode())
+  settingUiScale.value = String(loadUiScale())
   settingDefaultZoom.value = localStorage.getItem('easypaper_default_zoom') || '1.5'
   settingToolbarPosition.value = getToolbarPosition()
   // 아래 항목은 모드와 관계없는 공통 뷰어 설정이다.
@@ -6327,6 +6412,7 @@ async function sendChatDrawerMessage() {
     },
     (eventName, payload) => {
       if (eventName === 'evidence') responseEvidence = payload?.items || []
+      if (eventName === 'chapter_summary' && payload?.status === 'queued') showToast(t('chat:chapterSummaryPreparing'), 'info')
       if (eventName === 'verification') responseVerification = payload
     }
   )
@@ -7987,7 +8073,7 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
       try {
         const targetLang = getTranslationOptions().targetLang
         const primer = await fetchPrimer(nodeData.doc_id, targetLang)
-        const text = primer.hook || primer.feynman || primer.lineage || ''
+        const text = adaptiveBriefingSummary(primer) || primer.hook || primer.feynman || primer.lineage || ''
         summaryEl.innerHTML = text
           ? escapeHtml(text).replace(/\n/g, '<br>')
           : `<p class="rg-detail-loading">아직 생성된 요약이 없습니다.</p>`
@@ -9461,7 +9547,7 @@ async function loadLibraryDetailOverview(doc) {
     const targetLang = getTranslationOptions().targetLang
     const data = await fetchPrimer(doc.id, targetLang)
     if (myToken !== libraryDetailSummaryReqToken) return
-    const text = data.hook || data.feynman || data.lineage || ''
+    const text = adaptiveBriefingSummary(data) || data.hook || data.feynman || data.lineage || ''
     if (summaryEl) {
       summaryEl.innerHTML = text
         ? escapeHtml(text).replace(/\n/g, '<br>')
@@ -9917,6 +10003,19 @@ function setPrimerModeCopy(isOverview) {
 
 function renderPrimerContent(doc, data, mode) {
   const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
+  const isAdaptive = hasAdaptiveBriefing(data)
+  if (primerAdaptiveSections) {
+    primerAdaptiveSections.classList.toggle('hidden', !isAdaptive)
+    primerAdaptiveSections.innerHTML = isAdaptive ? renderAdaptiveBriefingHtml(data, { suggestedQuestions: t('common:briefing.suggestedQuestions') }) : ''
+  }
+  primerTabsBar?.classList.toggle('hidden', isAdaptive)
+  document.querySelectorAll('.primer-tab-panel').forEach(panel => panel.classList.toggle('hidden', isAdaptive))
+  if (isAdaptive) {
+    primerTitle.textContent = displayTitle
+    if (primerEyebrow) primerEyebrow.textContent = data.length_policy === 'long' ? t('common:briefing.sampledTitle') : t('common:briefing.title')
+    applyKatexToElement(primerAdaptiveSections)
+    return
+  }
   const isOverview = data.document_overview === true
   setPrimerModeCopy(isOverview)
   primerTitle.textContent = displayTitle
@@ -10204,6 +10303,12 @@ async function openFromLibrary(doc, shouldPushState = true) {
   const isCurrentOpen = () => myOpenGeneration === documentOpenGeneration
   docOpeningId = doc.id
   try {
+    if (doc.classification_status && doc.classification_status !== 'confirmed') {
+      const confirmed = await requireClassificationConfirmation(doc.id)
+      doc.document_mode = confirmed.document_mode
+      doc.document_type = confirmed.document_type
+      doc.classification_status = 'confirmed'
+    }
     // 이전 문서에서 진행 중이던 채팅 스트림이 있으면 반드시 먼저 취소한다.
     // 이 함수는 popstate/hashchange 라우팅(handleRouting)에서 resetState()를
     // 거치지 않고 직접 호출될 수 있어서, 취소하지 않으면 이전 문서의 스트림
@@ -14615,6 +14720,7 @@ function regenerateResponse(assistantMsgEl) {
     },
     (eventName, payload) => {
       if (eventName === "evidence") responseEvidence = payload?.items || [];
+      if (eventName === 'chapter_summary' && payload?.status === 'queued') showToast(t('chat:chapterSummaryPreparing'), 'info')
       if (eventName === "verification") responseVerification = payload;
     }
   );
@@ -17638,57 +17744,114 @@ async function loadPDFOutline() {
   if (!outlineContent) return
   outlineContent.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:20px;">목차 로드 중...</div>'
 
+  const waitForSummary = async (chapter, button, result) => {
+    button.disabled = true
+    button.textContent = t('viewer:chapter.summarizing')
+    try {
+      let response = await getChapterSummaryAPI(state.sessionId, chapter.id)
+      while (response.status !== 'completed') {
+        if (['failed', 'cancelled'].includes(response.status)) throw new Error(t('viewer:chapter.taskFailed'))
+        await new Promise(resolve => setTimeout(resolve, 1200))
+        response = await getChapterSummaryAPI(state.sessionId, chapter.id)
+      }
+      result.hidden = false
+      result.innerHTML = renderChapterSummaryHtml(response.summary, { title: chapter.title, keyPoints: t('viewer:chapter.keyPoints'), terms: t('viewer:chapter.terms'), limitations: t('viewer:chapter.limitations') })
+      button.textContent = t('viewer:chapter.viewAgain')
+    } catch (error) {
+      showToast(error.message || t('viewer:chapter.failed'), 'error')
+      button.textContent = t('viewer:chapter.retry')
+    } finally { button.disabled = false }
+  }
+
   try {
-    const outline = await getPDFOutline()
+    const [outline, chapterData] = await Promise.all([
+      getPDFOutline(),
+      getDocumentChaptersAPI(state.sessionId).catch(() => ({ status: 'unavailable', chapters: [] })),
+    ])
     outlineContent.innerHTML = ''
 
-    if (!outline || outline.length === 0) {
-      // 목차 메타데이터가 존재하지 않는 경우를 대비한 전체 페이지 리스트 폴백(Fallback) 렌더링
-      const infoMsg = document.createElement('div')
-      infoMsg.style.cssText = 'font-size:11px; color:var(--text-muted); padding:4px 10px 12px; border-bottom:1px dashed var(--border); margin-bottom:8px; line-height:1.4;'
-      infoMsg.innerHTML = `${icon('info', 12, 'style="vertical-align:-2px;margin-right:3px"')}${t('viewer:outline.noToc')}`
-      outlineContent.appendChild(infoMsg)
-
-      for (let p = 1; p <= state.totalPages; p++) {
-        const div = document.createElement('button')
-        div.type = 'button'
-        div.className = 'outline-item depth-0'
-        const iconSvg = `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
-        div.innerHTML = `${iconSvg}<span>${t('viewer:pageLabel', { page: p })}</span>`
-        div.addEventListener('click', () => {
-          scrollToPage(viewerScrollContainer, p)
-        })
-        div.title = t('viewer:goToPage', { page: p })
-        outlineContent.appendChild(div)
-      }
+    if (chapterData.status === 'available') {
+      const fullButton = document.createElement('button')
+      fullButton.type = 'button'; fullButton.className = 'btn btn-secondary'
+      fullButton.style.cssText = 'margin:6px 10px 12px; width:calc(100% - 20px); font-size:11px;'
+      fullButton.textContent = t('viewer:chapter.full')
+      const cancelFullButton = document.createElement('button')
+      cancelFullButton.type = 'button'; cancelFullButton.className = 'btn btn-secondary'; cancelFullButton.hidden = true
+      cancelFullButton.style.cssText = 'margin:0 10px 12px;width:calc(100% - 20px);font-size:11px;'
+      cancelFullButton.textContent = t('viewer:chapter.cancel')
+      let activeFullTaskId = null
+      let fullCancelRequested = false
+      cancelFullButton.addEventListener('click', async () => {
+        if (!activeFullTaskId) return
+        cancelFullButton.disabled = true
+        try {
+          await cancelDocumentTaskAPI(activeFullTaskId)
+          fullCancelRequested = true
+          showToast(t('viewer:chapter.cancelled'), 'info')
+        }
+        catch (error) { showToast(error.message || t('viewer:chapter.cancelFailed'), 'error'); cancelFullButton.disabled = false }
+      })
+      fullButton.addEventListener('click', async () => {
+        fullCancelRequested = false
+        try {
+          const estimate = await getFullSummaryEstimateAPI(state.sessionId)
+          const accepted = await showCustomConfirm(
+            t('viewer:chapter.fullConfirm', { count: estimate.chapter_count, missing: estimate.missing_chapter_count, calls: estimate.estimated_llm_calls, tokens: estimate.estimated_input_tokens.toLocaleString() }),
+            { title: t('viewer:chapter.fullTitle'), confirmText: t('viewer:chapter.fullStart'), danger: false },
+          )
+          if (!accepted) return
+          fullButton.disabled = true; fullButton.textContent = t('viewer:chapter.fullRunning')
+          let status = await startFullSummaryAPI(state.sessionId)
+          activeFullTaskId = status.task_id || null
+          cancelFullButton.hidden = !activeFullTaskId
+          cancelFullButton.disabled = false
+          while (status.status !== 'completed') {
+            if (['failed', 'cancelled'].includes(status.status)) throw new Error(t('viewer:chapter.fullTaskFailed'))
+            await new Promise(resolve => setTimeout(resolve, 1500))
+            status = await getFullSummaryStatusAPI(state.sessionId)
+          }
+          const panel = document.createElement('div'); panel.className = 'outline-summary-result'
+          panel.style.cssText = 'margin:0 10px 12px;padding:10px;font-size:12px;line-height:1.5;border:1px solid var(--border);border-radius:8px;'
+          panel.innerHTML = renderFullSummaryHtml(status.summary, { title: t('viewer:chapter.fullTitle'), keyPoints: t('viewer:chapter.keyPoints'), connections: t('viewer:chapter.connections'), limitations: t('viewer:chapter.limitations') })
+          fullButton.after(panel); fullButton.textContent = t('viewer:chapter.fullView')
+        } catch (error) {
+          if (!fullCancelRequested) showToast(error.message || t('viewer:chapter.fullFailed'), 'error')
+          fullButton.textContent = t('viewer:chapter.retry')
+        } finally {
+          fullButton.disabled = false; cancelFullButton.hidden = true; activeFullTaskId = null; fullCancelRequested = false
+        }
+      })
+      outlineContent.append(fullButton, cancelFullButton)
+      chapterData.chapters.forEach(chapter => {
+        const row = document.createElement('div'); row.className = 'outline-chapter-row'
+        row.style.cssText = 'border-bottom:1px solid var(--border);padding:4px 8px;'
+        const nav = document.createElement('button'); nav.type = 'button'; nav.className = 'outline-item depth-0'
+        nav.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${escapeHtml(chapter.title)}</span><small>${chapter.start_page}–${chapter.end_page}</small>`
+        nav.addEventListener('click', () => scrollToPage(viewerScrollContainer, chapter.start_page))
+        nav.title = t('viewer:goToPage', { page: chapter.start_page })
+        const summary = document.createElement('button'); summary.type = 'button'; summary.className = 'btn btn-secondary'
+        summary.style.cssText = 'font-size:10px;margin:2px 0 4px;'; summary.textContent = chapter.summary_status === 'completed' ? t('viewer:chapter.view') : t('viewer:chapter.summarize')
+        const result = document.createElement('div'); result.hidden = true; result.style.cssText = 'font-size:11px;line-height:1.45;padding:8px 2px;'
+        summary.addEventListener('click', () => waitForSummary(chapter, summary, result))
+        row.append(nav, summary, result); outlineContent.appendChild(row)
+      })
       return
     }
 
-    function renderTree(items, depth = 0) {
-      items.forEach(item => {
-        const div = document.createElement('button')
-        div.type = 'button'
-        div.className = `outline-item depth-${depth}`
-        const iconSvg = depth === 0
-          ? `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:0.6; margin-right:8px; flex-shrink:0;"><circle cx="12" cy="12" r="8"/></svg>`
-          : `<svg width="5" height="5" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.4; margin-right:8px; flex-shrink:0; margin-left:4px;"><circle cx="12" cy="12" r="10"/></svg>`
-        div.innerHTML = `${iconSvg}<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(item.title)}</span>`
-        if (item.pageNum) {
-          div.addEventListener('click', () => {
-            scrollToPage(viewerScrollContainer, item.pageNum)
-          })
-          div.title = t('viewer:goToPage', { page: item.pageNum })
-        }
-        outlineContent.appendChild(div)
-        if (item.items && item.items.length > 0) {
-          renderTree(item.items, depth + 1)
-        }
-      })
-    }
-
-    renderTree(outline)
+    const infoMsg = document.createElement('div')
+    infoMsg.style.cssText = 'font-size:11px; color:var(--text-muted); padding:4px 10px 12px; border-bottom:1px dashed var(--border); margin-bottom:8px; line-height:1.4;'
+    infoMsg.innerHTML = `${icon('info', 12, 'style="vertical-align:-2px;margin-right:3px"')}${t('viewer:outline.noToc')} ${t('viewer:chapter.unavailable')}`
+    outlineContent.appendChild(infoMsg)
+    const flat = outline?.length ? outline : Array.from({ length: state.totalPages }, (_, index) => ({ title: t('viewer:pageLabel', { page: index + 1 }), pageNum: index + 1 }))
+    const renderTree = (items, depth = 0) => items.forEach(item => {
+      const button = document.createElement('button'); button.type = 'button'; button.className = `outline-item depth-${depth}`
+      button.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.title)}</span>`
+      if (item.pageNum) button.addEventListener('click', () => scrollToPage(viewerScrollContainer, item.pageNum))
+      outlineContent.appendChild(button); if (item.items?.length) renderTree(item.items, depth + 1)
+    })
+    renderTree(flat)
   } catch (err) {
-    console.error("Outline load error:", err)
+    console.error('Outline load error:', err)
     outlineContent.innerHTML = '<div style="font-size:12px; color:var(--error); text-align:center; padding:20px;">목차 로드 실패</div>'
   }
 }

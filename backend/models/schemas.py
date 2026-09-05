@@ -10,6 +10,7 @@ class UploadResponse(BaseModel):
     metadata: dict
     document_mode: str = "research"
     document_type: str = "research_paper"
+    classification_status: str = "confirmed"
     source_language: str = "auto"
     detected_source_language: str = "und"
     source_language_confidence: Optional[float] = None

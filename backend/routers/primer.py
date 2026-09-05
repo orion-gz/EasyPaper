@@ -7,8 +7,10 @@ from fastapi.responses import FileResponse
 from routers.upload import require_session_owner
 from services.auth import get_current_user
 from services.ownership import require_owned_document
-from services.primer import (get_cached_primer, generate_primer, invalidate_primer_cache,
-    generate_document_overview, get_cached_document_overview, invalidate_document_overview)
+from services.primer import (get_cached_primer, invalidate_primer_cache,
+    get_cached_document_overview, invalidate_document_overview,
+    generate_adaptive_document_briefing, get_cached_adaptive_briefing,
+    invalidate_adaptive_briefing)
 from services.library import get_primer_figure_path
 
 router = APIRouter()
@@ -103,16 +105,9 @@ def _ensure_generation_started(doc_id: str, target_lang: str, source_lang: str, 
         update_task(durable_task_id, status="running", increment_attempt=True)
 
         async def generate_once():
-            if document_mode == "general":
-                return await generate_document_overview(
-                    doc_id, session["pages"], session["metadata"], document_type,
-                    target_lang=target_lang, source_lang=source_lang, session_id=doc_id,
-                )
-            return await generate_primer(
-                doc_id, session["pages"], session["metadata"],
-                username=current_user, pdf_path=session["pdf_path"],
-                target_lang=target_lang, session_id=doc_id,
-                source_lang=source_lang,
+            return await generate_adaptive_document_briefing(
+                doc_id, session["pages"], session["metadata"], document_mode, document_type,
+                target_lang=target_lang, source_lang=source_lang, session_id=doc_id,
             )
 
         def record_retry(_attempt: int, code: str, retry_at: str) -> None:
@@ -147,12 +142,18 @@ async def get_primer(doc_id: str, target_lang: str = "ko", current_user: str = D
     target_lang, source_lang = _validated_languages(session, target_lang)
     from services.processing_policy import ensure_processing_allowed
     ensure_processing_allowed(session, "primer")
-    if session.get("document_mode", "research") == "general":
-        cached = get_cached_document_overview(
-            doc_id, session.get("document_type", "other"), target_lang=target_lang, source_lang=source_lang,
+    document_mode = session.get("document_mode", "research")
+    document_type = session.get("document_type", "research_paper")
+    cached = get_cached_adaptive_briefing(
+        doc_id, document_type, target_lang=target_lang, source_lang=source_lang,
+    )
+    # Read-only compatibility for pre-v3 caches; all new generation uses v3.
+    if not cached:
+        cached = (
+            get_cached_document_overview(doc_id, document_type, target_lang=target_lang, source_lang=source_lang)
+            if document_mode == "general"
+            else get_cached_primer(doc_id, target_lang=target_lang, source_lang=source_lang)
         )
-    else:
-        cached = get_cached_primer(doc_id, target_lang=target_lang, source_lang=source_lang)
     if cached:
         return cached
     _ensure_generation_started(doc_id, target_lang, source_lang, session, current_user)
@@ -169,8 +170,12 @@ async def regenerate_primer(doc_id: str, target_lang: str = "ko", current_user: 
     target_lang, source_lang = _validated_languages(session, target_lang)
     from services.processing_policy import ensure_processing_allowed
     ensure_processing_allowed(session, "primer")
-    if session.get("document_mode", "research") == "general":
-        invalidate_document_overview(doc_id, session.get("document_type", "other"), target_lang, source_lang)
+    document_mode = session.get("document_mode", "research")
+    document_type = session.get("document_type", "research_paper")
+    invalidate_adaptive_briefing(doc_id, document_type, target_lang, source_lang)
+    # Explicit regeneration also retires any legacy response for this language.
+    if document_mode == "general":
+        invalidate_document_overview(doc_id, document_type, target_lang, source_lang)
     else:
         invalidate_primer_cache(doc_id, target_lang, source_lang)
     _ensure_generation_started(doc_id, target_lang, source_lang, session, current_user)

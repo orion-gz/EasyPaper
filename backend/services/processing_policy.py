@@ -15,6 +15,7 @@ _TRANSFER_ITEMS = {
     "insight": ["document_text"],
     "primer": ["document_text", "document_metadata", "page_image"],
     "recommendation": ["document_metadata", "notes", "chat_history"],
+    "classification": ["document_text", "document_metadata"],
     "reparse": ["document_file"],
 }
 
@@ -77,7 +78,13 @@ def processing_disclosure(provider: str, operation: str) -> dict:
 
 
 def ensure_processing_allowed(document: dict, operation: str, provider: str | None = None) -> dict:
-    """Raise before work/rate accounting starts when local-only would be violated."""
+    """Raise before work/rate accounting starts when policy or classification blocks it."""
+    if operation in {"translate", "insight", "primer"} and document.get("classification_status", "confirmed") != "confirmed":
+        raise HTTPException(status_code=409, detail={
+            "code": "classification_confirmation_required",
+            "params": {"status": document.get("classification_status", "pending")},
+            "fallback": "Confirm the document classification before starting AI processing.",
+        })
     policy = normalize_processing_policy(document.get("processing_policy", "inherit"))
     selected_provider = (provider or provider_for_operation(operation)).strip().lower()
     disclosure = processing_disclosure(selected_provider, operation)

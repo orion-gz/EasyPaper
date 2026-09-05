@@ -11,6 +11,29 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  test-macos-webkit:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+
+      - name: Install frontend dependencies and WebKit
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install webkit
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Test PDF rendering with WebKit
+        working-directory: frontend
+        run: npm run test:e2e:webkit -- tests/e2e/pdf-text-layer-alignment.spec.js tests/e2e/pdf-viewer-race.spec.js
+
   build-sidecar:
     strategy:
       fail-fast: false
@@ -38,7 +61,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.13.0
 
       - name: Build frontend (needed for sidecar's bundled dist)
         working-directory: frontend

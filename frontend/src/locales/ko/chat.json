@@ -16,5 +16,6 @@
   "evidence.risk": "근거 위험 신호 {{count}}개",
   "evidence.translation": "번역 근거",
   "evidence.verifyAction": "근거 검증",
-  "evidence.verifyPrompt": "직전 답변의 근거를 검증해줘."
+  "evidence.verifyPrompt": "직전 답변의 근거를 검증해줘.",
+  "chapterSummaryPreparing": "요청한 장의 요약을 준비한 뒤 질문을 자동으로 이어갑니다."
 }

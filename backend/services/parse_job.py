@@ -116,6 +116,7 @@ async def execute_parse_task(
                 preferred_target_language=target_lang,
                 content_revision=1, parser_engine=active_parser_engine,
                 parser_version=active_parser_version,
+                classification_status="pending",
             )
             persistent_pdf_path = get_pdf_path(doc_id)
 
@@ -181,6 +182,7 @@ async def execute_parse_task(
         "username": options.get("username", "admin"),
         "document_mode": options.get("document_mode", "research"),
         "document_type": options.get("document_type", "research_paper"),
+        "classification_status": "pending",
         "source_language": source_lang,
         "detected_source_language": detected_source_language,
         "source_language_confidence": detection["confidence"],
@@ -203,7 +205,7 @@ async def execute_parse_task(
         from services.translation_job import start_job
         translation_starter = start_job
     if (
-        latest_task(doc_id, "translate") is None
+        False and latest_task(doc_id, "translate") is None
         and options.get("translation_mode", "auto") == "auto"
         and len(pages) < LONG_DOCUMENT_PAGE_THRESHOLD
         and translation_skipped_reason is None
@@ -261,7 +263,11 @@ async def execute_parse_task(
                 resolved_source_language,
             )
 
-    asyncio.create_task(_run_followups())
+    # Classification is durable; all other AI work waits for explicit confirmation.
+    from services.document_classification import start_classification_task
+    start_classification_task(
+        doc_id, metadata.get("title") or options.get("filename", "document.pdf"), pages,
+    )
     await asyncio.sleep(0)
     update_task(task_id, status="succeeded", last_error_code=None)
     return {
@@ -272,6 +278,7 @@ async def execute_parse_task(
         "metadata": metadata,
         "document_mode": options.get("document_mode", "research"),
         "document_type": options.get("document_type", "research_paper"),
+        "classification_status": "pending",
         "source_language": source_lang,
         "detected_source_language": detected_source_language,
         "source_language_confidence": float(detection["confidence"]),
@@ -302,3 +309,36 @@ def resume_parse_task(task_id: str, sessions: dict, **execute_kwargs) -> asyncio
 
     worker.add_done_callback(_finished)
     return worker
+
+
+def start_processing_after_classification(doc_id: str, sessions: dict) -> None:
+    """Idempotently start deferred AI work after the user confirms a type."""
+    from services.document_tasks import latest_task
+    from services.db import db_get_document
+    session = sessions.get(doc_id)
+    doc = db_get_document(doc_id)
+    if not session or not doc:
+        return
+    options = (latest_task(doc_id, "parse") or {}).get("options") or {}
+    source = session.get("source_language", "auto")
+    resolved = session.get("detected_source_language", source) if source == "auto" else source
+    target = session.get("preferred_target_language") or options.get("target_lang", "ko")
+    pages = session["pages"]
+    if (
+        options.get("translation_mode", "auto") == "auto"
+        and len(pages) < LONG_DOCUMENT_PAGE_THRESHOLD
+        and resolved not in {"und", "mul", target}
+        and latest_task(doc_id, "translate") is None
+    ):
+        from services.translation_job import start_job
+        start_job(doc_id, pages, target_lang=target, source_lang=resolved, style=options.get("style", "academic"), ignore_math=bool(options.get("ignore_math", False)), ignore_table=bool(options.get("ignore_table", True)), ignore_refs=bool(options.get("ignore_refs", False)))
+    if latest_task(doc_id, "primer") is None:
+        from routers.primer import _ensure_generation_started
+        _ensure_generation_started(doc_id, target, resolved, session, doc["username"])
+    title = session.get("metadata", {}).get("title") or session.get("filename", "document.pdf")
+    if options.get("keyword_mode") == "auto" and latest_task(doc_id, "keywords") is None:
+        from services.insight_job import start_keyword_job
+        start_keyword_job(doc_id, pages, target, title, doc["document_mode"], doc["document_type"], resolved)
+    if options.get("summary_mode") == "auto" and latest_task(doc_id, "summary") is None:
+        from services.insight_job import start_summary_job
+        start_summary_job(doc_id, pages, target, title, doc["document_mode"], doc["document_type"], resolved)

@@ -1175,5 +1175,14 @@
   "documentTypes.legacyBook": "책(재분류 필요)",
   "modelChange.futureOnly": "새 모델은 이후 번역부터 적용됩니다.",
   "modelChange.fullConfirm": "기존 캐시를 삭제하고 문서 전체를 새 모델로 다시 번역하시겠습니까?",
-  "modelChange.partialConfirm": "기존에 번역한 {{count}}개 페이지만 새 모델로 다시 번역하시겠습니까?\n번역하지 않은 페이지는 자동으로 번역하지 않습니다."
+  "modelChange.partialConfirm": "기존에 번역한 {{count}}개 페이지만 새 모델로 다시 번역하시겠습니까?\n번역하지 않은 페이지는 자동으로 번역하지 않습니다.",
+  "briefing.suggestedQuestions": "추천 질문",
+  "briefing.sampledTitle": "대표 구간 브리핑",
+  "briefing.title": "문서 브리핑",
+  "classification.title": "AI 문서 분류 확인",
+  "classification.confirm": "분류 확정",
+  "classification.pending": "AI가 문서 유형을 분석하고 있습니다…",
+  "classification.failed": "자동 분류에 실패했습니다. 문서 유형을 직접 선택해 주세요.",
+  "classification.recommended": "추천된 문서 유형을 확인해 주세요.",
+  "classification.manual": "분류 근거가 부족해 사용자 선택이 필요합니다."
 }

@@ -934,7 +934,7 @@
             <select id="setting-ui-scale" class="form-select">
               <option value="0.8">80%</option>
               <option value="0.9">90%</option>
-              <option value="1">100%</option>
+              <option value="1" selected>100%</option>
               <option value="1.1">110%</option>
               <option value="1.25">125%</option>
             </select>
@@ -1016,7 +1016,7 @@
             <label for="setting-default-zoom">기본 PDF 확대 비율</label>
             <select id="setting-default-zoom" class="form-select">
               <option value="1.0">70%</option>
-              <option value="1.5">100% (기본)</option>
+              <option value="1.5" selected>100% (기본)</option>
               <option value="2.0">130%</option>
               <option value="2.5">170%</option>
             </select>
@@ -1597,6 +1597,7 @@
         </div>
 
         <div class="primer-tab-panels">
+          <div id="primer-adaptive-sections" class="primer-adaptive-sections hidden"></div>
           <div class="primer-tab-panel active" data-panel="overview">
             <div id="primer-hook-section" class="primer-hook-section hidden">
               <span class="primer-hook-quote">&ldquo;</span>
