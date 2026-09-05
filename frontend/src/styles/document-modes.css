@@ -104,6 +104,30 @@ button.document-type-chip:hover { background: color-mix(in srgb, var(--document-
 .document-upload-summary { margin-top: 14px; min-height: 18px; color: var(--text-secondary); font-size: 12px; }
 .document-type-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
+.classification-confirmation-dialog {
+  width: min(620px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+}
+.classification-confirmation-dialog .custom-confirm-modal-body { min-height: 0; overflow-y: auto; }
+.classification-confirmation-dialog .classification-options { margin-top: 14px; }
+.classification-confirmation-dialog .document-type-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.classification-confirmation-dialog .document-type-option input { margin: 3px 0 0; }
+.classification-confirmation-dialog .document-type-option span { margin-top: 0; }
+.classification-confirmation-dialog .document-type-option small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .onboarding-purpose-help { margin: 8px 0 16px; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
 .onboarding-purpose-cards { display: grid; gap: 10px; }
 .onboarding-purpose-cards button { padding: 15px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--bg-elevated); color: var(--text-primary); text-align: left; cursor: pointer; }
@@ -159,5 +183,6 @@ button.document-type-chip:hover { background: color-mix(in srgb, var(--document-
 @media (max-width: 520px) {
   .workspace-mode-switch-compact { position: static; width: 100%; }
   .document-type-modal-content { width: calc(100vw - 20px); max-height: calc(100vh - 24px); overflow: auto; }
+  .classification-confirmation-dialog { width: calc(100vw - 20px); max-height: calc(100vh - 24px); }
   .insight-job-progress { right: 14px; bottom: 14px; }
 }

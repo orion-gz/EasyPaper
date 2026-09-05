@@ -8,6 +8,8 @@ test('classification modal exposes accessible status and radio group contracts',
   assert.match(html, /aria-live="polite"/)
   assert.match(html, /role="radiogroup"/)
   assert.match(html, /aria-describedby="classification-confirmation-reason"/)
+  assert.match(html, /class="custom-confirm-modal classification-confirmation-dialog"/)
+  assert.match(html, /class="classification-options document-type-options"/)
 })
 
 test('recommendation falls back to current manual choice', () => {
