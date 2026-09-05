@@ -2889,6 +2889,13 @@ const PROVIDER_CONFIG = [
   {
     id: 'codex', label: 'Codex', icon: icon('code', 13),
     models: [
+      // GPT-6 Astra
+      { value: 'gpt-6-astra|low',    label: 'Astra · Low',    group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|medium', label: 'Astra · Medium', group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|high',   label: 'Astra · High',   group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|xhigh',  label: 'Astra · xHigh',  group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|max',    label: 'Astra · Max',    group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|ultra',  label: 'Astra · Ultra',  group: 'GPT-6 Astra' },
       // GPT-5.6 Terra
       { value: 'gpt-5.6-terra|low',    label: 'Terra · Low',    group: 'GPT-5.6 Terra' },
       { value: 'gpt-5.6-terra|medium', label: 'Terra · Medium', group: 'GPT-5.6 Terra' },
