@@ -91,6 +91,7 @@ async def execute_parse_task(
     active_parser_engine = (pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf"
     from services.pdf_diagnostics import diagnose_pages, parser_version
     active_parser_version = parser_version(active_parser_engine)
+    classification_status = "pending" if options.get("classification_method", "ai") == "ai" else "confirmed"
 
     try:
         from services.library import get_document, get_pdf_path, save_document
@@ -116,7 +117,7 @@ async def execute_parse_task(
                 preferred_target_language=target_lang,
                 content_revision=1, parser_engine=active_parser_engine,
                 parser_version=active_parser_version,
-                classification_status="pending",
+                classification_status=classification_status,
             )
             persistent_pdf_path = get_pdf_path(doc_id)
 
@@ -182,7 +183,7 @@ async def execute_parse_task(
         "username": options.get("username", "admin"),
         "document_mode": options.get("document_mode", "research"),
         "document_type": options.get("document_type", "research_paper"),
-        "classification_status": "pending",
+        "classification_status": classification_status,
         "source_language": source_lang,
         "detected_source_language": detected_source_language,
         "source_language_confidence": detection["confidence"],
@@ -263,13 +264,16 @@ async def execute_parse_task(
                 resolved_source_language,
             )
 
-    # Classification is durable; all other AI work waits for explicit confirmation.
-    from services.document_classification import start_classification_task
-    start_classification_task(
-        doc_id, metadata.get("title") or options.get("filename", "document.pdf"), pages,
-    )
+    # Only an explicit AI choice starts classification. Manual selections are final.
+    if options.get("classification_method", "ai") == "ai":
+        from services.document_classification import start_classification_task
+        start_classification_task(
+            doc_id, metadata.get("title") or options.get("filename", "document.pdf"), pages,
+        )
     await asyncio.sleep(0)
     update_task(task_id, status="succeeded", last_error_code=None)
+    if classification_status == "confirmed":
+        start_processing_after_classification(doc_id, sessions)
     return {
         "session_id": doc_id,
         "filename": options.get("filename") or "document.pdf",
@@ -278,7 +282,7 @@ async def execute_parse_task(
         "metadata": metadata,
         "document_mode": options.get("document_mode", "research"),
         "document_type": options.get("document_type", "research_paper"),
-        "classification_status": "pending",
+        "classification_status": classification_status,
         "source_language": source_lang,
         "detected_source_language": detected_source_language,
         "source_language_confidence": float(detection["confidence"]),
@@ -319,7 +323,7 @@ def start_processing_after_classification(doc_id: str, sessions: dict) -> None:
     doc = db_get_document(doc_id)
     if not session or not doc:
         return
-    options = (latest_task(doc_id, "parse") or {}).get("options") or {}
+    options = (latest_task(doc_id, "parse") or {}).get("options") or session.get("processing_options") or {}
     source = session.get("source_language", "auto")
     resolved = session.get("detected_source_language", source) if source == "auto" else source
     target = session.get("preferred_target_language") or options.get("target_lang", "ko")

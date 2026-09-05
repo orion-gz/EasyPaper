@@ -1137,4 +1137,5 @@
   ,"제목": "viewer:documentInfo.name"
   ,"파일명": "viewer:documentInfo.filename"
   ,"데이터 처리": "viewer:documentInfo.processing"
+  ,"AI로 분류하기": "common:classification.classifyWithAi"
 }

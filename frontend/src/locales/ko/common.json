@@ -1181,5 +1181,6 @@
   "classification.pending": "AI가 문서 유형을 분석하고 있습니다…",
   "classification.failed": "자동 분류에 실패했습니다. 문서 유형을 직접 선택해 주세요.",
   "classification.recommended": "추천된 문서 유형을 확인해 주세요.",
-  "classification.manual": "분류 근거가 부족해 사용자 선택이 필요합니다."
+  "classification.manual": "분류 근거가 부족해 사용자 선택이 필요합니다.",
+  "classification.classifyWithAi": "AI로 분류하기"
 }

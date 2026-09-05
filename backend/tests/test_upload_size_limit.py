@@ -130,13 +130,31 @@ def test_auto_ai_jobs_wait_for_classification_confirmation(test_client, isolated
     monkeypatch.setattr(primer_router, "_ensure_generation_started", fake_generate_primer)
 
     res = test_client.post(
-        "/api/upload?translation_mode=auto&source_lang=en",
+        "/api/upload?translation_mode=auto&source_lang=en&classification_method=ai",
         files={"file": ("paper.pdf", _minimal_pdf_bytes(), "application/pdf")},
     )
 
     body = _await_upload(test_client, res)
     assert events == []
     assert upload_module.sessions[body["session_id"]]["classification_status"] == "pending"
+
+
+def test_manual_upload_skips_ai_classification(test_client, isolated_dirs, monkeypatch):
+    upload_dir = isolated_dirs["upload_dir"]
+    monkeypatch.setattr(upload_module, "UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setattr(upload_module, "MAX_FILE_SIZE_MB", 50)
+    monkeypatch.setattr(upload_module, "start_job", lambda *_args, **_kwargs: {"status": "running"})
+    monkeypatch.setattr(primer_router, "_ensure_generation_started", lambda *_args, **_kwargs: {})
+
+    response = test_client.post(
+        "/api/upload?translation_mode=auto&source_lang=en&classification_method=manual",
+        files={"file": ("manual.pdf", _minimal_pdf_bytes(), "application/pdf")},
+    )
+
+    body = _await_upload(test_client, response)
+    from services.document_tasks import latest_task
+    assert upload_module.sessions[body["session_id"]]["classification_status"] == "confirmed"
+    assert latest_task(body["session_id"], "classification") is None
 
 
 def test_auto_translation_skips_full_job_at_fifty_pages(test_client, isolated_dirs, monkeypatch):

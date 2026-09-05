@@ -43,6 +43,7 @@ test('upload sends a client-known id and reports progress phases', async () => {
     const xhr = MockXHR.instances[0]
     assert.equal(xhr.method, 'POST')
     assert.match(xhr.url, new RegExp(`upload_id=${uploadId}`))
+    assert.match(xhr.url, /classification_method=manual/)
     xhr.uploadHandler[1]({ lengthComputable: true, loaded: 1, total: 2 })
     xhr.status = 202
     xhr.responseText = JSON.stringify({ session_id: uploadId, task_id: "parse-task", status: "queued" })
@@ -123,6 +124,7 @@ test('URL import sends a recoverable id and restores a completed session after d
     if (requestCount === 1) {
       assert.equal(url, "/api/import-url")
       assert.equal(JSON.parse(init.body).upload_id, uploadId)
+      assert.equal(JSON.parse(init.body).classification_method, "manual")
       throw new TypeError("connection closed")
     }
     assert.equal(url, `/api/session/${uploadId}`)

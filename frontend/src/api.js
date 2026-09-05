@@ -153,9 +153,9 @@ export async function uploadPDF(file, options, onProgress) {
   const formData = new FormData()
   formData.append('file', file)
 
-  const { targetLang, sourceLang = "auto", style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode, documentMode, documentType } = options
+  const { targetLang, sourceLang = "auto", style, ignoreMath, ignoreTable, ignoreRefs, translationMode, keywordMode, summaryMode, documentMode, documentType, classificationMethod = 'manual' } = options
   const query = `?target_lang=${encodeURIComponent(targetLang)}&source_lang=${encodeURIComponent(sourceLang)}&style=${style}&ignore_math=${ignoreMath}&ignore_table=${ignoreTable}&ignore_refs=${ignoreRefs}&translation_mode=${encodeURIComponent(translationMode || 'auto')}&keyword_mode=${encodeURIComponent(keywordMode || 'manual')}&summary_mode=${encodeURIComponent(summaryMode || 'manual')}`
-  const classificationQuery = "&document_mode=" + encodeURIComponent(documentMode || "research") + "&document_type=" + encodeURIComponent(documentType || "research_paper")
+  const classificationQuery = "&document_mode=" + encodeURIComponent(documentMode || "research") + "&document_type=" + encodeURIComponent(documentType || "research_paper") + "&classification_method=" + encodeURIComponent(classificationMethod)
   const uploadId = crypto.randomUUID()
 
   return new Promise((resolve, reject) => {
@@ -1118,6 +1118,7 @@ export async function importURL(url, options, onProgress) {
     summary_mode: options.summaryMode || 'manual',
     document_mode: options.documentMode || 'research',
     document_type: options.documentType || 'research_paper',
+    classification_method: options.classificationMethod || 'manual',
   }
   onProgress?.(30, 'downloading')
   let progress = 30

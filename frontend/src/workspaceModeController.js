@@ -52,6 +52,7 @@ export function createWorkspaceModeController({
   const modal = document.getElementById('document-type-modal')
   const optionRoot = document.getElementById('document-type-options')
   const confirmBtn = document.getElementById('document-type-confirm-btn')
+  const aiBtn = document.getElementById('document-type-ai-btn')
   const summary = document.getElementById('document-upload-summary')
   const modeChip = document.getElementById('upload-mode-chip')
   const uploadModeSwitch = document.getElementById('document-upload-switch-mode-btn')
@@ -196,12 +197,13 @@ export function createWorkspaceModeController({
     classificationMode = initialMode === 'general' ? 'general' : 'research'
     classificationContext = context
     if (!modal || !optionRoot) {
-      return Promise.resolve({ documentMode: classificationMode, documentType: defaultDocumentType(classificationMode) })
+      return Promise.resolve({ documentMode: classificationMode, documentType: defaultDocumentType(classificationMode), classificationMethod: 'manual' })
     }
     if (pendingUpload) closeUploadModal(null)
     const title = modal.querySelector('.modal-header h2')
     if (title) title.textContent = purpose === 'upload' ? 'PDF 업로드' : '문서 분류 변경'
     if (confirmBtn) confirmBtn.textContent = purpose === 'upload' ? '업로드' : '변경'
+    if (aiBtn) aiBtn.classList.toggle('hidden', purpose !== 'upload')
     renderUploadTypes()
     modal.classList.remove('hidden')
     requestAnimationFrame(() => modal.classList.add('is-visible'))
@@ -230,7 +232,14 @@ export function createWorkspaceModeController({
 
   confirmBtn?.addEventListener('click', () => {
     if (!selectedType) return
-    closeUploadModal({ documentMode: classificationMode, documentType: selectedType })
+    closeUploadModal({ documentMode: classificationMode, documentType: selectedType, classificationMethod: 'manual' })
+  })
+  aiBtn?.addEventListener('click', () => {
+    closeUploadModal({
+      documentMode: classificationMode,
+      documentType: defaultDocumentType(classificationMode),
+      classificationMethod: 'ai',
+    })
   })
   document.getElementById('document-type-close-btn')?.addEventListener('click', () => closeUploadModal(null))
   document.getElementById('document-type-cancel-btn')?.addEventListener('click', () => closeUploadModal(null))

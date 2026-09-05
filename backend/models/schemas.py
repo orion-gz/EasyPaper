@@ -46,6 +46,7 @@ class UrlImportRequest(BaseModel):
     summary_mode: str = "manual"
     document_mode: str = "research"
     document_type: str = "research_paper"
+    classification_method: str = "manual"
 
 
 class PageInfo(BaseModel):

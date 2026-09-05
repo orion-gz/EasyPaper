@@ -103,6 +103,7 @@ button.document-type-chip:hover { background: color-mix(in srgb, var(--document-
 .document-type-option span { margin-top: 4px; color: var(--text-muted); font-size: 11px; }
 .document-upload-summary { margin-top: 14px; min-height: 18px; color: var(--text-secondary); font-size: 12px; }
 .document-type-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.document-type-modal-actions .document-type-ai-btn { margin-right: auto; color: var(--control-accent); }
 
 .classification-confirmation-dialog {
   width: min(620px, calc(100vw - 40px));
