@@ -1172,5 +1172,8 @@
   "documentTypes.manual": "매뉴얼·가이드",
   "documentTypes.legalPolicy": "법률·정책 문서",
   "documentTypes.presentation": "발표·강의 자료",
-  "documentTypes.legacyBook": "책(재분류 필요)"
+  "documentTypes.legacyBook": "책(재분류 필요)",
+  "modelChange.futureOnly": "새 모델은 이후 번역부터 적용됩니다.",
+  "modelChange.fullConfirm": "기존 캐시를 삭제하고 문서 전체를 새 모델로 다시 번역하시겠습니까?",
+  "modelChange.partialConfirm": "기존에 번역한 {{count}}개 페이지만 새 모델로 다시 번역하시겠습니까?\n번역하지 않은 페이지는 자동으로 번역하지 않습니다."
 }

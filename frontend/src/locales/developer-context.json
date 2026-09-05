@@ -4222,5 +4222,14 @@
   },
   "viewer:documentInfo.processing": {
     "description": "Label for the local or external data processing badge."
+  },
+  "common:modelChange.futureOnly": {
+    "description": "Toast shown when the translation model changes before any page has been translated in a manual translation mode."
+  },
+  "common:modelChange.fullConfirm": {
+    "description": "Confirmation prompt for retranslating an entire document after changing the translation model."
+  },
+  "common:modelChange.partialConfirm": {
+    "description": "Confirmation prompt for retranslating only previously translated pages after changing the model; count is the number of pages."
   }
 }

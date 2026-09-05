@@ -1172,5 +1172,8 @@
   "documentTypes.manual": "Manual or guide",
   "documentTypes.legalPolicy": "Legal or policy document",
   "documentTypes.presentation": "Presentation or lecture material",
-  "documentTypes.legacyBook": "Book (reclassification needed)"
+  "documentTypes.legacyBook": "Book (reclassification needed)",
+  "modelChange.futureOnly": "The new model will apply to future translations.",
+  "modelChange.fullConfirm": "Delete the existing cache and retranslate the entire document with the new model?",
+  "modelChange.partialConfirm": "Retranslate only the {{count}} previously translated pages with the new model?\nUntranslated pages will not be translated automatically."
 }

@@ -2470,6 +2470,61 @@ retranslateBtn.addEventListener('click', async () => {
   }
 })
 
+async function retranslateAfterModelChange() {
+  if (!state.sessionId) return
+
+  const mode = getEffectiveTranslationMode()
+  const translatedPageNumbers = Array.from(state.translatedPages)
+    .filter(pageNum => Number.isInteger(pageNum) && pageNum >= 1 && pageNum <= state.totalPages)
+    .sort((a, b) => a - b)
+  const isFullDocumentTranslation = mode === 'auto'
+
+  if (!isFullDocumentTranslation && translatedPageNumbers.length === 0) {
+    showToast(t('modelChange.futureOnly'), 'info')
+    return
+  }
+
+  const scopeMessage = isFullDocumentTranslation
+    ? t('modelChange.fullConfirm')
+    : t('modelChange.partialConfirm', { count: translatedPageNumbers.length })
+  const ok = await showCustomConfirm(scopeMessage, {
+    title: 'AI 변경으로 인한 재번역',
+    confirmText: '재번역',
+    danger: true,
+  })
+  if (!ok) return
+
+  state.translationCache = {}
+  state.translationSentences = {}
+  state.translatingPages.clear()
+  state.translatedPages.clear()
+
+  for (let i = 1; i <= state.totalPages; i++) {
+    const contentEl = $(`trans-content-${i}`)
+    const statusEl = $(`trans-status-${i}`)
+    if (contentEl) contentEl.innerHTML = getTranslationPlaceholderHtml(i)
+    if (statusEl) {
+      statusEl.textContent = t('viewer:translation.waiting')
+      statusEl.classList.remove('done')
+    }
+  }
+
+  try {
+    showToast('번역 캐시를 삭제하는 중...', 'info')
+    await clearTranslationCacheAPI(state.sessionId)
+
+    const options = getTranslationOptions()
+    if (!isFullDocumentTranslation) options.pageNumbers = translatedPageNumbers
+    showToast(t('legacy.ui.0277'), 'info')
+    await restartJobAPI(state.sessionId, options)
+
+    startJobPolling(state.sessionId)
+    showToast(isFullDocumentTranslation ? t('legacy.ui.0280') : t('legacy.ui.0279'), 'success')
+  } catch (err) {
+    showToast(err.message, 'error')
+  }
+}
+
 // ── 번역 중지하기 ──────────────────────────────────
 cancelTransBtn.addEventListener('click', async () => {
   if (!state.sessionId) return
@@ -3931,10 +3986,7 @@ async function changeProviderAndModel(type, newProvider, newModel) {
     await checkAIStatus()
     showToast(`${type === 'trans' ? '번역' : '어시스턴트'} AI가 변경되었습니다.`, 'success')
     if (type === 'trans' && state.sessionId) {
-      const ok = await showCustomConfirm('번역 AI가 변경되었습니다. 기존 캐시를 삭제하고 처음부터 다시 번역하시겠습니까?', { title: 'AI 변경으로 인한 재번역', confirmText: '재번역', danger: true })
-      if (ok) {
-        retranslateBtn.click()
-      }
+      await retranslateAfterModelChange()
     }
   } catch (err) {
     showToast(err.message, 'error')
