@@ -164,6 +164,7 @@ async def upload_pdf(
     summary_mode: str = "manual",
     document_mode: str = "research",
     document_type: str = "research_paper",
+    classification_method: str = "manual",
     current_user: str = Depends(get_current_user)
 ):
     """PDF 파일을 업로드하고 텍스트를 추출합니다."""
@@ -180,6 +181,8 @@ async def upload_pdf(
         raise HTTPException(status_code=400, detail=api_language_error(source_lang, source=True))
 
     from services.document_policy import feature_enabled, validate_classification
+    if classification_method not in {"manual", "ai"}:
+        raise HTTPException(status_code=400, detail="유효하지 않은 문서 분류 방식입니다.")
     try:
         validate_classification(document_mode, document_type, allow_deprecated=False)
         if document_mode == "general" and not feature_enabled("general_document_mode"):
@@ -259,6 +262,7 @@ async def upload_pdf(
         "summary_mode": summary_mode,
         "document_mode": document_mode,
         "document_type": document_type,
+        "classification_method": classification_method,
     }
     parse_task = create_task(session_id, "parse", parse_options, status="queued")
     from services.parse_job import resume_parse_task

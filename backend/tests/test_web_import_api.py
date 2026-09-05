@@ -36,6 +36,9 @@ def test_import_html_endpoint_is_atomic_and_serves_manifest(test_client, isolate
     assert body["total_units"] >= 1
     doc = isolated_dirs["db"].db_get_document(doc_id)
     assert doc["content_kind"] == "html_article"
+    assert doc["classification_status"] == "confirmed"
+    from services.document_tasks import latest_task
+    assert latest_task(doc_id, "classification") is None
     assert Path(doc["pdf_path"]).is_file()
     manifest = test_client.get(f"/api/library/{doc_id}/article")
     assert manifest.status_code == 200

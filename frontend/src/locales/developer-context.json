@@ -4301,6 +4301,9 @@
   "common:classification.manual": {
     "description": "Document classification confirmation UI: classification.manual"
   },
+  "common:classification.classifyWithAi": {
+    "description": "Upload classification action that requests an AI recommendation."
+  },
   "chat:chapterSummaryPreparing": {
     "description": "Shown while a requested chapter summary is generated before automatically retrying chat."
   },

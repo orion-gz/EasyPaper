@@ -28,6 +28,8 @@ def _validate_options(body: UrlImportRequest) -> tuple[str, str]:
     from services.languages import normalize_document_language
     try:
         validate_classification(body.document_mode, body.document_type, allow_deprecated=False)
+        if body.classification_method not in {"manual", "ai"}:
+            raise ValueError("유효하지 않은 문서 분류 방식입니다.")
         if body.document_mode == "general" and not feature_enabled("general_document_mode"):
             raise ValueError("일반 문서 모드가 아직 활성화되지 않았습니다.")
         target = normalize_document_language(body.target_lang, allow_legacy=True)
@@ -117,17 +119,21 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
         detection = detect_document_language(pages)
         from services.db import db_save_document
         metadata = {"title": manifest["title"], "source_url": body.url, "canonical_url": manifest["canonical_url"]}
-        db_save_document(doc_id, current_user, f"{manifest['title']}.html", str(manifest_path), len(pages), metadata, document_mode=body.document_mode, document_type=body.document_type, source_language=source_lang, detected_source_language=str(detection["language"]), source_language_confidence=float(detection["confidence"]), preferred_target_language=target_lang, parser_engine="readability", parser_version="1", source_origin="web", content_kind="html_article", source_url=body.url, canonical_url=manifest["canonical_url"], fetched_at=manifest["fetched_at"], content_schema_version=1, content_unit_count=len(pages))
+        classification_status = "pending" if body.classification_method == "ai" else "confirmed"
+        db_save_document(doc_id, current_user, f"{manifest['title']}.html", str(manifest_path), len(pages), metadata, document_mode=body.document_mode, document_type=body.document_type, classification_status=classification_status, source_language=source_lang, detected_source_language=str(detection["language"]), source_language_confidence=float(detection["confidence"]), preferred_target_language=target_lang, parser_engine="readability", parser_version="1", source_origin="web", content_kind="html_article", source_url=body.url, canonical_url=manifest["canonical_url"], fetched_at=manifest["fetched_at"], content_schema_version=1, content_unit_count=len(pages))
         from services.cache import save_pages_cache
         save_pages_cache(doc_id, str(manifest_path), pages, "readability", "1", strict=True)
         from services.context_retrieval import index_document_chunks
         index_document_chunks(doc_id, pages)
         from routers.upload import sessions
-        sessions[doc_id] = {"pdf_path": str(manifest_path), "filename": f"{manifest['title']}.html", "pages": pages, "total_pages": len(pages), "metadata": metadata, "from_library": True, "username": current_user, "document_mode": body.document_mode, "document_type": body.document_type, "source_language": source_lang, "detected_source_language": detection["language"], "source_language_confidence": detection["confidence"], "preferred_target_language": target_lang, "processing_policy": "inherit", "content_revision": 1, "parser_engine": "readability", "parser_version": "1", "content_kind": "html_article", "source_origin": "web"}
-        if body.translation_mode == "auto" and len(pages) < 50 and (source_lang if source_lang != "auto" else detection["language"]) != target_lang:
+        sessions[doc_id] = {"pdf_path": str(manifest_path), "filename": f"{manifest['title']}.html", "pages": pages, "total_pages": len(pages), "metadata": metadata, "from_library": True, "username": current_user, "document_mode": body.document_mode, "document_type": body.document_type, "classification_status": classification_status, "processing_options": body.model_dump(exclude={"url", "upload_id"}), "source_language": source_lang, "detected_source_language": detection["language"], "source_language_confidence": detection["confidence"], "preferred_target_language": target_lang, "processing_policy": "inherit", "content_revision": 1, "parser_engine": "readability", "parser_version": "1", "content_kind": "html_article", "source_origin": "web"}
+        if body.classification_method == "ai":
+            from services.document_classification import start_classification_task
+            start_classification_task(doc_id, manifest["title"], pages)
+        elif body.translation_mode == "auto" and len(pages) < 50 and (source_lang if source_lang != "auto" else detection["language"]) != target_lang:
             from services.translation_job import start_job
             start_job(doc_id, pages, target_lang=target_lang, source_lang=source_lang if source_lang != "auto" else detection["language"], style=body.style, ignore_math=body.ignore_math, ignore_table=body.ignore_table, ignore_refs=body.ignore_refs)
-        return UploadResponse(session_id=doc_id, filename=f"{manifest['title']}.html", total_pages=len(pages), file_size_mb=round(downloaded_size / 1048576, 2), metadata=metadata, document_mode=body.document_mode, document_type=body.document_type, source_language=source_lang, detected_source_language=str(detection["language"]), source_language_confidence=float(detection["confidence"]), preferred_target_language=target_lang, source_origin="web", content_kind="html_article", source_url=body.url, canonical_url=manifest["canonical_url"], fetched_at=manifest["fetched_at"], total_units=len(pages), capabilities=_capabilities("html_article"))
+        return UploadResponse(session_id=doc_id, filename=f"{manifest['title']}.html", total_pages=len(pages), file_size_mb=round(downloaded_size / 1048576, 2), metadata=metadata, document_mode=body.document_mode, document_type=body.document_type, classification_status=classification_status, source_language=source_lang, detected_source_language=str(detection["language"]), source_language_confidence=float(detection["confidence"]), preferred_target_language=target_lang, source_origin="web", content_kind="html_article", source_url=body.url, canonical_url=manifest["canonical_url"], fetched_at=manifest["fetched_at"], total_units=len(pages), capabilities=_capabilities("html_article"))
     except WebImportError as exc:
         shutil.rmtree(staging, ignore_errors=True); shutil.rmtree(final_dir, ignore_errors=True)
         raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc

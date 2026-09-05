@@ -54,6 +54,7 @@ test('봇 확인으로 차단된 URL 오류를 가져오기 모달에 표시한�
   await page.locator('#url-import-input').fill('https://computer.howstuffworks.com/computer-memory.htm#pt1')
   await page.locator('#url-import-form').press('Enter')
   await expect(page.locator('#document-type-modal')).toBeVisible()
+  await expect(page.locator('#document-type-ai-btn')).toBeVisible()
   await page.locator('#document-type-options button').first().click()
   await page.locator('#document-type-confirm-btn').click()
   const error = page.locator('#url-import-error')

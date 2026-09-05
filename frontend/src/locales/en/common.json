@@ -1184,5 +1184,6 @@
   "classification.pending": "AI is analyzing the document type…",
   "classification.failed": "Automatic classification failed. Select the document type manually.",
   "classification.recommended": "Review the recommended document type.",
-  "classification.manual": "The evidence was insufficient, so your selection is required."
+  "classification.manual": "The evidence was insufficient, so your selection is required.",
+  "classification.classifyWithAi": "Classify with AI"
 }

@@ -1316,6 +1316,7 @@ async function handleFiles(uploadItems, targetFolderId = null) {
         summaryMode: getSummaryMode(classification.documentMode),
         documentMode: classification.documentMode,
         documentType: classification.documentType,
+        classificationMethod: classification.classificationMethod,
       }, (pct, phase) => {
         row.bar.style.width = `${pct}%`
         row.status.textContent = phase === 'verifying'
@@ -1351,7 +1352,9 @@ async function handleFiles(uploadItems, targetFolderId = null) {
 
   for (const uploaded of successes) {
     const { classification, result, rememberedTypeOptions } = uploaded
-    const confirmedClassification = await requireClassificationConfirmation(result.session_id)
+    const confirmedClassification = classification.classificationMethod === 'ai'
+      ? await requireClassificationConfirmation(result.session_id)
+      : { document_mode: classification.documentMode, document_type: classification.documentType }
     result.document_mode = confirmedClassification.document_mode
     result.document_type = confirmedClassification.document_type
     result.classification_status = "confirmed"
@@ -18053,11 +18056,17 @@ $('url-import-form')?.addEventListener('submit', async event => {
   uploadPopupTitle.textContent = t('library:import.running')
   try {
     const remembered = loadDocumentTypeOptions()[classification.documentType] || {}
-    const result = await importURL(url, { ...getTranslationOptions(classification.documentMode), ...remembered, translationMode: getTranslationMode(classification.documentMode), keywordMode: getKeywordMode(classification.documentMode), summaryMode: getSummaryMode(classification.documentMode), documentMode: classification.documentMode, documentType: classification.documentType }, (_pct, phase) => {
+    const result = await importURL(url, { ...getTranslationOptions(classification.documentMode), ...remembered, translationMode: getTranslationMode(classification.documentMode), keywordMode: getKeywordMode(classification.documentMode), summaryMode: getSummaryMode(classification.documentMode), documentMode: classification.documentMode, documentType: classification.documentType, classificationMethod: classification.classificationMethod }, (_pct, phase) => {
       const labels = { checking: t('library:import.checking'), downloading: t('library:import.downloading'), complete: t('library:import.analyzed') }
       row.status.textContent = labels[phase] || t('library:import.processing')
       row.bar.style.width = `${_pct}%`
     })
+    if (classification.classificationMethod === 'ai') {
+      const confirmed = await requireClassificationConfirmation(result.session_id)
+      result.document_mode = confirmed.document_mode
+      result.document_type = confirmed.document_type
+      result.classification_status = 'confirmed'
+    }
     if (targetFolderId) await moveLibraryDocuments([result.session_id], targetFolderId)
     row.spinner.classList.add('hidden'); row.success.classList.remove('hidden')
     row.status.textContent = t('library:import.complete'); row.bar.style.width = '100%'
