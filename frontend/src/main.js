@@ -25,7 +25,7 @@ import { buildScholarSearchUrl, extractCitationTitle } from './citationSearch.js
 import { changeLocale, getLocale, initI18n, loadFeatureNamespaces, loadNamespaces, t } from './i18n.js'
 import { saveUserLanguagePreferences, saveDocumentLanguageOverride } from './languagePreferences.js'
 import { canRetryTranslationTask, isTranslationTaskRunning, shouldRetryFailedTranslationTask } from './translationTaskState.js'
-import { applyUiScale, loadUiScale, saveUiScale } from './uiScale.js'
+import { applyUiScale, loadUiScale, saveUiScale, syncUiScaleControl } from './uiScale.js'
 import { adaptiveBriefingSummary, hasAdaptiveBriefing, renderAdaptiveBriefingHtml } from './adaptiveBriefing.js'
 import { classificationModalMarkup, recommendedClassification } from './classificationConfirmationView.js'
 import { renderChapterSummaryHtml, renderFullSummaryHtml } from './chapterSummaryView.js'
@@ -648,7 +648,7 @@ for (const id of ['login-ui-locale', 'onboarding-ui-locale', 'setting-ui-locale'
   if (selector) selector.addEventListener('change', (event) => handleLocaleSelector(event).catch(console.error))
 }
 if (settingUiScale) {
-  settingUiScale.value = String(loadUiScale())
+  syncUiScaleControl(settingUiScale)
   settingUiScale.addEventListener('change', () => {
     const scale = saveUiScale(settingUiScale.value)
     settingUiScale.value = String(scale)
@@ -4029,6 +4029,8 @@ async function changeProviderAndModel(type, newProvider, newModel) {
 // ── EasyPaper 설정 모달 이벤트 ──────────────────────────
 globalSettingsBtn.addEventListener('click', async () => {
   await loadFeatureNamespaces('settings')
+  syncUiScaleControl(settingUiScale)
+  settingDefaultZoom.value = localStorage.getItem('easypaper_default_zoom') || '1.5'
   openOverlayModal(settingsModal)
 
   // 1. 기본 진입 카테고리는 일반
@@ -4036,8 +4038,6 @@ globalSettingsBtn.addEventListener('click', async () => {
 
   // 2. 일반 설정값 로드
   syncModeSettings(workspaceModeController.getMode())
-  settingUiScale.value = String(loadUiScale())
-  settingDefaultZoom.value = localStorage.getItem('easypaper_default_zoom') || '1.5'
   settingToolbarPosition.value = getToolbarPosition()
   // 아래 항목은 모드와 관계없는 공통 뷰어 설정이다.
   settingDisableHoverTooltip.checked = !state.disableHoverTooltip
