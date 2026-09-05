@@ -17,9 +17,23 @@ export function saveUiScale(value, storage = localStorage) {
   return scale
 }
 
+export function syncSelectValue(control, value) {
+  if (!control) return ''
+
+  const nextValue = String(value)
+  for (const option of control.options) {
+    const isSelected = option.value === nextValue
+    option.selected = isSelected
+    option.defaultSelected = isSelected
+    option.toggleAttribute('selected', isSelected)
+  }
+  control.value = nextValue
+  return control.value
+}
+
 export function syncUiScaleControl(control, storage = localStorage) {
   const scale = loadUiScale(storage)
-  if (control) control.value = String(scale)
+  syncSelectValue(control, scale)
   return scale
 }
 
