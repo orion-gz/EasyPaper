@@ -1,4 +1,5 @@
 import './style.css'
+import { pageCoordinates } from './pdfCoordinates.js'
 import './styles/shell.css'
 import './styles/library-page.css'
 import './styles/research-graph.css'
@@ -11,7 +12,7 @@ import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, 
 import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
 import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
-import { loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
+import { refreshTextLayerGeometry, loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
 import { icon } from './icons.js'
@@ -653,6 +654,7 @@ if (settingUiScale) {
     const scale = saveUiScale(settingUiScale.value)
     settingUiScale.value = String(scale)
     applyUiScale(scale)
+    schedulePdfGeometryRefresh()
     showToast(t('settings:uiScaleSaved'), 'success')
   })
 }
@@ -13113,6 +13115,28 @@ document.addEventListener('mouseup', (e) => {
   }, 20)
 })
 
+// Browser zoom and UI scale can change DOM font advances without a PDF rerender.
+let pdfGeometryRefreshTimer
+function schedulePdfGeometryRefresh() {
+  clearTimeout(pdfGeometryRefreshTimer)
+  pdfGeometryRefreshTimer = setTimeout(() => {
+    refreshTextLayerGeometry((layer, pageNum) => {
+      window.onTextLayerRendered(layer, pageNum)
+      const sentences = state.pdfPageSentences?.[pageNum] || []
+      if (currentHoverPage === pageNum) {
+        const hovered = sentences.find(s => s.sentenceIdx === currentHoverSentenceIdx)
+        if (hovered) applyHoverHighlight(pageNum, hovered)
+      }
+      if (activeHighlightPage === pageNum) {
+        const active = sentences.find(s => s.sentenceIdx === activeHighlightSentenceIdx)
+        if (active) applyActiveHighlight(pageNum, active)
+      }
+    })
+  }, 100)
+}
+window.addEventListener('resize', schedulePdfGeometryRefresh)
+document.fonts.addEventListener('loadingdone', schedulePdfGeometryRefresh)
+
 // PDF.js 텍스트 레이어 렌더 완료 콜백 등록
 window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   // 문장 1대1 매칭을 위한 세그멘테이션 추가
@@ -15939,18 +15963,12 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
 //
 // buildVirtualTextMap: textLayer 내부 스팬을 읽어 가상 텍스트 인덱스 맵 구성 (DOM 비수정)
 function buildVirtualTextMap(container, pageNum) {
-  const allElements = Array.from(container.children).filter(el => el.nodeType === 1);
+  const allElements = Array.from(container.querySelectorAll('span:not(.markedContent)')).filter(el => !el.querySelector('span'));
   if (allElements.length === 0) return null;
 
-  // left/top을 el.style.left/top 문자열(px, %, calc() 등 PDF.js 버전·문서마다 다를 수
-  // 있음)로 역산하는 대신, 브라우저가 실제로 계산한 렌더링 좌표(getBoundingClientRect)를
-  // 컨테이너 기준 상대좌표로 직접 사용한다. 이전에 퍼센트 단위를 컨테이너 크기 기준으로
-  // 환산하는 방식을 썼었는데, 일부 문서에서는 그 환산값이 실제 렌더링 위치와 수십~백
-  // px씩 어긋났다(원인 불명 - 아마도 PDF.js가 퍼센트의 기준으로 삼는 상자와 textLayer의
-  // clientWidth/Height가 문서에 따라 정확히 일치하지 않는 경우가 있는 듯하다). 실제
-  // 렌더링 좌표를 직접 읽으면 이런 불일치가 원천적으로 발생하지 않는다.
-  const containerRect = container.getBoundingClientRect();
-  const pageWidth  = container.clientWidth  || containerRect.width  || 600;
+  // Overlay coordinates are local CSS pixels; client rects already include UI zoom.
+  const coordinates = pageCoordinates(container.closest('.pdf-page-inner') || container);
+  const pageWidth = coordinates.width || 600;
 
   // 줄 번호 필터링 + 노드 메타데이터 수집
   const spans = [];
@@ -15963,11 +15981,12 @@ function buildVirtualTextMap(container, pageNum) {
     // 위치를 거터로 오판하게 만든다(실측: 실제 텍스트는 left=88부터 시작하는데
     // 빈 스팬이 left=0에 끼어들어 "0~88" 사이를 간격으로 오인).
     if (!text) return;
-    const rect = el.getBoundingClientRect();
-    const leftVal   = rect.left - containerRect.left;
-    const topVal    = rect.top  - containerRect.top;
-    const fsMatch   = el.style.fontSize?.match(/([\d.]+)/);
-    const fsVal     = fsMatch   ? parseFloat(fsMatch[1])   : (rect.height || 10);
+    const rect = coordinates.rectToLocal(el.getBoundingClientRect());
+    const leftVal = rect.left;
+    const topVal = rect.top;
+    const style = getComputedStyle(el);
+    const minFontSize = parseFloat(style.getPropertyValue('--min-font-size')) || 1;
+    const fsVal = parseFloat(style.fontSize) / minFontSize || 10;
     const ratio     = leftVal / pageWidth;
 
     // 줄 번호: 3~4자리 숫자, 좌측 마진 8% 이내
@@ -16169,10 +16188,10 @@ function findDisplayEquationsFromVTM(vtm) {
   return eqs;
 }
 
-// 문장 범위로부터 화면 좌표 Rects 계산 (getClientRects 기반, 라인별 개별 상자)
+// 문장 범위로부터 오버레이의 로컬 CSS 좌표 Rects 계산 (getClientRects 기반, 라인별 개별 상자)
 function getSentenceRects(sentenceRange, vtm, containerEl) {
-  const { fullText, nodeRanges } = vtm;
-  const containerRect = containerEl.getBoundingClientRect();
+  const { nodeRanges } = vtm;
+  const coordinates = pageCoordinates(containerEl.closest('.pdf-page-inner') || containerEl);
   const mergedRects = [];
 
   for (const nr of nodeRanges) {
@@ -16191,12 +16210,7 @@ function getSentenceRects(sentenceRange, vtm, containerEl) {
 
       for (const rect of rects) {
         if (rect.width < 1 || rect.height < 1) continue;
-        const r = {
-          left:   rect.left   - containerRect.left,
-          top:    rect.top    - containerRect.top,
-          width:  rect.width,
-          height: rect.height,
-        };
+        const r = coordinates.rectToLocal(rect);
         // 같은 라인의 인접 상자 병합 (top ± 2px)
         const last = mergedRects[mergedRects.length - 1];
         if (last && Math.abs(last.top - r.top) < 3 && Math.abs((last.left + last.width) - r.left) < 4) {
@@ -16857,7 +16871,7 @@ function estimateCharIdxFromPoint(x, y, vtm) {
       const rect = range.getBoundingClientRect();
       if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
         // 비례폭 글꼴·ligature에서는 스팬 폭을 글자 수로 균등 분할할 수 없다.
-        // 실제 문자별 DOM Range를 VTM 수명 동안 캐시해 가장 가까운 caret을 찾는다.
+        // 문자별 상대 비율을 캐시해 UI 배율 변경 후에도 현재 rect로 caret을 찾는다.
         if (!vtm.charRectCache) vtm.charRectCache = new WeakMap();
         let charRects = vtm.charRectCache.get(nr.node);
         if (!charRects) {
@@ -16867,18 +16881,18 @@ function estimateCharIdxFromPoint(x, y, vtm) {
             charRange.setStart(nr.node, i);
             charRange.setEnd(nr.node, i + 1);
             const charRect = charRange.getBoundingClientRect();
-            if (charRect.width > 0 || charRect.height > 0) charRects.push({ offset: i, left: charRect.left - rect.left, width: charRect.width });
+            if (charRect.width > 0 || charRect.height > 0) charRects.push({ offset: i, left: (charRect.left - rect.left) / rect.width, width: charRect.width / rect.width });
           }
           vtm.charRectCache.set(nr.node, charRects);
         }
         let best = null;
         let bestDistance = Infinity;
         for (const item of charRects) {
-          const centerX = rect.left + item.left + item.width / 2;
+          const centerX = rect.left + (item.left + item.width / 2) * rect.width;
           const distance = Math.abs(x - centerX);
           if (distance < bestDistance) { best = item; bestDistance = distance; }
         }
-        if (best) return nr.start + best.offset + (x > rect.left + best.left + best.width / 2 ? 1 : 0);
+        if (best) return nr.start + best.offset + (x > rect.left + (best.left + best.width / 2) * rect.width ? 1 : 0);
         return nr.start;
       }
     } catch(e) { /* no-op */ }
