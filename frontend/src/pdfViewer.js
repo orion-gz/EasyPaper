@@ -5,11 +5,14 @@
  * - IntersectionObserver 기반 lazy 렌더링
  */
 
+import { alignTextLayer, collectTextContent } from './pdfTextLayer.js'
+
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 let pdfjsLib = null
 let pdfDoc = null
 let pdfLoadingTask = null
+const renderedTextLayers = new Map()
 let currentScale = 1.5
 let pageObserver = null
 let pageVisibilityObserver = null
@@ -117,6 +120,7 @@ export async function renderFigureCrop(pageNum, imgPercent) {
 export async function renderScrollView(container, zoom, { onPageVisible } = {}) {
   if (!pdfDoc) return
   currentScale = zoom
+  renderedTextLayers.clear()
   renderGeneration++
   const myGeneration = renderGeneration
 
@@ -262,6 +266,7 @@ async function _renderPage(wrapper, pageNum, generation) {
     textLayerDiv.style.width  = `${viewport.width}px`
     textLayerDiv.style.height = `${viewport.height}px`
     textLayerDiv.style.setProperty('--scale-factor', viewport.scale)
+    textLayerDiv.style.setProperty('--user-unit', viewport.userUnit)
 
     inner.appendChild(canvas)
     inner.appendChild(textLayerDiv)
@@ -279,23 +284,28 @@ async function _renderPage(wrapper, pageNum, generation) {
 
     // 텍스트 레이어 렌더링
     try {
+      let textContent
       try {
-        const textContent = await page.getTextContent()
-        const textLayer = new pdfjsLib.TextLayer({
-          textContentSource: textContent,
-          container: textLayerDiv,
-          viewport,
-        })
-        await textLayer.render()
-      } catch (err) {
-        console.warn("TextLayer with getTextContent failed, trying streamTextContent fallback:", err)
-        const textLayer = new pdfjsLib.TextLayer({
-          textContentSource: page.streamTextContent(),
-          container: textLayerDiv,
-          viewport,
-        })
-        await textLayer.render()
+        textContent = await page.getTextContent()
+      } catch (error) {
+        console.warn('getTextContent failed, trying streamTextContent:', error)
+        textContent = await collectTextContent(page.streamTextContent())
       }
+      if (generation !== renderGeneration) return
+      const textLayer = new pdfjsLib.TextLayer({
+        textContentSource: textContent,
+        container: textLayerDiv,
+        viewport,
+      })
+      await textLayer.render()
+      // Our canvas keeps fractional CSS dimensions rather than PDFViewer's
+      // rounded page sizes. Restore exact, unrotated layer dimensions after
+      // TextLayer sets its viewer-specific round()/--scale-round-* expressions.
+      textLayerDiv.style.width = `${viewport.rawDims.pageWidth * viewport.scale * viewport.userUnit}px`
+      textLayerDiv.style.height = `${viewport.rawDims.pageHeight * viewport.scale * viewport.userUnit}px`
+      if (generation !== renderGeneration) return
+      alignTextLayer(textLayer, textContent, viewport)
+      renderedTextLayers.set(pageNum, { textLayer, textContent, viewport, container: textLayerDiv, generation })
 
       // 텍스트 레이어 렌더 완료 콜백 호출
       if (generation === renderGeneration && window.onTextLayerRendered) {
@@ -309,6 +319,18 @@ async function _renderPage(wrapper, pageNum, generation) {
     if (generation !== renderGeneration) return
     inner.innerHTML = `<div class="page-render-error">페이지 ${pageNum} 오류</div>`
     console.error(`Render p.${pageNum}:`, e)
+  }
+}
+
+/** Re-measure native text after UI/browser zoom without replacing selection nodes. */
+export function refreshTextLayerGeometry(onUpdated) {
+  for (const [pageNum, layer] of renderedTextLayers) {
+    if (layer.generation !== renderGeneration || !layer.container.isConnected) {
+      renderedTextLayers.delete(pageNum)
+      continue
+    }
+    alignTextLayer(layer.textLayer, layer.textContent, layer.viewport)
+    onUpdated?.(layer.container, pageNum)
   }
 }
 
