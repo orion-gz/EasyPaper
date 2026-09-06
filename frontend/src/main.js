@@ -25,7 +25,7 @@ import { buildScholarSearchUrl, extractCitationTitle } from './citationSearch.js
 import { changeLocale, getLocale, initI18n, loadFeatureNamespaces, loadNamespaces, t } from './i18n.js'
 import { saveUserLanguagePreferences, saveDocumentLanguageOverride } from './languagePreferences.js'
 import { canRetryTranslationTask, isTranslationTaskRunning, shouldRetryFailedTranslationTask } from './translationTaskState.js'
-import { applyUiScale, loadUiScale, saveUiScale, syncUiScaleControl } from './uiScale.js'
+import { applyUiScale, loadUiScale, saveUiScale, syncSelectValue, syncUiScaleControl } from './uiScale.js'
 import { adaptiveBriefingSummary, hasAdaptiveBriefing, renderAdaptiveBriefingHtml } from './adaptiveBriefing.js'
 import { classificationModalMarkup, recommendedClassification } from './classificationConfirmationView.js'
 import { renderChapterSummaryHtml, renderFullSummaryHtml } from './chapterSummaryView.js'
@@ -651,7 +651,7 @@ if (settingUiScale) {
   syncUiScaleControl(settingUiScale)
   settingUiScale.addEventListener('change', () => {
     const scale = saveUiScale(settingUiScale.value)
-    settingUiScale.value = String(scale)
+    syncSelectValue(settingUiScale, scale)
     applyUiScale(scale)
     showToast(t('settings:uiScaleSaved'), 'success')
   })
@@ -4085,7 +4085,7 @@ async function changeProviderAndModel(type, newProvider, newModel) {
 globalSettingsBtn.addEventListener('click', async () => {
   await loadFeatureNamespaces('settings')
   syncUiScaleControl(settingUiScale)
-  settingDefaultZoom.value = localStorage.getItem('easypaper_default_zoom') || '1.5'
+  syncSelectValue(settingDefaultZoom, localStorage.getItem('easypaper_default_zoom') || '1.5')
   openOverlayModal(settingsModal)
 
   // 1. 기본 진입 카테고리는 일반
@@ -4337,6 +4337,7 @@ async function handleTranslationAffectingSettingChange() {
 })
 
 settingDefaultZoom.addEventListener('change', () => {
+  syncSelectValue(settingDefaultZoom, settingDefaultZoom.value)
   persistGeneralSettingsToStorage()
   showToast('일반 설정이 저장되었습니다.', 'success')
   const newZoom = parseFloat(settingDefaultZoom.value) || 1.5
