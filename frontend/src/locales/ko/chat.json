@@ -18,5 +18,12 @@
   "evidence.verifyAction": "근거 검증",
   "evidence.verifyPrompt": "직전 답변의 근거를 검증해줘.",
   "evidence.verifyTarget": "검증 대상 답변",
-  "chapterSummaryPreparing": "요청한 장의 요약을 준비한 뒤 질문을 자동으로 이어갑니다."
+  "chapterSummaryPreparing": "요청한 장의 요약을 준비한 뒤 질문을 자동으로 이어갑니다.",
+  "memo.createAction": "메모 생성",
+  "memo.createdAction": "메모 생성됨",
+  "memo.created": "질문과 답변을 본문 메모로 생성했습니다.",
+  "memo.alreadyCreated": "이미 생성된 메모입니다.",
+  "memo.quoteHeading": "인용 본문",
+  "memo.questionHeading": "질문",
+  "memo.answerHeading": "AI 답변"
 }

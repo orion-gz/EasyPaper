@@ -232,3 +232,47 @@ test('로컬에 저장된 인용 이미지가 없으면 텍스트 placeholder로
   await expect(page.locator('.chat-message.user .message-quote-img')).toHaveCount(0)
   await expect(page.locator('.chat-message.user .quote-body')).toContainText('Page 2')
 })
+
+
+test('본문 인용 질문의 AI 답변을 원래 선택 범위의 메모로 생성한다', async ({ page }) => {
+  const docA = { id: 'doc-A', filename: 'DocA.pdf', total_pages: 1, metadata: { title: 'Document A' }, translated_pages: [] }
+  await mockBaseRoutes(page, { documents: [docA] })
+  await page.route('**/api/library/doc-A/pdf', route =>
+    route.fulfill({ status: 200, contentType: 'application/pdf', body: SAMPLE_PDF_A }))
+  await page.route('**/api/chat/doc-A/history', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        history: [
+          { role: 'user', content: '[인용된 본문 내용 (Page 1, chars 0-12)]:\n\"Attention is\"\n\n[질문]:\n왜 중요한가요?' },
+          { role: 'assistant', content: '문맥의 핵심 관계를 직접 학습하기 때문입니다.' },
+        ],
+      }),
+    }))
+
+  await gotoApp(page)
+  await page.evaluate(() => {
+    localStorage.setItem('easypaper_hydrated_doc-A', '1')
+    location.hash = '#viewer?id=doc-A'
+  })
+  await page.click('#chat-toggle-btn')
+  await expect(page.locator('.create-answer-memo-btn')).toHaveText('메모 생성')
+
+  await page.locator('.create-answer-memo-btn').click()
+
+  await expect(page.locator('.floating-memo')).toHaveCount(1)
+  await expect(page.locator('.floating-memo')).toContainText('왜 중요한가요?')
+  await expect(page.locator('.floating-memo')).toContainText('문맥의 핵심 관계를 직접 학습하기 때문입니다.')
+  const memo = await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('easypaper_memos_doc-A') || '{}')
+    return saved.page_1?.[0]
+  })
+  expect(memo).toMatchObject({
+    pageNum: 1,
+    charStart: 0,
+    charEnd: 12,
+    source: 'chat-answer',
+    sourceQuestion: '왜 중요한가요?',
+  })
+})
