@@ -73,6 +73,8 @@ test('설정 화면이 현재 워크스페이스 모드의 값과 항목 구성�
   await expect(page.locator('#setting-disable-citation-overlay').locator('..')).toBeHidden()
   await page.locator('[data-tab="tab-automation"]').click()
   await expect(page.locator('#settings-keywords-label')).toHaveText('고급 어휘 자동 생성')
+  await expect(page.locator('#setting-disable-suggested-questions').locator('..')).toBeVisible()
+  await expect(page.locator('#settings-nav-automation')).toHaveText('생성 및 자동화')
 
   await page.locator('[data-tab="tab-translation"]').click()
   await page.locator('#setting-trans-style').selectOption('summary')

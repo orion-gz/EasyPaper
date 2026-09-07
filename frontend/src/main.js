@@ -533,7 +533,9 @@ function initializeSettingsInformationArchitecture() {
   for (const id of ['setting-default-zoom', 'setting-toolbar-position', 'setting-disable-hover-tooltip']) {
     moveSettingsGroup(id, viewerBody)
   }
-  moveSettingsGroup('setting-auto-generate-keywords', automationBody)
+  for (const id of ['setting-auto-generate-keywords', 'setting-disable-suggested-questions']) {
+    moveSettingsGroup(id, automationBody)
+  }
   moveSettingsGroup('clear-cache-btn', dataSystemBody)
 
   for (const id of ['system-update-section', 'tauri-update-section']) {
