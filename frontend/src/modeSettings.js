@@ -15,6 +15,10 @@ const MODE_DEFAULTS = {
     disableFigureOverlay: false,
     disablePrimer: false,
     disableSuggestedQuestions: false,
+    focusModeEnabled: false,
+    focusBlurStrength: 6,
+    focusDimOpacity: 20,
+    focusScale: 104,
   },
   general: {
     theme: 'dark',
@@ -32,6 +36,10 @@ const MODE_DEFAULTS = {
     disableFigureOverlay: false,
     disablePrimer: true,
     disableSuggestedQuestions: false,
+    focusModeEnabled: false,
+    focusBlurStrength: 6,
+    focusDimOpacity: 20,
+    focusScale: 104,
   },
 }
 
@@ -58,7 +66,14 @@ const SHARED_LEGACY_PREFERENCES = new Set(['theme', 'accentColor', 'targetLang']
 const BOOLEAN_SETTINGS = new Set([
   'ignoreMath', 'ignoreTable', 'ignoreRefs', 'disableInsights',
   'disableCitationOverlay', 'disableFigureOverlay', 'disablePrimer', 'disableSuggestedQuestions',
+  'focusModeEnabled',
 ])
+const NUMBER_SETTINGS = {
+  focusBlurStrength: { min: 0, max: 16, step: 1 },
+  focusDimOpacity: { min: 0, max: 60, step: 5 },
+  focusScale: { min: 100, max: 110, step: 1 },
+}
+
 const LEGACY_LANGUAGE_VALUES = {
   '한국어': 'ko', '영어': 'en', '일본어': 'ja', '중국어': 'zh-Hans',
 }
@@ -95,7 +110,14 @@ export function getModeSetting(name, mode, storage = localStorage) {
     if (migrated !== raw) storage.setItem(modeSettingStorageKey(name, normalizedMode), migrated)
     return migrated
   }
-  return BOOLEAN_SETTINGS.has(name) ? raw === 'true' : raw
+  if (BOOLEAN_SETTINGS.has(name)) return raw === 'true'
+  if (NUMBER_SETTINGS[name]) {
+    const { min, max, step } = NUMBER_SETTINGS[name]
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed)) return fallback
+    return Math.min(max, Math.max(min, Math.round(parsed / step) * step))
+  }
+  return raw
 }
 
 export function setModeSetting(name, mode, value, storage = localStorage) {
