@@ -109,6 +109,28 @@ test('뷰어 메모 입력창에 포커스 테두리를 표시하지 않는다',
   await expect.poll(() => textarea.evaluate(element => getComputedStyle(element).outlineStyle)).toBe('none')
 })
 
+test('메모 편집 중 목차가 메모를 덮고 포커스를 빼앗지 않는다', async ({ page }) => {
+  await openViewerWithMemo(page)
+
+  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  await memo.locator('.edit-btn').click()
+  const textarea = memo.locator('.floating-memo-textarea')
+  await expect(textarea).toBeFocused()
+
+  await page.locator('#outline-toggle-btn').click()
+  const outline = page.locator('#outline-sidebar')
+  await expect(outline).not.toHaveClass(/hidden/)
+  await page.waitForTimeout(200)
+  await expect(textarea).toBeFocused()
+  await expect(memo.locator('.floating-memo-render')).toHaveCount(0)
+
+  const layers = await page.evaluate(() => ({
+    outline: Number(getComputedStyle(document.querySelector('#outline-sidebar')).zIndex),
+    memo: Number(getComputedStyle(document.querySelector('.floating-memo')).zIndex),
+  }))
+  expect(layers.outline).toBeGreaterThan(layers.memo)
+})
+
 
 test('메모 편집 중 원격 snapshot은 입력 DOM 교체를 편집 종료까지 미룬다', async ({ page }) => {
   await openViewerWithMemo(page)

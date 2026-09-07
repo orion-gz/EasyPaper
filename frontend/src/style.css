@@ -4947,7 +4947,8 @@ body:not(.toolbar-pos-left):not(.toolbar-pos-right):has(.chat-sidebar:not(.hidde
   background: var(--bg-panel);
   border-right: 1px solid var(--border-strong);
   box-shadow: 4px 0 30px rgba(0, 0, 0, 0.2);
-  z-index: 120 !important;
+  /* 떠 있는 메모(10000)보다 위에서 하나의 불투명한 패널로 동작해야 한다. */
+  z-index: 10010 !important;
   display: flex;
   flex-direction: column;
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), top 0.25s ease, bottom 0.25s ease, left 0.25s ease;
@@ -4998,6 +4999,31 @@ body.toolbar-hidden .outline-sidebar {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
+}
+.outline-full-summary-btn { width:calc(100% - 8px); margin:4px 4px 12px; min-height:34px; font-size:11px; }
+.outline-full-summary-cancel-btn { width:calc(100% - 8px); margin:0 4px 12px; min-height:32px; font-size:11px; }
+.outline-chapter-row { padding:7px 4px 9px; border-bottom:1px solid var(--border); }
+.outline-chapter-row .outline-item { width:100%; border:0; background:transparent; text-align:left; }
+.outline-chapter-pages { flex:0 0 auto; color:var(--text-muted); font-size:10px; font-weight:500; }
+.outline-summary-btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:5px;
+  min-height:27px; margin:3px 6px 0 10px; padding:4px 10px;
+  border:1px solid color-mix(in srgb,var(--accent-mid) 38%,var(--border));
+  border-radius:999px; background:color-mix(in srgb,var(--accent-mid) 10%,var(--bg-panel));
+  color:var(--accent-mid); font-size:10px; font-weight:650; line-height:1; cursor:pointer;
+  transition:background .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease;
+}
+.outline-summary-btn::before { content:"✦"; font-size:10px; }
+.outline-summary-btn:hover:not(:disabled) {
+  border-color:var(--accent-mid);
+  background:color-mix(in srgb,var(--accent-mid) 17%,var(--bg-panel));
+  box-shadow:0 3px 10px color-mix(in srgb,var(--accent-mid) 16%,transparent);
+  transform:translateY(-1px);
+}
+.outline-summary-btn:disabled { cursor:wait; opacity:.65; }
+.outline-summary-result {
+  margin:8px 6px 2px; padding:10px; border:1px solid var(--border); border-radius:8px;
+  background:color-mix(in srgb,var(--bg-elevated) 82%,transparent); font-size:11px; line-height:1.5;
 }
 .outline-item {
   font-size: 12px;

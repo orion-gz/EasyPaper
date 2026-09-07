@@ -17790,12 +17790,10 @@ async function loadPDFOutline() {
 
     if (chapterData.status === 'available') {
       const fullButton = document.createElement('button')
-      fullButton.type = 'button'; fullButton.className = 'btn btn-secondary'
-      fullButton.style.cssText = 'margin:6px 10px 12px; width:calc(100% - 20px); font-size:11px;'
+      fullButton.type = 'button'; fullButton.className = 'btn btn-secondary outline-full-summary-btn'
       fullButton.textContent = t('viewer:chapter.full')
       const cancelFullButton = document.createElement('button')
-      cancelFullButton.type = 'button'; cancelFullButton.className = 'btn btn-secondary'; cancelFullButton.hidden = true
-      cancelFullButton.style.cssText = 'margin:0 10px 12px;width:calc(100% - 20px);font-size:11px;'
+      cancelFullButton.type = 'button'; cancelFullButton.className = 'btn btn-secondary outline-full-summary-cancel-btn'; cancelFullButton.hidden = true
       cancelFullButton.textContent = t('viewer:chapter.cancel')
       let activeFullTaskId = null
       let fullCancelRequested = false
@@ -17829,7 +17827,6 @@ async function loadPDFOutline() {
             status = await getFullSummaryStatusAPI(state.sessionId)
           }
           const panel = document.createElement('div'); panel.className = 'outline-summary-result'
-          panel.style.cssText = 'margin:0 10px 12px;padding:10px;font-size:12px;line-height:1.5;border:1px solid var(--border);border-radius:8px;'
           panel.innerHTML = renderFullSummaryHtml(status.summary, { title: t('viewer:chapter.fullTitle'), keyPoints: t('viewer:chapter.keyPoints'), connections: t('viewer:chapter.connections'), limitations: t('viewer:chapter.limitations') })
           fullButton.after(panel); fullButton.textContent = t('viewer:chapter.fullView')
         } catch (error) {
@@ -17842,14 +17839,13 @@ async function loadPDFOutline() {
       outlineContent.append(fullButton, cancelFullButton)
       chapterData.chapters.forEach(chapter => {
         const row = document.createElement('div'); row.className = 'outline-chapter-row'
-        row.style.cssText = 'border-bottom:1px solid var(--border);padding:4px 8px;'
         const nav = document.createElement('button'); nav.type = 'button'; nav.className = 'outline-item depth-0'
-        nav.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${escapeHtml(chapter.title)}</span><small>${chapter.start_page}–${chapter.end_page}</small>`
+        nav.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${escapeHtml(chapter.title)}</span><small class="outline-chapter-pages">${chapter.start_page}–${chapter.end_page}</small>`
         nav.addEventListener('click', () => scrollToPage(viewerScrollContainer, chapter.start_page))
         nav.title = t('viewer:goToPage', { page: chapter.start_page })
-        const summary = document.createElement('button'); summary.type = 'button'; summary.className = 'btn btn-secondary'
-        summary.style.cssText = 'font-size:10px;margin:2px 0 4px;'; summary.textContent = chapter.summary_status === 'completed' ? t('viewer:chapter.view') : t('viewer:chapter.summarize')
-        const result = document.createElement('div'); result.hidden = true; result.style.cssText = 'font-size:11px;line-height:1.45;padding:8px 2px;'
+        const summary = document.createElement('button'); summary.type = 'button'; summary.className = 'outline-summary-btn'
+        summary.textContent = chapter.summary_status === 'completed' ? t('viewer:chapter.view') : t('viewer:chapter.summarize')
+        const result = document.createElement('div'); result.className = 'outline-summary-result'; result.hidden = true
         summary.addEventListener('click', () => waitForSummary(chapter, summary, result))
         row.append(nav, summary, result); outlineContent.appendChild(row)
       })
@@ -17885,14 +17881,16 @@ function hideOutlineSidebar({ restoreFocus = false } = {}) {
   }
 }
 
-function showOutlineSidebar() {
+function showOutlineSidebar({ focusContent = false } = {}) {
   if (outlineSidebar) {
     outlineSidebar.classList.remove('hidden')
     if (outlineToggleBtn) {
       outlineToggleBtn.classList.add('active')
       outlineToggleBtn.setAttribute('aria-expanded', 'true')
     }
-    window.requestAnimationFrame(() => outlineContent?.querySelector('.outline-item:not(:disabled)')?.focus())
+    // 포인터로 열 때 메모 textarea를 강제로 blur시키면 메모 렌더링 전환과
+    // 패널 애니메이션이 겹쳐 깜빡인다. 키보드로 연 경우에만 탐색 위치를 옮긴다.
+    if (focusContent) window.requestAnimationFrame(() => outlineContent?.querySelector('.outline-item:not(:disabled)')?.focus())
   }
 }
 
@@ -17900,14 +17898,22 @@ function showOutlineSidebar() {
 if (outlineToggleBtn) {
   outlineToggleBtn.setAttribute('aria-controls', 'outline-sidebar')
   outlineToggleBtn.setAttribute('aria-expanded', 'false')
-  outlineToggleBtn.addEventListener('click', () => {
+  outlineToggleBtn.addEventListener('mousedown', (event) => {
+    // 편집 중인 메모 위로 목차를 여는 포인터 동작은 textarea의 포커스를
+    // 유지한다. 버튼의 click은 그대로 발생하므로 패널 토글에는 영향이 없다.
+    if (outlineSidebar?.classList.contains('hidden')
+        && document.activeElement?.classList.contains('floating-memo-textarea')) {
+      event.preventDefault()
+    }
+  })
+  outlineToggleBtn.addEventListener('click', (event) => {
     console.log("[Outline] Toggle button clicked. Sidebar:", outlineSidebar, "ToggleBtn:", outlineToggleBtn)
     if (!outlineSidebar) {
       showToast('목차 사이드바를 찾을 수 없습니다.', 'error')
       return
     }
     if (outlineSidebar.classList.contains('hidden')) {
-      showOutlineSidebar()
+      showOutlineSidebar({ focusContent: event.detail === 0 })
     } else {
       hideOutlineSidebar()
     }
