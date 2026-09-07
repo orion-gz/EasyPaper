@@ -3,7 +3,10 @@ import hmac
 import os
 import time
 from fastapi import Depends, Request, HTTPException, status
-from config import get_app_password, get_app_username, get_skip_login, SECRET_KEY
+from config import (
+    get_app_password, get_app_password_hash, get_app_username, get_skip_login,
+    SECRET_KEY,
+)
 
 def verify_password(stored_password_hash: str, provided_password: str) -> bool:
     # 1. 만약 평문 비밀번호(APP_PASSWORD)가 설정되어 있다면 즉시 비교
@@ -92,8 +95,18 @@ SESSION_TTL_REMEMBER_SECONDS = 90 * 24 * 3600
 def create_session_token(username: str, ttl_seconds: int = SESSION_TTL_DEFAULT_SECONDS) -> str:
     expires = int(time.time()) + ttl_seconds
     payload = f"{username}:{expires}"
-    signature = hmac.new(SECRET_KEY.encode('utf-8'), payload.encode('utf-8'), hashlib.sha256).hexdigest()
+    signature = _session_signature(payload)
     return f"{payload}:{signature}"
+
+def _session_signature(payload: str) -> str:
+    """Bind sessions to the current credential hash as well as the install key."""
+    credential_key = hmac.new(
+        SECRET_KEY.encode("utf-8"),
+        get_app_password_hash().encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return hmac.new(credential_key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
 
 def verify_session_token(token: str) -> bool:
     try:
@@ -105,7 +118,7 @@ def verify_session_token(token: str) -> bool:
         if time.time() > expires:
             return False
         payload = f"{username}:{expires_str}"
-        expected_signature = hmac.new(SECRET_KEY.encode('utf-8'), payload.encode('utf-8'), hashlib.sha256).hexdigest()
+        expected_signature = _session_signature(payload)
         return hmac.compare_digest(expected_signature, signature)
     except Exception:
         return False

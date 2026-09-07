@@ -1,4 +1,5 @@
-fastapi==0.115.0
+fastapi==0.116.2
+starlette==0.47.2
 uvicorn[standard]==0.30.6
 python-multipart>=0.0.18
 pymupdf==1.24.10
