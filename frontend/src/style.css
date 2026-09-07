@@ -568,7 +568,7 @@ body.toolbar-pos-right .topbar.toolbar-hidden {
 /* ── 패널 레이아웃 ── */
 .panels {
   display: flex;
-  height: 100vh;
+  height: 100%;
   padding-top: var(--topbar-h);
   overflow: hidden;
   transition: padding 0.25s ease;
