@@ -4342,5 +4342,26 @@
   },
   "viewer:chapter.cancelFailed": {
     "description": "Chapter/full summary retry and cancellation UI: chapter.cancelFailed"
+  },
+  "chat:memo.createAction": {
+    "description": "Button under a quoted-text AI answer that creates a memo in the document."
+  },
+  "chat:memo.createdAction": {
+    "description": "Disabled button label after the memo was created."
+  },
+  "chat:memo.created": {
+    "description": "Success toast shown after exporting a quoted question and AI answer to a memo."
+  },
+  "chat:memo.alreadyCreated": {
+    "description": "Toast shown when the same answer was already exported."
+  },
+  "chat:memo.quoteHeading": {
+    "description": "Heading for the quoted document text in the exported memo."
+  },
+  "chat:memo.questionHeading": {
+    "description": "Heading for the user question in the exported memo."
+  },
+  "chat:memo.answerHeading": {
+    "description": "Heading for the AI answer in the exported memo."
   }
 }

@@ -18,5 +18,12 @@
   "evidence.verifyAction": "Verify evidence",
   "evidence.verifyPrompt": "Verify the evidence for the previous answer.",
   "evidence.verifyTarget": "Answer to verify",
-  "chapterSummaryPreparing": "Preparing the requested chapter summary; your question will resume automatically."
+  "chapterSummaryPreparing": "Preparing the requested chapter summary; your question will resume automatically.",
+  "memo.createAction": "Create memo",
+  "memo.createdAction": "Memo created",
+  "memo.created": "Created a document memo from the question and answer.",
+  "memo.alreadyCreated": "This memo has already been created.",
+  "memo.quoteHeading": "Quoted text",
+  "memo.questionHeading": "Question",
+  "memo.answerHeading": "AI answer"
 }

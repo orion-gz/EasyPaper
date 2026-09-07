@@ -10509,7 +10509,8 @@ async function openFromLibrary(doc, shouldPushState = true) {
         if (isAssistant && msg.stale) {
           renderedContent = `<span class="chat-stale-revision-badge">${t("chat:staleRevision")}</span>${renderedContent}`
         }
-        const messageElement = appendChatMessage(msg.role, renderedContent, true)
+        const quotedMemoContext = isAssistant ? null : parseQuotedTextChatPayload(msg.content)
+        const messageElement = appendChatMessage(msg.role, renderedContent, true, quotedMemoContext)
         if (isAssistant && msg.evidence?.length) {
           attachEvidenceToBubble(messageElement.querySelector(".message-bubble"), msg.evidence)
         }
@@ -12152,6 +12153,79 @@ function renderPageMemos(pageNum) {
   })
 }
 
+function createMemoFromQuotedAnswer(context, answer, button) {
+  if (!state.sessionId || !context?.pageNum) return
+  const pageNum = Number(context.pageNum)
+  const charStart = Number(context.charStart)
+  const charEnd = Number(context.charEnd)
+  if (!Number.isInteger(pageNum) || !Number.isInteger(charStart)
+      || !Number.isInteger(charEnd) || charStart >= charEnd) return
+
+  const allMemosObj = loadMemos(state.sessionId)
+  const pageKey = `page_${pageNum}`
+  const pageMemos = allMemosObj[pageKey] || []
+  const duplicate = pageMemos.some(memo =>
+    memo.source === 'chat-answer'
+    && memo.charStart === charStart
+    && memo.charEnd === charEnd
+    && memo.sourceQuestion === context.question
+    && memo.sourceAnswer === answer
+  )
+  if (duplicate) {
+    showToast(t('chat:memo.alreadyCreated'), 'info')
+    return
+  }
+
+  const sentenceRanges = state.pdfPageSentences?.[pageNum] || []
+  const anchorRange = findSentenceAtChar(charStart, sentenceRanges)
+    || findSentenceAtChar(Math.max(charStart, charEnd - 1), sentenceRanges)
+  const sentenceIdx = anchorRange
+    ? (anchorRange.sentenceIdx >= 10000 ? (anchorRange.originalSentenceIdx ?? 0) : anchorRange.sentenceIdx)
+    : 0
+
+  let x = 68
+  let y = 12
+  const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+  const vtm = state.virtualTextMaps?.[pageNum]
+  const textLayer = pageWrapper?.querySelector('.textLayer')
+  if (pageWrapper && vtm && textLayer) {
+    const rects = getSentenceRects({ charStart, charEnd }, vtm, textLayer)
+    if (rects.length) {
+      const firstRect = rects[0]
+      x = Math.min(Math.max(10, ((firstRect.left + firstRect.width / 2) / pageWrapper.offsetWidth) * 100), 70)
+      y = Math.min(Math.max(10, ((firstRect.top + firstRect.height) / pageWrapper.offsetHeight) * 100 + 4), 85)
+    }
+  }
+
+  const quotedBlock = String(context.quote || '').split('\n').map(line => `> ${line}`).join('\n')
+  const content = `### ${t('chat:memo.quoteHeading')}\n${quotedBlock}\n\n### ${t('chat:memo.questionHeading')}\n${context.question}\n\n### ${t('chat:memo.answerHeading')}\n${answer}`
+  pageMemos.push({
+    id: `memo_${Date.now()}`,
+    pageNum,
+    sentenceIdx,
+    sentenceText: context.quote,
+    charStart,
+    charEnd,
+    content,
+    createdAt: new Date().toISOString(),
+    x,
+    y,
+    source: 'chat-answer',
+    sourceQuestion: context.question,
+    sourceAnswer: answer,
+  })
+  allMemosObj[pageKey] = pageMemos
+  saveMemos(state.sessionId, allMemosObj)
+  globalAnalyticsTracker.trackInteraction('memo', pageNum)
+  renderPageMemos(pageNum)
+  scrollToPage(viewerScrollContainer, pageNum)
+  if (button) {
+    button.disabled = true
+    button.textContent = t('chat:memo.createdAction')
+  }
+  showToast(t('chat:memo.created'), 'success')
+}
+
 // explicitRange({charStart, charEnd})가 주어지면 사용자가 실제로 드래그해서 고른
 // 정확한 범위로 메모를 만들고, 없으면(드웰 호버 등) 문장 전체 범위를 사용한다.
 function createFloatingMemoForSentence(pageNum, sentenceIdx, explicitRange) {
@@ -12449,18 +12523,26 @@ function createSelectionMenu() {
     const nativeText = extractSelectionText(selection).trim()
     let text = nativeText
     let sourcePage = null
+    let quoteRange = null
     if (nativeText && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0)
       const commonNode = range.commonAncestorContainer
       const commonEl = commonNode.nodeType === Node.ELEMENT_NODE ? commonNode : commonNode.parentElement
       const pageWrapper = commonEl?.closest(".textLayer")?.closest(".pdf-page-wrapper")
       sourcePage = pageWrapper ? Number.parseInt(pageWrapper.dataset.page, 10) : null
+      const vtm = Number.isInteger(sourcePage) ? state.virtualTextMaps?.[sourcePage] : null
+      quoteRange = vtm ? getVtmCharRangeFromSelection(range, vtm) : null
     } else if (state.hoverSelectedRange && state.hoverSelectedPageNum != null) {
       const vtm = state.virtualTextMaps && state.virtualTextMaps[state.hoverSelectedPageNum]
       text = vtm ? vtm.fullText.substring(state.hoverSelectedRange.charStart, state.hoverSelectedRange.charEnd).trim() : ""
       sourcePage = state.hoverSelectedPageNum
+      quoteRange = state.hoverSelectedRange
     }
-    if (text) askAIAssistant(text, { sourcePage: Number.isInteger(sourcePage) ? sourcePage : null })
+    if (text) askAIAssistant(text, {
+      sourcePage: Number.isInteger(sourcePage) ? sourcePage : null,
+      charStart: quoteRange?.charStart,
+      charEnd: quoteRange?.charEnd,
+    })
     if (selection) selection.removeAllRanges()
     hideSelectionMenu()
   })
@@ -12707,7 +12789,11 @@ function createAnnHoverTooltip() {
     e.preventDefault(); e.stopPropagation()
     const text = activeHoveredSpan ? (activeHoveredSpan.dataset.annotationText || activeHoveredText) : activeHoveredText
     if (text) {
-      askAIAssistant(text, { sourcePage: activeHoveredPageNum })
+      askAIAssistant(text, {
+        sourcePage: activeHoveredPageNum,
+        charStart: state.hoverSelectedRange?.charStart,
+        charEnd: state.hoverSelectedRange?.charEnd,
+      })
     }
     hideAnnHoverTooltip()
   })
@@ -14600,21 +14686,9 @@ window.__quoteImgFallback = function(imgEl, pageInfoText) {
 function formatUserChatHtml(content, sessionId = state.sessionId) {
   if (!content) return ''
 
-  if (content.startsWith('[인용된 본문 내용]:')) {
-    const marker = '\n\n[질문]:\n'
-    const markerIdx = content.indexOf(marker)
-    if (markerIdx !== -1) {
-      const firstQuote = content.indexOf('"', 12)
-      const lastQuote = content.lastIndexOf('"', markerIdx)
-      let quoteText = ''
-      if (firstQuote !== -1 && lastQuote !== -1 && lastQuote > firstQuote) {
-        quoteText = content.substring(firstQuote + 1, lastQuote)
-      } else {
-        quoteText = content.substring(21, markerIdx)
-      }
-      const questionText = content.substring(markerIdx + marker.length)
-      return `<div class="message-quote"><span class="quote-symbol">❝</span><span class="quote-body">${escapeHtml(quoteText)}</span></div><div class="message-text">${escapeHtml(questionText)}</div>`
-    }
+  const quotedTextPayload = parseQuotedTextChatPayload(content)
+  if (quotedTextPayload) {
+    return `<div class="message-quote"><span class="quote-symbol">❝</span><span class="quote-body">${escapeHtml(quotedTextPayload.quote)}</span></div><div class="message-text">${escapeHtml(quotedTextPayload.question)}</div>`
   }
 
   if (content.startsWith('[인용된 이미지')) {
@@ -14648,6 +14722,30 @@ function formatUserChatHtml(content, sessionId = state.sessionId) {
   }
 
   return escapeHtml(content)
+}
+
+// 새 형식은 메모를 원래 본문 선택 범위에 다시 연결할 수 있도록 페이지와 VTM
+// 문자 범위를 함께 저장한다. 메타데이터가 없는 기존 채팅도 계속 렌더링한다.
+function parseQuotedTextChatPayload(content) {
+  if (!content || !content.startsWith('[인용된 본문 내용')) return null
+  const marker = '\n\n[질문]:\n'
+  const markerIdx = content.indexOf(marker)
+  if (markerIdx === -1) return null
+  const headerEnd = content.indexOf('\n')
+  if (headerEnd === -1 || headerEnd > markerIdx) return null
+  const header = content.substring(0, headerEnd)
+  const locationMatch = header.match(/\(Page (\d+), chars (\d+)-(\d+)\)/)
+  const quoteSection = content.substring(headerEnd + 1, markerIdx)
+  const quote = quoteSection.startsWith('"') && quoteSection.endsWith('"')
+    ? quoteSection.slice(1, -1)
+    : quoteSection
+  return {
+    quote,
+    question: content.substring(markerIdx + marker.length),
+    pageNum: locationMatch ? Number(locationMatch[1]) : null,
+    charStart: locationMatch ? Number(locationMatch[2]) : null,
+    charEnd: locationMatch ? Number(locationMatch[3]) : null,
+  }
 }
 
 function updateChatSendBtnIcon(isGenerating) {
@@ -14821,6 +14919,28 @@ function appendActionButtons(msgEl, role, content) {
   actionsEl.appendChild(copyBtn)
 
   if (role === 'assistant') {
+    const previousUserMessage = msgEl.previousElementSibling?.classList.contains('user')
+      ? msgEl.previousElementSibling
+      : null
+    let quotedMemoContext = null
+    try {
+      quotedMemoContext = previousUserMessage?.dataset.quotedMemoContext
+        ? JSON.parse(previousUserMessage.dataset.quotedMemoContext)
+        : null
+    } catch (e) {
+      quotedMemoContext = null
+    }
+
+    if (quotedMemoContext?.pageNum) {
+      const memoBtn = document.createElement('button')
+      memoBtn.type = 'button'
+      memoBtn.className = 'msg-action-btn create-answer-memo-btn'
+      memoBtn.innerHTML = `${icon('edit3', 12, 'style="vertical-align:-2px;margin-right:3px"')}${escapeHtml(t('chat:memo.createAction'))}`
+      memoBtn.title = t('chat:memo.createAction')
+      memoBtn.addEventListener('click', () => createMemoFromQuotedAnswer(quotedMemoContext, content, memoBtn))
+      actionsEl.appendChild(memoBtn)
+    }
+
     const regenBtn = document.createElement('button')
     regenBtn.className = 'msg-action-btn'
     regenBtn.innerHTML = `${icon('refreshCw', 12, 'style="vertical-align:-2px;margin-right:3px"')}다시 받기`
@@ -14942,7 +15062,7 @@ async function renderSuggestedQuestions(msgEl) {
   }
 }
 
-function appendChatMessage(role, content, isHtml = false) {
+function appendChatMessage(role, content, isHtml = false, quotedMemoContext = null) {
   const msgEl = document.createElement('div')
   msgEl.className = `chat-message ${role}`
 
@@ -14957,11 +15077,15 @@ function appendChatMessage(role, content, isHtml = false) {
 
   msgEl.appendChild(bubbleEl)
 
-  if (content) {
-    appendActionButtons(msgEl, role, content)
+  if (role === 'user' && quotedMemoContext?.pageNum) {
+    msgEl.dataset.quotedMemoContext = JSON.stringify(quotedMemoContext)
   }
 
   chatMessages.appendChild(msgEl)
+
+  if (content) {
+    appendActionButtons(msgEl, role, content)
+  }
   chatMessages.scrollTop = chatMessages.scrollHeight
   return msgEl
 }
@@ -15014,6 +15138,7 @@ async function sendChatMessage({ verifyEvidence = false } = {}) {
   let imageForThisTurn = null
   let selectedTextForThisTurn = null
   let contextPageForThisTurn = state.currentPage
+  let quotedMemoContextForThisTurn = null
 
   if (state.quotedText) {
     const quotedText = typeof state.quotedText === 'string' ? state.quotedText : state.quotedText?.text
@@ -15022,11 +15147,17 @@ async function sendChatMessage({ verifyEvidence = false } = {}) {
       selectedTextForThisTurn = quotedText
       contextPageForThisTurn = sourcePage
     }
-    const fullPayload = `[인용된 본문 내용]:\n"${quotedText}"\n\n[질문]:\n${text}`
+    const charStart = typeof state.quotedText === 'object' ? state.quotedText?.charStart : null
+    const charEnd = typeof state.quotedText === 'object' ? state.quotedText?.charEnd : null
+    const hasLocation = Number.isInteger(sourcePage) && sourcePage > 0
+      && Number.isInteger(charStart) && Number.isInteger(charEnd) && charStart < charEnd
+    const location = hasLocation ? ` (Page ${sourcePage}, chars ${charStart}-${charEnd})` : ''
+    const fullPayload = `[인용된 본문 내용${location}]:\n"${quotedText}"\n\n[질문]:\n${text}`
+    if (hasLocation) quotedMemoContextForThisTurn = { quote: quotedText, question: text, pageNum: sourcePage, charStart, charEnd }
 
     // UI에 답장/인용구 레이아웃으로 표시
     const userMsgHtml = `<div class="message-quote"><span class="quote-symbol">❝</span><span class="quote-body">${escapeHtml(quotedText)}</span></div><div class="message-text">${escapeHtml(text)}</div>`
-    appendChatMessage('user', userMsgHtml, true)
+    appendChatMessage('user', userMsgHtml, true, quotedMemoContextForThisTurn)
     state.chatHistory.push({ role: 'user', content: fullPayload })
 
     // 인용 상태 초기화
@@ -15368,7 +15499,7 @@ function initChatListeners() {
 // AI Chat Sidebar 리스너 초기화 실행
 initChatListeners()
 
-function askAIAssistant(text, { sourcePage = null } = {}) {
+function askAIAssistant(text, { sourcePage = null, charStart = null, charEnd = null } = {}) {
   if (!state.sessionId) {
     showToast('논문을 먼저 업로드하거나 선택해주세요.', 'error');
     return;
@@ -15380,6 +15511,8 @@ function askAIAssistant(text, { sourcePage = null } = {}) {
   state.quotedText = {
     text,
     sourcePage: Number.isInteger(sourcePage) && sourcePage > 0 ? sourcePage : null,
+    charStart: Number.isInteger(charStart) ? charStart : null,
+    charEnd: Number.isInteger(charEnd) ? charEnd : null,
   };
   state.quotedImage = null;
   state.quotedImagePage = null;
@@ -18150,7 +18283,8 @@ async function restoreArticleChatHistory(chatRes, doc) {
     const assistant = msg.role === 'assistant'
     let rendered = assistant ? formatChatHtml(msg.content) : formatUserChatHtml(msg.content)
     if (assistant && msg.stale) rendered = `<span class="chat-stale-revision-badge">${t("chat:staleRevision")}</span>${rendered}`
-    const element = appendChatMessage(msg.role, rendered, true)
+    const quotedMemoContext = assistant ? null : parseQuotedTextChatPayload(msg.content)
+    const element = appendChatMessage(msg.role, rendered, true, quotedMemoContext)
     if (assistant && msg.evidence?.length) attachEvidenceToBubble(element.querySelector('.message-bubble'), msg.evidence)
     if (assistant && msg.verification) renderVerificationBadge(element, msg.verification)
   }
