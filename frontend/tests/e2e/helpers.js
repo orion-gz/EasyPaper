@@ -130,6 +130,7 @@ export async function gotoApp(page, { navigateToLibrary = true } = {}) {
   })
   await page.reload()
   if (navigateToLibrary) {
+    await page.locator('#page-dashboard.active').waitFor({ state: 'visible' })
     const libraryNav = page.locator('.sidebar-nav-item[data-page="library"]')
     await libraryNav.waitFor({ state: 'visible' })
     await libraryNav.click()
