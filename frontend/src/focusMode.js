@@ -30,7 +30,7 @@ export function mergeClientRects(rects, gap = 3) {
 
 export function createFocusMask(rects, width, height, padding = 4) {
   const holes = mergeClientRects(rects).map(rect => `<rect x="${Math.max(0, rect.left - padding)}" y="${Math.max(0, rect.top - padding)}" width="${rect.width + padding * 2}" height="${rect.height + padding * 2}" rx="5" fill="black"/>`).join('')
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="white"/>${holes}</svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><mask id="holes" maskUnits="userSpaceOnUse"><rect width="100%" height="100%" fill="white"/>${holes}</mask></defs><rect width="100%" height="100%" fill="white" mask="url(#holes)"/></svg>`
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
 }
 
@@ -46,21 +46,42 @@ export function isFocusKeyboardExcluded(target) {
 export class FocusModeController {
   constructor({ root, resolvePair, listSentences, announce = () => {}, notifyFallback = () => {}, releaseDelay = 150 }) {
     Object.assign(this, { root, resolvePair, listSentences, announce, notifyFallback, releaseDelay })
-    this.settings = normalizeFocusSettings(); this.current = null; this.pinned = false; this.exclusions = new Set(); this.slowFrames = 0; this.performanceFallback = false
+    this.settings = normalizeFocusSettings(); this.current = null; this.pinned = false; this.slowFrames = 0; this.performanceFallback = false
     this.onKeyDown = event => this.handleKeyDown(event); this.onViewportChange = () => this.scheduleRender()
-    document.addEventListener('keydown', this.onKeyDown); window.addEventListener('resize', this.onViewportChange); root?.addEventListener('scroll', this.onViewportChange, { passive: true })
+    this.onLeave = () => this.leave()
+    this.onInteraction = event => {
+      if (!event.target.closest?.('.textLayer, .trans-sentence')) this.clear()
+    }
+    this.onVisibility = () => { if (document.hidden) this.clear() }
+    document.addEventListener('keydown', this.onKeyDown)
+    document.addEventListener('pointerdown', this.onInteraction, true)
+    document.addEventListener('visibilitychange', this.onVisibility)
+    window.addEventListener('resize', this.onViewportChange)
+    root?.addEventListener('mouseleave', this.onLeave)
+    root?.addEventListener('scroll', this.onViewportChange, { passive: true, capture: true })
   }
   applySettings(settings) { this.settings = normalizeFocusSettings(settings); if (!this.settings.enabled) this.clear(); else if (this.current) this.scheduleRender() }
   sameRef(a, b) { return !!a && !!b && a.pageNum === b.pageNum && a.sentenceIdx === b.sentenceIdx }
   focus(ref, { pin = false } = {}) {
     if (!this.settings.enabled || !ref) return false
     this.cancelLeave()
+    if (this.pinned && !pin) return true
     if (pin && this.pinned && this.sameRef(ref, this.current)) { this.clear(); return true }
+    if (!pin && this.sameRef(ref, this.current)) return true
     this.current = ref; if (pin) this.pinned = true; this.scheduleRender(); this.announce(this.pinned ? 'focusPinned' : 'focusActive'); return true
   }
-  leave() { this.cancelLeave(); if (!this.pinned) this.releaseTimer = setTimeout(() => this.clear(), this.releaseDelay) }
+  leave() { if (!this.pinned && !this.releaseTimer) this.releaseTimer = setTimeout(() => this.clear(), this.releaseDelay) }
   cancelLeave() { clearTimeout(this.releaseTimer); this.releaseTimer = null }
-  clear() { this.cancelLeave(); this.current = null; this.pinned = false; this.layer?.remove(); this.outlineLayer?.remove(); this.layer = null; this.outlineLayer = null; document.querySelectorAll('.focus-mode-target').forEach(element => element.classList.remove('focus-mode-target')); this.root?.classList.remove('focus-mode-active') }
+  clear() {
+    this.cancelLeave()
+    if (this.raf) cancelAnimationFrame(this.raf)
+    this.raf = null
+    this.current = null; this.pinned = false; this.lastGeometry = null
+    this.layer?.remove(); this.outlineLayer?.remove()
+    this.layer = null; this.outlineLayer = null
+    this.root?.classList.remove('focus-mode-active')
+    this.root?.querySelectorAll('.trans-sentence[aria-pressed]').forEach(element => element.removeAttribute('aria-pressed'))
+  }
   togglePin(ref) { return this.focus(ref, { pin: true }) }
   navigate(delta) {
     if (!this.pinned || !this.current) return false
@@ -76,21 +97,50 @@ export class FocusModeController {
     const delta = ['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : ['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : 0
     if (delta) { event.preventDefault(); this.navigate(delta) }
   }
-  registerExclusion(element) { if (element) this.exclusions.add(element); this.scheduleRender(); return () => { this.exclusions.delete(element); this.scheduleRender() } }
-  scheduleRender() { if (this.raf) cancelAnimationFrame(this.raf); this.raf = requestAnimationFrame(() => { this.raf = null; this.render() }) }
+  scheduleRender() {
+    if (!this.current || !this.settings.enabled || this.raf) return
+    this.raf = requestAnimationFrame(() => { this.raf = null; this.render() })
+  }
   render() {
     if (!this.current || !this.settings.enabled) return
-    const started = performance.now(); const pair = this.resolvePair?.(this.current) || {}; const rects = [...(pair.sourceRects || []), ...(pair.translationRects || [])]
-    for (const element of this.exclusions) if (element?.isConnected) rects.push(...element.getClientRects())
-    if (!rects.length) { this.clear(); return }
+    const started = performance.now()
+    const pair = this.resolvePair?.(this.current) || {}
+    const bounds = this.root.getBoundingClientRect()
+    const rects = [...(pair.sourceRects || []), ...(pair.translationRects || [])].map(rect => {
+      const left = Math.max(0, bounds.left, rect.left)
+      const top = Math.max(0, bounds.top, rect.top)
+      const right = Math.min(window.innerWidth, bounds.right, rect.right ?? rect.left + rect.width)
+      const bottom = Math.min(window.innerHeight, bounds.bottom, rect.bottom ?? rect.top + rect.height)
+      return { left, top, width: right - left, height: bottom - top }
+    }).filter(rect => rect.width > 0 && rect.height > 0)
+    if (this.root?.closest('#viewer-screen')?.classList.contains('active') === false) { this.clear(); return }
+    // Only sentence pixels are revealed. Panels, popups and toolbars remain covered.
+    // Rendering can temporarily disappear during PDF zoom; retain the pinned reference.
+    const zoom = Number.parseFloat(getComputedStyle(document.documentElement).zoom) || 1
+    const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, this.performanceFallback])
+    if (geometry === this.lastGeometry) { this.scheduleRender(); return }
+    this.lastGeometry = geometry
     if (!this.layer) { this.layer = document.createElement('div'); this.layer.className = 'focus-mode-layer'; this.layer.setAttribute('aria-hidden', 'true'); this.outlineLayer = document.createElement('div'); this.outlineLayer.className = 'focus-mode-outline-layer'; this.outlineLayer.setAttribute('aria-hidden', 'true'); document.body.append(this.layer, this.outlineLayer) }
-    for (const [name, value] of Object.entries(focusCssVariables(this.settings))) { this.layer.style.setProperty(name, value); this.outlineLayer.style.setProperty(name, value); this.root?.style.setProperty(name, value) }
+    for (const layer of [this.layer, this.outlineLayer]) {
+      // Client rects use viewport pixels; cancel the application's root CSS zoom.
+      layer.style.zoom = String(1 / zoom)
+      for (const [name, value] of Object.entries(focusCssVariables(this.settings))) layer.style.setProperty(name, value)
+    }
     this.layer.classList.toggle('focus-performance-fallback', this.performanceFallback)
     this.layer.style.maskImage = createFocusMask(rects, window.innerWidth, window.innerHeight); this.layer.style.webkitMaskImage = this.layer.style.maskImage
-    document.querySelectorAll('.focus-mode-target').forEach(element => element.classList.remove('focus-mode-target')); if (!this.performanceFallback) for (const element of pair.elements || []) element.classList.add('focus-mode-target'); this.outlineLayer.replaceChildren(...mergeClientRects(rects).map(rect => { const outline = document.createElement('i'); outline.className = 'focus-mode-outline'; Object.assign(outline.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` }); return outline }))
+    this.outlineLayer.replaceChildren(...mergeClientRects(rects).map(rect => { const outline = document.createElement('i'); outline.className = 'focus-mode-outline'; Object.assign(outline.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` }); return outline }))
     this.root?.classList.add('focus-mode-active')
     this.slowFrames = performance.now() - started > 20 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 1)
     if (!this.performanceFallback && this.slowFrames >= 8) { this.performanceFallback = true; this.notifyFallback(); this.scheduleRender() }
+    this.scheduleRender()
   }
-  destroy() { this.clear(); if (this.raf) cancelAnimationFrame(this.raf); document.removeEventListener('keydown', this.onKeyDown); window.removeEventListener('resize', this.onViewportChange); this.root?.removeEventListener('scroll', this.onViewportChange); this.exclusions.clear() }
+  destroy() {
+    this.clear()
+    document.removeEventListener('keydown', this.onKeyDown)
+    document.removeEventListener('pointerdown', this.onInteraction, true)
+    document.removeEventListener('visibilitychange', this.onVisibility)
+    window.removeEventListener('resize', this.onViewportChange)
+    this.root?.removeEventListener('mouseleave', this.onLeave)
+    this.root?.removeEventListener('scroll', this.onViewportChange, true)
+  }
 }

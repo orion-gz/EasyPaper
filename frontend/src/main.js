@@ -10364,6 +10364,8 @@ async function hydrateAnnotationsAndMemosFromServer(docId) {
 async function openFromLibrary(doc, shouldPushState = true) {
   await loadFeatureNamespaces('viewer')
   if (docOpeningId === doc.id) return
+  focusModeController?.clear()
+  if (focusModeController) focusModeController.performanceFallback = false
   const myOpenGeneration = ++documentOpenGeneration
   const isCurrentOpen = () => myOpenGeneration === documentOpenGeneration
   docOpeningId = doc.id
@@ -17263,7 +17265,6 @@ function listFocusSentences() {
 }
 
 focusModeController = new FocusModeController({ root: viewerScrollContainer, resolvePair: focusPairRects, listSentences: listFocusSentences, announce: key => announceA11y({ focusActive: t('viewer:a11y.focusActive'), focusPinned: t('viewer:a11y.focusPinned'), focusMoved: t('viewer:a11y.focusMoved') }[key]), notifyFallback: () => showToast(t('viewer:focus.performanceFallback'), 'info') })
-for (const selector of ['.selection-menu', '#ann-hover-tooltip', '.chat-sidebar', '.floating-memo', '.citation-popup', '.figure-ref-popup', '.modal-overlay']) document.querySelectorAll(selector).forEach(element => focusModeController.registerExclusion(element))
 
 function startDwellSelection(pageNum, sentenceRange) {
   if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null }
@@ -17349,7 +17350,7 @@ if (viewerScrollContainer) {
       }
     }
 
-    if (isSame) return;
+    if (isSame) { focusModeController.focus(focusRef(pageNum, sentenceRange)); return; }
 
     // 이전 페이지 호버 클리어
     if (currentHoverPage !== null && currentHoverPage !== pageNum) {
