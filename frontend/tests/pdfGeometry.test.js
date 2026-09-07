@@ -24,15 +24,15 @@ test('viewport rects map into a bordered, scrolled page under fractional zoom', 
 
 test('DOM advances replace stale canvas width and preserve text/rotation', t => {
   t.mock.method(globalThis, 'getComputedStyle', () => ({
-    width: '400px', getPropertyValue: () => '0.8',
+    width: '400px', getPropertyValue: () => '1.25',
   }))
   const changes = []
   const span = { isConnected: true, style: { setProperty: (...args) => changes.push(args) } }
   alignTextLayer({ textDivs: [span] }, {
     items: [{ type: 'beginMarkedContent' }, { str: 'variable width', width: 300, fontName: 'f' }],
     styles: { f: {} },
-  }, { scale: 1.5, userUnit: 2, rotation: 90 })
-  assert.deepEqual(changes, [['--scale-x', 1.8]])
+  }, { scale: 1.5, userUnit: 2, rotation: 90 }, { style: { getPropertyValue: () => '1.25' } })
+  assert.deepEqual(changes, [['--scale-x', 2.8125]])
 })
 
 test('stream fallback preserves marked content, font styles and language', async () => {
@@ -46,4 +46,23 @@ test('stream fallback preserves marked content, font styles and language', async
   assert.equal(result.styles.f.vertical, true)
   assert.equal(result.lang, 'ja')
   assert.equal(stream.locked, false)
+})
+
+
+test('zero minimum font size is repaired before DOM measurement', t => {
+  let minimum = '0'
+  const container = { style: {
+    getPropertyValue: () => minimum,
+    setProperty: (name, value) => { assert.equal(name, '--min-font-size'); minimum = value },
+  } }
+  t.mock.method(globalThis, 'getComputedStyle', () => {
+    assert.equal(minimum, '1')
+    return { width: '400px', getPropertyValue: () => minimum }
+  })
+  const changes = []
+  const span = { isConnected: true, style: { setProperty: (...args) => changes.push(args) } }
+  alignTextLayer({ textDivs: [span] }, {
+    items: [{ str: 'text', width: 300, fontName: 'f' }], styles: { f: {} },
+  }, { scale: 1.5, userUnit: 1 }, container)
+  assert.deepEqual(changes, [['--scale-x', 1.125]])
 })

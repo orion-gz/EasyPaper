@@ -3,7 +3,13 @@
  * from browser layout; 6.3.289 also retains its font cache after resetting the
  * ascent canvas. Measuring the rendered spans avoids both sources of drift.
  */
-export function alignTextLayer(textLayer, textContent, viewport) {
+export function alignTextLayer(textLayer, textContent, viewport, container) {
+  // On macOS, PDF.js can round its 1px probe to zero under CSS zoom < 1.
+  // Repair the CSS value before measuring: its reciprocal drives span transforms.
+  const minimum = Number.parseFloat(container.style.getPropertyValue('--min-font-size'))
+  if (!Number.isFinite(minimum) || minimum < 1) {
+    container.style.setProperty('--min-font-size', '1')
+  }
   const items = textContent.items.filter(item => typeof item.str === 'string')
   const corrections = []
   for (const [index, span] of textLayer.textDivs.entries()) {

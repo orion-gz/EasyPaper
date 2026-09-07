@@ -304,7 +304,7 @@ async function _renderPage(wrapper, pageNum, generation) {
       textLayerDiv.style.width = `${viewport.rawDims.pageWidth * viewport.scale * viewport.userUnit}px`
       textLayerDiv.style.height = `${viewport.rawDims.pageHeight * viewport.scale * viewport.userUnit}px`
       if (generation !== renderGeneration) return
-      alignTextLayer(textLayer, textContent, viewport)
+      alignTextLayer(textLayer, textContent, viewport, textLayerDiv)
       renderedTextLayers.set(pageNum, { textLayer, textContent, viewport, container: textLayerDiv, generation })
 
       // 텍스트 레이어 렌더 완료 콜백 호출
@@ -329,7 +329,7 @@ export function refreshTextLayerGeometry(onUpdated) {
       renderedTextLayers.delete(pageNum)
       continue
     }
-    alignTextLayer(layer.textLayer, layer.textContent, layer.viewport)
+    alignTextLayer(layer.textLayer, layer.textContent, layer.viewport, layer.container)
     onUpdated?.(layer.container, pageNum)
   }
 }
