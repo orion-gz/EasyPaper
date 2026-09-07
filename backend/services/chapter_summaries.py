@@ -72,7 +72,7 @@ def _html_outline(manifest_path: str, total_pages: int) -> list[dict]:
     entries = []
     for item in data.get("toc") or []:
         index = int(item.get("index") or 0)
-        entries.append({"title": item.get("title"), "start_page": index + 1})
+        entries.append({"title": item.get("title"), "start_page": index})
     return _ranges(entries, total_pages, "toc")
 
 
@@ -176,12 +176,37 @@ def _term_list(value: object, limit: int = 12) -> list[dict | str]:
 
 
 def _chapter_text(pages: list[dict], chapter: dict) -> str:
-    chunks = []
+    selected = []
     for index, page in enumerate(pages):
         number = int(page.get("page_num") or index + 1)
-        if chapter["start_page"] <= number <= chapter["end_page"] and (page.get("text") or "").strip():
-            chunks.append(f"--- Page {number} ---\n{(page.get('text') or '').strip()}")
-    return "\n\n".join(chunks)[:MAX_CHAPTER_INPUT_CHARS]
+        text = (page.get("text") or "").strip()
+        if chapter["start_page"] <= number <= chapter["end_page"] and text:
+            selected.append((number, text))
+    chunks = [f"--- Page {number} ---\n{text}" for number, text in selected]
+    complete = "\n\n".join(chunks)
+    if len(complete) <= MAX_CHAPTER_INPUT_CHARS:
+        return complete
+
+    headers = [f"--- Page {number} ---\n" for number, _ in selected]
+    overhead = sum(map(len, headers)) + 2 * (len(headers) - 1)
+    available = max(0, MAX_CHAPTER_INPUT_CHARS - overhead)
+    per_page, remainder = divmod(available, len(selected))
+    omission = "\n… omitted …\n"
+
+    def excerpt(text: str, budget: int) -> str:
+        if len(text) <= budget:
+            return text
+        if budget <= len(omission):
+            return text[:budget]
+        kept = budget - len(omission)
+        head = kept // 2
+        return text[:head] + omission + text[-(kept - head):]
+
+    bounded = [
+        header + excerpt(text, per_page + (index < remainder))
+        for index, (header, (_, text)) in enumerate(zip(headers, selected))
+    ]
+    return "\n\n".join(bounded)[:MAX_CHAPTER_INPUT_CHARS]
 
 
 async def _generate_chapter(document: dict, pages: list[dict], chapter: dict, target_lang: str, session_id: str) -> dict:

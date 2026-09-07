@@ -179,3 +179,35 @@ def test_chapter_router_reports_unconfirmed_structure(test_client, monkeypatch):
     response = test_client.get("/api/library/route-doc/full-summary/estimate")
     assert response.status_code == 409
     assert response.json()["code"] == "chapter_structure_unconfirmed"
+
+
+def test_html_outline_uses_manifest_one_based_unit_indexes(tmp_path):
+    manifest = {
+        "toc": [
+            {"index": 1, "title": "First"},
+            {"index": 2, "title": "Second"},
+            {"index": 3, "title": "Third"},
+        ]
+    }
+    path = tmp_path / "article.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    chapters = summaries._html_outline(str(path), 3)
+
+    assert [(item["start_page"], item["end_page"]) for item in chapters] == [
+        (1, 1), (2, 2), (3, 3),
+    ]
+
+
+def test_capped_chapter_input_preserves_each_page_and_tail_content():
+    pages = [
+        {"page_num": 1, "text": "FIRST_START " + "a" * 20_000 + " FIRST_END"},
+        {"page_num": 2, "text": "SECOND_START " + "b" * 20_000 + " SECOND_END"},
+    ]
+
+    text = summaries._chapter_text(pages, {"start_page": 1, "end_page": 2})
+
+    assert len(text) == summaries.MAX_CHAPTER_INPUT_CHARS
+    assert all(marker in text for marker in (
+        "FIRST_START", "FIRST_END", "SECOND_START", "SECOND_END",
+    ))
