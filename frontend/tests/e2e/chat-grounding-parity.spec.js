@@ -90,6 +90,12 @@ test('standalone chat renders evidence and retries one failed question without d
   expect(requests[0].current_page).toBeUndefined()
   expect(requests[0].selected_text).toBeUndefined()
 
+  await page.locator('#chat-drawer-messages .chat-message.assistant .msg-action-btn', { hasText: '근거 검증' }).last().click()
+  await expect.poll(() => requests.length).toBe(2)
+  expect(requests[1].verify_evidence).toBe(true)
+  expect(requests[1].messages.at(-1).content).toContain('Grounded answer [p.1]')
+  expect(requests[1].messages.at(-1).content).not.toBe('직전 답변의 근거를 검증해줘.')
+
   await page.fill('#chat-drawer-input', 'fail once')
   await page.click('#chat-drawer-send-btn')
   const retry = page.locator('#chat-drawer-messages [data-chat-drawer-retry]')
