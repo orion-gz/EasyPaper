@@ -27,6 +27,14 @@ test('기존 일반 설정을 연구 모드에 승계한다', () => {
   assert.equal(getModeSetting('disablePrimer', 'research', storage), true)
 })
 
+test('추천 질문 설정은 모드별 불리언 값으로 저장한다', () => {
+  const storage = memoryStorage()
+  setModeSetting('disableSuggestedQuestions', 'research', true, storage)
+
+  assert.equal(getModeSetting('disableSuggestedQuestions', 'research', storage), true)
+  assert.equal(getModeSetting('disableSuggestedQuestions', 'general', storage), false)
+})
+
 test('기존 테마 설정은 두 모드의 최초 값으로 승계한다', () => {
   const storage = memoryStorage({
     theme: 'light',
@@ -45,6 +53,7 @@ test('일반 문서는 자연스러운 문체와 필요 시 번역을 기본으�
   assert.equal(defaults.style, 'natural')
   assert.equal(defaults.translationMode, 'scroll')
   assert.equal(defaults.ignoreTable, false)
+  assert.equal(defaults.disableSuggestedQuestions, false)
 })
 
 test('모드별 저장 값이 서로 덮어쓰지 않는다', () => {

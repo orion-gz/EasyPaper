@@ -14,6 +14,7 @@ const MODE_DEFAULTS = {
     disableCitationOverlay: false,
     disableFigureOverlay: false,
     disablePrimer: false,
+    disableSuggestedQuestions: false,
   },
   general: {
     theme: 'dark',
@@ -30,6 +31,7 @@ const MODE_DEFAULTS = {
     disableCitationOverlay: true,
     disableFigureOverlay: false,
     disablePrimer: true,
+    disableSuggestedQuestions: false,
   },
 }
 
@@ -48,13 +50,14 @@ const LEGACY_KEYS = {
   disableCitationOverlay: 'easypaper_disable_citation_overlay',
   disableFigureOverlay: 'easypaper_disable_figure_overlay',
   disablePrimer: 'easypaper_disable_primer',
+  disableSuggestedQuestions: 'easypaper_disable_suggested_questions',
 }
 
 const SHARED_LEGACY_PREFERENCES = new Set(['theme', 'accentColor', 'targetLang'])
 
 const BOOLEAN_SETTINGS = new Set([
   'ignoreMath', 'ignoreTable', 'ignoreRefs', 'disableInsights',
-  'disableCitationOverlay', 'disableFigureOverlay', 'disablePrimer',
+  'disableCitationOverlay', 'disableFigureOverlay', 'disablePrimer', 'disableSuggestedQuestions',
 ])
 const LEGACY_LANGUAGE_VALUES = {
   '한국어': 'ko', '영어': 'en', '일본어': 'ja', '중국어': 'zh-Hans',

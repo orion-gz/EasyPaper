@@ -9,6 +9,8 @@
   "themeHeading": "Display theme",
   "viewerReadingBehavior": "Reading behavior",
   "viewerReadingTools": "Reading tools",
+  "suggestedQuestions": "Suggested and related questions for AI answers",
+  "suggestedQuestionsDescription": "Turn off to stop generating follow-up questions below answers.",
   "accentColor": "Accent color",
   "themeLightEnabled": "Switched to light mode ✓",
   "themeDarkEnabled": "Switched to dark mode ✓",

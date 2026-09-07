@@ -116,6 +116,8 @@ const state = {
   // 논문을 처음 열 때 뜨는 "읽기 전 브리핑" 게이팅 모달을 끌지 여부. 꺼도
   // 뷰어 툴바 버튼으로는 언제든 다시 열어볼 수 있다.
   disablePrimer: getModeSetting('disablePrimer', 'research'),
+  // AI 답변 아래의 추천·관련 질문 생성을 끌지 여부.
+  disableSuggestedQuestions: getModeSetting('disableSuggestedQuestions', 'research'),
   // 아래로 스크롤하면 상단 툴바를 자동으로 숨기고 위로 스크롤하면 다시 보여줄지
   // 여부. 다른 편의 설정과 달리 새로 추가하는 화면 동작이라 기본값은 꺼짐(false).
   toolbarAutoHide: localStorage.getItem('easypaper_toolbar_autohide') === 'true',
@@ -640,6 +642,7 @@ const settingDisableInsights = $('setting-disable-insights')
 const settingDisableCitationOverlay = $('setting-disable-citation-overlay')
 const settingDisableFigureOverlay = $('setting-disable-figure-overlay')
 const settingDisablePrimer = $('setting-disable-primer')
+const settingDisableSuggestedQuestions = $('setting-disable-suggested-questions')
 const settingToolbarAutoHide = $('setting-toolbar-autohide')
 const settingAutoGenerateKeywords = $('setting-auto-generate-keywords')
 const settingAutoGenerateSummaries = $('setting-auto-generate-summaries')
@@ -941,6 +944,7 @@ function applyModeViewerSettings(documentMode) {
   state.disableCitationOverlay = getModeSetting('disableCitationOverlay', mode)
   state.disableFigureOverlay = getModeSetting('disableFigureOverlay', mode)
   state.disablePrimer = getModeSetting('disablePrimer', mode)
+  state.disableSuggestedQuestions = getModeSetting('disableSuggestedQuestions', mode)
 }
 
 function showInsightJobProgress(sessionId, kind, title) {
@@ -1072,6 +1076,7 @@ function syncModeSettings(documentMode) {
   settingDisableCitationOverlay.checked = !getModeSetting('disableCitationOverlay', settingsTranslationModeContext)
   settingDisableFigureOverlay.checked = !getModeSetting('disableFigureOverlay', settingsTranslationModeContext)
   settingDisablePrimer.checked = !getModeSetting('disablePrimer', settingsTranslationModeContext)
+  settingDisableSuggestedQuestions.checked = !getModeSetting('disableSuggestedQuestions', settingsTranslationModeContext)
   updateAccentSettingsUI(getModeSetting('accentColor', settingsTranslationModeContext))
 
   settingsModeBadge.textContent = isGeneral ? '일반 문서 모드' : '연구 모드'
@@ -4411,6 +4416,15 @@ settingDisablePrimer.addEventListener('change', () => {
   setModeSetting('disablePrimer', settingsTranslationModeContext, disabled)
   if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
     state.disablePrimer = disabled
+  }
+})
+
+settingDisableSuggestedQuestions.addEventListener('change', () => {
+  const disabled = !settingDisableSuggestedQuestions.checked
+  setModeSetting('disableSuggestedQuestions', settingsTranslationModeContext, disabled)
+  if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
+    state.disableSuggestedQuestions = disabled
+    if (disabled) clearSuggestedQuestions()
   }
 })
 
@@ -10505,7 +10519,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
       const lastMsg = chatHistoryList[chatHistoryList.length - 1]
       if (lastMsg.role === 'assistant') {
         const cachedQuestions = loadSuggestedQuestionsCache(doc.id)
-        if (cachedQuestions?.length) {
+        if (!state.disableSuggestedQuestions && cachedQuestions?.length) {
           renderSuggestedQuestionChips(chatMessages.lastElementChild, cachedQuestions)
         }
       }
@@ -14904,7 +14918,7 @@ function renderSuggestedQuestionChips(msgEl, questions) {
 // bubble 아래에 클릭 가능한 칩으로 붙인다. 클릭하면 바로 그 질문으로 다음
 // 메시지를 보낸다.
 async function renderSuggestedQuestions(msgEl) {
-  if (!state.sessionId) return
+  if (state.disableSuggestedQuestions || !state.sessionId) return
   try {
     const questions = await getSuggestedQuestionsAPI(state.sessionId, state.chatHistory)
     if (!questions.length) return
@@ -18110,7 +18124,7 @@ async function restoreArticleChatHistory(chatRes, doc) {
     if (assistant && msg.verification) renderVerificationBadge(element, msg.verification)
   }
   const last = messages[messages.length - 1]
-  if (last?.role === 'assistant') { const questions = loadSuggestedQuestionsCache(doc.id); if (questions?.length) renderSuggestedQuestionChips(chatMessages.lastElementChild, questions) }
+  if (last?.role === 'assistant') { const questions = loadSuggestedQuestionsCache(doc.id); if (!state.disableSuggestedQuestions && questions?.length) renderSuggestedQuestionChips(chatMessages.lastElementChild, questions) }
 }
 
 async function renderArticleDocument(doc) {
