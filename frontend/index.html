@@ -912,7 +912,7 @@
           <button class="tab-btn active" id="settings-nav-general" data-tab="tab-general" data-i18n="settings:categoryGeneral" role="tab" aria-controls="tab-general" aria-selected="true">General</button>
           <button class="tab-btn" id="settings-nav-translation" data-tab="tab-translation" data-i18n="settings:categoryTranslation" role="tab" aria-controls="tab-translation" aria-selected="false" tabindex="-1">Translation</button>
           <button class="tab-btn" id="settings-nav-viewer" data-tab="tab-viewer" data-i18n="settings:categoryViewer" role="tab" aria-controls="tab-viewer" aria-selected="false" tabindex="-1">Viewer</button>
-          <button class="tab-btn" id="settings-nav-automation" data-tab="tab-automation" data-i18n="settings:categoryAutomation" role="tab" aria-controls="tab-automation" aria-selected="false" tabindex="-1">Automation</button>
+          <button class="tab-btn" id="settings-nav-automation" data-tab="tab-automation" data-i18n="settings:categoryAutomation" role="tab" aria-controls="tab-automation" aria-selected="false" tabindex="-1">Generation &amp; Automation</button>
           <button class="tab-btn" id="settings-nav-model" data-tab="tab-model" data-i18n="settings:categoryModel" role="tab" aria-controls="tab-model" aria-selected="false" tabindex="-1">AI &amp; Models</button>
           <button class="tab-btn" id="settings-nav-account" data-tab="tab-account" data-i18n="settings:categoryAccount" role="tab" aria-controls="tab-account" aria-selected="false" tabindex="-1">Account &amp; Security</button>
           <button class="tab-btn" id="settings-nav-data-system" data-tab="tab-data-system" data-i18n="settings:categoryDataSystem" role="tab" aria-controls="tab-data-system" aria-selected="false" tabindex="-1">Data &amp; System</button>
@@ -1071,12 +1071,15 @@
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
                 <span class="toggle-switch-label">논문을 열 때 "읽기 전 브리핑" 팝업<small>꺼도 툴바 버튼으로 언제든 다시 볼 수 있음</small></span>
               </label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="setting-disable-suggested-questions" />
-                <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
-                <span class="toggle-switch-label"><span data-i18n="settings:suggestedQuestions">AI 답변의 추천·관련 질문</span><small data-i18n="settings:suggestedQuestionsDescription">끄면 답변 아래에 후속 질문을 생성하지 않음</small></span>
-              </label>
             </div>
+          </div>
+
+          <div class="form-group">
+            <label class="toggle-switch">
+              <input type="checkbox" id="setting-disable-suggested-questions" />
+              <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+              <span class="toggle-switch-label"><span data-i18n="settings:suggestedQuestions">AI 답변의 추천·관련 질문</span><small data-i18n="settings:suggestedQuestionsDescription">끄면 답변 아래에 후속 질문을 생성하지 않음</small></span>
+            </label>
           </div>
 
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
