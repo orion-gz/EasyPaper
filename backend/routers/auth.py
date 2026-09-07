@@ -202,6 +202,13 @@ async def change_credentials(
             detail="이미 존재하는 아이디입니다."
         )
     update_credentials_in_env(new_username, new_hash)
+
+    # DB 소유권과 함께 현재 프로세스의 열린 문서 세션도 새 계정명으로 이동한다.
+    if new_username != current_user:
+        from routers.upload import sessions
+        for session in sessions.values():
+            if session.get("username") == current_user:
+                session["username"] = new_username
     
     # 세션 갱신
     new_token = create_session_token(new_username)

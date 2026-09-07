@@ -66,10 +66,11 @@ async def localized_http_exception_handler(request: Request, exc: HTTPException)
     return await http_exception_handler(request, exc)
 
 
-# CORS 설정 (모든 오리진 허용 — NPM/리버스 프록시 환경)
+# CORS 설정. 브라우저에서 접근 가능한 배포에서 임의 웹사이트가 API 응답을
+# 읽거나 로그인 생략 모드의 관리자 권한을 사용하는 일을 막는다.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
