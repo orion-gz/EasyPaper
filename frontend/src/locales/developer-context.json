@@ -3803,6 +3803,12 @@
   "settings:viewerReadingTools": {
     "description": "Label for reading tools shown for the active mode"
   },
+  "settings:suggestedQuestions": {
+    "description": "Toggle label for suggested and related questions below AI answers."
+  },
+  "settings:suggestedQuestionsDescription": {
+    "description": "Description of the AI answer follow-up question toggle."
+  },
   "settings:accentColor": {
     "description": "Accent color setting label"
   },

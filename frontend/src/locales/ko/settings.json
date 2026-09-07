@@ -9,6 +9,8 @@
   "themeHeading": "화면 테마",
   "viewerReadingBehavior": "읽기 동작",
   "viewerReadingTools": "읽기 도구",
+  "suggestedQuestions": "AI 답변의 추천·관련 질문",
+  "suggestedQuestionsDescription": "끄면 답변 아래에 후속 질문을 생성하지 않음",
   "accentColor": "테마 색상",
   "themeLightEnabled": "라이트 모드로 전환 ✓",
   "themeDarkEnabled": "다크 모드로 전환 ✓",
