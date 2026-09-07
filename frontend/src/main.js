@@ -10913,6 +10913,7 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations, pageNum) {
       overlay.appendChild(box)
     })
   })
+  if (activeViewerAnnotationTarget?.page === pageNum) markViewerAnnotationTarget()
 }
 
 // PDF와 번역본의 문장 수 차이를 고려한 오프셋 기반 매핑 함수
@@ -17600,6 +17601,21 @@ function viewerAnnotationTargetFromParams(params) {
   }
 }
 
+let activeViewerAnnotationTarget = null
+
+function markViewerAnnotationTarget() {
+  if (!activeViewerAnnotationTarget) return null
+  const targetEl = findViewerAnnotationElement(activeViewerAnnotationTarget)
+  if (!targetEl) return null
+  viewerScrollContainer.querySelectorAll('[data-viewer-note-jump-target="true"]').forEach(el => {
+    delete el.dataset.viewerNoteJumpTarget
+  })
+  targetEl.dataset.viewerNoteJumpTarget = 'true'
+  targetEl.classList.add('viewer-note-jump-target')
+  setTimeout(() => targetEl.classList.remove('viewer-note-jump-target'), 1800)
+  return targetEl
+}
+
 function findViewerAnnotationElement(target) {
   const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${target.page}"]`)
   if (!pageWrapper) return null
@@ -17621,6 +17637,7 @@ function findViewerAnnotationElement(target) {
 
 async function navigateToViewerAnnotation(target) {
   if (!target || target.page > state.totalPages) return
+  activeViewerAnnotationTarget = target
   scrollToPage(viewerScrollContainer, target.page, { instant: true })
   if (target.quote) {
     await locateTermInPdf(target.page, target.quote, target.occurrence)
@@ -17637,9 +17654,8 @@ async function navigateToViewerAnnotation(target) {
   }
   if (!targetEl) return
 
+  targetEl = markViewerAnnotationTarget() || targetEl
   targetEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
-  targetEl.classList.add('viewer-note-jump-target')
-  setTimeout(() => targetEl.classList.remove('viewer-note-jump-target'), 1800)
 }
 
 async function handleRouting() {
@@ -17652,6 +17668,7 @@ async function handleRouting() {
       const docId = params.get('id')
       const wantChatOpen = params.get('chat') === '1'
       const annotationTarget = viewerAnnotationTargetFromParams(params)
+      activeViewerAnnotationTarget = annotationTarget
       if (docId) {
         if (state.sessionId === docId && viewerScreen.classList.contains('active')) {
           console.log("[Router] Viewer already active for document:", docId)

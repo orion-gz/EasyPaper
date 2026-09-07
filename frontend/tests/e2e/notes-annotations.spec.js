@@ -89,6 +89,6 @@ test('Notes 하이라이트 클릭 시 뷰어의 저장 오프셋 위치를 강�
   await page.locator('.notes-annotation-card').click()
 
   await expect(page.locator('#viewer-screen')).toHaveClass(/active/)
-  await expect(page.locator('.pdf-annotation-highlight[data-start-offset="0"][data-end-offset="6"]')).toHaveClass(/viewer-note-jump-target/, { timeout: 10_000 })
+  await expect(page.locator('.pdf-annotation-highlight[data-start-offset="0"][data-end-offset="6"]')).toHaveAttribute('data-viewer-note-jump-target', 'true', { timeout: 10_000 })
   await expect(page.locator('#page-input')).toHaveValue('1')
 })
