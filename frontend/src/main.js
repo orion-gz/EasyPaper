@@ -6225,8 +6225,10 @@ function appendChatDrawerActionButtons(msgEl, role, content) {
     verifyBtn.title = t('chat:evidence.verifyAction')
     verifyBtn.addEventListener('click', () => {
       if (chatDrawerState.activeStream) return
-      chatDrawerInput.value = t('chat:evidence.verifyPrompt')
-      sendChatDrawerMessage()
+      // 검증 명령만 새 질문으로 보내면 모델은 직전 답변이 아니라 명령 자체에
+      // 대한 새 답변을 만든다. 클릭한 답변을 요청에 명시해 검증 대상을 고정한다.
+      chatDrawerInput.value = buildEvidenceVerificationPrompt(content)
+      sendChatDrawerMessage({ verifyEvidence: true })
     })
     actionsEl.appendChild(verifyBtn)
   }
@@ -6341,7 +6343,7 @@ function requestCloseChatDrawer() {
   }
 }
 
-async function sendChatDrawerMessage() {
+async function sendChatDrawerMessage({ verifyEvidence = false } = {}) {
   if (!chatDrawerState.docId) return
   if (chatDrawerState.activeStream) return
 
@@ -6414,7 +6416,7 @@ async function sendChatDrawerMessage() {
     null,
     {
       screenContext: { mode: 'standalone', include_visual: false },
-      verifyEvidence: /근거\s*검증|verify\s+(?:the\s+)?evidence/i.test(text),
+      verifyEvidence: verifyEvidence || /근거\s*검증|verify\s+(?:the\s+)?evidence/i.test(text),
     },
     (eventName, payload) => {
       if (eventName === 'evidence') responseEvidence = payload?.items || []
@@ -14828,13 +14830,17 @@ function appendActionButtons(msgEl, role, content) {
     verifyBtn.title = t("chat:evidence.verifyAction")
     verifyBtn.addEventListener("click", () => {
       if (state.chatActiveStream) return
-      chatInput.value = t("chat:evidence.verifyPrompt")
-      sendChatMessage()
+      chatInput.value = buildEvidenceVerificationPrompt(content)
+      sendChatMessage({ verifyEvidence: true })
     })
     actionsEl.appendChild(verifyBtn)
   }
 
   msgEl.appendChild(actionsEl)
+}
+
+function buildEvidenceVerificationPrompt(answer) {
+  return `${t('chat:evidence.verifyPrompt')}\n\n[${t('chat:evidence.verifyTarget')}]:\n${answer}`
 }
 
 // ── 추천 질문 로컬 캐시 ─────────────────────────────────
@@ -14973,7 +14979,7 @@ function removeTypingIndicator() {
   }
 }
 
-async function sendChatMessage() {
+async function sendChatMessage({ verifyEvidence = false } = {}) {
   if (!state.sessionId) return
   if (state.chatActiveStream) return
 
@@ -15109,7 +15115,7 @@ async function sendChatMessage() {
         page_num: contextPageForThisTurn,
         include_visual: null,
       },
-      verifyEvidence: /근거\s*검증|verify\s+(?:the\s+)?evidence/i.test(text),
+      verifyEvidence: verifyEvidence || /근거\s*검증|verify\s+(?:the\s+)?evidence/i.test(text),
     },
     (eventName, payload) => {
       if (eventName === "evidence") responseEvidence = payload?.items || []

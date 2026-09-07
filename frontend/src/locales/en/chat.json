@@ -17,5 +17,6 @@
   "evidence.translation": "Translation evidence",
   "evidence.verifyAction": "Verify evidence",
   "evidence.verifyPrompt": "Verify the evidence for the previous answer.",
+  "evidence.verifyTarget": "Answer to verify",
   "chapterSummaryPreparing": "Preparing the requested chapter summary; your question will resume automatically."
 }

@@ -3950,6 +3950,9 @@
   "chat:evidence.verifyPrompt": {
     "description": "Question inserted when the user requests evidence verification."
   },
+  "chat:evidence.verifyTarget": {
+    "description": "Label placed before the exact assistant answer selected for evidence verification."
+  },
   "viewer:a11y.chatResizer": {
     "description": "Accessible label for the AI chat panel resize separator."
   },
