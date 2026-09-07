@@ -11565,6 +11565,8 @@ function renderPageMemos(pageNum) {
       const lastFormat = textarea._memoLastInlineFormat
       if (lastFormat?.prefix === prefix
           && lastFormat.suffix === suffix
+          && start === lastFormat.start + prefix.length
+          && end === lastFormat.end - suffix.length
           && textarea.value.slice(lastFormat.start, lastFormat.end) === lastFormat.wrapped) {
         textarea.setRangeText(lastFormat.content, lastFormat.start, lastFormat.end, 'select')
         textarea.setSelectionRange(lastFormat.start, lastFormat.start + lastFormat.content.length)
