@@ -7951,3 +7951,18 @@ body.light-theme .chat-drawer {
 .primer-adaptive-roadmap > strong { color: var(--text-primary); }
 .primer-adaptive-roadmap > small { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .primer-adaptive-roadmap > span { grid-column: 1 / -1; line-height: 1.55; }
+
+/* Focus mode keeps layout and selection coordinates untouched; only this fixed visual layer changes. */
+.focus-settings { display: grid; gap: 9px; padding: 8px 0; }
+.focus-range { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(120px, 2fr) 46px; align-items: center; gap: 10px; font-size: 12px; color: var(--text-secondary); }
+.focus-range output { color: var(--text-primary); font-variant-numeric: tabular-nums; text-align: right; }
+.focus-range input:disabled { opacity: .45; }
+.focus-keyboard-help { color: var(--text-muted); }
+.focus-mode-layer { position: fixed; inset: 0; z-index: 900; pointer-events: none; background: rgba(5, 7, 12, var(--focus-dim)); backdrop-filter: blur(var(--focus-blur)); -webkit-backdrop-filter: blur(var(--focus-blur)); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; transition: opacity 120ms ease; }
+.focus-mode-outline { position: fixed; display: block; border-radius: 5px; outline: 2px solid var(--control-accent); box-shadow: 0 0 10px var(--control-accent-soft); transform: scale(var(--focus-scale)); transform-origin: center; transition: transform 120ms ease, opacity 120ms ease; }
+.focus-performance-fallback { backdrop-filter: none; -webkit-backdrop-filter: none; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .focus-mode-layer { backdrop-filter: none; -webkit-backdrop-filter: none; } }
+@supports not (mask-image: url("")) { .focus-mode-layer { mask-image: none !important; -webkit-mask-image: none !important; background: rgba(5, 7, 12, calc(var(--focus-dim) * .45)); } }
+@media (prefers-reduced-motion: reduce) { .focus-mode-layer, .focus-mode-outline { transition: none; } }
+.focus-mode-outline-layer { position: fixed; inset: 0; z-index: 901; pointer-events: none; }
+.focus-mode-target { z-index: 902; transform: scale(var(--focus-scale, 1.04)); transform-origin: center; }

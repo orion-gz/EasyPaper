@@ -1,0 +1,25 @@
+import { test, expect } from '@playwright/test'
+import { mockBaseRoutes, gotoApp } from './helpers.js'
+
+test('Focus 설정을 모드별로 저장하고 슬라이더 활성 상태를 복원한다', async ({ page }) => {
+  await mockBaseRoutes(page, { documents: [] })
+  await gotoApp(page)
+  await page.locator('#sidebar-settings-btn').click()
+  await page.locator('[data-tab="tab-viewer"]').click()
+  await expect(page.locator('#setting-focus-mode')).not.toBeChecked()
+  await expect(page.locator('#setting-focus-blur')).toBeDisabled()
+  await page.locator('#setting-focus-mode').locator('..').click()
+  await page.locator('#setting-focus-blur').fill('12')
+  await page.locator('#setting-focus-dim').fill('35')
+  await page.locator('#setting-focus-scale').fill('108')
+  await expect(page.locator('#setting-focus-blur-value')).toHaveText('12px')
+  await expect(page.locator('#setting-focus-dim-value')).toHaveText('35%')
+  await expect(page.locator('#setting-focus-scale-value')).toHaveText('108%')
+  expect(await page.evaluate(() => localStorage.getItem('easypaper_focus_mode_enabled_research'))).toBe('true')
+  await page.locator('#close-settings-btn').click()
+  await page.locator('#workspace-mode-switch [data-workspace-mode="general"]').click()
+  await page.locator('#sidebar-settings-btn').click()
+  await page.locator('[data-tab="tab-viewer"]').click()
+  await expect(page.locator('#setting-focus-mode')).not.toBeChecked()
+  await expect(page.locator('#setting-focus-blur')).toHaveValue('6')
+})

@@ -7,6 +7,7 @@ import "./styles/document-modes.css"
 import { marked } from 'marked'
 import { createWorkspaceModeController } from "./workspaceModeController.js"
 import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSettings.js'
+import { FocusModeController } from './focusMode.js'
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
@@ -639,6 +640,13 @@ const settingIgnoreRefs   = $('setting-ignore-refs')
 const settingDefaultZoom  = $('setting-default-zoom')
 const settingToolbarPosition = $('setting-toolbar-position')
 const settingDisableHoverTooltip = $('setting-disable-hover-tooltip')
+const settingFocusMode = $('setting-focus-mode')
+const settingFocusBlur = $('setting-focus-blur')
+const settingFocusDim = $('setting-focus-dim')
+const settingFocusScale = $('setting-focus-scale')
+const settingFocusBlurValue = $('setting-focus-blur-value')
+const settingFocusDimValue = $('setting-focus-dim-value')
+const settingFocusScaleValue = $('setting-focus-scale-value')
 const settingDisableBookmark = $('setting-disable-bookmark')
 const settingDisableInsights = $('setting-disable-insights')
 const settingDisableCitationOverlay = $('setting-disable-citation-overlay')
@@ -849,6 +857,7 @@ const backBtn           = $('back-btn')
 const logoBtn           = $('logo-btn')
 const viewerReadToggleBtn = $('viewer-read-toggle-btn')
 const viewerScrollContainer = $('viewer-scroll-container')
+let focusModeController = null
 const progressMini          = $('translation-progress-mini')
 const progressMiniBar       = $('progress-mini-bar')
 const progressMiniText      = $('progress-mini-text')
@@ -947,6 +956,7 @@ function applyModeViewerSettings(documentMode) {
   state.disableFigureOverlay = getModeSetting('disableFigureOverlay', mode)
   state.disablePrimer = getModeSetting('disablePrimer', mode)
   state.disableSuggestedQuestions = getModeSetting('disableSuggestedQuestions', mode)
+  applyFocusModeSettings(mode)
 }
 
 function showInsightJobProgress(sessionId, kind, title) {
@@ -1079,6 +1089,11 @@ function syncModeSettings(documentMode) {
   settingDisableFigureOverlay.checked = !getModeSetting('disableFigureOverlay', settingsTranslationModeContext)
   settingDisablePrimer.checked = !getModeSetting('disablePrimer', settingsTranslationModeContext)
   settingDisableSuggestedQuestions.checked = !getModeSetting('disableSuggestedQuestions', settingsTranslationModeContext)
+  settingFocusMode.checked = getModeSetting('focusModeEnabled', settingsTranslationModeContext)
+  settingFocusBlur.value = getModeSetting('focusBlurStrength', settingsTranslationModeContext)
+  settingFocusDim.value = getModeSetting('focusDimOpacity', settingsTranslationModeContext)
+  settingFocusScale.value = getModeSetting('focusScale', settingsTranslationModeContext)
+  syncFocusSettingsControls()
   updateAccentSettingsUI(getModeSetting('accentColor', settingsTranslationModeContext))
 
   settingsModeBadge.textContent = isGeneral ? '일반 문서 모드' : '연구 모드'
@@ -1154,6 +1169,7 @@ function showCompareScreen() {
 }
 
 function resetState() {
+  focusModeController?.clear()
   state.articleViewer?.destroy?.()
   globalAnalyticsTracker.stopSession()
   // 폴링 중단
@@ -2118,6 +2134,7 @@ function applyZoomPreviewTransform(previewValue) {
 }
 
 function clearZoomPreviewTransform() {
+  focusModeController?.scheduleRender()
   viewerScrollContainer.querySelectorAll('.pdf-page-wrapper').forEach(w => {
     w.style.transform = ''
     w.style.zIndex = ''
@@ -2128,12 +2145,14 @@ async function setZoom(newZoom) {
   newZoom = previewZoom(newZoom)
   lastCommittedZoom = newZoom
   if (!state.sessionId) { clearZoomPreviewTransform(); return }
+  focusModeController?.scheduleRender()
   await reRenderAll(viewerScrollContainer, newZoom, {
     onPageVisible: (pageNum) => updatePageDisplay(pageNum)
   })
   // 재렌더링이 끝나 새 배율의 캔버스로 이미 교체된 뒤에 transform을 지워야
   // "확대된 미리보기 → 원래 크기로 순간 복귀 → 새 크기로 점프"하는 깜빡임이 없다.
   clearZoomPreviewTransform()
+  focusModeController?.scheduleRender()
 }
 
 zoomInBtn.addEventListener('click',  () => setZoom(state.zoom + 0.2))
@@ -4372,6 +4391,28 @@ settingDisableBookmark.addEventListener('change', () => {
   state.disableBookmark = !settingDisableBookmark.checked
   localStorage.setItem('easypaper_disable_bookmark', state.disableBookmark)
 })
+
+function readFocusModeSettings(mode = settingsTranslationModeContext) {
+  return { enabled: getModeSetting('focusModeEnabled', mode), blurStrength: getModeSetting('focusBlurStrength', mode), dimOpacity: getModeSetting('focusDimOpacity', mode), scale: getModeSetting('focusScale', mode) }
+}
+function syncFocusSettingsControls() {
+  const enabled = settingFocusMode.checked
+  for (const control of [settingFocusBlur, settingFocusDim, settingFocusScale]) control.disabled = !enabled
+  settingFocusBlurValue.value = `${settingFocusBlur.value}px`
+  settingFocusDimValue.value = `${settingFocusDim.value}%`
+  settingFocusScaleValue.value = `${settingFocusScale.value}%`
+}
+function applyFocusModeSettings(mode) { focusModeController?.applySettings(readFocusModeSettings(mode)) }
+function persistFocusModeSettings() {
+  setModeSetting('focusModeEnabled', settingsTranslationModeContext, settingFocusMode.checked)
+  setModeSetting('focusBlurStrength', settingsTranslationModeContext, settingFocusBlur.value)
+  setModeSetting('focusDimOpacity', settingsTranslationModeContext, settingFocusDim.value)
+  setModeSetting('focusScale', settingsTranslationModeContext, settingFocusScale.value)
+  syncFocusSettingsControls()
+  if (normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) applyFocusModeSettings(settingsTranslationModeContext)
+}
+settingFocusMode.addEventListener('change', persistFocusModeSettings)
+for (const control of [settingFocusBlur, settingFocusDim, settingFocusScale]) control.addEventListener('input', persistFocusModeSettings)
 
 settingDisableInsights.addEventListener('change', () => {
   const disabled = !settingDisableInsights.checked
@@ -13245,6 +13286,7 @@ document.fonts.addEventListener('loadingdone', schedulePdfGeometryRefresh)
 
 // PDF.js 텍스트 레이어 렌더 완료 콜백 등록
 window.onTextLayerRendered = (textLayerDiv, pageNum) => {
+  focusModeController?.scheduleRender()
   // 문장 1대1 매칭을 위한 세그멘테이션 추가
   segmentElementIntoSentences(textLayerDiv, pageNum, 'pdf-sentence')
 
@@ -17190,6 +17232,39 @@ function createDomRangeFromVtmRange(vtm, charStart, charEnd) {
 
 // hover는 시각적 overlay와 내부 범위만 갱신한다. native Selection은 사용자의
 // 실제 드래그에만 맡겨 hover 직후에도 caret이 끊기지 않게 한다.
+function focusRef(pageNum, sentenceRange) {
+  return { pageNum, sentenceIdx: sentenceRange.sentenceIdx, element: viewerScrollContainer.querySelector(`.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceRange.sentenceIdx >= 10000 ? (sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) : sentenceRange.sentenceIdx}"]`) || viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`) }
+}
+
+function focusPairRects(ref) {
+  const sourceRects = []
+  const sentenceRanges = state.pdfPageSentences?.[ref.pageNum] || []
+  const sentenceRange = sentenceRanges.find(range => range.sentenceIdx === ref.sentenceIdx || (range.originalSentenceIdx ?? range.sentenceIdx) === ref.sentenceIdx)
+  const vtm = state.virtualTextMaps?.[ref.pageNum]
+  if (sentenceRange && vtm) {
+    for (const nr of vtm.nodeRanges) {
+      const start = Math.max(nr.start, sentenceRange.charStart), end = Math.min(nr.end, sentenceRange.charEnd)
+      if (start >= end) continue
+      try { const range = document.createRange(); range.setStart(nr.node, start - nr.start); range.setEnd(nr.node, end - nr.start); sourceRects.push(...range.getClientRects()) } catch (_) {}
+    }
+  }
+  const idx = ref.sentenceIdx >= 10000 ? (sentenceRange?.originalSentenceIdx ?? ref.sentenceIdx) : ref.sentenceIdx
+  const translationRects = []
+  viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`).forEach(element => translationRects.push(...element.getClientRects()))
+  return { sourceRects, translationRects, elements: Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`)) }
+}
+
+function listFocusSentences() {
+  const result = []
+  for (let pageNum = 1; pageNum <= state.totalPages; pageNum++) {
+    for (const sentenceRange of state.pdfPageSentences?.[pageNum] || []) if (sentenceRange.sentenceIdx < 10000) result.push(focusRef(pageNum, sentenceRange))
+  }
+  return result
+}
+
+focusModeController = new FocusModeController({ root: viewerScrollContainer, resolvePair: focusPairRects, listSentences: listFocusSentences, announce: key => announceA11y({ focusActive: t('viewer:a11y.focusActive'), focusPinned: t('viewer:a11y.focusPinned'), focusMoved: t('viewer:a11y.focusMoved') }[key]), notifyFallback: () => showToast(t('viewer:focus.performanceFallback'), 'info') })
+for (const selector of ['.selection-menu', '#ann-hover-tooltip', '.chat-sidebar', '.floating-memo', '.citation-popup', '.figure-ref-popup', '.modal-overlay']) document.querySelectorAll(selector).forEach(element => focusModeController.registerExclusion(element))
+
 function startDwellSelection(pageNum, sentenceRange) {
   if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null }
 
@@ -17239,6 +17314,7 @@ if (viewerScrollContainer) {
     // PDF textLayer 위 문장 감지
     const detected = detectSentenceAtMouse(e);
     if (!detected) {
+      focusModeController.leave()
       // textLayer 밖으로 나가면 호버 클리어
       if (currentHoverPage !== null) {
         const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${currentHoverPage}"]`);
@@ -17286,6 +17362,7 @@ if (viewerScrollContainer) {
 
     currentHoverPage = pageNum;
     currentHoverSentenceIdx = sentenceRange.sentenceIdx;
+    focusModeController.focus(focusRef(pageNum, sentenceRange));
 
     applyHoverHighlight(pageNum, sentenceRange);
 
@@ -17313,6 +17390,8 @@ if (viewerScrollContainer) {
       if (isNaN(pageNum)) return;
       const sentenceIdx = parseInt(transSent.dataset.sentenceIdx, 10);
       if (isNaN(sentenceIdx)) return;
+      focusModeController.focus({ pageNum, sentenceIdx, element: transSent });
+      focusModeController.cancelLeave();
 
       // 번역 패널 호버 → PDF 오버레이 하이라이트
       // 볼드(**...**) 등으로 한 문장이 여러 DOM 노드에 걸쳐 쪼개진 경우, 같은
@@ -17360,6 +17439,7 @@ if (viewerScrollContainer) {
       // trans-sentence mouseout 처리
       const transSent = e.target.closest('.trans-sentence');
       if (transSent && !e.relatedTarget?.closest('.trans-sentence')) {
+        focusModeController.leave();
         viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => el.classList.remove('sentence-highlight'));
         if (currentHoverPage !== null) {
           const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${currentHoverPage}"]`);
@@ -17390,6 +17470,7 @@ if (viewerScrollContainer) {
         const pageNum = parseInt(pageWrapper.dataset.page, 10);
         if (isNaN(pageNum)) return;
         const sentenceIdx = parseInt(transSent.dataset.sentenceIdx, 10);
+        if (focusModeController.settings.enabled) { focusModeController.togglePin({ pageNum, sentenceIdx, element: transSent }); transSent.setAttribute('aria-pressed', String(focusModeController.pinned)); }
         if (isNaN(sentenceIdx)) return;
 
         const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum];
@@ -17433,11 +17514,13 @@ if (viewerScrollContainer) {
 
       const detected = detectSentenceAtMouse(e);
       if (!detected) {
+      focusModeController.leave()
         applyActiveHighlight(null, null);
         return;
       }
 
       const { pageNum, sentenceRange } = detected;
+      if (focusModeController.settings.enabled) focusModeController.togglePin(focusRef(pageNum, sentenceRange));
       applyActiveHighlight(pageNum, sentenceRange);
       activeHighlightPage = pageNum;
       activeHighlightSentenceIdx = sentenceRange.sentenceIdx;

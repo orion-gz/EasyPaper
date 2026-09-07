@@ -4364,4 +4364,14 @@
   "chat:memo.answerHeading": {
     "description": "Heading for the AI answer in the exported memo."
   }
+  ,"settings:focusMode": { "description": "Toggle for sentence-pair Focus mode." }
+  ,"settings:focusModeDescription": { "description": "Explains the Focus mode hover behavior." }
+  ,"settings:focusBlur": { "description": "Label for the Focus backdrop blur slider." }
+  ,"settings:focusDim": { "description": "Label for the Focus backdrop dimming slider." }
+  ,"settings:focusScale": { "description": "Label for the focused sentence scale slider." }
+  ,"settings:focusKeyboardHelp": { "description": "Keyboard instructions for pinned Focus navigation." }
+  ,"viewer:a11y.focusActive": { "description": "Screen reader status when sentence Focus activates." }
+  ,"viewer:a11y.focusPinned": { "description": "Screen reader status when sentence Focus is pinned." }
+  ,"viewer:a11y.focusMoved": { "description": "Screen reader status after keyboard Focus navigation." }
+  ,"viewer:focus.performanceFallback": { "description": "Notice shown when Focus switches to a lower-cost visual mode." }
 }
