@@ -32,7 +32,7 @@ jobs:
 
       - name: Test PDF rendering with WebKit
         working-directory: frontend
-        run: npm run test:e2e:webkit -- tests/e2e/pdf-text-layer-alignment.spec.js tests/e2e/pdf-viewer-race.spec.js
+        run: npm run test:e2e:webkit -- tests/e2e/pdf-text-layer-alignment.spec.js tests/e2e/pdf-text-geometry.spec.js tests/e2e/pdf-viewer-race.spec.js
 
   build-sidecar:
     strategy:

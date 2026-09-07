@@ -22,7 +22,11 @@ test('전역 자간이 PDF 텍스트 레이어의 위치와 크기에 영향을 
 
   const textLayer = page.locator('.pdf-page-wrapper[data-page="1"] .textLayer')
   await expect(textLayer).toBeVisible()
-  await expect(textLayer.locator('span').first()).toBeAttached()
+  await expect(textLayer).toHaveAttribute('data-segmented', 'true')
+  // Compare settled geometry, not two frames of the viewer entrance transition.
+  await page.evaluate(() => Promise.all(document.getAnimations()
+    .filter(animation => animation.effect.getComputedTiming().iterations !== Infinity)
+    .map(animation => animation.finished.catch(() => {}))))
 
   const readGeometry = () => page.locator('.textLayer span').evaluateAll(spans => spans.map(span => {
     const rect = span.getBoundingClientRect()
