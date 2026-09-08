@@ -102,10 +102,41 @@ export function visibleFocusRects(element) {
   return rects
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg'
+let filterId = 0
+function svgElement(name, attributes = {}) {
+  const element = document.createElementNS(SVG_NS, name)
+  for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value))
+  return element
+}
+
+// Filter SourceGraphic itself, not the browser's optional backdrop compositor.
+// The original pixels inside each sentence are merged over the blurred pixels.
+export function createSentenceFilter(id, rects, bounds, strength) {
+  // Normalized coordinates avoid WebKit/Chromium differences under CSS zoom.
+  const width = bounds.width || 1, height = bounds.height || 1
+  const px = Math.max(4, strength * 3) / width, py = Math.max(4, strength * 3) / height
+  const filter = svgElement('filter', { id, filterUnits: 'objectBoundingBox', primitiveUnits: 'objectBoundingBox', x: -px, y: -py, width: 1 + px * 2, height: 1 + py * 2, 'color-interpolation-filters': 'sRGB' })
+  filter.append(svgElement('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: `${strength / width} ${strength / height}`, result: 'blurred' }))
+  rects.forEach((rect, index) => filter.append(svgElement('feFlood', {
+    x: (rect.left - bounds.left - 4) / width, y: (rect.top - bounds.top - 4) / height,
+    width: (rect.width + 8) / width, height: (rect.height + 8) / height,
+    'flood-color': 'white', result: `hole${index}`,
+  })))
+  const holes = svgElement('feMerge', { result: 'holes' })
+  rects.forEach((_, index) => holes.append(svgElement('feMergeNode', { in: `hole${index}` })))
+  filter.append(holes, svgElement('feComposite', { in: 'blurred', in2: 'holes', operator: 'out', result: 'background' }), svgElement('feComposite', { in: 'SourceGraphic', in2: 'holes', operator: 'in', result: 'sentence' }))
+  const output = svgElement('feMerge')
+  output.append(svgElement('feMergeNode', { in: 'background' }), svgElement('feMergeNode', { in: 'sentence' }))
+  filter.append(output)
+  return filter
+}
+
 export class FocusModeController {
   constructor({ root, resolvePair, listSentences, announce = () => {}, notifyFallback = () => {}, releaseDelay = 150 }) {
     Object.assign(this, { root, resolvePair, listSentences, announce, notifyFallback, releaseDelay })
-    this.settings = normalizeFocusSettings(); this.current = null; this.pinned = false; this.slowFrames = 0; this.performanceFallback = false
+    this.settings = normalizeFocusSettings(); this.current = null; this.pinned = false
+    this.filteredElements = new Map(); this.hiddenMemos = new Map()
     this.onKeyDown = event => this.handleKeyDown(event); this.onViewportChange = () => this.scheduleRender()
     this.onLeave = () => this.leave()
     this.onInteraction = event => {
@@ -143,6 +174,13 @@ export class FocusModeController {
     this.current = null; this.pinned = false; this.lastGeometry = null
     this.layer?.remove()
     this.layer = null
+    for (const [element, original] of this.filteredElements) {
+      element.style.setProperty('filter', original.value, original.priority)
+    }
+    this.filteredElements.clear()
+    for (const [element, original] of this.hiddenMemos) element.style.setProperty('visibility', original.value, original.priority)
+    this.hiddenMemos.clear()
+    this.filterSvg?.remove(); this.filterSvg = null
     this.root?.classList.remove('focus-mode-active')
     this.root?.querySelectorAll('.trans-sentence[aria-pressed]').forEach(element => element.removeAttribute('aria-pressed'))
   }
@@ -167,7 +205,6 @@ export class FocusModeController {
   }
   render() {
     if (!this.current || !this.settings.enabled) return
-    const started = performance.now()
     let pair = this.resolvePair?.(this.current) || {}
     if (this.current.revealTranslation && !this.revealedTranslation && pair.elements?.length) {
       revealFocusTranslation(pair.elements)
@@ -186,16 +223,41 @@ export class FocusModeController {
     // Only sentence pixels are revealed. Panels, popups and toolbars remain covered.
     // Rendering can temporarily disappear during PDF zoom; retain the pinned reference.
     const zoom = Number.parseFloat(getComputedStyle(document.documentElement).zoom) || 1
-    const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, this.performanceFallback])
-    if (geometry === this.lastGeometry) { this.scheduleRender(); return }
+    const memoRects = Array.from(document.querySelectorAll('.floating-memo')).map(element => ({ element, bounds: element.getBoundingClientRect() }))
+    for (const { element, bounds: memo } of memoRects) {
+      const overlaps = rects.some(rect => rect.left < memo.right && rect.left + rect.width > memo.left && rect.top < memo.bottom && rect.top + rect.height > memo.top)
+      if (overlaps && !this.hiddenMemos.has(element)) {
+        this.hiddenMemos.set(element, { value: element.style.getPropertyValue('visibility'), priority: element.style.getPropertyPriority('visibility') })
+        element.style.setProperty('visibility', 'hidden', 'important')
+      } else if (!overlaps && this.hiddenMemos.has(element)) {
+        const original = this.hiddenMemos.get(element)
+        element.style.setProperty('visibility', original.value, original.priority); this.hiddenMemos.delete(element)
+      }
+    }
+    const targets = Array.from(document.body.children).filter(element => element instanceof HTMLElement && !['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName) && element !== this.layer)
+    const targetBounds = targets.map(element => element.getBoundingClientRect())
+    const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height])])
+    if (geometry === this.lastGeometry && targets.every(element => this.filteredElements.has(element))) { this.scheduleRender(); return }
     this.lastGeometry = geometry
+    if (!this.filterSvg) {
+      this.filterSvg = svgElement('svg', { width: 0, height: 0, 'aria-hidden': 'true' })
+      this.filterSvg.style.position = 'absolute'; document.body.append(this.filterSvg)
+    }
+    this.filterSvg.replaceChildren()
+    targets.forEach((element, index) => {
+      if (!this.filteredElements.has(element)) this.filteredElements.set(element, { value: element.style.getPropertyValue('filter'), priority: element.style.getPropertyPriority('filter'), computed: getComputedStyle(element).filter })
+      const original = this.filteredElements.get(element)
+      const id = `focus-sentence-filter-${++filterId}`
+      this.filterSvg.append(createSentenceFilter(id, rects, targetBounds[index], this.settings.blurStrength))
+      const prefix = original.computed === 'none' ? '' : original.computed
+      element.style.setProperty('filter', `${prefix} url("#${id}")`, 'important')
+    })
     if (!this.layer) { this.layer = document.createElement('div'); this.layer.className = 'focus-mode-layer'; this.layer.setAttribute('aria-hidden', 'true'); document.body.append(this.layer) }
     for (const layer of [this.layer]) {
       // Client rects use viewport pixels; cancel the application's root CSS zoom.
       layer.style.zoom = String(1 / zoom)
       for (const [name, value] of Object.entries(focusCssVariables(this.settings))) layer.style.setProperty(name, value)
     }
-    this.layer.classList.toggle('focus-performance-fallback', this.performanceFallback)
     this.layer.replaceChildren(...createFocusBackdropRects(rects, window.innerWidth, window.innerHeight).map(rect => {
       const backdrop = document.createElement('div')
       backdrop.className = 'focus-mode-backdrop'
@@ -203,8 +265,6 @@ export class FocusModeController {
       return backdrop
     }))
     this.root?.classList.add('focus-mode-active')
-    this.slowFrames = performance.now() - started > 20 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 1)
-    if (!this.performanceFallback && this.slowFrames >= 8) { this.performanceFallback = true; this.notifyFallback(); this.scheduleRender() }
     this.scheduleRender()
   }
   destroy() {

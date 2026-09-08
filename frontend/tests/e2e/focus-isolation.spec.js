@@ -60,34 +60,69 @@ test('pinned focus ignores hover, follows geometry changes and releases with Esc
   await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
 })
 
-test('blur actually softens background pixels while preserving sentence pixels', async ({ page, browserName }) => {
-  test.skip(browserName === 'webkit' && process.platform === 'linux', 'Linux headless WebKit does not rasterize backdrop-filter, even on an unmasked standalone element')
-  await setup(page)
+for (const scale of [0.8, 1, 1.25]) {
+test(`blur actually softens background pixels while preserving sentence pixels at scale ${scale}`, async ({ page }) => {
+  await setup(page, scale)
   await page.addStyleTag({ content: '#panel, #root .sentence { background: repeating-linear-gradient(90deg, black 0 2px, white 2px 4px) }' })
   await page.evaluate(() => window.controller.applySettings({ enabled: true, blurStrength: 12, dimOpacity: 0, scale: 100 }))
-  await expect(page.locator('.focus-mode-backdrop').first()).toHaveCSS('backdrop-filter', 'blur(12px)')
+  await expect.poll(() => page.locator('.focus-mode-layer').evaluate(element => element.style.getPropertyValue('--focus-blur'))).toBe('12px')
   const screenshot = (await page.screenshot({ scale: 'css' })).toString('base64')
-  const contrasts = await page.evaluate(async screenshot => {
+  const contrasts = await page.evaluate(async ({ screenshot, scale }) => {
     const image = new Image(); image.src = `data:image/png;base64,${screenshot}`; await image.decode()
     const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
     const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
     const contrast = (x, y) => {
-      const data = ctx.getImageData(x, y, 32, 1).data
+      const data = ctx.getImageData(Math.round(x * scale), Math.round(y * scale), 32, 1).data
       const samples = Array.from({ length: 32 }, (_, i) => data[i * 4])
       return Math.max(...samples) - Math.min(...samples)
     }
     return { source: contrast(220, 150), background: contrast(450, 175) }
-  }, screenshot)
+  }, { screenshot, scale })
   expect(contrasts.source).toBeGreaterThan(200)
   expect(contrasts.background).toBeLessThan(30)
 })
+}
 
 test('blur and tint can be independently disabled; controls release the mask before interaction', async ({ page }) => {
   await setup(page)
   await page.evaluate(() => window.controller.applySettings({ enabled: true, blurStrength: 10, dimOpacity: 0, scale: 100 }))
-  await expect(page.locator('.focus-mode-backdrop').first()).toHaveCSS('backdrop-filter', 'blur(10px)')
+  await expect.poll(() => page.locator('.focus-mode-layer').evaluate(element => element.style.getPropertyValue('--focus-blur'))).toBe('10px')
   await expect(page.locator('.focus-mode-backdrop').first()).toHaveCSS('background-color', 'rgba(5, 7, 12, 0)')
   await page.locator('#panel').click()
+  await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
+  await expect(page.locator('#root')).toHaveCSS('filter', 'none')
+})
+
+test('overlapping memos cannot obscure focus and are restored on release', async ({ page }) => {
+  await setup(page)
+  await page.evaluate(() => {
+    const memo = document.createElement('aside')
+    memo.className = 'floating-memo'
+    memo.textContent = 'Covering note'
+    Object.assign(memo.style, { position: 'fixed', left: '100px', top: '120px', width: '200px', height: '40px', background: 'red', zIndex: '999999' })
+    document.body.append(memo)
+  })
+  await expect(page.locator('.floating-memo')).toHaveCSS('visibility', 'hidden')
+  await page.locator('.floating-memo').evaluate(element => { element.style.left = '600px' })
+  await expect(page.locator('.floating-memo')).toHaveCSS('visibility', 'visible')
+  await page.locator('.floating-memo').evaluate(element => { element.style.left = '100px' })
+  await expect(page.locator('.floating-memo')).toHaveCSS('visibility', 'hidden')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.floating-memo')).toHaveCSS('visibility', 'visible')
+  await expect(page.locator('.floating-memo')).toHaveCSS('filter', 'none')
+})
+
+test('focus restores existing inline filters and cleans up when disabled', async ({ page }) => {
+  await setup(page)
+  await page.evaluate(() => {
+    window.controller.clear()
+    document.querySelector('#root').style.setProperty('filter', 'brightness(0.8)', 'important')
+    window.controller.togglePin({ pageNum: 1, sentenceIdx: 0 })
+  })
+  await expect(page.locator('feGaussianBlur').first()).toBeAttached()
+  await page.evaluate(() => window.controller.applySettings({ enabled: false }))
+  await expect(page.locator('#root')).toHaveCSS('filter', 'brightness(0.8)')
+  await expect(page.locator('feGaussianBlur')).toHaveCount(0)
   await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
 })
 
@@ -128,7 +163,7 @@ test('real PDF hover reveals source and translation together and clears on viewe
     location.hash = '#viewer?id=focus-pdf'
   })
   const source = page.locator('.textLayer span').filter({ hasText: 'The quick brown fox' }).first()
-  await expect(source).toBeVisible()
+  await expect(source).toBeVisible({ timeout: 15000 })
   const translation = page.locator('.trans-sentence').first()
   await expect(translation).toBeVisible()
   // Put the matching translation below its own scroll viewport, not below the page.

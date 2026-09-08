@@ -76,7 +76,7 @@ jobs:
         run: npm run build
       - name: Verify PDF geometry on macOS WebKit
         working-directory: frontend
-        run: npm run test:e2e:webkit -- tests/e2e/pdf-text-geometry.spec.js tests/e2e/pdf-text-layer-alignment.spec.js tests/e2e/pdf-viewer-race.spec.js --workers=2
+        run: npm run test:e2e:webkit -- tests/e2e/pdf-text-geometry.spec.js tests/e2e/pdf-text-layer-alignment.spec.js tests/e2e/pdf-viewer-race.spec.js tests/e2e/focus-isolation.spec.js --workers=2
       - name: Upload PDF geometry failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
