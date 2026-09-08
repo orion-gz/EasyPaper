@@ -523,7 +523,7 @@ function initializeSettingsInformationArchitecture() {
 
   const translationHeading = $('settings-translation-heading')?.closest('.settings-section-heading')
   if (translationHeading) translationBody?.appendChild(translationHeading)
-  for (const id of ['setting-target-lang', 'setting-trans-style', 'setting-translation-mode', 'setting-ignore-math']) {
+  for (const id of ['setting-source-lang', 'setting-target-lang', 'setting-trans-style', 'setting-translation-mode', 'setting-ignore-math']) {
     moveSettingsGroup(id, translationBody)
   }
   moveSettingsGroup('setting-prompt-template', translationBody)
@@ -1098,7 +1098,7 @@ function syncModeSettings(documentMode) {
 
   settingsModeBadge.textContent = isGeneral ? '일반 문서 모드' : '연구 모드'
   settingsTranslationHeading.textContent = '번역'
-  settingsAutomationTitle.textContent = '문서 처리 시 자동 생성'
+  settingsAutomationTitle.textContent = '문서 처리 자동 생성'
   settingsReadingToolsLabel.textContent = t('settings:viewerReadingTools')
   settingsKeywordsLabel.textContent = isGeneral ? '고급 어휘 자동 생성' : '키워드·단어 자동 생성'
   settingsKeywordsDescription.textContent = isGeneral

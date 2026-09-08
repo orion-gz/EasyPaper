@@ -952,7 +952,7 @@
           </div>
           
           <div class="form-group">
-            <label for="setting-trans-style">번역 문체 (스타일)</label>
+            <label for="setting-trans-style">번역 문체</label>
             <select id="setting-trans-style" class="form-select">
               <option value="academic">학술용 의역 (매끄럽고 자연스러움)</option>
               <option value="natural">원문 문체 유지 (목적과 분위기를 자연스럽게 반영)</option>
@@ -962,7 +962,7 @@
           </div>
           
           <div class="form-group">
-            <label for="setting-translation-mode">번역 모드</label>
+            <label for="setting-translation-mode">번역 시작 시점</label>
             <select id="setting-translation-mode" class="form-select">
               <option value="auto">업로드 시 자동 번역 (50페이지 미만)</option>
               <option value="pane">번역 버튼으로 한 페이지씩 번역</option>
@@ -971,7 +971,7 @@
           </div>
 
           <div class="form-group">
-            <label>번역에서 제외할 요소</label>
+            <label>번역 제외 요소</label>
             <div class="toggle-switch-group">
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-ignore-math" />
@@ -1012,7 +1012,7 @@
           </div>
 
           <div class="form-group">
-            <label for="setting-default-zoom">기본 PDF 확대 비율</label>
+            <label for="setting-default-zoom">기본 PDF 배율</label>
             <select id="setting-default-zoom" class="form-select">
               <option value="1.0">70%</option>
               <option value="1.5">100% (기본)</option>
@@ -1022,7 +1022,7 @@
           </div>
 
           <div class="form-group">
-            <label for="setting-toolbar-position">툴바 위치</label>
+            <label for="setting-toolbar-position">뷰어 툴바 위치</label>
             <select id="setting-toolbar-position" class="form-select">
               <option value="top">위 (기본)</option>
               <option value="bottom">아래</option>
@@ -1032,7 +1032,7 @@
           </div>
 
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
-            <label>뷰어 편의 설정</label>
+            <label>읽기 동작 및 도구</label>
             <div class="toggle-switch-group">
               <span class="settings-subsection-label" data-i18n="settings:viewerReadingBehavior">읽기 동작</span>
               <div class="focus-settings">
@@ -1094,7 +1094,7 @@
           </div>
 
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
-            <label id="settings-automation-title">문서 처리 시 자동 생성</label>
+            <label id="settings-automation-title">문서 처리 자동 생성</label>
             <div class="toggle-switch-group">
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-auto-generate-keywords" />
@@ -1111,7 +1111,7 @@
           </div>
 
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
-            <label>데이터 및 용량 관리</label>
+            <label>캐시 관리</label>
             <button type="button" id="clear-cache-btn" class="btn btn-secondary" style="width: 100%; color: var(--error); border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.05); font-weight: 600;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>브라우저 번역 캐시 비우기
             </button>
