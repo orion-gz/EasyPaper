@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 import { mockBaseRoutes, gotoApp } from './helpers.js'
 
 test('Focus 설정을 모드별로 저장하고 슬라이더 활성 상태를 복원한다', async ({ page }) => {
+  test.setTimeout(60000)
   await mockBaseRoutes(page, { documents: [] })
   await gotoApp(page)
   await page.locator('#sidebar-settings-btn').click()
@@ -9,6 +10,29 @@ test('Focus 설정을 모드별로 저장하고 슬라이더 활성 상태를 �
   await expect(page.locator('#setting-focus-mode')).not.toBeChecked()
   await expect(page.locator('#setting-focus-blur')).toBeDisabled()
   await page.locator('#setting-focus-mode').locator('..').click()
+  for (const zoom of [0.8, 1, 1.25]) {
+  await page.evaluate(zoom => { document.documentElement.style.zoom = String(zoom) }, zoom)
+  for (const [id, min, max] of [['blur', '0', '16'], ['dim', '0', '60'], ['scale', '100', '150']]) {
+    const range = page.locator(`#setting-focus-${id}`)
+    await range.scrollIntoViewIfNeeded()
+    const bounds = await range.boundingBox()
+    await page.mouse.click(bounds.x + 1, bounds.y + bounds.height / 2)
+    await expect(range).toHaveValue(min)
+    await page.mouse.click(bounds.x + bounds.width - 1, bounds.y + bounds.height / 2)
+    await expect(range).toHaveValue(max)
+    await page.mouse.move(bounds.x + bounds.width - 4, bounds.y + bounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + 1, bounds.y + bounds.height / 2, { steps: 8 })
+    await page.mouse.up()
+    await expect(range).toHaveValue(min)
+    await page.mouse.move(bounds.x + 4, bounds.y + bounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + bounds.width - 1, bounds.y + bounds.height / 2, { steps: 8 })
+    await page.mouse.up()
+    await expect(range).toHaveValue(max)
+  }
+  }
+  await page.evaluate(() => { document.documentElement.style.zoom = '1' })
   await page.locator('#setting-focus-blur').focus()
   await page.keyboard.press('Home')
   await expect(page.locator('#setting-focus-blur-value')).toHaveText('0px')

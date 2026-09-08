@@ -147,6 +147,48 @@ test('focus restores existing inline filters and cleans up when disabled', async
   await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
 })
 
+for (const zoom of [0.8, 1, 1.25]) {
+  test(`150% magnifies canvas and multiline translation without reflow at UI scale ${zoom}`, async ({ page }) => {
+    await setup(page, zoom)
+    const original = await page.evaluate(async moduleSource => {
+      const { visibleFocusRects } = await import(URL.createObjectURL(new Blob([moduleSource], { type: 'text/javascript' })))
+      window.controller.clear()
+      const root = document.querySelector('#root')
+      const canvas = document.createElement('canvas'); canvas.id = 'focus-canvas'; canvas.width = 400; canvas.height = 80
+      Object.assign(canvas.style, { position: 'absolute', left: '100px', top: '120px', width: '200px', height: '40px' })
+      const ctx = canvas.getContext('2d'); ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 400, 80); ctx.fillStyle = 'black'; ctx.font = '28px sans-serif'; ctx.fillText('Focused source', 12, 48)
+      const paragraph = document.createElement('p'); paragraph.id = 'focus-paragraph'
+      Object.assign(paragraph.style, { position: 'absolute', left: '650px', top: '240px', width: '200px', margin: '0', fontSize: '18px', lineHeight: '28px' })
+      paragraph.innerHTML = '<span class="trans-sentence">A translated sentence that wraps across multiple lines.</span>'
+      root.append(canvas, paragraph)
+      const element = paragraph.firstElementChild
+      window.controller.resolvePair = () => ({ sourceCanvas: canvas, sourceRects: [canvas.getBoundingClientRect()], translationRects: visibleFocusRects(element), elements: [element] })
+      const original = { canvas: canvas.getBoundingClientRect().toJSON(), paragraph: paragraph.getBoundingClientRect().toJSON() }
+      window.controller.applySettings({ enabled: true, blurStrength: 1, dimOpacity: 20, scale: 150 })
+      window.controller.togglePin({ pageNum: 1, sentenceIdx: 0 })
+      return original
+    }, moduleSource)
+    const source = page.locator('.focus-mode-magnification[data-kind="source"]')
+    const translation = page.locator('.focus-mode-magnification[data-kind="translation"]')
+    await expect(source).toBeVisible()
+    await expect(translation).toBeVisible()
+    await expect.poll(() => page.evaluate(async () => {
+      const before = document.querySelector('.focus-mode-magnification')
+      await new Promise(requestAnimationFrame)
+      await new Promise(requestAnimationFrame)
+      return before === document.querySelector('.focus-mode-magnification')
+    })).toBe(true)
+    await expect.poll(() => source.evaluate(e => Math.round(e.getBoundingClientRect().width))).toBe(Math.round(original.canvas.width * 1.5))
+    await expect(translation.locator(':scope > div')).not.toHaveCount(1)
+    expect(await page.locator('#focus-paragraph').boundingBox()).toEqual({ x: original.paragraph.x, y: original.paragraph.y, width: original.paragraph.width, height: original.paragraph.height })
+    await expect(page.locator('.focus-mode-magnification [id]')).toHaveCount(0)
+    await page.evaluate(() => window.controller.applySettings({ enabled: true, blurStrength: 1, dimOpacity: 20, scale: 120 }))
+    await expect.poll(() => source.evaluate(e => Math.round(e.getBoundingClientRect().width))).toBe(Math.round(original.canvas.width * 1.2))
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.focus-mode-magnification, .focus-mode-erasure')).toHaveCount(0)
+  })
+}
+
 for (const scale of [0.8, 1, 1.25]) {
   test(`translation reveal scrolls only its pane and clips hidden fragments at scale ${scale}`, async ({ page }) => {
     await page.setContent('<div class="trans-page-content" style="position:absolute;left:400px;top:80px;width:200px;height:100px;overflow:auto;border:2px solid"><div style="height:500px"></div><span id="translation">Translated sentence</span><div style="height:500px"></div></div>')
@@ -170,6 +212,7 @@ for (const scale of [0.8, 1, 1.25]) {
 }
 
 test('real PDF hover reveals source and translation together and clears on viewer exit', async ({ page }) => {
+  test.setTimeout(60000)
   const doc = { id: 'focus-pdf', filename: 'focus.pdf', total_pages: 1, translated_pages: [1], metadata: { title: 'Focus' } }
   const pdf = fs.readFileSync(new URL('./fixtures/text-geometry.pdf', import.meta.url))
   await mockBaseRoutes(page, { documents: [doc] })
@@ -180,6 +223,7 @@ test('real PDF hover reveals source and translation together and clears on viewe
   await gotoApp(page)
   await page.evaluate(() => {
     localStorage.setItem('easypaper_focus_mode_enabled_research', 'true')
+    localStorage.setItem('easypaper_focus_scale_research', '100')
     localStorage.setItem('easypaper_disable_hover_tooltip', 'true')
     location.hash = '#viewer?id=focus-pdf'
   })
@@ -207,7 +251,7 @@ test('real PDF hover reveals source and translation together and clears on viewe
   })).toBe(true)
   expect((await source.boundingBox()).y).toBeCloseTo(sourceBefore.y, 0)
   await source.click()
-  const sourceMask = await page.locator('.focus-mode-layer').innerHTML()
+  const sourceMask = await page.locator('.focus-mode-backdrop').evaluateAll(elements => elements.map(e => ['left', 'top', 'width', 'height'].map(p => parseFloat(e.style[p]))))
   // Compare actual PDF canvas and translation glyph pixels, not just geometry
   // or CSS declarations. Keep native layout/scroll positions fixed for both.
   const focused = (await page.screenshot({ scale: 'css', path: test.info().outputPath('focused.png') })).toString('base64')
@@ -248,8 +292,44 @@ test('real PDF hover reveals source and translation together and clears on viewe
     expect(result.focused.edges).toBeGreaterThan(result.original.edges * 0.9)
     expect(result.focused.contrast).toBeGreaterThan(result.original.contrast * 0.95)
   }
+  await page.evaluate(() => {
+    document.querySelector('#setting-focus-mode').checked = true
+    const range = document.querySelector('#setting-focus-scale')
+    range.value = '150'; range.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const enlargedSource = page.locator('.focus-mode-magnification[data-kind="source"]')
+  await expect(enlargedSource).toBeVisible()
+  await expect(page.locator('.focus-mode-magnification[data-kind="translation"]').first()).toBeVisible()
+  await expect(page.locator('.focus-mode-magnification .sentence-highlight, .focus-mode-magnification .active-mapped-sentence')).toHaveCount(0)
+  expect((await enlargedSource.boundingBox()).width).toBeGreaterThan(sourceBefore.width * 1.4)
+  expect((await source.boundingBox()).width).toBeCloseTo(sourceBefore.width, 0)
+  const magnified = (await page.screenshot({ scale: 'css', path: test.info().outputPath('magnified-150.png') })).toString('base64')
+  const enlargedBoxes = await page.locator('.focus-mode-magnification').evaluateAll(elements => elements.map(e => e.getBoundingClientRect().toJSON()))
+  const glyphs = await page.evaluate(async ({ magnified, enlargedBoxes }) => {
+    const image = new Image(); image.src = `data:image/png;base64,${magnified}`; await image.decode()
+    const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
+    const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
+    return enlargedBoxes.map(b => {
+      const width = Math.floor(b.width), data = ctx.getImageData(Math.ceil(b.x), Math.ceil(b.y), width, Math.floor(b.height)).data
+      const gray = Array.from({ length: data.length / 4 }, (_, i) => (data[i * 4] + data[i * 4 + 1] + data[i * 4 + 2]) / 3)
+      return { contrast: Math.max(...gray) - Math.min(...gray), edges: gray.reduce((sum, value, i) => sum + (i % width ? Math.abs(value - gray[i - 1]) : 0), 0) / gray.length }
+    })
+  }, { magnified, enlargedBoxes })
+  for (const glyph of glyphs) {
+    expect(glyph.contrast).toBeGreaterThan(100)
+    expect(glyph.edges).toBeGreaterThan(4)
+  }
+  await page.evaluate(() => {
+    const range = document.querySelector('#setting-focus-scale')
+    range.value = '100'; range.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await expect(page.locator('.focus-mode-magnification')).toHaveCount(0)
   await translation.hover()
-  await expect.poll(() => page.locator('.focus-mode-layer').innerHTML()).toBe(sourceMask)
+  // Native hover can scroll the pane by a fractional pixel in WebKit.
+  await expect.poll(() => page.locator('.focus-mode-backdrop').evaluateAll((elements, before) => {
+    if (elements.length !== before.length) return Infinity
+    return Math.max(...elements.flatMap((e, i) => ['left', 'top', 'width', 'height'].map((p, j) => Math.abs(parseFloat(e.style[p]) - before[i][j]))))
+  }, sourceMask)).toBeLessThanOrEqual(2)
   await expect(page.locator('.focus-mode-outline')).toHaveCount(0)
   await expect(translation).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await expect(translation).toHaveCSS('box-shadow', 'none')

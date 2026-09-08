@@ -10,7 +10,7 @@ export function normalizeFocusSettings(value = {}) {
     enabled: value.enabled === true,
     blurStrength: number(value.blurStrength, 6, 0, 16),
     dimOpacity: number(value.dimOpacity, 20, 0, 60, 5),
-    scale: number(value.scale, 104, 100, 110),
+    scale: number(value.scale, 104, 100, 150),
   }
 }
 
@@ -136,6 +136,86 @@ export function createSentenceFilter(id, rects, bounds, strength, zoom = 1) {
   return filter
 }
 
+function copyStyledTree(element) {
+  const clone = element.cloneNode(false)
+  if (element instanceof Element) {
+    const style = getComputedStyle(element)
+    for (const property of style) clone.style.setProperty(property, style.getPropertyValue(property))
+    clone.removeAttribute('id')
+    clone.removeAttribute('contenteditable')
+    clone.classList.remove('sentence-highlight', 'active-mapped-sentence', 'sentence-pulse')
+  }
+  for (const child of element.childNodes) clone.append(child instanceof Element ? copyStyledTree(child) : child.cloneNode(true))
+  return clone
+}
+
+function sentenceBackground(element) {
+  for (let current = element; current; current = current.parentElement) {
+    const color = getComputedStyle(current).backgroundColor
+    if (color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') return color
+  }
+  return 'var(--bg-primary, white)'
+}
+
+// Magnify visual copies only; native PDF/text layout and selection stay intact.
+export function createFocusMagnification(pair, viewportRects, scale) {
+  if (scale <= 1) return []
+  const groups = [], erasures = []
+  const build = (rects, draw, kind, background, filter = 'none') => {
+    const visible = mergeClientRects(rects).flatMap(rect => viewportRects.map(view => {
+      const left = Math.max(rect.left, view.left), top = Math.max(rect.top, view.top)
+      const right = Math.min(rect.right, view.left + view.width), bottom = Math.min(rect.bottom, view.top + view.height)
+      return { left, top, right, bottom, width: right - left, height: bottom - top }
+    })).filter(rect => rect.width > 0 && rect.height > 0)
+    if (!visible.length) return
+    const left = Math.min(...visible.map(r => r.left)), top = Math.min(...visible.map(r => r.top))
+    const width = Math.max(...visible.map(r => r.right)) - left, height = Math.max(...visible.map(r => r.bottom)) - top
+    const effectiveScale = Math.max(1, Math.min(scale, (window.innerWidth - 8) / width, (window.innerHeight - 8) / height))
+    const group = document.createElement('div')
+    group.className = 'focus-mode-magnification'; group.dataset.kind = kind; group.inert = true
+    const dx = Math.max(4 - (left - width * (effectiveScale - 1) / 2), Math.min(0, window.innerWidth - 4 - (left + width * (effectiveScale + 1) / 2)))
+    const dy = Math.max(4 - (top - height * (effectiveScale - 1) / 2), Math.min(0, window.innerHeight - 4 - (top + height * (effectiveScale + 1) / 2)))
+    Object.assign(group.style, { position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`, transform: `translate(${dx}px, ${dy}px) scale(${effectiveScale})`, transformOrigin: 'center' })
+    for (const rect of visible) {
+      const erasure = document.createElement('div')
+      erasure.className = 'focus-mode-erasure'
+      Object.assign(erasure.style, { position: 'absolute', left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, background, filter })
+      erasures.push(erasure)
+      const crop = document.createElement('div')
+      Object.assign(crop.style, { position: 'absolute', overflow: 'hidden', left: `${rect.left - left}px`, top: `${rect.top - top}px`, width: `${rect.width}px`, height: `${rect.height}px` })
+      draw(crop, rect); group.append(crop)
+    }
+    groups.push(group)
+  }
+  if (pair.sourceCanvas) {
+    const source = pair.sourceCanvas, bounds = source.getBoundingClientRect()
+    if (bounds.width && bounds.height) build(pair.sourceRects || [], (crop, rect) => {
+      const canvas = document.createElement('canvas')
+      const sx = source.width / bounds.width, sy = source.height / bounds.height
+      canvas.width = Math.ceil(rect.width * sx); canvas.height = Math.ceil(rect.height * sy)
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = 'white'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(source, (rect.left - bounds.left) * sx, (rect.top - bounds.top) * sy, rect.width * sx, rect.height * sy, 0, 0, canvas.width, canvas.height)
+      Object.assign(canvas.style, { display: 'block', width: '100%', height: '100%', filter: getComputedStyle(source).filter })
+      crop.append(canvas)
+    }, 'source', 'white', getComputedStyle(source).filter)
+  }
+  for (const element of pair.elements || []) {
+    const host = element.closest('p, li, h1, h2, h3, h4, h5, h6') || element.parentElement
+    if (!host) continue
+    const bounds = host.getBoundingClientRect(), zoom = bounds.width / host.offsetWidth || 1
+    const clone = copyStyledTree(host)
+    Object.assign(clone.style, { position: 'absolute', right: 'auto', bottom: 'auto', margin: '0', width: `${bounds.width / zoom}px`, height: 'auto', boxSizing: 'border-box', transform: 'none', zoom: String(zoom) })
+    build(visibleFocusRects(element), (crop, rect) => {
+      crop.style.background = sentenceBackground(host)
+      const content = clone.cloneNode(true)
+      content.style.left = `${(bounds.left - rect.left) / zoom}px`; content.style.top = `${(bounds.top - rect.top) / zoom}px`
+      crop.append(content)
+    }, 'translation', sentenceBackground(host))
+  }
+  return [...erasures, ...groups]
+}
+
 export class FocusModeController {
   constructor({ root, resolvePair, listSentences, announce = () => {}, notifyFallback = () => {}, releaseDelay = 150 }) {
     Object.assign(this, { root, resolvePair, listSentences, announce, notifyFallback, releaseDelay })
@@ -242,7 +322,7 @@ export class FocusModeController {
     const targets = Array.from(document.body.children).filter(element => element instanceof HTMLElement && !['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName) && element !== this.layer)
       .filter(element => { const bounds = element.getBoundingClientRect(); return bounds.width > 0 && bounds.height > 0 })
     const targetBounds = targets.map(element => element.getBoundingClientRect())
-    const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height])])
+    const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height]), pair.elements?.map(e => e.textContent), document.body.className])
     if (geometry === this.lastGeometry && targets.every(element => this.filteredElements.has(element))) { this.scheduleRender(); return }
     this.lastGeometry = geometry
     if (!this.filterSvg) {
@@ -288,6 +368,7 @@ export class FocusModeController {
       return backdrop
     }))
     this.root?.classList.add('focus-mode-active')
+    this.layer.append(...createFocusMagnification(pair, rects, this.settings.scale / 100))
     this.scheduleRender()
   }
   destroy() {
