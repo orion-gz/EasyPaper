@@ -1041,10 +1041,12 @@
                   <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
                   <span class="toggle-switch-label"><span data-i18n="settings:focusMode">Focus 모드</span><small id="focus-mode-help" data-i18n="settings:focusModeDescription">문장 위에 마우스를 올리면 대응 원문과 번역만 선명하게 표시</small></span>
                 </label>
-                <label class="focus-range"><span data-i18n="settings:focusBlur">블러 강도</span><input id="setting-focus-blur" type="range" min="0" max="16" step="1" value="6" aria-label="블러 강도" /><output id="setting-focus-blur-value">6px</output></label>
-                <label class="focus-range"><span data-i18n="settings:focusDim">배경 디밍</span><input id="setting-focus-dim" type="range" min="0" max="60" step="5" value="20" aria-label="배경 디밍" /><output id="setting-focus-dim-value">20%</output></label>
-                <label class="focus-range"><span data-i18n="settings:focusScale">문장 확대</span><input id="setting-focus-scale" type="range" min="100" max="110" step="1" value="104" aria-label="문장 확대" /><output id="setting-focus-scale-value">104%</output></label>
-                <small class="focus-keyboard-help" data-i18n="settings:focusKeyboardHelp">문장을 클릭해 고정한 뒤 방향키로 이동하고 Esc로 해제</small>
+                <div id="focus-mode-controls" class="focus-mode-controls" aria-hidden="true">
+                  <label class="focus-range"><span data-i18n="settings:focusBlur">블러 강도</span><input id="setting-focus-blur" type="range" min="0" max="16" step="1" value="6" aria-label="블러 강도" /><output id="setting-focus-blur-value">6px</output></label>
+                  <label class="focus-range"><span data-i18n="settings:focusDim">배경 디밍</span><input id="setting-focus-dim" type="range" min="0" max="60" step="5" value="20" aria-label="배경 디밍" /><output id="setting-focus-dim-value">20%</output></label>
+                  <label class="focus-range"><span data-i18n="settings:focusScale">문장 확대</span><input id="setting-focus-scale" type="range" min="100" max="110" step="1" value="104" aria-label="문장 확대" /><output id="setting-focus-scale-value">104%</output></label>
+                  <small class="focus-keyboard-help" data-i18n="settings:focusKeyboardHelp">문장을 클릭해 고정한 뒤 방향키로 이동하고 Esc로 해제</small>
+                </div>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-disable-hover-tooltip" />
