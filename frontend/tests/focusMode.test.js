@@ -21,6 +21,8 @@ test('배경 영역은 겹치는 문장 구멍을 제외하고 한 번만 덮는
 })
 
 test('Focus 설정은 손상값과 범위를 정규화한다', () => {
+  assert.equal(normalizeFocusSettings({ scale: 180 }).scale, 150)
+  assert.equal(normalizeFocusSettings({ scale: 125 }).scale, 125)
   assert.deepEqual(normalizeFocusSettings({ enabled: true, blurStrength: 99, dimOpacity: 23, scale: 'bad' }), { enabled: true, blurStrength: 16, dimOpacity: 25, scale: 104 })
   assert.deepEqual(normalizeFocusSettings({ blurStrength: 0, dimOpacity: 0, scale: 100 }), { enabled: false, blurStrength: 0, dimOpacity: 0, scale: 100 })
 })

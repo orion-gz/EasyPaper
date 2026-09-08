@@ -71,7 +71,7 @@ const BOOLEAN_SETTINGS = new Set([
 const NUMBER_SETTINGS = {
   focusBlurStrength: { min: 0, max: 16, step: 1 },
   focusDimOpacity: { min: 0, max: 60, step: 5 },
-  focusScale: { min: 100, max: 110, step: 1 },
+  focusScale: { min: 100, max: 150, step: 1 },
 }
 
 const LEGACY_LANGUAGE_VALUES = {
