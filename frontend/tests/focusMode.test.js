@@ -1,6 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createFocusMask, focusCssVariables, isFocusKeyboardExcluded, mergeClientRects, normalizeFocusSettings } from '../src/focusMode.js'
+import { createFocusBackdropRects, createFocusMask, focusCssVariables, isFocusKeyboardExcluded, mergeClientRects, normalizeFocusSettings } from '../src/focusMode.js'
+
+test('배경 영역은 겹치는 문장 구멍을 제외하고 한 번만 덮는다', () => {
+  const regions = createFocusBackdropRects([
+    { left: 10, top: 10, width: 20, height: 20 },
+    { left: 20, top: 20, width: 20, height: 20 },
+  ], 50, 50, 0)
+  for (let y = 0; y < 50; y++) for (let x = 0; x < 50; x++) {
+    const hole = (x >= 10 && x < 30 && y >= 10 && y < 30) || (x >= 20 && x < 40 && y >= 20 && y < 40)
+    assert.equal(regions.filter(r => x >= r.left && x < r.left + r.width && y >= r.top && y < r.top + r.height).length, hole ? 0 : 1)
+  }
+})
 
 test('Focus 설정은 손상값과 범위를 정규화한다', () => {
   assert.deepEqual(normalizeFocusSettings({ enabled: true, blurStrength: 99, dimOpacity: 23, scale: 'bad' }), { enabled: true, blurStrength: 16, dimOpacity: 25, scale: 104 })

@@ -39,8 +39,67 @@ export function focusCssVariables(settings) {
   return { '--focus-blur': `${value.blurStrength}px`, '--focus-dim': String(value.dimOpacity / 100), '--focus-scale': String(value.scale / 100) }
 }
 
+// Keep the sentence openings independent of CSS image-mask support.
+export function createFocusBackdropRects(rects, width, height, padding = 4) {
+  const holes = mergeClientRects(rects).map(rect => ({
+    left: Math.max(0, rect.left - padding), right: Math.min(width, rect.right + padding),
+    top: Math.max(0, rect.top - padding), bottom: Math.min(height, rect.bottom + padding),
+  })).filter(rect => rect.left < rect.right && rect.top < rect.bottom)
+  const rows = [...new Set([0, height, ...holes.flatMap(rect => [rect.top, rect.bottom])])].sort((a, b) => a - b)
+  const regions = []
+  for (let i = 1; i < rows.length; i++) {
+    const top = rows[i - 1], bottom = rows[i]
+    let left = 0
+    const spans = holes.filter(rect => rect.top < bottom && rect.bottom > top).sort((a, b) => a.left - b.left)
+    const add = right => { if (right > left) regions.push({ left, top, width: right - left, height: bottom - top }) }
+    for (const span of spans) { add(span.left); left = Math.max(left, span.right) }
+    add(width)
+  }
+  return regions
+}
+
 export function isFocusKeyboardExcluded(target) {
   return !!target?.closest?.('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="menu"], .chat-input-box')
+}
+
+export function revealFocusTranslation(elements) {
+  const first = elements?.[0]
+  const pane = first?.closest('.trans-page-content')
+  if (!pane || !pane.clientHeight) return
+  const bounds = pane.getBoundingClientRect()
+  const scale = bounds.height / pane.offsetHeight || 1
+  const top = bounds.top + pane.clientTop * scale
+  const bottom = top + pane.clientHeight * scale
+  const rects = elements.flatMap(element => Array.from(element.getClientRects()))
+  if (!rects.length) return
+  const start = Math.min(...rects.map(rect => rect.top))
+  const end = Math.max(...rects.map(rect => rect.bottom))
+  // Scroll only the translation pane, so the source stays under the pointer.
+  if (start < top || end > bottom) {
+    const offset = end - start > bottom - top ? start - top : (start + end - top - bottom) / 2
+    pane.scrollTop += offset / scale
+  }
+}
+
+export function visibleFocusRects(element) {
+  let rects = Array.from(element.getClientRects())
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    const style = getComputedStyle(parent)
+    const clipX = /auto|scroll|hidden|clip/.test(style.overflowX)
+    const clipY = /auto|scroll|hidden|clip/.test(style.overflowY)
+    if (!clipX && !clipY) continue
+    const bounds = parent.getBoundingClientRect()
+    const sx = bounds.width / parent.offsetWidth || 1, sy = bounds.height / parent.offsetHeight || 1
+    const x = bounds.left + parent.clientLeft * sx, y = bounds.top + parent.clientTop * sy
+    rects = rects.map(rect => {
+      const left = clipX ? Math.max(rect.left, x) : rect.left
+      const right = clipX ? Math.min(rect.right, x + parent.clientWidth * sx) : rect.right
+      const top = clipY ? Math.max(rect.top, y) : rect.top
+      const bottom = clipY ? Math.min(rect.bottom, y + parent.clientHeight * sy) : rect.bottom
+      return { left, top, right, bottom, width: right - left, height: bottom - top }
+    }).filter(rect => rect.width > 0 && rect.height > 0)
+  }
+  return rects
 }
 
 export class FocusModeController {
@@ -67,8 +126,13 @@ export class FocusModeController {
     this.cancelLeave()
     if (this.pinned && !pin) return true
     if (pin && this.pinned && this.sameRef(ref, this.current)) { this.clear(); return true }
-    if (!pin && this.sameRef(ref, this.current)) return true
-    this.current = ref; if (pin) this.pinned = true; this.scheduleRender(); this.announce(this.pinned ? 'focusPinned' : 'focusActive'); return true
+    if (!pin && this.sameRef(ref, this.current)) {
+      if (ref.revealTranslation && !this.current.revealTranslation) {
+        this.current = ref; this.revealedTranslation = false; this.scheduleRender()
+      }
+      return true
+    }
+    this.current = ref; this.revealedTranslation = false; if (pin) this.pinned = true; this.scheduleRender(); this.announce(this.pinned ? 'focusPinned' : 'focusActive'); return true
   }
   leave() { if (!this.pinned && !this.releaseTimer) this.releaseTimer = setTimeout(() => this.clear(), this.releaseDelay) }
   cancelLeave() { clearTimeout(this.releaseTimer); this.releaseTimer = null }
@@ -77,8 +141,8 @@ export class FocusModeController {
     if (this.raf) cancelAnimationFrame(this.raf)
     this.raf = null
     this.current = null; this.pinned = false; this.lastGeometry = null
-    this.layer?.remove(); this.outlineLayer?.remove()
-    this.layer = null; this.outlineLayer = null
+    this.layer?.remove()
+    this.layer = null
     this.root?.classList.remove('focus-mode-active')
     this.root?.querySelectorAll('.trans-sentence[aria-pressed]').forEach(element => element.removeAttribute('aria-pressed'))
   }
@@ -89,7 +153,7 @@ export class FocusModeController {
     if (index < 0) return false
     const next = sequence[Math.max(0, Math.min(sequence.length - 1, index + delta))]
     if (!next || this.sameRef(next, this.current)) return true
-    this.current = next; next.element?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); this.scheduleRender(); this.announce('focusMoved'); return true
+    this.current = next; this.revealedTranslation = false; next.element?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); this.scheduleRender(); this.announce('focusMoved'); return true
   }
   handleKeyDown(event) {
     if (!this.pinned || isFocusKeyboardExcluded(event.target)) return
@@ -104,7 +168,12 @@ export class FocusModeController {
   render() {
     if (!this.current || !this.settings.enabled) return
     const started = performance.now()
-    const pair = this.resolvePair?.(this.current) || {}
+    let pair = this.resolvePair?.(this.current) || {}
+    if (this.current.revealTranslation && !this.revealedTranslation && pair.elements?.length) {
+      revealFocusTranslation(pair.elements)
+      this.revealedTranslation = true
+      pair = this.resolvePair(this.current)
+    }
     const bounds = this.root.getBoundingClientRect()
     const rects = [...(pair.sourceRects || []), ...(pair.translationRects || [])].map(rect => {
       const left = Math.max(0, bounds.left, rect.left)
@@ -120,15 +189,19 @@ export class FocusModeController {
     const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, this.performanceFallback])
     if (geometry === this.lastGeometry) { this.scheduleRender(); return }
     this.lastGeometry = geometry
-    if (!this.layer) { this.layer = document.createElement('div'); this.layer.className = 'focus-mode-layer'; this.layer.setAttribute('aria-hidden', 'true'); this.outlineLayer = document.createElement('div'); this.outlineLayer.className = 'focus-mode-outline-layer'; this.outlineLayer.setAttribute('aria-hidden', 'true'); document.body.append(this.layer, this.outlineLayer) }
-    for (const layer of [this.layer, this.outlineLayer]) {
+    if (!this.layer) { this.layer = document.createElement('div'); this.layer.className = 'focus-mode-layer'; this.layer.setAttribute('aria-hidden', 'true'); document.body.append(this.layer) }
+    for (const layer of [this.layer]) {
       // Client rects use viewport pixels; cancel the application's root CSS zoom.
       layer.style.zoom = String(1 / zoom)
       for (const [name, value] of Object.entries(focusCssVariables(this.settings))) layer.style.setProperty(name, value)
     }
     this.layer.classList.toggle('focus-performance-fallback', this.performanceFallback)
-    this.layer.style.maskImage = createFocusMask(rects, window.innerWidth, window.innerHeight); this.layer.style.webkitMaskImage = this.layer.style.maskImage
-    this.outlineLayer.replaceChildren(...mergeClientRects(rects).map(rect => { const outline = document.createElement('i'); outline.className = 'focus-mode-outline'; Object.assign(outline.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` }); return outline }))
+    this.layer.replaceChildren(...createFocusBackdropRects(rects, window.innerWidth, window.innerHeight).map(rect => {
+      const backdrop = document.createElement('div')
+      backdrop.className = 'focus-mode-backdrop'
+      Object.assign(backdrop.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` })
+      return backdrop
+    }))
     this.root?.classList.add('focus-mode-active')
     this.slowFrames = performance.now() - started > 20 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 1)
     if (!this.performanceFallback && this.slowFrames >= 8) { this.performanceFallback = true; this.notifyFallback(); this.scheduleRender() }
