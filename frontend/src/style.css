@@ -7961,8 +7961,7 @@ body.light-theme .chat-drawer {
 .focus-range input:disabled { opacity: .45; }
 .focus-keyboard-help { color: var(--text-muted); }
 .focus-mode-layer { position: fixed; inset: 0; z-index: 2147483646; pointer-events: none; }
-.focus-mode-backdrop { position: absolute; pointer-events: none; background: rgba(5, 7, 12, var(--focus-dim)); backdrop-filter: blur(var(--focus-blur)); -webkit-backdrop-filter: blur(var(--focus-blur)); }
-.focus-performance-fallback .focus-mode-backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.focus-mode-backdrop { position: absolute; pointer-events: none; background: rgba(5, 7, 12, var(--focus-dim)); }
 @media (prefers-reduced-motion: reduce) { .focus-mode-layer { transition: none; } }
 /* Focus reveals unchanged sentence pixels, without the legacy blue hover/click decoration. */
 .focus-mode-active .sentence-hover-box,
