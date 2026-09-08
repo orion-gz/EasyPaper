@@ -647,6 +647,7 @@ const settingFocusScale = $('setting-focus-scale')
 const settingFocusBlurValue = $('setting-focus-blur-value')
 const settingFocusDimValue = $('setting-focus-dim-value')
 const settingFocusScaleValue = $('setting-focus-scale-value')
+const focusModeControls = $('focus-mode-controls')
 const settingDisableBookmark = $('setting-disable-bookmark')
 const settingDisableInsights = $('setting-disable-insights')
 const settingDisableCitationOverlay = $('setting-disable-citation-overlay')
@@ -4397,6 +4398,8 @@ function readFocusModeSettings(mode = settingsTranslationModeContext) {
 }
 function syncFocusSettingsControls() {
   const enabled = settingFocusMode.checked
+  focusModeControls?.classList.toggle('hidden', !enabled)
+  focusModeControls?.setAttribute('aria-hidden', String(!enabled))
   for (const control of [settingFocusBlur, settingFocusDim, settingFocusScale]) control.disabled = !enabled
   settingFocusBlurValue.value = `${settingFocusBlur.value}px`
   settingFocusDimValue.value = `${settingFocusDim.value}%`
