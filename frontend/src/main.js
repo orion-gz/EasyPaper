@@ -7,7 +7,7 @@ import "./styles/document-modes.css"
 import { marked } from 'marked'
 import { createWorkspaceModeController } from "./workspaceModeController.js"
 import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSettings.js'
-import { FocusModeController } from './focusMode.js'
+import { FocusModeController, visibleFocusRects } from './focusMode.js'
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
@@ -17237,7 +17237,7 @@ function createDomRangeFromVtmRange(vtm, charStart, charEnd) {
 // hover는 시각적 overlay와 내부 범위만 갱신한다. native Selection은 사용자의
 // 실제 드래그에만 맡겨 hover 직후에도 caret이 끊기지 않게 한다.
 function focusRef(pageNum, sentenceRange) {
-  return { pageNum, sentenceIdx: sentenceRange.sentenceIdx, element: viewerScrollContainer.querySelector(`.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceRange.sentenceIdx >= 10000 ? (sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) : sentenceRange.sentenceIdx}"]`) || viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`) }
+  return { pageNum, sentenceIdx: sentenceRange.sentenceIdx, revealTranslation: true, element: viewerScrollContainer.querySelector(`.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceRange.sentenceIdx >= 10000 ? (sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) : sentenceRange.sentenceIdx}"]`) || viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`) }
 }
 
 function focusPairRects(ref) {
@@ -17254,7 +17254,7 @@ function focusPairRects(ref) {
   }
   const idx = ref.sentenceIdx >= 10000 ? (sentenceRange?.originalSentenceIdx ?? ref.sentenceIdx) : ref.sentenceIdx
   const translationRects = []
-  viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`).forEach(element => translationRects.push(...element.getClientRects()))
+  viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`).forEach(element => translationRects.push(...visibleFocusRects(element)))
   return { sourceRects, translationRects, elements: Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`)) }
 }
 
