@@ -9,6 +9,13 @@ async function setup(page, scale = 1) {
   await page.setContent(`<style>body{margin:0;background:white} #root{position:absolute;inset:0} .sentence{position:absolute;left:100px;top:120px;width:200px;height:40px;background:white} #panel{position:fixed;left:400px;top:120px;width:150px;height:80px;z-index:10000;background:white}</style><div id="root"><div class="sentence trans-sentence">Source sentence</div></div><aside id="panel">AI panel</aside>`)
   await page.addStyleTag({ content: css })
   await page.addStyleTag({ content: '#root .sentence { position:absolute; display:block; left:100px; top:120px; width:200px; height:40px; background:white }' })
+  // Real viewer screens contain offscreen panels and long document contents.
+  // Their visual overflow must not enlarge the SVG filter coordinate system.
+  await page.locator('#root').evaluate(root => {
+    const overflow = document.createElement('div')
+    Object.assign(overflow.style, { position: 'absolute', left: '-2000px', top: '3000px', width: '4000px', height: '2000px', background: 'red' })
+    root.append(overflow)
+  })
   await page.evaluate(async ({ moduleSource, scale }) => {
     const module = await import(URL.createObjectURL(new Blob([moduleSource], { type: 'text/javascript' })))
     document.documentElement.style.zoom = String(scale)
@@ -61,11 +68,17 @@ test('pinned focus ignores hover, follows geometry changes and releases with Esc
 })
 
 for (const scale of [0.8, 1, 1.25]) {
-test(`blur actually softens background pixels while preserving sentence pixels at scale ${scale}`, async ({ page }) => {
+for (const strength of [1, 6, 16]) {
+test(`blur ${strength}px preserves sentence pixels with offscreen overflow at scale ${scale}`, async ({ page }) => {
   await setup(page, scale)
   await page.addStyleTag({ content: '#panel, #root .sentence { background: repeating-linear-gradient(90deg, black 0 2px, white 2px 4px) }' })
-  await page.evaluate(() => window.controller.applySettings({ enabled: true, blurStrength: 12, dimOpacity: 0, scale: 100 }))
-  await expect.poll(() => page.locator('.focus-mode-layer').evaluate(element => element.style.getPropertyValue('--focus-blur'))).toBe('12px')
+  await page.locator('#root').evaluate(root => {
+    const background = document.createElement('div')
+    Object.assign(background.style, { position: 'absolute', left: '400px', top: '240px', width: '150px', height: '80px', background: 'repeating-linear-gradient(90deg, black 0 2px, white 2px 4px)' })
+    root.append(background)
+  })
+  await page.evaluate(strength => window.controller.applySettings({ enabled: true, blurStrength: strength, dimOpacity: 0, scale: 100 }), strength)
+  await expect.poll(() => page.locator('.focus-mode-layer').evaluate(element => element.style.getPropertyValue('--focus-blur'))).toBe(`${strength}px`)
   const screenshot = (await page.screenshot({ scale: 'css' })).toString('base64')
   const contrasts = await page.evaluate(async ({ screenshot, scale }) => {
     const image = new Image(); image.src = `data:image/png;base64,${screenshot}`; await image.decode()
@@ -76,11 +89,17 @@ test(`blur actually softens background pixels while preserving sentence pixels a
       const samples = Array.from({ length: 32 }, (_, i) => data[i * 4])
       return Math.max(...samples) - Math.min(...samples)
     }
-    return { source: contrast(220, 150), background: contrast(450, 175) }
+    return { source: contrast(220, 150), background: contrast(450, 175), viewerBackground: contrast(450, 285) }
   }, { screenshot, scale })
   expect(contrasts.source).toBeGreaterThan(200)
-  expect(contrasts.background).toBeLessThan(30)
+  for (const contrast of [contrasts.background, contrasts.viewerBackground]) {
+    if (strength === 1) {
+      expect(contrast).toBeGreaterThan(20)
+      expect(contrast).toBeLessThan(200)
+    } else expect(contrast).toBeLessThan(30)
+  }
 })
+}
 }
 
 test('blur and tint can be independently disabled; controls release the mask before interaction', async ({ page }) => {
@@ -122,6 +141,8 @@ test('focus restores existing inline filters and cleans up when disabled', async
   await expect(page.locator('feGaussianBlur').first()).toBeAttached()
   await page.evaluate(() => window.controller.applySettings({ enabled: false }))
   await expect(page.locator('#root')).toHaveCSS('filter', 'brightness(0.8)')
+  await expect(page.locator('#root')).toHaveCSS('overflow-x', 'visible')
+  await expect(page.locator('#root')).toHaveCSS('overflow-y', 'visible')
   await expect(page.locator('feGaussianBlur')).toHaveCount(0)
   await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
 })
@@ -185,7 +206,48 @@ test('real PDF hover reveals source and translation together and clears on viewe
     return pane.scrollTop > 0 && rect.top >= bounds.top && rect.bottom <= bounds.bottom
   })).toBe(true)
   expect((await source.boundingBox()).y).toBeCloseTo(sourceBefore.y, 0)
+  await source.click()
   const sourceMask = await page.locator('.focus-mode-layer').innerHTML()
+  // Compare actual PDF canvas and translation glyph pixels, not just geometry
+  // or CSS declarations. Keep native layout/scroll positions fixed for both.
+  const focused = (await page.screenshot({ scale: 'css', path: test.info().outputPath('focused.png') })).toString('base64')
+  await page.evaluate(() => {
+    window.focusFilterStyles = Array.from(document.body.children).filter(e => e instanceof HTMLElement && e.style.filter).map(e => [e, e.style.filter, e.style.getPropertyPriority('filter')])
+    for (const [element] of window.focusFilterStyles) element.style.setProperty('filter', 'none', 'important')
+    document.querySelector('.focus-mode-layer').style.visibility = 'hidden'
+  })
+  const original = (await page.screenshot({ scale: 'css', path: test.info().outputPath('original.png') })).toString('base64')
+  await page.evaluate(() => {
+    for (const [element, value, priority] of window.focusFilterStyles) element.style.setProperty('filter', value, priority)
+    document.querySelector('.focus-mode-layer').style.visibility = ''
+    delete window.focusFilterStyles
+  })
+  const boxes = [await source.boundingBox(), await translation.boundingBox()]
+  const differences = await page.evaluate(async ({ focused, original, boxes }) => {
+    const pixels = async data => {
+      const image = new Image(); image.src = `data:image/png;base64,${data}`; await image.decode()
+      const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
+      const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
+      return boxes.map(b => ctx.getImageData(Math.ceil(b.x), Math.ceil(b.y), Math.floor(b.width), Math.floor(b.height)).data)
+    }
+    const a = await pixels(focused), b = await pixels(original)
+    const sharpness = (data, width) => {
+      const gray = Array.from({ length: data.length / 4 }, (_, i) => (data[i * 4] + data[i * 4 + 1] + data[i * 4 + 2]) / 3)
+      return { edges: gray.reduce((sum, value, i) => sum + (i % width ? Math.abs(value - gray[i - 1]) : 0), 0), contrast: Math.max(...gray) - Math.min(...gray) }
+    }
+    return a.map((data, box) => ({
+      difference: data.reduce((sum, value, i) => sum + Math.abs(value - b[box][i]), 0) / data.length,
+      focused: sharpness(data, Math.floor(boxes[box].width)), original: sharpness(b[box], Math.floor(boxes[box].width)),
+    }))
+  }, { focused, original, boxes })
+  // Compositing changes glyph antialiasing and, on macOS, PDF canvas colors.
+  // Bound the color difference while requiring the original edge detail and
+  // contrast: a blank or blurred sentence must still fail on every platform.
+  for (const result of differences) {
+    expect(result.difference).toBeLessThan(15)
+    expect(result.focused.edges).toBeGreaterThan(result.original.edges * 0.9)
+    expect(result.focused.contrast).toBeGreaterThan(result.original.contrast * 0.95)
+  }
   await translation.hover()
   await expect.poll(() => page.locator('.focus-mode-layer').innerHTML()).toBe(sourceMask)
   await expect(page.locator('.focus-mode-outline')).toHaveCount(0)

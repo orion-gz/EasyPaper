@@ -104,6 +104,12 @@ export function visibleFocusRects(element) {
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 let filterId = 0
+export function focusSvgCoordinateScale(zoom, userAgent) {
+  // WebKit resolves SVG filter primitives on HTML in viewport pixels even
+  // under CSS zoom; Blink/Gecko use the element's unzoomed CSS coordinates.
+  const webkit = /AppleWebKit/.test(userAgent) && !/(?:Chrome|Chromium|Edg|OPR)\//.test(userAgent)
+  return webkit ? 1 : zoom
+}
 function svgElement(name, attributes = {}) {
   const element = document.createElementNS(SVG_NS, name)
   for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value))
@@ -112,15 +118,13 @@ function svgElement(name, attributes = {}) {
 
 // Filter SourceGraphic itself, not the browser's optional backdrop compositor.
 // The original pixels inside each sentence are merged over the blurred pixels.
-export function createSentenceFilter(id, rects, bounds, strength) {
-  // Normalized coordinates avoid WebKit/Chromium differences under CSS zoom.
-  const width = bounds.width || 1, height = bounds.height || 1
-  const px = Math.max(4, strength * 3) / width, py = Math.max(4, strength * 3) / height
-  const filter = svgElement('filter', { id, filterUnits: 'objectBoundingBox', primitiveUnits: 'objectBoundingBox', x: -px, y: -py, width: 1 + px * 2, height: 1 + py * 2, 'color-interpolation-filters': 'sRGB' })
-  filter.append(svgElement('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: `${strength / width} ${strength / height}`, result: 'blurred' }))
+export function createSentenceFilter(id, rects, bounds, strength, zoom = 1) {
+  const padding = Math.max(4, strength * 3) / zoom
+  const filter = svgElement('filter', { id, filterUnits: 'userSpaceOnUse', primitiveUnits: 'userSpaceOnUse', x: -padding, y: -padding, width: bounds.width / zoom + padding * 2, height: bounds.height / zoom + padding * 2, 'color-interpolation-filters': 'sRGB' })
+  filter.append(svgElement('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: strength / zoom, result: 'blurred' }))
   rects.forEach((rect, index) => filter.append(svgElement('feFlood', {
-    x: (rect.left - bounds.left - 4) / width, y: (rect.top - bounds.top - 4) / height,
-    width: (rect.width + 8) / width, height: (rect.height + 8) / height,
+    x: (rect.left - bounds.left - 4) / zoom, y: (rect.top - bounds.top - 4) / zoom,
+    width: (rect.width + 8) / zoom, height: (rect.height + 8) / zoom,
     'flood-color': 'white', result: `hole${index}`,
   })))
   const holes = svgElement('feMerge', { result: 'holes' })
@@ -176,6 +180,7 @@ export class FocusModeController {
     this.layer = null
     for (const [element, original] of this.filteredElements) {
       element.style.setProperty('filter', original.value, original.priority)
+      for (const [property, value] of Object.entries(original.overflow)) element.style.setProperty(property, value.value, value.priority)
     }
     this.filteredElements.clear()
     for (const [element, original] of this.hiddenMemos) element.style.setProperty('visibility', original.value, original.priority)
@@ -235,6 +240,7 @@ export class FocusModeController {
       }
     }
     const targets = Array.from(document.body.children).filter(element => element instanceof HTMLElement && !['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName) && element !== this.layer)
+      .filter(element => { const bounds = element.getBoundingClientRect(); return bounds.width > 0 && bounds.height > 0 })
     const targetBounds = targets.map(element => element.getBoundingClientRect())
     const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height])])
     if (geometry === this.lastGeometry && targets.every(element => this.filteredElements.has(element))) { this.scheduleRender(); return }
@@ -245,12 +251,29 @@ export class FocusModeController {
     }
     this.filterSvg.replaceChildren()
     targets.forEach((element, index) => {
-      if (!this.filteredElements.has(element)) this.filteredElements.set(element, { value: element.style.getPropertyValue('filter'), priority: element.style.getPropertyPriority('filter'), computed: getComputedStyle(element).filter })
+      if (!this.filteredElements.has(element)) {
+        const computed = getComputedStyle(element)
+        const original = { value: element.style.getPropertyValue('filter'), priority: element.style.getPropertyPriority('filter'), computed: computed.filter, overflow: {} }
+        // Constrain the SVG source surface to its measured box. Offscreen
+        // descendants otherwise expand the filter's paint/reference bounds.
+        // Existing scroll/hidden overflow already clips and must stay intact.
+        for (const property of ['overflow-x', 'overflow-y']) if (element.contains(this.root) && computed.getPropertyValue(property) === 'visible') {
+          original.overflow[property] = { value: element.style.getPropertyValue(property), priority: element.style.getPropertyPriority(property) }
+        }
+        this.filteredElements.set(element, original)
+        for (const property of Object.keys(original.overflow)) element.style.setProperty(property, 'hidden', 'important')
+      }
       const original = this.filteredElements.get(element)
-      const id = `focus-sentence-filter-${++filterId}`
-      this.filterSvg.append(createSentenceFilter(id, rects, targetBounds[index], this.settings.blurStrength))
       const prefix = original.computed === 'none' ? '' : original.computed
-      element.style.setProperty('filter', `${prefix} url("#${id}")`, 'important')
+      if (element.contains(this.root)) {
+        const id = `focus-sentence-filter-${++filterId}`
+        this.filterSvg.append(createSentenceFilter(id, rects, targetBounds[index], this.settings.blurStrength, focusSvgCoordinateScale(zoom, navigator.userAgent)))
+        element.style.setProperty('filter', `${prefix} url("#${id}")`, 'important')
+      } else {
+        // Other UI has no sentence pixels to reveal. A pixel-based CSS filter
+        // avoids out-of-bounds SVG cutouts on small floating panels.
+        element.style.setProperty('filter', `${prefix} blur(${this.settings.blurStrength / zoom}px)`, 'important')
+      }
     })
     if (!this.layer) { this.layer = document.createElement('div'); this.layer.className = 'focus-mode-layer'; this.layer.setAttribute('aria-hidden', 'true'); document.body.append(this.layer) }
     for (const layer of [this.layer]) {

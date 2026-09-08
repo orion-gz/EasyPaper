@@ -1,6 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createFocusBackdropRects, createFocusMask, focusCssVariables, isFocusKeyboardExcluded, mergeClientRects, normalizeFocusSettings } from '../src/focusMode.js'
+import { createFocusBackdropRects, createFocusMask, focusCssVariables, focusSvgCoordinateScale, isFocusKeyboardExcluded, mergeClientRects, normalizeFocusSettings } from '../src/focusMode.js'
+
+test('SVG 필터 좌표 배율은 WebKit과 Chromium의 차이를 보정한다', () => {
+  assert.equal(focusSvgCoordinateScale(1.25, 'AppleWebKit/605.1.15 Version/26.5 Safari/605.1.15'), 1)
+  assert.equal(focusSvgCoordinateScale(0.8, 'AppleWebKit/605.1.15 CriOS/140.0 Mobile Safari/604.1'), 1)
+  assert.equal(focusSvgCoordinateScale(1.25, 'AppleWebKit/537.36 Chrome/149.0 Safari/537.36'), 1.25)
+  assert.equal(focusSvgCoordinateScale(0.8, 'Gecko/20100101 Firefox/140.0'), 0.8)
+})
 
 test('배경 영역은 겹치는 문장 구멍을 제외하고 한 번만 덮는다', () => {
   const regions = createFocusBackdropRects([
