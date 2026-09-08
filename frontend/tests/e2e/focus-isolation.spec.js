@@ -240,11 +240,11 @@ test('real PDF hover reveals source and translation together and clears on viewe
       focused: sharpness(data, Math.floor(boxes[box].width)), original: sharpness(b[box], Math.floor(boxes[box].width)),
     }))
   }, { focused, original, boxes })
-  expect(differences[0].difference).toBeLessThan(1)
-  // HTML glyph antialiasing changes when composited through a filter, unlike
-  // PDF canvas pixels. Verify contrast and edge detail, not byte equality.
-  expect(differences[1].difference).toBeLessThan(15)
+  // Compositing changes glyph antialiasing and, on macOS, PDF canvas colors.
+  // Bound the color difference while requiring the original edge detail and
+  // contrast: a blank or blurred sentence must still fail on every platform.
   for (const result of differences) {
+    expect(result.difference).toBeLessThan(15)
     expect(result.focused.edges).toBeGreaterThan(result.original.edges * 0.9)
     expect(result.focused.contrast).toBeGreaterThan(result.original.contrast * 0.95)
   }
