@@ -7592,10 +7592,10 @@ body.light-theme .chat-drawer {
 
 /* ── 설정 정보 구조: 카테고리 내비게이션 + 공통 행/작업 카드 ── */
 .settings-dialog {
-  width: min(960px, calc(100vw - 48px));
-  max-width: 960px;
-  height: min(760px, calc(100vh - 48px));
-  max-height: 760px;
+  width: min(920px, calc(100vw - 48px));
+  max-width: 920px;
+  height: min(720px, calc(100vh - 48px));
+  max-height: 720px;
   display: flex;
   flex-direction: column;
 }
@@ -7617,7 +7617,7 @@ body.light-theme .chat-drawer {
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: 176px minmax(0, 1fr);
 }
 
 .settings-nav.modal-tabs {
@@ -7635,7 +7635,8 @@ body.light-theme .chat-drawer {
 
 .settings-nav .tab-btn {
   width: 100%;
-  padding: 10px 12px;
+  min-height: 40px;
+  padding: 9px 12px;
   flex: 0 0 auto;
   border: 0;
   border-radius: var(--radius-sm);
@@ -7666,7 +7667,7 @@ body.light-theme .chat-drawer {
 }
 
 .settings-category-header {
-  padding: 20px 24px 14px;
+  padding: 20px 28px 14px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -7685,7 +7686,7 @@ body.light-theme .chat-drawer {
 }
 
 .settings-content .modal-form {
-  padding: 16px 24px 20px;
+  padding: 12px 28px 24px;
   gap: 0;
 }
 
@@ -7695,8 +7696,8 @@ body.light-theme .chat-drawer {
 .settings-content .modal-form > .settings-action-card,
 .settings-content .modal-form > details {
   margin: 0;
-  padding-top: 12px;
-  padding-bottom: 12px;
+  padding-top: 14px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -7706,7 +7707,8 @@ body.light-theme .chat-drawer {
 
 .settings-row {
   display: grid;
-  grid-template-columns: minmax(150px, 210px) minmax(220px, 1fr);
+  grid-template-columns: minmax(168px, 210px) minmax(240px, 360px);
+  justify-content: space-between;
   align-items: center;
   column-gap: 20px;
   row-gap: 8px;
