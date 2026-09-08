@@ -278,6 +278,35 @@ test('메모 Markdown 서식과 줄 단축키를 토글한다', async ({ page })
   await expect(textarea).toHaveValue('[[]]')
 })
 
+test('메모 서식 단축키를 서로 다른 선택 영역에 독립적으로 적용한다', async ({ page }) => {
+  await openViewerWithMemo(page)
+  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  await memo.locator('.edit-btn').click()
+  const textarea = memo.locator('.floating-memo-textarea')
+
+  for (const { shortcut, prefix, suffix } of [
+    { shortcut: 'ControlOrMeta+b', prefix: '**', suffix: '**' },
+    { shortcut: 'ControlOrMeta+i', prefix: '*', suffix: '*' },
+    { shortcut: 'ControlOrMeta+k', prefix: '[', suffix: '](url)' },
+    { shortcut: 'ControlOrMeta+e', prefix: '`', suffix: '`' },
+    { shortcut: 'ControlOrMeta+Shift+x', prefix: '~~', suffix: '~~' },
+    { shortcut: 'ControlOrMeta+Shift+c', prefix: '```\n', suffix: '\n```' },
+  ]) {
+    await textarea.fill('첫째 둘째')
+    await textarea.evaluate(element => element.setSelectionRange(0, 2))
+    await textarea.press(shortcut)
+
+    const firstFormatted = `${prefix}첫째${suffix} 둘째`
+    await expect(textarea).toHaveValue(firstFormatted)
+
+    const secondStart = firstFormatted.lastIndexOf('둘째')
+    await textarea.evaluate((element, start) => element.setSelectionRange(start, start + 2), secondStart)
+    await textarea.press(shortcut)
+
+    await expect(textarea).toHaveValue(`${prefix}첫째${suffix} ${prefix}둘째${suffix}`)
+  }
+})
+
 test('메모 편집 중 Control/Cmd+Z는 브라우저 기본 실행 취소를 유지한다', async ({ page }) => {
   await openViewerWithMemo(page)
   const memo = page.locator('.floating-memo[data-id="memo-regression"]')
