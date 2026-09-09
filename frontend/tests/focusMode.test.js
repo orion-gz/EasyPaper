@@ -34,6 +34,23 @@ test('여러 DOM 조각을 같은 행 단위로 병합한다', () => {
   ])
 })
 
+test('높이가 비슷해도 떨어진 원문과 번역 패널 사이를 병합하지 않는다', () => {
+  for (const offset of [-2, -0.25, 0, 0.25, 2]) {
+    const rects = [{ left: 100, top: 100 + offset, width: 200, height: 20 }, { left: 600, top: 100, width: 200, height: 20 }]
+    for (const input of [rects, [...rects].reverse()]) {
+      assert.equal(mergeClientRects(input).length, 2)
+      const regions = createFocusBackdropRects(input, 1000, 300, 0)
+      assert.equal(regions.filter(r => 450 >= r.left && 450 < r.left + r.width && 110 >= r.top && 110 < r.top + r.height).length, 1)
+    }
+  }
+})
+
+test('오른쪽 조각이 먼저 정렬되어도 실제로 인접한 조각은 병합한다', () => {
+  assert.deepEqual(mergeClientRects([{ left: 130, top: 100, width: 20, height: 20 }, { left: 100, top: 101, width: 28, height: 20 }]), [
+    { left: 100, top: 100, right: 150, bottom: 121, width: 50, height: 21 },
+  ])
+})
+
 test('마스크와 CSS 값은 0 값도 그대로 보존한다', () => {
   const mask = createFocusMask([{ left: 10, top: 20, width: 30, height: 40 }], 800, 600)
   assert.match(mask, /data:image\/svg\+xml/)

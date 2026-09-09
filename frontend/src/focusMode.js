@@ -20,7 +20,9 @@ export function mergeClientRects(rects, gap = 3) {
   const rows = []
   for (const rect of values) {
     const last = rows.at(-1)
-    if (last && Math.abs(last.top - rect.top) <= gap && rect.left <= last.right + gap) {
+    // Sorting by top can put the right-hand pane first when baselines differ
+    // by a fraction of a pixel. Check both horizontal edges before merging.
+    if (last && Math.abs(last.top - rect.top) <= gap && rect.left <= last.right + gap && rect.right >= last.left - gap) {
       last.left = Math.min(last.left, rect.left); last.top = Math.min(last.top, rect.top)
       last.right = Math.max(last.right, rect.right); last.bottom = Math.max(last.bottom, rect.bottom)
     } else rows.push({ ...rect })

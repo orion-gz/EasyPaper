@@ -32,6 +32,35 @@ async function setup(page, scale = 1) {
 }
 
 for (const zoom of [0.8, 1, 1.25]) {
+  test(`aligned source and translation leave their gutter dimmed at zoom ${zoom}`, async ({ page }) => {
+    await page.setContent('<style>body{margin:0;background:white}#layer{position:fixed;inset:0;--focus-dim:.6}.focus-mode-backdrop{position:absolute;inset:0}</style><div id="layer"></div>')
+    for (const magnification of [1, 1.5]) for (const offset of [-0.25, 0.25]) {
+      await page.evaluate(async ({ moduleSource, zoom, magnification, offset }) => {
+        const { createFocusTint } = await import(URL.createObjectURL(new Blob([moduleSource], { type: 'text/javascript' })))
+        document.documentElement.style.zoom = String(zoom)
+        const layer = document.querySelector('#layer'); layer.style.zoom = String(1 / zoom)
+        layer.replaceChildren(createFocusTint([
+          { left: 100 * zoom, top: (200 + offset) * zoom, width: 200 * magnification * zoom, height: 20 * magnification * zoom },
+          { left: 600 * zoom, top: 200 * zoom, width: 200 * magnification * zoom, height: 20 * magnification * zoom },
+        ], innerWidth, innerHeight, 0))
+      }, { moduleSource, zoom, magnification, offset })
+      await expect(page.locator('.focus-tint-hole')).toHaveCount(2)
+      const screenshot = (await page.screenshot({ scale: 'css', path: test.info().outputPath(`gutter-${magnification}-${offset}.png`) })).toString('base64')
+      const pixels = await page.evaluate(async ({ screenshot, zoom }) => {
+        const image = new Image(); image.src = `data:image/png;base64,${screenshot}`; await image.decode()
+        const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
+        const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
+        const red = x => ctx.getImageData(Math.round(x * zoom), Math.round(210 * zoom), 1, 1).data[0]
+        return { source: red(200), translation: red(700), gutter: red(500) }
+      }, { screenshot, zoom })
+      expect(pixels.source).toBe(255)
+      expect(pixels.translation).toBe(255)
+      expect(pixels.gutter).toBeLessThan(130)
+    }
+  })
+}
+
+for (const zoom of [0.8, 1, 1.25]) {
   test(`keyboard navigation scrolls once without recentering or bounce at zoom ${zoom}`, async ({ page }) => {
     await page.setContent('<div id="root"><div class="page-pair"><div class="trans-page-content"><p><span id="s0" class="trans-sentence">First sentence.</span><span id="s1" class="trans-sentence">Second sentence.</span><span id="s2" class="trans-sentence">Offscreen sentence.</span></p></div></div><div style="height:400px"></div><div class="page-pair"><div class="trans-page-content"><p><span id="s3" class="trans-sentence">Next page sentence.</span></p></div></div></div>')
     await page.addStyleTag({ content: css })
