@@ -308,6 +308,10 @@ for (const zoom of [0.8, 1, 1.25]) {
       Object.assign(paragraph.style, { position: 'absolute', left: '650px', top: '240px', width: '200px', margin: '0', fontSize: '18px', lineHeight: '28px' })
       paragraph.innerHTML = '<span class="trans-sentence">A <strong>translated</strong> sentence that <em>wraps</em> across multiple lines.</span>'
       root.append(canvas, paragraph)
+      // The fixture inherits web fonts; newly used bold/italic faces may still
+      // load after insertion. Compare layout only after font metrics settle.
+      paragraph.getBoundingClientRect()
+      await document.fonts.ready
       const element = paragraph.firstElementChild
       window.controller.resolvePair = () => ({ sourceCanvas: canvas, sourceRects: [canvas.getBoundingClientRect()], translationRects: visibleFocusRects(element), elements: [element] })
       const original = { canvas: canvas.getBoundingClientRect().toJSON(), paragraph: paragraph.getBoundingClientRect().toJSON() }
