@@ -161,20 +161,41 @@ function sentenceBackground(element) {
 export function createFocusMagnification(pair, viewportRects, scale) {
   if (scale <= 1) return []
   const groups = [], erasures = []
-  const build = (rects, draw, kind, background, filter = 'none') => {
+  const containment = element => {
+    const bounds = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
+    for (let parent = element?.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent)
+      const panel = parent.matches('.pdf-page-inner, .pdf-page-wrapper, .trans-page-content')
+      const clipX = panel || /auto|scroll|hidden|clip/.test(style.overflowX)
+      const clipY = panel || /auto|scroll|hidden|clip/.test(style.overflowY)
+      if (!clipX && !clipY) continue
+      const rect = parent.getBoundingClientRect()
+      const sx = rect.width / parent.offsetWidth || 1, sy = rect.height / parent.offsetHeight || 1
+      const left = rect.left + parent.clientLeft * sx, top = rect.top + parent.clientTop * sy
+      if (clipX) { bounds.left = Math.max(bounds.left, left); bounds.right = Math.min(bounds.right, left + parent.clientWidth * sx) }
+      if (clipY) { bounds.top = Math.max(bounds.top, top); bounds.bottom = Math.min(bounds.bottom, top + parent.clientHeight * sy) }
+    }
+    return bounds
+  }
+  const build = (rects, draw, kind, background, filter = 'none', element) => {
+    const limits = containment(element)
     const visible = mergeClientRects(rects).flatMap(rect => viewportRects.map(view => {
-      const left = Math.max(rect.left, view.left), top = Math.max(rect.top, view.top)
-      const right = Math.min(rect.right, view.left + view.width), bottom = Math.min(rect.bottom, view.top + view.height)
+      const left = Math.max(rect.left, view.left, limits.left), top = Math.max(rect.top, view.top, limits.top)
+      const right = Math.min(rect.right, view.left + view.width, limits.right), bottom = Math.min(rect.bottom, view.top + view.height, limits.bottom)
       return { left, top, right, bottom, width: right - left, height: bottom - top }
     })).filter(rect => rect.width > 0 && rect.height > 0)
     if (!visible.length) return
     const left = Math.min(...visible.map(r => r.left)), top = Math.min(...visible.map(r => r.top))
     const width = Math.max(...visible.map(r => r.right)) - left, height = Math.max(...visible.map(r => r.bottom)) - top
-    const effectiveScale = Math.max(1, Math.min(scale, (window.innerWidth - 8) / width, (window.innerHeight - 8) / height))
+    // Keep the entire sentence inside its own pane, including its scrollbar and
+    // clipped ancestors. Moving it inward preserves more zoom than clipping it.
+    const insetX = Math.min(4, Math.max(0, (limits.right - limits.left - width) / 2))
+    const insetY = Math.min(4, Math.max(0, (limits.bottom - limits.top - height) / 2))
+    const effectiveScale = Math.max(1, Math.min(scale, (limits.right - limits.left - insetX * 2) / width, (limits.bottom - limits.top - insetY * 2) / height))
     const group = document.createElement('div')
     group.className = 'focus-mode-magnification'; group.dataset.kind = kind; group.inert = true
-    const dx = Math.max(4 - (left - width * (effectiveScale - 1) / 2), Math.min(0, window.innerWidth - 4 - (left + width * (effectiveScale + 1) / 2)))
-    const dy = Math.max(4 - (top - height * (effectiveScale - 1) / 2), Math.min(0, window.innerHeight - 4 - (top + height * (effectiveScale + 1) / 2)))
+    const dx = Math.max(limits.left + insetX - (left - width * (effectiveScale - 1) / 2), Math.min(0, limits.right - insetX - (left + width * (effectiveScale + 1) / 2)))
+    const dy = Math.max(limits.top + insetY - (top - height * (effectiveScale - 1) / 2), Math.min(0, limits.bottom - insetY - (top + height * (effectiveScale + 1) / 2)))
     Object.assign(group.style, { position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`, transform: `translate(${dx}px, ${dy}px) scale(${effectiveScale})`, transformOrigin: 'center' })
     for (const rect of visible) {
       const erasure = document.createElement('div')
@@ -198,7 +219,7 @@ export function createFocusMagnification(pair, viewportRects, scale) {
       ctx.drawImage(source, (rect.left - bounds.left) * sx, (rect.top - bounds.top) * sy, rect.width * sx, rect.height * sy, 0, 0, canvas.width, canvas.height)
       Object.assign(canvas.style, { display: 'block', width: '100%', height: '100%', filter: getComputedStyle(source).filter })
       crop.append(canvas)
-    }, 'source', 'white', getComputedStyle(source).filter)
+    }, 'source', 'white', getComputedStyle(source).filter, source)
   }
   for (const element of pair.elements || []) {
     const host = element.closest('p, li, h1, h2, h3, h4, h5, h6') || element.parentElement
@@ -211,7 +232,7 @@ export function createFocusMagnification(pair, viewportRects, scale) {
       const content = clone.cloneNode(true)
       content.style.left = `${(bounds.left - rect.left) / zoom}px`; content.style.top = `${(bounds.top - rect.top) / zoom}px`
       crop.append(content)
-    }, 'translation', sentenceBackground(host))
+    }, 'translation', sentenceBackground(host), 'none', element)
   }
   return [...erasures, ...groups]
 }
@@ -322,7 +343,12 @@ export class FocusModeController {
     const targets = Array.from(document.body.children).filter(element => element instanceof HTMLElement && !['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName) && element !== this.layer)
       .filter(element => { const bounds = element.getBoundingClientRect(); return bounds.width > 0 && bounds.height > 0 })
     const targetBounds = targets.map(element => element.getBoundingClientRect())
-    const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height]), pair.elements?.map(e => e.textContent), document.body.className])
+    const panes = [pair.sourceCanvas?.closest('.pdf-page-inner, .pdf-page-wrapper'), ...(pair.elements || []).map(e => e.closest('.trans-page-content'))].filter(Boolean)
+    const paneGeometry = [...new Set(panes)].map(element => {
+      const b = element.getBoundingClientRect()
+      return [b.left, b.top, b.width, b.height, element.clientWidth, element.clientHeight]
+    })
+    const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height]), paneGeometry, pair.elements?.map(e => e.textContent), document.body.className])
     if (geometry === this.lastGeometry && targets.every(element => this.filteredElements.has(element))) { this.scheduleRender(); return }
     this.lastGeometry = geometry
     if (!this.filterSvg) {

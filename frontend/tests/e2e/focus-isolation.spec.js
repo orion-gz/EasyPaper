@@ -148,6 +148,41 @@ test('focus restores existing inline filters and cleans up when disabled', async
 })
 
 for (const zoom of [0.8, 1, 1.25]) {
+  test(`magnified sentences stay inside bordered panes at UI scale ${zoom}`, async ({ page }) => {
+    await page.setContent(`<style>
+      .pane { position:absolute; top:80px; width:240px; height:180px; border:5px solid; overflow:auto; }
+      .pdf-page-wrapper { left:30px; } .trans-page-content { left:400px; }
+      canvas { width:240px; height:180px; display:block; }
+      p { margin:0; position:absolute; right:0; bottom:0; width:210px; font:18px/26px sans-serif; }
+    </style><div class="pane pdf-page-wrapper"><canvas width="480" height="360"></canvas></div>
+    <div class="pane trans-page-content"><p><span>A translated sentence across multiple lines at the edge.</span></p></div>`)
+    const results = await page.evaluate(async ({ moduleSource, zoom }) => {
+      const { createFocusMagnification, visibleFocusRects } = await import(URL.createObjectURL(new Blob([moduleSource], { type: 'text/javascript' })))
+      document.documentElement.style.zoom = String(zoom)
+      const canvas = document.querySelector('canvas'), element = document.querySelector('span')
+      const layer = document.createElement('div')
+      Object.assign(layer.style, { position: 'fixed', inset: '0', zoom: String(1 / zoom) })
+      document.body.append(layer)
+      const results = []
+      for (const width of [240, 190]) {
+        document.querySelectorAll('.pane').forEach(pane => { pane.style.width = `${width}px` })
+        const c = canvas.getBoundingClientRect()
+        const sourceRects = [{ left: c.left + 10 * zoom, top: c.bottom - 35 * zoom, right: c.left + width * zoom, bottom: c.bottom, width: (width - 10) * zoom, height: 35 * zoom }]
+        const translationRects = visibleFocusRects(element)
+        layer.replaceChildren(...createFocusMagnification({ sourceCanvas: canvas, sourceRects, elements: [element] }, [...sourceRects, ...translationRects], 1.5))
+        for (const group of layer.querySelectorAll('.focus-mode-magnification')) {
+          const pane = document.querySelector(group.dataset.kind === 'source' ? '.pdf-page-wrapper' : '.trans-page-content')
+          const p = pane.getBoundingClientRect(), r = group.getBoundingClientRect()
+          const sx = p.width / pane.offsetWidth, sy = p.height / pane.offsetHeight
+          results.push({ kind: group.dataset.kind, left: r.left - (p.left + pane.clientLeft * sx), top: r.top - (p.top + pane.clientTop * sy), right: p.left + (pane.clientLeft + pane.clientWidth) * sx - r.right, bottom: p.top + (pane.clientTop + pane.clientHeight) * sy - r.bottom })
+        }
+      }
+      return results
+    }, { moduleSource, zoom })
+    expect(results).toHaveLength(4)
+    for (const result of results) for (const side of ['left', 'top', 'right', 'bottom']) expect(result[side], `${result.kind} ${side}`).toBeGreaterThanOrEqual(-1)
+  })
+
   test(`150% magnifies canvas and multiline translation without reflow at UI scale ${zoom}`, async ({ page }) => {
     await setup(page, zoom)
     const original = await page.evaluate(async moduleSource => {
