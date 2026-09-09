@@ -31,6 +31,59 @@ async function setup(page, scale = 1) {
   await expect(page.locator('.focus-mode-layer')).toBeVisible()
 }
 
+for (const zoom of [0.8, 1, 1.25]) {
+  test(`keyboard navigation scrolls once without recentering or bounce at zoom ${zoom}`, async ({ page }) => {
+    await page.setContent('<div id="root"><div class="page-pair"><div class="trans-page-content"><p><span id="s0" class="trans-sentence">First sentence.</span><span id="s1" class="trans-sentence">Second sentence.</span><span id="s2" class="trans-sentence">Offscreen sentence.</span></p></div></div><div style="height:400px"></div><div class="page-pair"><div class="trans-page-content"><p><span id="s3" class="trans-sentence">Next page sentence.</span></p></div></div></div>')
+    await page.addStyleTag({ content: css })
+    await page.addStyleTag({ content: 'body{margin:0} #root{position:absolute;left:40px;top:40px;width:560px;height:240px;overflow:auto;scroll-behavior:smooth} .page-pair{display:block;width:500px;max-width:none;margin:0;padding:0;border:0} .trans-page-content{height:140px;min-height:0;padding:10px;overflow:auto;scroll-behavior:smooth} p{margin:0;font:18px/30px sans-serif} .trans-sentence{display:block} #s2{margin-top:300px}' })
+    await page.evaluate(async ({ moduleSource, zoom }) => {
+      document.documentElement.style.zoom = String(zoom)
+      const { FocusModeController, visibleFocusRects } = await import(URL.createObjectURL(new Blob([moduleSource], { type: 'text/javascript' })))
+      const refs = Array.from({ length: 4 }, (_, i) => ({ pageNum: i === 3 ? 2 : 1, sentenceIdx: i, revealTranslation: true, element: document.querySelector(`#s${i}`) }))
+      window.controller = new FocusModeController({ root: document.querySelector('#root'), listSentences: () => refs, resolvePair: ref => ({ elements: [ref.element], translationRects: visibleFocusRects(ref.element) }) })
+      window.controller.applySettings({ enabled: true, blurStrength: 1, dimOpacity: 20, scale: 125 })
+      window.controller.togglePin(refs[0])
+    }, { moduleSource, zoom })
+    await expect(page.locator('.focus-mode-magnification')).toBeVisible()
+    await page.locator('#s0').hover()
+    await expect(page.locator('.page-pair').first()).toHaveCSS('transform', 'none')
+    const scrolls = () => page.evaluate(() => [document.querySelector('#root').scrollTop, ...Array.from(document.querySelectorAll('.trans-page-content'), e => e.scrollTop)])
+    const initial = await scrolls()
+    await page.keyboard.press('ArrowDown')
+    expect(await scrolls()).toEqual(initial)
+    const stable = async () => {
+      await expect(page.locator('.focus-mode-magnification')).toBeVisible()
+      const samples = await page.evaluate(async () => {
+        const samples = []
+        for (let i = 0; i < 15; i++) {
+          await new Promise(requestAnimationFrame)
+          const r = document.querySelector('.focus-mode-magnification')?.getBoundingClientRect()
+          samples.push([document.querySelector('#root').scrollTop, ...Array.from(document.querySelectorAll('.trans-page-content'), e => e.scrollTop), r?.left, r?.top, r?.width, r?.height])
+        }
+        return samples
+      })
+      expect(samples.every(sample => sample.every(Number.isFinite))).toBe(true)
+      for (const sample of samples) expect(sample).toEqual(samples[0])
+    }
+    await page.keyboard.press('ArrowDown')
+    expect((await scrolls())[1]).toBeGreaterThan(0)
+    await stable()
+    await page.keyboard.press('ArrowDown')
+    expect((await scrolls())[0]).toBeGreaterThan(0)
+    await stable()
+    await page.keyboard.press('ArrowUp')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('ArrowUp')
+    await stable()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
+    await page.evaluate(() => window.controller.applySettings({ enabled: false }))
+    await expect(page.locator('#root')).not.toHaveClass(/focus-mode-enabled/)
+    await page.evaluate(() => { window.controller.applySettings({ enabled: true }); window.controller.destroy() })
+    await expect(page.locator('#root')).not.toHaveClass(/focus-mode-enabled/)
+  })
+}
+
 for (const density of [1, 2]) {
   test.describe(`single tint surface at DPR ${density}`, () => {
     test.use({ deviceScaleFactor: density })

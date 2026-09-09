@@ -7963,6 +7963,7 @@ body.light-theme .chat-drawer {
 .focus-range output { color: var(--text-primary); font-variant-numeric: tabular-nums; text-align: right; }
 .focus-range input[type="range"] { width: 100%; min-width: 0; padding: 0; margin: 0; border: 0; box-sizing: border-box; cursor: pointer; }
 .focus-mode-magnification, .focus-mode-magnification * { pointer-events: none !important; }
+.focus-mode-enabled .page-pair { transform: none; transition: none; }
 .focus-range input:disabled { opacity: .45; }
 .focus-keyboard-help { color: var(--text-muted); }
 .focus-mode-layer { position: fixed; inset: 0; z-index: 2147483646; pointer-events: none; }
