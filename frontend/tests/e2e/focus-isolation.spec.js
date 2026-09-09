@@ -110,6 +110,34 @@ test('pinned focus ignores hover, follows geometry changes and releases with Esc
   await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
 })
 
+test('idle focus avoids per-frame resolution without delaying explicit input', async ({ page }) => {
+  await setup(page)
+  const counts = await page.evaluate(async () => {
+    let calls = 0
+    const resolve = window.controller.resolvePair
+    window.controller.resolvePair = ref => { calls++; return resolve(ref) }
+    const frames = async count => { for (let i = 0; i < count; i++) await new Promise(requestAnimationFrame) }
+    await frames(4)
+    calls = 0
+    await frames(12)
+    const idle = calls
+    // Queueing a new hover cancels the idle check and resolves on the next RAF.
+    window.controller.pinned = false
+    calls = 0
+    window.controller.focus({ pageNum: 1, sentenceIdx: 1 })
+    await frames(1)
+    const hover = calls
+    window.controller.clear()
+    calls = 0
+    await new Promise(resolve => setTimeout(resolve, 160))
+    return { idle, hover, cleared: calls, timer: window.controller.idleTimer }
+  })
+  expect(counts.idle).toBeLessThan(8)
+  expect(counts.hover).toBeGreaterThan(0)
+  expect(counts.cleared).toBe(0)
+  expect(counts.timer).toBeNull()
+})
+
 for (const scale of [0.8, 1, 1.25]) {
 for (const strength of [1, 6, 16]) {
 test(`blur ${strength}px preserves sentence pixels with offscreen overflow at scale ${scale}`, async ({ page }) => {
@@ -278,7 +306,7 @@ for (const zoom of [0.8, 1, 1.25]) {
       const ctx = canvas.getContext('2d'); ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 400, 80); ctx.fillStyle = 'black'; ctx.font = '28px sans-serif'; ctx.fillText('Focused source', 12, 48)
       const paragraph = document.createElement('p'); paragraph.id = 'focus-paragraph'
       Object.assign(paragraph.style, { position: 'absolute', left: '650px', top: '240px', width: '200px', margin: '0', fontSize: '18px', lineHeight: '28px' })
-      paragraph.innerHTML = '<span class="trans-sentence">A translated sentence that wraps across multiple lines.</span>'
+      paragraph.innerHTML = '<span class="trans-sentence">A <strong>translated</strong> sentence that <em>wraps</em> across multiple lines.</span>'
       root.append(canvas, paragraph)
       const element = paragraph.firstElementChild
       window.controller.resolvePair = () => ({ sourceCanvas: canvas, sourceRects: [canvas.getBoundingClientRect()], translationRects: visibleFocusRects(element), elements: [element] })
@@ -291,6 +319,12 @@ for (const zoom of [0.8, 1, 1.25]) {
     const translation = page.locator('.focus-mode-magnification[data-kind="translation"]')
     await expect(source).toBeVisible()
     await expect(translation).toBeVisible()
+    await expect(translation.locator('.focus-mode-text-copy')).toHaveCount(1)
+    await expect(translation.locator('p')).toHaveCount(1)
+    for (const [selector, property] of [['strong', 'font-weight'], ['em', 'font-style']]) {
+      const originalStyle = await page.locator(`#focus-paragraph ${selector}`).evaluate((e, property) => getComputedStyle(e).getPropertyValue(property), property)
+      await expect(translation.locator(selector)).toHaveCSS(property, originalStyle)
+    }
     await expect.poll(() => page.evaluate(async () => {
       const before = document.querySelector('.focus-mode-magnification')
       await new Promise(requestAnimationFrame)
