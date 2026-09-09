@@ -31,6 +31,49 @@ async function setup(page, scale = 1) {
   await expect(page.locator('.focus-mode-layer')).toBeVisible()
 }
 
+for (const density of [1, 2]) {
+  test.describe(`single tint surface at DPR ${density}`, () => {
+    test.use({ deviceScaleFactor: density })
+    for (const zoom of [0.8, 1, 1.25]) {
+      test(`fractional sentence edges produce no dark horizontal seams at zoom ${zoom}`, async ({ page }) => {
+        await setup(page, zoom)
+        await page.evaluate(() => {
+          document.querySelector('#root').replaceChildren()
+          window.controller.resolvePair = () => ({
+            sourceRects: [
+              { left: 100.125, top: 120.33333, width: 320.33333, height: 18.66667 },
+              { left: 100.125, top: 160.66667, width: 250.25, height: 19.33333 },
+            ],
+            translationRects: [
+              { left: 600.25, top: 139.00001, width: 300.125, height: 21.33333 },
+              { left: 600.25, top: 180.00001, width: 180.33333, height: 22.66667 },
+            ],
+          })
+        })
+        for (const dimOpacity of [0, 20, 60]) {
+          await page.evaluate(dimOpacity => window.controller.applySettings({ enabled: true, blurStrength: 0, dimOpacity, scale: 100 }), dimOpacity)
+          await expect(page.locator('.focus-mode-backdrop')).toHaveCount(1)
+          await expect(page.locator('.focus-mode-backdrop > rect')).toHaveCSS('fill-opacity', String(dimOpacity / 100))
+          const screenshot = (await page.screenshot({ scale: 'device', path: test.info().outputPath(`tint-${dimOpacity}.png`) })).toString('base64')
+          const pixels = await page.evaluate(async ({ screenshot, density }) => {
+            const image = new Image(); image.src = `data:image/png;base64,${screenshot}`; await image.decode()
+            const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
+            const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
+            const reds = []
+            // The reported lines extend across the whole screen, far outside
+            // sentence openings. Every pixel in this strip must have one tint.
+            for (let y = 20 * density; y < image.height - 20 * density; y++) reds.push(ctx.getImageData(5 * density, y, 1, 1).data[0])
+            return { min: Math.min(...reds), max: Math.max(...reds), hole: ctx.getImageData(200 * density, 130 * density, 1, 1).data[0] }
+          }, { screenshot, density })
+          expect(pixels.max - pixels.min).toBeLessThanOrEqual(1)
+          expect(pixels.min).toBeCloseTo(255 - 250 * dimOpacity / 100, 0)
+          expect(pixels.hole).toBe(255)
+        }
+      })
+    }
+  })
+}
+
 for (const scale of [0.8, 1, 1.25]) {
   test(`only the sentence stays clear, including above high-z-index panels at scale ${scale}`, async ({ page }) => {
     await setup(page, scale)
@@ -60,7 +103,7 @@ test('pinned focus ignores hover, follows geometry changes and releases with Esc
     document.querySelector('.sentence').style.left = '250px'
   })
   expect(await page.evaluate(() => window.controller.current.sentenceIdx)).toBe(0)
-  await expect.poll(() => page.locator('.focus-mode-layer').innerHTML()).toContain('246px')
+  await expect(page.locator('.focus-tint-hole').first()).toHaveAttribute('x', '246')
   await page.keyboard.press('ArrowRight')
   expect(await page.evaluate(() => window.controller.current.sentenceIdx)).toBe(1)
   await page.keyboard.press('Escape')
@@ -106,7 +149,7 @@ test('blur and tint can be independently disabled; controls release the mask bef
   await setup(page)
   await page.evaluate(() => window.controller.applySettings({ enabled: true, blurStrength: 10, dimOpacity: 0, scale: 100 }))
   await expect.poll(() => page.locator('.focus-mode-layer').evaluate(element => element.style.getPropertyValue('--focus-blur'))).toBe('10px')
-  await expect(page.locator('.focus-mode-backdrop').first()).toHaveCSS('background-color', 'rgba(5, 7, 12, 0)')
+  await expect(page.locator('.focus-mode-backdrop > rect')).toHaveCSS('fill-opacity', '0')
   await page.locator('#panel').click()
   await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
   await expect(page.locator('#root')).toHaveCSS('filter', 'none')
@@ -327,7 +370,7 @@ test('real PDF hover reveals source and translation together and clears on viewe
   })).toBe(true)
   expect((await source.boundingBox()).y).toBeCloseTo(sourceBefore.y, 0)
   await source.click()
-  const sourceMask = await page.locator('.focus-mode-backdrop').evaluateAll(elements => elements.map(e => ['left', 'top', 'width', 'height'].map(p => parseFloat(e.style[p]))))
+  const sourceMask = await page.locator('.focus-tint-hole').evaluateAll(elements => elements.map(e => ['x', 'y', 'width', 'height'].map(p => Number(e.getAttribute(p)))))
   // Compare actual PDF canvas and translation glyph pixels, not just geometry
   // or CSS declarations. Keep native layout/scroll positions fixed for both.
   const focused = (await page.screenshot({ scale: 'css', path: test.info().outputPath('focused.png') })).toString('base64')
@@ -402,9 +445,9 @@ test('real PDF hover reveals source and translation together and clears on viewe
   await expect(page.locator('.focus-mode-magnification')).toHaveCount(0)
   await translation.hover()
   // Native hover can scroll the pane by a fractional pixel in WebKit.
-  await expect.poll(() => page.locator('.focus-mode-backdrop').evaluateAll((elements, before) => {
+  await expect.poll(() => page.locator('.focus-tint-hole').evaluateAll((elements, before) => {
     if (elements.length !== before.length) return Infinity
-    return Math.max(...elements.flatMap((e, i) => ['left', 'top', 'width', 'height'].map((p, j) => Math.abs(parseFloat(e.style[p]) - before[i][j]))))
+    return Math.max(...elements.flatMap((e, i) => ['x', 'y', 'width', 'height'].map((p, j) => Math.abs(Number(e.getAttribute(p)) - before[i][j]))))
   }, sourceMask)).toBeLessThanOrEqual(2)
   await expect(page.locator('.focus-mode-outline')).toHaveCount(0)
   await expect(translation).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
