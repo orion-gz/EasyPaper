@@ -77,7 +77,7 @@ export function revealFocusTranslation(elements) {
   // Scroll only the translation pane, so the source stays under the pointer.
   if (start < top || end > bottom) {
     const offset = end - start > bottom - top ? start - top : (start + end - top - bottom) / 2
-    pane.scrollTop += offset / scale
+    pane.scrollTo({ top: pane.scrollTop + offset / scale, behavior: 'instant' })
   }
 }
 
@@ -302,7 +302,13 @@ export class FocusModeController {
     root?.addEventListener('mouseleave', this.onLeave)
     root?.addEventListener('scroll', this.onViewportChange, { passive: true, capture: true })
   }
-  applySettings(settings) { this.settings = normalizeFocusSettings(settings); if (!this.settings.enabled) this.clear(); else if (this.current) this.scheduleRender() }
+  applySettings(settings) {
+    this.settings = normalizeFocusSettings(settings)
+    // Suppress the card lift before the pointer enters, not when the focus
+    // overlay appears: changing it on activation shifts the source by 2px.
+    this.root?.classList.toggle('focus-mode-enabled', this.settings.enabled)
+    if (!this.settings.enabled) this.clear(); else if (this.current) this.scheduleRender()
+  }
   sameRef(a, b) { return !!a && !!b && a.pageNum === b.pageNum && a.sentenceIdx === b.sentenceIdx }
   focus(ref, { pin = false } = {}) {
     if (!this.settings.enabled || !ref) return false
@@ -345,7 +351,15 @@ export class FocusModeController {
     if (index < 0) return false
     const next = sequence[Math.max(0, Math.min(sequence.length - 1, index + delta))]
     if (!next || this.sameRef(next, this.current)) return true
-    this.current = next; this.revealedTranslation = false; next.element?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); this.scheduleRender(); this.announce('focusMoved'); return true
+    this.current = next
+    // Commit one nearest-position scroll before measuring the new pair. A
+    // smooth center scroll was being retargeted by translation reveal and by
+    // repeated keys, rebuilding magnification on every intermediate position.
+    next.element?.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'instant' })
+    // scrollIntoView already reveals the translation through all ancestors;
+    // do not follow it with a second, centered translation-pane scroll.
+    this.revealedTranslation = !!next.element
+    this.scheduleRender(); this.announce('focusMoved'); return true
   }
   handleKeyDown(event) {
     if (!this.pinned || isFocusKeyboardExcluded(event.target)) return
@@ -459,6 +473,7 @@ export class FocusModeController {
   }
   destroy() {
     this.clear()
+    this.root?.classList.remove('focus-mode-enabled')
     document.removeEventListener('keydown', this.onKeyDown)
     document.removeEventListener('pointerdown', this.onInteraction, true)
     document.removeEventListener('visibilitychange', this.onVisibility)
