@@ -116,6 +116,26 @@ function svgElement(name, attributes = {}) {
   return element
 }
 
+// Paint tint once. Tiled translucent HTML rectangles can overlap by a device
+// pixel when fractional coordinates are rounded independently under CSS zoom.
+export function createFocusTint(rects, width, height, padding = 4) {
+  const svg = svgElement('svg', { width, height, viewBox: `0 0 ${width} ${height}`, 'aria-hidden': 'true' })
+  svg.classList.add('focus-mode-backdrop')
+  const id = `focus-tint-mask-${++filterId}`
+  const defs = svgElement('defs')
+  const mask = svgElement('mask', { id, maskUnits: 'userSpaceOnUse', maskContentUnits: 'userSpaceOnUse', x: 0, y: 0, width, height, 'mask-type': 'luminance' })
+  mask.append(svgElement('rect', { width, height, fill: 'white' }))
+  for (const rect of mergeClientRects(rects)) mask.append(svgElement('rect', {
+    class: 'focus-tint-hole', x: rect.left - padding, y: rect.top - padding,
+    width: rect.width + padding * 2, height: rect.height + padding * 2, fill: 'black',
+  }))
+  defs.append(mask)
+  const tint = svgElement('rect', { width, height, mask: `url(#${id})`, fill: 'rgb(5, 7, 12)' })
+  tint.style.fillOpacity = 'var(--focus-dim)'
+  svg.append(defs, tint)
+  return svg
+}
+
 // Filter SourceGraphic itself, not the browser's optional backdrop compositor.
 // The original pixels inside each sentence are merged over the blurred pixels.
 export function createSentenceFilter(id, rects, bounds, strength, zoom = 1) {
@@ -411,12 +431,7 @@ export class FocusModeController {
       })),
       ...groups.flatMap(element => element.focusRects),
     ]
-    this.layer.replaceChildren(...erasures, ...createFocusBackdropRects(displayedRects, window.innerWidth, window.innerHeight, groups.length ? 0 : 4).map(rect => {
-      const backdrop = document.createElement('div')
-      backdrop.className = 'focus-mode-backdrop'
-      Object.assign(backdrop.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` })
-      return backdrop
-    }), ...groups)
+    this.layer.replaceChildren(...erasures, createFocusTint(displayedRects, window.innerWidth, window.innerHeight, groups.length ? 0 : 4), ...groups)
     this.scheduleRender()
   }
   destroy() {
