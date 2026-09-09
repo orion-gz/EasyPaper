@@ -148,6 +148,47 @@ test('focus restores existing inline filters and cleans up when disabled', async
 })
 
 for (const zoom of [0.8, 1, 1.25]) {
+  test(`expanded Korean sentence openings match text, not old white boxes at scale ${zoom}`, async ({ page }) => {
+    await setup(page, zoom)
+    await page.evaluate(async moduleSource => {
+      const { visibleFocusRects } = await import(URL.createObjectURL(new Blob([moduleSource], { type: 'text/javascript' })))
+      window.controller.clear()
+      document.body.classList.add('light-theme')
+      document.querySelector('#root').innerHTML = `<div class="trans-page-content" style="position:absolute;left:50px;top:60px;width:850px;height:300px;background:white"><p style="margin:35px;width:680px;font:20px/60px sans-serif;color:black"><span class="trans-sentence sentence-highlight" style="background:rgba(74,135,181,.2);box-shadow:0 0 0 2px blue;transition:background-color 1s">2. 합성곱 커널 가중치 시각화: 이 접근법은 모델의 합성곱 커널 가중치를 직접 시각화하고 해석하는 데 중점을 둡니다.</span> 일반적으로 임의의 두 층 간의 교차 필터 맵 연결성으로 인해</p></div>`
+      const element = document.querySelector('#root .trans-sentence')
+      window.controller.resolvePair = () => ({ translationRects: visibleFocusRects(element), elements: [element] })
+      window.controller.applySettings({ enabled: true, blurStrength: 1, dimOpacity: 60, scale: 125 })
+      window.controller.togglePin({ pageNum: 1, sentenceIdx: 0 })
+    }, moduleSource)
+    const group = page.locator('.focus-mode-magnification')
+    await expect(group).toBeVisible()
+    for (const clone of await group.locator('.trans-sentence').all()) {
+      await expect(clone).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await expect(clone).toHaveCSS('box-shadow', 'none')
+    }
+    const points = await page.evaluate(() => {
+      const inside = (x, y, r) => x >= r.left - 1 && x <= r.left + r.width + 1 && y >= r.top - 1 && y <= r.top + r.height + 1
+      const enlarged = [...document.querySelectorAll('.focus-mode-magnification')].flatMap(e => e.focusRects)
+      const points = []
+      for (const e of document.querySelectorAll('.focus-mode-erasure')) {
+        const r = e.focusRect
+        for (let y = Math.ceil(r.top + 1); y < r.bottom - 1; y += 2) for (let x = Math.ceil(r.left + 1); x < r.right - 1; x += 4) {
+          if (!enlarged.some(r => inside(x, y, r))) points.push([x, y])
+        }
+      }
+      return points
+    })
+    expect(points.length).toBeGreaterThan(10)
+    const screenshot = (await page.screenshot({ scale: 'css', path: test.info().outputPath('korean-focus-box.png') })).toString('base64')
+    const brightest = await page.evaluate(async ({ screenshot, points }) => {
+      const image = new Image(); image.src = `data:image/png;base64,${screenshot}`; await image.decode()
+      const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
+      const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
+      return Math.max(...points.map(([x, y]) => ctx.getImageData(x, y, 1, 1).data[0]))
+    }, { screenshot, points })
+    expect(brightest).toBeLessThan(150)
+  })
+
   test(`magnified sentences stay inside bordered panes at UI scale ${zoom}`, async ({ page }) => {
     await page.setContent(`<style>
       .pane { position:absolute; top:80px; width:240px; height:180px; border:5px solid; overflow:auto; }

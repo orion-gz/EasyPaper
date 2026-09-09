@@ -144,6 +144,11 @@ function copyStyledTree(element) {
     clone.removeAttribute('id')
     clone.removeAttribute('contenteditable')
     clone.classList.remove('sentence-highlight', 'active-mapped-sentence', 'sentence-pulse')
+    // Computed styles can capture an in-flight hover transition even after the
+    // class is removed. Copies must never retain that transient decoration.
+    if (element.matches('.trans-sentence')) {
+      Object.assign(clone.style, { background: 'transparent', boxShadow: 'none', outline: 'none', animation: 'none', transition: 'none' })
+    }
   }
   for (const child of element.childNodes) clone.append(child instanceof Element ? copyStyledTree(child) : child.cloneNode(true))
   return clone
@@ -197,9 +202,15 @@ export function createFocusMagnification(pair, viewportRects, scale) {
     const dx = Math.max(limits.left + insetX - (left - width * (effectiveScale - 1) / 2), Math.min(0, limits.right - insetX - (left + width * (effectiveScale + 1) / 2)))
     const dy = Math.max(limits.top + insetY - (top - height * (effectiveScale - 1) / 2), Math.min(0, limits.bottom - insetY - (top + height * (effectiveScale + 1) / 2)))
     Object.assign(group.style, { position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`, transform: `translate(${dx}px, ${dy}px) scale(${effectiveScale})`, transformOrigin: 'center' })
+    group.focusRects = visible.map(rect => ({
+      left: left + dx + (rect.left - left - width / 2) * effectiveScale + width / 2,
+      top: top + dy + (rect.top - top - height / 2) * effectiveScale + height / 2,
+      width: rect.width * effectiveScale, height: rect.height * effectiveScale,
+    }))
     for (const rect of visible) {
       const erasure = document.createElement('div')
       erasure.className = 'focus-mode-erasure'
+      erasure.focusRect = rect
       Object.assign(erasure.style, { position: 'absolute', left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, background, filter })
       erasures.push(erasure)
       const crop = document.createElement('div')
@@ -387,14 +398,25 @@ export class FocusModeController {
       layer.style.zoom = String(1 / zoom)
       for (const [name, value] of Object.entries(focusCssVariables(this.settings))) layer.style.setProperty(name, value)
     }
-    this.layer.replaceChildren(...createFocusBackdropRects(rects, window.innerWidth, window.innerHeight).map(rect => {
+    this.root?.classList.add('focus-mode-active')
+    const copies = createFocusMagnification(pair, rects, this.settings.scale / 100)
+    const erasures = copies.filter(element => element.classList.contains('focus-mode-erasure'))
+    const groups = copies.filter(element => element.classList.contains('focus-mode-magnification'))
+    // Erase native glyphs BELOW the tint. Only the transformed sentence gets
+    // an opening; otherwise the old white holes remain behind enlarged text.
+    const displayedRects = [
+      ...rects.filter(rect => !erasures.some(element => {
+        const original = element.focusRect
+        return original.left < rect.left + rect.width && original.right > rect.left && original.top < rect.top + rect.height && original.bottom > rect.top
+      })),
+      ...groups.flatMap(element => element.focusRects),
+    ]
+    this.layer.replaceChildren(...erasures, ...createFocusBackdropRects(displayedRects, window.innerWidth, window.innerHeight, groups.length ? 0 : 4).map(rect => {
       const backdrop = document.createElement('div')
       backdrop.className = 'focus-mode-backdrop'
       Object.assign(backdrop.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` })
       return backdrop
-    }))
-    this.root?.classList.add('focus-mode-active')
-    this.layer.append(...createFocusMagnification(pair, rects, this.settings.scale / 100))
+    }), ...groups)
     this.scheduleRender()
   }
   destroy() {
