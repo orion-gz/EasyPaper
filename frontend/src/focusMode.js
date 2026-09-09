@@ -156,11 +156,17 @@ export function createSentenceFilter(id, rects, bounds, strength, zoom = 1) {
   return filter
 }
 
+// Snapshot paint/layout properties, not interaction, scrolling, animation,
+// counters or hundreds of unrelated browser defaults on every inline span.
+const COPY_STYLE = /^(?:display$|position$|box-sizing$|(?:min-|max-)?(?:width|height)$|inset|top$|right$|bottom$|left$|margin|padding|border|background|color$|opacity$|font|line-height$|letter-spacing$|word-spacing$|white-space|word-break$|overflow-wrap$|text-|vertical-align$|direction$|unicode-bidi$|writing-mode$|transform|translate$|rotate$|scale$|zoom$|visibility$|overflow$|overflow-x$|overflow-y$|list-style|float$|clear$|flex|grid|align-|justify-|gap$|row-gap$|column-gap$|object-|fill|stroke|box-shadow$|filter$|clip-path$)/
+
 function copyStyledTree(element) {
   const clone = element.cloneNode(false)
   if (element instanceof Element) {
     const style = getComputedStyle(element)
-    for (const property of style) clone.style.setProperty(property, style.getPropertyValue(property))
+    // Set the declaration once instead of reparsing a growing declaration for
+    // every computed property (hundreds per element).
+    clone.style.cssText = Array.from(style).filter(property => COPY_STYLE.test(property)).map(property => `${property}:${style.getPropertyValue(property)}`).join(';')
     clone.removeAttribute('id')
     clone.removeAttribute('contenteditable')
     clone.classList.remove('sentence-highlight', 'active-mapped-sentence', 'sentence-pulse')
@@ -202,7 +208,7 @@ export function createFocusMagnification(pair, viewportRects, scale) {
     }
     return bounds
   }
-  const build = (rects, draw, kind, background, filter = 'none', element) => {
+  const build = (rects, draw, kind, background, filter = 'none', element, finish) => {
     const limits = containment(element)
     const visible = mergeClientRects(rects).flatMap(rect => viewportRects.map(view => {
       const left = Math.max(rect.left, view.left, limits.left), top = Math.max(rect.top, view.top, limits.top)
@@ -237,6 +243,7 @@ export function createFocusMagnification(pair, viewportRects, scale) {
       Object.assign(crop.style, { position: 'absolute', overflow: 'hidden', left: `${rect.left - left}px`, top: `${rect.top - top}px`, width: `${rect.width}px`, height: `${rect.height}px` })
       draw(crop, rect); group.append(crop)
     }
+    finish?.(group, visible, left, top, width, height)
     groups.push(group)
   }
   if (pair.sourceCanvas) {
@@ -260,10 +267,19 @@ export function createFocusMagnification(pair, viewportRects, scale) {
     Object.assign(clone.style, { position: 'absolute', right: 'auto', bottom: 'auto', margin: '0', width: `${bounds.width / zoom}px`, height: 'auto', boxSizing: 'border-box', transform: 'none', zoom: String(zoom) })
     build(visibleFocusRects(element), (crop, rect) => {
       crop.style.background = sentenceBackground(host)
-      const content = clone.cloneNode(true)
-      content.style.left = `${(bounds.left - rect.left) / zoom}px`; content.style.top = `${(bounds.top - rect.top) / zoom}px`
-      crop.append(content)
-    }, 'translation', sentenceBackground(host), 'none', element)
+    }, 'translation', sentenceBackground(host), 'none', element, (group, visible, left, top, width, height) => {
+      // One styled paragraph per sentence, not one complete paragraph per
+      // visible line. A single union clip preserves the same line openings.
+      const content = document.createElement('div')
+      content.className = 'focus-mode-text-copy'
+      const path = visible.map(rect => {
+        const x = rect.left - left, y = rect.top - top
+        return `M${x} ${y}h${rect.width}v${rect.height}h${-rect.width}Z`
+      }).join(' ')
+      Object.assign(content.style, { position: 'absolute', inset: '0', width: `${width}px`, height: `${height}px`, overflow: 'hidden', clipPath: `path("${path}")` })
+      clone.style.left = `${(bounds.left - left) / zoom}px`; clone.style.top = `${(bounds.top - top) / zoom}px`
+      content.append(clone); group.append(content)
+    })
   }
   return [...erasures, ...groups]
 }
@@ -305,6 +321,7 @@ export class FocusModeController {
   cancelLeave() { clearTimeout(this.releaseTimer); this.releaseTimer = null }
   clear() {
     this.cancelLeave()
+    clearTimeout(this.idleTimer); this.idleTimer = null
     if (this.raf) cancelAnimationFrame(this.raf)
     this.raf = null
     this.current = null; this.pinned = false; this.lastGeometry = null
@@ -337,6 +354,9 @@ export class FocusModeController {
     if (delta) { event.preventDefault(); this.navigate(delta) }
   }
   scheduleRender() {
+    // Explicit input (hover, scroll, resize, settings) never waits for the idle
+    // geometry check. Only unchanged frames are polled at a lower frequency.
+    clearTimeout(this.idleTimer); this.idleTimer = null
     if (!this.current || !this.settings.enabled || this.raf) return
     this.raf = requestAnimationFrame(() => { this.raf = null; this.render() })
   }
@@ -380,7 +400,10 @@ export class FocusModeController {
       return [b.left, b.top, b.width, b.height, element.clientWidth, element.clientHeight]
     })
     const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height]), paneGeometry, pair.elements?.map(e => e.textContent), document.body.className])
-    if (geometry === this.lastGeometry && targets.every(element => this.filteredElements.has(element))) { this.scheduleRender(); return }
+    if (geometry === this.lastGeometry && targets.every(element => this.filteredElements.has(element))) {
+      this.idleTimer = setTimeout(() => { this.idleTimer = null; this.scheduleRender() }, 120)
+      return
+    }
     this.lastGeometry = geometry
     if (!this.filterSvg) {
       this.filterSvg = svgElement('svg', { width: 0, height: 0, 'aria-hidden': 'true' })
