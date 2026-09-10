@@ -6600,19 +6600,25 @@ body.light-theme .figure-preview-tooltip {
 }
 .figure-preview-tooltip-resize-handle {
   position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
+  width: 16px;
+  height: 16px;
   opacity: 0.45;
   transition: opacity 0.15s ease-in-out;
+  background: transparent;
+  border: none;
+  padding: 0;
+  z-index: 10;
 }
 .figure-preview-tooltip-resize-handle:hover,
 .figure-preview-tooltip.resizing .figure-preview-tooltip-resize-handle {
   opacity: 1;
 }
-.figure-preview-tooltip-resize-handle::after {
+.figure-preview-tooltip-resize-handle.handle-se {
+  right: 3px;
+  bottom: 3px;
+  cursor: nwse-resize;
+}
+.figure-preview-tooltip-resize-handle.handle-se::after {
   content: '';
   position: absolute;
   right: 2px;
@@ -6620,6 +6626,51 @@ body.light-theme .figure-preview-tooltip {
   width: 8px;
   height: 8px;
   border-right: 2px solid var(--text-secondary);
+  border-bottom: 2px solid var(--text-secondary);
+}
+.figure-preview-tooltip-resize-handle.handle-ne {
+  right: 3px;
+  top: 3px;
+  cursor: nesw-resize;
+}
+.figure-preview-tooltip-resize-handle.handle-ne::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-secondary);
+  border-top: 2px solid var(--text-secondary);
+}
+.figure-preview-tooltip-resize-handle.handle-nw {
+  left: 3px;
+  top: 3px;
+  cursor: nwse-resize;
+}
+.figure-preview-tooltip-resize-handle.handle-nw::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid var(--text-secondary);
+  border-top: 2px solid var(--text-secondary);
+}
+.figure-preview-tooltip-resize-handle.handle-sw {
+  left: 3px;
+  bottom: 3px;
+  cursor: nesw-resize;
+}
+.figure-preview-tooltip-resize-handle.handle-sw::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid var(--text-secondary);
   border-bottom: 2px solid var(--text-secondary);
 }
 .figure-preview-tooltip-item + .figure-preview-tooltip-item {
