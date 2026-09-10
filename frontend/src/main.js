@@ -2420,7 +2420,8 @@ if (viewerClearCacheBtn) {
     if (!ok) return
     try {
       await clearSingleDocCacheAPI(state.sessionId)
-      showToast('PDF 추출 캐시가 삭제되었습니다.', 'success')
+      showToast('PDF 추출 및 번역 캐시가 삭제되었습니다. 뷰어를 새로고침합니다.', 'success')
+      setTimeout(() => window.location.reload(), 500)
     } catch (err) {
       showToast('캐시 삭제 실패: ' + err.message, 'error')
     }
@@ -14127,7 +14128,13 @@ function getOrCreateFigurePreviewTooltip() {
   el.className = 'figure-preview-tooltip hidden'
   el.setAttribute('role', 'dialog')
   el.setAttribute('aria-label', t('viewer:a11y.figureTrigger', { label: '' }))
-  el.innerHTML = `<div class="figure-preview-tooltip-items"></div><button type="button" class="figure-preview-tooltip-resize-handle" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>`
+  el.innerHTML = `
+    <div class="figure-preview-tooltip-items"></div>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-nw" data-corner="nw" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-ne" data-corner="ne" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-se" data-corner="se" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-sw" data-corner="sw" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+  `
   document.body.appendChild(el)
 
   try {
@@ -14164,72 +14171,99 @@ function getOrCreateFigurePreviewTooltip() {
     scrollToPage(viewerScrollContainer, target.page)
   })
 
-  const figureResizeHandle = el.querySelector('.figure-preview-tooltip-resize-handle')
-  figureResizeHandle.addEventListener('mousedown', (e) => {
-    e.preventDefault()
-    e.stopPropagation()
+  el.querySelectorAll('.figure-preview-tooltip-resize-handle').forEach((handle) => {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
 
-    const startX = e.clientX
-    const startWidth = el.offsetWidth
-    const startHeight = el.offsetHeight
-    // 이미지는 CSS에서 width:100%; height:auto로 표시되므로 컨테이너 너비가
-    // scale배 될 때 이미지의 실제 렌더링 높이도 같은 비율로 커진다. 반면
-    // 레이블/캡션 같은 텍스트 영역(chromeHeight)은 너비가 바뀌어도 높이가
-    // 거의 그대로다. 너비/높이를 마우스 이동량으로 각각 독립적으로 정하면
-    // 이미지 비율과 무관하게 박스 크기가 고정되어 이미지 아래로 빈 공간이
-    // 남거나 이미지가 잘려 스크롤이 생기는 문제가 있었다 - 높이를 "이미지
-    // 비율을 유지한 채 늘어난 이미지 높이 + 고정된 chromeHeight"로 다시
-    // 계산해 너비를 끌면 이미지 비율에 맞게 박스 전체가 adaptive하게
-    // 커지고 작아지도록 한다.
-    const loadedImgs = Array.from(el.querySelectorAll('.figure-preview-tooltip-img:not(.hidden)'))
-    const startImagesHeight = loadedImgs.reduce((sum, img) => sum + img.getBoundingClientRect().height, 0)
-    const chromeHeight = startHeight - startImagesHeight
-    const maxWidth = Math.min(window.innerWidth * 0.9, 900)
-    const maxHeight = Math.min(window.innerHeight * 0.9, 900)
-    el.classList.add('resizing')
-    figurePreviewIsResizing = true
-    if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+      const corner = handle.dataset.corner || 'se'
+      const startX = e.clientX
+      const startY = e.clientY
+      const startWidth = el.offsetWidth
+      const startHeight = el.offsetHeight
+      const rect = el.getBoundingClientRect()
+      const startLeft = rect.left
+      const startTop = rect.top
 
-    const onMove = (moveEvent) => {
-      const newWidth = Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, startWidth + (moveEvent.clientX - startX)))
-      const scale = startWidth > 0 ? newWidth / startWidth : 1
-      const newHeight = Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, chromeHeight + startImagesHeight * scale))
-      el.style.width = `${newWidth}px`
-      el.style.height = `${newHeight}px`
-    }
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-      el.classList.remove('resizing')
-      figurePreviewIsResizing = false
-      // 드래그 중엔 실시간 피드백을 위해 높이를 직접 계산해 인라인으로 고정했지만,
-      // 드래그가 끝나면 그 고정값을 지워 다시 CSS의 height: auto로 돌려놓는다 -
-      // 그래야 이후 다른 비율의 그림/표로 내용이 바뀌어도 높이가 자동으로
-      // 맞춰지고, 지금 안 맞는 빈 여백이 남지 않는다. 너비만 기억해둔다.
-      el.style.height = ''
-      localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: el.offsetWidth }))
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  })
-  figureResizeHandle.addEventListener('keydown', (event) => {
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
-    event.preventDefault()
-    const step = event.shiftKey ? 20 : 4
-    const maxWidth = Math.min(window.innerWidth * 0.9, 900)
-    const maxHeight = Math.min(window.innerHeight * 0.9, 900)
-    let width = el.offsetWidth
-    let height = el.offsetHeight
-    if (event.key === 'ArrowLeft') width -= step
-    if (event.key === 'ArrowRight') width += step
-    if (event.key === 'ArrowUp') height -= step
-    if (event.key === 'ArrowDown') height += step
-    width = Math.round(Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, width)))
-    height = Math.round(Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, height)))
-    el.style.width = `${width}px`
-    el.style.height = `${height}px`
-    localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: width }))
-    announceA11y(t('viewer:a11y.previewSize', { width, height }))
+      const loadedImgs = Array.from(el.querySelectorAll('.figure-preview-tooltip-img:not(.hidden)'))
+      const startImagesHeight = loadedImgs.reduce((sum, img) => sum + img.getBoundingClientRect().height, 0)
+      const chromeHeight = Math.max(0, startHeight - startImagesHeight)
+
+      const maxAvailableW = corner.includes('w')
+        ? Math.min(window.innerWidth * 0.9, 900, startLeft + startWidth - 8)
+        : Math.min(window.innerWidth * 0.9, 900, window.innerWidth - startLeft - 8)
+      const maxAvailableH = corner.includes('n')
+        ? Math.min(window.innerHeight * 0.9, 900, startTop + startHeight - 8)
+        : Math.min(window.innerHeight * 0.9, 900, window.innerHeight - startTop - 8)
+
+      const maxWidth = Math.max(_FIGURE_PREVIEW_MIN_WIDTH, maxAvailableW)
+      const maxHeight = Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, maxAvailableH)
+
+      el.classList.add('resizing')
+      figurePreviewIsResizing = true
+      if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+
+      const onMove = (moveEvent) => {
+        const rawDx = moveEvent.clientX - startX
+        const rawDy = moveEvent.clientY - startY
+        const deltaX = corner.includes('e') ? rawDx : -rawDx
+        const deltaY = corner.includes('s') ? rawDy : -rawDy
+
+        const aspect = startWidth / Math.max(1, startHeight)
+        let effectiveDelta = deltaX
+        if (Math.abs(deltaY) > Math.abs(deltaX)) {
+          effectiveDelta = deltaY * aspect
+        }
+
+        const newWidth = Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, startWidth + effectiveDelta))
+        const scale = startWidth > 0 ? newWidth / startWidth : 1
+        const newHeight = Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, chromeHeight + startImagesHeight * scale))
+
+        el.style.width = `${newWidth}px`
+        el.style.height = `${newHeight}px`
+
+        if (corner.includes('w')) {
+          const newLeft = startLeft - (newWidth - startWidth)
+          el.style.left = `${Math.max(8, newLeft)}px`
+        }
+        if (corner.includes('n')) {
+          const newTop = startTop - (newHeight - startHeight)
+          el.style.top = `${Math.max(8, newTop)}px`
+        }
+      }
+
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+        el.classList.remove('resizing')
+        figurePreviewIsResizing = false
+        el.style.height = ''
+        localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: el.offsetWidth }))
+      }
+
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
+    })
+
+    handle.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      event.preventDefault()
+      const step = event.shiftKey ? 20 : 4
+      const maxWidth = Math.min(window.innerWidth * 0.9, 900)
+      const maxHeight = Math.min(window.innerHeight * 0.9, 900)
+      let width = el.offsetWidth
+      let height = el.offsetHeight
+      if (event.key === 'ArrowLeft') width -= step
+      if (event.key === 'ArrowRight') width += step
+      if (event.key === 'ArrowUp') height -= step
+      if (event.key === 'ArrowDown') height += step
+      width = Math.round(Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, width)))
+      height = Math.round(Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, height)))
+      el.style.width = `${width}px`
+      el.style.height = `${height}px`
+      localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: width }))
+      announceA11y(t('viewer:a11y.previewSize', { width, height }))
+    })
   })
 
   figurePreviewTooltipEl = el
@@ -16047,6 +16081,26 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
       idx = cleanText.indexOf(prefix, searchStart);
     }
 
+    // 3. 비순차 블록(본문 끝단으로 재배치된 표/그림 캡션 등) 무충돌 전역 검색
+    let isOutOfOrder = false;
+    if (idx === -1 && cleanSent.length >= 15) {
+      let candIdx = cleanText.indexOf(cleanSent);
+      if (candIdx === -1 && cleanSent.length >= 25) {
+        candIdx = cleanText.indexOf(cleanSent.substring(0, 25));
+      }
+      if (candIdx !== -1) {
+        const candRawStart = cleanToRaw[candIdx] ?? 0;
+        const candLastIdx = Math.min(cleanText.length, candIdx + cleanSent.length) - 1;
+        const candRawEnd = (cleanToRaw[candLastIdx] !== undefined) ? cleanToRaw[candLastIdx] + 1 : fullText.length;
+        // 기존 매칭된 문장 범위와 충돌(오버랩)하는지 검사
+        const overlaps = sentenceRanges.some(r => r.end > r.start && Math.max(candRawStart, r.start) < Math.min(candRawEnd, r.end));
+        if (!overlaps) {
+          idx = candIdx;
+          isOutOfOrder = true;
+        }
+      }
+    }
+
     if (idx !== -1) {
       const cleanStart = idx;
       const cleanEnd = Math.min(cleanText.length, idx + cleanSent.length);
@@ -16062,8 +16116,8 @@ function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
         end: rawEnd
       });
 
-      // 순차 검색 인덱스는 전방향 진행만 허용
-      if (cleanEnd > searchStart) {
+      // 순방향 매칭일 때만 순차 포인터 전진 (비순차 캡션에 의해 본문 포인터가 교란되지 않도록 방지)
+      if (!isOutOfOrder && cleanEnd > searchStart) {
         searchStart = cleanEnd;
       }
     } else {
@@ -16971,8 +17025,8 @@ function splitIntoSentences(fullText) {
       const nextChar = paraText[nextIndex];
       const isPeriod = punc.includes('.');
 
-      // 다음 글자가 소문자/숫자/특수문자이면 문장 구분 안 함
-      const isLowerOrDigitOrSpecial = /^[a-z0-9\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
+      // 다음 글자가 소문자/특수문자이면 문장 구분 안 함 (단, 숫자는 1988년, 1세 등 문장의 시작이 될 수 있으므로 제외)
+      const isLowerOrDigitOrSpecial = /^[a-z\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
       if (isPeriod && isLowerOrDigitOrSpecial) {
         continue;
       }

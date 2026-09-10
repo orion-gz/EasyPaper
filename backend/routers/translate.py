@@ -306,8 +306,9 @@ async def clear_translation_cache(session_id: str, current_user: str = Depends(g
     require_session_owner(session_id, current_user)
 
     # 1. 파일 캐시 삭제
-    from services.cache import clear_session_cache
+    from services.cache import clear_session_cache, clear_derived_session_cache
     clear_session_cache(session_id)
+    clear_derived_session_cache(session_id)
     
     # 2. 라이브러리 번역 저장본 삭제 및 메타데이터 업데이트
     lib_clear_translations(session_id)
@@ -315,12 +316,26 @@ async def clear_translation_cache(session_id: str, current_user: str = Depends(g
     from config import LIBRARY_DIR
     import os
     import shutil
+    import glob
     import json
     
-    doc_trans_dir = os.path.join(LIBRARY_DIR, session_id, "translations")
-    if os.path.exists(doc_trans_dir):
-        shutil.rmtree(doc_trans_dir, ignore_errors=True)
-        os.makedirs(doc_trans_dir, exist_ok=True)
+    doc_dir = os.path.join(LIBRARY_DIR, session_id)
+    if os.path.exists(doc_dir):
+        doc_trans_dir = os.path.join(doc_dir, "translations")
+        if os.path.exists(doc_trans_dir):
+            shutil.rmtree(doc_trans_dir, ignore_errors=True)
+            os.makedirs(doc_trans_dir, exist_ok=True)
+
+        doc_md_dir = os.path.join(doc_dir, "md")
+        if os.path.exists(doc_md_dir):
+            shutil.rmtree(doc_md_dir, ignore_errors=True)
+            os.makedirs(doc_md_dir, exist_ok=True)
+
+        for f in glob.glob(os.path.join(doc_dir, "translation_*.md")):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
         
     meta_path = os.path.join(LIBRARY_DIR, session_id, "metadata.json")
     if os.path.exists(meta_path):

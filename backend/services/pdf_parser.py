@@ -1,8 +1,9 @@
 import base64
 import fitz  # PyMuPDF
+import os
 import re
 from functools import lru_cache
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 
 def extract_pages(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -102,28 +103,250 @@ def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:
         return _extract_pages_pymupdf(pdf_path)
 
 
+def _find_cross_page_split(item_text: str, current_fitz_text: str, next_fitz_text: str) -> Optional[Tuple[str, str]]:
+    """MinerU가 다음 페이지로 이어진 문단을 현재 페이지 블록에 조기 병합해버린 경우,
+    실제 PDF 텍스트 레이어(PyMuPDF)와 대조하여 분할 지점(part_curr, part_next)을 찾습니다."""
+    if not item_text or not next_fitz_text:
+        return None
+
+    def _norm_words(text: str) -> List[str]:
+        t = re.sub(r'-\s*\n\s*', '', text)
+        t = re.sub(r'[^a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff]+', ' ', t)
+        return t.strip().lower().split()
+
+    item_words = _norm_words(item_text)
+    if len(item_words) < 10:
+        return None
+
+    next_words = _norm_words(next_fitz_text)
+    if len(next_words) < 5:
+        return None
+
+    next_head_words = next_words[:200]
+    next_head_str = ' '.join(next_head_words)
+    curr_norm_str = ' '.join(_norm_words(current_fitz_text))
+
+    window = 4
+    found_split_word_idx = -1
+    for i in range(5, len(item_words) - window + 1):
+        probe = ' '.join(item_words[i:i + window])
+        if probe in next_head_str:
+            if probe not in curr_norm_str:
+                found_split_word_idx = i
+                break
+
+    if found_split_word_idx == -1:
+        return None
+
+    target_words = item_words[found_split_word_idx:found_split_word_idx + 3]
+    pat = r'\s+'.join(re.escape(w) for w in target_words)
+    m = re.search(pat, item_text, re.IGNORECASE)
+    if not m:
+        m = re.search(r'\b' + re.escape(target_words[0]) + r'\b', item_text, re.IGNORECASE)
+
+    if m:
+        pos = m.start()
+        part1 = item_text[:pos].strip()
+        part2 = item_text[pos:].strip()
+        if part1 and part2:
+            return part1, part2
+
+    return None
+
+
+def sanitize_mineru_pages(pages: List[Dict[str, Any]], pdf_path: str) -> List[Dict[str, Any]]:
+    """이미 파싱/캐시된 MinerU pages에서 다음 페이지로 유출된 블록들을
+    실제 PDF 페이지 경계에 맞게 분할하여 보정합니다."""
+    if not pages or not pdf_path or not os.path.exists(pdf_path):
+        return pages
+
+    try:
+        with fitz.open(pdf_path) as doc:
+            fitz_texts = [doc[p].get_text() for p in range(len(doc))]
+    except Exception:
+        return pages
+
+    for p_idx in range(len(pages)):
+        curr_p = pages[p_idx]
+        has_next = p_idx + 1 < len(pages) and p_idx + 1 < len(fitz_texts)
+        new_curr_blocks = []
+        spillover_blocks = []
+        for block in curr_p.get("blocks", []):
+            txt = block.get("text", "")
+            b_type = block.get("type", 0)
+            bbox = block.get("bbox", [0.0, 0.0, 1000.0, 1000.0])
+
+            # 헤더/푸터 및 저널 메타데이터 블록 정제
+            if b_type == 0 and len(txt) < 120 and (bbox[1] < 75.0 or bbox[3] > 905.0):
+                if re.search(r'\b(?:Volume\s*\d+|Article\s*[a-z]?\d+|doi:|http[s]?://|www\.|Check\s+for\s+updates|esa|ECOSPHERE)\b', txt, re.IGNORECASE):
+                    continue
+                if txt.startswith("<sub>") and txt.endswith("</sub>"):
+                    continue
+
+            if has_next and b_type == 0 and txt:
+                split_res = _find_cross_page_split(txt, fitz_texts[p_idx], fitz_texts[p_idx + 1])
+                if split_res:
+                    part_curr, part_next = split_res
+                    b_curr = dict(block)
+                    b_curr["text"] = part_curr
+                    new_curr_blocks.append(b_curr)
+
+                    b_next = dict(block)
+                    b_next["text"] = part_next
+                    b_next["bbox"] = [100.0, 100.0, 900.0, 300.0]
+                    spillover_blocks.append(b_next)
+                    continue
+            new_curr_blocks.append(block)
+
+        curr_p["blocks"] = new_curr_blocks
+        curr_p["text"] = clean_text_for_translation("\n\n".join(b["text"] for b in new_curr_blocks).strip())
+        if spillover_blocks and has_next:
+            next_p = pages[p_idx + 1]
+            next_p["blocks"] = spillover_blocks + next_p.get("blocks", [])
+            next_p["text"] = clean_text_for_translation("\n\n".join(b["text"] for b in next_p["blocks"]).strip())
+
+    return pages
+
+
+def _build_mineru_pages(content_list: Any, total_pages: int = 0, pdf_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """MinerU content_list를 페이지별 텍스트 및 바운딩 박스 블록으로 조립합니다.
+    본문 문맥이 떠 있는 그림/표 캡션에 의해 중간에 끊기지 않도록 본문 텍스트를 먼저
+    연결하고 캡션은 페이지 끝단에 배치하며, 각 블록의 실제 바운딩 박스(bbox)를 보존합니다."""
+    if not content_list:
+        return []
+
+    fitz_page_texts: List[str] = []
+    if pdf_path and os.path.exists(pdf_path):
+        try:
+            with fitz.open(pdf_path) as d:
+                fitz_page_texts = [d[p].get_text() for p in range(len(d))]
+                if total_pages <= 0:
+                    total_pages = len(d)
+        except Exception:
+            pass
+
+    adjusted_items: List[Dict[str, Any]] = []
+    for item in content_list:
+        if not isinstance(item, dict):
+            continue
+        p_idx = item.get("page_idx", 0)
+        t = item.get("type")
+        raw_txt = _mineru_item_text(item)
+
+        if (
+            t in ("text", "paragraph", None)
+            and raw_txt
+            and fitz_page_texts
+            and p_idx + 1 < len(fitz_page_texts)
+        ):
+            split_res = _find_cross_page_split(
+                raw_txt,
+                fitz_page_texts[p_idx],
+                fitz_page_texts[p_idx + 1],
+            )
+            if split_res:
+                part_curr, part_next = split_res
+                item_curr = dict(item)
+                item_curr["text"] = part_curr
+                adjusted_items.append(item_curr)
+
+                item_next = dict(item)
+                item_next["page_idx"] = p_idx + 1
+                item_next["text"] = part_next
+                item_next["bbox"] = [100.0, 100.0, 900.0, 300.0]
+                adjusted_items.append(item_next)
+                continue
+
+        adjusted_items.append(item)
+
+    pages_items: Dict[int, List[Dict[str, Any]]] = {}
+    for item in adjusted_items:
+        pages_items.setdefault(item.get("page_idx", 0), []).append(item)
+
+    max_page_idx = max(pages_items.keys()) if pages_items else 0
+    num_pages = max(total_pages, max_page_idx + 1)
+    pages: List[Dict[str, Any]] = []
+
+    for page_idx in range(num_pages):
+        items = pages_items.get(page_idx, [])
+        body_blocks: List[Dict[str, Any]] = []
+        caption_blocks: List[Dict[str, Any]] = []
+
+        for item in items:
+            raw_txt = _mineru_item_text(item)
+            txt = clean_text_for_translation(raw_txt)
+            if not txt:
+                continue
+
+            t = item.get("type")
+            if t in ("header", "footer", "page_footnote", "page_number"):
+                # 머리말, 꼬리말, 쪽번호, 각주는 번역 스트림에서 완전 제외
+                continue
+
+            raw_bbox = item.get("bbox")
+            if raw_bbox and len(raw_bbox) == 4:
+                bbox = [float(c) for c in raw_bbox]
+            else:
+                bbox = [0.0, 0.0, 1000.0, 1000.0]
+
+            # 저널 메타데이터/여백 헤더-푸터 추가 방어 (패턴 매칭)
+            if (bbox[1] < 75.0 or bbox[3] > 905.0) and len(txt) < 120:
+                if re.search(r'\b(?:Volume\s*\d+|Article\s*[a-z]?\d+|doi:|http[s]?://|www\.|Check\s+for\s+updates|esa|ECOSPHERE)\b', txt, re.IGNORECASE):
+                    continue
+                if txt.startswith("<sub>") and txt.endswith("</sub>"):
+                    continue
+
+            if t in ("table", "image", "chart"):
+                caption_blocks.append({
+                    "bbox": bbox,
+                    "text": txt,
+                    "type": 1,
+                })
+            else:
+                body_blocks.append({
+                    "bbox": bbox,
+                    "text": txt,
+                    "type": 0,
+                })
+
+        body_str = "\n\n".join(b["text"] for b in body_blocks).strip()
+        caption_str = "\n\n".join(b["text"] for b in caption_blocks).strip()
+
+        if body_str and caption_str:
+            page_text = f"{body_str}\n\n{caption_str}"
+        elif body_str:
+            page_text = body_str
+        else:
+            page_text = caption_str
+
+        text_content = clean_text_for_translation(page_text)
+        all_blocks = body_blocks + caption_blocks
+        if not all_blocks and text_content:
+            all_blocks = [{"bbox": [0.0, 0.0, 1000.0, 1000.0], "text": text_content, "type": 0}]
+
+        pages.append({
+            "page_num": page_idx + 1,
+            "text": text_content,
+            "blocks": all_blocks,
+            "parser_engine": "mineru",
+        })
+
+    return pages
+
+
 def _extract_pages_mineru(pdf_path: str) -> List[Dict[str, Any]]:
     try:
         content_list = _run_mineru(pdf_path)
-        pages_text: Dict[int, List[str]] = {}
-        for item in content_list:
-            text = _mineru_item_text(item)
-            if text:
-                pages_text.setdefault(item.get("page_idx", 0), []).append(text)
+        total_pages = 0
+        try:
+            with fitz.open(pdf_path) as d:
+                total_pages = len(d)
+        except Exception:
+            pass
 
-        if not pages_text:
+        pages = _build_mineru_pages(content_list, total_pages, pdf_path=pdf_path)
+        if not pages:
             return _extract_pages_pymupdf(pdf_path)
-
-        max_page_idx = max(pages_text.keys())
-        pages = []
-        for page_idx in range(max_page_idx + 1):
-            text_content = clean_text_for_translation("\n\n".join(pages_text.get(page_idx, [])))
-            pages.append({
-                "page_num": page_idx + 1,
-                "text": text_content,
-                "blocks": [{"bbox": (0, 0, 1000, 1000), "text": text_content, "type": 0}],
-                "parser_engine": "mineru"
-            })
         return pages
     except Exception as e:
         import logging
@@ -874,7 +1097,7 @@ _ROMAN_NUMERAL_RE = r"(?=[MDCLXVI])M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:
 # "Table N"으로 시작하는 문장(번호 뒤에 소문자 동사가 곧장 이어짐)은 캡션이
 # 아니므로 걸러내야 한다. re.IGNORECASE가 걸린 상태에서도 이 판별만은
 # 대소문자를 구분해야 하므로 (?-i:...)로 지역 범위에서 대소문자 구분을 켠다.
-_CAPTION_FOLLOW_RE = r"(?=\s*(?:[:.\-–—*]|$|(?-i:[A-Z0-9])))"
+_CAPTION_FOLLOW_RE = r"(?=\s*(?:[:.\-–—*|]|$|(?-i:[A-Z0-9])))"
 _CAPTION_RE = re.compile(
     rf"^\s*(Fig(?:ure)?|Table)\.?\s*(\d+|{_ROMAN_NUMERAL_RE})\b{_CAPTION_FOLLOW_RE}", re.IGNORECASE
 )
@@ -1056,14 +1279,15 @@ def _mineru_item_text(item: Dict[str, Any]) -> str:
     번역 스트림에 넣지 않고 캡션만 포함한다(pymupdf 경로도 그림 내부 텍스트는
     본문에서 제외하므로 동일한 취급)."""
     t = item.get("type")
-    if t == "text":
-        return (item.get("text") or "").strip()
-    if t == "image":
-        return " ".join(item.get("image_caption") or []).strip()
+    if t in ("image", "chart"):
+        caps = item.get("image_caption") or item.get("chart_caption") or []
+        return " ".join(caps).strip()
     if t == "table":
         return " ".join(item.get("table_caption") or []).strip()
-    if t == "equation":
+    if t in ("text", "equation"):
         return (item.get("text") or "").strip()
+    if item.get("text"):
+        return str(item.get("text")).strip()
     return ""
 
 
@@ -1072,12 +1296,13 @@ def _mineru_page_regions(content_list: tuple) -> Dict[int, List[Dict[str, Any]]]
     for item in content_list:
         bbox = item.get("bbox")
         t = item.get("type")
-        if not bbox or t not in ("image", "table", "equation"):
+        if not bbox or t not in ("image", "table", "equation", "chart"):
             continue
 
         label, caption = None, None
-        if t == "image":
-            label, caption = _match_label_from_caption_text(" ".join(item.get("image_caption") or []).strip() or None)
+        if t in ("image", "chart"):
+            caps = item.get("image_caption") or item.get("chart_caption") or []
+            label, caption = _match_label_from_caption_text(" ".join(caps).strip() or None)
         elif t == "table":
             label, caption = _match_label_from_caption_text(" ".join(item.get("table_caption") or []).strip() or None)
         else:
