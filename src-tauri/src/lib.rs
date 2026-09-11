@@ -156,12 +156,23 @@ fn backend_binary_path(app: &tauri::AppHandle) -> PathBuf {
     base.join("easypaper-backend").join(exe_name)
 }
 
-fn kill_sidecar(state: &tauri::State<SidecarState>) {
-    if let Ok(mut guard) = state.0.lock() {
-        if let Some(mut child) = guard.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+fn stop_sidecar(state: &tauri::State<SidecarState>) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(child) = guard.as_mut() {
+        if child.try_wait().map_err(|e| e.to_string())?.is_none() {
+            child.kill().map_err(|e| format!("백엔드 종료 실패: {e}"))?;
         }
+        child.wait().map_err(|e| format!("백엔드 종료 확인 실패: {e}"))?;
+    }
+    // Retain the handle on failure so shutdown can retry and installation
+    // cannot proceed under the false assumption that DLL locks were released.
+    guard.take();
+    Ok(())
+}
+
+fn kill_sidecar(state: &tauri::State<SidecarState>) {
+    if let Err(error) = stop_sidecar(state) {
+        log::error!("{}", error);
     }
 }
 
@@ -172,9 +183,9 @@ fn kill_sidecar(state: &tauri::State<SidecarState>) {
 /// 오류로 멈춘다 - 자동 업데이트로 설치를 시작하기 전에 sidecar를 먼저
 /// 종료해 파일 잠금을 풀어줘야 한다.
 #[tauri::command]
-fn kill_backend_sidecar(state: tauri::State<SidecarState>) {
+fn kill_backend_sidecar(state: tauri::State<SidecarState>) -> Result<(), String> {
     log::info!("update install requested, killing sidecar to release locked files");
-    kill_sidecar(&state);
+    stop_sidecar(&state)
 }
 
 /// 앱 시작에 필요한 필수 자원(리소스 디렉토리, sidecar 프로세스 등)을 얻지

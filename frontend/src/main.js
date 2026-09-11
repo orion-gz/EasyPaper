@@ -1,4 +1,5 @@
 import './style.css'
+import { applyDesktopUpdate } from './desktopUpdate.js'
 import { pageCoordinates } from './pdfCoordinates.js'
 import './styles/shell.css'
 import './styles/library-page.css'
@@ -4797,41 +4798,31 @@ async function installTauriUpdate() {
     // 설치가 실패한다.
     const { relaunch } = await import('@tauri-apps/plugin-process')
 
-    // Windows 설치 프로그램이 파일을 덮어쓰기 전에 백엔드 sidecar를 먼저
-    // 종료해야 한다 - 계속 떠 있으면 PyInstaller 런타임이 로드한 DLL(예:
-    // MSVCP140.dll)을 OS가 잠그고 있어서 "Error opening file for writing"
-    // 오류로 설치가 멈춘다. downloadAndInstall의 진행 콜백은 await하지
-    // 않고 그냥 호출되므로, 'Finished' 이벤트 시점에 죽이면 설치 시작과
-    // 경쟁 상태가 생길 수 있다 - 다운로드 시작 전에 미리 종료해 둔다
-    // (다운로드 자체는 sidecar 없이도 문제없이 동작한다).
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('kill_backend_sidecar')
-    } catch (killErr) {
-      console.warn('sidecar 종료 실패(무시하고 설치 계속):', killErr)
-    }
+    const { invoke } = await import('@tauri-apps/api/core')
 
     let downloadedBytes = 0
     let totalBytes = 0
-    await pendingTauriUpdate.downloadAndInstall((event) => {
-      switch (event.event) {
-        case 'Started':
-          totalBytes = event.data.contentLength || 0
-          setTauriUpdateStatusText('다운로드 시작...')
-          break
-        case 'Progress':
-          downloadedBytes += event.data.chunkLength
-          setTauriUpdateStatusText(totalBytes
-            ? `다운로드 중... ${Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))}%`
-            : '다운로드 중...')
-          break
-        case 'Finished':
-          setTauriUpdateStatusText('설치 중... 곧 앱이 재시작됩니다.')
-          break
+    await applyDesktopUpdate(pendingTauriUpdate, {
+      stopBackend: () => invoke('kill_backend_sidecar'),
+      relaunch,
+      onEvent: (event) => {
+        switch (event.event) {
+          case 'Started':
+            totalBytes = event.data.contentLength || 0
+            setTauriUpdateStatusText('다운로드 시작...')
+            break
+          case 'Progress':
+            downloadedBytes += event.data.chunkLength
+            setTauriUpdateStatusText(totalBytes
+              ? `다운로드 중... ${Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))}%`
+              : '다운로드 중...')
+            break
+          case 'Finished':
+            setTauriUpdateStatusText('설치 중... 곧 앱이 재시작됩니다.')
+            break
+        }
       }
     })
-
-    await relaunch()
   } catch (err) {
     setTauriUpdateStatusText('설치 실패: ' + (err.message || err), '#ef4444')
     if (tauriUpdateInstallBtn) tauriUpdateInstallBtn.disabled = false

@@ -182,6 +182,9 @@ def test_packaged_restart_preserves_bundled_dependencies(tmp_path, engine):
     module = venv_manager.PARSER_PACKAGES[engine][1]
     (packages / module).mkdir(parents=True)
     (packages / module / "__init__.py").write_text("AVAILABLE = True\n")
+    (packages / "startup_hook.pth").write_text(
+        "import sys; sys.exit('optional package hook ran during startup')\n"
+    )
     (packages / "startup_dependency.py").write_text(
         "raise RuntimeError('incompatible parser dependency at startup')\n"
     )
