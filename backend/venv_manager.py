@@ -155,10 +155,11 @@ def _activate_packaged_parser(engine: str) -> None:
         return
 
     package_dir = parser_packages_dir(engine)
+    # pip --target installs transitive dependencies too. Keep bundled server
+    # packages first so their Python code and native extensions stay compatible
+    # after restarting with a different parser. Parser-only packages remain
+    # available through the appended site-packages directory.
     site.addsitedir(package_dir)
-    while package_dir in sys.path:
-        sys.path.remove(package_dir)
-    sys.path.insert(0, package_dir)
     _active_engine = engine
 
 
