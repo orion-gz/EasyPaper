@@ -10,6 +10,7 @@ ensure_session()이 실제로 열람될 때 지연 복원하도록 바뀌었다 
 
 import json
 import os
+import asyncio
 
 import fitz
 import pytest
@@ -66,7 +67,7 @@ def test_only_documents_with_running_job_are_restored_eagerly(isolated_dirs, mon
         upload_module, "resume_incomplete_jobs", lambda sessions: calls.append(dict(sessions))
     )
 
-    upload_module.restore_sessions_from_library()
+    asyncio.run(upload_module.restore_sessions_from_library())
 
     assert "doc-running" in upload_module.sessions, "진행 중인 잡이 있는 문서는 즉시 복원되어야 함"
     assert upload_module.sessions["doc-running"]["pages"], "복원된 세션에는 추출된 페이지가 있어야 함"
@@ -84,7 +85,7 @@ def test_document_without_any_job_status_is_not_restored_eagerly(isolated_dirs, 
 
     monkeypatch.setattr(upload_module, "resume_incomplete_jobs", lambda sessions: None)
 
-    upload_module.restore_sessions_from_library()
+    asyncio.run(upload_module.restore_sessions_from_library())
 
     assert "doc-untouched" not in upload_module.sessions
 
@@ -96,7 +97,7 @@ def test_ensure_session_still_lazily_restores_idle_document_on_demand(isolated_d
     _write_job_status("doc-idle", "completed", isolated_dirs)
 
     monkeypatch.setattr(upload_module, "resume_incomplete_jobs", lambda sessions: None)
-    upload_module.restore_sessions_from_library()
+    asyncio.run(upload_module.restore_sessions_from_library())
     assert "doc-idle" not in upload_module.sessions
 
     assert upload_module.ensure_session("doc-idle") is True
@@ -122,3 +123,18 @@ def test_ensure_session_reuses_disk_cache_across_simulated_restart(isolated_dirs
 
     assert upload_module.ensure_session("doc-idle") is True
     assert upload_module.sessions["doc-idle"]["pages"] == cached_pages
+
+
+def test_recovery_preserves_session_opened_while_parsing(isolated_dirs, monkeypatch):
+    _create_doc(isolated_dirs, "doc-race", monkeypatch)
+    original_extract = upload_module.extract_pages
+    live_session = {"pages": [], "user_edit": "keep"}
+
+    def extract(*args, **kwargs):
+        pages = original_extract(*args, **kwargs)
+        upload_module.sessions["doc-race"] = live_session
+        return pages
+
+    monkeypatch.setattr(upload_module, "extract_pages", extract)
+    assert upload_module.ensure_session("doc-race")
+    assert upload_module.sessions["doc-race"] is live_session

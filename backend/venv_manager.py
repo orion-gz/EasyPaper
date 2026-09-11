@@ -11,7 +11,6 @@ Tauri PyInstaller 배포본은 일반 Python 인터프리터가 아니므로 별
 """
 import os
 import shutil
-import site
 import sys
 import tempfile
 
@@ -159,7 +158,10 @@ def _activate_packaged_parser(engine: str) -> None:
     # packages first so their Python code and native extensions stay compatible
     # after restarting with a different parser. Parser-only packages remain
     # available through the appended site-packages directory.
-    site.addsitedir(package_dir)
+    # pip --target wheels need a module search path, not startup .pth hooks.
+    # Executing optional native imports here can crash or hang the whole server.
+    if package_dir not in sys.path:
+        sys.path.append(package_dir)
     _active_engine = engine
 
 

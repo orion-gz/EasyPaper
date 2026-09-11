@@ -1,6 +1,8 @@
 import uuid
 import os
 import shutil
+import asyncio
+import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import aiofiles
@@ -73,7 +75,9 @@ def ensure_session(session_id: str) -> bool:
         # 기존 문서는 처음 열릴 때 원문 FTS 인덱스를 지연 백필한다.
         from services.context_retrieval import index_document_chunks
         index_document_chunks(session_id, pages)
-        sessions[session_id] = {
+        # Recovery may finish after an interactive request has opened this
+        # document. Preserve that live session and any edits made to it.
+        sessions.setdefault(session_id, {
             "pdf_path": pdf_path,
             "filename": doc["filename"],
             "pages": pages,
@@ -95,7 +99,7 @@ def ensure_session(session_id: str) -> bool:
             "content_kind": doc.get("content_kind", "pdf"),
             "source_origin": doc.get("source_origin", "local"),
             "source_url": doc.get("source_url"),
-        }
+        })
         return True
     except Exception:
         return False
@@ -117,8 +121,11 @@ def require_session_owner(session_id: str, current_user: str) -> dict:
     return session
 
 
-def restore_sessions_from_library():
-    """서버 시작 시 미완료 번역 잡이 있는 문서만 세션으로 복원하고 잡을 재개합니다.
+async def restore_sessions_from_library():
+    """API 시작 후 미완료 작업의 문서를 백그라운드 복원하고 잡을 재개합니다.
+
+    PDF/OCR 복원은 worker thread에서 수행하고, asyncio 작업 재개는
+    서버 이벤트 루프에서 수행한다. 복원이 느려도 시작 응답을 막지 않는다.
 
     예전에는 라이브러리의 모든 문서를 매번 세션으로 복원했다(각 PDF를
     처음부터 다시 extract_pages()로 텍스트 추출). 이러면 서버 기동 시간이
@@ -134,12 +141,15 @@ def restore_sessions_from_library():
     열지 않는 가벼운 파일 I/O라 문서 수가 많아도 부담이 없다.
     """
     from services.document_tasks import recoverable_tasks
-    recoverable_doc_ids = {task["doc_id"] for task in recoverable_tasks()}
-    for doc in list_documents():
+    recoverable_doc_ids = {task["doc_id"] for task in await asyncio.to_thread(recoverable_tasks)}
+    for doc in await asyncio.to_thread(list_documents):
         doc_id = doc["id"]
-        job = get_job_status(doc_id)
+        job = await asyncio.to_thread(get_job_status, doc_id)
         if doc_id in recoverable_doc_ids or (job and job.get("status") == "running"):
-            ensure_session(doc_id)
+            try:
+                await asyncio.to_thread(ensure_session, doc_id)
+            except Exception:
+                logging.getLogger(__name__).exception("Failed to restore document %s", doc_id)
 
     # 미완료 번역 잡과 나머지 영속 작업 재개
     resume_incomplete_jobs(sessions)
