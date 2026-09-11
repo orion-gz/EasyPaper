@@ -28,6 +28,14 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 /// kill하기 위해 앱 상태로 보관한다(고아 프로세스 방지, 계획 Phase 3).
 struct SidecarState(Mutex<Option<Child>>);
 
+#[derive(Default)]
+struct StartupState(Mutex<Option<String>>);
+
+#[tauri::command]
+fn backend_startup_error(state: tauri::State<StartupState>) -> Option<String> {
+    state.0.lock().unwrap().clone()
+}
+
 /// 선호 포트(8000)를 우선 시도하고, 이미 사용 중이면(기존 웹 배포판이 로컬에
 /// 동시 실행 중인 경우 등) OS가 골라주는 임시 포트로 폴백한다(계획 Phase 2).
 fn find_available_port(preferred: u16) -> u16 {
@@ -90,28 +98,36 @@ fn resolve_user_shell_path() -> Option<String> {
 /// 백엔드의 루트(`/`)에 재시도 GET을 보내 준비 상태를 확인한다. `/api/*`는
 /// 전역 인증이 걸려 있어 로그인 전 판별에 쓸 수 없지만, 루트는 인증 없이
 /// 200을 반환하며 기존 Dockerfile의 HEALTHCHECK도 동일하게 `/`를 쓴다.
-fn wait_for_backend(port: u16, timeout: Duration) -> bool {
+fn wait_for_backend(port: u16, timeout: Duration, app: &tauri::AppHandle) -> Result<(), String> {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", port)) {
+        {
+            let state = app.state::<SidecarState>();
+            let mut guard = state.0.lock().unwrap();
+            let child = guard.as_mut().ok_or("백엔드 프로세스가 없습니다.")?;
+            if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+                return Err(format!("백엔드가 시작 중 종료되었습니다 ({status})."));
+            }
+        }
+        let address = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+        if let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_millis(500)) {
             let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+            let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
             let request =
                 format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
             if stream.write_all(request.as_bytes()).is_ok() {
-                let mut buf = [0u8; 32];
-                if let Ok(n) = stream.read(&mut buf) {
-                    if n > 0 {
-                        let text = String::from_utf8_lossy(&buf[..n]);
-                        if text.starts_with("HTTP/1.1 200") || text.starts_with("HTTP/1.0 200") {
-                            return true;
-                        }
+                let mut buf = [0u8; 12];
+                if stream.read_exact(&mut buf).is_ok() {
+                    let text = String::from_utf8_lossy(&buf);
+                    if text.starts_with("HTTP/1.1 200") || text.starts_with("HTTP/1.0 200") {
+                        return Ok(());
                     }
                 }
             }
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    false
+    Err("백엔드 시작 대기 시간(120초)을 초과했습니다.".to_string())
 }
 
 /// 백엔드 sidecar 실행파일 경로를 계산한다.
@@ -187,15 +203,17 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .manage(SidecarState(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![kill_backend_sidecar])
+        .manage(StartupState::default())
+        .invoke_handler(tauri::generate_handler![
+            kill_backend_sidecar,
+            backend_startup_error
+        ])
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    .build(),
+            )?;
 
             let app_handle = app.handle().clone();
 
@@ -215,9 +233,18 @@ pub fn run() {
             let cache_dir = app_data_dir.join("cache");
             let library_dir = app_data_dir.join("library");
             let logs_dir = app_data_dir.join("logs");
-            for dir in [&app_data_dir, &uploads_dir, &cache_dir, &library_dir, &logs_dir] {
+            for dir in [
+                &app_data_dir,
+                &uploads_dir,
+                &cache_dir,
+                &library_dir,
+                &logs_dir,
+            ] {
                 if let Err(e) = std::fs::create_dir_all(dir) {
-                    die(&format!("앱 데이터 하위 디렉토리를 만들 수 없습니다 ({dir:?})"), e);
+                    die(
+                        &format!("앱 데이터 하위 디렉토리를 만들 수 없습니다 ({dir:?})"),
+                        e,
+                    );
                 }
             }
             let db_path = app_data_dir.join("easypaper.db");
@@ -279,10 +306,8 @@ pub fn run() {
                 .spawn()
                 .unwrap_or_else(|e| die("백엔드 sidecar 프로세스를 실행할 수 없습니다", e));
 
-            // 디버깅 편의를 위해 sidecar의 stdout/stderr을 그대로 로그로 흘려보낸다.
-            // tauri_plugin_log는 디버그 빌드에서만 설치되므로(위 참고), 릴리스
-            // 빌드에서는 별도 로거가 없어 이 log:: 호출들이 실제로는 아무 데도
-            // 쓰이지 않는다 - 별도 볼륨 조정이 필요 없다.
+            // 릴리스에서도 import 단계의 실패를 진단할 수 있도록 sidecar의
+            // stdout/stderr을 Tauri 로그 파일에 남긴다.
             if let Some(stdout) = child.stdout.take() {
                 std::thread::spawn(move || {
                     use std::io::BufRead;
@@ -318,14 +343,18 @@ pub fn run() {
                 .get_webview_window("main")
                 .unwrap_or_else(|| die_msg("main 윈도우를 찾을 수 없습니다"));
             std::thread::spawn(move || {
-                if wait_for_backend(port, Duration::from_secs(15)) {
+                let result = wait_for_backend(port, Duration::from_secs(120), &app_handle);
+                let result = result.and_then(|()| {
                     let url = format!("http://127.0.0.1:{port}/");
                     log::info!("backend ready, navigating window to {}", url);
-                    if let Err(e) = window.navigate(url.parse().expect("invalid url")) {
-                        log::error!("failed to navigate window: {}", e);
-                    }
-                } else {
-                    log::error!("backend healthcheck did not succeed within timeout");
+                    window
+                        .navigate(url.parse().expect("invalid url"))
+                        .map_err(|e| format!("앱 화면을 열 수 없습니다: {e}"))
+                });
+                if let Err(error) = result {
+                    log::error!("backend startup failed: {}", error);
+                    *app_handle.state::<StartupState>().0.lock().unwrap() = Some(error);
+                    kill_sidecar(&app_handle.state::<SidecarState>());
                 }
             });
 

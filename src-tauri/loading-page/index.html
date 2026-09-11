@@ -17,6 +17,31 @@
 </style>
 </head>
 <body>
-  <p>EasyPaper 백엔드를 시작하는 중입니다...</p>
+  <div style="max-width: 560px; padding: 24px; text-align: center">
+    <p id="status" role="status">EasyPaper 백엔드를 시작하는 중입니다...</p>
+    <p id="help" hidden>앱을 종료한 뒤 다시 실행해 주세요. 문제가 반복되면 EasyPaper 로그와 함께 오류 메시지를 전달해 주세요.</p>
+  </div>
+  <script>
+    function showError(error) {
+      clearInterval(timer);
+      clearTimeout(deadline);
+      document.getElementById('status').textContent = error;
+      document.getElementById('help').hidden = false;
+    }
+    const deadline = setTimeout(() => showError(
+      '앱 시작을 완료하지 못했습니다. 백엔드 연결 또는 화면 로딩에 실패했습니다.'
+    ), 130000);
+    const timer = setInterval(async () => {
+      let error;
+      try {
+        error = await window.__TAURI_INTERNALS__.invoke('backend_startup_error');
+      } catch (_) {
+        // A local deadline also covers a failed IPC connection or navigation.
+      }
+      if (error) {
+        showError(error);
+      }
+    }, 500);
+  </script>
 </body>
 </html>

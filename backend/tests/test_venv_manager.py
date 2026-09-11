@@ -161,13 +161,49 @@ def test_packaged_parser_activation_and_restart_decision(tmp_path, monkeypatch):
     original_path = list(sys.path)
     try:
         venv_manager.relaunch_into_required_venv("mineru")
-        assert sys.path[0] == str(package_dir)
+        assert sys.path == original_path + [str(package_dir)]
         assert venv_manager.restart_required_for_engine("mineru") is False
         assert venv_manager.restart_required_for_engine("pymupdf") is True
     finally:
         sys.path[:] = original_path
         venv_manager._active_engine = "pymupdf"
 
+
+
+@pytest.mark.parametrize("engine", ["pdfplumber", "marker", "mineru"])
+def test_packaged_restart_preserves_bundled_dependencies(tmp_path, engine):
+    """Fresh startup must not load incompatible pip --target dependencies."""
+    import subprocess
+
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "startup_dependency.py").write_text("SOURCE = 'bundle'\n")
+    packages = tmp_path / "pdf-parser-packages" / engine
+    module = venv_manager.PARSER_PACKAGES[engine][1]
+    (packages / module).mkdir(parents=True)
+    (packages / module / "__init__.py").write_text("AVAILABLE = True\n")
+    (packages / "startup_dependency.py").write_text(
+        "raise RuntimeError('incompatible parser dependency at startup')\n"
+    )
+    script = """
+import sys
+import venv_manager
+sys.frozen = True
+sys.path[:] = [p for p in sys.path if 'site-packages' not in p]
+sys.path.insert(0, sys.argv[1])
+venv_manager.relaunch_into_required_venv(sys.argv[2])
+import startup_dependency
+assert startup_dependency.SOURCE == 'bundle'
+assert __import__(sys.argv[3]).AVAILABLE
+assert not venv_manager.restart_required_for_engine(sys.argv[2])
+"""
+    env = dict(os.environ, EASYPAPER_DESKTOP="1", EASYPAPER_CONFIG_DIR=str(tmp_path))
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(bundle), engine, module],
+        cwd=os.path.dirname(venv_manager.__file__), env=env,
+        capture_output=True, text=True, timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_packaged_installer_configures_windows_streams_as_utf8(monkeypatch):
