@@ -12,6 +12,7 @@ from services.library import (
     get_chat_quote_image_path, list_folders, create_folder, update_folder, delete_folder, move_documents_to_folder
 )
 from pydantic import BaseModel, Field, field_validator, model_validator
+import asyncio
 import json
 import re
 
