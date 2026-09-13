@@ -33,10 +33,11 @@ def _extract_pages_pymupdf(pdf_path: str) -> List[Dict[str, Any]]:
     doc = fitz.open(pdf_path)
     try:
         pages = []
+        recovery_context = {}
 
         for page_num in range(len(doc)):
             page = doc[page_num]
-            page_data = _extract_page(page, page_num + 1)
+            page_data = _extract_page(page, page_num + 1, recovery_context)
             page_data["parser_engine"] = "pymupdf"
             pages.append(page_data)
 
@@ -55,9 +56,16 @@ def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
 
     try:
         pages = []
-        with pdfplumber.open(pdf_path) as pdf:
+        from services.pdf_text_recovery import needs_text_recovery
+        recovery_context = {}
+        with pdfplumber.open(pdf_path) as pdf, fitz.open(pdf_path) as source:
             for idx, p in enumerate(pdf.pages):
                 page_num = idx + 1
+                if needs_text_recovery(source[idx]):
+                    recovered = _extract_page(source[idx], page_num, recovery_context)
+                    recovered["parser_engine"] = "pdfplumber"
+                    pages.append(recovered)
+                    continue
                 text = p.extract_text() or ""
                 blocks = []
                 if text:
@@ -131,7 +139,7 @@ def _extract_pages_mineru(pdf_path: str) -> List[Dict[str, Any]]:
         return _extract_pages_pymupdf(pdf_path)
 
 
-def _extract_page(page: fitz.Page, page_num: int) -> Dict[str, Any]:
+def _extract_page(page: fitz.Page, page_num: int, recovery_context=None) -> Dict[str, Any]:
     """단일 페이지에서 텍스트를 추출합니다."""
     page_width = page.rect.width
 
@@ -147,7 +155,23 @@ def _extract_page(page: fitz.Page, page_num: int) -> Dict[str, Any]:
     # 전부 버린다. 블록 분할/정렬 결과는 "blocks" 모드와 동일함을 확인했으므로
     # (같은 sort=True 옵션, 같은 bbox), 기존 2단 레이아웃 감지/정렬 함수는
     # bbox 튜플 형태만 맞춰주면 그대로 재사용할 수 있다.
-    raw = page.get_text("dict", sort=True)
+    from services.pdf_text_recovery import needs_text_recovery, recover_text, TextRecoveryError
+    recovery = {}
+    if needs_text_recovery(page):
+        try:
+            raw = recover_text(page, recovery_context if recovery_context is not None else {})
+            recovery = {"text_recovery": "ocr", "text_layer": [
+                {"text": span["text"], "bbox": list(span["bbox"]),
+                 "hasEOL": index == len(line["spans"]) - 1}
+                for block in raw["blocks"] for line in block.get("lines", [])
+                for index, span in enumerate(line["spans"]) if span["text"].strip()
+            ]}
+            figure_rects = []
+        except TextRecoveryError as exc:
+            return {"page_num": page_num, "text": "", "blocks": [], "word_count": 0,
+                    "text_recovery": "failed", "text_recovery_error": str(exc), "text_layer": []}
+    else:
+        raw = page.get_text("dict", sort=True, flags=fitz.TEXTFLAGS_DICT & ~fitz.TEXT_CID_FOR_UNKNOWN_UNICODE)
     blocks = []
     for b in raw["blocks"]:
         if "lines" not in b or not b["lines"]:
@@ -173,6 +197,7 @@ def _extract_page(page: fitz.Page, page_num: int) -> Dict[str, Any]:
 
     return {
         "page_num": page_num,
+        **recovery,
         "text": text_content,
         "is_two_column": is_two_column,
         "word_count": len(text_content.split()),

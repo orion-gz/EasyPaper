@@ -1,4 +1,7 @@
 {
+  "errors:pdf_ocr_unavailable": {"description": "Local OCR executable or trained data is unavailable for an unmapped PDF."},
+  "errors:pdf_ocr_language_missing": {"description": "The detected script has no installed OCR model."},
+  "errors:pdf_ocr_failed": {"description": "Local OCR could not recover usable page text."},
   "chat:placeholder": {
     "description": "Ask about this document…"
   },

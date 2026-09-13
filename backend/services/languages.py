@@ -118,6 +118,8 @@ def language_catalog() -> list[dict[str, str]]:
 
 
 _URL = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+_COMMAND_OR_LOG = re.compile(r"^\s*[#$]\s+\w|(?:\s[#$]\s+\w.*){2}|\b(?:DEBUG|INFO|WARN(?:ING)?|ERROR|COMMAND_FAILED):|\b\d{2}:\d{2}:\d{2}\b")
+_TECHNICAL_TOKEN = re.compile(r"(?:/[A-Za-z0-9_./-]+)|(?:\b[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+(?:/[A-Za-z0-9_./-]*)?)")
 
 
 def _sample_text(pages: Iterable[dict], max_pages: int = 5, max_chars: int = 20_000) -> tuple[str, list[str]]:
@@ -131,11 +133,16 @@ def _sample_text(pages: Iterable[dict], max_pages: int = 5, max_chars: int = 20_
     for index in indexes:
         useful = []
         for raw_line in str(page_list[index].get("text", "")).splitlines():
+            # Shell transcripts and logs are not evidence of the prose language.
+            # This matters especially for CJK manuals with long Latin identifiers.
+            if _COMMAND_OR_LOG.search(raw_line):
+                continue
             line = _URL.sub(" ", raw_line).strip()
+            line = _TECHNICAL_TOKEN.sub(" ", line)
             letters = sum(char.isalpha() for char in line)
             if letters >= 12 and letters / max(1, len(line)) >= 0.35:
                 useful.append(line)
-        sample = "\n".join(useful)[:remaining]
+        sample = "\n".join(useful)[:min(remaining, max_chars // count)]
         if sample:
             samples.append(sample)
             remaining -= len(sample)

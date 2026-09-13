@@ -330,6 +330,9 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
 
             try:
                 # 원문 태깅 처리
+                if page_data.get("text_recovery") == "failed":
+                    from services.pdf_text_recovery import TextRecoveryError
+                    raise TextRecoveryError(page_data.get("text_recovery_error", "pdf_ocr_failed"))
                 tagged_text, src_sentences = tag_source_text(text)
 
                 from services.document_tasks import retry_async, update_page, update_task
@@ -573,4 +576,3 @@ def get_page_md(session_id: str, page_num: int, suffix: str = "", fallback: bool
     lines = content.split("\n")
     body_lines = [l for l in lines if not l.startswith("## ")]
     return "\n".join(body_lines).strip()
-

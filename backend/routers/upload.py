@@ -41,6 +41,7 @@ def ensure_session(session_id: str) -> bool:
         parser_engine = doc.get("parser_engine") or "pymupdf"
         parser_version = doc.get("parser_version")
         pages = get_cached_pages(session_id, pdf_path, parser_engine, parser_version)
+        reparsed = pages is None
         if pages is None:
             if doc.get("content_kind") == "html_article":
                 from services.web_import import pages_from_manifest
@@ -62,7 +63,7 @@ def ensure_session(session_id: str) -> bool:
                 from services.pdf_diagnostics import parser_version as resolve_parser_version
                 parser_version = resolve_parser_version(parser_engine)
             save_pages_cache(session_id, pdf_path, pages, parser_engine, parser_version)
-        if doc.get("source_language", "auto") == "auto" and doc.get("detected_source_language", "und") == "und":
+        if reparsed or doc.get("detected_source_language", "und") == "und":
             from services.languages import detect_document_language
             detection = detect_document_language(pages)
             doc["detected_source_language"] = detection["language"]
@@ -360,3 +361,14 @@ async def get_pdf_path(session_id: str, current_user: str = Depends(get_current_
     """세션의 PDF 파일 경로를 반환합니다."""
     session = require_session_owner(session_id, current_user)
     return {"pdf_path": session["pdf_path"]}
+
+
+@router.get("/pdf-text/{session_id}/{page_num}")
+async def get_pdf_text_layer(session_id: str, page_num: int,
+                             current_user: str = Depends(get_current_user)):
+    session = require_session_owner(session_id, current_user)
+    page = next((item for item in session["pages"] if item["page_num"] == page_num), None)
+    if page is None:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return {"recovery": page.get("text_recovery"), "spans": page.get("text_layer", []),
+            "error": page.get("text_recovery_error")}

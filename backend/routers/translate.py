@@ -38,6 +38,13 @@ async def translate_page(
     이미 동일한 옵션으로 번역된 페이지는 캐시에서 즉시 반환합니다.
     """
     session = require_session_owner(session_id, current_user)
+    recovery_page = next((p for p in session["pages"] if p["page_num"] == page_num), {})
+    if recovery_page.get("text_recovery") == "failed":
+        raise HTTPException(status_code=422, detail={
+            "code": recovery_page.get("text_recovery_error", "pdf_ocr_failed"),
+            "params": {},
+            "fallback": "This PDF has no usable character mapping. Install Tesseract and the source language model, then reparse the document.",
+        })
     from services.processing_policy import ensure_processing_allowed
     ensure_processing_allowed(session, "translate")
     enforce_rate_limit("translate", current_user)

@@ -126,6 +126,22 @@ def test_mixed_language_single_page_is_mul():
     assert detect_document_language([{"text": text}])["language"] == "mul"
 
 
+def test_japanese_manual_with_shell_transcripts_is_not_english_or_mixed():
+    prose = "Linux について説明するにあたり、必要な知識である基本ソフトと応用ソフトの考え方を学習します。"
+    transcript = ("# systemctl disable firewalld.service Removed symlink "
+                  "/etc/systemd/system/dbus-org.fedoraproject.FirewallD1.service. " * 15)
+    log = "3 月 11 07:05:18 localhost.localdomain firewalld[14853]: WARNING: COMMAND_FAILED"
+    assert detect_document_language([{"text": prose * 8 + "\n\n" + transcript + "\n" + log * 5}])["language"] == "ja"
+
+
+def test_inline_math_and_cjk_ascii_periods_remain_detection_evidence():
+    from services.languages import _sample_text
+    text = "We define $ alpha as the weight of the first measurement in this experiment."
+    assert "alpha" in _sample_text([{"text": text}])[0]
+    japanese = "本研究では安定した言語判定を行います.多言語文書について説明します"
+    assert japanese in _sample_text([{"text": japanese}])[0]
+
+
 def test_short_foreign_fragments_do_not_make_english_paper_multilingual():
     english = "This paper presents a reliable language detection method for multilingual documents. " * 12
     text = (english + "\n\n" + "서울대학교 컴퓨터공학부 인공지능 연구실 소속 연구자 일동\n\n"

@@ -11,8 +11,17 @@ export default defineConfig({
     },
   },
   build: {
+    assetsInlineLimit: path => path.includes('/pdfjs-dist/') ? false : undefined,
     rollupOptions: {
       output: {
+        // PDF.js requests companion resources by their original file names.
+        assetFileNames(asset) {
+          const name = asset.names?.[0] || asset.name || ''
+          if (/\.(bcmap|pfb|ttf|wasm)$/.test(name) || /^(openjpeg|qcms|jbig2|quickjs|LICENSE)/.test(name)) {
+            return 'assets/pdfjs/[name][extname]'
+          }
+          return 'assets/[name]-[hash][extname]'
+        },
         manualChunks(id) {
           if (id.includes('/node_modules/cytoscape/')) return 'cytoscape'
           if (id.includes('/node_modules/cytoscape-fcose/') ||

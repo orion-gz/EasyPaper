@@ -749,6 +749,18 @@ body:not(.light-theme) .pdf-page-inner canvas {
   --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 
+.pdf-text-recovery-notice {
+  position: absolute;
+  inset: auto 8px 8px;
+  z-index: 3;
+  padding: 8px 12px;
+  color: #713f12;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
 .textLayer[data-main-rotation="90"] {
   transform: rotate(90deg) translateY(-100%);
 }

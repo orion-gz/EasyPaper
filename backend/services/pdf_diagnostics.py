@@ -8,7 +8,7 @@ import unicodedata
 from collections import Counter
 from typing import Any, Iterable
 
-PAGES_CACHE_SCHEMA_VERSION = 2
+PAGES_CACHE_SCHEMA_VERSION = 3
 _PARSER_DISTRIBUTIONS = {
     "pymupdf": "PyMuPDF",
     "pdfplumber": "pdfplumber",
@@ -139,6 +139,8 @@ def diagnose_pages(pages: list[dict], images: list[dict] | None = None,
 
         suspicious_order = _suspicious_reading_order(page)
         issues = []
+        if page.get("text_recovery_error"):
+            issues.append(page["text_recovery_error"])
         if not stripped:
             issues.append("empty_text")
         if broken_ratio > 0.005:

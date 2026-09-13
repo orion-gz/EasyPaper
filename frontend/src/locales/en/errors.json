@@ -1,4 +1,7 @@
 {
+  "pdf_ocr_unavailable": "This PDF needs text recovery. Install Tesseract and its source-language model, then reparse the document.",
+  "pdf_ocr_language_missing": "The OCR model for this document's script is missing. Install the language model and reparse the document.",
+  "pdf_ocr_failed": "Text recovery failed on this page. Check the original PDF and retry parsing with the correct OCR language.",
   "unsupported_source_language": "Unsupported source language: {{language}}",
   "unsupported_target_language": "Unsupported target language: {{language}}",
   "unsupported_ui_locale": "Unsupported interface language: {{locale}}",
