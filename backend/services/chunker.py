@@ -133,8 +133,8 @@ def split_into_sentences(text: str) -> List[str]:
             next_char = para[next_index]
             is_period = '.' in punc
             
-            # 다음 글자가 소문자/숫자/특수문자이면 구분 안 함
-            is_lower_or_digit_or_special = bool(re.match(r'^[a-z0-9\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]', next_char))
+            # 다음 글자가 소문자/특수문자이면 구분 안 함 (단, 숫자는 1988년, 1세 등 문장의 시작이 될 수 있으므로 제외)
+            is_lower_or_digit_or_special = bool(re.match(r'^[a-z\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]', next_char))
             if is_period and is_lower_or_digit_or_special:
                 continue
                 

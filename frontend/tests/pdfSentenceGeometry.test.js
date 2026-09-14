@@ -4,10 +4,10 @@ import fs from 'node:fs'
 import vm from 'node:vm'
 import { normalizePdfText, mergePdfHighlightRects, mappedSentenceRange } from '../src/pdfSentenceGeometry.js'
 
+import { alignSentencesToText as align } from '../src/sentenceAlignment.js'
+
 // Exercise the actual production alignment function without booting the UI.
 const source = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-const alignment = source.slice(source.indexOf('function alignSentencesToText('), source.indexOf('// ── PDF 텍스트 레이어 비파괴'))
-const align = vm.runInNewContext(`${alignment}; alignSentencesToText`, { normalizePdfText, console })
 const equations = source.slice(source.indexOf('function findDisplayEquationsFromVTM('), source.indexOf('// 문장 범위로부터 오버레이'))
 const detectEquations = vm.runInNewContext(`${equations}; findDisplayEquationsFromVTM`)
 

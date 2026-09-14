@@ -1,11 +1,11 @@
 // Normalized matching must retain DOM (UTF-16) offsets, including ligatures,
 // combining marks and supplementary-plane letters.
-export function normalizePdfText(text) {
+export function normalizePdfText(text, { includeMathSymbols = false } = {}) {
   let clean = ''
   const starts = [], ends = []
   for (const { segment, index } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
     for (const char of segment.normalize('NFKC').toLowerCase()) {
-      if (!/[\p{L}\p{M}\p{N}]/u.test(char)) continue
+      if (!/[\p{L}\p{M}\p{N}]/u.test(char) && !(includeMathSymbols && /[\u2200-\u22ff\u2190-\u21ff\u00d7\u00f7\u00b1\u00b7]/u.test(char))) continue
       clean += char
       for (let i = 0; i < char.length; i++) {
         starts.push(index)

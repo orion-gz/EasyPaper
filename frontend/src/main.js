@@ -1,7 +1,7 @@
 import './style.css'
 import { applyDesktopUpdate } from './desktopUpdate.js'
 import { pageCoordinates } from './pdfCoordinates.js'
-import { normalizePdfText, mergePdfHighlightRects, mappedSentenceRange } from './pdfSentenceGeometry.js'
+import { mergePdfHighlightRects, mappedSentenceRange } from './pdfSentenceGeometry.js'
 import './styles/shell.css'
 import './styles/library-page.css'
 import './styles/research-graph.css'
@@ -21,6 +21,7 @@ import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceCh
 import { icon } from './icons.js'
 import { formatTranslationHtml, applyKatexToElement, linkPageCitations } from './textFormat.js'
 import { prepareMemoMarkdown } from './memoMarkdown.js'
+import { alignSentencesToText } from './sentenceAlignment.js'
 import { createSelectionRect, resolveDragSelection } from './library-selection.js'
 import { globalAnalyticsTracker } from './readingAnalytics.js'
 import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
@@ -2418,11 +2419,17 @@ if (viewerClearCacheBtn) {
       return
     }
     const currentDocTitle = $('doc-title')?.textContent || '현재 논문'
-    const ok = await showCustomConfirm(`"${currentDocTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+    const ok = await showCustomConfirm(
+      `"${currentDocTitle}"의 PDF 추출 및 번역 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하며, 기존 번역본도 초기화됩니다.)`,
+      { title: '캐시 삭제', confirmText: '캐시 삭제', danger: true }
+    )
     if (!ok) return
     try {
-      await clearSingleDocCacheAPI(state.sessionId)
-      showToast('PDF 추출 캐시가 삭제되었습니다.', 'success')
+      const sessionId = state.sessionId
+      await clearTranslationCacheAPI(sessionId)
+      await clearSingleDocCacheAPI(sessionId)
+      showToast(t('viewer:cacheClearedReload'), 'success')
+      setTimeout(() => window.location.reload(), 500)
     } catch (err) {
       showToast('캐시 삭제 실패: ' + err.message, 'error')
     }
@@ -14161,7 +14168,13 @@ function getOrCreateFigurePreviewTooltip() {
   el.className = 'figure-preview-tooltip hidden'
   el.setAttribute('role', 'dialog')
   el.setAttribute('aria-label', t('viewer:a11y.figureTrigger', { label: '' }))
-  el.innerHTML = `<div class="figure-preview-tooltip-items"></div><button type="button" class="figure-preview-tooltip-resize-handle" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>`
+  el.innerHTML = `
+    <div class="figure-preview-tooltip-items"></div>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-nw" data-corner="nw" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-ne" data-corner="ne" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-se" data-corner="se" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-sw" data-corner="sw" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+  `
   document.body.appendChild(el)
 
   try {
@@ -14198,72 +14211,99 @@ function getOrCreateFigurePreviewTooltip() {
     scrollToPage(viewerScrollContainer, target.page)
   })
 
-  const figureResizeHandle = el.querySelector('.figure-preview-tooltip-resize-handle')
-  figureResizeHandle.addEventListener('mousedown', (e) => {
-    e.preventDefault()
-    e.stopPropagation()
+  el.querySelectorAll('.figure-preview-tooltip-resize-handle').forEach((handle) => {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
 
-    const startX = e.clientX
-    const startWidth = el.offsetWidth
-    const startHeight = el.offsetHeight
-    // 이미지는 CSS에서 width:100%; height:auto로 표시되므로 컨테이너 너비가
-    // scale배 될 때 이미지의 실제 렌더링 높이도 같은 비율로 커진다. 반면
-    // 레이블/캡션 같은 텍스트 영역(chromeHeight)은 너비가 바뀌어도 높이가
-    // 거의 그대로다. 너비/높이를 마우스 이동량으로 각각 독립적으로 정하면
-    // 이미지 비율과 무관하게 박스 크기가 고정되어 이미지 아래로 빈 공간이
-    // 남거나 이미지가 잘려 스크롤이 생기는 문제가 있었다 - 높이를 "이미지
-    // 비율을 유지한 채 늘어난 이미지 높이 + 고정된 chromeHeight"로 다시
-    // 계산해 너비를 끌면 이미지 비율에 맞게 박스 전체가 adaptive하게
-    // 커지고 작아지도록 한다.
-    const loadedImgs = Array.from(el.querySelectorAll('.figure-preview-tooltip-img:not(.hidden)'))
-    const startImagesHeight = loadedImgs.reduce((sum, img) => sum + img.getBoundingClientRect().height, 0)
-    const chromeHeight = startHeight - startImagesHeight
-    const maxWidth = Math.min(window.innerWidth * 0.9, 900)
-    const maxHeight = Math.min(window.innerHeight * 0.9, 900)
-    el.classList.add('resizing')
-    figurePreviewIsResizing = true
-    if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+      const corner = handle.dataset.corner || 'se'
+      const startX = e.clientX
+      const startY = e.clientY
+      const startWidth = el.offsetWidth
+      const startHeight = el.offsetHeight
+      const rect = el.getBoundingClientRect()
+      const startLeft = rect.left
+      const startTop = rect.top
 
-    const onMove = (moveEvent) => {
-      const newWidth = Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, startWidth + (moveEvent.clientX - startX)))
-      const scale = startWidth > 0 ? newWidth / startWidth : 1
-      const newHeight = Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, chromeHeight + startImagesHeight * scale))
-      el.style.width = `${newWidth}px`
-      el.style.height = `${newHeight}px`
-    }
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-      el.classList.remove('resizing')
-      figurePreviewIsResizing = false
-      // 드래그 중엔 실시간 피드백을 위해 높이를 직접 계산해 인라인으로 고정했지만,
-      // 드래그가 끝나면 그 고정값을 지워 다시 CSS의 height: auto로 돌려놓는다 -
-      // 그래야 이후 다른 비율의 그림/표로 내용이 바뀌어도 높이가 자동으로
-      // 맞춰지고, 지금 안 맞는 빈 여백이 남지 않는다. 너비만 기억해둔다.
-      el.style.height = ''
-      localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: el.offsetWidth }))
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  })
-  figureResizeHandle.addEventListener('keydown', (event) => {
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
-    event.preventDefault()
-    const step = event.shiftKey ? 20 : 4
-    const maxWidth = Math.min(window.innerWidth * 0.9, 900)
-    const maxHeight = Math.min(window.innerHeight * 0.9, 900)
-    let width = el.offsetWidth
-    let height = el.offsetHeight
-    if (event.key === 'ArrowLeft') width -= step
-    if (event.key === 'ArrowRight') width += step
-    if (event.key === 'ArrowUp') height -= step
-    if (event.key === 'ArrowDown') height += step
-    width = Math.round(Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, width)))
-    height = Math.round(Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, height)))
-    el.style.width = `${width}px`
-    el.style.height = `${height}px`
-    localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: width }))
-    announceA11y(t('viewer:a11y.previewSize', { width, height }))
+      const loadedImgs = Array.from(el.querySelectorAll('.figure-preview-tooltip-img:not(.hidden)'))
+      const startImagesHeight = loadedImgs.reduce((sum, img) => sum + img.getBoundingClientRect().height, 0)
+      const chromeHeight = Math.max(0, startHeight - startImagesHeight)
+
+      const maxAvailableW = corner.includes('w')
+        ? Math.min(window.innerWidth * 0.9, 900, startLeft + startWidth - 8)
+        : Math.min(window.innerWidth * 0.9, 900, window.innerWidth - startLeft - 8)
+      const maxAvailableH = corner.includes('n')
+        ? Math.min(window.innerHeight * 0.9, 900, startTop + startHeight - 8)
+        : Math.min(window.innerHeight * 0.9, 900, window.innerHeight - startTop - 8)
+
+      const maxWidth = Math.max(_FIGURE_PREVIEW_MIN_WIDTH, maxAvailableW)
+      const maxHeight = Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, maxAvailableH)
+
+      el.classList.add('resizing')
+      figurePreviewIsResizing = true
+      if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+
+      const onMove = (moveEvent) => {
+        const rawDx = moveEvent.clientX - startX
+        const rawDy = moveEvent.clientY - startY
+        const deltaX = corner.includes('e') ? rawDx : -rawDx
+        const deltaY = corner.includes('s') ? rawDy : -rawDy
+
+        const aspect = startWidth / Math.max(1, startHeight)
+        let effectiveDelta = deltaX
+        if (Math.abs(deltaY) > Math.abs(deltaX)) {
+          effectiveDelta = deltaY * aspect
+        }
+
+        const newWidth = Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, startWidth + effectiveDelta))
+        const scale = startWidth > 0 ? newWidth / startWidth : 1
+        const newHeight = Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, chromeHeight + startImagesHeight * scale))
+
+        el.style.width = `${newWidth}px`
+        el.style.height = `${newHeight}px`
+
+        if (corner.includes('w')) {
+          const newLeft = startLeft - (newWidth - startWidth)
+          el.style.left = `${Math.max(8, newLeft)}px`
+        }
+        if (corner.includes('n')) {
+          const newTop = startTop - (newHeight - startHeight)
+          el.style.top = `${Math.max(8, newTop)}px`
+        }
+      }
+
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+        el.classList.remove('resizing')
+        figurePreviewIsResizing = false
+        el.style.height = ''
+        localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: el.offsetWidth }))
+      }
+
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
+    })
+
+    handle.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      event.preventDefault()
+      const step = event.shiftKey ? 20 : 4
+      const maxWidth = Math.min(window.innerWidth * 0.9, 900)
+      const maxHeight = Math.min(window.innerHeight * 0.9, 900)
+      let width = el.offsetWidth
+      let height = el.offsetHeight
+      if (event.key === 'ArrowLeft') width -= step
+      if (event.key === 'ArrowRight') width += step
+      if (event.key === 'ArrowUp') height -= step
+      if (event.key === 'ArrowDown') height += step
+      width = Math.round(Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, width)))
+      height = Math.round(Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, height)))
+      el.style.width = `${width}px`
+      el.style.height = `${height}px`
+      localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: width }))
+      announceA11y(t('viewer:a11y.previewSize', { width, height }))
+    })
   })
 
   figurePreviewTooltipEl = el
@@ -16004,189 +16044,8 @@ function segmentElementIntoSentences(container, pageNum, className) {
 
 
 
-// 주어진 텍스트에서 원문 문장들의 정확한 문자 범위(start, end)를 유니코드 인지 방식으로 추출하여 매핑합니다.
-function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
-  const { clean: cleanText, starts: cleanToRaw, ends: cleanToRawEnd } = normalizePdfText(fullText);
+// alignSentencesToText는 ./sentenceAlignment.js 모듈에서 가져옵니다.
 
-  const sentenceRanges = [];
-  let searchStart = 0;
-
-  // 모든 문장 미리 전처리 - null/undefined 방어, LaTeX 명령어 제거 및 그리스 문자 대응
-  const GREEK_MAP = {
-    'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'delta': 'δ', 'epsilon': 'ε',
-    'zeta': 'ζ', 'eta': 'η', 'theta': 'θ', 'iota': 'ι', 'kappa': 'κ',
-    'lambda': 'λ', 'mu': 'μ', 'nu': 'ν', 'xi': 'ξ', 'pi': 'π',
-    'rho': 'ρ', 'sigma': 'σ', 'tau': 'τ', 'upsilon': 'υ', 'phi': 'φ',
-    'chi': 'χ', 'psi': 'ψ', 'omega': 'ω'
-  };
-
-  const cleanSents = (sentencesList || []).map(s => {
-    let text = s || '';
-
-    // LaTeX 그리스 문자 명령어를 유니코드 문자로 변환
-    for (const [name, unicode] of Object.entries(GREEK_MAP)) {
-      text = text.replace(new RegExp('\\\\' + name, 'g'), unicode);
-    }
-
-    // 기타 백슬래시로 시작하는 LaTeX 명령어 제거 (예: \sum, \int 등)
-    text = text.replace(/\\[a-zA-Z]+/g, '');
-
-    return normalizePdfText(text).clean;
-  });
-
-  for (let k = 0; k < cleanSents.length; k++) {
-    const cleanSent = cleanSents[k];
-    const sText = sentencesList[k] || '';
-
-    if (!cleanSent) {
-      const rawPos = cleanToRaw[searchStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
-      sentenceRanges.push({
-        text: sText,
-        start: rawPos,
-        end: rawPos
-      });
-      continue;
-    }
-
-    // 1. 순차 검색 시도 (가장 최선)
-    let idx = cleanText.indexOf(cleanSent, searchStart);
-
-    // 2. 접두어 기반 검색 시도 (사소한 문자 오차 해결) - searchStart 이후에서만 찾는다.
-    // 예전에는 이 단계에서 실패하면 fromIndex 없이(처음부터) 다시 검색하는 "전역
-    // 폴백"이 있었는데, indexOf(x, searchStart)가 이미 -1을 반환한 상태에서
-    // indexOf(x)(전체 검색)가 뭔가를 찾는다면 그 위치는 수학적으로 반드시
-    // searchStart보다 앞쪽일 수밖에 없다(그렇지 않다면 위 순차 검색이 이미 찾았을
-    // 것이므로). 즉 이 전역 폴백은 실행될 때마다 예외 없이 직전 문장이 이미 차지한
-    // 구간을 다시 가리켜, 인접한 두 문장의 하이라이트가 겹치는 버그로 항상 이어졌다.
-    // 실패한 문장은 대신 아래 Gap Partitioning이 겹치지 않게 처리하도록 둔다.
-    if (idx === -1) {
-      const prefix = cleanSent.substring(0, Math.min(15, cleanSent.length));
-      idx = cleanText.indexOf(prefix, searchStart);
-    }
-
-    if (idx !== -1) {
-      const cleanStart = idx;
-      const cleanEnd = Math.min(cleanText.length, idx + cleanSent.length);
-      const rawStart = cleanToRaw[cleanStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
-      const lastCleanIdx = cleanEnd - 1;
-      let rawEnd = (cleanToRawEnd[lastCleanIdx] !== undefined)
-        ? cleanToRawEnd[lastCleanIdx]
-        : (cleanToRaw[cleanToRaw.length - 1] ?? fullText.length);
-
-      // Include sentence-final punctuation, even when OCR inserts virtual spaces.
-      const suffix = sText.match(/[^\p{L}\p{M}\p{N}\s]+\s*$/u)?.[0]?.trim();
-      if (suffix) {
-        let cursor = rawEnd;
-        for (const char of suffix) {
-          while (/\s/u.test(fullText[cursor] || '') && cursor < fullText.length) cursor++;
-          if (fullText[cursor] !== char) break;
-          rawEnd = ++cursor;
-        }
-      }
-
-      sentenceRanges.push({
-        text: fullText.substring(rawStart, rawEnd),
-        start: rawStart,
-        end: rawEnd
-      });
-
-      // 순차 검색 인덱스는 전방향 진행만 허용
-      if (cleanEnd > searchStart) {
-        searchStart = cleanEnd;
-      }
-    } else {
-      // 매칭 실패 폴백
-      console.warn(`[alignSentencesToText] Failed to match sentence on page ${pageNum}:`, sText);
-      const rawPos = cleanToRaw[searchStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
-      sentenceRanges.push({
-        text: sText,
-        start: rawPos,
-        end: rawPos
-      });
-    }
-  }
-
-  // 매칭 실패(길이 0)인 문장들의 범위를 주변 매칭 성공 문장들 사이의 간격으로 분할 보간(Gap Partitioning)
-  // 수식 등의 기호만 있는 문장들이 누락 없이 서로 겹치지 않고 PDF 텍스트 레이어에 균등 분할 마킹되도록 지원.
-  //
-  // 실패한 문장들 사이의 간격을 "개수로 균등 분할"하면 위험하다 - 그림 캡션처럼 원문
-  // 추출 텍스트와 번역 문장 목록이 잘 안 맞는 구간에서 매칭이 연쇄적으로 실패하면,
-  // prevEnd와 nextStart 사이의 간격이 그림이 차지하는 공백이나 전혀 무관한 다른
-  // 단락까지 포함할 정도로 커질 수 있다(실측: 캡션 문장 하나가 수백 자 떨어진 다른
-  // 컬럼의 무관한 문단까지 하이라이트로 끌어옴). 그 큰 간격을 실패한 문장 "개수"로만
-  // 나누면 문장의 실제 길이와 무관하게 넓은 범위가 배정되므로, 대신 (1) 각 문장
-  // 원문(sText) 길이 비율로 나누고, (2) 간격이 실패한 문장들의 원문 길이 합보다
-  // 비정상적으로 크면(그림 등으로 인한 진짜 공백일 가능성) 간격 전체를 억지로 채우지
-  // 않고 prevEnd부터 필요한 만큼만 촘촘히 배정한 뒤 나머지는 어느 문장에도 배정하지
-  // 않고 비워 둔다.
-  const GAP_SAFETY_MULTIPLIER = 2.5;
-  let walkIdx = 0;
-  while (walkIdx < sentenceRanges.length) {
-    if (sentenceRanges[walkIdx].start === sentenceRanges[walkIdx].end) {
-      let k_start = walkIdx;
-      let k_end = walkIdx;
-      while (k_end + 1 < sentenceRanges.length && sentenceRanges[k_end + 1].start === sentenceRanges[k_end + 1].end) {
-        k_end++;
-      }
-
-      let prevEnd = 0;
-      for (let i = k_start - 1; i >= 0; i--) {
-        if (sentenceRanges[i].end > sentenceRanges[i].start) {
-          prevEnd = sentenceRanges[i].end;
-          break;
-        }
-      }
-
-      let nextStart = fullText.length;
-      for (let i = k_end + 1; i < sentenceRanges.length; i++) {
-        if (sentenceRanges[i].end > sentenceRanges[i].start) {
-          nextStart = sentenceRanges[i].start;
-          break;
-        }
-      }
-
-      if (prevEnd < nextStart) {
-        const gapSize = nextStart - prevEnd;
-        const lens = [];
-        let totalLen = 0;
-        for (let i = k_start; i <= k_end; i++) {
-          const len = Math.max(1, (sentenceRanges[i].text || '').length);
-          lens.push(len);
-          totalLen += len;
-        }
-        const usedGap = Math.min(gapSize, totalLen * GAP_SAFETY_MULTIPLIER);
-        let cursor = prevEnd;
-        for (let idx = 0; idx < lens.length; idx++) {
-          const i = k_start + idx;
-          const share = Math.round((lens[idx] / totalLen) * usedGap);
-          sentenceRanges[i].start = cursor;
-          sentenceRanges[i].end = Math.min(nextStart, cursor + share);
-          cursor = sentenceRanges[i].end;
-        }
-      }
-
-      walkIdx = k_end + 1;
-    } else {
-      walkIdx++;
-    }
-  }
-
-  // 최종 안전장치: 인접한 두 문장의 범위가 여전히 겹치면(접두어 폴백이 원문
-  // 오차로 실제보다 넓게 잡거나, 위 두 보정 단계가 손대지 않는 경계에서 우연히
-  // 겹치는 경우) 겹친 구간의 중간 지점에서 서로 맞닿도록 잘라 겹침을 제거한다.
-  // 어느 한쪽이 항상 옳다고 볼 근거가 없으므로 중간 지점에서 공평하게 나눈다.
-  for (let i = 1; i < sentenceRanges.length; i++) {
-    const prev = sentenceRanges[i - 1];
-    const cur = sentenceRanges[i];
-    if (cur.start < prev.end) {
-      const mid = Math.floor((cur.start + prev.end) / 2);
-      prev.end = Math.max(prev.start, mid);
-      cur.start = Math.min(cur.end, mid);
-    }
-  }
-
-  return sentenceRanges;
-}
 
 // ── PDF 텍스트 레이어 비파괴 가상 오버레이 기반 문장 매핑 시스템 ───────────────
 //
@@ -16997,8 +16856,8 @@ function splitIntoSentences(fullText) {
       const nextChar = paraText[nextIndex];
       const isPeriod = punc.includes('.');
 
-      // 다음 글자가 소문자/숫자/특수문자이면 문장 구분 안 함
-      const isLowerOrDigitOrSpecial = /^[a-z0-9\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
+      // 다음 글자가 소문자/특수문자이면 문장 구분 안 함 (단, 숫자는 1988년, 1세 등 문장의 시작이 될 수 있으므로 제외)
+      const isLowerOrDigitOrSpecial = /^[a-z\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
       if (isPeriod && isLowerOrDigitOrSpecial) {
         continue;
       }

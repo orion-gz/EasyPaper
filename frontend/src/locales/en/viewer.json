@@ -78,5 +78,6 @@
   "chapter.retry": "Retry",
   "chapter.cancel": "Cancel full summary",
   "chapter.cancelled": "The full summary task was cancelled.",
-  "chapter.cancelFailed": "Failed to cancel the full summary."
+  "chapter.cancelFailed": "Failed to cancel the full summary.",
+  "cacheClearedReload": "PDF extraction and translation cache deleted. Reloading viewer."
 }

@@ -310,11 +310,22 @@ async def translation_status(session_id: str, current_user: str = Depends(get_cu
 @router.post("/translate/{session_id}/clear-cache")
 async def clear_translation_cache(session_id: str, current_user: str = Depends(get_current_user)):
     """세션의 모든 번역 캐시와 라이브러리 번역 저장본 및 잡 상태를 지웁니다."""
-    require_session_owner(session_id, current_user)
+    # 소유권 확인: 활성 세션이 있으면 세션 소유권을, 세션이 없으면 PDF 재파싱 없이 라이브러리 문서 소유권만 확인
+    from routers.upload import sessions
+    if session_id in sessions:
+        if sessions[session_id].get("username") != current_user:
+            raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+    else:
+        from services.ownership import require_owned_document
+        try:
+            require_owned_document(session_id, current_user)
+        except HTTPException:
+            raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
 
     # 1. 파일 캐시 삭제
-    from services.cache import clear_session_cache
+    from services.cache import clear_session_cache, clear_derived_session_cache
     clear_session_cache(session_id)
+    clear_derived_session_cache(session_id)
     
     # 2. 라이브러리 번역 저장본 삭제 및 메타데이터 업데이트
     lib_clear_translations(session_id)
@@ -322,12 +333,15 @@ async def clear_translation_cache(session_id: str, current_user: str = Depends(g
     from config import LIBRARY_DIR
     import os
     import shutil
+    import glob
     import json
     
-    doc_trans_dir = os.path.join(LIBRARY_DIR, session_id, "translations")
-    if os.path.exists(doc_trans_dir):
-        shutil.rmtree(doc_trans_dir, ignore_errors=True)
-        os.makedirs(doc_trans_dir, exist_ok=True)
+    doc_dir = os.path.join(LIBRARY_DIR, session_id)
+    if os.path.exists(doc_dir):
+        doc_trans_dir = os.path.join(doc_dir, "translations")
+        if os.path.exists(doc_trans_dir):
+            shutil.rmtree(doc_trans_dir, ignore_errors=True)
+            os.makedirs(doc_trans_dir, exist_ok=True)
         
     meta_path = os.path.join(LIBRARY_DIR, session_id, "metadata.json")
     if os.path.exists(meta_path):

@@ -4346,6 +4346,9 @@
   "viewer:chapter.cancelFailed": {
     "description": "Chapter/full summary retry and cancellation UI: chapter.cancelFailed"
   },
+  "viewer:cacheClearedReload": {
+    "description": "Toast shown when single document PDF extraction and translation caches are cleared."
+  },
   "chat:memo.createAction": {
     "description": "Button under a quoted-text AI answer that creates a memo in the document."
   },
