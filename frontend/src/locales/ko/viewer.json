@@ -1,4 +1,5 @@
 {
+  "focus.toggle": "Focus 모드 (Shift+F)",
   "translation.waiting": "대기 중",
   "translation.progress": "{{total}}페이지 중 {{completed}}페이지",
   "source.label": "원문",

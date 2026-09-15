@@ -9,7 +9,7 @@ import "./styles/document-modes.css"
 import { marked } from 'marked'
 import { createWorkspaceModeController } from "./workspaceModeController.js"
 import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSettings.js'
-import { FocusModeController, visibleFocusRects } from './focusMode.js'
+import { FocusModeController, isFocusKeyboardExcluded, visibleFocusRects } from './focusMode.js'
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
@@ -4414,7 +4414,36 @@ function syncFocusSettingsControls() {
   settingFocusDimValue.value = `${settingFocusDim.value}%`
   settingFocusScaleValue.value = `${settingFocusScale.value}%`
 }
-function applyFocusModeSettings(mode) { focusModeController?.applySettings(readFocusModeSettings(mode)) }
+function syncViewerFocusToggle() {
+  const enabled = getModeSetting('focusModeEnabled', normalizeSettingsMode(state.currentDocumentMode))
+  $('viewer-focus-toggle').setAttribute('aria-pressed', String(enabled))
+}
+function applyFocusModeSettings(mode) {
+  focusModeController?.applySettings(readFocusModeSettings(mode))
+  syncViewerFocusToggle()
+}
+function toggleViewerFocusMode() {
+  if (!$('viewer-screen').classList.contains('active')) return
+  const mode = normalizeSettingsMode(state.currentDocumentMode)
+  const enabled = !getModeSetting('focusModeEnabled', mode)
+  setModeSetting('focusModeEnabled', mode, enabled)
+  applyFocusModeSettings(mode)
+  if (settingsTranslationModeContext === mode) {
+    settingFocusMode.checked = enabled
+    syncFocusSettingsControls()
+  }
+}
+$('viewer-focus-toggle').addEventListener('click', toggleViewerFocusMode)
+document.addEventListener('keydown', event => {
+  if (event.defaultPrevented || event.repeat || event.isComposing
+    || !event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
+    || event.code !== 'KeyF' || isFocusKeyboardExcluded(event.target)
+    || event.target?.isContentEditable
+    || !$('viewer-screen').classList.contains('active')
+    || document.querySelector('.modal-overlay:not(.hidden)')) return
+  event.preventDefault()
+  toggleViewerFocusMode()
+})
 function persistFocusModeSettings() {
   setModeSetting('focusModeEnabled', settingsTranslationModeContext, settingFocusMode.checked)
   setModeSetting('focusBlurStrength', settingsTranslationModeContext, settingFocusBlur.value)

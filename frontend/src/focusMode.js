@@ -402,7 +402,13 @@ export class FocusModeController {
       return { left, top, width: right - left, height: bottom - top }
     }).filter(rect => rect.width > 0 && rect.height > 0)
     if (this.root?.closest('#viewer-screen')?.classList.contains('active') === false) { this.clear(); return }
-    // Only sentence pixels are revealed. Panels, popups and toolbars remain covered.
+    // Keep the viewer's focus toggle available while the rest of the UI is dimmed.
+    const toggle = document.getElementById('viewer-focus-toggle')
+    const toggleBounds = toggle?.getBoundingClientRect()
+    const controlRects = toggleBounds?.width && toggleBounds?.height
+      ? [{ left: toggleBounds.left - 4, top: toggleBounds.top - 4, width: toggleBounds.width + 8, height: toggleBounds.height + 8 }]
+      : []
+    const revealRects = [...rects, ...controlRects]
     // Rendering can temporarily disappear during PDF zoom; retain the pinned reference.
     const zoom = Number.parseFloat(getComputedStyle(document.documentElement).zoom) || 1
     const memoRects = Array.from(document.querySelectorAll('.floating-memo')).map(element => ({ element, bounds: element.getBoundingClientRect() }))
@@ -424,7 +430,7 @@ export class FocusModeController {
       const b = element.getBoundingClientRect()
       return [b.left, b.top, b.width, b.height, element.clientWidth, element.clientHeight]
     })
-    const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height]), paneGeometry, pair.elements?.map(e => e.textContent), document.body.className])
+    const geometry = JSON.stringify([revealRects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height]), paneGeometry, pair.elements?.map(e => e.textContent), document.body.className])
     if (geometry === this.lastGeometry && targets.every(element => this.filteredElements.has(element))) {
       this.idleTimer = setTimeout(() => { this.idleTimer = null; this.scheduleRender() }, 120)
       return
@@ -452,7 +458,7 @@ export class FocusModeController {
       const prefix = original.computed === 'none' ? '' : original.computed
       if (element.contains(this.root)) {
         const id = `focus-sentence-filter-${++filterId}`
-        this.filterSvg.append(createSentenceFilter(id, rects, targetBounds[index], this.settings.blurStrength, focusSvgCoordinateScale(zoom, navigator.userAgent)))
+        this.filterSvg.append(createSentenceFilter(id, revealRects, targetBounds[index], this.settings.blurStrength, focusSvgCoordinateScale(zoom, navigator.userAgent)))
         element.style.setProperty('filter', `${prefix} url("#${id}")`, 'important')
       } else {
         // Other UI has no sentence pixels to reveal. A pixel-based CSS filter
@@ -479,7 +485,7 @@ export class FocusModeController {
       })),
       ...groups.flatMap(element => element.focusRects),
     ]
-    this.layer.replaceChildren(...erasures, createFocusTint(displayedRects, window.innerWidth, window.innerHeight, groups.length ? 0 : 4), ...groups)
+    this.layer.replaceChildren(...erasures, createFocusTint([...displayedRects, ...controlRects], window.innerWidth, window.innerHeight, groups.length ? 0 : 4), ...groups)
     this.scheduleRender()
   }
   destroy() {

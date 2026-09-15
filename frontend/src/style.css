@@ -8059,3 +8059,14 @@ body.light-theme .chat-drawer {
   outline: none !important;
   animation: none !important;
 }
+
+.viewer-focus-toggle { margin-bottom: 8px; }
+.viewer-focus-toggle[aria-pressed="true"] {
+  color: var(--control-accent);
+  border-color: var(--control-accent);
+  background: var(--bg-elevated);
+}
+.viewer-focus-toggle:focus-visible {
+  outline: 2px solid var(--control-accent);
+  outline-offset: 3px;
+}
