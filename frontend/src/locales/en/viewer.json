@@ -1,4 +1,5 @@
 {
+  "focus.toggle": "Focus mode (Shift+F)",
   "translation.waiting": "Waiting",
   "translation.progress": "{{completed}} of {{total}} pages",
   "source.label": "Source",
