@@ -113,6 +113,47 @@ for (const zoom of [0.8, 1, 1.25]) {
   })
 }
 
+test('hover starts keyboard navigation and hidden translations still reveal the next page', async ({ page }) => {
+  await page.setContent(`<style>
+    body { margin: 0 } #root { height: 240px; overflow: auto }
+    .page-pair { height: 600px } .trans-sentence { display: block }
+    [data-page="2"] .trans-sentence { display: none }
+  </style><input id="editor"><div id="root">
+    <div class="page-pair" data-page="1"><span class="trans-sentence">First</span><span class="trans-sentence">Second</span></div>
+    <div class="page-pair" data-page="2"><span class="trans-sentence">Third</span></div>
+  </div>`)
+  await page.evaluate(async moduleSource => {
+    const { FocusModeController } = await import(URL.createObjectURL(new Blob([moduleSource], { type: 'text/javascript' })))
+    const refs = Array.from(document.querySelectorAll('.trans-sentence'), (element, sentenceIdx) => ({
+      pageNum: Number(element.closest('.page-pair').dataset.page), sentenceIdx, element,
+    }))
+    window.controller = new FocusModeController({ root: document.querySelector('#root'), listSentences: () => refs })
+    window.controller.applySettings({ enabled: true })
+    for (const ref of refs) ref.element.addEventListener('mouseenter', () => window.controller.focus(ref))
+  }, moduleSource)
+  await page.locator('.trans-sentence').first().hover()
+  expect(await page.evaluate(() => window.controller.pinned)).toBe(false)
+  await page.keyboard.press('ArrowDown')
+  expect(await page.evaluate(() => window.controller.current.sentenceIdx)).toBe(1)
+  await page.keyboard.press('ArrowDown')
+  expect(await page.evaluate(() => window.controller.current.pageNum)).toBe(2)
+  expect(await page.locator('#root').evaluate(e => e.scrollTop)).toBeGreaterThan(500)
+  // A leave event caused by scrolling must not clear keyboard focus.
+  await page.evaluate(() => window.controller.leave())
+  await page.waitForTimeout(200)
+  expect(await page.evaluate(() => window.controller.current.pageNum)).toBe(2)
+  await page.keyboard.press('ArrowUp')
+  expect(await page.evaluate(() => window.controller.current.pageNum)).toBe(1)
+  expect(await page.locator('#root').evaluate(e => e.scrollTop)).toBe(0)
+  await page.locator('#editor').focus()
+  await page.keyboard.press('ArrowDown')
+  expect(await page.evaluate(() => window.controller.current.sentenceIdx)).toBe(1)
+  await page.locator('#editor').evaluate(e => e.blur())
+  await page.keyboard.press('Escape')
+  expect(await page.evaluate(() => window.controller.current)).toBeNull()
+  await page.evaluate(() => window.controller.destroy())
+})
+
 for (const density of [1, 2]) {
   test.describe(`single tint surface at DPR ${density}`, () => {
     test.use({ deviceScaleFactor: density })

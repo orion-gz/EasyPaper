@@ -370,23 +370,33 @@ export class FocusModeController {
   }
   togglePin(ref) { return this.focus(ref, { pin: true }) }
   navigate(delta) {
-    if (!this.pinned || !this.current) return false
+    if (!this.settings.enabled || !this.current) return false
     const sequence = this.listSentences?.() || []; const index = sequence.findIndex(ref => this.sameRef(ref, this.current))
     if (index < 0) return false
     const next = sequence[Math.max(0, Math.min(sequence.length - 1, index + delta))]
+    // Keyboard navigation owns focus until Escape/click, so scroll-triggered
+    // mouseleave or hover cannot reset the sentence selected by the arrows.
+    this.cancelLeave()
+    this.pinned = true
     if (!next || this.sameRef(next, this.current)) return true
+    const pageChanged = next.pageNum !== this.current.pageNum
     this.current = next
-    // Commit one nearest-position scroll before measuring the new pair. A
+    if (pageChanged) {
+      this.root?.querySelector(`.page-pair[data-page="${next.pageNum}"]`)
+        ?.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' })
+    }
+    // Reveal the sentence before measuring the new pair. A
     // smooth center scroll was being retargeted by translation reveal and by
     // repeated keys, rebuilding magnification on every intermediate position.
-    next.element?.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'instant' })
+    const element = next.element?.getClientRects().length ? next.element : null
+    element?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })
     // scrollIntoView already reveals the translation through all ancestors;
     // do not follow it with a second, centered translation-pane scroll.
-    this.revealedTranslation = !!next.element
+    this.revealedTranslation = !!element
     this.scheduleRender(); this.announce('focusMoved'); return true
   }
   handleKeyDown(event) {
-    if (!this.pinned || isFocusKeyboardExcluded(event.target)) return
+    if (!this.settings.enabled || !this.current || isFocusKeyboardExcluded(event.target)) return
     if (event.key === 'Escape') { event.preventDefault(); this.clear(); return }
     const delta = ['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : ['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : 0
     if (delta) { event.preventDefault(); this.navigate(delta) }
