@@ -14,6 +14,8 @@
   "focusBlur": "블러 강도",
   "focusDim": "배경 디밍",
   "focusScale": "문장 확대",
+  "focusHideOverlays": "Focus 모드에서 참조 오버레이 숨기기",
+  "focusHideOverlaysDescription": "Focus 모드가 켜져 있을 때만 그림·표·참고문헌 미리보기를 숨김",
   "focusKeyboardHelp": "문장을 클릭해 고정한 뒤 방향키로 이동하고 Esc로 해제",
   "suggestedQuestions": "AI 답변의 추천·관련 질문",
   "suggestedQuestionsDescription": "끄면 답변 아래에 후속 질문을 생성하지 않음",

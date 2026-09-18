@@ -1,4 +1,6 @@
-export const FOCUS_DEFAULTS = Object.freeze({ enabled: false, blurStrength: 6, dimOpacity: 20, scale: 104 })
+import { placeFocusPreview, previewBelongsToSentence } from './focusPreview.js'
+
+export const FOCUS_DEFAULTS = Object.freeze({ enabled: false, blurStrength: 6, dimOpacity: 20, scale: 104, hideOverlays: false })
 
 export function normalizeFocusSettings(value = {}) {
   const number = (input, fallback, min, max, step = 1) => {
@@ -8,6 +10,7 @@ export function normalizeFocusSettings(value = {}) {
   }
   return {
     enabled: value.enabled === true,
+    hideOverlays: value.hideOverlays === true,
     blurStrength: number(value.blurStrength, 6, 0, 16),
     dimOpacity: number(value.dimOpacity, 20, 0, 60, 5),
     scale: number(value.scale, 104, 100, 150),
@@ -302,10 +305,11 @@ export class FocusModeController {
     Object.assign(this, { root, resolvePair, listSentences, announce, notifyFallback, releaseDelay })
     this.settings = normalizeFocusSettings(); this.current = null; this.pinned = false
     this.filteredElements = new Map(); this.hiddenMemos = new Map()
+    this.previews = new Map(); this.activePreviews = new Set()
     this.onKeyDown = event => this.handleKeyDown(event); this.onViewportChange = () => this.scheduleRender()
     this.onLeave = () => this.leave()
     this.onPreviewOver = event => {
-      if (event.target.closest?.(FOCUS_PREVIEW_SELECTOR)) this.cancelLeave()
+      if (this.activePreviews.has(event.target.closest?.(FOCUS_PREVIEW_SELECTOR))) this.cancelLeave()
     }
     this.onPreviewOut = event => {
       if (event.target.closest?.(FOCUS_PREVIEW_SELECTOR) && !event.relatedTarget?.closest?.(FOCUS_PREVIEW_SELECTOR)) this.leave()
@@ -313,7 +317,9 @@ export class FocusModeController {
     document.addEventListener('mouseover', this.onPreviewOver)
     document.addEventListener('mouseout', this.onPreviewOut)
     this.onInteraction = event => {
-      if (!event.target.closest?.(`.textLayer, .trans-sentence, ${FOCUS_PREVIEW_SELECTOR}`)) this.clear()
+      if (!event.target.closest?.('.textLayer, .trans-sentence')
+        && !this.activePreviews.has(event.target.closest?.(FOCUS_PREVIEW_SELECTOR))
+        && !this.isPreviewAnchor(event.target.closest?.('[data-focus-start]'))) this.clear()
     }
     this.onVisibility = () => { if (document.hidden) this.clear() }
     document.addEventListener('keydown', this.onKeyDown)
@@ -325,10 +331,48 @@ export class FocusModeController {
   }
   applySettings(settings) {
     this.settings = normalizeFocusSettings(settings)
+    if (this.settings.enabled && this.settings.hideOverlays) {
+      for (const preview of this.previews.values()) preview.hide()
+    }
     // Suppress the card lift before the pointer enters, not when the focus
     // overlay appears: changing it on activation shifts the source by 2px.
     this.root?.classList.toggle('focus-mode-enabled', this.settings.enabled)
     if (!this.settings.enabled) this.clear(); else if (this.current) this.scheduleRender()
+  }
+  isPreviewAnchor(anchor, pair) {
+    if (!anchor || !this.current || !this.settings.enabled || this.settings.hideOverlays) return false
+    return previewBelongsToSentence(anchor, this.current, (pair || this.resolvePair?.(this.current) || {}).sourceRange)
+  }
+  registerPreview(element, anchor, hide) {
+    this.restorePreviewLayout(element)
+    this.previews.set(element, { anchor, hide })
+    this.scheduleRender()
+  }
+  restorePreviewLayout(element) {
+    const preview = this.previews.get(element)
+    if (!preview?.layout) return
+    for (const [property, original] of Object.entries(preview.layout)) {
+      element.style.setProperty(property, original.value, original.priority)
+    }
+    delete preview.layout
+  }
+  positionPreview(element, obstacles) {
+    const preview = this.previews.get(element)
+    const bounds = element.getBoundingClientRect()
+    const position = placeFocusPreview(bounds, obstacles, window.innerWidth, window.innerHeight)
+    if (!position) { preview.hide(); return false }
+    if (!preview.layout) {
+      preview.layout = Object.fromEntries(['left', 'top', 'min-width', 'min-height', 'max-width', 'max-height', 'overflow', 'animation'].map(property =>
+        [property, { value: element.style.getPropertyValue(property), priority: element.style.getPropertyPriority(property) }]))
+    }
+    // Preview elements are fixed body children; convert viewport pixels back
+    // to the application's CSS zoom coordinates.
+    const zoom = Number.parseFloat(getComputedStyle(document.documentElement).zoom) || 1
+    for (const [property, value] of Object.entries({ left: position.left, top: position.top, 'min-width': 0, 'min-height': 0,
+      'max-width': position.maxWidth, 'max-height': position.maxHeight })) element.style.setProperty(property, `${value / zoom}px`)
+    element.style.overflow = 'auto'
+    element.style.animation = 'none'
+    return true
   }
   sameRef(a, b) { return !!a && !!b && a.pageNum === b.pageNum && a.sentenceIdx === b.sentenceIdx && a.partIdx === b.partIdx }
   focus(ref, { pin = false } = {}) {
@@ -346,11 +390,13 @@ export class FocusModeController {
   }
   leave() { if (!this.pinned && !this.releaseTimer) this.releaseTimer = setTimeout(() => {
     this.releaseTimer = null
-    if (!Array.from(document.querySelectorAll(FOCUS_PREVIEW_SELECTOR)).some(element => element.matches(':hover') && element.getClientRects().length)) this.clear()
+    if (![...this.activePreviews].some(element => element.matches(':hover') && element.getClientRects().length)) this.clear()
   }, this.releaseDelay) }
   cancelLeave() { clearTimeout(this.releaseTimer); this.releaseTimer = null }
   clear() {
     this.cancelLeave()
+    for (const element of this.previews.keys()) this.restorePreviewLayout(element)
+    this.activePreviews.clear()
     clearTimeout(this.idleTimer); this.idleTimer = null
     if (this.raf) cancelAnimationFrame(this.raf)
     this.raf = null
@@ -425,13 +471,15 @@ export class FocusModeController {
       return { left, top, width: right - left, height: bottom - top }
     }).filter(rect => rect.width > 0 && rect.height > 0)
     if (this.root?.closest('#viewer-screen')?.classList.contains('active') === false) { this.clear(); return }
-    const previews = Array.from(document.querySelectorAll(FOCUS_PREVIEW_SELECTOR)).filter(element => {
+    let previews = [...this.previews].flatMap(([element, preview]) => {
       const style = getComputedStyle(element)
-      return style.visibility !== 'hidden' && style.display !== 'none' && element.getClientRects().length
+      if (!element.isConnected || style.visibility === 'hidden' || style.display === 'none' || !element.getClientRects().length) return []
+      if (!this.isPreviewAnchor(preview.anchor, pair)) { preview.hide(); this.restorePreviewLayout(element); return [] }
+      return [element]
     })
-    const previewRects = previews.map(element => element.getBoundingClientRect())
+    let previewRects = previews.map(element => element.getBoundingClientRect())
+    this.activePreviews = new Set(previews)
     // Reveal reading previews alongside the sentence, including outside the viewer.
-    // Reveal sentence pixels only; floating controls share the surrounding dimming.
     // Rendering can temporarily disappear during PDF zoom; retain the pinned reference.
     const zoom = Number.parseFloat(getComputedStyle(document.documentElement).zoom) || 1
     const memoRects = Array.from(document.querySelectorAll('.floating-memo')).map(element => ({ element, bounds: element.getBoundingClientRect() }))
@@ -459,6 +507,13 @@ export class FocusModeController {
       return
     }
     this.lastGeometry = geometry
+    const copies = createFocusMagnification(pair, rects, this.settings.scale / 100)
+    const erasures = copies.filter(element => element.classList.contains('focus-mode-erasure'))
+    const groups = copies.filter(element => element.classList.contains('focus-mode-magnification'))
+    const obstacles = [...rects, ...groups.flatMap(element => element.focusRects)]
+    previews = previews.filter(element => this.positionPreview(element, obstacles))
+    previewRects = previews.map(element => element.getBoundingClientRect())
+    this.activePreviews = new Set(previews)
     if (!this.filterSvg) {
       this.filterSvg = svgElement('svg', { width: 0, height: 0, 'aria-hidden': 'true' })
       this.filterSvg.style.position = 'absolute'; document.body.append(this.filterSvg)
@@ -498,9 +553,6 @@ export class FocusModeController {
       for (const [name, value] of Object.entries(focusCssVariables(this.settings))) layer.style.setProperty(name, value)
     }
     this.root?.classList.add('focus-mode-active')
-    const copies = createFocusMagnification(pair, rects, this.settings.scale / 100)
-    const erasures = copies.filter(element => element.classList.contains('focus-mode-erasure'))
-    const groups = copies.filter(element => element.classList.contains('focus-mode-magnification'))
     // Erase native glyphs BELOW the tint. Only the transformed sentence gets
     // an opening; otherwise the old white holes remain behind enlarged text.
     const displayedRects = [

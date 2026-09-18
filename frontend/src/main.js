@@ -647,6 +647,7 @@ const settingFocusMode = $('setting-focus-mode')
 const settingFocusBlur = $('setting-focus-blur')
 const settingFocusDim = $('setting-focus-dim')
 const settingFocusScale = $('setting-focus-scale')
+const settingFocusHideOverlays = $('setting-focus-hide-overlays')
 const settingFocusBlurValue = $('setting-focus-blur-value')
 const settingFocusDimValue = $('setting-focus-dim-value')
 const settingFocusScaleValue = $('setting-focus-scale-value')
@@ -1097,6 +1098,7 @@ function syncModeSettings(documentMode) {
   settingFocusBlur.value = getModeSetting('focusBlurStrength', settingsTranslationModeContext)
   settingFocusDim.value = getModeSetting('focusDimOpacity', settingsTranslationModeContext)
   settingFocusScale.value = getModeSetting('focusScale', settingsTranslationModeContext)
+  settingFocusHideOverlays.checked = getModeSetting('focusHideOverlays', settingsTranslationModeContext)
   syncFocusSettingsControls()
   updateAccentSettingsUI(getModeSetting('accentColor', settingsTranslationModeContext))
 
@@ -4403,13 +4405,13 @@ settingDisableBookmark.addEventListener('change', () => {
 })
 
 function readFocusModeSettings(mode = settingsTranslationModeContext) {
-  return { enabled: getModeSetting('focusModeEnabled', mode), blurStrength: getModeSetting('focusBlurStrength', mode), dimOpacity: getModeSetting('focusDimOpacity', mode), scale: getModeSetting('focusScale', mode) }
+  return { enabled: getModeSetting('focusModeEnabled', mode), blurStrength: getModeSetting('focusBlurStrength', mode), dimOpacity: getModeSetting('focusDimOpacity', mode), scale: getModeSetting('focusScale', mode), hideOverlays: getModeSetting('focusHideOverlays', mode) }
 }
 function syncFocusSettingsControls() {
   const enabled = settingFocusMode.checked
   focusModeControls?.classList.toggle('hidden', !enabled)
   focusModeControls?.setAttribute('aria-hidden', String(!enabled))
-  for (const control of [settingFocusBlur, settingFocusDim, settingFocusScale]) control.disabled = !enabled
+  for (const control of [settingFocusBlur, settingFocusDim, settingFocusScale, settingFocusHideOverlays]) control.disabled = !enabled
   settingFocusBlurValue.value = `${settingFocusBlur.value}px`
   settingFocusDimValue.value = `${settingFocusDim.value}%`
   settingFocusScaleValue.value = `${settingFocusScale.value}%`
@@ -4449,10 +4451,12 @@ function persistFocusModeSettings() {
   setModeSetting('focusBlurStrength', settingsTranslationModeContext, settingFocusBlur.value)
   setModeSetting('focusDimOpacity', settingsTranslationModeContext, settingFocusDim.value)
   setModeSetting('focusScale', settingsTranslationModeContext, settingFocusScale.value)
+  setModeSetting('focusHideOverlays', settingsTranslationModeContext, settingFocusHideOverlays.checked)
   syncFocusSettingsControls()
   if (normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) applyFocusModeSettings(settingsTranslationModeContext)
 }
 settingFocusMode.addEventListener('change', persistFocusModeSettings)
+settingFocusHideOverlays.addEventListener('change', persistFocusModeSettings)
 for (const control of [settingFocusBlur, settingFocusDim, settingFocusScale]) control.addEventListener('input', persistFocusModeSettings)
 
 settingDisableInsights.addEventListener('change', () => {
@@ -13871,6 +13875,7 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
       box.style.width  = `${r.width}px`
       box.style.height = `${r.height}px`
       box.dataset.refNum = validKeys.join(',')
+      Object.assign(box.dataset, { focusPage: pageNum, focusStart: charStart, focusEnd: charEnd })
       box.tabIndex = 0
       box.setAttribute('role', 'button')
       box.setAttribute('aria-haspopup', 'dialog')
@@ -14134,6 +14139,7 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
     rects.forEach(r => {
       const box = document.createElement('div')
       box.className = 'figure-ref-marker-box'
+      Object.assign(box.dataset, { focusPage: pageNum, focusStart: match.index, focusEnd: match.index + match[0].length })
       box.style.left   = `${r.left}px`
       box.style.top    = `${r.top}px`
       box.style.width  = `${r.width}px`
@@ -14299,6 +14305,7 @@ function getOrCreateFigurePreviewTooltip() {
           const newTop = startTop - (newHeight - startHeight)
           el.style.top = `${Math.max(8, newTop)}px`
         }
+        focusModeController?.scheduleRender()
       }
 
       const onUp = () => {
@@ -14308,6 +14315,7 @@ function getOrCreateFigurePreviewTooltip() {
         figurePreviewIsResizing = false
         el.style.height = ''
         localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: el.offsetWidth }))
+        focusModeController?.scheduleRender()
       }
 
       document.addEventListener('mousemove', onMove)
@@ -14332,6 +14340,7 @@ function getOrCreateFigurePreviewTooltip() {
       el.style.height = `${height}px`
       localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: width }))
       announceA11y(t('viewer:a11y.previewSize', { width, height }))
+      focusModeController?.scheduleRender()
     })
   })
 
@@ -14354,6 +14363,20 @@ function positionFigurePreviewTooltip() {
   if (top < 8) top = rect.bottom + 10
   figurePreviewTooltipEl.style.left = `${left}px`
   figurePreviewTooltipEl.style.top = `${top}px`
+  focusModeController?.scheduleRender()
+}
+
+function prepareFocusPreview(anchor) {
+  if (!focusModeController?.settings.enabled) return true
+  if (!anchor) return false
+  const pageNum = Number(anchor.dataset.focusPage)
+  const charStart = Number(anchor.dataset.focusStart)
+  const range = state.pdfPageSentences?.[pageNum]?.find(range => charStart >= range.charStart && charStart < range.charEnd)
+  if (!range) return false
+  // Hovering a marker must resolve its sentence even when it covers the PDF
+  // text layer. A pinned sentence remains authoritative.
+  focusModeController.focus(focusRef(pageNum, range, charStart))
+  return focusModeController.isPreviewAnchor(anchor)
 }
 
 // targets: documentImages 항목 배열(1개 이상 - "Figures 1 and 2"처럼 여러 개를
@@ -14362,6 +14385,7 @@ async function showFigurePreviewTooltip(targets, boxEl, { focus = false } = {}) 
   // 텍스트 드래그 선택 중에 마우스가 마커 박스 위를 스쳐 지나가도(mouseenter)
   // 미리보기가 뜨지 않도록 막는다 - 다른 호버 오버레이들과 동일한 가드.
   if (state.isSelectionDragging) return
+  if (!prepareFocusPreview(boxEl)) { hideFigurePreviewTooltip(); return }
   if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
   if (figurePreviewBoxEl && figurePreviewBoxEl !== boxEl) figurePreviewBoxEl.setAttribute('aria-expanded', 'false')
   figurePreviewBoxEl = boxEl
@@ -14370,6 +14394,7 @@ async function showFigurePreviewTooltip(targets, boxEl, { focus = false } = {}) 
   const requestId = ++figurePreviewRequestId
 
   const tooltip = getOrCreateFigurePreviewTooltip()
+  focusModeController?.registerPreview(tooltip, boxEl, hideFigurePreviewTooltip)
   const itemsEl = tooltip.querySelector('.figure-preview-tooltip-items')
   itemsEl.innerHTML = targets.map((target, idx) => `
     <button type="button" class="figure-preview-tooltip-item" data-idx="${idx}" aria-label="${escapeHtml(t('viewer:a11y.figureItem', { label: target.label, page: target.page }))}">
@@ -14419,7 +14444,8 @@ function scheduleFigurePreviewTooltipHide() {
   figurePreviewHideTimer = setTimeout(hideFigurePreviewTooltip, 220)
 }
 
-document.addEventListener('scroll', () => {
+document.addEventListener('scroll', event => {
+  if (figurePreviewTooltipEl?.contains(event.target)) return
   if (figurePreviewTooltipEl && !figurePreviewTooltipEl.classList.contains('hidden')) hideFigurePreviewTooltip()
 }, true)
 
@@ -14525,6 +14551,7 @@ function positionCitationTooltip() {
   top = Math.max(8, Math.min(top, window.innerHeight - th - 8))
   citationTooltipEl.style.left = `${left}px`
   citationTooltipEl.style.top = `${top}px`
+  focusModeController?.scheduleRender()
 }
 
 // refKeys가 여러 개면(예: "[66-69]" 범위 인용, "(A, 2020; B, 2019)" 나열)
@@ -14540,6 +14567,7 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
   // 텍스트 드래그 선택 중에 마우스가 마커 박스 위를 스쳐 지나가도(mouseenter)
   // 미리보기가 뜨지 않도록 막는다 - 다른 호버 오버레이들과 동일한 가드.
   if (state.isSelectionDragging) return
+  if (!prepareFocusPreview(boxEl)) { hideCitationTooltip(); return }
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   if (citationTooltipBoxEl && citationTooltipBoxEl !== boxEl) citationTooltipBoxEl.setAttribute('aria-expanded', 'false')
   citationTooltipDocId = docId
@@ -14548,6 +14576,7 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
   boxEl?.setAttribute('aria-expanded', 'true')
 
   const tooltip = getOrCreateCitationTooltip()
+  focusModeController?.registerPreview(tooltip, boxEl, hideCitationTooltip)
   tooltip.querySelector('.citation-tooltip-text').innerHTML = buildCitationTooltipHtml(refKeys, refMap)
   const resultEl = tooltip.querySelector('.citation-tooltip-result')
   resultEl.className = 'citation-tooltip-result hidden'
@@ -17257,7 +17286,7 @@ function focusPairRects(ref) {
   const sourceLineRects = mergePdfHighlightRects(sourceRects).map(rect => ({
     ...rect, right: rect.left + rect.width, bottom: rect.top + rect.height,
   }))
-  return { sourceRects: sourceLineRects, translationRects, sourceCanvas: viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${ref.pageNum}"] canvas`), elements: Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`)) }
+  return { sourceRange: sentenceRange, sourceRects: sourceLineRects, translationRects, sourceCanvas: viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${ref.pageNum}"] canvas`), elements: Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`)) }
 }
 
 function listFocusSentences() {
@@ -17331,6 +17360,11 @@ if (viewerScrollContainer) {
     }
 
     // PDF textLayer 위 문장 감지
+    const referenceMarker = e.target.closest('.citation-marker-box, .figure-ref-marker-box')
+    if (referenceMarker && focusModeController.settings.enabled) {
+      prepareFocusPreview(referenceMarker)
+      return
+    }
     const detected = detectSentenceAtMouse(e);
     if (!detected) {
       focusModeController.leave()

@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
 import { mockBaseRoutes, gotoApp } from './helpers.js'
 
-const moduleSource = fs.readFileSync(new URL('../../src/focusMode.js', import.meta.url), 'utf8')
+const moduleSource = fs.readFileSync(new URL('../../src/focusPreview.js', import.meta.url), 'utf8') + '\n'
+  + fs.readFileSync(new URL('../../src/focusMode.js', import.meta.url), 'utf8').replace(/^import .*from '\.\/focusPreview.js'\n/, '')
 const css = fs.readFileSync(new URL('../../src/style.css', import.meta.url), 'utf8')
 
 async function setup(page, scale = 1) {
@@ -22,7 +23,7 @@ async function setup(page, scale = 1) {
     document.body.style.background = 'white'
     window.controller = new module.FocusModeController({
       root: document.querySelector('#root'),
-      resolvePair: () => ({ sourceRects: [document.querySelector('.sentence').getBoundingClientRect()] }),
+      resolvePair: () => ({ sourceRange: { charStart: 0, charEnd: 100 }, sourceRects: [document.querySelector('.sentence').getBoundingClientRect()] }),
       listSentences: () => [{ pageNum: 1, sentenceIdx: 0 }, { pageNum: 1, sentenceIdx: 1 }],
     })
     window.controller.applySettings({ enabled: true, blurStrength: 0, dimOpacity: 60, scale: 100 })
@@ -623,6 +624,81 @@ test('real PDF hover reveals source and translation together and clears on viewe
 })
 
 for (const previewClass of ['figure-preview-tooltip', 'citation-tooltip']) {
+  test(`${previewClass} reveals only references in the pinned sentence`, async ({ page }) => {
+    await setup(page)
+    await page.evaluate(previewClass => {
+      const anchor = document.querySelector('.sentence')
+      Object.assign(anchor.dataset, { focusPage: '1', focusStart: '20', focusEnd: '25' })
+      const preview = document.createElement('div')
+      preview.className = previewClass
+      preview.style.cssText = 'position:fixed;left:600px;top:220px;width:240px;height:100px;animation:none'
+      preview.textContent = 'Reference preview'
+      document.body.append(preview)
+      controller.registerPreview(preview, anchor, () => preview.classList.add('hidden'))
+    }, previewClass)
+    const preview = page.locator(`.${previewClass}`)
+    await expect(page.locator('.focus-tint-hole')).toHaveCount(2)
+    for (const dataset of [{ focusStart: '120', focusEnd: '125' }, { focusPage: '2', focusStart: '20', focusEnd: '25' }]) {
+      await page.evaluate(({ previewClass, dataset }) => {
+        Object.assign(document.querySelector('.sentence').dataset, dataset)
+        document.querySelector(`.${previewClass}`).classList.remove('hidden')
+        controller.scheduleRender()
+      }, { previewClass, dataset })
+      await expect(preview).toBeHidden()
+      await expect(page.locator('.focus-tint-hole')).toHaveCount(1)
+    }
+    await page.evaluate(previewClass => {
+      Object.assign(document.querySelector('.sentence').dataset, { focusPage: '1', focusStart: '20', focusEnd: '25' })
+      document.querySelector(`.${previewClass}`).classList.remove('hidden')
+      controller.applySettings({ enabled: true, hideOverlays: true })
+    }, previewClass)
+    await expect(preview).toBeHidden()
+    await page.evaluate(previewClass => {
+      controller.applySettings({ enabled: false, hideOverlays: true })
+      document.querySelector(`.${previewClass}`).classList.remove('hidden')
+    }, previewClass)
+    await expect(preview).toBeVisible()
+    await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
+  })
+
+  for (const zoom of [0.8, 1, 1.25]) {
+    test(`${previewClass} avoids enlarged sentences and stays within viewport at zoom ${zoom}`, async ({ page }) => {
+      await setup(page, zoom)
+      await page.evaluate(previewClass => {
+        const paragraph = document.createElement('p')
+        paragraph.style.cssText = 'position:absolute;left:400px;top:200px;width:320px;background:white'
+        paragraph.innerHTML = '<span class="trans-sentence">A translated sentence with a reference spanning multiple lines.</span>'
+        document.querySelector('#root').append(paragraph)
+        const translation = paragraph.firstElementChild
+        const anchor = document.querySelector('.sentence')
+        Object.assign(anchor.dataset, { focusPage: '1', focusStart: '20', focusEnd: '25' })
+        controller.resolvePair = () => ({ sourceRange: { charStart: 0, charEnd: 100 }, sourceRects: [anchor.getBoundingClientRect()],
+          translationRects: [...translation.getClientRects()], elements: [translation] })
+        const preview = document.createElement('div')
+        preview.className = previewClass
+        preview.style.cssText = 'position:fixed;left:100px;top:120px;width:900px;height:900px;animation:none'
+        preview.innerHTML = '<div style="height:1500px;flex-shrink:0">Oversized reference content</div>'
+        document.body.append(preview)
+        controller.registerPreview(preview, anchor, () => preview.classList.add('hidden'))
+        controller.applySettings({ enabled: true, scale: 150 })
+      }, previewClass)
+      const preview = page.locator(`.${previewClass}`)
+      await expect(page.locator('.focus-mode-magnification')).toBeVisible()
+      const noOverlap = () => page.evaluate(previewClass => {
+        const bounds = document.querySelector(`.${previewClass}`).getBoundingClientRect()
+        const obstacles = [document.querySelector('.sentence').getBoundingClientRect(),
+          ...[...document.querySelectorAll('.focus-mode-magnification')].flatMap(e => e.focusRects)]
+        return bounds.left >= 7 && bounds.top >= 7 && bounds.right <= innerWidth - 7 && bounds.bottom <= innerHeight - 7
+          && obstacles.every(r => bounds.right <= r.left || bounds.left >= r.left + r.width || bounds.bottom <= r.top || bounds.top >= r.top + r.height)
+      }, previewClass)
+      await expect.poll(noOverlap).toBe(true)
+      await preview.evaluate(e => { e.style.width = '1000px'; e.style.height = '1100px'; e.scrollTop = 100 })
+      await expect.poll(noOverlap).toBe(true)
+      await expect(preview).toBeVisible()
+      await expect.poll(() => preview.evaluate(e => e.scrollTop)).toBeGreaterThan(0)
+    })
+  }
+
   test(`${previewClass} stays clear during focus interaction`, async ({ page }) => {
     await setup(page)
     await page.evaluate(previewClass => {
@@ -633,6 +709,9 @@ for (const previewClass of ['figure-preview-tooltip', 'citation-tooltip']) {
       preview.textContent = 'Reading preview'
       preview.style.cssText = 'position:fixed;left:600px;top:220px;width:200px;height:100px;display:block;visibility:visible;filter:opacity(0.9)'
       document.body.append(preview)
+      const anchor = document.querySelector('.sentence')
+      Object.assign(anchor.dataset, { focusPage: '1', focusStart: '20', focusEnd: '25' })
+      controller.registerPreview(preview, anchor, () => { preview.style.display = 'none' })
     }, previewClass)
     const preview = page.locator(`.${previewClass}`)
     await expect(page.locator('.focus-tint-hole')).toHaveCount(2)

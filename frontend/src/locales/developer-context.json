@@ -4375,6 +4375,8 @@
   ,"settings:focusBlur": { "description": "Label for the Focus backdrop blur slider." }
   ,"settings:focusDim": { "description": "Label for the Focus backdrop dimming slider." }
   ,"settings:focusScale": { "description": "Label for the focused sentence scale slider." }
+  ,"settings:focusHideOverlays": { "description": "Toggle to hide figure, table and reference previews only while Focus mode is enabled." }
+  ,"settings:focusHideOverlaysDescription": { "description": "Clarifies that the preview suppression does not apply outside Focus mode." }
   ,"settings:focusKeyboardHelp": { "description": "Keyboard instructions for pinned Focus navigation." }
   ,"viewer:a11y.focusActive": { "description": "Screen reader status when sentence Focus activates." }
   ,"viewer:a11y.focusPinned": { "description": "Screen reader status when sentence Focus is pinned." }
