@@ -104,6 +104,8 @@ export function visibleFocusRects(element) {
   return rects
 }
 
+const FOCUS_PREVIEW_SELECTOR = '.figure-preview-tooltip, .citation-tooltip'
+
 const SVG_NS = 'http://www.w3.org/2000/svg'
 let filterId = 0
 export function focusSvgCoordinateScale(zoom, userAgent) {
@@ -302,8 +304,16 @@ export class FocusModeController {
     this.filteredElements = new Map(); this.hiddenMemos = new Map()
     this.onKeyDown = event => this.handleKeyDown(event); this.onViewportChange = () => this.scheduleRender()
     this.onLeave = () => this.leave()
+    this.onPreviewOver = event => {
+      if (event.target.closest?.(FOCUS_PREVIEW_SELECTOR)) this.cancelLeave()
+    }
+    this.onPreviewOut = event => {
+      if (event.target.closest?.(FOCUS_PREVIEW_SELECTOR) && !event.relatedTarget?.closest?.(FOCUS_PREVIEW_SELECTOR)) this.leave()
+    }
+    document.addEventListener('mouseover', this.onPreviewOver)
+    document.addEventListener('mouseout', this.onPreviewOut)
     this.onInteraction = event => {
-      if (!event.target.closest?.('.textLayer, .trans-sentence')) this.clear()
+      if (!event.target.closest?.(`.textLayer, .trans-sentence, ${FOCUS_PREVIEW_SELECTOR}`)) this.clear()
     }
     this.onVisibility = () => { if (document.hidden) this.clear() }
     document.addEventListener('keydown', this.onKeyDown)
@@ -334,7 +344,10 @@ export class FocusModeController {
     }
     this.current = ref; this.revealedTranslation = false; if (pin) this.pinned = true; this.scheduleRender(); this.announce(this.pinned ? 'focusPinned' : 'focusActive'); return true
   }
-  leave() { if (!this.pinned && !this.releaseTimer) this.releaseTimer = setTimeout(() => this.clear(), this.releaseDelay) }
+  leave() { if (!this.pinned && !this.releaseTimer) this.releaseTimer = setTimeout(() => {
+    this.releaseTimer = null
+    if (!Array.from(document.querySelectorAll(FOCUS_PREVIEW_SELECTOR)).some(element => element.matches(':hover') && element.getClientRects().length)) this.clear()
+  }, this.releaseDelay) }
   cancelLeave() { clearTimeout(this.releaseTimer); this.releaseTimer = null }
   clear() {
     this.cancelLeave()
@@ -402,6 +415,12 @@ export class FocusModeController {
       return { left, top, width: right - left, height: bottom - top }
     }).filter(rect => rect.width > 0 && rect.height > 0)
     if (this.root?.closest('#viewer-screen')?.classList.contains('active') === false) { this.clear(); return }
+    const previews = Array.from(document.querySelectorAll(FOCUS_PREVIEW_SELECTOR)).filter(element => {
+      const style = getComputedStyle(element)
+      return style.visibility !== 'hidden' && style.display !== 'none' && element.getClientRects().length
+    })
+    const previewRects = previews.map(element => element.getBoundingClientRect())
+    // Reveal reading previews alongside the sentence, including outside the viewer.
     // Reveal sentence pixels only; floating controls share the surrounding dimming.
     // Rendering can temporarily disappear during PDF zoom; retain the pinned reference.
     const zoom = Number.parseFloat(getComputedStyle(document.documentElement).zoom) || 1
@@ -424,7 +443,7 @@ export class FocusModeController {
       const b = element.getBoundingClientRect()
       return [b.left, b.top, b.width, b.height, element.clientWidth, element.clientHeight]
     })
-    const geometry = JSON.stringify([rects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height]), paneGeometry, pair.elements?.map(e => e.textContent), document.body.className])
+    const geometry = JSON.stringify([rects, previewRects, window.innerWidth, window.innerHeight, zoom, this.settings, targetBounds.map(b => [b.left, b.top, b.width, b.height]), paneGeometry, pair.elements?.map(e => e.textContent), document.body.className])
     if (geometry === this.lastGeometry && targets.every(element => this.filteredElements.has(element))) {
       this.idleTimer = setTimeout(() => { this.idleTimer = null; this.scheduleRender() }, 120)
       return
@@ -450,9 +469,11 @@ export class FocusModeController {
       }
       const original = this.filteredElements.get(element)
       const prefix = original.computed === 'none' ? '' : original.computed
-      if (element.contains(this.root)) {
+      if (previews.includes(element)) {
+        element.style.setProperty('filter', original.value, original.priority)
+      } else if (element.contains(this.root)) {
         const id = `focus-sentence-filter-${++filterId}`
-        this.filterSvg.append(createSentenceFilter(id, rects, targetBounds[index], this.settings.blurStrength, focusSvgCoordinateScale(zoom, navigator.userAgent)))
+        this.filterSvg.append(createSentenceFilter(id, [...rects, ...previewRects], targetBounds[index], this.settings.blurStrength, focusSvgCoordinateScale(zoom, navigator.userAgent)))
         element.style.setProperty('filter', `${prefix} url("#${id}")`, 'important')
       } else {
         // Other UI has no sentence pixels to reveal. A pixel-based CSS filter
@@ -473,6 +494,7 @@ export class FocusModeController {
     // Erase native glyphs BELOW the tint. Only the transformed sentence gets
     // an opening; otherwise the old white holes remain behind enlarged text.
     const displayedRects = [
+      ...previewRects,
       ...rects.filter(rect => !erasures.some(element => {
         const original = element.focusRect
         return original.left < rect.left + rect.width && original.right > rect.left && original.top < rect.top + rect.height && original.bottom > rect.top
@@ -485,6 +507,8 @@ export class FocusModeController {
   destroy() {
     this.clear()
     this.root?.classList.remove('focus-mode-enabled')
+    document.removeEventListener('mouseover', this.onPreviewOver)
+    document.removeEventListener('mouseout', this.onPreviewOut)
     document.removeEventListener('keydown', this.onKeyDown)
     document.removeEventListener('pointerdown', this.onInteraction, true)
     document.removeEventListener('visibilitychange', this.onVisibility)
