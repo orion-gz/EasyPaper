@@ -580,3 +580,33 @@ test('real PDF hover reveals source and translation together and clears on viewe
   await page.evaluate(() => { location.hash = '#library' })
   await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
 })
+
+for (const previewClass of ['figure-preview-tooltip', 'citation-tooltip']) {
+  test(`${previewClass} stays clear during focus interaction`, async ({ page }) => {
+    await setup(page)
+    await page.evaluate(previewClass => {
+      controller.pinned = false
+      controller.applySettings({ enabled: true, blurStrength: 6, dimOpacity: 60, scale: 100 })
+      const preview = document.createElement('div')
+      preview.className = previewClass
+      preview.textContent = 'Reading preview'
+      preview.style.cssText = 'position:fixed;left:600px;top:220px;width:200px;height:100px;display:block;visibility:visible;filter:opacity(0.9)'
+      document.body.append(preview)
+    }, previewClass)
+    const preview = page.locator(`.${previewClass}`)
+    await expect(page.locator('.focus-tint-hole')).toHaveCount(2)
+    await expect(preview).toHaveCSS('filter', 'opacity(0.9)')
+    await expect(page.locator('#panel')).toHaveCSS('filter', 'blur(6px)')
+    const box = await preview.boundingBox()
+    await page.evaluate(() => controller.leave())
+    await page.mouse.move(box.x + 20, box.y + 20)
+    await preview.click()
+    await page.waitForTimeout(250)
+    await expect(page.locator('.focus-mode-layer')).toBeVisible()
+    await preview.evaluate(e => { e.style.height = '180px' })
+    await expect(page.locator('.focus-tint-hole').last()).toHaveAttribute('height', '188')
+    await page.mouse.move(900, 600)
+    await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
+    await expect(preview).toHaveCSS('filter', 'opacity(0.9)')
+  })
+}
