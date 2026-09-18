@@ -15117,6 +15117,11 @@ function appendActionButtons(msgEl, role, content) {
       memoBtn.type = 'button'
       memoBtn.className = 'msg-action-btn create-answer-memo-btn'
       memoBtn.innerHTML = `${icon('edit3', 12, 'style="vertical-align:-2px;margin-right:3px"')}${escapeHtml(t('chat:memo.createAction'))}`
+      memoBtn.style.background = 'none'
+      memoBtn.style.border = 'none'
+      memoBtn.style.color = 'var(--text-muted)'
+      memoBtn.style.fontSize = '11px'
+      memoBtn.style.cursor = 'pointer'
       memoBtn.title = t('chat:memo.createAction')
       memoBtn.addEventListener('click', () => createMemoFromQuotedAnswer(quotedMemoContext, content, memoBtn))
       actionsEl.appendChild(memoBtn)
