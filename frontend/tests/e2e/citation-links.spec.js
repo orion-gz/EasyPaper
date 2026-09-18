@@ -1,6 +1,46 @@
 import { test, expect } from '@playwright/test'
 import { mockBaseRoutes, gotoApp, SAMPLE_PDF_CITATION } from './helpers.js'
 
+test('Focus reference preview follows its sentence and is hidden only in Focus mode when configured', async ({ page }) => {
+  test.setTimeout(60000)
+  const doc = { id: 'doc-C', filename: 'Citation.pdf', total_pages: 1, metadata: { title: 'Citation' }, translated_pages: [] }
+  await mockBaseRoutes(page, { documents: [doc] })
+  await page.route('**/api/library/doc-C/pdf', route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_CITATION }))
+  await page.route('**/api/library/doc-C/references', route => route.fulfill({ json: { references: { '1': 'Vaswani et al. Attention Is All You Need. 2017.' } } }))
+  await gotoApp(page)
+  await page.evaluate(() => {
+    localStorage.setItem('easypaper_focus_mode_enabled_research', 'true')
+    localStorage.setItem('easypaper_focus_scale_research', '150')
+    location.hash = '#viewer?id=doc-C'
+  })
+  const marker = page.locator('.citation-marker-box').first()
+  await expect(marker).toBeVisible()
+  await marker.hover()
+  await page.waitForTimeout(250)
+  const tooltip = page.locator('.citation-tooltip')
+  await expect(tooltip).toBeVisible()
+  await expect(page.locator('.focus-mode-layer')).toBeVisible()
+  await expect(tooltip).toHaveCSS('filter', 'none')
+  await expect.poll(() => page.evaluate(() => {
+    const preview = document.querySelector('.citation-tooltip').getBoundingClientRect()
+    return [...document.querySelectorAll('.focus-mode-magnification')].flatMap(e => e.focusRects).every(r =>
+      preview.right <= r.left || preview.left >= r.left + r.width || preview.bottom <= r.top || preview.top >= r.top + r.height)
+  })).toBe(true)
+  await page.mouse.move(10, 10)
+  await page.evaluate(() => { location.hash = '#library' })
+  await expect(page.locator('#viewer-screen')).not.toHaveClass(/active/)
+  await page.locator('#sidebar-settings-btn').click()
+  await page.locator('[data-tab="tab-viewer"]').click()
+  await page.locator('#setting-focus-hide-overlays').locator('..').click()
+  await page.locator('#close-settings-btn').click()
+  await page.evaluate(() => { location.hash = '#viewer?id=doc-C' })
+  await marker.hover()
+  await expect(tooltip).toBeHidden()
+  await page.locator('#viewer-focus-toggle').click()
+  await marker.hover()
+  await expect(tooltip).toBeVisible()
+})
+
 test('참고문헌 목록에 있는 번호의 본문 인용 표기만 클릭 가능한 오버레이가 생기고, 클릭하면 원문 텍스트와 함께 툴팁이 뜬다', async ({ page }) => {
   const docC = { id: 'doc-C', filename: 'Citation.pdf', total_pages: 1, metadata: { title: 'Citation Sample Paper' }, translated_pages: [] }
   await mockBaseRoutes(page, { documents: [docC] })

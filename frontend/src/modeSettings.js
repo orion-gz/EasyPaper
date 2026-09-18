@@ -19,6 +19,7 @@ const MODE_DEFAULTS = {
     focusBlurStrength: 6,
     focusDimOpacity: 20,
     focusScale: 104,
+    focusHideOverlays: false,
   },
   general: {
     theme: 'dark',
@@ -40,6 +41,7 @@ const MODE_DEFAULTS = {
     focusBlurStrength: 6,
     focusDimOpacity: 20,
     focusScale: 104,
+    focusHideOverlays: false,
   },
 }
 
@@ -66,7 +68,7 @@ const SHARED_LEGACY_PREFERENCES = new Set(['theme', 'accentColor', 'targetLang']
 const BOOLEAN_SETTINGS = new Set([
   'ignoreMath', 'ignoreTable', 'ignoreRefs', 'disableInsights',
   'disableCitationOverlay', 'disableFigureOverlay', 'disablePrimer', 'disableSuggestedQuestions',
-  'focusModeEnabled',
+  'focusModeEnabled', 'focusHideOverlays',
 ])
 const NUMBER_SETTINGS = {
   focusBlurStrength: { min: 0, max: 16, step: 1 },

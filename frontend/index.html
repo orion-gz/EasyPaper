@@ -1045,6 +1045,11 @@
                   <span class="toggle-switch-label"><span data-i18n="settings:focusMode">Focus 모드</span><small id="focus-mode-help" data-i18n="settings:focusModeDescription">문장 위에 마우스를 올리면 대응 원문과 번역만 선명하게 표시</small></span>
                 </label>
                 <div id="focus-mode-controls" class="focus-mode-controls" aria-hidden="true">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="setting-focus-hide-overlays" />
+                    <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+                    <span class="toggle-switch-label"><span data-i18n="settings:focusHideOverlays">Focus 모드에서 참조 오버레이 숨기기</span><small data-i18n="settings:focusHideOverlaysDescription">Focus 모드가 켜져 있을 때만 그림·표·참고문헌 미리보기를 숨김</small></span>
+                  </label>
                   <label class="focus-range"><span data-i18n="settings:focusBlur">블러 강도</span><input id="setting-focus-blur" type="range" min="0" max="16" step="1" value="6" aria-label="블러 강도" /><output id="setting-focus-blur-value">6px</output></label>
                   <label class="focus-range"><span data-i18n="settings:focusDim">배경 디밍</span><input id="setting-focus-dim" type="range" min="0" max="60" step="5" value="20" aria-label="배경 디밍" /><output id="setting-focus-dim-value">20%</output></label>
                   <label class="focus-range"><span data-i18n="settings:focusScale">문장 확대</span><input id="setting-focus-scale" type="range" min="100" max="150" step="1" value="104" aria-label="문장 확대" /><output id="setting-focus-scale-value">104%</output></label>

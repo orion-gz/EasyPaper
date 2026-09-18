@@ -14,6 +14,8 @@
   "focusBlur": "Blur strength",
   "focusDim": "Background dimming",
   "focusScale": "Sentence scale",
+  "focusHideOverlays": "Hide reference overlays in Focus mode",
+  "focusHideOverlaysDescription": "Hide figure, table, and reference previews only while Focus mode is enabled.",
   "focusKeyboardHelp": "Click a sentence to pin it, use arrow keys to move, and Escape to release.",
   "suggestedQuestions": "Suggested and related questions for AI answers",
   "suggestedQuestionsDescription": "Turn off to stop generating follow-up questions below answers.",
