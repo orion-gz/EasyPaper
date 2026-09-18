@@ -7,7 +7,10 @@ fn main() {
   // 자동 생성되도록 명시해야 capabilities/default.json에서 참조할 수 있다.
   tauri_build::try_build(
     tauri_build::Attributes::new()
-      .app_manifest(tauri_build::AppManifest::new().commands(&["kill_backend_sidecar"])),
+      .app_manifest(tauri_build::AppManifest::new().commands(&[
+        "kill_backend_sidecar",
+        "backend_startup_error",
+      ])),
   )
   .expect("failed to run tauri-build");
 }

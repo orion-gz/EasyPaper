@@ -1,4 +1,7 @@
 {
+  "pdf_ocr_unavailable": "이 PDF는 텍스트 복구가 필요합니다. Tesseract와 원문 언어 모델을 설치한 뒤 문서를 다시 분석해 주세요.",
+  "pdf_ocr_language_missing": "이 문서의 문자에 맞는 OCR 모델이 없습니다. 해당 언어 모델을 설치한 뒤 문서를 다시 분석해 주세요.",
+  "pdf_ocr_failed": "이 페이지의 텍스트 복구에 실패했습니다. 원본 PDF를 확인하고 올바른 OCR 언어로 다시 분석해 주세요.",
   "unsupported_source_language": "지원하지 않는 원문 언어입니다: {{language}}",
   "unsupported_target_language": "지원하지 않는 대상 언어입니다: {{language}}",
   "unsupported_ui_locale": "지원하지 않는 화면 언어입니다: {{locale}}",

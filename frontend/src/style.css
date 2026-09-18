@@ -749,6 +749,18 @@ body:not(.light-theme) .pdf-page-inner canvas {
   --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 
+.pdf-text-recovery-notice {
+  position: absolute;
+  inset: auto 8px 8px;
+  z-index: 3;
+  padding: 8px 12px;
+  color: #713f12;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
 .textLayer[data-main-rotation="90"] {
   transform: rotate(90deg) translateY(-100%);
 }
@@ -806,6 +818,20 @@ body:not(.light-theme) .pdf-page-inner canvas {
 .textLayer ::-moz-selection {
   background: rgba(74, 135, 181, 0.4);
   color: transparent;
+}
+
+.textLayer.pdf-box-selection ::selection {
+  background: transparent;
+}
+
+.textLayer.pdf-box-selection ::-moz-selection {
+  background: transparent;
+}
+
+.sentence-selection-box {
+  position: absolute;
+  pointer-events: none !important;
+  background: rgba(74, 135, 181, 0.4);
 }
 
 .page-render-error {
@@ -6600,19 +6626,25 @@ body.light-theme .figure-preview-tooltip {
 }
 .figure-preview-tooltip-resize-handle {
   position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
+  width: 16px;
+  height: 16px;
   opacity: 0.45;
   transition: opacity 0.15s ease-in-out;
+  background: transparent;
+  border: none;
+  padding: 0;
+  z-index: 10;
 }
 .figure-preview-tooltip-resize-handle:hover,
 .figure-preview-tooltip.resizing .figure-preview-tooltip-resize-handle {
   opacity: 1;
 }
-.figure-preview-tooltip-resize-handle::after {
+.figure-preview-tooltip-resize-handle.handle-se {
+  right: 3px;
+  bottom: 3px;
+  cursor: nwse-resize;
+}
+.figure-preview-tooltip-resize-handle.handle-se::after {
   content: '';
   position: absolute;
   right: 2px;
@@ -6620,6 +6652,51 @@ body.light-theme .figure-preview-tooltip {
   width: 8px;
   height: 8px;
   border-right: 2px solid var(--text-secondary);
+  border-bottom: 2px solid var(--text-secondary);
+}
+.figure-preview-tooltip-resize-handle.handle-ne {
+  right: 3px;
+  top: 3px;
+  cursor: nesw-resize;
+}
+.figure-preview-tooltip-resize-handle.handle-ne::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-secondary);
+  border-top: 2px solid var(--text-secondary);
+}
+.figure-preview-tooltip-resize-handle.handle-nw {
+  left: 3px;
+  top: 3px;
+  cursor: nwse-resize;
+}
+.figure-preview-tooltip-resize-handle.handle-nw::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid var(--text-secondary);
+  border-top: 2px solid var(--text-secondary);
+}
+.figure-preview-tooltip-resize-handle.handle-sw {
+  left: 3px;
+  bottom: 3px;
+  cursor: nesw-resize;
+}
+.figure-preview-tooltip-resize-handle.handle-sw::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid var(--text-secondary);
   border-bottom: 2px solid var(--text-secondary);
 }
 .figure-preview-tooltip-item + .figure-preview-tooltip-item {
@@ -7981,4 +8058,15 @@ body.light-theme .chat-drawer {
   box-shadow: none !important;
   outline: none !important;
   animation: none !important;
+}
+
+.viewer-focus-toggle { margin-bottom: 8px; }
+.viewer-focus-toggle[aria-pressed="true"] {
+  color: var(--control-accent);
+  border-color: var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 22%, var(--bg-elevated));
+}
+.viewer-focus-toggle:focus-visible {
+  outline: 2px solid var(--control-accent);
+  outline-offset: 3px;
 }

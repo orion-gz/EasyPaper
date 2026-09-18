@@ -17,6 +17,7 @@
     "core:window:allow-set-theme",
     "core:window:allow-set-background-color",
     "opener:default",
-    "allow-kill-backend-sidecar"
+    "allow-kill-backend-sidecar",
+    "allow-backend-startup-error"
   ]
 }

@@ -5,13 +5,16 @@
  * - IntersectionObserver 기반 lazy 렌더링
  */
 
-import { alignTextLayer, collectTextContent } from './pdfTextLayer.js'
+import { alignTextLayer, collectTextContent, recoveredTextContent } from './pdfTextLayer.js'
+import { pdfResources } from './pdfResources.js'
+import { t } from './i18n.js'
 
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 let pdfjsLib = null
 let pdfDoc = null
 let pdfLoadingTask = null
+let pdfTextUrl = null
 const renderedTextLayers = new Map()
 let currentScale = 1.5
 let pageObserver = null
@@ -43,7 +46,7 @@ export async function loadPDF(url) {
   // 정상적인 취소가 페이지 오류나 콘솔 오류로 노출되지 않게 한다.
   renderGeneration++
   const previousLoadingTask = pdfLoadingTask
-  const loadingTask = pdfjsLib.getDocument({ url })
+  const loadingTask = pdfjsLib.getDocument({ url, ...pdfResources })
   pdfLoadingTask = loadingTask
 
   if (previousLoadingTask && previousLoadingTask !== loadingTask) {
@@ -63,6 +66,8 @@ export async function loadPDF(url) {
   }
   renderGeneration++
   pdfDoc = nextPdfDoc
+  const match = String(url).match(/\/api\/(?:pdf-file\/([^/?]+)|library\/([^/?]+)\/pdf)(?:\?|$)/)
+  pdfTextUrl = match ? `/api/pdf-text/${match[1] || match[2]}` : null
   figureCropCache.clear()
   return pdfDoc.numPages
 }
@@ -245,6 +250,7 @@ async function _renderPage(wrapper, pageNum, generation) {
   inner.innerHTML = ''
 
   try {
+    const textUrl = pdfTextUrl
     const page = await pdfDoc.getPage(pageNum)
     if (generation !== renderGeneration) return
     const viewport = page.getViewport({ scale: currentScale })
@@ -285,11 +291,31 @@ async function _renderPage(wrapper, pageNum, generation) {
     // 텍스트 레이어 렌더링
     try {
       let textContent
-      try {
-        textContent = await page.getTextContent()
-      } catch (error) {
-        console.warn('getTextContent failed, trying streamTextContent:', error)
-        textContent = await collectTextContent(page.streamTextContent())
+      let recovery
+      if (textUrl) {
+        const response = await fetch(`${textUrl}/${pageNum}`)
+        if (!response.ok) throw new Error(`PDF text recovery: HTTP ${response.status}`)
+        recovery = await response.json()
+        if (generation !== renderGeneration) return
+      }
+      if (recovery?.recovery) {
+        textContent = recoveredTextContent(recovery.spans || [], viewport)
+        textLayerDiv.dataset.recovery = recovery.recovery
+        if (recovery.error) {
+          textLayerDiv.dataset.recoveryError = recovery.error
+          const notice = document.createElement('div')
+          notice.className = 'pdf-text-recovery-notice'
+          notice.setAttribute('role', 'status')
+          notice.textContent = t(`errors:${recovery.error}`)
+          inner.appendChild(notice)
+        }
+      } else {
+        try {
+          textContent = await page.getTextContent()
+        } catch (error) {
+          console.warn('getTextContent failed, trying streamTextContent:', error)
+          textContent = await collectTextContent(page.streamTextContent())
+        }
       }
       if (generation !== renderGeneration) return
       const textLayer = new pdfjsLib.TextLayer({

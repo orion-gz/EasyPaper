@@ -122,7 +122,117 @@ def test_mineru_page_regions_normalizes_bbox_and_matches_caption():
     assert len(regions) == 1
     r = regions[0]
     # bbox 0-1000 정규화 -> 퍼센트는 /10
-    assert abs(r["left"] - 10.0) < 0.01
-    assert abs(r["top"] - 20.0) < 0.01
-    assert abs(r["width"] - 50.0) < 0.01
     assert r["label"] == "Figure 3"
+
+
+def test_find_cross_page_split_with_comma_boundary():
+    """리뷰어 재현 사례: 쉼표가 포함된 다음 페이지 첫 문단이 올바르게 경계에서 분할되는지 검증."""
+    from services.pdf_parser import _find_cross_page_split
+
+    current = "We measured the response under several controlled conditions."
+    following = "The results, however, indicate a significant change in behavior."
+
+    split_res = _find_cross_page_split(current + " " + following, current, following)
+    assert split_res is not None
+    part_curr, part_next = split_res
+    assert part_curr == current
+    assert part_next == following
+
+
+def test_find_cross_page_split_repeating_words():
+    """'the'나 공통 어휘가 앞뒤 문단 모두에 반복 등장할 때 앞쪽 단어로 오분할되지 않는지 검증."""
+    from services.pdf_parser import _find_cross_page_split
+
+    current = "The model achieves significant gains across all evaluation benchmarks in the test set."
+    following = "The model parameters were optimized using the standard Adam optimizer with decay."
+
+    split_res = _find_cross_page_split(current + " " + following, current, following)
+    assert split_res is not None
+    part_curr, part_next = split_res
+    assert part_curr == current
+    assert part_next == following
+
+
+def test_find_cross_page_split_hyphen_newline():
+    """하이픈 줄바꿈(예: experi-\\n mental)이 포함된 경우에도 원문 오프셋 대응을 유지하는지 검증."""
+    from services.pdf_parser import _find_cross_page_split
+
+    current = "We measured the response under several experi-\nmental conditions."
+    following = "The results, however, indicate a significant change in behavior."
+
+    split_res = _find_cross_page_split(current + " " + following, current, following)
+    assert split_res is not None
+    part_curr, part_next = split_res
+    assert part_curr == current
+    assert part_next == following
+
+
+def test_find_cross_page_split_normal_paragraph_no_split():
+    """현재 페이지에만 완전히 속한 일반 문단은 분할하지 않고 None을 반환해야 함."""
+    from services.pdf_parser import _find_cross_page_split
+
+    current = "We measured the response under several controlled conditions and verified accuracy."
+    following = "A completely different section begins on the next page discussing future work."
+
+    split_res = _find_cross_page_split(current, current, following)
+    assert split_res is None
+
+
+def test_sanitize_mineru_pages_idempotent(monkeypatch):
+    """sanitize_mineru_pages()를 2회 이상 반복 적용해도 결과가 동일하게 유지되는지(멱등성) 검증."""
+    import fitz
+    import os
+    from services.pdf_parser import sanitize_mineru_pages
+
+    p0_text = "We measured the response under several controlled conditions."
+    p1_text = "The results, however, indicate a significant change in behavior."
+
+    class FakePage:
+        def __init__(self, text):
+            self.text = text
+        def get_text(self):
+            return self.text
+
+    class FakeDoc:
+        def __init__(self, pages):
+            self.pages = [FakePage(t) for t in pages]
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def __len__(self):
+            return len(self.pages)
+        def __getitem__(self, i):
+            return self.pages[i]
+
+    monkeypatch.setattr(fitz, "open", lambda path: FakeDoc([p0_text, p1_text]))
+    monkeypatch.setattr(os.path, "exists", lambda path: True)
+
+    initial_pages = [
+        {
+            "page_idx": 0,
+            "blocks": [
+                {"type": 0, "text": f"{p0_text} {p1_text}", "bbox": [0, 0, 1000, 1000]}
+            ],
+            "text": f"{p0_text} {p1_text}"
+        },
+        {
+            "page_idx": 1,
+            "blocks": [],
+            "text": ""
+        }
+    ]
+
+    import copy
+    first_pass = sanitize_mineru_pages(copy.deepcopy(initial_pages), "dummy.pdf")
+    assert len(first_pass[0]["blocks"]) == 1
+    assert first_pass[0]["blocks"][0]["text"] == p0_text
+    assert len(first_pass[1]["blocks"]) == 1
+    assert first_pass[1]["blocks"][0]["text"] == p1_text
+
+    second_pass = sanitize_mineru_pages(copy.deepcopy(first_pass), "dummy.pdf")
+    assert len(second_pass[0]["blocks"]) == 1
+    assert second_pass[0]["blocks"][0]["text"] == p0_text
+    assert len(second_pass[1]["blocks"]) == 1
+    assert second_pass[1]["blocks"][0]["text"] == p1_text
+

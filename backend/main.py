@@ -18,6 +18,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os
 from contextlib import asynccontextmanager
+import asyncio
+from contextlib import suppress
 import logging
 
 from logging_config import setup_logging
@@ -41,14 +43,27 @@ from services.auth import get_current_user
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Initialize persistent state and restore library sessions at startup."""
+    """Initialize storage, then recover library work without blocking startup."""
     from services.db import init_db
     from services.usage_tracker import init_usage_table
 
     init_db()
     init_usage_table()
-    upload.restore_sessions_from_library()
-    yield
+    async def recover_library():
+        try:
+            await upload.restore_sessions_from_library()
+        except Exception:
+            logger.exception("Library task recovery failed; the API remains available")
+
+    # Uncached documents can require PDF parsing or OCR model initialization.
+    # Keep the API available while restoring them in the background.
+    recovery = asyncio.create_task(recover_library())
+    try:
+        yield
+    finally:
+        recovery.cancel()
+        with suppress(asyncio.CancelledError):
+            await recovery
 
 
 app = FastAPI(

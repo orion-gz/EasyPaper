@@ -1,4 +1,7 @@
 {
+  "errors:pdf_ocr_unavailable": {"description": "Local OCR executable or trained data is unavailable for an unmapped PDF."},
+  "errors:pdf_ocr_language_missing": {"description": "The detected script has no installed OCR model."},
+  "errors:pdf_ocr_failed": {"description": "Local OCR could not recover usable page text."},
   "chat:placeholder": {
     "description": "Ask about this document…"
   },
@@ -4343,6 +4346,9 @@
   "viewer:chapter.cancelFailed": {
     "description": "Chapter/full summary retry and cancellation UI: chapter.cancelFailed"
   },
+  "viewer:cacheClearedReload": {
+    "description": "Toast shown when single document PDF extraction and translation caches are cleared."
+  },
   "chat:memo.createAction": {
     "description": "Button under a quoted-text AI answer that creates a memo in the document."
   },
@@ -4374,4 +4380,5 @@
   ,"viewer:a11y.focusPinned": { "description": "Screen reader status when sentence Focus is pinned." }
   ,"viewer:a11y.focusMoved": { "description": "Screen reader status after keyboard Focus navigation." }
   ,"viewer:focus.performanceFallback": { "description": "Notice shown when Focus switches to a lower-cost visual mode." }
+,"viewer:focus.toggle": { "description": "Viewer floating Focus mode toggle; Shift+F keyboard shortcut." }
 }

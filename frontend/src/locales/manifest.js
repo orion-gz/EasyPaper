@@ -3,7 +3,7 @@ export const UI_LOCALES = {
   ko: { code: 'ko', nativeName: '한국어', direction: 'ltr', fallback: 'en' },
 }
 
-export const INITIAL_NAMESPACES = ['common', 'navigation', 'onboarding']
+export const INITIAL_NAMESPACES = ['common', 'navigation', 'onboarding', 'viewer']
 export const FEATURE_NAMESPACES = {
   settings: ['settings', 'errors'],
   dashboard: ['dashboard', 'errors'],

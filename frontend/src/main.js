@@ -1,5 +1,7 @@
 import './style.css'
+import { applyDesktopUpdate } from './desktopUpdate.js'
 import { pageCoordinates } from './pdfCoordinates.js'
+import { mergePdfHighlightRects, mappedSentenceRange } from './pdfSentenceGeometry.js'
 import './styles/shell.css'
 import './styles/library-page.css'
 import './styles/research-graph.css'
@@ -7,7 +9,7 @@ import "./styles/document-modes.css"
 import { marked } from 'marked'
 import { createWorkspaceModeController } from "./workspaceModeController.js"
 import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSettings.js'
-import { FocusModeController, visibleFocusRects } from './focusMode.js'
+import { FocusModeController, isFocusKeyboardExcluded, visibleFocusRects } from './focusMode.js'
 import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabularyView.js"
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
@@ -19,6 +21,7 @@ import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceCh
 import { icon } from './icons.js'
 import { formatTranslationHtml, applyKatexToElement, linkPageCitations } from './textFormat.js'
 import { prepareMemoMarkdown } from './memoMarkdown.js'
+import { alignSentencesToText } from './sentenceAlignment.js'
 import { createSelectionRect, resolveDragSelection } from './library-selection.js'
 import { globalAnalyticsTracker } from './readingAnalytics.js'
 import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
@@ -2416,11 +2419,17 @@ if (viewerClearCacheBtn) {
       return
     }
     const currentDocTitle = $('doc-title')?.textContent || '현재 논문'
-    const ok = await showCustomConfirm(`"${currentDocTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+    const ok = await showCustomConfirm(
+      `"${currentDocTitle}"의 PDF 추출 및 번역 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하며, 기존 번역본도 초기화됩니다.)`,
+      { title: '캐시 삭제', confirmText: '캐시 삭제', danger: true }
+    )
     if (!ok) return
     try {
-      await clearSingleDocCacheAPI(state.sessionId)
-      showToast('PDF 추출 캐시가 삭제되었습니다.', 'success')
+      const sessionId = state.sessionId
+      await clearTranslationCacheAPI(sessionId)
+      await clearSingleDocCacheAPI(sessionId)
+      showToast(t('viewer:cacheClearedReload'), 'success')
+      setTimeout(() => window.location.reload(), 500)
     } catch (err) {
       showToast('캐시 삭제 실패: ' + err.message, 'error')
     }
@@ -4405,7 +4414,36 @@ function syncFocusSettingsControls() {
   settingFocusDimValue.value = `${settingFocusDim.value}%`
   settingFocusScaleValue.value = `${settingFocusScale.value}%`
 }
-function applyFocusModeSettings(mode) { focusModeController?.applySettings(readFocusModeSettings(mode)) }
+function syncViewerFocusToggle() {
+  const enabled = getModeSetting('focusModeEnabled', normalizeSettingsMode(state.currentDocumentMode))
+  $('viewer-focus-toggle').setAttribute('aria-pressed', String(enabled))
+}
+function applyFocusModeSettings(mode) {
+  focusModeController?.applySettings(readFocusModeSettings(mode))
+  syncViewerFocusToggle()
+}
+function toggleViewerFocusMode() {
+  if (!$('viewer-screen').classList.contains('active')) return
+  const mode = normalizeSettingsMode(state.currentDocumentMode)
+  const enabled = !getModeSetting('focusModeEnabled', mode)
+  setModeSetting('focusModeEnabled', mode, enabled)
+  applyFocusModeSettings(mode)
+  if (settingsTranslationModeContext === mode) {
+    settingFocusMode.checked = enabled
+    syncFocusSettingsControls()
+  }
+}
+$('viewer-focus-toggle').addEventListener('click', toggleViewerFocusMode)
+document.addEventListener('keydown', event => {
+  if (event.defaultPrevented || event.repeat || event.isComposing
+    || !event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
+    || event.code !== 'KeyF' || isFocusKeyboardExcluded(event.target)
+    || event.target?.isContentEditable
+    || !$('viewer-screen').classList.contains('active')
+    || document.querySelector('.modal-overlay:not(.hidden)')) return
+  event.preventDefault()
+  toggleViewerFocusMode()
+})
 function persistFocusModeSettings() {
   setModeSetting('focusModeEnabled', settingsTranslationModeContext, settingFocusMode.checked)
   setModeSetting('focusBlurStrength', settingsTranslationModeContext, settingFocusBlur.value)
@@ -4797,41 +4835,31 @@ async function installTauriUpdate() {
     // 설치가 실패한다.
     const { relaunch } = await import('@tauri-apps/plugin-process')
 
-    // Windows 설치 프로그램이 파일을 덮어쓰기 전에 백엔드 sidecar를 먼저
-    // 종료해야 한다 - 계속 떠 있으면 PyInstaller 런타임이 로드한 DLL(예:
-    // MSVCP140.dll)을 OS가 잠그고 있어서 "Error opening file for writing"
-    // 오류로 설치가 멈춘다. downloadAndInstall의 진행 콜백은 await하지
-    // 않고 그냥 호출되므로, 'Finished' 이벤트 시점에 죽이면 설치 시작과
-    // 경쟁 상태가 생길 수 있다 - 다운로드 시작 전에 미리 종료해 둔다
-    // (다운로드 자체는 sidecar 없이도 문제없이 동작한다).
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('kill_backend_sidecar')
-    } catch (killErr) {
-      console.warn('sidecar 종료 실패(무시하고 설치 계속):', killErr)
-    }
+    const { invoke } = await import('@tauri-apps/api/core')
 
     let downloadedBytes = 0
     let totalBytes = 0
-    await pendingTauriUpdate.downloadAndInstall((event) => {
-      switch (event.event) {
-        case 'Started':
-          totalBytes = event.data.contentLength || 0
-          setTauriUpdateStatusText('다운로드 시작...')
-          break
-        case 'Progress':
-          downloadedBytes += event.data.chunkLength
-          setTauriUpdateStatusText(totalBytes
-            ? `다운로드 중... ${Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))}%`
-            : '다운로드 중...')
-          break
-        case 'Finished':
-          setTauriUpdateStatusText('설치 중... 곧 앱이 재시작됩니다.')
-          break
+    await applyDesktopUpdate(pendingTauriUpdate, {
+      stopBackend: () => invoke('kill_backend_sidecar'),
+      relaunch,
+      onEvent: (event) => {
+        switch (event.event) {
+          case 'Started':
+            totalBytes = event.data.contentLength || 0
+            setTauriUpdateStatusText('다운로드 시작...')
+            break
+          case 'Progress':
+            downloadedBytes += event.data.chunkLength
+            setTauriUpdateStatusText(totalBytes
+              ? `다운로드 중... ${Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))}%`
+              : '다운로드 중...')
+            break
+          case 'Finished':
+            setTauriUpdateStatusText('설치 중... 곧 앱이 재시작됩니다.')
+            break
+        }
       }
     })
-
-    await relaunch()
   } catch (err) {
     setTauriUpdateStatusText('설치 실패: ' + (err.message || err), '#ef4444')
     if (tauriUpdateInstallBtn) tauriUpdateInstallBtn.disabled = false
@@ -13270,6 +13298,47 @@ document.addEventListener('mouseup', (e) => {
 })
 
 // Browser zoom and UI scale can change DOM font advances without a PDF rerender.
+// Draw native selections as continuous line boxes without changing the Range,
+// text nodes, copy offsets, or keyboard selection behaviour.
+let pdfSelectionFrame = 0;
+function schedulePdfSelectionOverlay() {
+  if (pdfSelectionFrame) return;
+  pdfSelectionFrame = requestAnimationFrame(() => {
+    pdfSelectionFrame = 0;
+    viewerScrollContainer.querySelectorAll('.sentence-selection-box').forEach(el => el.remove());
+    viewerScrollContainer.querySelectorAll('.pdf-box-selection').forEach(el => el.classList.remove('pdf-box-selection'));
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return;
+    const selected = selection.getRangeAt(0);
+    for (const layer of viewerScrollContainer.querySelectorAll('.textLayer')) {
+      if (!selected.intersectsNode(layer)) continue;
+      const coordinates = pageCoordinates(layer.closest('.pdf-page-inner') || layer);
+      const rects = [];
+      const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!selected.intersectsNode(node)) continue;
+        const part = document.createRange();
+        part.selectNodeContents(node);
+        if (selected.compareBoundaryPoints(Range.START_TO_START, part) > 0) part.setStart(selected.startContainer, selected.startOffset);
+        if (selected.compareBoundaryPoints(Range.END_TO_END, part) < 0) part.setEnd(selected.endContainer, selected.endOffset);
+        if (!part.collapsed) {
+          for (const rect of part.getClientRects()) {
+            if (rect.width > 0 && rect.height > 0) rects.push(coordinates.rectToLocal(rect));
+          }
+        }
+      }
+      const boxes = mergePdfHighlightRects(rects);
+      if (boxes.length) {
+        const overlay = getOrCreateOverlay(layer.closest('.pdf-page-wrapper'));
+        clearOverlayBoxes(overlay, 'sentence-hover-box', 'sentence-equation-box');
+        renderSentenceOverlay(overlay, boxes, 'sentence-selection-box');
+        layer.classList.add('pdf-box-selection');
+      }
+    }
+  });
+}
+document.addEventListener('selectionchange', schedulePdfSelectionOverlay);
+
 let pdfGeometryRefreshTimer
 function schedulePdfGeometryRefresh() {
   clearTimeout(pdfGeometryRefreshTimer)
@@ -13286,6 +13355,7 @@ function schedulePdfGeometryRefresh() {
         if (active) applyActiveHighlight(pageNum, active)
       }
     })
+    schedulePdfSelectionOverlay()
   }, 100)
 }
 window.addEventListener('resize', schedulePdfGeometryRefresh)
@@ -14127,7 +14197,13 @@ function getOrCreateFigurePreviewTooltip() {
   el.className = 'figure-preview-tooltip hidden'
   el.setAttribute('role', 'dialog')
   el.setAttribute('aria-label', t('viewer:a11y.figureTrigger', { label: '' }))
-  el.innerHTML = `<div class="figure-preview-tooltip-items"></div><button type="button" class="figure-preview-tooltip-resize-handle" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>`
+  el.innerHTML = `
+    <div class="figure-preview-tooltip-items"></div>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-nw" data-corner="nw" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-ne" data-corner="ne" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-se" data-corner="se" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+    <button type="button" class="figure-preview-tooltip-resize-handle handle-sw" data-corner="sw" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
+  `
   document.body.appendChild(el)
 
   try {
@@ -14164,72 +14240,99 @@ function getOrCreateFigurePreviewTooltip() {
     scrollToPage(viewerScrollContainer, target.page)
   })
 
-  const figureResizeHandle = el.querySelector('.figure-preview-tooltip-resize-handle')
-  figureResizeHandle.addEventListener('mousedown', (e) => {
-    e.preventDefault()
-    e.stopPropagation()
+  el.querySelectorAll('.figure-preview-tooltip-resize-handle').forEach((handle) => {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
 
-    const startX = e.clientX
-    const startWidth = el.offsetWidth
-    const startHeight = el.offsetHeight
-    // 이미지는 CSS에서 width:100%; height:auto로 표시되므로 컨테이너 너비가
-    // scale배 될 때 이미지의 실제 렌더링 높이도 같은 비율로 커진다. 반면
-    // 레이블/캡션 같은 텍스트 영역(chromeHeight)은 너비가 바뀌어도 높이가
-    // 거의 그대로다. 너비/높이를 마우스 이동량으로 각각 독립적으로 정하면
-    // 이미지 비율과 무관하게 박스 크기가 고정되어 이미지 아래로 빈 공간이
-    // 남거나 이미지가 잘려 스크롤이 생기는 문제가 있었다 - 높이를 "이미지
-    // 비율을 유지한 채 늘어난 이미지 높이 + 고정된 chromeHeight"로 다시
-    // 계산해 너비를 끌면 이미지 비율에 맞게 박스 전체가 adaptive하게
-    // 커지고 작아지도록 한다.
-    const loadedImgs = Array.from(el.querySelectorAll('.figure-preview-tooltip-img:not(.hidden)'))
-    const startImagesHeight = loadedImgs.reduce((sum, img) => sum + img.getBoundingClientRect().height, 0)
-    const chromeHeight = startHeight - startImagesHeight
-    const maxWidth = Math.min(window.innerWidth * 0.9, 900)
-    const maxHeight = Math.min(window.innerHeight * 0.9, 900)
-    el.classList.add('resizing')
-    figurePreviewIsResizing = true
-    if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+      const corner = handle.dataset.corner || 'se'
+      const startX = e.clientX
+      const startY = e.clientY
+      const startWidth = el.offsetWidth
+      const startHeight = el.offsetHeight
+      const rect = el.getBoundingClientRect()
+      const startLeft = rect.left
+      const startTop = rect.top
 
-    const onMove = (moveEvent) => {
-      const newWidth = Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, startWidth + (moveEvent.clientX - startX)))
-      const scale = startWidth > 0 ? newWidth / startWidth : 1
-      const newHeight = Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, chromeHeight + startImagesHeight * scale))
-      el.style.width = `${newWidth}px`
-      el.style.height = `${newHeight}px`
-    }
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-      el.classList.remove('resizing')
-      figurePreviewIsResizing = false
-      // 드래그 중엔 실시간 피드백을 위해 높이를 직접 계산해 인라인으로 고정했지만,
-      // 드래그가 끝나면 그 고정값을 지워 다시 CSS의 height: auto로 돌려놓는다 -
-      // 그래야 이후 다른 비율의 그림/표로 내용이 바뀌어도 높이가 자동으로
-      // 맞춰지고, 지금 안 맞는 빈 여백이 남지 않는다. 너비만 기억해둔다.
-      el.style.height = ''
-      localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: el.offsetWidth }))
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  })
-  figureResizeHandle.addEventListener('keydown', (event) => {
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
-    event.preventDefault()
-    const step = event.shiftKey ? 20 : 4
-    const maxWidth = Math.min(window.innerWidth * 0.9, 900)
-    const maxHeight = Math.min(window.innerHeight * 0.9, 900)
-    let width = el.offsetWidth
-    let height = el.offsetHeight
-    if (event.key === 'ArrowLeft') width -= step
-    if (event.key === 'ArrowRight') width += step
-    if (event.key === 'ArrowUp') height -= step
-    if (event.key === 'ArrowDown') height += step
-    width = Math.round(Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, width)))
-    height = Math.round(Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, height)))
-    el.style.width = `${width}px`
-    el.style.height = `${height}px`
-    localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: width }))
-    announceA11y(t('viewer:a11y.previewSize', { width, height }))
+      const loadedImgs = Array.from(el.querySelectorAll('.figure-preview-tooltip-img:not(.hidden)'))
+      const startImagesHeight = loadedImgs.reduce((sum, img) => sum + img.getBoundingClientRect().height, 0)
+      const chromeHeight = Math.max(0, startHeight - startImagesHeight)
+
+      const maxAvailableW = corner.includes('w')
+        ? Math.min(window.innerWidth * 0.9, 900, startLeft + startWidth - 8)
+        : Math.min(window.innerWidth * 0.9, 900, window.innerWidth - startLeft - 8)
+      const maxAvailableH = corner.includes('n')
+        ? Math.min(window.innerHeight * 0.9, 900, startTop + startHeight - 8)
+        : Math.min(window.innerHeight * 0.9, 900, window.innerHeight - startTop - 8)
+
+      const maxWidth = Math.max(_FIGURE_PREVIEW_MIN_WIDTH, maxAvailableW)
+      const maxHeight = Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, maxAvailableH)
+
+      el.classList.add('resizing')
+      figurePreviewIsResizing = true
+      if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+
+      const onMove = (moveEvent) => {
+        const rawDx = moveEvent.clientX - startX
+        const rawDy = moveEvent.clientY - startY
+        const deltaX = corner.includes('e') ? rawDx : -rawDx
+        const deltaY = corner.includes('s') ? rawDy : -rawDy
+
+        const aspect = startWidth / Math.max(1, startHeight)
+        let effectiveDelta = deltaX
+        if (Math.abs(deltaY) > Math.abs(deltaX)) {
+          effectiveDelta = deltaY * aspect
+        }
+
+        const newWidth = Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, startWidth + effectiveDelta))
+        const scale = startWidth > 0 ? newWidth / startWidth : 1
+        const newHeight = Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, chromeHeight + startImagesHeight * scale))
+
+        el.style.width = `${newWidth}px`
+        el.style.height = `${newHeight}px`
+
+        if (corner.includes('w')) {
+          const newLeft = startLeft - (newWidth - startWidth)
+          el.style.left = `${Math.max(8, newLeft)}px`
+        }
+        if (corner.includes('n')) {
+          const newTop = startTop - (newHeight - startHeight)
+          el.style.top = `${Math.max(8, newTop)}px`
+        }
+      }
+
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+        el.classList.remove('resizing')
+        figurePreviewIsResizing = false
+        el.style.height = ''
+        localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: el.offsetWidth }))
+      }
+
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
+    })
+
+    handle.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      event.preventDefault()
+      const step = event.shiftKey ? 20 : 4
+      const maxWidth = Math.min(window.innerWidth * 0.9, 900)
+      const maxHeight = Math.min(window.innerHeight * 0.9, 900)
+      let width = el.offsetWidth
+      let height = el.offsetHeight
+      if (event.key === 'ArrowLeft') width -= step
+      if (event.key === 'ArrowRight') width += step
+      if (event.key === 'ArrowUp') height -= step
+      if (event.key === 'ArrowDown') height += step
+      width = Math.round(Math.max(_FIGURE_PREVIEW_MIN_WIDTH, Math.min(maxWidth, width)))
+      height = Math.round(Math.max(_FIGURE_PREVIEW_MIN_HEIGHT, Math.min(maxHeight, height)))
+      el.style.width = `${width}px`
+      el.style.height = `${height}px`
+      localStorage.setItem(_FIGURE_PREVIEW_SIZE_KEY, JSON.stringify({ w: width }))
+      announceA11y(t('viewer:a11y.previewSize', { width, height }))
+    })
   })
 
   figurePreviewTooltipEl = el
@@ -15970,195 +16073,8 @@ function segmentElementIntoSentences(container, pageNum, className) {
 
 
 
-// 주어진 텍스트에서 원문 문장들의 정확한 문자 범위(start, end)를 유니코드 인지 방식으로 추출하여 매핑합니다.
-function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
-  const cleanToRaw = [];
-  let cleanText = '';
+// alignSentencesToText는 ./sentenceAlignment.js 모듈에서 가져옵니다.
 
-  for (let i = 0; i < fullText.length; i++) {
-    const char = fullText[i];
-    // 알파벳, 숫자, 한글, 한자 및 그리스 문자(수식 기호 대응)만 비교 대상으로 삼음
-    if (/[a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff\u0370-\u03ff]/.test(char)) {
-      cleanToRaw.push(i);
-      cleanText += char.toLowerCase();
-    }
-  }
-
-  const sentenceRanges = [];
-  let searchStart = 0;
-
-  // 모든 문장 미리 전처리 - null/undefined 방어, LaTeX 명령어 제거 및 그리스 문자 대응
-  const GREEK_MAP = {
-    'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'delta': 'δ', 'epsilon': 'ε',
-    'zeta': 'ζ', 'eta': 'η', 'theta': 'θ', 'iota': 'ι', 'kappa': 'κ',
-    'lambda': 'λ', 'mu': 'μ', 'nu': 'ν', 'xi': 'ξ', 'pi': 'π',
-    'rho': 'ρ', 'sigma': 'σ', 'tau': 'τ', 'upsilon': 'υ', 'phi': 'φ',
-    'chi': 'χ', 'psi': 'ψ', 'omega': 'ω'
-  };
-
-  const cleanSents = (sentencesList || []).map(s => {
-    let text = s || '';
-
-    // LaTeX 그리스 문자 명령어를 유니코드 문자로 변환
-    for (const [name, unicode] of Object.entries(GREEK_MAP)) {
-      text = text.replace(new RegExp('\\\\' + name, 'g'), unicode);
-    }
-
-    // 기타 백슬래시로 시작하는 LaTeX 명령어 제거 (예: \sum, \int 등)
-    text = text.replace(/\\[a-zA-Z]+/g, '');
-
-    let clean = '';
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (/[a-zA-Z0-9\u3131-\uD79D\u4e00-\u9fff\u0370-\u03ff]/.test(char)) {
-        clean += char.toLowerCase();
-      }
-    }
-    return clean;
-  });
-
-  for (let k = 0; k < cleanSents.length; k++) {
-    const cleanSent = cleanSents[k];
-    const sText = sentencesList[k] || '';
-
-    if (!cleanSent) {
-      const rawPos = cleanToRaw[searchStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
-      sentenceRanges.push({
-        text: sText,
-        start: rawPos,
-        end: rawPos
-      });
-      continue;
-    }
-
-    // 1. 순차 검색 시도 (가장 최선)
-    let idx = cleanText.indexOf(cleanSent, searchStart);
-
-    // 2. 접두어 기반 검색 시도 (사소한 문자 오차 해결) - searchStart 이후에서만 찾는다.
-    // 예전에는 이 단계에서 실패하면 fromIndex 없이(처음부터) 다시 검색하는 "전역
-    // 폴백"이 있었는데, indexOf(x, searchStart)가 이미 -1을 반환한 상태에서
-    // indexOf(x)(전체 검색)가 뭔가를 찾는다면 그 위치는 수학적으로 반드시
-    // searchStart보다 앞쪽일 수밖에 없다(그렇지 않다면 위 순차 검색이 이미 찾았을
-    // 것이므로). 즉 이 전역 폴백은 실행될 때마다 예외 없이 직전 문장이 이미 차지한
-    // 구간을 다시 가리켜, 인접한 두 문장의 하이라이트가 겹치는 버그로 항상 이어졌다.
-    // 실패한 문장은 대신 아래 Gap Partitioning이 겹치지 않게 처리하도록 둔다.
-    if (idx === -1) {
-      const prefix = cleanSent.substring(0, Math.min(15, cleanSent.length));
-      idx = cleanText.indexOf(prefix, searchStart);
-    }
-
-    if (idx !== -1) {
-      const cleanStart = idx;
-      const cleanEnd = Math.min(cleanText.length, idx + cleanSent.length);
-      const rawStart = cleanToRaw[cleanStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
-      const lastCleanIdx = cleanEnd - 1;
-      const rawEnd = (cleanToRaw[lastCleanIdx] !== undefined)
-        ? cleanToRaw[lastCleanIdx] + 1
-        : (cleanToRaw[cleanToRaw.length - 1] ?? fullText.length);
-
-      sentenceRanges.push({
-        text: fullText.substring(rawStart, rawEnd),
-        start: rawStart,
-        end: rawEnd
-      });
-
-      // 순차 검색 인덱스는 전방향 진행만 허용
-      if (cleanEnd > searchStart) {
-        searchStart = cleanEnd;
-      }
-    } else {
-      // 매칭 실패 폴백
-      console.warn(`[alignSentencesToText] Failed to match sentence on page ${pageNum}:`, sText);
-      const rawPos = cleanToRaw[searchStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
-      sentenceRanges.push({
-        text: sText,
-        start: rawPos,
-        end: rawPos
-      });
-    }
-  }
-
-  // 매칭 실패(길이 0)인 문장들의 범위를 주변 매칭 성공 문장들 사이의 간격으로 분할 보간(Gap Partitioning)
-  // 수식 등의 기호만 있는 문장들이 누락 없이 서로 겹치지 않고 PDF 텍스트 레이어에 균등 분할 마킹되도록 지원.
-  //
-  // 실패한 문장들 사이의 간격을 "개수로 균등 분할"하면 위험하다 - 그림 캡션처럼 원문
-  // 추출 텍스트와 번역 문장 목록이 잘 안 맞는 구간에서 매칭이 연쇄적으로 실패하면,
-  // prevEnd와 nextStart 사이의 간격이 그림이 차지하는 공백이나 전혀 무관한 다른
-  // 단락까지 포함할 정도로 커질 수 있다(실측: 캡션 문장 하나가 수백 자 떨어진 다른
-  // 컬럼의 무관한 문단까지 하이라이트로 끌어옴). 그 큰 간격을 실패한 문장 "개수"로만
-  // 나누면 문장의 실제 길이와 무관하게 넓은 범위가 배정되므로, 대신 (1) 각 문장
-  // 원문(sText) 길이 비율로 나누고, (2) 간격이 실패한 문장들의 원문 길이 합보다
-  // 비정상적으로 크면(그림 등으로 인한 진짜 공백일 가능성) 간격 전체를 억지로 채우지
-  // 않고 prevEnd부터 필요한 만큼만 촘촘히 배정한 뒤 나머지는 어느 문장에도 배정하지
-  // 않고 비워 둔다.
-  const GAP_SAFETY_MULTIPLIER = 2.5;
-  let walkIdx = 0;
-  while (walkIdx < sentenceRanges.length) {
-    if (sentenceRanges[walkIdx].start === sentenceRanges[walkIdx].end) {
-      let k_start = walkIdx;
-      let k_end = walkIdx;
-      while (k_end + 1 < sentenceRanges.length && sentenceRanges[k_end + 1].start === sentenceRanges[k_end + 1].end) {
-        k_end++;
-      }
-
-      let prevEnd = 0;
-      for (let i = k_start - 1; i >= 0; i--) {
-        if (sentenceRanges[i].end > sentenceRanges[i].start) {
-          prevEnd = sentenceRanges[i].end;
-          break;
-        }
-      }
-
-      let nextStart = fullText.length;
-      for (let i = k_end + 1; i < sentenceRanges.length; i++) {
-        if (sentenceRanges[i].end > sentenceRanges[i].start) {
-          nextStart = sentenceRanges[i].start;
-          break;
-        }
-      }
-
-      if (prevEnd < nextStart) {
-        const gapSize = nextStart - prevEnd;
-        const lens = [];
-        let totalLen = 0;
-        for (let i = k_start; i <= k_end; i++) {
-          const len = Math.max(1, (sentenceRanges[i].text || '').length);
-          lens.push(len);
-          totalLen += len;
-        }
-        const usedGap = Math.min(gapSize, totalLen * GAP_SAFETY_MULTIPLIER);
-        let cursor = prevEnd;
-        for (let idx = 0; idx < lens.length; idx++) {
-          const i = k_start + idx;
-          const share = Math.round((lens[idx] / totalLen) * usedGap);
-          sentenceRanges[i].start = cursor;
-          sentenceRanges[i].end = Math.min(nextStart, cursor + share);
-          cursor = sentenceRanges[i].end;
-        }
-      }
-
-      walkIdx = k_end + 1;
-    } else {
-      walkIdx++;
-    }
-  }
-
-  // 최종 안전장치: 인접한 두 문장의 범위가 여전히 겹치면(접두어 폴백이 원문
-  // 오차로 실제보다 넓게 잡거나, 위 두 보정 단계가 손대지 않는 경계에서 우연히
-  // 겹치는 경우) 겹친 구간의 중간 지점에서 서로 맞닿도록 잘라 겹침을 제거한다.
-  // 어느 한쪽이 항상 옳다고 볼 근거가 없으므로 중간 지점에서 공평하게 나눈다.
-  for (let i = 1; i < sentenceRanges.length; i++) {
-    const prev = sentenceRanges[i - 1];
-    const cur = sentenceRanges[i];
-    if (cur.start < prev.end) {
-      const mid = Math.floor((cur.start + prev.end) / 2);
-      prev.end = Math.max(prev.start, mid);
-      cur.start = Math.min(cur.end, mid);
-    }
-  }
-
-  return sentenceRanges;
-}
 
 // ── PDF 텍스트 레이어 비파괴 가상 오버레이 기반 문장 매핑 시스템 ───────────────
 //
@@ -16258,6 +16174,7 @@ function buildVirtualTextMap(container, pageNum) {
   // 줄간격 중앙값 및 폰트 크기 중앙값 계산
   const gaps = [];
   for (let i = 1; i < sortedSpans.length; i++) {
+    if (sortedSpans[i].lineIndex === sortedSpans[i - 1].lineIndex) continue;
     const gap = sortedSpans[i].top - sortedSpans[i - 1].top;
     if (gap > 0) gaps.push(gap);
   }
@@ -16308,7 +16225,8 @@ function buildVirtualTextMap(container, pageNum) {
       const prevText = collectTextNodes(sortedSpans[i - 1].el).map(n => n.nodeValue).join('').trim();
       const isPrevSectionNum = /^(?:[IVXLCDM\d]+(?:\.[IVXLCDM\d]+)*\.?|[A-Z]\.?)$/i.test(prevText);
 
-      if (!isPrevSectionNum && (isPrevHeader || isCurrentHeader || isLargeGap || gap < -50)) {
+      const isNewLine = spanInfo.lineIndex !== sortedSpans[i - 1].lineIndex;
+      if (isNewLine && !isPrevSectionNum && (isPrevHeader || isCurrentHeader || isLargeGap || gap < -50)) {
         if (!fullText.endsWith('\n\n')) fullText += '\n\n';
       } else {
         const prevChar = fullText[fullText.length - 1];
@@ -16373,7 +16291,7 @@ function findDisplayEquationsFromVTM(vtm) {
     // \uc55e\ub4a4\uac00 \ubaa8\ub450 \uae00\uc790\uc778 \ud558\uc774\ud508\uc740 \uc601\uc5b4 \ubcf5\ud569\uc5b4 \ud558\uc774\ud508\uc77c \ubfd0\uc778\ub370, \uc774\ub97c \uc218\uc2dd \uae30\ud638\ub85c
     // \uc624\ud310\ud558\uba74 \uc774\ub7f0 \ub2e8\uc5b4\uac00 \ud3ec\ud568\ub41c \uc9e7\uc740 \uc904(\ud2b9\ud788 \uc904\ubc14\uafc8\uc73c\ub85c \ub2e8\uc5b4 \uc218\uac00 \uc801\uc5b4\uc9c0\ub294
     // \ub9c8\uc9c0\ub9c9 \uc904)\uc774 \uc218\uc2dd\uc73c\ub85c \uc798\ubabb \ubd84\ub958\ub418\uc5b4 \ubb38\uc7a5 \ubc94\uc704\uac00 \uc911\uac04\uc5d0 \uc798\ub824\ub098\uac04\ub2e4(\uc2e4\uce21).
-    const hasMathSymbol = /[=<>+\u2212\u22c5\u0370-\u03ff\u2200-\u22ff*/\u00d7\u00f7_\^\\]/.test(lineText)
+    const hasMathSymbol = /[=<>+\u2212\u22c5\u2200-\u22ff*/\u00d7\u00f7_\^\\]/.test(lineText)
       || /(?<![a-zA-Z])-(?![a-zA-Z])/.test(lineText);
     const words = lineText.split(/\s+/);
     const engWordCount = words.filter(w => {
@@ -16381,7 +16299,10 @@ function findDisplayEquationsFromVTM(vtm) {
       return c.length >= 3 && !w.startsWith('\\');
     }).length;
 
-    const isEquation = hasMathSymbol && (
+    // The absence of English words is not evidence of a displayed equation.
+    const proseLetters = [...lineText].filter(c => /\p{L}/u.test(c) && !/[\p{Script=Latin}\p{Script=Greek}]/u.test(c)).length;
+    const hasMultilingualProse = proseLetters >= 3 || /\p{Script=Greek}{3,}/u.test(lineText);
+    const isEquation = !hasMultilingualProse && hasMathSymbol && (
       (hasEqNum && engWordCount <= 6) ||
       (!hasEqNum && lineText.length < 150 && engWordCount <= 4)
     );
@@ -16417,19 +16338,12 @@ function getSentenceRects(sentenceRange, vtm, containerEl) {
       for (const rect of rects) {
         if (rect.width < 1 || rect.height < 1) continue;
         const r = coordinates.rectToLocal(rect);
-        // 같은 라인의 인접 상자 병합 (top ± 2px)
-        const last = mergedRects[mergedRects.length - 1];
-        if (last && Math.abs(last.top - r.top) < 3 && Math.abs((last.left + last.width) - r.left) < 4) {
-          last.width = r.left + r.width - last.left;
-          last.height = Math.max(last.height, r.height);
-        } else {
-          mergedRects.push({ ...r });
-        }
+        mergedRects.push(r);
       }
     } catch (e) { /* 범위 생성 실패 시 무시 */ }
   }
 
-  return mergedRects;
+  return mergePdfHighlightRects(mergedRects);
 }
 
 // 오버레이 레이어에 하이라이트 상자를 드로잉
@@ -16944,14 +16858,14 @@ function splitIntoSentences(fullText) {
     if (!paraText.trim()) continue;
 
     // 문단 내부에서 구두점을 기준으로 2차 문장 분할
-    const candRegex = /([.!?]+)([ \t\n\r]+)/g;
+    const candRegex = /([。！？]+[」』”’）】》〉]*)([ \t\n\r]*)|([.!?]+)([ \t\n\r]+)/g;
     let lastSentenceIndex = 0;
     let sMatch;
 
     while ((sMatch = candRegex.exec(paraText)) !== null) {
       const puncIndex = sMatch.index;
-      const punc = sMatch[1];
-      const whitespace = sMatch[2];
+      const punc = sMatch[1] || sMatch[3];
+      const whitespace = sMatch[1] ? sMatch[2] : sMatch[4];
       const nextIndex = puncIndex + punc.length + whitespace.length;
 
       if (nextIndex >= paraText.length) {
@@ -16971,8 +16885,8 @@ function splitIntoSentences(fullText) {
       const nextChar = paraText[nextIndex];
       const isPeriod = punc.includes('.');
 
-      // 다음 글자가 소문자/숫자/특수문자이면 문장 구분 안 함
-      const isLowerOrDigitOrSpecial = /^[a-z0-9\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
+      // 다음 글자가 소문자/특수문자이면 문장 구분 안 함 (단, 숫자는 1988년, 1세 등 문장의 시작이 될 수 있으므로 제외)
+      const isLowerOrDigitOrSpecial = /^[a-z\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
       if (isPeriod && isLowerOrDigitOrSpecial) {
         continue;
       }
@@ -17138,6 +17052,9 @@ function getVtmCharRangeFromSelection(range, vtm) {
 
 // 오버레이에 호버 하이라이트를 그리고 번역 문장에 클래스를 적용
 function applyHoverHighlight(pageNum, sentenceRange) {
+  if (!sentenceRange.isEquation) {
+    sentenceRange = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [], sentenceRange.sentenceIdx) || sentenceRange;
+  }
   const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
   if (!vtm) return;
 
@@ -17172,6 +17089,8 @@ function applyActiveHighlight(pageNum, sentenceRange) {
   viewerScrollContainer.querySelectorAll('.active-mapped-sentence').forEach(el => el.classList.remove('active-mapped-sentence'));
 
   if (!sentenceRange || !pageNum) return;
+  sentenceRange = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [],
+    sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) || sentenceRange;
 
   const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
   const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`);
@@ -17210,7 +17129,7 @@ function detectSentenceAtMouse(e) {
   if (charIdx < 0) return null;
 
   const sRange = findSentenceAtChar(charIdx, sentenceRanges);
-  return sRange ? { pageNum, sentenceRange: sRange } : null;
+  return sRange ? { pageNum, sentenceRange: sRange, charIdx } : null;
 }
 
 // 700ms 드웰 후 문장 전체를 자동 선택하고 선택 메뉴 표시하는 헬퍼
@@ -17239,14 +17158,79 @@ function createDomRangeFromVtmRange(vtm, charStart, charEnd) {
 
 // hover는 시각적 overlay와 내부 범위만 갱신한다. native Selection은 사용자의
 // 실제 드래그에만 맡겨 hover 직후에도 caret이 끊기지 않게 한다.
-function focusRef(pageNum, sentenceRange) {
-  return { pageNum, sentenceIdx: sentenceRange.sentenceIdx, revealTranslation: true, element: viewerScrollContainer.querySelector(`.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceRange.sentenceIdx >= 10000 ? (sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) : sentenceRange.sentenceIdx}"]`) || viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`) }
+const legacyFocusPartsCache = new WeakMap()
+function legacyFocusParts(pageNum, sentenceIdx) {
+  if (!focusModeController?.settings.enabled) return []
+  const pair = state.translationSentences?.[pageNum]?.[sentenceIdx]
+  if (!pair || !/[。！？]/.test(pair.src || '')) return []
+  const vtm = state.virtualTextMaps?.[pageNum]
+  const whole = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [], sentenceIdx)
+  if (!vtm || !whole) return []
+  let cache = legacyFocusPartsCache.get(vtm)
+  if (!cache) { cache = new Map(); legacyFocusPartsCache.set(vtm, cache) }
+  const key = JSON.stringify([pair.src, pair.trans, whole.charStart, whole.charEnd])
+  const cached = cache.get(sentenceIdx)
+  if (cached?.key === key) return cached.parts
+  const source = splitIntoSentences(pair.src)
+  const translated = splitIntoSentences(pair.trans || '')
+  const parts = source.length < 2 ? [] : alignSentencesToText(vtm.fullText.slice(whole.charStart, whole.charEnd), source.map(s => s.text), pageNum)
+    .map((range, partIdx) => ({ partIdx, charStart: whole.charStart + range.start,
+      charEnd: whole.charStart + range.end,
+      translation: source.length === translated.length ? translated.slice(0, partIdx + 1).map(s => s.text) : null }))
+  cache.set(sentenceIdx, { key, parts })
+  return parts
+}
+
+// Keep cached sentence IDs (and annotations) stable; subdivision is view-only.
+function focusRef(pageNum, sentenceRange, charIdx = sentenceRange.charStart) {
+  const sentenceIdx = sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx
+  const parts = sentenceRange.isEquation ? [] : legacyFocusParts(pageNum, sentenceIdx)
+  // OCR whitespace between sentences must not briefly restore paragraph focus.
+  const part = parts.find(part => charIdx < part.charEnd) || parts.at(-1)
+  return { pageNum, sentenceIdx: sentenceRange.sentenceIdx, partIdx: part ? part.partIdx : undefined,
+    revealTranslation: true, element: viewerScrollContainer.querySelector(`.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"]`) || viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`) }
+}
+
+function translationFocusPartRects(elements, texts) {
+  let fullText = ''
+  const nodes = []
+  for (const element of elements) {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const start = fullText.length
+      fullText += node.nodeValue
+      nodes.push({ node, start, end: fullText.length })
+    }
+    fullText += ' '
+  }
+  const matched = alignSentencesToText(fullText, texts).at(-1)
+  if (!matched) return []
+  const rects = []
+  for (const entry of nodes) {
+    const start = Math.max(entry.start, matched.start), end = Math.min(entry.end, matched.end)
+    if (start >= end) continue
+    const range = document.createRange()
+    range.setStart(entry.node, start - entry.start); range.setEnd(entry.node, end - entry.start)
+    rects.push(...range.getClientRects())
+  }
+  return rects
+}
+
+function translationFocusRef(pageNum, sentenceIdx, element, event) {
+  const ref = { pageNum, sentenceIdx, element }
+  const elements = [...viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${pageNum}"][data-sentence-idx="${sentenceIdx}"]`)]
+  const part = legacyFocusParts(pageNum, sentenceIdx).find(part => part.translation
+    && translationFocusPartRects(elements, part.translation).some(r => event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom))
+  return part ? { ...ref, partIdx: part.partIdx } : ref
 }
 
 function focusPairRects(ref) {
   const sourceRects = []
   const sentenceRanges = state.pdfPageSentences?.[ref.pageNum] || []
-  const sentenceRange = sentenceRanges.find(range => range.sentenceIdx === ref.sentenceIdx || (range.originalSentenceIdx ?? range.sentenceIdx) === ref.sentenceIdx)
+  let sentenceRange = mappedSentenceRange(sentenceRanges, ref.sentenceIdx)
+    || sentenceRanges.find(range => range.sentenceIdx === ref.sentenceIdx)
+  const part = ref.partIdx !== undefined ? legacyFocusParts(ref.pageNum, ref.sentenceIdx)[ref.partIdx] : null
+  if (part) sentenceRange = { ...sentenceRange, charStart: part.charStart, charEnd: part.charEnd }
   const vtm = state.virtualTextMaps?.[ref.pageNum]
   if (sentenceRange && vtm) {
     for (const nr of vtm.nodeRanges) {
@@ -17256,15 +17240,37 @@ function focusPairRects(ref) {
     }
   }
   const idx = ref.sentenceIdx >= 10000 ? (sentenceRange?.originalSentenceIdx ?? ref.sentenceIdx) : ref.sentenceIdx
-  const translationRects = []
+  let translationRects = []
   viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`).forEach(element => translationRects.push(...visibleFocusRects(element)))
-  return { sourceRects, translationRects, sourceCanvas: viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${ref.pageNum}"] canvas`), elements: Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`)) }
+  if (part?.translation) {
+    const elements = [...viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`)]
+    const selected = translationFocusPartRects(elements, part.translation)
+    // Preserve clipping from scrollable translation panes.
+    translationRects = selected.flatMap(r => translationRects.map(v => ({
+      left: Math.max(r.left, v.left), top: Math.max(r.top, v.top),
+      right: Math.min(r.right, v.right), bottom: Math.min(r.bottom, v.bottom),
+    }))).filter(r => r.right > r.left && r.bottom > r.top)
+      .map(r => ({ ...r, width: r.right - r.left, height: r.bottom - r.top }))
+  }
+  // Focus crops, blur openings and tint must share the same continuous source
+  // lines as hover highlights. Keep viewport coordinates for the fixed layer.
+  const sourceLineRects = mergePdfHighlightRects(sourceRects).map(rect => ({
+    ...rect, right: rect.left + rect.width, bottom: rect.top + rect.height,
+  }))
+  return { sourceRects: sourceLineRects, translationRects, sourceCanvas: viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${ref.pageNum}"] canvas`), elements: Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`)) }
 }
 
 function listFocusSentences() {
   const result = []
   for (let pageNum = 1; pageNum <= state.totalPages; pageNum++) {
-    for (const sentenceRange of state.pdfPageSentences?.[pageNum] || []) if (sentenceRange.sentenceIdx < 10000) result.push(focusRef(pageNum, sentenceRange))
+    const seen = new Set()
+    for (const sentenceRange of state.pdfPageSentences?.[pageNum] || []) {
+      if (sentenceRange.sentenceIdx >= 10000 || seen.has(sentenceRange.sentenceIdx)) continue
+      seen.add(sentenceRange.sentenceIdx)
+      const parts = legacyFocusParts(pageNum, sentenceRange.sentenceIdx)
+      if (parts.length) parts.forEach(part => result.push(focusRef(pageNum, sentenceRange, part.charStart)))
+      else result.push(focusRef(pageNum, sentenceRange))
+    }
   }
   return result
 }
@@ -17272,6 +17278,9 @@ function listFocusSentences() {
 focusModeController = new FocusModeController({ root: viewerScrollContainer, resolvePair: focusPairRects, listSentences: listFocusSentences, announce: key => announceA11y({ focusActive: t('viewer:a11y.focusActive'), focusPinned: t('viewer:a11y.focusPinned'), focusMoved: t('viewer:a11y.focusMoved') }[key]), notifyFallback: () => showToast(t('viewer:focus.performanceFallback'), 'info') })
 
 function startDwellSelection(pageNum, sentenceRange) {
+  if (!sentenceRange.isEquation) {
+    sentenceRange = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [], sentenceRange.sentenceIdx) || sentenceRange;
+  }
   if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null }
 
   sentenceHoverTimer = setTimeout(() => {
@@ -17315,7 +17324,11 @@ if (viewerScrollContainer) {
     let annSpan = null;
 
     // 번역 패널 호버는 mouseover로 처리됨 (기존 trans-sentence 방식 유지)
-    if (e.target.closest('.trans-page-block')) return;
+    if (e.target.closest('.trans-page-block')) {
+      const element = e.target.closest('.trans-sentence')
+      if (element) focusModeController.focus(translationFocusRef(Number(element.dataset.page), Number(element.dataset.sentenceIdx), element, e))
+      return;
+    }
 
     // PDF textLayer 위 문장 감지
     const detected = detectSentenceAtMouse(e);
@@ -17355,7 +17368,7 @@ if (viewerScrollContainer) {
       }
     }
 
-    if (isSame) { focusModeController.focus(focusRef(pageNum, sentenceRange)); return; }
+    if (isSame) { focusModeController.focus(focusRef(pageNum, sentenceRange, detected.charIdx)); return; }
 
     // 이전 페이지 호버 클리어
     if (currentHoverPage !== null && currentHoverPage !== pageNum) {
@@ -17368,7 +17381,7 @@ if (viewerScrollContainer) {
 
     currentHoverPage = pageNum;
     currentHoverSentenceIdx = sentenceRange.sentenceIdx;
-    focusModeController.focus(focusRef(pageNum, sentenceRange));
+    focusModeController.focus(focusRef(pageNum, sentenceRange, detected.charIdx));
 
     applyHoverHighlight(pageNum, sentenceRange);
 
@@ -17396,7 +17409,7 @@ if (viewerScrollContainer) {
       if (isNaN(pageNum)) return;
       const sentenceIdx = parseInt(transSent.dataset.sentenceIdx, 10);
       if (isNaN(sentenceIdx)) return;
-      focusModeController.focus({ pageNum, sentenceIdx, element: transSent });
+      focusModeController.focus(translationFocusRef(pageNum, sentenceIdx, transSent, e));
       focusModeController.cancelLeave();
 
       // 번역 패널 호버 → PDF 오버레이 하이라이트
@@ -17409,10 +17422,7 @@ if (viewerScrollContainer) {
 
       const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum];
       if (sentenceRanges) {
-        const sRange = sentenceRanges.find(r => {
-          const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx;
-          return idx === sentenceIdx;
-        });
+        const sRange = mappedSentenceRange(sentenceRanges, sentenceIdx);
         if (sRange) {
           const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`);
           if (pw) {
@@ -17476,16 +17486,13 @@ if (viewerScrollContainer) {
         const pageNum = parseInt(pageWrapper.dataset.page, 10);
         if (isNaN(pageNum)) return;
         const sentenceIdx = parseInt(transSent.dataset.sentenceIdx, 10);
-        if (focusModeController.settings.enabled) { focusModeController.togglePin({ pageNum, sentenceIdx, element: transSent }); transSent.setAttribute('aria-pressed', String(focusModeController.pinned)); }
+        if (focusModeController.settings.enabled) { focusModeController.togglePin(translationFocusRef(pageNum, sentenceIdx, transSent, e)); transSent.setAttribute('aria-pressed', String(focusModeController.pinned)); }
         if (isNaN(sentenceIdx)) return;
 
         const sentenceRanges = state.pdfPageSentences && state.pdfPageSentences[pageNum];
         if (!sentenceRanges) return;
 
-        const sRange = sentenceRanges.find(r => {
-          const idx = r.sentenceIdx >= 10000 ? (r.originalSentenceIdx ?? r.sentenceIdx) : r.sentenceIdx;
-          return idx === sentenceIdx;
-        });
+        const sRange = mappedSentenceRange(sentenceRanges, sentenceIdx);
         if (!sRange) return;
 
         applyActiveHighlight(pageNum, sRange);
@@ -17526,7 +17533,7 @@ if (viewerScrollContainer) {
       }
 
       const { pageNum, sentenceRange } = detected;
-      if (focusModeController.settings.enabled) focusModeController.togglePin(focusRef(pageNum, sentenceRange));
+      if (focusModeController.settings.enabled) focusModeController.togglePin(focusRef(pageNum, sentenceRange, detected.charIdx));
       applyActiveHighlight(pageNum, sentenceRange);
       activeHighlightPage = pageNum;
       activeHighlightSentenceIdx = sentenceRange.sentenceIdx;

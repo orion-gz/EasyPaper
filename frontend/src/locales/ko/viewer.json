@@ -1,4 +1,5 @@
 {
+  "focus.toggle": "Focus 모드 (Shift+F)",
   "translation.waiting": "대기 중",
   "translation.progress": "{{total}}페이지 중 {{completed}}페이지",
   "source.label": "원문",
@@ -78,5 +79,6 @@
   "chapter.retry": "다시 시도",
   "chapter.cancel": "전체 요약 취소",
   "chapter.cancelled": "전체 요약 작업을 취소했습니다.",
-  "chapter.cancelFailed": "전체 요약 취소에 실패했습니다."
+  "chapter.cancelFailed": "전체 요약 취소에 실패했습니다.",
+  "cacheClearedReload": "PDF 추출 및 번역 캐시가 삭제되었습니다. 뷰어를 새로고침합니다."
 }

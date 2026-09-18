@@ -141,7 +141,14 @@ def get_cached_pages(doc_id: str, pdf_path: str, engine: str | None = None,
             or data.get("parser_version") != expected_version
         ):
             return None
-        return data.get("pages")
+        pages = data.get("pages")
+        if pages and data.get("parser_engine") == "mineru":
+            try:
+                from services.pdf_parser import sanitize_mineru_pages
+                pages = sanitize_mineru_pages(pages, pdf_path)
+            except Exception:
+                pass
+        return pages
     except Exception:
         return None
 
@@ -318,15 +325,34 @@ def clear_stale_parser_caches(doc_id: str, keep_revision: int) -> None:
 def clear_derived_session_cache(doc_id: str) -> None:
     """Drop stale translation caches without deleting active parser revision data."""
     prefix = f"{doc_id}_"
-    for fname in os.listdir(CACHE_DIR):
-        if not fname.startswith(prefix):
-            continue
-        if fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX)):
-            continue
-        try:
-            os.remove(os.path.join(CACHE_DIR, fname))
-        except OSError:
-            pass
+    if os.path.exists(CACHE_DIR):
+        for fname in os.listdir(CACHE_DIR):
+            if not fname.startswith(prefix):
+                continue
+            if fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX)):
+                continue
+            try:
+                os.remove(os.path.join(CACHE_DIR, fname))
+            except OSError:
+                pass
+
+    try:
+        from config import LIBRARY_DIR
+        import glob
+        import shutil
+        doc_dir = os.path.join(LIBRARY_DIR, doc_id)
+        if os.path.exists(doc_dir):
+            md_dir = os.path.join(doc_dir, "md")
+            if os.path.exists(md_dir):
+                shutil.rmtree(md_dir, ignore_errors=True)
+                os.makedirs(md_dir, exist_ok=True)
+            for md_file in glob.glob(os.path.join(doc_dir, "translation_*.md")):
+                try:
+                    os.remove(md_file)
+                except OSError:
+                    pass
+    except Exception:
+        pass
 
 
 def clear_all_images_cache() -> "tuple[int, int]":

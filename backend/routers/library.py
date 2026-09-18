@@ -12,6 +12,7 @@ from services.library import (
     get_chat_quote_image_path, list_folders, create_folder, update_folder, delete_folder, move_documents_to_folder
 )
 from pydantic import BaseModel, Field, field_validator, model_validator
+import asyncio
 import json
 import re
 
@@ -725,9 +726,11 @@ async def get_library_document(
     """특정 문서의 메타데이터와 번역 완료 페이지 목록을 반환합니다."""
     doc = get_document(doc_id, target_lang, style, ignore_math, ignore_table, ignore_refs)
     require_owned_document(doc_id, current_user, doc)
-    if doc.get("source_language", "auto") == "auto" and doc.get("detected_source_language", "und") == "und":
+    if doc.get("content_kind") != "html_article" or (
+        doc.get("source_language", "auto") == "auto" and doc.get("detected_source_language", "und") == "und"
+    ):
         from routers.upload import ensure_session
-        if ensure_session(doc_id):
+        if await asyncio.to_thread(ensure_session, doc_id):
             doc = get_document(doc_id, target_lang, style, ignore_math, ignore_table, ignore_refs)
             require_owned_document(doc_id, current_user, doc)
     return doc
