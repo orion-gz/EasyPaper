@@ -275,15 +275,22 @@ export function createFocusMagnification(pair, viewportRects, scale) {
       crop.append(canvas)
     }, 'source', 'white', getComputedStyle(source).filter, source)
   }
+  const translationHosts = new Map()
   for (const element of pair.elements || []) {
     const host = element.closest('p, li, h1, h2, h3, h4, h5, h6') || element.parentElement
     if (!host) continue
+    if (!translationHosts.has(host)) translationHosts.set(host, [])
+    translationHosts.get(host).push(element)
+  }
+  // Markdown and math split a sentence into multiple spans. Transform their
+  // union once, so each fragment keeps its position relative to the others.
+  for (const [host, elements] of translationHosts) {
     const bounds = host.getBoundingClientRect(), zoom = bounds.width / host.offsetWidth || 1
     const clone = copyStyledTree(host)
     Object.assign(clone.style, { position: 'absolute', right: 'auto', bottom: 'auto', margin: '0', width: `${bounds.width / zoom}px`, height: 'auto', boxSizing: 'border-box', transform: 'none', zoom: String(zoom) })
-    build(visibleFocusRects(element), (crop, rect) => {
+    build(elements.flatMap(visibleFocusRects), (crop, rect) => {
       crop.style.background = sentenceBackground(host)
-    }, 'translation', sentenceBackground(host), 'none', element, (group, visible, left, top, width, height) => {
+    }, 'translation', sentenceBackground(host), 'none', elements[0], (group, visible, left, top, width, height) => {
       // One styled paragraph per sentence, not one complete paragraph per
       // visible line. A single union clip preserves the same line openings.
       const content = document.createElement('div')
