@@ -430,14 +430,14 @@ for (const zoom of [0.8, 1, 1.25]) {
       const ctx = canvas.getContext('2d'); ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 400, 80); ctx.fillStyle = 'black'; ctx.font = '28px sans-serif'; ctx.fillText('Focused source', 12, 48)
       const paragraph = document.createElement('p'); paragraph.id = 'focus-paragraph'
       Object.assign(paragraph.style, { position: 'absolute', left: '650px', top: '240px', width: '200px', margin: '0', fontSize: '18px', lineHeight: '28px' })
-      paragraph.innerHTML = '<span class="trans-sentence">A <strong>translated</strong> sentence that <em>wraps</em> across multiple lines.</span>'
+      paragraph.innerHTML = 'Before. <span class="trans-sentence">A </span><strong><span class="trans-sentence">translated</span></strong><span class="trans-sentence"> sentence with </span><code><span class="trans-sentence">code</span></code><span class="trans-sentence"> and </span><span class="trans-sentence" style="display:inline-block">x<sup>2</sup></span><span class="trans-sentence"> that </span><em><span class="trans-sentence">wraps</span></em><span class="trans-sentence"> across multiple lines.</span> After.'
       root.append(canvas, paragraph)
       // The fixture inherits web fonts; newly used bold/italic faces may still
       // load after insertion. Compare layout only after font metrics settle.
       paragraph.getBoundingClientRect()
       await document.fonts.ready
-      const element = paragraph.firstElementChild
-      window.controller.resolvePair = () => ({ sourceCanvas: canvas, sourceRects: [canvas.getBoundingClientRect()], translationRects: visibleFocusRects(element), elements: [element] })
+      const elements = [...paragraph.querySelectorAll('.trans-sentence')]
+      window.controller.resolvePair = () => ({ sourceCanvas: canvas, sourceRects: [canvas.getBoundingClientRect()], translationRects: elements.flatMap(visibleFocusRects), elements })
       const original = { canvas: canvas.getBoundingClientRect().toJSON(), paragraph: paragraph.getBoundingClientRect().toJSON() }
       window.controller.applySettings({ enabled: true, blurStrength: 1, dimOpacity: 20, scale: 150 })
       window.controller.togglePin({ pageNum: 1, sentenceIdx: 0 })
@@ -447,6 +447,7 @@ for (const zoom of [0.8, 1, 1.25]) {
     const translation = page.locator('.focus-mode-magnification[data-kind="translation"]')
     await expect(source).toBeVisible()
     await expect(translation).toBeVisible()
+    await expect(translation).toHaveCount(1)
     await expect(translation.locator('.focus-mode-text-copy')).toHaveCount(1)
     await expect(translation.locator('p')).toHaveCount(1)
     for (const [selector, property] of [['strong', 'font-weight'], ['em', 'font-style']]) {
