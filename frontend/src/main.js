@@ -1837,7 +1837,10 @@ function translatePage(pageNum) {
       state.translatingPages.delete(pageNum)
       if (state.sessionId !== currentSessionId) return
       if (statusEl) statusEl.textContent = '번역 실패'
-      contentEl.innerHTML = `<div class="trans-error">번역 실패: ${escapeHtml(err.message)}</div>`
+      contentEl.innerHTML = `<div class="manual-translation-prompt">
+        <div class="trans-error" role="alert">번역 실패: ${escapeHtml(err.message)}</div>
+        <button type="button" class="translate-page-btn" data-page="${pageNum}">${t('common:legacy.ui.0902')}</button>
+      </div>`
     }
   )
 }
