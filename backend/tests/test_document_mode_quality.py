@@ -25,11 +25,33 @@ def test_decade_handling_preserves_duration_and_code_checks():
     assert not validate_translation_integrity(source, "1960년대부터 30s 대기.")["valid"]
 
 
-def test_manual_page_translation_accepts_translated_decades(test_client, monkeypatch):
+@pytest.mark.parametrize("word", ["shows", "servers", "systems", "msize", "Applications", "Versions", "kgrowth"])
+def test_unit_prefix_in_word_is_not_a_measurement(word):
+    source = f"Figure 2.20 {word}"
+    assert protected_literals(source) == ["2.20"]
+    assert validate_translation_integrity(source, "그림 2.20 설명")["valid"]
+    assert not validate_translation_integrity(source, "그림 설명")["valid"]
+
+
+@pytest.mark.parametrize("unit", ["%", "ms", "s", "MB", "GB", "KB", "Hz", "kHz", "MHz", "GHz", "°C", "V", "A", "mA", "kg", "km", "cm", "mm"])
+@pytest.mark.parametrize("separator", ["", " "])
+def test_actual_measurements_still_require_units(unit, separator):
+    literal = f"2.20{separator}{unit}"
+    assert protected_literals(f"Measured {literal}.") == [literal]
+    assert validate_translation_integrity(f"Measured {literal}.", f"측정값 {literal}.")["valid"]
+    assert not validate_translation_integrity(f"Measured {literal}.", "측정값 2.20.")["valid"]
+
+
+@pytest.mark.parametrize("source,translated", [
+    ("Architecture since the 1960s and 1980s.", "1960년대와 1980년대 이후의 컴퓨터 구조."),
+    ("Figure 2.20 shows a DNS query chain for which all of the queries are recursive.",
+     "그림 2.20은 모든 질의가 재귀적인 DNS 질의 체인을 보여준다."),
+])
+def test_manual_page_translation_accepts_translated_prose(test_client, monkeypatch, source, translated):
     from routers import translate
 
     session = {
-        "pages": [{"page_num": 1, "text": "Architecture since the 1960s and 1980s."}],
+        "pages": [{"page_num": 1, "text": source}],
         "total_pages": 1,
         "document_mode": "general",
         "document_type": "academic_book",
@@ -45,7 +67,7 @@ def test_manual_page_translation_accepts_translated_decades(test_client, monkeyp
     monkeypatch.setattr(translate, "lib_save_translation", lambda *args: saved.append(args))
 
     async def stream(*args, **kwargs):
-        yield "[S0] 1960년대와 1980년대 이후의 컴퓨터 구조."
+        yield f"[S0] {translated}"
 
     monkeypatch.setattr(translate, "stream_translation", stream)
     response = test_client.get("/api/translate/decade-test/1?source_lang=en")
@@ -53,7 +75,7 @@ def test_manual_page_translation_accepts_translated_decades(test_client, monkeyp
     assert response.status_code == 200
     assert events[-1]["done"] and "error" not in events[-1]
     assert len(saved) == 2
-    assert "1960년대" in json.loads(saved[0][2])["translation"]
+    assert translated == json.loads(saved[0][2])["translation"]
 
 
 def _cases():
