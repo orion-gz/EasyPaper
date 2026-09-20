@@ -1,4 +1,5 @@
 import json
+import pytest
 from collections import Counter
 from pathlib import Path
 
@@ -7,6 +8,52 @@ from services.document_policy import build_assistant_prompt
 from services.translation_quality import protected_literals, validate_translation_integrity
 
 FIXTURE = Path(__file__).parent / "fixtures" / "document_mode_quality_cases.json"
+
+
+@pytest.mark.parametrize("decade", ["1960s", "1980s", "1990's", "2000’s"])
+def test_translated_decades_are_not_seconds(decade):
+    year = decade[:4]
+    source = f"Computer architecture since the {decade}."
+    assert validate_translation_integrity(source, f"{year}년대 이후 컴퓨터 구조.")["valid"]
+    assert not validate_translation_integrity(source, "컴퓨터 구조.")["valid"]
+
+
+def test_decade_handling_preserves_duration_and_code_checks():
+    source = "Since the 1960s, wait 30s and run `1960s`."
+    assert validate_translation_integrity(source, "1960년대부터 30s 대기 후 `1960s` 실행.")["valid"]
+    assert not validate_translation_integrity(source, "1960년대부터 30 대기 후 `1960s` 실행.")["valid"]
+    assert not validate_translation_integrity(source, "1960년대부터 30s 대기.")["valid"]
+
+
+def test_manual_page_translation_accepts_translated_decades(test_client, monkeypatch):
+    from routers import translate
+
+    session = {
+        "pages": [{"page_num": 1, "text": "Architecture since the 1960s and 1980s."}],
+        "total_pages": 1,
+        "document_mode": "general",
+        "document_type": "academic_book",
+        "detected_source_language": "en",
+    }
+    monkeypatch.setattr(translate, "require_session_owner", lambda *args: session)
+    monkeypatch.setattr(translate, "enforce_rate_limit", lambda *args: None)
+    monkeypatch.setattr(translate, "get_trans_provider", lambda: "ollama")
+    monkeypatch.setattr(translate, "lib_get_translation_full", lambda *args, **kwargs: {})
+    monkeypatch.setattr(translate, "get_cached_translation_full", lambda *args: {})
+    saved = []
+    monkeypatch.setattr(translate, "save_translation_cache", lambda *args: saved.append(args))
+    monkeypatch.setattr(translate, "lib_save_translation", lambda *args: saved.append(args))
+
+    async def stream(*args, **kwargs):
+        yield "[S0] 1960년대와 1980년대 이후의 컴퓨터 구조."
+
+    monkeypatch.setattr(translate, "stream_translation", stream)
+    response = test_client.get("/api/translate/decade-test/1?source_lang=en")
+    events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+    assert response.status_code == 200
+    assert events[-1]["done"] and "error" not in events[-1]
+    assert len(saved) == 2
+    assert "1960년대" in json.loads(saved[0][2])["translation"]
 
 
 def _cases():

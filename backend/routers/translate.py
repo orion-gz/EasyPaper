@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 
@@ -19,6 +20,7 @@ from services.document_policy import translation_cache_candidates
 _VISION_CAPABLE_PROVIDERS = ("openai", "gemini", "claude")
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/translate/{session_id}/{page_num}")
@@ -202,6 +204,7 @@ async def translate_page(
             lib_save_translation(session_id, page_num, payload_json, suffix)
 
         except Exception as e:
+            logger.exception("Page translation failed: session=%s page=%s mode=%s", session_id, page_num, document_mode)
             error_data = json.dumps({"error": {"code": "generation_failed", "params": {}, "fallback": "Generation failed."}, "done": True})
             yield f"data: {error_data}\n\n"
             return

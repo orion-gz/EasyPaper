@@ -9,6 +9,11 @@ _COMMAND = re.compile(r"(?m)^(?:\$\s*)?((?:sudo|curl|wget|npm|npx|pnpm|yarn|pip|
 _PATH = re.compile(r"(?<![:/\w])(?:/(?:[\w-]+/)*[\w-]+(?:\.[\w-]+)*|[A-Za-z]:\\(?:[^\s\\]+\\)*[^\s\\]+)")
 
 
+# English decades are calendar values, not durations in seconds. Preserve the
+# year while allowing the suffix to be translated (1960s -> 1960년대).
+_DECADE = re.compile(r"\b((?:1[0-9]|20)[0-9]0)(?:['’]?s)\b")
+
+
 class TranslationIntegrityError(ValueError):
     pass
 
@@ -16,7 +21,10 @@ class TranslationIntegrityError(ValueError):
 def protected_literals(source: str) -> list[str]:
     values = []
     for pattern in (_URL, _INLINE_CODE, _COMMAND, _PATH, _NUMBER_UNIT):
-        for match in pattern.finditer(source or ""):
+        text = source or ""
+        if pattern is _NUMBER_UNIT:
+            text = _DECADE.sub(r"\1 ", text)
+        for match in pattern.finditer(text):
             value = match.group(1) if pattern in (_INLINE_CODE, _COMMAND) else match.group(0)
             value = value.rstrip(".,;:") if pattern is _URL else value
             if value and value not in values:
