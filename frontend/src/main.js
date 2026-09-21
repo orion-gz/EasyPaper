@@ -1514,11 +1514,16 @@ async function initScrollViewer() {
   if (!viewerScrollContainer.dataset.analyticsListenersAttached) {
     viewerScrollContainer.dataset.analyticsListenersAttached = 'true'
 
+    let analyticsScrollFrame = null
     viewerScrollContainer.addEventListener('scroll', () => {
-      if (state.currentPage) {
-        const curPageEl = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${state.currentPage}"]`)
-        globalAnalyticsTracker.trackScroll(state.currentPage, curPageEl, viewerScrollContainer, true, false)
-      }
+      if (analyticsScrollFrame !== null) return
+      analyticsScrollFrame = requestAnimationFrame(() => {
+        analyticsScrollFrame = null
+        if (state.currentPage) {
+          const curPageEl = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${state.currentPage}"]`)
+          globalAnalyticsTracker.trackScroll(state.currentPage, curPageEl, viewerScrollContainer, true, false)
+        }
+      })
     }, { passive: true })
 
     let lastAnalyticsScrollInteractionAt = 0
@@ -13366,6 +13371,18 @@ window.addEventListener('resize', schedulePdfGeometryRefresh)
 document.fonts.addEventListener('loadingdone', schedulePdfGeometryRefresh)
 
 // PDF.js 텍스트 레이어 렌더 완료 콜백 등록
+window.onTextLayerReleased = (textLayerDiv, pageNum) => {
+  if (!textLayerDiv) return
+  delete state.virtualTextMaps?.[pageNum]
+  delete state.pdfPageSentences?.[pageNum]
+  textLayerDiv.closest('.pdf-page-wrapper')?.querySelectorAll(':scope > .floating-memo').forEach(memo => {
+    memo._memoResizeObserver?.disconnect()
+    clearTimeout(memo._memoResizeSaveTimer)
+    memo.remove()
+  })
+  textLayerDiv.closest('.pdf-page-wrapper')?.querySelector('.memo-connector-svg')?.remove()
+}
+
 window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   focusModeController?.scheduleRender()
   // 문장 1대1 매칭을 위한 세그멘테이션 추가
@@ -13397,8 +13414,14 @@ window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   // renderTransContent → reRenderPageAnnotations에서 최종 위치로 한 번만 그리게 한다.
   const pendingRetranslationSegmentation =
     state.translatedPages.has(pageNum) &&
+    (!Object.hasOwn(state.translationCache, pageNum) || state.translationCache[pageNum] === '__fetching__') &&
     !(state.translationSentences[pageNum] && state.translationSentences[pageNum].length)
   if (pendingRetranslationSegmentation) return
+
+  // Geometry refresh also calls this hook. With cached fallback segmentation,
+  // keep existing cards (and editing state); an evicted page has none to retain.
+  if (!state.translationSentences[pageNum]?.length
+    && textLayerDiv.closest('.pdf-page-wrapper')?.querySelector('.floating-memo')) return
 
   // Render floating memos
   renderPageMemos(pageNum)
