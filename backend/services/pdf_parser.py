@@ -426,10 +426,12 @@ def _extract_page(page: fitz.Page, page_num: int, recovery_context=None) -> Dict
             continue
         blocks.append((x0, y0, x1, y1, text, is_indented))
 
-    # 2단 레이아웃 감지
-    is_two_column = _detect_two_column(blocks, page_width)
+    column_starts = _detect_three_columns(blocks, page_width)
+    is_two_column = not column_starts and _detect_two_column(blocks, page_width)
 
-    if is_two_column:
+    if column_starts:
+        sorted_blocks = _sort_three_columns(blocks, page_width, column_starts)
+    elif is_two_column:
         sorted_blocks = _sort_two_column(blocks, page_width)
     else:
         sorted_blocks = sorted(blocks, key=lambda b: (b[1], b[0]))  # y, x 순 정렬
@@ -442,6 +444,7 @@ def _extract_page(page: fitz.Page, page_num: int, recovery_context=None) -> Dict
         **recovery,
         "text": text_content,
         "is_two_column": is_two_column,
+        "column_count": 3 if column_starts else (2 if is_two_column else 1),
         "word_count": len(text_content.split()),
         "blocks": [
             {"bbox": [b[0], b[1], b[2], b[3]], "text": b[4], "type": 0}
@@ -528,6 +531,50 @@ def _classify_block(block: tuple, page_width: float, mid: float) -> str:
     if (x1 - x0) >= page_width * _WIDE_BLOCK_RATIO:
         return "wide"
     return "left" if (x0 + x1) / 2 < mid else "right"
+
+
+def _detect_three_columns(blocks: list, page_width: float) -> list[float]:
+    """Find three aligned body-text columns, ignoring headings and small labels."""
+    groups = []
+    for block in sorted(blocks, key=lambda b: b[0]):
+        width = block[2] - block[0]
+        if not page_width * 0.18 <= width <= page_width * 0.34:
+            continue
+        if groups and block[0] - groups[-1][0] <= page_width * 0.04:
+            groups[-1][1] += len(block[4])
+        else:
+            groups.append([block[0], len(block[4])])
+    starts = [x for x, chars in groups if chars > 200]
+    if len(starts) != 3:
+        return []
+    if any(b - a < page_width * 0.20 for a, b in zip(starts, starts[1:])):
+        return []
+    return starts
+
+
+def _sort_three_columns(blocks: list, page_width: float, starts: list[float]) -> list:
+    """Read each column top to bottom; full-width headings delimit sections.
+
+    Use left edges so captions spanning two columns stay with their starting
+    column rather than interrupting the unrelated third column.
+    """
+    result = []
+    columns = [[], [], []]
+
+    def flush():
+        for column in columns:
+            result.extend(sorted(column, key=lambda b: (b[1], b[0])))
+            column.clear()
+
+    for block in sorted(blocks, key=lambda b: (b[1], b[0])):
+        if block[2] - block[0] >= page_width * 0.75:
+            flush()
+            result.append(block)
+        else:
+            index = min(range(3), key=lambda i: abs(block[0] - starts[i]))
+            columns[index].append(block)
+    flush()
+    return result
 
 
 def _detect_two_column(blocks: list, page_width: float) -> bool:
@@ -1196,22 +1243,32 @@ def _marker_html_to_text(block_html: str) -> str:
     return BeautifulSoup(marked, "html.parser").get_text(" ", strip=True)
 
 
-def _marker_collect_text(block, parts: List[str]) -> None:
+def _marker_collect_text(block, parts: List[str], blocks: list | None = None) -> None:
     if block.block_type in _MARKER_SKIP_TEXT_TYPES:
         return
     if block.children:
         for child in block.children:
-            _marker_collect_text(child, parts)
+            _marker_collect_text(child, parts, blocks)
         return
     text = _marker_html_to_text(block.html)
     if text:
         parts.append(text)
+        bbox = getattr(block, "bbox", None)
+        if blocks is not None and bbox and len(bbox) == 4:
+            blocks.append((*bbox, text))
 
 
 def _marker_page_text(page_json) -> str:
     parts: List[str] = []
+    blocks = []
     for child in page_json.children or []:
-        _marker_collect_text(child, parts)
+        _marker_collect_text(child, parts, blocks)
+    bbox = getattr(page_json, "bbox", None)
+    if bbox and len(blocks) == len(parts):
+        width = bbox[2] - bbox[0]
+        starts = _detect_three_columns(blocks, width)
+        if starts:
+            parts = [b[4] for b in _sort_three_columns(blocks, width, starts)]
     return "\n\n".join(parts)
 
 
