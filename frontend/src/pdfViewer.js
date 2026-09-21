@@ -207,6 +207,21 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     for (const job of jobs.values()) release(job)
   }
 
+  // Reserve each page's real dimensions before restoring a saved position.
+  // This keeps the scroll geometry stable while nearby pages are lazy-rendered.
+  const renderingDoc = pdfDoc
+  let viewports
+  try {
+    viewports = await Promise.all(Array.from({ length: numPages }, async (_, index) => {
+      const page = await renderingDoc.getPage(index + 1)
+      return page.getViewport({ scale: zoom })
+    }))
+  } catch (error) {
+    if (!isCurrent()) return
+    throw error
+  }
+  if (!isCurrent()) return
+
   let wrappers = container.querySelectorAll('.pdf-page-wrapper')
 
   const wrapperShapeMatches = wrappers.length === numPages
@@ -222,8 +237,6 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
       const wrapper = document.createElement('div')
       wrapper.className = 'pdf-page-wrapper'
       wrapper.dataset.page = i
-      // 실제 렌더 전까지 대략적인 높이로 자리 확보
-      wrapper.style.minHeight = `${Math.round(841 * currentScale)}px`
 
       const inner = document.createElement('div')
       inner.className = 'pdf-page-inner'
@@ -231,25 +244,19 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
       container.appendChild(wrapper)
     }
     wrappers = container.querySelectorAll('.pdf-page-wrapper')
-  } else {
-    // 기존에 존재하면 minHeight 업데이트 및 내부 렌더링 초기화
-    wrappers.forEach(w => {
-      const height = Math.round(841 * currentScale)
-      w.style.minHeight = `${height}px`
-      const inner = w.querySelector('.pdf-page-inner')
-      if (inner) {
-        inner.replaceChildren()
-        inner.style.width = ''
-        inner.style.height = ''
-      }
-
-      // 번역 블록 높이 동기화
-      const transBlock = w.parentElement?.querySelector('.trans-page-block')
-      if (transBlock) {
-        transBlock.style.height = `${height}px`
-      }
-    })
   }
+
+  wrappers.forEach((wrapper, index) => {
+    const { width, height } = viewports[index]
+    wrapper.style.minHeight = `${height}px`
+    const inner = wrapper.querySelector('.pdf-page-inner')
+    inner.replaceChildren()
+    inner.style.boxSizing = 'content-box'
+    inner.style.width = `${width}px`
+    inner.style.height = `${height}px`
+    const transBlock = wrapper.parentElement?.querySelector('.trans-page-block')
+    if (transBlock) transBlock.style.height = `${Math.floor(height)}px`
+  })
 
   if (pageVisibilityObserver) { pageVisibilityObserver.disconnect(); pageVisibilityObserver = null }
   visiblePageHeights = {}
@@ -439,7 +446,7 @@ export function refreshTextLayerGeometry(onUpdated) {
 /** 특정 페이지 wrapper로 스크롤 */
 export function scrollToPage(container, pageNum, { instant = false } = {}) {
   const el = container.querySelector(`[data-page="${pageNum}"]`)
-  if (el) el.scrollIntoView({ behavior: instant ? 'auto' : 'smooth', block: 'start' })
+  if (el) el.scrollIntoView({ behavior: instant ? 'instant' : 'smooth', block: 'start' })
 }
 
 /** 줌 변경 후 전체 재렌더링 */
