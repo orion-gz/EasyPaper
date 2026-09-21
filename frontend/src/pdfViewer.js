@@ -21,6 +21,7 @@ let pageObserver = null
 let pageVisibilityObserver = null
 let visiblePageHeights = {}
 let loadGeneration = 0
+let disposeScrollView = () => {}
 // renderScrollView가 호출될 때마다(문서 전환, 줌 변경) 증가하는 세대 카운터.
 // pdf-page-wrapper DOM 노드는 문서를 바꿔도 새로 만들지 않고 재사용하는데,
 // 이전 문서/줌에 대한 _renderPage 호출이 비동기 대기 중일 때 사용자가 빠르게
@@ -45,6 +46,7 @@ export async function loadPDF(url) {
   // 새 문서가 로드되기 시작한 시점부터 기존 렌더를 오래된 작업으로 표시해
   // 정상적인 취소가 페이지 오류나 콘솔 오류로 노출되지 않게 한다.
   renderGeneration++
+  disposeScrollView()
   const previousLoadingTask = pdfLoadingTask
   const loadingTask = pdfjsLib.getDocument({ url, ...pdfResources })
   pdfLoadingTask = loadingTask
@@ -124,20 +126,89 @@ export async function renderFigureCrop(pageNum, imgPercent) {
  */
 export async function renderScrollView(container, zoom, { onPageVisible } = {}) {
   if (!pdfDoc) return
+  disposeScrollView()
   currentScale = zoom
   renderedTextLayers.clear()
   renderGeneration++
   const myGeneration = renderGeneration
 
   if (pageObserver) { pageObserver.disconnect(); pageObserver = null }
-  if (pageVisibilityObserver) { pageVisibilityObserver.disconnect(); pageVisibilityObserver = null }
 
   const numPages = pdfDoc.numPages
-  const rendered = new Set()
+  const jobs = new Map()
+  const nearby = new Set()
+  const queue = new Map()
+  let active = 0
+  let pumpTimer = null
+  let currentPage = 1
+  let lastNotifiedPage = null
+  const isCurrent = () => myGeneration === renderGeneration
 
-  // Reserve real page dimensions before restoring a bookmark. Estimated A4
-  // heights otherwise shrink as nearby landscape/Letter pages render, moving
-  // the saved page even when the restoration itself is instantaneous.
+  function release(job) {
+    job.cancelled = true
+    job.controller.abort()
+    job.renderTask?.cancel()
+    job.textLayer?.cancel()
+    renderedTextLayers.delete(job.pageNum)
+    // Keep the measured footprint so evicting a page cannot move the scrollbar.
+    const inner = job.wrapper.querySelector('.pdf-page-inner')
+    if (inner) {
+      window.onTextLayerReleased?.(inner.querySelector('.textLayer'), job.pageNum)
+      inner.querySelectorAll('canvas').forEach(canvas => { canvas.width = 0; canvas.height = 0 })
+      inner.replaceChildren()
+    }
+    jobs.delete(job.pageNum)
+  }
+
+  function trimPages() {
+    const selection = window.getSelection()
+    const candidates = [...jobs.values()]
+      .filter(job => !nearby.has(job.pageNum) && !job.wrapper.contains(document.activeElement) && !(
+        selection?.rangeCount && !selection.isCollapsed
+        && selection.getRangeAt(0).intersectsNode(job.wrapper)
+      ))
+      .sort((a, b) => Math.abs(b.pageNum - currentPage) - Math.abs(a.pageNum - currentPage))
+    for (const job of candidates) {
+      if (jobs.size <= 8 && job.done) continue
+      release(job)
+    }
+  }
+
+  function scheduleRender() {
+    if (pumpTimer !== null || !isCurrent()) return
+    // Yield between pages, leaving input/scroll events a chance to run.
+    pumpTimer = setTimeout(() => {
+      pumpTimer = null
+      if (!isCurrent()) return
+      while (active < 2 && queue.size) {
+        const pageNum = [...queue.keys()].sort((a, b) => Math.abs(a - currentPage) - Math.abs(b - currentPage))[0]
+        const wrapper = queue.get(pageNum)
+        queue.delete(pageNum)
+        if (!nearby.has(pageNum) || jobs.has(pageNum)) continue
+        const job = { wrapper, pageNum, controller: new AbortController(), cancelled: false, done: false }
+        jobs.set(pageNum, job)
+        active++
+        _renderPage(wrapper, pageNum, myGeneration, job).finally(() => {
+          active--
+          job.done = true
+          if (!isCurrent()) return
+          trimPages()
+          if (queue.size) scheduleRender()
+        })
+      }
+    }, 0)
+  }
+
+  disposeScrollView = () => {
+    pageObserver?.disconnect()
+    pageVisibilityObserver?.disconnect()
+    clearTimeout(pumpTimer)
+    queue.clear()
+    for (const job of jobs.values()) release(job)
+  }
+
+  // Reserve each page's real dimensions before restoring a saved position.
+  // This keeps the scroll geometry stable while nearby pages are lazy-rendered.
   const renderingDoc = pdfDoc
   let viewports
   try {
@@ -146,10 +217,10 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
       return page.getViewport({ scale: zoom })
     }))
   } catch (error) {
-    if (myGeneration !== renderGeneration) return
+    if (!isCurrent()) return
     throw error
   }
-  if (myGeneration !== renderGeneration) return
+  if (!isCurrent()) return
 
   let wrappers = container.querySelectorAll('.pdf-page-wrapper')
 
@@ -166,6 +237,7 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
       const wrapper = document.createElement('div')
       wrapper.className = 'pdf-page-wrapper'
       wrapper.dataset.page = i
+
       const inner = document.createElement('div')
       inner.className = 'pdf-page-inner'
       wrapper.appendChild(inner)
@@ -178,7 +250,7 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     const { width, height } = viewports[index]
     wrapper.style.minHeight = `${height}px`
     const inner = wrapper.querySelector('.pdf-page-inner')
-    inner.innerHTML = ''
+    inner.replaceChildren()
     inner.style.boxSizing = 'content-box'
     inner.style.width = `${width}px`
     inner.style.height = `${height}px`
@@ -186,19 +258,24 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     if (transBlock) transBlock.style.height = `${Math.floor(height)}px`
   })
 
+  if (pageVisibilityObserver) { pageVisibilityObserver.disconnect(); pageVisibilityObserver = null }
   visiblePageHeights = {}
 
   // ─── IntersectionObserver (페이지 렌더링용: 미리 600px 앞서 로딩) ───
   pageObserver = new IntersectionObserver((entries) => {
+    if (!isCurrent()) return
     entries.forEach(entry => {
       const pageNum = parseInt(entry.target.dataset.page)
       if (entry.isIntersecting) {
-        if (!rendered.has(pageNum)) {
-          rendered.add(pageNum)
-          _renderPage(entry.target, pageNum, myGeneration)
-        }
+        nearby.add(pageNum)
+        if (!jobs.has(pageNum)) queue.set(pageNum, entry.target)
+      } else {
+        nearby.delete(pageNum)
+        queue.delete(pageNum)
       }
     })
+    trimPages()
+    scheduleRender()
   }, {
     root: container,
     rootMargin: '600px 0px',  // 미리 600px 앞서 렌더링
@@ -207,6 +284,7 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
 
   // ─── IntersectionObserver (현재 보고 있는 페이지 추적용: 마진 없이 실시간 감지) ───
   pageVisibilityObserver = new IntersectionObserver((entries) => {
+    if (!isCurrent()) return
     entries.forEach(entry => {
       const pageNum = parseInt(entry.target.dataset.page)
       if (entry.isIntersecting) {
@@ -226,12 +304,10 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
       }
     }
 
-    if (maxPageNum !== -1) {
+    if (maxPageNum !== -1 && maxPageNum !== lastNotifiedPage) {
+      currentPage = maxPageNum
+      lastNotifiedPage = maxPageNum
       onPageVisible?.(maxPageNum)
-      // 비동기 다음 페이지 프리렌더링 (Canvas 로딩 속도 최적화)
-      setTimeout(() => {
-        triggerRender(maxPageNum + 1)
-      }, 150)
     }
   }, {
     root: container,
@@ -239,31 +315,22 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     threshold: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], // 정밀한 노출 비율 판정
   })
 
-  function triggerRender(pNum) {
-    if (pNum >= 1 && pNum <= numPages && !rendered.has(pNum)) {
-      const targetWrapper = container.querySelector(`.pdf-page-wrapper[data-page="${pNum}"]`)
-      if (targetWrapper) {
-        rendered.add(pNum)
-        _renderPage(targetWrapper, pNum, myGeneration)
-      }
-    }
-  }
-
   wrappers.forEach(w => {
     pageObserver.observe(w)
     pageVisibilityObserver.observe(w)
   })
 }
 
-async function _renderPage(wrapper, pageNum, generation) {
-  if (generation !== renderGeneration) return
+async function _renderPage(wrapper, pageNum, generation, job) {
+  const stale = () => generation !== renderGeneration || job.cancelled
+  if (stale()) return
   const inner = wrapper.querySelector('.pdf-page-inner')
   inner.innerHTML = ''
 
   try {
     const textUrl = pdfTextUrl
     const page = await pdfDoc.getPage(pageNum)
-    if (generation !== renderGeneration) return
+    if (stale()) return
     const viewport = page.getViewport({ scale: currentScale })
     const dpr = window.devicePixelRatio || 1
 
@@ -287,6 +354,8 @@ async function _renderPage(wrapper, pageNum, generation) {
 
     inner.appendChild(canvas)
     inner.appendChild(textLayerDiv)
+    inner.style.width = `${viewport.width}px`
+    inner.style.height = `${viewport.height}px`
     wrapper.style.minHeight = ''
 
     // 번역 블록의 높이를 실제 렌더링된 PDF 높이와 동기화
@@ -296,18 +365,19 @@ async function _renderPage(wrapper, pageNum, generation) {
     }
 
     // 캔버스 렌더링 (먼저 실행)
-    await page.render({ canvasContext: ctx, viewport }).promise
-    if (generation !== renderGeneration) return
+    job.renderTask = page.render({ canvasContext: ctx, viewport })
+    await job.renderTask.promise
+    if (stale()) return
 
     // 텍스트 레이어 렌더링
     try {
       let textContent
       let recovery
       if (textUrl) {
-        const response = await fetch(`${textUrl}/${pageNum}`)
+        const response = await fetch(`${textUrl}/${pageNum}`, { signal: job.controller.signal })
         if (!response.ok) throw new Error(`PDF text recovery: HTTP ${response.status}`)
         recovery = await response.json()
-        if (generation !== renderGeneration) return
+        if (stale()) return
       }
       if (recovery?.recovery) {
         textContent = recoveredTextContent(recovery.spans || [], viewport)
@@ -328,32 +398,34 @@ async function _renderPage(wrapper, pageNum, generation) {
           textContent = await collectTextContent(page.streamTextContent())
         }
       }
-      if (generation !== renderGeneration) return
+      if (stale()) return
       const textLayer = new pdfjsLib.TextLayer({
         textContentSource: textContent,
         container: textLayerDiv,
         viewport,
       })
+      job.textLayer = textLayer
       await textLayer.render()
       // Our canvas keeps fractional CSS dimensions rather than PDFViewer's
       // rounded page sizes. Restore exact, unrotated layer dimensions after
       // TextLayer sets its viewer-specific round()/--scale-round-* expressions.
       textLayerDiv.style.width = `${viewport.rawDims.pageWidth * viewport.scale * viewport.userUnit}px`
       textLayerDiv.style.height = `${viewport.rawDims.pageHeight * viewport.scale * viewport.userUnit}px`
-      if (generation !== renderGeneration) return
+      if (stale()) return
       alignTextLayer(textLayer, textContent, viewport, textLayerDiv)
       renderedTextLayers.set(pageNum, { textLayer, textContent, viewport, container: textLayerDiv, generation })
 
       // 텍스트 레이어 렌더 완료 콜백 호출
-      if (generation === renderGeneration && window.onTextLayerRendered) {
+      if (!stale() && window.onTextLayerRendered) {
         window.onTextLayerRendered(textLayerDiv, pageNum)
       }
     } catch (e) {
+      if (stale()) return
       console.warn(`TextLayer p.${pageNum}:`, e.message)
     }
 
   } catch (e) {
-    if (generation !== renderGeneration) return
+    if (stale()) return
     inner.innerHTML = `<div class="page-render-error">페이지 ${pageNum} 오류</div>`
     console.error(`Render p.${pageNum}:`, e)
   }
@@ -374,8 +446,6 @@ export function refreshTextLayerGeometry(onUpdated) {
 /** 특정 페이지 wrapper로 스크롤 */
 export function scrollToPage(container, pageNum, { instant = false } = {}) {
   const el = container.querySelector(`[data-page="${pageNum}"]`)
-  // 'auto' inherits the container's scroll-behavior: smooth. During restoration
-  // that animation crosses lazy pages whose changing heights move the target.
   if (el) el.scrollIntoView({ behavior: instant ? 'instant' : 'smooth', block: 'start' })
 }
 
