@@ -130,9 +130,26 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
   const myGeneration = renderGeneration
 
   if (pageObserver) { pageObserver.disconnect(); pageObserver = null }
+  if (pageVisibilityObserver) { pageVisibilityObserver.disconnect(); pageVisibilityObserver = null }
 
   const numPages = pdfDoc.numPages
   const rendered = new Set()
+
+  // Reserve real page dimensions before restoring a bookmark. Estimated A4
+  // heights otherwise shrink as nearby landscape/Letter pages render, moving
+  // the saved page even when the restoration itself is instantaneous.
+  const renderingDoc = pdfDoc
+  let viewports
+  try {
+    viewports = await Promise.all(Array.from({ length: numPages }, async (_, index) => {
+      const page = await renderingDoc.getPage(index + 1)
+      return page.getViewport({ scale: zoom })
+    }))
+  } catch (error) {
+    if (myGeneration !== renderGeneration) return
+    throw error
+  }
+  if (myGeneration !== renderGeneration) return
 
   let wrappers = container.querySelectorAll('.pdf-page-wrapper')
 
@@ -149,32 +166,26 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
       const wrapper = document.createElement('div')
       wrapper.className = 'pdf-page-wrapper'
       wrapper.dataset.page = i
-      // 실제 렌더 전까지 대략적인 높이로 자리 확보
-      wrapper.style.minHeight = `${Math.round(841 * currentScale)}px`
-
       const inner = document.createElement('div')
       inner.className = 'pdf-page-inner'
       wrapper.appendChild(inner)
       container.appendChild(wrapper)
     }
     wrappers = container.querySelectorAll('.pdf-page-wrapper')
-  } else {
-    // 기존에 존재하면 minHeight 업데이트 및 내부 렌더링 초기화
-    wrappers.forEach(w => {
-      const height = Math.round(841 * currentScale)
-      w.style.minHeight = `${height}px`
-      const inner = w.querySelector('.pdf-page-inner')
-      if (inner) inner.innerHTML = ''
-
-      // 번역 블록 높이 동기화
-      const transBlock = w.parentElement?.querySelector('.trans-page-block')
-      if (transBlock) {
-        transBlock.style.height = `${height}px`
-      }
-    })
   }
 
-  if (pageVisibilityObserver) { pageVisibilityObserver.disconnect(); pageVisibilityObserver = null }
+  wrappers.forEach((wrapper, index) => {
+    const { width, height } = viewports[index]
+    wrapper.style.minHeight = `${height}px`
+    const inner = wrapper.querySelector('.pdf-page-inner')
+    inner.innerHTML = ''
+    inner.style.boxSizing = 'content-box'
+    inner.style.width = `${width}px`
+    inner.style.height = `${height}px`
+    const transBlock = wrapper.parentElement?.querySelector('.trans-page-block')
+    if (transBlock) transBlock.style.height = `${Math.floor(height)}px`
+  })
+
   visiblePageHeights = {}
 
   // ─── IntersectionObserver (페이지 렌더링용: 미리 600px 앞서 로딩) ───
@@ -363,7 +374,9 @@ export function refreshTextLayerGeometry(onUpdated) {
 /** 특정 페이지 wrapper로 스크롤 */
 export function scrollToPage(container, pageNum, { instant = false } = {}) {
   const el = container.querySelector(`[data-page="${pageNum}"]`)
-  if (el) el.scrollIntoView({ behavior: instant ? 'auto' : 'smooth', block: 'start' })
+  // 'auto' inherits the container's scroll-behavior: smooth. During restoration
+  // that animation crosses lazy pages whose changing heights move the target.
+  if (el) el.scrollIntoView({ behavior: instant ? 'instant' : 'smooth', block: 'start' })
 }
 
 /** 줌 변경 후 전체 재렌더링 */

@@ -10564,6 +10564,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
     await Promise.all([
       (async () => {
         await initScrollViewer()
+        if (!isCurrentOpen()) return
         if (restorePage > 1) {
           scrollToPage(viewerScrollContainer, restorePage, { instant: true })
         }
