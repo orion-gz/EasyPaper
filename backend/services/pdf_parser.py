@@ -1243,22 +1243,32 @@ def _marker_html_to_text(block_html: str) -> str:
     return BeautifulSoup(marked, "html.parser").get_text(" ", strip=True)
 
 
-def _marker_collect_text(block, parts: List[str]) -> None:
+def _marker_collect_text(block, parts: List[str], blocks: list | None = None) -> None:
     if block.block_type in _MARKER_SKIP_TEXT_TYPES:
         return
     if block.children:
         for child in block.children:
-            _marker_collect_text(child, parts)
+            _marker_collect_text(child, parts, blocks)
         return
     text = _marker_html_to_text(block.html)
     if text:
         parts.append(text)
+        bbox = getattr(block, "bbox", None)
+        if blocks is not None and bbox and len(bbox) == 4:
+            blocks.append((*bbox, text))
 
 
 def _marker_page_text(page_json) -> str:
     parts: List[str] = []
+    blocks = []
     for child in page_json.children or []:
-        _marker_collect_text(child, parts)
+        _marker_collect_text(child, parts, blocks)
+    bbox = getattr(page_json, "bbox", None)
+    if bbox and len(blocks) == len(parts):
+        width = bbox[2] - bbox[0]
+        starts = _detect_three_columns(blocks, width)
+        if starts:
+            parts = [b[4] for b in _sort_three_columns(blocks, width, starts)]
     return "\n\n".join(parts)
 
 

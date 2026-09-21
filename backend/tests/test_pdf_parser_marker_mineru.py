@@ -236,3 +236,30 @@ def test_sanitize_mineru_pages_idempotent(monkeypatch):
     assert len(second_pass[1]["blocks"]) == 1
     assert second_pass[1]["blocks"][0]["text"] == p1_text
 
+
+
+def test_marker_three_columns_sorted_across_nested_groups():
+    def paragraph(x, y, label):
+        return FakeMarkerBlock('Text', html=f'<p><b>{label}</b> ' + 'body text ' * 30 + '</p>',
+                               bbox=[x, y, x + 163, y + 80])
+
+    page = FakeMarkerBlock('Page', bbox=[0, 0, 585, 783], children=[
+        paragraph(388, 50, 'RIGHT'),
+        FakeMarkerBlock('TextGroup', children=[
+            paragraph(42, 65, 'LEFT'), paragraph(215, 55, 'MIDDLE'),
+        ]),
+        paragraph(42, 160, 'LEFT_END'),
+    ])
+    text = _marker_page_text(page)
+    labels = ['**LEFT**', '**LEFT_END**', '**MIDDLE**', '**RIGHT**']
+    positions = [text.index(label) for label in labels]
+    assert positions == sorted(positions)
+    assert text.count('body text') == 120
+
+
+def test_marker_missing_coordinates_preserves_model_order_and_all_text():
+    page = FakeMarkerBlock('Page', bbox=[0, 0, 585, 783], children=[
+        FakeMarkerBlock('Text', html='<p>First</p>'),
+        FakeMarkerBlock('Text', html='<p>Second</p>', bbox=[42, 60, 205, 140]),
+    ])
+    assert _marker_page_text(page) == 'First\n\nSecond'
