@@ -854,6 +854,7 @@ const exportBtn         = $('export-btn')
 const memosHideAllBtn   = $('memos-hide-all-btn')
 const translationScopeBtn = $('translation-scope-btn')
 const retranslateBtn    = $('retranslate-btn')
+const translateDocumentBtn = $('translate-document-btn')
 const captureAreaBtn    = $('capture-area-btn')
 const cancelTransBtn    = $('cancel-trans-btn')
 const resumeTransBtn    = $('resume-trans-btn')
@@ -1068,6 +1069,9 @@ function getTranslationPlaceholderHtml(pageNum) {
       <span>필요한 페이지만 직접 번역할 수 있습니다.</span>
       <button type="button" class="translate-page-btn" data-page="${pageNum}">이 페이지 번역하기</button>
     </div>`
+  }
+  if (getEffectiveTranslationMode() === 'auto') {
+    return `<div class="trans-page-placeholder">${t('viewer:translation.startFromMenu')}</div>`
   }
   const message = isLongDocument()
     ? '페이지를 잠시 보고 있으면 자동으로 번역됩니다'
@@ -1474,8 +1478,28 @@ function createPagePair(pageNum) {
 }
 
 const visibleTranslationTimers = new Map()
+const pageTranslationAborts = new Map()
+let translationRevision = 0
+let translationResetSession = null
+
+function syncTranslationActions() {
+  const auto = getTranslationMode() === 'auto'
+  translateDocumentBtn?.classList.toggle('hidden', !auto)
+  translationScopeBtn?.classList.toggle('hidden', !auto)
+  if (!auto) resumeTransBtn.classList.add('hidden')
+  for (let page = 1; page <= state.totalPages; page++) {
+    if (state.translatedPages.has(page) || state.translatingPages.has(page)) continue
+    const content = $(`trans-content-${page}`)
+    if (content) content.innerHTML = getTranslationPlaceholderHtml(page)
+  }
+}
+
+function resumeVisibleTranslation() {
+  if (getEffectiveTranslationMode() === 'scroll') scheduleVisiblePageTranslation(state.currentPage)
+}
 
 function scheduleVisiblePageTranslation(pageNum) {
+  if (getEffectiveTranslationMode() !== 'scroll' || translationResetSession === state.sessionId) return
   const previousTimer = visibleTranslationTimers.get(pageNum)
   if (previousTimer) clearTimeout(previousTimer)
 
@@ -1487,7 +1511,7 @@ function scheduleVisiblePageTranslation(pageNum) {
   const sessionId = state.sessionId
   const timer = setTimeout(() => {
     visibleTranslationTimers.delete(pageNum)
-    if (state.sessionId !== sessionId || state.translatedPages.has(pageNum)) return
+    if (state.sessionId !== sessionId || state.translatedPages.has(pageNum) || getEffectiveTranslationMode() !== 'scroll' || translationResetSession === sessionId) return
 
     const pagePair = viewerScrollContainer.querySelector(`.page-pair[data-page="${pageNum}"]`)
     if (!pagePair) return
@@ -1550,6 +1574,8 @@ async function initScrollViewer() {
 
   await renderScrollView(viewerScrollContainer, state.zoom, {
     onPageVisible: async (pageNum) => {
+      const revision = translationRevision
+      if (translationResetSession === state.sessionId) return
       updatePageDisplay(pageNum)
       globalAnalyticsTracker.setCurrentPage(pageNum)
       const visiblePageEl = viewerScrollContainer.querySelector('.pdf-page-wrapper[data-page="' + pageNum + '"]')
@@ -1566,6 +1592,7 @@ async function initScrollViewer() {
         try {
           const opts = getTranslationOptions()
           const res = await fetchLibraryTranslation(currentSessionId, pageNum, opts)
+          if (state.sessionId !== currentSessionId || revision !== translationRevision) return
           state.translationCache[pageNum] = res.translation
           state.translationSentences[pageNum] = res.sentences || []
           // 패치하는 중에 사용자가 다른 세션으로 이동하지 않았는지 확인
@@ -1573,6 +1600,7 @@ async function initScrollViewer() {
             renderTransContent(pageNum, res.translation, true)
           }
         } catch (err) {
+          if (state.sessionId !== currentSessionId || revision !== translationRevision) return
           console.warn(`Failed to lazy load translation for page ${pageNum}:`, err)
           delete state.translationCache[pageNum]
           // 번역 로딩 실패 시 폴백 세그멘테이션 상태로 메모가 계속 숨겨져 있지
@@ -1593,13 +1621,13 @@ async function initScrollViewer() {
           const currentSessionId = state.sessionId
           const opts = getTranslationOptions()
           fetchLibraryTranslation(currentSessionId, nextPage, opts).then(res => {
-            if (state.sessionId === currentSessionId) {
+            if (state.sessionId === currentSessionId && revision === translationRevision) {
               state.translationCache[nextPage] = res.translation
               state.translationSentences[nextPage] = res.sentences || []
               renderTransContent(nextPage, res.translation, true)
             }
           }).catch(err => {
-            if (state.sessionId === currentSessionId) {
+            if (state.sessionId === currentSessionId && revision === translationRevision) {
               delete state.translationCache[nextPage]
               renderPageMemos(nextPage)
             }
@@ -1809,6 +1837,7 @@ function renderInsightContent(contentEl, kind, text) {
 // state.translatedPages/translationCache/translationSentences를 채워 이후
 // 다시 방문했을 때는 재번역 없이 캐시를 바로 쓴다.
 function translatePage(pageNum) {
+  if (translationResetSession === state.sessionId) return
   if (state.translatingPages.has(pageNum) || state.translatedPages.has(pageNum)) return
   if (!state.sessionId) return
 
@@ -1826,11 +1855,14 @@ function translatePage(pageNum) {
   if (statusEl) statusEl.textContent = '번역 중...'
 
   const currentSessionId = state.sessionId
+  const revision = translationRevision
   let buffer = ''
-  streamTranslation(
+  const abort = streamTranslation(
     currentSessionId, pageNum, getTranslationOptions(),
     (token) => { buffer += token },
     (cached, sentences) => {
+      if (translationRevision !== revision || state.sessionId !== currentSessionId) return
+      pageTranslationAborts.delete(pageNum)
       state.translatingPages.delete(pageNum)
       if (state.sessionId !== currentSessionId) return
       state.translatedPages.add(pageNum)
@@ -1839,6 +1871,8 @@ function translatePage(pageNum) {
       renderTransContent(pageNum, buffer, false)
     },
     (err) => {
+      if (translationRevision !== revision || state.sessionId !== currentSessionId) return
+      pageTranslationAborts.delete(pageNum)
       state.translatingPages.delete(pageNum)
       if (state.sessionId !== currentSessionId) return
       if (statusEl) statusEl.textContent = '번역 실패'
@@ -1848,6 +1882,7 @@ function translatePage(pageNum) {
       </div>`
     }
   )
+  pageTranslationAborts.set(pageNum, abort)
 }
 
 // ── 코드 블록 외부의 볼드체를 <strong> 태그로 미리 변환 ──
@@ -2008,6 +2043,7 @@ function updateProgressMiniRaw(done, total, isRunning = true) {
 
 // ── 잡 폰링 ───────────────────────────────────────
 function startJobPolling(sessionId) {
+  const revision = translationRevision
   if (state.pollingTimer) clearInterval(state.pollingTimer)
 
   // 완료된 페이지 수가 많거나 네트워크가 느리면 poll() 한 번의 실행이
@@ -2018,17 +2054,17 @@ function startJobPolling(sessionId) {
   let pollInFlight = false
 
   async function poll() {
-    if (!state.sessionId || state.sessionId !== sessionId) return
+    if (!state.sessionId || state.sessionId !== sessionId || revision !== translationRevision) return
     if (pollInFlight) return
     pollInFlight = true
     try {
       const job = await getJobStatus(sessionId)
-      if (!job || state.sessionId !== sessionId) return
+      if (!job || state.sessionId !== sessionId || revision !== translationRevision) return
 
       for (const pageNum of (job.completed_pages || [])) {
         if (state.translatedPages.has(pageNum)) continue
         const data = await getPageTranslation(sessionId, pageNum, getTranslationOptions())
-        if (state.sessionId !== sessionId) return
+        if (state.sessionId !== sessionId || revision !== translationRevision) return
         if (data?.translation) {
           state.translationCache[pageNum] = data.translation
           state.translationSentences[pageNum] = data.sentences || []
@@ -2057,7 +2093,7 @@ function startJobPolling(sessionId) {
       } else {
         cancelTransBtn.classList.add('hidden')
         const canRetry = canRetryTranslationTask(job)
-        resumeTransBtn.classList.toggle('hidden', !canRetry)
+        resumeTransBtn.classList.toggle('hidden', !canRetry || getTranslationMode() !== 'auto')
         clearInterval(state.pollingTimer)
         state.pollingTimer = null
       }
@@ -2379,6 +2415,7 @@ if (toolbarKebabBtn && toolbarKebabMenu) {
 
   toolbarKebabBtn.addEventListener('click', (e) => {
     e.stopPropagation()
+    syncTranslationActions()
     const willOpen = toolbarKebabMenu.classList.contains('hidden')
     toolbarKebabMenu.classList.toggle('hidden')
     syncMenuState()
@@ -2491,6 +2528,8 @@ function parseTranslationPageRange(value) {
 }
 
 async function startScopedTranslation(pageNumbers, label) {
+  const sessionId = state.sessionId
+  const revision = translationRevision
   const pendingPages = pageNumbers.filter(pageNum => !state.translatedPages.has(pageNum))
   if (pendingPages.length === 0) {
     showToast('선택한 범위는 이미 번역되었습니다.', 'info')
@@ -2506,9 +2545,11 @@ async function startScopedTranslation(pageNumbers, label) {
   }
 
   try {
+    if (state.sessionId !== sessionId || revision !== translationRevision || translationResetSession || getTranslationMode() !== 'auto') return
     showToast(`${label} 번역 작업을 시작합니다.`, 'info')
-    await restartJobAPI(state.sessionId, { ...getTranslationOptions(), pageNumbers: pendingPages })
-    startJobPolling(state.sessionId)
+    await restartJobAPI(sessionId, { ...getTranslationOptions(), pageNumbers: pendingPages })
+    if (state.sessionId !== sessionId || revision !== translationRevision) return
+    startJobPolling(sessionId)
     showToast(`${label} 번역이 시작되었습니다.`, 'success')
   } catch (err) {
     showToast(err.message || '번역 작업 시작 실패', 'error')
@@ -2517,7 +2558,7 @@ async function startScopedTranslation(pageNumbers, label) {
 
 translationScopeBtn?.addEventListener('click', async () => {
   toolbarKebabMenu?.classList.add('hidden')
-  if (!state.sessionId) return
+  if (!state.sessionId || translationResetSession || getTranslationMode() !== 'auto') return
   const scope = await showTranslationScopeDialog()
   if (!scope) return
 
@@ -2553,45 +2594,73 @@ translationScopeBtn?.addEventListener('click', async () => {
   await startScopedTranslation(pageNumbers, label)
 })
 
-// ── 다시 번역하기 ──────────────────────────────────
-
-retranslateBtn.addEventListener('click', async () => {
-  if (!state.sessionId) return
-
-  const ok = await showCustomConfirm('기존 번역 캐시를 삭제하고 처음부터 다시 번역을 시작하시겠습니까?\n(확인을 누르면 기존 번역이 완전히 초기화되고 새로 번역을 진행합니다.)', { title: '재번역 시작', confirmText: '재번역', danger: true })
-  if (ok) {
-    // 1. 로컬 번역 정보 전체 비우기
+// 초기화는 서버 삭제 성공 후에만 화면에 반영한다.
+async function resetViewerTranslations(sessionId) {
+  if (translationResetSession || state.sessionId !== sessionId) return false
+  translationResetSession = sessionId
+  translationRevision++
+  visibleTranslationTimers.forEach(timer => clearTimeout(timer))
+  visibleTranslationTimers.clear()
+  pageTranslationAborts.forEach(abort => abort())
+  pageTranslationAborts.clear()
+  clearInterval(state.pollingTimer)
+  state.pollingTimer = null
+  try {
+    await clearTranslationCacheAPI(sessionId)
+    if (state.sessionId !== sessionId) return false
     state.translationCache = {}
     state.translationSentences = {}
     state.translatingPages.clear()
     state.translatedPages.clear()
-
-    // 2. UI 상의 모든 번역창 초기화
+    state.translationTaskId = null
+    state.translationTaskStatus = null
     for (let i = 1; i <= state.totalPages; i++) {
       const contentEl = $(`trans-content-${i}`)
       const statusEl = $(`trans-status-${i}`)
-      if (contentEl) {
-        contentEl.innerHTML = getTranslationPlaceholderHtml(i)
-      }
+      if (contentEl) contentEl.innerHTML = getTranslationPlaceholderHtml(i)
       if (statusEl) {
         statusEl.textContent = t('viewer:translation.waiting')
         statusEl.classList.remove('done')
       }
     }
-
-    try {
-      showToast('번역 캐시를 삭제하는 중...', 'info')
-      await clearTranslationCacheAPI(state.sessionId)
-
-      showToast('번역 작업을 재시작하는 중...', 'info')
-      await restartJobAPI(state.sessionId, getTranslationOptions())
-
-      startJobPolling(state.sessionId)
-      showToast('번역 작업이 처음부터 재시작되었습니다.', 'success')
-    } catch (err) {
-      showToast(err.message, 'error')
+    cancelTransBtn.classList.add('hidden')
+    resumeTransBtn.classList.add('hidden')
+    updateProgressMiniRaw(0, state.totalPages, false)
+    return true
+  } catch (err) {
+    if (state.sessionId === sessionId) {
+      state.translatingPages.clear()
+      for (const [page, text] of Object.entries(state.translationCache)) {
+        if (text === '__fetching__') delete state.translationCache[page]
+      }
+      syncTranslationActions()
+      startJobPolling(sessionId)
     }
+    throw err
+  } finally {
+    translationResetSession = null
   }
+}
+
+retranslateBtn.addEventListener('click', async () => {
+  toolbarKebabMenu?.classList.add('hidden')
+  const sessionId = state.sessionId
+  if (!sessionId || translationResetSession) return
+  const ok = await showCustomConfirm(t('viewer:translation.resetConfirm'), { title: t('viewer:translation.reset'), confirmText: '초기화', danger: true })
+  if (!ok || state.sessionId !== sessionId) return
+  try {
+    if (!await resetViewerTranslations(sessionId)) return
+    showToast(t('viewer:translation.resetDone'), 'success')
+    resumeVisibleTranslation()
+  } catch (err) {
+    showToast(err.message, 'error')
+  }
+})
+
+translateDocumentBtn?.addEventListener('click', async () => {
+  toolbarKebabMenu?.classList.add('hidden')
+  if (!state.sessionId || translationResetSession || getTranslationMode() !== 'auto') return
+  await startScopedTranslation(Array.from({ length: state.totalPages }, (_, index) => index + 1), '문서 전체')
 })
 
 async function retranslateAfterModelChange() {
@@ -4341,45 +4410,43 @@ function persistGeneralSettingsToStorage() {
   localStorage.setItem('easypaper_toolbar_position', settingToolbarPosition.value)
 }
 
-async function handleTranslationAffectingSettingChange() {
+async function handleTranslationAffectingSettingChange(event) {
   persistGeneralSettingsToStorage()
   showToast(`${settingsTranslationModeContext === 'general' ? '일반 문서' : '연구'} 모드 설정이 저장되었습니다.`, 'success')
+  if (!state.sessionId || normalizeSettingsMode(state.currentDocumentMode) !== settingsTranslationModeContext) return
 
-  // 현재 논문을 작업 중인 경우 번역 잡 재시작 제안
-  if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
-    const ok = await showCustomConfirm('번역 설정을 즉시 변경하고 다시 번역하시겠습니까?\n(확인을 누르면 기존 번역이 초기화되고 새로 번역을 시작합니다.)', { title: '설정 변경 및 재번역', confirmText: '재번역', danger: true })
-    if (ok) {
-      // 로컬 번역 정보 전체 비우기
-      state.translationCache = {}
-      state.translationSentences = {}
-      state.translatingPages.clear()
-      state.translatedPages.clear()
-
-      // UI 상의 모든 번역창 초기화
-      for (let i = 1; i <= state.totalPages; i++) {
-        const contentEl = $(`trans-content-${i}`)
-        const statusEl = $(`trans-status-${i}`)
-        if (contentEl) {
-          contentEl.innerHTML = getTranslationPlaceholderHtml(i)
-        }
-        if (statusEl) {
-          statusEl.textContent = '대기 중'
-          statusEl.classList.remove('done')
-        }
-      }
-
+  syncTranslationActions()
+  // 실행 방식 변경은 기존 번역을 유지하고 이후 트리거부터 즉시 적용한다.
+  if (event?.target === settingTranslationMode) {
+    const sessionId = state.sessionId
+    visibleTranslationTimers.forEach(timer => clearTimeout(timer))
+    visibleTranslationTimers.clear()
+    if (getTranslationMode() !== 'auto') {
       try {
-        showToast('번역 작업을 재시작하는 중...', 'info')
-        await restartJobAPI(state.sessionId, getTranslationOptions())
-        startJobPolling(state.sessionId)
-        showToast('번역 작업이 재시작되었습니다.', 'success')
+        await cancelJobAPI(sessionId)
       } catch (err) {
         showToast(err.message, 'error')
       }
     }
+    if (state.sessionId === sessionId) resumeVisibleTranslation()
+    return
+  }
+
+  const sessionId = state.sessionId
+  const ok = await showCustomConfirm(t('viewer:translation.settingsResetConfirm'), { title: t('viewer:translation.reset'), confirmText: '초기화', danger: true })
+  if (!ok || state.sessionId !== sessionId) return
+  try {
+    if (!await resetViewerTranslations(sessionId)) return
+    if (getEffectiveTranslationMode() === 'auto') {
+      await restartJobAPI(sessionId, getTranslationOptions())
+      if (state.sessionId === sessionId) startJobPolling(sessionId)
+    } else {
+      resumeVisibleTranslation()
+    }
+  } catch (err) {
+    showToast(err.message, 'error')
   }
 }
-
 ;[settingTargetLang, settingTransStyle, settingTranslationMode, settingIgnoreMath, settingIgnoreTable, settingIgnoreRefs].forEach(el => {
   el.addEventListener('change', handleTranslationAffectingSettingChange)
 })
