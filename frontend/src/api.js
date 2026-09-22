@@ -254,7 +254,7 @@ export function streamTranslation(sessionId, pageNum, options, onToken, onDone, 
 
       while (true) {
         const { value, done } = await reader.read()
-        if (done) break
+        if (done) throw new Error(errorMessage({ code: 'network' }))
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')

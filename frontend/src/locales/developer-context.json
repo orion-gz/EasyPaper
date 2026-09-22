@@ -1,4 +1,10 @@
 {
+  "viewer:translation.reset": { "description": "Viewer menu action that deletes existing translations without starting a batch job." },
+  "viewer:translation.full": { "description": "Viewer menu action to translate all missing pages, available in automatic mode." },
+  "viewer:translation.resetConfirm": { "description": "Confirmation before deleting all document translations." },
+  "viewer:translation.resetDone": { "description": "Toast after translation reset succeeds." },
+  "viewer:translation.settingsResetConfirm": { "description": "Confirmation to reset translations after changing translation options." },
+  "viewer:translation.startFromMenu": { "description": "Empty translation pane guidance for automatic mode after reset." },
   "errors:pdf_ocr_unavailable": {"description": "Local OCR executable or trained data is unavailable for an unmapped PDF."},
   "errors:pdf_ocr_language_missing": {"description": "The detected script has no installed OCR model."},
   "errors:pdf_ocr_failed": {"description": "Local OCR could not recover usable page text."},

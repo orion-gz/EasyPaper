@@ -4,7 +4,8 @@ import re
 
 _URL = re.compile(r"https?://[^\s<>()\]]+")
 _INLINE_CODE = re.compile(r"`([^`\n]+)`")
-_NUMBER_UNIT = re.compile(r"(?<![\w.])(?:[-+]?\d+(?:[.,]\d+)*\s?(?:%|ms|s|MB|GB|KB|Hz|kHz|MHz|GHz|°C|V|A|mA|kg|km|cm|mm)|[-+]?\d+(?:[.,]\d+)*(?![%\w.]))")
+# A unit must end here: the 's' in 'Figure 2.20 shows' is not seconds.
+_NUMBER_UNIT = re.compile(r"(?<![\w.])(?:[-+]?\d+(?:[.,]\d+)*\s?(?:%|ms|s|MB|GB|KB|Hz|kHz|MHz|GHz|°C|V|A|mA|kg|km|cm|mm)(?!\w)|[-+]?\d+(?:[.,]\d+)*(?![%\w.]))")
 _COMMAND = re.compile(r"(?m)^(?:\$\s*)?((?:sudo|curl|wget|npm|npx|pnpm|yarn|pip|python|docker|kubectl|git)\s+[^\n]+)$")
 _PATH = re.compile(r"(?<![:/\w])(?:/(?:[\w-]+/)*[\w-]+(?:\.[\w-]+)*|[A-Za-z]:\\(?:[^\s\\]+\\)*[^\s\\]+)")
 

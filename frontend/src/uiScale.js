@@ -28,6 +28,8 @@ export function syncSelectValue(control, value) {
     option.toggleAttribute('selected', isSelected)
   }
   control.value = nextValue
+  // Programmatic value changes do not emit change or trigger MutationObserver.
+  control._customSelectPicker?.refresh()
   return control.value
 }
 

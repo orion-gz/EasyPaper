@@ -88,6 +88,18 @@ def list_tasks(doc_id: Optional[str] = None) -> list[dict]:
     return [task for row in rows if (task := get_task(row["id"]))]
 
 
+def clear_translation_tasks(doc_id: str) -> None:
+    """Reset translation checkpoints after the document's worker has stopped."""
+    with get_db() as conn:
+        conn.execute(
+            """DELETE FROM document_task_pages WHERE task_id IN
+               (SELECT id FROM document_tasks WHERE doc_id = ? AND kind = 'translate')""",
+            (doc_id,),
+        )
+        conn.execute("DELETE FROM document_tasks WHERE doc_id = ? AND kind = 'translate'", (doc_id,))
+        conn.commit()
+
+
 def latest_task(doc_id: str, kind: str) -> Optional[dict]:
     with get_db() as conn:
         row = conn.execute(
