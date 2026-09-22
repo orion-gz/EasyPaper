@@ -164,4 +164,44 @@ def test_clear_translation_cache_without_session_does_not_reparse(test_client, i
     assert len(parse_called) == 0
     assert get_cached_translation(doc_id, 1) is None
     assert lib_get_translation(doc_id, 1) is None
+def test_translation_reset_waits_for_cancelled_job(isolated_dirs, monkeypatch):
+    """취소 처리 중 기록한 번역/잡 상태도 초기화가 끝나기 전에 삭제한다."""
+    import asyncio
+    import os
+    from routers.translate import clear_translation_cache
+    from routers.upload import sessions
+    from services.cache import save_translation_cache, get_cached_translation
+    import services.translation_job as translation_job
+    from services.translation_job import _running_tasks, _save_job, _job_path, get_job_status
+    from services.document_tasks import create_task, get_task
+
+    monkeypatch.setattr(translation_job, "LIBRARY_DIR", str(isolated_dirs["library_dir"]))
+
+    doc_id = "reset-cancelled-job"
+    sessions[doc_id] = {"username": "testuser"}
+    other_task = create_task(doc_id, "summary", {}, [1])
+
+    async def run():
+        async def job():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                save_translation_cache(doc_id, 1, "stale translation")
+                _save_job(doc_id, {"status": "cancelled", "completed_pages": [1], "target_pages": [1]})
+
+        task = asyncio.create_task(job())
+        _running_tasks[doc_id] = task
+        await asyncio.sleep(0)
+        await clear_translation_cache(doc_id, current_user="testuser")
+        assert task.done()
+        assert get_cached_translation(doc_id, 1) is None
+        assert not os.path.exists(_job_path(doc_id))
+        assert doc_id not in _running_tasks
+        assert get_job_status(doc_id) is None
+        assert get_task(other_task["id"]) is not None
+
+    try:
+        asyncio.run(run())
+    finally:
+        sessions.pop(doc_id, None)
 

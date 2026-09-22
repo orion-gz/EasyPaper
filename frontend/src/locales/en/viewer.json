@@ -1,4 +1,10 @@
 {
+  "translation.reset": "Reset translations",
+  "translation.full": "Translate entire document",
+  "translation.resetConfirm": "Delete all existing translations?",
+  "translation.resetDone": "Translations have been reset.",
+  "translation.settingsResetConfirm": "Reset existing translations to apply the changed settings?",
+  "translation.startFromMenu": "Start document translation from the menu.",
   "focus.toggle": "Focus mode (Shift+F)",
   "translation.waiting": "Waiting",
   "translation.progress": "{{completed}} of {{total}} pages",
