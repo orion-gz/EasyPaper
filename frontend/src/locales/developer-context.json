@@ -4382,5 +4382,41 @@
   ,"viewer:a11y.focusPinned": { "description": "Screen reader status when sentence Focus is pinned." }
   ,"viewer:a11y.focusMoved": { "description": "Screen reader status after keyboard Focus navigation." }
   ,"viewer:focus.performanceFallback": { "description": "Notice shown when Focus switches to a lower-cost visual mode." }
-,"viewer:focus.toggle": { "description": "Viewer floating Focus mode toggle; Shift+F keyboard shortcut." }
+,"viewer:focus.toggle": { "description": "Viewer floating Focus mode toggle; Shift+F keyboard shortcut." },
+  "errors:translation_integrity_failed": {
+    "description": "Translation was generated, but required source values are missing or changed: {{missing}}. Compare with the original and retry."
+  },
+  "errors:translation_integrity_warning": {
+    "description": "Some source values are absent: {{missing}}. Omission options or summary style may explain this; compare with the original."
+  },
+  "errors:translation_empty": {
+    "description": "The model returned an empty translation. Check the model and retry."
+  },
+  "errors:cli_response_timeout": {
+    "description": "No CLI output was received for {{seconds}} seconds. The session may still contain a result; check the CLI and retry."
+  },
+  "errors:cli_exit_timeout": {
+    "description": "The CLI did not exit within {{seconds}} seconds after closing its output. Check the CLI process."
+  },
+  "errors:cli_execution_failed": {
+    "description": "The CLI exited with code {{exit_code}}. Check the server logs for details."
+  },
+  "errors:rate_limited": {
+    "description": "The provider request limit was reached. Wait and retry."
+  },
+  "errors:provider_unavailable": {
+    "description": "The model provider is temporarily unavailable. Retry later."
+  },
+  "errors:timeout": {
+    "description": "The model request timed out. Retry later."
+  },
+  "errors:network_error": {
+    "description": "Could not connect to the model provider. Check the connection."
+  },
+  "errors:authentication_failed": {
+    "description": "Provider authentication failed. Check the API key or CLI login."
+  },
+  "errors:unsupported_model": {
+    "description": "The selected model is unavailable. Check the model setting."
+  }
 }

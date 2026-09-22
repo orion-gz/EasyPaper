@@ -72,7 +72,7 @@ def _save_job(session_id: str, job: dict) -> None:
         desired = "succeeded" if page_num in completed else "failed" if page_num in failed else page["status"]
         if desired != page["status"]:
             update_page(task_id, page_num, desired,
-                        last_error_code="generation_failed" if desired == "failed" else None)
+                        last_error_code=(job.get("error_code") or "generation_failed") if desired == "failed" else None)
     legacy_status = job.get("status", "running")
     if legacy_status == "cancelled":
         update_task(task_id, status="cancelled", cancel_requested=True)
@@ -375,12 +375,17 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                 job["next_retry_at"] = None
                 # 태그 분석 및 매핑 생성
                 cleaned_translation, sentences = parse_tagged_translation(translation, src_sentences)
+                warnings = []
                 if document_mode == "general":
-                    from services.translation_quality import assert_translation_integrity
-                    assert_translation_integrity(text, cleaned_translation)
+                    from services.translation_quality import check_translation_integrity
+                    warnings = check_translation_integrity(
+                        text, cleaned_translation, style=style, ignore_math=ignore_math,
+                        ignore_table=ignore_table, ignore_refs=ignore_refs,
+                    )
                 payload_data = {
                     "translation": cleaned_translation,
-                    "sentences": sentences
+                    "sentences": sentences,
+                    "warnings": warnings,
                 }
                 payload_json = json.dumps(payload_data, ensure_ascii=False)
 
@@ -392,7 +397,8 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                     job["completed_pages"].append(page_num)
             except Exception as e:
                 print(f"[Job {session_id}] page {page_num} failed: {e}")
-                job["error_code"] = getattr(e, "document_task_error_code", "generation_failed")
+                from services.document_tasks import classify_error
+                job["error_code"] = classify_error(e)[0]
                 job["next_retry_at"] = None
                 if page_num not in job["failed_pages"]:
                     job["failed_pages"].append(page_num)

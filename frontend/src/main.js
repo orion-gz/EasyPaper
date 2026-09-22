@@ -1,3 +1,4 @@
+import { translationFeedback } from './translationFeedback.js'
 import './style.css'
 import { applyDesktopUpdate } from './desktopUpdate.js'
 import { pageCoordinates } from './pdfCoordinates.js'
@@ -79,6 +80,7 @@ const state = {
   zoom: 1.5,
   syncScroll: true,
   translationCache: {},        // pageNum → 번역 텍스트
+  translationWarnings: {},
   translationSentences: {},    // pageNum → 문장 매핑 데이터
   translatingPages: new Set(), // 현재 번역 중인 페이지 (폴링 중복 방지용)
   translatedPages: new Set(),  // 번역 완료된 페이지
@@ -1184,7 +1186,7 @@ function resetState() {
 
   Object.assign(state, {
     sessionId: null, filename: null, title: null, totalPages: 0, currentPage: 1,
-    zoom: 1.5, translationCache: {}, translationSentences: {}, translatingPages: new Set(), translatedPages: new Set(), pollingTimer: null,
+    zoom: 1.5, translationCache: {}, translationWarnings: {}, translationSentences: {}, translatingPages: new Set(), translatedPages: new Set(), pollingTimer: null,
     chatHistory: [], chatActiveStream: null, quotedText: null, quotedImage: null, quotedImagePage: null,
     activeHighlightColor: '#eab308', activeUnderlineColor: '#ef4444', isCropMode: false, documentImages: [], referenceMap: {},
     citationStyle: null, referencesHeaderPageNum: null
@@ -1563,6 +1565,7 @@ async function initScrollViewer() {
           const res = await fetchLibraryTranslation(currentSessionId, pageNum, opts)
           state.translationCache[pageNum] = res.translation
           state.translationSentences[pageNum] = res.sentences || []
+          state.translationWarnings[pageNum] = res.warnings || []
           // 패치하는 중에 사용자가 다른 세션으로 이동하지 않았는지 확인
           if (state.sessionId === currentSessionId) {
             renderTransContent(pageNum, res.translation, true)
@@ -1591,6 +1594,7 @@ async function initScrollViewer() {
             if (state.sessionId === currentSessionId) {
               state.translationCache[nextPage] = res.translation
               state.translationSentences[nextPage] = res.sentences || []
+              state.translationWarnings[nextPage] = res.warnings || []
               renderTransContent(nextPage, res.translation, true)
             }
           }).catch(err => {
@@ -1825,12 +1829,13 @@ function translatePage(pageNum) {
   streamTranslation(
     currentSessionId, pageNum, getTranslationOptions(),
     (token) => { buffer += token },
-    (cached, sentences) => {
+    (cached, sentences, warnings = []) => {
       state.translatingPages.delete(pageNum)
       if (state.sessionId !== currentSessionId) return
       state.translatedPages.add(pageNum)
       state.translationCache[pageNum] = buffer
       state.translationSentences[pageNum] = sentences || []
+      state.translationWarnings[pageNum] = warnings
       renderTransContent(pageNum, buffer, false)
     },
     (err) => {
@@ -1900,6 +1905,13 @@ function renderTransContent(pageNum, text, cached = false) {
     badge.className = 'cached-badge'
     badge.textContent = '✓ 캐시'
     contentEl.appendChild(badge)
+  }
+  for (const warning of (state.translationWarnings[pageNum] || [])) {
+    const notice = document.createElement('div')
+    notice.className = 'trans-warning'
+    notice.setAttribute('role', 'status')
+    notice.textContent = translationFeedback(warning)
+    contentEl.prepend(notice)
   }
   const el = document.createElement('div')
   el.className = 'trans-text'
@@ -2024,6 +2036,7 @@ function startJobPolling(sessionId) {
         if (data?.translation) {
           state.translationCache[pageNum] = data.translation
           state.translationSentences[pageNum] = data.sentences || []
+          state.translationWarnings[pageNum] = data.warnings || []
           state.translatedPages.add(pageNum)
           state.translatingPages.delete(pageNum)
           renderTransContent(pageNum, data.translation, false)
@@ -2230,6 +2243,7 @@ async function ensureAllTranslationsLoaded() {
       const res = await fetchLibraryTranslation(state.sessionId, pageNum, opts)
       state.translationCache[pageNum] = res.translation
       state.translationSentences[pageNum] = res.sentences || []
+      state.translationWarnings[pageNum] = res.warnings || []
     } catch (err) {
       console.warn(`Failed to fetch translation for page ${pageNum} during export:`, err)
     }
@@ -2555,6 +2569,7 @@ retranslateBtn.addEventListener('click', async () => {
     // 1. 로컬 번역 정보 전체 비우기
     state.translationCache = {}
     state.translationSentences = {}
+    state.translationWarnings = {}
     state.translatingPages.clear()
     state.translatedPages.clear()
 
@@ -2612,6 +2627,7 @@ async function retranslateAfterModelChange() {
 
   state.translationCache = {}
   state.translationSentences = {}
+  state.translationWarnings = {}
   state.translatingPages.clear()
   state.translatedPages.clear()
 
@@ -4344,6 +4360,7 @@ async function handleTranslationAffectingSettingChange() {
       // 로컬 번역 정보 전체 비우기
       state.translationCache = {}
       state.translationSentences = {}
+      state.translationWarnings = {}
       state.translatingPages.clear()
       state.translatedPages.clear()
 
@@ -10504,6 +10521,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
     state.totalPages = doc.total_pages
     state.translationCache = {}
     state.translationSentences = {}
+    state.translationWarnings = {}
     state.translatingPages = new Set()
     state.pageInsightCache = {}
     // 번역이 완료된 페이지 번호만 기록하고 번역본 로드는 lazy-load에 위임

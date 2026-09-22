@@ -115,7 +115,7 @@ async def translate_page(
                 data = json.dumps({"content": chunk, "done": False, "cached": True}, ensure_ascii=False)
                 yield f"data: {data}\n\n"
                 await asyncio.sleep(0.01)
-            yield f"data: {json.dumps({'content': '', 'done': True, 'cached': True, 'sentences': cached_sentences}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'content': '', 'done': True, 'cached': True, 'sentences': cached_sentences, 'warnings': full_cached.get('warnings', [])}, ensure_ascii=False)}\n\n"
             return
 
         # 텍스트가 없는 페이지 처리
@@ -191,12 +191,17 @@ async def translate_page(
             
             # 태그 분석 및 매핑 생성
             cleaned_translation, sentences = parse_tagged_translation(complete_translation, src_sentences)
+            warnings = []
             if document_mode == "general":
-                from services.translation_quality import assert_translation_integrity
-                assert_translation_integrity(page_text, cleaned_translation)
+                from services.translation_quality import check_translation_integrity
+                warnings = check_translation_integrity(
+                    page_text, cleaned_translation, style=style, ignore_math=ignore_math,
+                    ignore_table=ignore_table, ignore_refs=ignore_refs,
+                )
             payload_data = {
                 "translation": cleaned_translation,
-                "sentences": sentences
+                "sentences": sentences,
+                "warnings": warnings,
             }
             payload_json = json.dumps(payload_data, ensure_ascii=False)
             
@@ -205,11 +210,12 @@ async def translate_page(
 
         except Exception as e:
             logger.exception("Page translation failed: session=%s page=%s mode=%s", session_id, page_num, document_mode)
-            error_data = json.dumps({"error": {"code": "generation_failed", "params": {}, "fallback": "Generation failed."}, "done": True})
+            from services.generation_errors import generation_error_payload
+            error_data = json.dumps({"error": generation_error_payload(e), "done": True}, ensure_ascii=False)
             yield f"data: {error_data}\n\n"
             return
 
-        yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False, 'sentences': sentences}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False, 'sentences': sentences, 'warnings': warnings}, ensure_ascii=False)}\n\n"
 
 
     return StreamingResponse(

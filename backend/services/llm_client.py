@@ -7,6 +7,7 @@ import re
 import threading
 from typing import AsyncGenerator
 from services.atomic_io import atomic_write_text
+from services.generation_errors import GenerationError
 from config import (
     get_ollama_host,
     get_trans_provider,
@@ -63,7 +64,7 @@ async def _read_chunk_with_timeout(process, size: int = 1024, label: str = "CLI"
         return await asyncio.wait_for(process.stdout.read(size), timeout=CLI_STALL_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         await _kill_process_safely(process)
-        raise RuntimeError(f"{label} 응답이 {CLI_STALL_TIMEOUT_SECONDS}초 이상 없어 중단했습니다(멈춘 것으로 판단).")
+        raise GenerationError("cli_response_timeout", f"{label} 응답이 {CLI_STALL_TIMEOUT_SECONDS}초 이상 없어 중단했습니다(멈춘 것으로 판단).", seconds=CLI_STALL_TIMEOUT_SECONDS)
 
 
 async def _readline_with_timeout(process, label: str = "CLI"):
@@ -72,7 +73,7 @@ async def _readline_with_timeout(process, label: str = "CLI"):
         return await asyncio.wait_for(process.stdout.readline(), timeout=CLI_STALL_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         await _kill_process_safely(process)
-        raise RuntimeError(f"{label} 응답이 {CLI_STALL_TIMEOUT_SECONDS}초 이상 없어 중단했습니다(멈춘 것으로 판단).")
+        raise GenerationError("cli_response_timeout", f"{label} 응답이 {CLI_STALL_TIMEOUT_SECONDS}초 이상 없어 중단했습니다(멈춘 것으로 판단).", seconds=CLI_STALL_TIMEOUT_SECONDS)
 
 
 async def _wait_with_timeout(process, label: str = "CLI"):
@@ -81,7 +82,7 @@ async def _wait_with_timeout(process, label: str = "CLI"):
         await asyncio.wait_for(process.wait(), timeout=CLI_EXIT_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         await _kill_process_safely(process)
-        raise RuntimeError(f"{label} 프로세스가 출력 종료 후에도 {CLI_EXIT_TIMEOUT_SECONDS}초 이상 종료되지 않아 강제 종료했습니다.")
+        raise GenerationError("cli_exit_timeout", f"{label} 프로세스가 출력 종료 후에도 {CLI_EXIT_TIMEOUT_SECONDS}초 이상 종료되지 않아 강제 종료했습니다.", seconds=CLI_EXIT_TIMEOUT_SECONDS)
 
 
 def _start_stderr_drain(process):
@@ -2118,9 +2119,11 @@ async def stream_antigravity(
         if process.returncode and process.returncode != 0:
             stderr_out = await _finish_stderr_drain(stderr_task)
             logger.error(f"Antigravity CLI 실패: code={process.returncode} stderr={stderr_out[:500]}")
-            raise RuntimeError(
+            raise GenerationError(
+                "cli_execution_failed",
                 f"Antigravity CLI 실행 실패 (code={process.returncode}): "
-                f"{stderr_out.strip()[:500] or '알 수 없는 오류'}"
+                f"{stderr_out.strip()[:500] or '알 수 없는 오류'}",
+                exit_code=process.returncode,
             )
         if session_id:
             # 이미 존재하던 conversation을 resume한 호출도 마지막 provider를

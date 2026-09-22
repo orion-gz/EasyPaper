@@ -1152,6 +1152,13 @@ body:not(.light-theme) .pdf-page-inner canvas {
   text-indent: 1.5em;
 }
 
+.trans-warning {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
 .trans-error {
   font-size: 13.5px;
   color: var(--error);
