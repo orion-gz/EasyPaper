@@ -14,5 +14,17 @@
   "external_processing_blocked": "This document allows local processing only. Select a loopback Ollama provider for {{operation}}.",
   "invalid_processing_policy": "Unsupported document processing policy.",
   "selected_text_requires_viewer_page": "Selected text can only be used from the current document viewer page.",
-  "selected_text_not_on_page": "Selected text was not found in the source of page {{page_num}}."
+  "selected_text_not_on_page": "Selected text was not found in the source of page {{page_num}}.",
+  "translation_integrity_failed": "Translation was generated, but required source values are missing or changed: {{missing}}. Compare with the original and retry.",
+  "translation_integrity_warning": "Some source values are absent: {{missing}}. Omission options or summary style may explain this; compare with the original.",
+  "translation_empty": "The model returned an empty translation. Check the model and retry.",
+  "cli_response_timeout": "No CLI output was received for {{seconds}} seconds. The session may still contain a result; check the CLI and retry.",
+  "cli_exit_timeout": "The CLI did not exit within {{seconds}} seconds after closing its output. Check the CLI process.",
+  "cli_execution_failed": "The CLI exited with code {{exit_code}}. Check the server logs for details.",
+  "rate_limited": "The provider request limit was reached. Wait and retry.",
+  "provider_unavailable": "The model provider is temporarily unavailable. Retry later.",
+  "timeout": "The model request timed out. Retry later.",
+  "network_error": "Could not connect to the model provider. Check the connection.",
+  "authentication_failed": "Provider authentication failed. Check the API key or CLI login.",
+  "unsupported_model": "The selected model is unavailable. Check the model setting."
 }

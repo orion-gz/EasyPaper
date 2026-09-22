@@ -213,6 +213,9 @@ def recoverable_tasks() -> list[dict]:
 
 
 def classify_error(exc: Exception) -> tuple[str, bool]:
+    code = getattr(exc, "document_task_error_code", None)
+    if code:
+        return code, code in {"timeout", "rate_limited", "provider_unavailable", "network_error"}
     status_code = getattr(exc, "status_code", None)
     response = getattr(exc, "response", None)
     if response is not None:
