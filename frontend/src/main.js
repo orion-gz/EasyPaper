@@ -183,7 +183,7 @@ class CustomSelectPicker {
     })
     select.addEventListener('change', () => this.refresh())
     this.observer = new MutationObserver(() => this.refresh())
-    this.observer.observe(select, { attributes: true, childList: true, subtree: true })
+    this.observer.observe(select, { attributes: true, childList: true, characterData: true, subtree: true })
     document.addEventListener('click', (event) => {
       if (!this.container.contains(event.target)) this.close()
     })
@@ -278,27 +278,27 @@ function populateLanguageControls(settings = {}) {
   ).join('')
   if (sourceSelect) {
     sourceSelect.innerHTML = '<option value="auto">' + t('common:language.auto') + '</option>' + options
-    sourceSelect.value = sourceValue
+    syncSelectValue(sourceSelect, sourceValue)
   }
   if (targetSelect) {
     targetSelect.innerHTML = options
-    targetSelect.value = targetValue
+    syncSelectValue(targetSelect, targetValue)
   }
   const documentSource = $('document-source-lang')
   const documentTarget = $('document-target-lang')
   if (documentSource) {
     documentSource.innerHTML = '<option value="auto">' + t('common:language.auto') + '</option>' + options
-    documentSource.value = state.sourceLanguage || 'auto'
+    syncSelectValue(documentSource, state.sourceLanguage || 'auto')
   }
   if (documentTarget) {
     documentTarget.innerHTML = options
-    documentTarget.value = state.preferredTargetLanguage || targetValue
+    syncSelectValue(documentTarget, state.preferredTargetLanguage || targetValue)
   }
   documentLanguagePickers.forEach(picker => picker.refresh())
   renderDocumentLanguageStatus()
   for (const id of ['login-ui-locale', 'onboarding-ui-locale', 'setting-ui-locale']) {
     const select = $(id)
-    if (select) select.value = getLocale()
+    syncSelectValue(select, getLocale())
   }
 }
 
@@ -1080,10 +1080,10 @@ function syncModeSettings(documentMode) {
   const isGeneral = settingsTranslationModeContext === 'general'
   const options = getTranslationOptions(settingsTranslationModeContext)
 
-  settingSourceLang.value = localStorage.getItem("easypaper_default_source_language") || "auto"
-  settingTargetLang.value = options.targetLang
-  settingTransStyle.value = options.style
-  settingTranslationMode.value = getTranslationMode(settingsTranslationModeContext)
+  syncSelectValue(settingSourceLang, localStorage.getItem("easypaper_default_source_language") || "auto")
+  syncSelectValue(settingTargetLang, options.targetLang)
+  syncSelectValue(settingTransStyle, options.style)
+  syncSelectValue(settingTranslationMode, getTranslationMode(settingsTranslationModeContext))
   settingIgnoreMath.checked = options.ignoreMath
   settingIgnoreTable.checked = options.ignoreTable
   settingIgnoreRefs.checked = options.ignoreRefs
@@ -4133,7 +4133,7 @@ globalSettingsBtn.addEventListener('click', async () => {
 
   // 2. 일반 설정값 로드
   syncModeSettings(workspaceModeController.getMode())
-  settingToolbarPosition.value = getToolbarPosition()
+  syncSelectValue(settingToolbarPosition, getToolbarPosition())
   // 아래 항목은 모드와 관계없는 공통 뷰어 설정이다.
   settingDisableHoverTooltip.checked = !state.disableHoverTooltip
   settingDisableBookmark.checked = !state.disableBookmark
@@ -4688,12 +4688,12 @@ function getTauriUpdateCheckInterval() {
 }
 
 if (settingTauriUpdateCheckInterval) {
-  settingTauriUpdateCheckInterval.value = getTauriUpdateCheckInterval()
+  syncSelectValue(settingTauriUpdateCheckInterval, getTauriUpdateCheckInterval())
   settingTauriUpdateCheckInterval.addEventListener('change', () => {
     localStorage.setItem(TAURI_UPDATE_CHECK_STORAGE_KEY, settingTauriUpdateCheckInterval.value)
   })
   globalSettingsBtn.addEventListener('click', () => {
-    settingTauriUpdateCheckInterval.value = getTauriUpdateCheckInterval()
+    syncSelectValue(settingTauriUpdateCheckInterval, getTauriUpdateCheckInterval())
   })
 }
 
@@ -5080,7 +5080,7 @@ async function initUpdateCheckSettingUI() {
   if (!settingUpdateCheckInterval) return
   try {
     const cfg = await getUpdateCheckConfigAPI()
-    settingUpdateCheckInterval.value = cfg.interval || 'weekly'
+    syncSelectValue(settingUpdateCheckInterval, cfg.interval || 'weekly')
   } catch (err) {
     console.warn('업데이트 확인 설정 로드 실패:', err)
   }
@@ -5183,7 +5183,7 @@ if (updateAvailableNowBtn) {
 async function maybeAutoCheckForUpdate() {
   try {
     const cfg = await getUpdateCheckConfigAPI()
-    if (settingUpdateCheckInterval) settingUpdateCheckInterval.value = cfg.interval || 'weekly'
+    syncSelectValue(settingUpdateCheckInterval, cfg.interval || 'weekly')
     if (cfg.interval === 'never') return
 
     const intervalMs = UPDATE_CHECK_INTERVAL_MS[cfg.interval] || UPDATE_CHECK_INTERVAL_MS.weekly
