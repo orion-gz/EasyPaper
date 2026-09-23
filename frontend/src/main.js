@@ -2969,23 +2969,19 @@ const PROVIDER_CONFIG = [
       { value: 'sonnet|xhigh',  label: 'Sonnet · xHigh',  group: 'Sonnet 5' },
       { value: 'sonnet|max',    label: 'Sonnet · Max',    group: 'Sonnet 5' },
       // Fable
-      { value: 'fable|low',    label: 'Fable · Low',    group: 'Fable 5' },
-      { value: 'fable|medium', label: 'Fable · Medium', group: 'Fable 5' },
-      { value: 'fable|high',   label: 'Fable · High',   group: 'Fable 5' },
-      { value: 'fable|xhigh',  label: 'Fable · xHigh',  group: 'Fable 5' },
-      { value: 'fable|max',    label: 'Fable · Max',    group: 'Fable 5' },
+      { value: 'fable|low',    label: 'Fable · Low',    group: 'Fable 5.1' },
+      { value: 'fable|medium', label: 'Fable · Medium', group: 'Fable 5.1' },
+      { value: 'fable|high',   label: 'Fable · High',   group: 'Fable 5.1' },
+      { value: 'fable|xhigh',  label: 'Fable · xHigh',  group: 'Fable 5.1' },
+      { value: 'fable|max',    label: 'Fable · Max',    group: 'Fable 5.1' },
       // Opus
-      { value: 'opus|low',    label: 'Opus · Low',    group: 'Opus 5' },
-      { value: 'opus|medium', label: 'Opus · Medium', group: 'Opus 5' },
-      { value: 'opus|high',   label: 'Opus · High',   group: 'Opus 5' },
-      { value: 'opus|xhigh',  label: 'Opus · xHigh',  group: 'Opus 5' },
-      { value: 'opus|max',    label: 'Opus · Max',    group: 'Opus 5' },
+      { value: 'opus|low',    label: 'Opus · Low',    group: 'Opus 5.5' },
+      { value: 'opus|medium', label: 'Opus · Medium', group: 'Opus 5.5' },
+      { value: 'opus|high',   label: 'Opus · High',   group: 'Opus 5.5' },
+      { value: 'opus|xhigh',  label: 'Opus · xHigh',  group: 'Opus 5.5' },
+      { value: 'opus|max',    label: 'Opus · Max',    group: 'Opus 5.5' },
       // Haiku
-      { value: 'haiku|low',    label: 'Haiku · Low',    group: 'Haiku 4.5' },
-      { value: 'haiku|medium', label: 'Haiku · Medium', group: 'Haiku 4.5' },
-      { value: 'haiku|high',   label: 'Haiku · High',   group: 'Haiku 4.5' },
-      { value: 'haiku|xhigh',  label: 'Haiku · xHigh',  group: 'Haiku 4.5' },
-      { value: 'haiku|max',    label: 'Haiku · Max',    group: 'Haiku 4.5' },
+      { value: 'haiku', label: 'Haiku', group: 'Haiku 4.5' },
     ]
   },
   {
@@ -2997,23 +2993,20 @@ const PROVIDER_CONFIG = [
       { value: 'gpt-6-astra|high',   label: 'Astra · High',   group: 'GPT-6 Astra' },
       { value: 'gpt-6-astra|xhigh',  label: 'Astra · xHigh',  group: 'GPT-6 Astra' },
       { value: 'gpt-6-astra|max',    label: 'Astra · Max',    group: 'GPT-6 Astra' },
-      { value: 'gpt-6-astra|ultra',  label: 'Astra · Ultra',  group: 'GPT-6 Astra' },
-      // GPT-5.6 Terra
-      { value: 'gpt-5.6-terra|low',    label: 'Terra · Low',    group: 'GPT-5.6 Terra' },
-      { value: 'gpt-5.6-terra|medium', label: 'Terra · Medium', group: 'GPT-5.6 Terra' },
-      { value: 'gpt-5.6-terra|high',   label: 'Terra · High',   group: 'GPT-5.6 Terra' },
-      { value: 'gpt-5.6-terra|xhigh',  label: 'Terra · xHigh',  group: 'GPT-5.6 Terra' },
-      { value: 'gpt-5.6-terra|max',    label: 'Terra · Max',    group: 'GPT-5.6 Terra' },
-      // GPT-5.6 Luna
-      { value: 'gpt-5.6-luna|low',    label: 'Luna · Low',    group: 'GPT-5.6 Luna' },
-      { value: 'gpt-5.6-luna|medium', label: 'Luna · Medium', group: 'GPT-5.6 Luna' },
-      { value: 'gpt-5.6-luna|high',   label: 'Luna · High',   group: 'GPT-5.6 Luna' },
-      { value: 'gpt-5.6-luna|xhigh',  label: 'Luna · xHigh',  group: 'GPT-5.6 Luna' },
-      // GPT-5.5
-      { value: 'gpt-5.5|low',    label: 'GPT-5.5 · Low',    group: 'GPT-5.5' },
-      { value: 'gpt-5.5|medium', label: 'GPT-5.5 · Medium', group: 'GPT-5.5' },
-      { value: 'gpt-5.5|high',   label: 'GPT-5.5 · High',   group: 'GPT-5.5' },
-      { value: 'gpt-5.5|xhigh',  label: 'GPT-5.5 · xHigh',  group: 'GPT-5.5' },
+      // GPT-6 Sol
+      { value: 'gpt-6-sol|none',   label: 'Sol · None',   group: 'GPT-6 Sol' },
+      { value: 'gpt-6-sol|low',    label: 'Sol · Low',    group: 'GPT-6 Sol' },
+      { value: 'gpt-6-sol|medium', label: 'Sol · Medium', group: 'GPT-6 Sol' },
+      { value: 'gpt-6-sol|high',   label: 'Sol · High',   group: 'GPT-6 Sol' },
+      { value: 'gpt-6-sol|xhigh',  label: 'Sol · xHigh',  group: 'GPT-6 Sol' },
+      { value: 'gpt-6-sol|max',    label: 'Sol · Max',    group: 'GPT-6 Sol' },
+      // GPT-6 Luna
+      { value: 'gpt-6-luna|none',   label: 'Luna · None',   group: 'GPT-6 Luna' },
+      { value: 'gpt-6-luna|low',    label: 'Luna · Low',    group: 'GPT-6 Luna' },
+      { value: 'gpt-6-luna|medium', label: 'Luna · Medium', group: 'GPT-6 Luna' },
+      { value: 'gpt-6-luna|high',   label: 'Luna · High',   group: 'GPT-6 Luna' },
+      { value: 'gpt-6-luna|xhigh',  label: 'Luna · xHigh',  group: 'GPT-6 Luna' },
+      { value: 'gpt-6-luna|max',    label: 'Luna · Max',    group: 'GPT-6 Luna' },
     ]
   },
   {
