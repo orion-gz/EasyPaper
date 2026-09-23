@@ -3038,10 +3038,6 @@ const PROVIDER_CONFIG = [
       { value: 'Gemini 3.6 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.6 Flash' },
       { value: 'Gemini 3.6 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.6 Flash' },
       { value: 'Gemini 3.6 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.6 Flash' },
-      // Gemini 3.5 Flash
-      { value: 'Gemini 3.5 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.5 Flash' },
-      { value: 'Gemini 3.5 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.5 Flash' },
-      { value: 'Gemini 3.5 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.5 Flash' },
       // Gemini 3.1 Pro
       { value: 'Gemini 3.1 Pro (Low)',  label: 'Pro · Low',  group: 'Gemini 3.1 Pro' },
       { value: 'Gemini 3.1 Pro (High)', label: 'Pro · High', group: 'Gemini 3.1 Pro' },
@@ -3086,20 +3082,45 @@ const PROVIDER_CONFIG = [
       { value: 'gpt-6-astra|high',   label: 'Astra · High',   group: 'GPT-6 Astra' },
       { value: 'gpt-6-astra|xhigh',  label: 'Astra · xHigh',  group: 'GPT-6 Astra' },
       { value: 'gpt-6-astra|max',    label: 'Astra · Max',    group: 'GPT-6 Astra' },
+      { value: 'gpt-6-astra|ultra',  label: 'Astra · Ultra',  group: 'GPT-6 Astra' },
       // GPT-6 Sol
-      { value: 'gpt-6-sol|none',   label: 'Sol · None',   group: 'GPT-6 Sol' },
       { value: 'gpt-6-sol|low',    label: 'Sol · Low',    group: 'GPT-6 Sol' },
       { value: 'gpt-6-sol|medium', label: 'Sol · Medium', group: 'GPT-6 Sol' },
       { value: 'gpt-6-sol|high',   label: 'Sol · High',   group: 'GPT-6 Sol' },
       { value: 'gpt-6-sol|xhigh',  label: 'Sol · xHigh',  group: 'GPT-6 Sol' },
       { value: 'gpt-6-sol|max',    label: 'Sol · Max',    group: 'GPT-6 Sol' },
+      { value: 'gpt-6-sol|ultra',  label: 'Sol · Ultra',  group: 'GPT-6 Sol' },
       // GPT-6 Luna
-      { value: 'gpt-6-luna|none',   label: 'Luna · None',   group: 'GPT-6 Luna' },
       { value: 'gpt-6-luna|low',    label: 'Luna · Low',    group: 'GPT-6 Luna' },
       { value: 'gpt-6-luna|medium', label: 'Luna · Medium', group: 'GPT-6 Luna' },
       { value: 'gpt-6-luna|high',   label: 'Luna · High',   group: 'GPT-6 Luna' },
       { value: 'gpt-6-luna|xhigh',  label: 'Luna · xHigh',  group: 'GPT-6 Luna' },
       { value: 'gpt-6-luna|max',    label: 'Luna · Max',    group: 'GPT-6 Luna' },
+      // GPT-5.6 Sol
+      { value: 'gpt-5.6-sol|low',    label: 'Sol · Low',    group: 'GPT-5.6 Sol' },
+      { value: 'gpt-5.6-sol|medium', label: 'Sol · Medium', group: 'GPT-5.6 Sol' },
+      { value: 'gpt-5.6-sol|high',   label: 'Sol · High',   group: 'GPT-5.6 Sol' },
+      { value: 'gpt-5.6-sol|xhigh',  label: 'Sol · xHigh',  group: 'GPT-5.6 Sol' },
+      { value: 'gpt-5.6-sol|max',    label: 'Sol · Max',    group: 'GPT-5.6 Sol' },
+      { value: 'gpt-5.6-sol|ultra',  label: 'Sol · Ultra',  group: 'GPT-5.6 Sol' },
+      // GPT-5.6 Terra
+      { value: 'gpt-5.6-terra|low',    label: 'Terra · Low',    group: 'GPT-5.6 Terra' },
+      { value: 'gpt-5.6-terra|medium', label: 'Terra · Medium', group: 'GPT-5.6 Terra' },
+      { value: 'gpt-5.6-terra|high',   label: 'Terra · High',   group: 'GPT-5.6 Terra' },
+      { value: 'gpt-5.6-terra|xhigh',  label: 'Terra · xHigh',  group: 'GPT-5.6 Terra' },
+      { value: 'gpt-5.6-terra|max',    label: 'Terra · Max',    group: 'GPT-5.6 Terra' },
+      { value: 'gpt-5.6-terra|ultra',  label: 'Terra · Ultra',  group: 'GPT-5.6 Terra' },
+      // GPT-5.6 Luna
+      { value: 'gpt-5.6-luna|low',    label: 'Luna · Low',    group: 'GPT-5.6 Luna' },
+      { value: 'gpt-5.6-luna|medium', label: 'Luna · Medium', group: 'GPT-5.6 Luna' },
+      { value: 'gpt-5.6-luna|high',   label: 'Luna · High',   group: 'GPT-5.6 Luna' },
+      { value: 'gpt-5.6-luna|xhigh',  label: 'Luna · xHigh',  group: 'GPT-5.6 Luna' },
+      { value: 'gpt-5.6-luna|max',    label: 'Luna · Max',    group: 'GPT-5.6 Luna' },
+      // GPT-5.5
+      { value: 'gpt-5.5|low',    label: 'GPT-5.5 · Low',    group: 'GPT-5.5' },
+      { value: 'gpt-5.5|medium', label: 'GPT-5.5 · Medium', group: 'GPT-5.5' },
+      { value: 'gpt-5.5|high',   label: 'GPT-5.5 · High',   group: 'GPT-5.5' },
+      { value: 'gpt-5.5|xhigh',  label: 'GPT-5.5 · xHigh',  group: 'GPT-5.5' },
     ]
   },
   {
@@ -3163,7 +3184,7 @@ class ProviderModelPicker {
     this.compact = compact
     this.onChange = onChange || (() => {})
     this._provider = 'antigravity'
-    this._model = 'Gemini 3.5 Flash (Medium)'
+    this._model = 'Gemini 3.8 Flash (Medium)'
     this._build()
     this._updateBtn()
     this._bindClose()
