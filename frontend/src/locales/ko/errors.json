@@ -26,5 +26,6 @@
   "timeout": "모델 요청 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
   "network_error": "모델 제공자에 연결하지 못했습니다. 네트워크 연결을 확인해 주세요.",
   "authentication_failed": "모델 제공자 인증에 실패했습니다. API 키 또는 CLI 로그인 상태를 확인해 주세요.",
-  "unsupported_model": "선택한 모델을 사용할 수 없습니다. 모델 설정을 확인해 주세요."
+  "unsupported_model": "선택한 모델을 사용할 수 없습니다. 모델 설정을 확인해 주세요.",
+  "pdf_reading_order_review": "읽기 순서 확인 필요"
 }

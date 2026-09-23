@@ -26,5 +26,6 @@
   "timeout": "The model request timed out. Retry later.",
   "network_error": "Could not connect to the model provider. Check the connection.",
   "authentication_failed": "Provider authentication failed. Check the API key or CLI login.",
-  "unsupported_model": "The selected model is unavailable. Check the model setting."
+  "unsupported_model": "The selected model is unavailable. Check the model setting.",
+  "pdf_reading_order_review": "Reading order needs review"
 }

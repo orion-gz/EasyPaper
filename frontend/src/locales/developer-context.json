@@ -4424,5 +4424,8 @@
   },
   "errors:unsupported_model": {
     "description": "The selected model is unavailable. Check the model setting."
+  },
+  "errors:pdf_reading_order_review": {
+    "description": "Status shown on PDF pages whose reading order or source coordinates require review."
   }
 }

@@ -108,7 +108,7 @@ def _worker_command(engine: str, pdf_path: str, output_path: str) -> tuple[list[
 
 
 
-def parse_document_isolated(pdf_path: str, engine: str) -> dict:
+def parse_document_isolated(pdf_path: str, engine: str, *, normalize_layout: bool = True) -> dict:
     """Run an applied advanced parser in its managed environment without changing globals."""
     import subprocess
     import tempfile
@@ -116,6 +116,8 @@ def parse_document_isolated(pdf_path: str, engine: str) -> dict:
     with tempfile.TemporaryDirectory(prefix="easypaper-parser-") as temp_dir:
         output_path = os.path.join(temp_dir, "result.json")
         command, env = _worker_command(engine, pdf_path, output_path)
+        if not normalize_layout:
+            command.append("--legacy-layout")
         result = subprocess.run(
             command,
             cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -447,6 +449,8 @@ async def apply_preview(doc_id: str, task_id: str, sessions: dict) -> dict:
                     metadata = json.loads(doc["metadata"]) if doc["metadata"] else {}
                 except (TypeError, json.JSONDecodeError):
                     metadata = {}
+                if pages and pages[0].get("layout"):
+                    metadata["layout_rule_version"] = pages[0]["layout"]["rule_version"]
                 for key in ("bibliography", "references", "reference_list"):
                     metadata.pop(key, None)
                 conn.execute(

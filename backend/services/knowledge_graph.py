@@ -261,7 +261,8 @@ async def _backfill_one(doc_id: str) -> None:
         from services.pdf_parser import extract_pages
         pages = get_cached_pages(doc_id, pdf_path)
         if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"))
+            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"),
+                                            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
             save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
 
         doc_title = doc.get("metadata", {}).get("title") or doc.get("filename")
@@ -284,7 +285,8 @@ async def _backfill_paper_tags(doc_id: str) -> None:
             return
         pages = get_cached_pages(doc_id, pdf_path)
         if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"))
+            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"),
+                                            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
             save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
         title = (doc.get("metadata") or {}).get("title") or doc.get("filename") or ""
         await classify_and_store_paper_tags(doc_id, pages, title, force=False)
@@ -909,7 +911,8 @@ async def _get_paper_text_for_scoring(doc_id: str) -> str:
             return ""
         pages = get_cached_pages(doc_id, pdf_path)
         if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"))
+            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"),
+                                            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
             save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
         return "\n".join(p.get("text", "") for p in pages[:2])
     except Exception:

@@ -16,9 +16,10 @@ def main() -> int:
     parser.add_argument("--pdf", required=True)
     parser.add_argument("--engine", required=True, choices=("pymupdf", "pdfplumber", "marker", "mineru"))
     parser.add_argument("--output", required=True)
+    parser.add_argument("--legacy-layout", action="store_true")
     args = parser.parse_args()
 
-    pages = extract_pages(args.pdf, engine=args.engine)
+    pages = extract_pages(args.pdf, engine=args.engine, normalize_layout=not args.legacy_layout)
     actual_engines = {str(page.get("parser_engine") or "") for page in pages}
     if not pages or actual_engines != {args.engine}:
         actual = ", ".join(sorted(actual_engines)) or "no output"

@@ -1,3 +1,4 @@
+import { projectSourceRects, sourceMappingMatchesRevision } from './pdfSentenceGeometry.js'
 /**
  * PDF.js 기반 연속 스크롤 뷰어
  * - 모든 페이지를 세로로 쌓아 스크롤
@@ -379,6 +380,14 @@ async function _renderPage(wrapper, pageNum, generation, job) {
         recovery = await response.json()
         if (stale()) return
       }
+      textLayerDiv.dataset.sourceRevision = recovery?.layout?.layout_revision || recovery?.layout?.source_revision || ''
+      if (recovery?.layout?.needs_review) {
+        const notice = document.createElement('div')
+        notice.className = 'pdf-text-recovery-notice'
+        notice.setAttribute('role', 'status')
+        notice.textContent = t('errors:pdf_reading_order_review')
+        inner.appendChild(notice)
+      }
       if (recovery?.recovery) {
         textContent = recoveredTextContent(recovery.spans || [], viewport)
         textLayerDiv.dataset.recovery = recovery.recovery
@@ -504,4 +513,10 @@ export async function getPDFOutline() {
     console.error("Error loading PDF outline:", err)
     return null
   }
+}
+
+export function sourceMappingRects(pageNum, mapping) {
+  const layer = renderedTextLayers.get(Number(pageNum))
+  if (!layer || !sourceMappingMatchesRevision(mapping, layer.container.dataset.sourceRevision)) return []
+  return projectSourceRects(mapping, layer.viewport)
 }

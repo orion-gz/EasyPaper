@@ -52,3 +52,31 @@ export function mappedSentenceRange(ranges, sentenceIdx) {
     charStart: Math.min(...parts.map(r => r.charStart)),
     charEnd: Math.max(...parts.map(r => r.charEnd)) }
 }
+
+// PyMuPDF uses the unrotated visible-page top left; PDF.js uses PDF bottom left.
+export function projectSourceRects(mapping, viewport) {
+  if (mapping?.status !== 'exact' || mapping.coordinate_space !== 'unrotated-top-left') return []
+  const { pageX, pageY, pageHeight } = viewport.rawDims
+  const sourceBoxes = (mapping.segments || []).flatMap(segment => {
+    const vertical = segment.writing_direction?.startsWith('vertical')
+    const boxes = (segment.rects || []).filter(box => Array.isArray(box) && box.length === 4
+      && box.every(Number.isFinite) && box[2] > box[0] && box[3] > box[1])
+      .map(box => vertical
+        ? { left: box[1], top: box[0], width: box[3] - box[1], height: box[2] - box[0] }
+        : { left: box[0], top: box[1], width: box[2] - box[0], height: box[3] - box[1] })
+    return mergePdfHighlightRects(boxes).map(box => vertical
+      ? [box.top, box.left, box.top + box.height, box.left + box.width]
+      : [box.left, box.top, box.left + box.width, box.top + box.height])
+  })
+  return sourceBoxes.flatMap(box => {
+    if (!Array.isArray(box) || box.length !== 4 || !box.every(Number.isFinite)
+        || box[2] <= box[0] || box[3] <= box[1]) return []
+    const [x0, y0] = viewport.convertToViewportPoint(pageX + box[0], pageY + pageHeight - box[3])
+    const [x1, y1] = viewport.convertToViewportPoint(pageX + box[2], pageY + pageHeight - box[1])
+    return [{ left: Math.min(x0, x1), top: Math.min(y0, y1), width: Math.abs(x1 - x0), height: Math.abs(y1 - y0) }]
+  })
+}
+
+export function sourceMappingMatchesRevision(mapping, revision) {
+  return Boolean(mapping && revision && (mapping.layout_revision || mapping.source_revision) === revision)
+}
