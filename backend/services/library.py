@@ -1,10 +1,11 @@
+import glob
 import os
 import re
 import shutil
 import json
 import base64
 from typing import Optional, List
-from config import LIBRARY_DIR, UPLOAD_DIR
+from config import LIBRARY_DIR, UPLOAD_DIR, get_project_root
 from services.cache import clear_session_cache
 from services.db import (
     db_save_document,
@@ -237,10 +238,14 @@ def move_documents_to_folder(username: str, doc_ids: List[str], folder_id: Optio
     return db_move_documents_to_folder(doc_ids, username, folder_id)
 
 
+_UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
 def delete_chat_sessions(doc_id: str) -> None:
     """논문 삭제 시 연동된 Claude Code 및 Antigravity 채팅 세션을 삭제합니다."""
     # 1. Claude Code 세션 캐시 디렉터리 삭제
-    cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
+    # stream_claude_code()가 격리 HOME을 만드는 위치(get_project_root()/cache)와 같아야 한다.
+    cache_dir = os.path.join(get_project_root(), "cache")
     claude_home = os.path.join(cache_dir, f"claude_home_{doc_id}")
     if os.path.exists(claude_home):
         try:
@@ -248,6 +253,21 @@ def delete_chat_sessions(doc_id: str) -> None:
             print(f"[delete_chat_sessions] Deleted Claude Code session directory: {claude_home}")
         except Exception as e:
             print(f"[delete_chat_sessions Claude Code Error] {e}")
+
+    # macOS는 격리 HOME 없이 실제 ~/.claude를 쓰므로(#612, llm_client의
+    # _claude_code_uses_isolated_home 참고) 세션 기록이
+    # ~/.claude/projects/<cwd>/<doc_id>.jsonl에 남는다. 정확히 그 파일만 지우고,
+    # ~/.claude 아래의 다른 파일/디렉터리는 절대 건드리지 않는다.
+    from services.llm_client import _claude_code_uses_isolated_home
+    if not _claude_code_uses_isolated_home() and _UUID_RE.fullmatch(doc_id or ""):
+        projects_dir = os.path.join(os.path.expanduser("~"), ".claude", "projects")
+        for transcript in glob.glob(os.path.join(glob.escape(projects_dir), "*", f"{doc_id}.jsonl")):
+            try:
+                if os.path.isfile(transcript) and not os.path.islink(transcript):
+                    os.remove(transcript)
+                    print(f"[delete_chat_sessions] Deleted Claude Code session transcript: {transcript}")
+            except Exception as e:
+                print(f"[delete_chat_sessions Claude Code Error] {e}")
 
     # 2. Antigravity 세션 삭제 (신규 ai_session.json 우선, 예전 conversation_id.txt는 폴백)
     conv_id = None

@@ -4,6 +4,7 @@ import httpx
 import json
 import logging
 import re
+import sys
 import threading
 from typing import AsyncGenerator
 from services.atomic_io import atomic_write_text
@@ -1332,6 +1333,35 @@ def _get_claude_code_session_lock(session_id: str):
     return _claude_code_session_locks[session_id]
 
 
+def _claude_code_uses_isolated_home() -> bool:
+    """Claude Code 호출 시 세션별 격리 HOME(cache/claude_home_<id>)을 쓸지 여부.
+
+    macOS의 Claude Code는 OAuth 자격증명을 ~/.claude/.credentials.json이 아니라
+    로그인 키체인(서비스명 "Claude Code-credentials")에 저장한다. 그래서 HOME을
+    격리 폴더로 바꾸면 복사할 자격증명 파일 자체가 없어 CLI가 "Not logged in"으로
+    실패한다(#612). macOS에서는 HOME을 바꾸지 않고 실제 사용자 HOME을 그대로 쓴다 -
+    세션은 cwd(문서별 격리 폴더)와 --session-id 기준으로
+    ~/.claude/projects/<cwd>/<session_id>.jsonl에 따로 저장되고, 같은 문서의 동시
+    호출은 _get_claude_code_session_lock으로 이미 직렬화되므로 문서별 대화 분리는
+    그대로 유지된다. Linux/Windows는 기존 동작을 유지한다.
+    """
+    return sys.platform != "darwin"
+
+
+# CLI가 로그인되어 있지 않으면 stderr가 아니라 stdout으로 이 문구를 출력하고
+# code=1로 종료한다(예: "Not logged in · Please run /login").
+_CLAUDE_CODE_LOGIN_ERROR_PREFIX = "Not logged in"
+_CLAUDE_CODE_LOGIN_ERROR_MARKERS = (_CLAUDE_CODE_LOGIN_ERROR_PREFIX, "Please run /login")
+# 실패 시 stderr가 비어 있으면 에러 메시지에 대신 넣을 stdout 끝부분 최대 길이(문자).
+_CLAUDE_CODE_STDOUT_TAIL_CHARS = 2000
+
+
+def _may_be_claude_code_login_error(text: str) -> bool:
+    """지금까지 받은 stdout이 로그인 에러 문구일 가능성이 있는지(= 아직 내보내면 안 되는지)."""
+    stripped = text.lstrip()
+    return stripped.startswith(_CLAUDE_CODE_LOGIN_ERROR_PREFIX) or _CLAUDE_CODE_LOGIN_ERROR_PREFIX.startswith(stripped)
+
+
 async def stream_claude_code(prompt: str, model: str = None, session_id: str = None, is_chat: bool = False, usage_label: str = None, effort_override: str = None) -> AsyncGenerator[str, None]:
     import asyncio
     import os
@@ -1369,8 +1399,9 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
     base_cmd = [claude_path, "--permission-mode", "dontAsk", "--tools", "Read", "--output-format", "text", "--print", "-"]
 
     # Prepare custom HOME for Claude Code session isolation to prevent concurrent locks
+    # (macOS는 키체인 자격증명 때문에 격리하지 않는다 - _claude_code_uses_isolated_home 참고)
     env = get_agy_env()
-    if session_id:
+    if session_id and _claude_code_uses_isolated_home():
         import shutil
         cache_dir = os.path.join(get_project_root(), "cache")
         home_dir = os.path.join(cache_dir, f"claude_home_{session_id}")
@@ -1467,6 +1498,14 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
 
                 decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
                 produced_output = False
+                # 로그인 에러 문구("Not logged in ...")는 stdout으로 나오므로, 출력 앞부분이
+                # 그 문구일 수 있는 동안만 내보내지 않고 붙잡아 둔다 - 그렇지 않으면 에러
+                # 문구가 모델 답변인 것처럼 호출부로 스트리밍된다. 정상 답변은 첫 글자부터
+                # 문구와 달라지므로 사실상 지연 없이 바로 흘려보낸다.
+                held_output = ""
+                holding = True
+                # stderr가 비어 있어도 실패 원인을 보여줄 수 있게 stdout 끝부분만 보관한다.
+                stdout_tail = ""
 
                 while True:
                     chunk = await _read_chunk_with_timeout(process, label="Claude Code CLI")
@@ -1475,16 +1514,30 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
                     decoded = decoder.decode(chunk)
                     if decoded:
                         produced_output = True
+                        stdout_tail = (stdout_tail + decoded)[-_CLAUDE_CODE_STDOUT_TAIL_CHARS:]
+                        if holding:
+                            held_output += decoded
+                            if _may_be_claude_code_login_error(held_output):
+                                continue
+                            holding = False
+                            decoded, held_output = held_output, ""
                         yield decoded
 
                 final_decoded = decoder.decode(b"", final=True)
                 if final_decoded:
                     produced_output = True
-                    yield final_decoded
+                    stdout_tail = (stdout_tail + final_decoded)[-_CLAUDE_CODE_STDOUT_TAIL_CHARS:]
+                    if holding:
+                        held_output += final_decoded
+                    else:
+                        yield final_decoded
 
                 await _wait_with_timeout(process, label="Claude Code CLI")
 
                 if process.returncode == 0:
+                    # 정상 종료면 붙잡아 두었던 앞부분(실제로는 답변이었음)을 내보낸다.
+                    if held_output:
+                        yield held_output
                     try:
                         from services.usage_tracker import record_call
                         record_call(usage_label or ("translate" if not is_chat else "chat"))
@@ -1531,14 +1584,26 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
                         encoded_prompt = guided_prompt.encode("utf-8")
                     continue
 
-                logger.error(f"Claude Code CLI 실패: code={process.returncode} stderr={stderr_out}")
+                logger.error(
+                    f"Claude Code CLI 실패: code={process.returncode} stderr={stderr_out} "
+                    f"stdout_tail={stdout_tail[-500:]!r}"
+                )
+                if any(marker in stderr_out or marker in stdout_tail for marker in _CLAUDE_CODE_LOGIN_ERROR_MARKERS):
+                    raise GenerationError(
+                        "authentication_failed",
+                        "Claude Code CLI에 로그인되어 있지 않습니다. 터미널에서 `claude`를 실행해 "
+                        "로그인한 뒤 다시 시도해 주세요.",
+                    )
                 # 실패를 조용히 삼키고 그냥 return하면, 호출부는 빈 결과를 "정상
                 # 번역 완료"로 착각해 빈 문자열을 캐시에 영구 저장해버린다.
                 # 예외를 던져서 라우터/job 쪽의 기존 실패 처리 로직(에러 응답,
                 # failed_pages 기록 등)이 실제로 작동하게 한다.
+                # stderr가 비어 있으면(로그인 에러처럼 stdout으로만 원인을 알리는 경우)
+                # stdout 끝부분을 대신 보여준다.
+                detail = stderr_out.strip()[:500] or stdout_tail.strip()[-500:]
                 raise RuntimeError(
                     f"Claude Code CLI 실행 실패 (code={process.returncode}): "
-                    f"{stderr_out.strip()[:500] or '알 수 없는 오류'}"
+                    f"{detail or '알 수 없는 오류'}"
                 )
             except Exception as e:
                 logger.error(f"Claude Code CLI 실행 예외: {e}")
