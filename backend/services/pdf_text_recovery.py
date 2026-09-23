@@ -18,6 +18,8 @@ class TextRecoveryError(RuntimeError):
 def needs_text_recovery(page: fitz.Page) -> bool:
     text = page.get_text("text", flags=fitz.TEXTFLAGS_TEXT & ~fitz.TEXT_CID_FOR_UNKNOWN_UNICODE)
     visible = "".join(text.split())
+    if not visible:
+        return bool(page.get_images())
     # A few missing symbols do not justify replacing otherwise usable text.
     return visible.count("\ufffd") >= 3 and visible.count("\ufffd") / len(visible) >= 0.02
 

@@ -4382,5 +4382,8 @@
   ,"viewer:a11y.focusPinned": { "description": "Screen reader status when sentence Focus is pinned." }
   ,"viewer:a11y.focusMoved": { "description": "Screen reader status after keyboard Focus navigation." }
   ,"viewer:focus.performanceFallback": { "description": "Notice shown when Focus switches to a lower-cost visual mode." }
-,"viewer:focus.toggle": { "description": "Viewer floating Focus mode toggle; Shift+F keyboard shortcut." }
+,"viewer:focus.toggle": { "description": "Viewer floating Focus mode toggle; Shift+F keyboard shortcut." },
+  "errors:pdf_reading_order_review": {
+    "description": "Status shown on PDF pages whose reading order or source coordinates require review."
+  }
 }

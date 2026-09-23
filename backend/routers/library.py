@@ -1060,7 +1060,8 @@ async def get_library_references(doc_id: str, current_user: str = Depends(get_cu
         # 열람)에서 텍스트를 한 번 더 처음부터 추출하게 된다.
         pages = get_cached_pages(doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"))
         if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"))
+            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"),
+                                            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
             save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
         references = extract_reference_list(pages)
     except Exception:
@@ -1222,7 +1223,8 @@ async def reclassify_paper_tags(
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
     pages = get_cached_pages(doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"))
     if pages is None:
-        pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"))
+        pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"),
+                                            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
         save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
     title = (doc.get("metadata") or {}).get("title") or doc.get("filename") or ""
     paper_tags = await classify_and_store_paper_tags(doc_id, pages, title, force=True)

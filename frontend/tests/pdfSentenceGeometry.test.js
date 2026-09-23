@@ -65,3 +65,24 @@ test('translation maps all fragments around a displayed equation', () => {
   assert.equal(result.charEnd, 40)
   assert.equal(result.sentenceIdx, 0)
 })
+
+import { projectSourceRects, sourceMappingMatchesRevision } from '../src/pdfSentenceGeometry.js'
+
+test('source rectangles use crop origin and preserve separated columns', () => {
+  const mapping = { status: 'exact', coordinate_space: 'unrotated-top-left', segments: [
+    { rects: [[10, 20, 30, 40], [300, 20, 320, 40]] },
+  ] }
+  const viewport = { rawDims: { pageX: 50, pageY: 70, pageHeight: 800 },
+    convertToViewportPoint: (x, y) => [2 * (x - 50), 2 * (870 - y)] }
+  assert.deepEqual(projectSourceRects(mapping, viewport), [
+    { left: 20, top: 40, width: 40, height: 40 },
+    { left: 600, top: 40, width: 40, height: 40 },
+  ])
+  assert.deepEqual(projectSourceRects({ ...mapping, status: 'unresolved' }, viewport), [])
+})
+
+test('source mapping from a previous revision cannot highlight', () => {
+  assert.equal(sourceMappingMatchesRevision({ source_revision: 'old' }, 'new'), false)
+  assert.equal(sourceMappingMatchesRevision({ source_revision: 'new' }, 'new'), true)
+  assert.equal(sourceMappingMatchesRevision(null, 'new'), false)
+})

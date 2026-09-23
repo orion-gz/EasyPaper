@@ -72,6 +72,9 @@ async def execute_parse_task(
             asyncio.to_thread(metadata_reader, pdf_path),
             asyncio.to_thread(page_extractor, pdf_path),
         )
+        if pages and pages[0].get("layout"):
+            metadata["layout_rule_version"] = pages[0]["layout"]["rule_version"]
+
         if not isinstance(pages, list):
             raise ValueError("invalid_parser_output")
     except asyncio.CancelledError:

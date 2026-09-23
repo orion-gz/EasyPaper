@@ -90,6 +90,7 @@ async def test_apply_reparse_increments_revision_and_preserves_user_data(isolate
     old_pages = [{"page_num": 1, "text": "Original text", "parser_engine": "pymupdf"}]
     new_pages = [{"page_num": 1, "text": "Improved candidate text", "parser_engine": "pdfplumber",
                   "blocks": [{"bbox": [0, 0, 100, 20], "text": "Improved candidate text", "type": 0}]}]
+    new_pages[0]["layout"] = {"rule_version": "1", "needs_review": False}
     report = diagnose_pages(new_pages, [], "pdfplumber", "test-new")
     staging_path = isolated_dirs["library_dir"] / "candidate.json"
     staging_path.write_text(json.dumps({
@@ -125,6 +126,7 @@ async def test_apply_reparse_increments_revision_and_preserves_user_data(isolate
     assert doc["content_revision"] == 2
     assert doc["parser_engine"] == "pdfplumber"
     assert "bibliography" not in doc["metadata"]
+    assert doc["metadata"]["layout_rule_version"] == "1"
     assert sessions["reparse-doc"]["pages"] == new_pages
     assert db.db_get_translation("reparse-doc", 1, "ko", fallback=False) is None
     assert db.db_get_translation("reparse-doc", 1, "ko", fallback=False, content_revision=1) == "old translation"

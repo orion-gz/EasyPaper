@@ -6,7 +6,7 @@ from functools import lru_cache
 from typing import List, Dict, Any, Optional, Tuple
 
 
-def extract_pages(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str, Any]]:
+def extract_pages(pdf_path: str, engine: Optional[str] = None, *, normalize_layout: bool = True) -> List[Dict[str, Any]]:
     """
     PDF에서 페이지별 텍스트 블록을 추출합니다.
     선택된 엔진(pymupdf, pdfplumber, marker, mineru)에 따라 파싱을 수행합니다.
@@ -20,14 +20,18 @@ def extract_pages(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str,
 
     engine = (engine or "pymupdf").lower().strip()
 
-    if engine == "pdfplumber":
-        return _extract_pages_pdfplumber(pdf_path)
-    elif engine == "marker":
-        return _extract_pages_marker(pdf_path)
-    elif engine == "mineru":
-        return _extract_pages_mineru(pdf_path)
-    else:
-        return _extract_pages_pymupdf(pdf_path)
+    extract = {"pdfplumber": _extract_pages_pdfplumber, "marker": _extract_pages_marker,
+               "mineru": _extract_pages_mineru}.get(engine, _extract_pages_pymupdf)
+    from services.pdf_layout import normalize_document
+    pages = extract(pdf_path)
+    if not normalize_layout:
+        for page in pages:
+            page.pop("_layout_native", None)
+            if page.get("parser_engine") == "mineru":
+                page["blocks"] = [b for b in page["blocks"] if b.get("role") != "footnote" and b.get("include_in_translation", True)]
+                page["text"] = clean_text_for_translation("\n\n".join(b["text"] for b in page["blocks"]))
+        return pages
+    return normalize_document(pages, pdf_path)
 
 
 def _extract_pages_pymupdf(pdf_path: str) -> List[Dict[str, Any]]:
@@ -101,7 +105,7 @@ def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:
             pages.append({
                 "page_num": idx + 1,
                 "text": text_content,
-                "blocks": [{"bbox": tuple(page_json.bbox), "text": text_content, "type": 0}],
+                "blocks": _marker_layout_blocks(page_json),
                 "parser_engine": "marker"
             })
         return pages if pages else _extract_pages_pymupdf(pdf_path)
@@ -195,6 +199,8 @@ def sanitize_mineru_pages(pages: List[Dict[str, Any]], pdf_path: str) -> List[Di
 
     for p_idx in range(len(pages)):
         curr_p = pages[p_idx]
+        if curr_p.get("layout"):
+            continue
         has_next = p_idx + 1 < len(pages) and p_idx + 1 < len(fitz_texts)
         new_curr_blocks = []
         spillover_blocks = []
@@ -306,9 +312,7 @@ def _build_mineru_pages(content_list: Any, total_pages: int = 0, pdf_path: Optio
                 continue
 
             t = item.get("type")
-            if t in ("header", "footer", "page_footnote", "page_number"):
-                # 머리말, 꼬리말, 쪽번호, 각주는 번역 스트림에서 완전 제외
-                continue
+            excluded = t in ("header", "footer", "page_number")
 
             raw_bbox = item.get("bbox")
             if raw_bbox and len(raw_bbox) == 4:
@@ -319,24 +323,27 @@ def _build_mineru_pages(content_list: Any, total_pages: int = 0, pdf_path: Optio
             # 저널 메타데이터/여백 헤더-푸터 추가 방어 (패턴 매칭)
             if (bbox[1] < 75.0 or bbox[3] > 905.0) and len(txt) < 120:
                 if re.search(r'\b(?:Volume\s*\d+|Article\s*[a-z]?\d+|doi:|http[s]?://|www\.|Check\s+for\s+updates|esa|ECOSPHERE)\b', txt, re.IGNORECASE):
-                    continue
+                    excluded = True
                 if txt.startswith("<sub>") and txt.endswith("</sub>"):
-                    continue
+                    excluded = True
 
             if t in ("table", "image", "chart"):
                 caption_blocks.append({
                     "bbox": bbox,
                     "text": txt,
                     "type": 1,
+                    "role": "table" if t == "table" else "figure",
                 })
             else:
                 body_blocks.append({
                     "bbox": bbox,
                     "text": txt,
                     "type": 0,
+                    "role": {"page_footnote": "footnote", "interline_equation": "equation"}.get(t, t if t in ("header", "footer", "page_number") else "body"),
+                    "include_in_translation": not excluded,
                 })
 
-        body_str = "\n\n".join(b["text"] for b in body_blocks).strip()
+        body_str = "\n\n".join(b["text"] for b in body_blocks if b.get("include_in_translation", True)).strip()
         caption_str = "\n\n".join(b["text"] for b in caption_blocks).strip()
 
         if body_str and caption_str:
@@ -402,7 +409,8 @@ def _extract_page(page: fitz.Page, page_num: int, recovery_context=None) -> Dict
     if needs_text_recovery(page):
         try:
             raw = recover_text(page, recovery_context if recovery_context is not None else {})
-            recovery = {"text_recovery": "ocr", "text_layer": [
+            from services.pdf_layout import native_blocks
+            recovery = {"text_recovery": "ocr", "_layout_native": native_blocks(page, raw), "text_layer": [
                 {"text": span["text"], "bbox": list(span["bbox"]),
                  "hasEOL": index == len(line["spans"]) - 1}
                 for block in raw["blocks"] for line in block.get("lines", [])
@@ -415,6 +423,7 @@ def _extract_page(page: fitz.Page, page_num: int, recovery_context=None) -> Dict
     else:
         raw = page.get_text("dict", sort=True, flags=fitz.TEXTFLAGS_DICT & ~fitz.TEXT_CID_FOR_UNKNOWN_UNICODE)
     blocks = []
+    preserved = []
     for b in raw["blocks"]:
         if "lines" not in b or not b["lines"]:
             continue
@@ -423,16 +432,15 @@ def _extract_page(page: fitz.Page, page_num: int, recovery_context=None) -> Dict
             continue
         x0, y0, x1, y1 = b["bbox"]
         if figure_rects and _rect_mostly_inside_any(x0, y0, x1, y1, figure_rects):
+            preserved.append({"bbox": [x0, y0, x1, y1], "text": text, "type": 0,
+                              "role": "figure", "include_in_translation": False})
             continue
         blocks.append((x0, y0, x1, y1, text, is_indented))
 
-    # 2단 레이아웃 감지
+    # Preserve legacy parser order for existing documents and conservative
+    # fallback. New uploads subsequently use common layout normalization.
     is_two_column = _detect_two_column(blocks, page_width)
-
-    if is_two_column:
-        sorted_blocks = _sort_two_column(blocks, page_width)
-    else:
-        sorted_blocks = sorted(blocks, key=lambda b: (b[1], b[0]))  # y, x 순 정렬
+    sorted_blocks = _sort_two_column(blocks, page_width) if is_two_column else sorted(blocks, key=lambda b: (b[1], b[0]))
 
     # 텍스트 정제
     text_content = _build_text(sorted_blocks)
@@ -444,9 +452,10 @@ def _extract_page(page: fitz.Page, page_num: int, recovery_context=None) -> Dict
         "is_two_column": is_two_column,
         "word_count": len(text_content.split()),
         "blocks": [
-            {"bbox": [b[0], b[1], b[2], b[3]], "text": b[4], "type": 0}
+            {"bbox": [b[0], b[1], b[2], b[3]], "text": b[4], "type": 0,
+             "is_indented": b[5]}
             for b in sorted_blocks
-        ],
+        ] + preserved,
     }
 
 
@@ -1213,6 +1222,43 @@ def _marker_page_text(page_json) -> str:
     for child in page_json.children or []:
         _marker_collect_text(child, parts)
     return "\n\n".join(parts)
+
+
+def _marker_layout_blocks(page_json) -> List[Dict[str, Any]]:
+    """Retain Marker roles and group membership instead of flattening a page."""
+    result = []
+    px0, py0, px1, py1 = page_json.bbox
+    roles = {"Caption": "caption", "Footnote": "footnote", "PageHeader": "header",
+             "PageFooter": "footer", "Table": "table", "Equation": "equation",
+             "SectionHeader": "title", "Figure": "figure", "Picture": "figure", "Diagram": "figure"}
+
+    def walk(block, group=None, excluded=False):
+        kind = block.block_type
+        excluded = excluded or kind in _MARKER_SKIP_TEXT_TYPES
+        if kind in _MARKER_GROUP_REGION_TYPES:
+            group = f"marker-group-{len(result)}"
+        if block.children and kind not in {"Table", "Equation"}:
+            for child in block.children:
+                walk(child, group, excluded)
+            return
+        text = _marker_html_to_text(block.html)
+        if not text and kind not in _MARKER_LEAF_REGION_TYPES:
+            return
+        box = block.bbox
+        normalized_box = None
+        if box and px1 > px0 and py1 > py0:
+            normalized_box = [(box[0] - px0) * 1000 / (px1 - px0), (box[1] - py0) * 1000 / (py1 - py0),
+                              (box[2] - px0) * 1000 / (px1 - px0), (box[3] - py0) * 1000 / (py1 - py0)]
+        item = {"text": text, "bbox": normalized_box, "type": 0,
+                "coordinate_space": "normalized-1000", "role": roles.get(kind, "body"),
+                "include_in_translation": not excluded}
+        if group:
+            item["group_id"] = group
+        result.append(item)
+
+    for child in page_json.children or []:
+        walk(child)
+    return result
 
 
 def _marker_find_caption_text(block) -> Optional[str]:

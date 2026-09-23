@@ -21,6 +21,8 @@ def test_valid_scripts_and_sparse_missing_symbols_do_not_trigger_ocr(text):
     class Page:
         def get_text(self, *_args, **_kwargs):
             return text
+        def get_images(self):
+            return []
     assert not recovery.needs_text_recovery(Page())
 
 

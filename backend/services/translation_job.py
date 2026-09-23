@@ -375,6 +375,8 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                 job["next_retry_at"] = None
                 # 태그 분석 및 매핑 생성
                 cleaned_translation, sentences = parse_tagged_translation(translation, src_sentences)
+                from services.pdf_layout import attach_source_mappings
+                attach_source_mappings(sentences, page_data)
                 if document_mode == "general":
                     from services.translation_quality import assert_translation_integrity
                     assert_translation_integrity(text, cleaned_translation)

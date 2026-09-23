@@ -15,7 +15,7 @@ import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, 
 import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
 import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
-import { refreshTextLayerGeometry, loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
+import { sourceMappingRects, refreshTextLayerGeometry, loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
 import { icon } from './icons.js'
@@ -15966,7 +15966,8 @@ document.addEventListener('copy', (e) => {
     // 실제로 맞는 넓은 범위를 밀어내는 것을 방지하기 위함이다. 채택된 범위만 다시
     // 위치 순으로 정렬해 읽는 순서대로 이어붙인다.
     const candidates = overlappingSentences
-      .map(r => ({ r, partStart: Math.max(r.charStart, selCharStart), partEnd: Math.min(r.charEnd, selCharEnd) }))
+      .flatMap(r => (r.sourceMapping ? r.charParts || [] : [{ start: r.charStart, end: r.charEnd }])
+        .map(part => ({ r, partStart: Math.max(part.start, selCharStart), partEnd: Math.min(part.end, selCharEnd) })))
       .filter(c => c.partStart < c.partEnd)
       .sort((a, b) => (b.partEnd - b.partStart) - (a.partEnd - a.partStart));
 
@@ -16350,7 +16351,41 @@ function findDisplayEquationsFromVTM(vtm) {
 }
 
 // 문장 범위로부터 오버레이의 로컬 CSS 좌표 Rects 계산 (getClientRects 기반, 라인별 개별 상자)
+function sourceMappedRanges(sentences, vtm, container, pageNum) {
+  const coordinates = pageCoordinates(container.closest('.pdf-page-inner') || container);
+  const glyphs = [];
+  for (const nr of vtm.nodeRanges) {
+    for (let i = 0; i < nr.node.length; i++) {
+      const range = document.createRange();
+      range.setStart(nr.node, i);
+      range.setEnd(nr.node, i + 1);
+      for (const rect of range.getClientRects()) {
+        if (rect.width > 0 && rect.height > 0) glyphs.push({ index: nr.start + i, ...coordinates.rectToLocal(rect) });
+      }
+    }
+  }
+  return sentences.map(sentence => {
+    const mapping = sentence.source_mapping || { status: 'unresolved', segments: [] };
+    const boxes = sourceMappingRects(pageNum, mapping);
+    const indices = glyphs.filter(g => boxes.some(b => {
+      const x = g.left + g.width / 2, y = g.top + g.height / 2;
+      return x >= b.left && x <= b.left + b.width && y >= b.top && y <= b.top + b.height;
+    })).map(g => g.index);
+    const parts = [];
+    for (const index of [...new Set(indices)].sort((a, b) => a - b)) {
+      if (parts.length && parts.at(-1).end === index) parts.at(-1).end++;
+      else parts.push({ start: index, end: index + 1 });
+    }
+    return { start: parts[0]?.start ?? -1, end: parts.at(-1)?.end ?? -1,
+      text: sentence.src, sourceMapping: mapping, charParts: parts };
+  });
+}
+
 function getSentenceRects(sentenceRange, vtm, containerEl) {
+  if (sentenceRange.sourceMapping) {
+    const pageNum = containerEl.closest('.pdf-page-wrapper')?.dataset.page;
+    return mergePdfHighlightRects(sourceMappingRects(pageNum, sentenceRange.sourceMapping));
+  }
   const { nodeRanges } = vtm;
   const coordinates = pageCoordinates(containerEl.closest('.pdf-page-inner') || containerEl);
   const mergedRects = [];
@@ -16560,7 +16595,9 @@ function segmentPdfElements(container, pageNum) {
     const sentences = state.translationSentences && state.translationSentences[pageNum];
     if (sentences && sentences.length > 0) {
       const srcSents = sentences.map(s => s.src);
-      sentenceRanges = alignSentencesToText(fullText, srcSents, pageNum);
+      sentenceRanges = sentences.some(s => s.source_mapping)
+        ? sourceMappedRanges(sentences, vtm, container, pageNum)
+        : alignSentencesToText(fullText, srcSents, pageNum);
     } else {
       sentenceRanges = splitIntoSentences(fullText);
     }
@@ -16582,7 +16619,7 @@ function segmentPdfElements(container, pageNum) {
         // 이미 앞선 eq에서 수식으로 잘려나온 조각은 다시 잘라내지 않는다.
         // 그렇지 않으면 두 수식 줄의 정렬 경계가 서로 살짝 겹칠 때 아주 짧은(1~2자)
         // 잔여 조각이 다음 eq와 또 겹쳐 잘못된(이전) 수식의 latexData를 물려받는다.
-        if (sent.isEquation) {
+        if (sent.isEquation || sent.sourceMapping) {
           nextRanges.push(sent);
           continue;
         }
@@ -16604,7 +16641,7 @@ function segmentPdfElements(container, pageNum) {
           nextRanges.push({ ...sent, charStart: overlapEnd, start: overlapEnd, text: fullText.substring(overlapEnd, sent.charEnd) });
         }
       }
-      currentRanges = nextRanges.filter(r => r.charStart < r.charEnd);
+      currentRanges = nextRanges.filter(r => r.sourceMapping || r.charStart < r.charEnd);
     }
     sentenceRanges = currentRanges;
 
@@ -16991,6 +17028,10 @@ function findSentenceAtChar(charIdx, sentenceRanges) {
   if (!sentenceRanges || sentenceRanges.length === 0) return null;
   let best = null;
   for (const r of sentenceRanges) {
+    if (r.sourceMapping) {
+      if (r.charParts?.some(part => charIdx >= part.start && charIdx < part.end)) return r;
+      continue;
+    }
     if (charIdx >= r.charStart && charIdx < r.charEnd) {
       if (!best || (r.charEnd - r.charStart) < (best.charEnd - best.charStart)) {
         best = r;
@@ -17196,7 +17237,7 @@ const legacyFocusPartsCache = new WeakMap()
 function legacyFocusParts(pageNum, sentenceIdx) {
   if (!focusModeController?.settings.enabled) return []
   const pair = state.translationSentences?.[pageNum]?.[sentenceIdx]
-  if (!pair || !/[。！？]/.test(pair.src || '')) return []
+  if (!pair || pair.source_mapping || !/[。！？]/.test(pair.src || '')) return []
   const vtm = state.virtualTextMaps?.[pageNum]
   const whole = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [], sentenceIdx)
   if (!vtm || !whole) return []
@@ -17266,7 +17307,18 @@ function focusPairRects(ref) {
   const part = ref.partIdx !== undefined ? legacyFocusParts(ref.pageNum, ref.sentenceIdx)[ref.partIdx] : null
   if (part) sentenceRange = { ...sentenceRange, charStart: part.charStart, charEnd: part.charEnd }
   const vtm = state.virtualTextMaps?.[ref.pageNum]
-  if (sentenceRange && vtm) {
+  if (sentenceRange?.sourceMapping) {
+    const canvas = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${ref.pageNum}"] canvas`)
+    if (canvas) {
+      const bounds = canvas.getBoundingClientRect()
+      const scaleX = bounds.width / Number.parseFloat(canvas.style.width)
+      const scaleY = bounds.height / Number.parseFloat(canvas.style.height)
+      sourceRects.push(...sourceMappingRects(ref.pageNum, sentenceRange.sourceMapping).map(rect => ({
+        left: bounds.left + rect.left * scaleX, top: bounds.top + rect.top * scaleY,
+        width: rect.width * scaleX, height: rect.height * scaleY,
+      })))
+    }
+  } else if (sentenceRange && vtm) {
     for (const nr of vtm.nodeRanges) {
       const start = Math.max(nr.start, sentenceRange.charStart), end = Math.min(nr.end, sentenceRange.charEnd)
       if (start >= end) continue
@@ -17324,6 +17376,11 @@ function startDwellSelection(pageNum, sentenceRange) {
 
     const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
     if (!vtm) return
+    if (sentenceRange.sourceMapping) {
+      const parts = sentenceRange.charParts || []
+      if (!parts.length || parts.some((part, index) => index > 0
+        && vtm.fullText.slice(parts[index - 1].end, part.start).trim())) return
+    }
     const range = createDomRangeFromVtmRange(vtm, sentenceRange.charStart, sentenceRange.charEnd)
     if (!range) return
 
