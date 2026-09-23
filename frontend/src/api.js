@@ -1,4 +1,5 @@
 import { errorMessage } from './i18n.js'
+import { translationError } from './translationFeedback.js'
 
 const API_BASE = '/api'
 
@@ -243,7 +244,7 @@ export function streamTranslation(sessionId, pageNum, options, onToken, onDone, 
     .then(async (res) => {
       if (!res.ok) {
         const err = await res.json()
-        onError(new Error(errorMessage(err)))
+        onError(translationError(err))
         return
       }
 
@@ -253,7 +254,7 @@ export function streamTranslation(sessionId, pageNum, options, onToken, onDone, 
 
       while (true) {
         const { value, done } = await reader.read()
-        if (done) break
+        if (done) throw new Error(errorMessage({ code: 'network' }))
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
@@ -267,14 +268,14 @@ export function streamTranslation(sessionId, pageNum, options, onToken, onDone, 
           try {
             const data = JSON.parse(jsonStr)
             if (data.error) {
-              onError(new Error(errorMessage(data.error, data.fallback)))
+              onError(translationError(data.error, data.fallback))
               return
             }
             if (data.content) {
               onToken(data.content, data.cached || false)
             }
             if (data.done) {
-              onDone(data.cached || false, data.sentences || [])
+              onDone(data.cached || false, data.sentences || [], data.warnings || [])
               return
             }
           } catch (e) {

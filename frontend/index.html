@@ -175,7 +175,7 @@
               </div>
               <div>
                 <div class="lib-add-fab-wrap">
-                  <button id="lib-upload-btn" class="file-btn lib-add-main-btn" aria-expanded="false" aria-label="추가 메뉴 열기" data-i18n-aria-label="common:addMenu.open"><span aria-hidden="true">+</span></button>
+                  <button id="lib-upload-btn" class="file-btn lib-add-main-btn" aria-expanded="false" aria-label="추가 메뉴 열기" data-i18n-aria-label="common:addMenu.open"><svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
                   <button id="lib-add-paper-btn" class="lib-add-sub-btn"><span class="lib-add-label" data-i18n="library:addDocument">논문 추가</span><span class="lib-add-circle" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z"/><path d="M14 2v6h6"/></svg></span></button>
                   <button id="lib-add-folder-btn" class="lib-add-sub-btn"><span class="lib-add-label" data-i18n="library:addFolder">폴더 추가</span><span class="lib-add-circle" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/><path d="M12 11v6M9 14h6"/></svg></span></button>
                 </div>
@@ -512,9 +512,13 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
               <span>번역 범위 선택</span>
             </button>
-            <button id="retranslate-btn" class="kebab-menu-item" title="처음부터 다시 번역하기">
+            <button id="translate-document-btn" class="kebab-menu-item hidden" title="문서 전체 번역" data-i18n-title="viewer:translation.full">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span data-i18n="viewer:translation.full">문서 전체 번역</span>
+            </button>
+            <button id="retranslate-btn" class="kebab-menu-item" title="번역본 초기화" data-i18n-title="viewer:translation.reset">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              <span>문서 전체 재번역</span>
+              <span data-i18n="viewer:translation.reset">번역본 초기화</span>
             </button>
             <button id="cancel-trans-btn" class="kebab-menu-item hidden" title="번역 작업 중지" style="color: var(--error);">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>

@@ -115,7 +115,7 @@ async def translate_page(
                 data = json.dumps({"content": chunk, "done": False, "cached": True}, ensure_ascii=False)
                 yield f"data: {data}\n\n"
                 await asyncio.sleep(0.01)
-            yield f"data: {json.dumps({'content': '', 'done': True, 'cached': True, 'sentences': cached_sentences}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'content': '', 'done': True, 'cached': True, 'sentences': cached_sentences, 'warnings': full_cached.get('warnings', [])}, ensure_ascii=False)}\n\n"
             return
 
         # 텍스트가 없는 페이지 처리
@@ -193,12 +193,17 @@ async def translate_page(
             cleaned_translation, sentences = parse_tagged_translation(complete_translation, src_sentences)
             from services.pdf_layout import attach_source_mappings
             attach_source_mappings(sentences, page_data)
+            warnings = []
             if document_mode == "general":
-                from services.translation_quality import assert_translation_integrity
-                assert_translation_integrity(page_text, cleaned_translation)
+                from services.translation_quality import check_translation_integrity
+                warnings = check_translation_integrity(
+                    page_text, cleaned_translation, style=style, ignore_math=ignore_math,
+                    ignore_table=ignore_table, ignore_refs=ignore_refs,
+                )
             payload_data = {
                 "translation": cleaned_translation,
-                "sentences": sentences
+                "sentences": sentences,
+                "warnings": warnings,
             }
             payload_json = json.dumps(payload_data, ensure_ascii=False)
             
@@ -207,11 +212,12 @@ async def translate_page(
 
         except Exception as e:
             logger.exception("Page translation failed: session=%s page=%s mode=%s", session_id, page_num, document_mode)
-            error_data = json.dumps({"error": {"code": "generation_failed", "params": {}, "fallback": "Generation failed."}, "done": True})
+            from services.generation_errors import generation_error_payload
+            error_data = json.dumps({"error": generation_error_payload(e), "done": True}, ensure_ascii=False)
             yield f"data: {error_data}\n\n"
             return
 
-        yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False, 'sentences': sentences}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'content': '', 'done': True, 'cached': False, 'sentences': sentences, 'warnings': warnings}, ensure_ascii=False)}\n\n"
 
 
     return StreamingResponse(
@@ -327,6 +333,18 @@ async def clear_translation_cache(session_id: str, current_user: str = Depends(g
         except HTTPException:
             raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
 
+    # 취소 처리도 잡 파일을 저장하므로, 종료를 기다린 뒤 캐시와 잡을 삭제한다.
+    from services.translation_job import _running_tasks, _job_path
+    task = _running_tasks.get(session_id)
+    if task is not None:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        if _running_tasks.get(session_id) is task:
+            _running_tasks.pop(session_id, None)
+
     # 1. 파일 캐시 삭제
     from services.cache import clear_session_cache, clear_derived_session_cache
     clear_session_cache(session_id)
@@ -359,15 +377,9 @@ async def clear_translation_cache(session_id: str, current_user: str = Depends(g
         except Exception:
             pass
             
-    # 3. 백그라운드 태스크 취소 및 잡 파일 삭제
-    from services.translation_job import _running_tasks, _job_path
-    if session_id in _running_tasks:
-        try:
-            _running_tasks[session_id].cancel()
-            del _running_tasks[session_id]
-        except Exception:
-            pass
-        
+    # 3. 종료된 잡 파일 삭제
+    from services.document_tasks import clear_translation_tasks
+    clear_translation_tasks(session_id)
     job_path = _job_path(session_id)
     if os.path.exists(job_path):
         try:

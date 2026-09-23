@@ -1,4 +1,10 @@
 {
+  "viewer:translation.reset": { "description": "Viewer menu action that deletes existing translations without starting a batch job." },
+  "viewer:translation.full": { "description": "Viewer menu action to translate all missing pages, available in automatic mode." },
+  "viewer:translation.resetConfirm": { "description": "Confirmation before deleting all document translations." },
+  "viewer:translation.resetDone": { "description": "Toast after translation reset succeeds." },
+  "viewer:translation.settingsResetConfirm": { "description": "Confirmation to reset translations after changing translation options." },
+  "viewer:translation.startFromMenu": { "description": "Empty translation pane guidance for automatic mode after reset." },
   "errors:pdf_ocr_unavailable": {"description": "Local OCR executable or trained data is unavailable for an unmapped PDF."},
   "errors:pdf_ocr_language_missing": {"description": "The detected script has no installed OCR model."},
   "errors:pdf_ocr_failed": {"description": "Local OCR could not recover usable page text."},
@@ -4383,6 +4389,42 @@
   ,"viewer:a11y.focusMoved": { "description": "Screen reader status after keyboard Focus navigation." }
   ,"viewer:focus.performanceFallback": { "description": "Notice shown when Focus switches to a lower-cost visual mode." }
 ,"viewer:focus.toggle": { "description": "Viewer floating Focus mode toggle; Shift+F keyboard shortcut." },
+  "errors:translation_integrity_failed": {
+    "description": "Translation was generated, but required source values are missing or changed: {{missing}}. Compare with the original and retry."
+  },
+  "errors:translation_integrity_warning": {
+    "description": "Some source values are absent: {{missing}}. Omission options or summary style may explain this; compare with the original."
+  },
+  "errors:translation_empty": {
+    "description": "The model returned an empty translation. Check the model and retry."
+  },
+  "errors:cli_response_timeout": {
+    "description": "No CLI output was received for {{seconds}} seconds. The session may still contain a result; check the CLI and retry."
+  },
+  "errors:cli_exit_timeout": {
+    "description": "The CLI did not exit within {{seconds}} seconds after closing its output. Check the CLI process."
+  },
+  "errors:cli_execution_failed": {
+    "description": "The CLI exited with code {{exit_code}}. Check the server logs for details."
+  },
+  "errors:rate_limited": {
+    "description": "The provider request limit was reached. Wait and retry."
+  },
+  "errors:provider_unavailable": {
+    "description": "The model provider is temporarily unavailable. Retry later."
+  },
+  "errors:timeout": {
+    "description": "The model request timed out. Retry later."
+  },
+  "errors:network_error": {
+    "description": "Could not connect to the model provider. Check the connection."
+  },
+  "errors:authentication_failed": {
+    "description": "Provider authentication failed. Check the API key or CLI login."
+  },
+  "errors:unsupported_model": {
+    "description": "The selected model is unavailable. Check the model setting."
+  },
   "errors:pdf_reading_order_review": {
     "description": "Status shown on PDF pages whose reading order or source coordinates require review."
   }

@@ -98,7 +98,8 @@ async def get_page_translation(
     return {
         "page_num": page_num,
         "translation": full_cached["translation"],
-        "sentences": full_cached.get("sentences", [])
+        "sentences": full_cached.get("sentences", []),
+        "warnings": full_cached.get("warnings", [])
     }
 
 

@@ -760,7 +760,8 @@ async def get_library_translation(
     return {
         "page": page_num,
         "translation": full_cached["translation"],
-        "sentences": full_cached.get("sentences", [])
+        "sentences": full_cached.get("sentences", []),
+        "warnings": full_cached.get("warnings", [])
     }
 
 
