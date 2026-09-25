@@ -133,7 +133,7 @@ FRONTEND_CSP = (
     "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
     "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
     "worker-src 'self' blob: https://cdnjs.cloudflare.com; object-src 'none'; "
-    "base-uri 'self'; frame-ancestors 'none'"
+    "base-uri 'self'; frame-ancestors 'self'"
 )
 
 

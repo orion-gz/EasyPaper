@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A, SAMPLE_PDF_B } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A, SAMPLE_PDF_B } from './helpers.js'
 
 // pdf-page-wrapper DOM은 문서 전환 시 재사용되는데, 이전 문서의 비동기
 // _renderPage()가 뒤늦게 끝나며 새 문서용으로 이미 정리된 wrapper에 옛
@@ -29,9 +29,9 @@ test('문서를 빠르게 연속 전환해도 최종적으로 올바른 문서 �
   await gotoApp(page)
 
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
-  await page.waitForTimeout(1500)
+  await expect(activeReader(page).locator('.pdf-page-wrapper canvas')).toBeAttached({ timeout: 15000 })
 
-  const initialCanvas = await page.evaluate(() => {
+  const initialCanvas = await evaluateReader(page, () => {
     const wrapper = document.querySelector('.pdf-page-wrapper[data-page="1"]')
     const canvas = wrapper?.querySelector('canvas')
     return canvas ? { width: canvas.width, height: canvas.height } : null
@@ -46,10 +46,10 @@ test('문서를 빠르게 연속 전환해도 최종적으로 올바른 문서 �
   await page.waitForTimeout(50)
   await page.evaluate(() => { location.hash = '#viewer?id=doc-B' })
 
-  await expect(page.locator('#doc-title')).toHaveText('Document B')
-  await expect(page.locator('.pdf-page-wrapper[data-page="1"] canvas')).toBeAttached({ timeout: 5_000 })
+  await expect(activeReader(page).locator('#doc-title')).toHaveText('Document B')
+  await expect(activeReader(page).locator('.pdf-page-wrapper[data-page="1"] canvas')).toBeAttached({ timeout: 5_000 })
 
-  const finalState = await page.evaluate(() => {
+  const finalState = await evaluateReader(page, () => {
     const wrappers = document.querySelectorAll('.pdf-page-wrapper')
     const canvas = wrappers[0]?.querySelector('canvas')
     return { wrapperCount: wrappers.length, hasCanvas: !!canvas }

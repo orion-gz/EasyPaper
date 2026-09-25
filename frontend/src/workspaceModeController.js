@@ -68,7 +68,7 @@ export function createWorkspaceModeController({
   function updateCopy() {
     const copy = modeCopy(mode)
     document.body.dataset.workspaceMode = mode
-    document.querySelectorAll('[data-workspace-mode]').forEach(button => {
+    document.querySelectorAll('button[data-workspace-mode]').forEach(button => {
       const selected = button.dataset.workspaceMode === mode
       button.setAttribute('aria-selected', String(selected))
       button.tabIndex = selected ? 0 : -1
@@ -118,7 +118,7 @@ export function createWorkspaceModeController({
     await onModeChange(mode)
   }
 
-  document.querySelectorAll('[data-workspace-mode]').forEach(button => {
+  document.querySelectorAll('button[data-workspace-mode]').forEach(button => {
     button.addEventListener('click', () => setMode(button.dataset.workspaceMode))
     button.addEventListener('keydown', event => {
       if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return

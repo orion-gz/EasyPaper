@@ -1,0 +1,141 @@
+/* Shared shell owns the viewport; each document owns its reader coordinates. */
+#tab-workspace { position: fixed; inset: 0; display: flex; background: var(--bg-primary); color: var(--text-primary); }
+#tab-workspace[hidden], .workspace-document-frame[hidden], .workspace-tab-menu[hidden] { display: none !important; }
+.tab-workspace-main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+#tab-workspace .workspace-topnav { min-height: 60px; height: 60px; padding: 0 16px 0 8px; gap: 16px; flex-shrink: 0; }
+#tab-workspace .workspace-topnav-actions { flex-shrink: 0; }
+#tab-workspace .workspace-search-box { width: 180px; }
+#tab-workspace .workspace-mode-switch-compact { display: none; }
+#workspace-tab-panel { position: relative; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+#workspace-tab-panel > .screen { position: absolute; inset: 0; width: 100%; height: 100%; }
+#workspace-tab-panel .library-container, #workspace-tab-panel .workspace-main { width: 100%; min-width: 0; height: 100%; }
+#workspace-tab-panel:fullscreen { background: var(--bg-primary); }
+.workspace-document-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg-surface); }
+.workspace-tab-controls { display: flex; align-items: center; min-width: 0; flex: 1; position: relative; height: 100%; gap: 4px; }
+.workspace-tab-list { display: flex; align-items: stretch; overflow-x: auto; scrollbar-width: thin; flex: 1; min-width: 0; height: 100%; padding-top: 10px; }
+.workspace-tab { display: flex; align-items: center; flex: 0 0 auto; max-width: 240px; min-width: 130px; border: 1px solid transparent; border-radius: 10px 10px 0 0; padding: 0 7px; position: relative; }
+.workspace-tab + .workspace-tab { border-left-color: var(--border); }
+.workspace-tab.active { background: var(--bg-surface); border-color: var(--border); border-bottom-color: transparent; }
+.workspace-tab.active::after { content: ''; position: absolute; bottom: 0; height: 2px; left: 12px; right: 12px; background: var(--control-accent, #4e6aff); }
+.workspace-tab [role=tab] { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; height: 100%; border: 0; background: none; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; }
+.workspace-tab.active [role=tab] { color: var(--text-primary); }
+.workspace-tab [role=tab] svg { flex-shrink: 0; color: var(--control-accent, #4e6aff); }
+.workspace-tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-tab-close { flex-shrink: 0; border: 0; background: transparent; color: var(--text-muted); border-radius: 5px; width: 24px; height: 26px; font-size: 17px; cursor: pointer; }
+.workspace-tab-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+.workspace-tab-status { color: var(--control-accent, #4e6aff); }
+.workspace-tab-status.error { color: var(--error); }
+.workspace-tab-status.busy { animation: workspace-spin 1.2s linear infinite; }
+@keyframes workspace-spin { to { transform: rotate(360deg); } }
+.workspace-tab-add { font-size: 24px; flex-shrink: 0; }
+.workspace-tab-overflow { width: 28px; color: var(--text-secondary); background: transparent; border: 0; }
+.workspace-tab-menu { position: absolute; top: 54px; right: 0; z-index: 100; padding: 6px; border: 1px solid var(--border); background: var(--bg-surface); box-shadow: var(--shadow-lg); border-radius: 10px; min-width: 190px; }
+.workspace-tab-menu button { display: block; padding: 10px 14px; width: 100%; background: none; border: 0; color: var(--text-primary); text-align: left; cursor: pointer; }
+.workspace-tab-menu button:hover { background: var(--bg-hover); }
+.workspace-tab-controls :focus-visible, .document-panel-tabs :focus-visible, .document-outline-tabs :focus-visible { outline: 2px solid var(--control-accent, #4e6aff); outline-offset: -2px; }
+.has-tab-workspace > #chat-drawer { top: 60px; height: calc(100% - 60px); }
+.document-workspace-runtime #library-screen, .document-workspace-runtime #global-theme-toggle, .document-workspace-runtime #global-logout-btn, .document-workspace-runtime #global-settings-btn { display: none !important; }
+.document-workspace-runtime #viewer-screen { padding: 10px; background: var(--bg-primary); }
+.document-workspace-runtime #viewer-topbar { position: absolute; inset: 10px 10px auto; height: 48px; min-height: 48px; width: auto; flex-direction: row; border: 1px solid var(--border); border-radius: 10px 10px 0 0; padding: 0 12px; transform: none; }
+.document-workspace-runtime #viewer-topbar .topbar-left, .document-workspace-runtime #viewer-topbar .topbar-right { flex-direction: row; min-width: 0; }
+.document-workspace-runtime #logo-btn, .document-workspace-runtime .topbar-center { display: none; }
+.document-workspace-runtime #doc-title { max-width: 260px !important; font-size: 13px; }
+.document-workspace-runtime .panels { position: absolute; inset: 58px 10px 10px; padding: 0; height: auto; border: 1px solid var(--border); border-radius: 0 0 10px 10px; overflow: hidden; }
+.document-workspace-runtime #outline-sidebar { position: absolute; top: 58px; bottom: 10px; left: 10px; width: 220px; border-radius: 0 0 0 10px; z-index: 20; }
+.document-workspace-runtime #viewer-screen:has(#outline-sidebar:not(.hidden)) .panels { left: 230px; }
+.document-workspace-runtime #chat-sidebar { width: 360px; min-width: 300px; max-width: 480px; border-left: 1px solid var(--border); background: var(--bg-surface); }
+.document-workspace-runtime .viewer-scroll-container { min-width: 0; background: var(--bg-primary); }
+.document-workspace-runtime .page-pair { gap: 18px; padding: 10px 12px; }
+.document-workspace-runtime #viewer-screen[data-reading-mode=original] .trans-page-block { display: none; }
+.document-workspace-runtime #viewer-screen[data-reading-mode=translation] .pdf-page-wrapper { visibility: hidden; width: 0 !important; min-width: 0 !important; flex: 0 0 0; overflow: hidden; }
+.document-workspace-runtime #viewer-screen[data-reading-mode=original] .pdf-page-wrapper { margin-inline: auto; }
+.document-workspace-runtime #viewer-screen[data-reading-mode=translation] .trans-page-block { flex: 1; }
+.document-workspace-runtime #workspace-reading-mode { border: 1px solid var(--border); border-radius: 6px; background: var(--bg-surface); color: var(--text-primary); padding: 6px; max-width: 120px; }
+.document-panel-tabs, .document-outline-tabs { display: flex; align-items: stretch; gap: 8px; flex-shrink: 0; }
+.document-panel-tabs { padding: 0 12px; min-height: 48px; border-bottom: 1px solid var(--border); }
+.document-panel-tabs button, .document-outline-tabs button { border: 0; background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; padding: 10px 6px; white-space: nowrap; }
+.document-panel-tabs button[aria-selected=true], .document-outline-tabs button[aria-pressed=true] { color: var(--control-accent, #4e6aff); box-shadow: inset 0 -2px var(--control-accent, #4e6aff); }
+.document-workspace-runtime .chat-title-area { display: none !important; }
+.document-workspace-runtime .chat-header { min-height: 0; height: 0; padding: 0; border: 0; position: relative; }
+.document-workspace-runtime #chat-close-btn { position: absolute; right: 5px; top: -36px; }
+.document-workspace-runtime .document-panel-tabs { padding-right: 32px; }
+.document-model-row { padding: 12px; border-bottom: 1px solid var(--border); }
+.document-workspace-runtime #chat-sidebar[data-tool-panel=notes] > :not(.document-panel-tabs):not(.chat-header):not(.document-resource-list),
+.document-workspace-runtime #chat-sidebar[data-tool-panel=annotations] > :not(.document-panel-tabs):not(.chat-header):not(.document-resource-list) { display: none !important; }
+.document-resource-list { overflow: auto; padding: 12px; flex: 1; }
+.document-resource-list[hidden], .document-thumbnails[hidden], .document-workspace-runtime #outline-content[hidden] { display: none !important; }
+.document-resource { width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px; margin-bottom: 8px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; text-align: left; cursor: pointer; }
+.document-resource small { color: var(--control-accent, #4e6aff); }
+.document-resource span { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.document-resources-empty { color: var(--text-muted); font-size: 13px; line-height: 1.6; padding: 14px; }
+.document-thumbnails { overflow: auto; padding: 12px; }
+.document-thumbnails button { display: flex; gap: 8px; width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--text-secondary); cursor: pointer; }
+.document-thumbnails button.active { border-color: var(--control-accent, #4e6aff); background: var(--bg-hover); }
+.document-thumbnails canvas { width: 110px; min-height: 140px; background: white; box-shadow: 0 1px 5px #0001; }
+.document-workspace-runtime #floating-scroll-nav { position: fixed; bottom: 26px; right: calc(26px + var(--chat-sidebar-offset, 0px)); display: flex; flex-direction: row; gap: 4px; background: #1d2a4a; color: #fff; padding: 6px; border-radius: 10px; box-shadow: 0 4px 14px #16244933; }
+.document-workspace-runtime #floating-scroll-nav .view-group { display: flex; align-items: center; }
+.document-workspace-runtime #floating-scroll-nav button, .document-workspace-runtime #floating-scroll-nav .zoom-label { color: white; }
+.document-workspace-runtime #scroll-top-btn, .document-workspace-runtime #scroll-bottom-btn { display: none; }
+body.light-theme #tab-workspace { background: #f3f7fc; }
+body.light-theme #tab-workspace .app-sidebar { background: #f7faff; }
+body.light-theme #tab-workspace .workspace-topnav { background: #eff4fa; }
+.document-workspace-runtime.light-theme #viewer-screen, .document-workspace-runtime.light-theme .viewer-scroll-container { background: #f5f8fd; }
+.workspace-load-error { padding: 32px; color: var(--text-primary); }
+@media (max-width: 859px) {
+  .document-workspace-runtime #viewer-screen:has(#outline-sidebar:not(.hidden)) .panels { left: 10px; }
+  .document-workspace-runtime #chat-sidebar:not(.hidden) { position: absolute; top: 0; right: 0; bottom: 0; max-width: min(480px, 95%); z-index: 30; box-shadow: -8px 0 24px #0002; }
+  .document-workspace-runtime #chat-resizer { display: none; }
+  .document-workspace-runtime #doc-title { max-width: 150px !important; }
+  .document-workspace-runtime #floating-scroll-nav { right: 24px; }
+}
+@media (max-width: 700px) { #tab-workspace .workspace-search-box { display: none; } #tab-workspace .workspace-topnav { gap: 0; padding-right: 4px; } .document-workspace-runtime #viewer-topbar { gap: 4px; } .document-workspace-runtime #doc-title { max-width: 85px !important; } .document-workspace-runtime #viewer-primer-btn, .document-workspace-runtime #doc-title-edit-btn, .document-workspace-runtime .toolbar-divider { display: none; } }
+@media (prefers-reduced-motion: reduce) { .workspace-tab-status.busy { animation: none; } }
+
+/* Custom select enhancement must keep the compact tab controls compact. */
+.workspace-tab-controls .custom-select-picker:has(.workspace-tab-overflow) { width: 30px; flex: 0 0 30px; }
+.workspace-tab-controls .custom-select-picker:has(.workspace-tab-overflow) .picker-label { display: none; }
+.workspace-tab-controls .custom-select-picker:has(.workspace-tab-overflow) .provider-picker-btn { padding: 7px; min-width: 28px; }
+.document-workspace-runtime .custom-select-picker:has(#workspace-reading-mode) { width: 118px; flex: 0 0 118px; }
+.document-workspace-runtime .document-outline-tabs { flex: 1; gap: 4px; }
+.document-workspace-runtime #floating-scroll-nav .page-display { color: white; font-size: 12px; }
+.document-workspace-runtime #floating-scroll-nav #page-input { color: white; background: #ffffff12; width: 38px; }
+.document-workspace-runtime.document-narrow #viewer-screen:has(#outline-sidebar:not(.hidden)) .panels { left: 10px; }
+.document-workspace-runtime.document-narrow #chat-sidebar:not(.hidden) { position: absolute; top: 0; right: 0; bottom: 0; max-width: min(480px, 95%); z-index: 30; box-shadow: -8px 0 24px #0002; }
+.document-workspace-runtime.document-narrow #chat-resizer { display: none; }
+.document-workspace-runtime.document-narrow #floating-scroll-nav { right: 24px; }
+.document-workspace-runtime #viewer-screen[data-reading-mode=original] .article-translation { display: none; }
+.document-workspace-runtime #viewer-screen[data-reading-mode=translation] .article-original { display: none; }
+
+/* Chat detail is an internal view of the AI Chats tab. */
+.has-tab-workspace #chat-drawer-overlay { display: none !important; }
+#workspace-tab-panel > #chat-drawer { position: absolute; inset: 0; width: 100%; max-width: none; height: 100%; border: 0; border-radius: 0; }
+#workspace-tab-panel > #chat-drawer:not(.open) { display: none; }
+#workspace-tab-panel > #chat-drawer.open { transform: none; }
+.document-workspace-runtime #login-screen { display: none !important; }
+body.sidebar-collapsed #tab-workspace .workspace-mode-switch-compact { display: grid; width: 108px; }
+.document-workspace-runtime #viewer-topbar .toolbar-group { flex-shrink: 0; }
+
+.document-panel-tabs button[aria-selected=true], .document-outline-tabs button[aria-pressed=true], .document-resource small { color: var(--control-accent-text, #95b3f5); }
+
+/* Keep the iframe viewport in physical CSS pixels; scale the reader internally.
+   This also keeps native selections and browser automation coordinates aligned. */
+.workspace-document-frame { zoom: calc(1 / var(--workspace-ui-scale, 1)); }
+.document-workspace-runtime #viewer-screen:not([data-reading-mode=parallel]) .article-unit { grid-template-columns: minmax(0, 1fr); }
+
+.document-workspace-runtime #floating-scroll-nav #viewer-focus-toggle { position: static; margin: 0; width: 32px; height: 32px; }
+@media (max-width: 1100px) { #tab-workspace .workspace-mode-switch-compact { display: grid; width: 108px; flex-shrink: 0; } }
+
+/* The reading controls keep their dark surface in both application themes. */
+.document-workspace-runtime #floating-scroll-nav .view-group,
+.document-workspace-runtime #floating-scroll-nav .page-display,
+.document-workspace-runtime #floating-scroll-nav button { background: transparent; border-color: transparent; box-shadow: none; }
+.document-workspace-runtime #floating-scroll-nav button { color: #fff !important; }
+.document-workspace-runtime #floating-scroll-nav button:hover,
+.document-workspace-runtime #floating-scroll-nav #viewer-focus-toggle[aria-pressed=true] { background: #ffffff24; }
+.document-workspace-runtime #floating-scroll-nav #page-input { border-color: #ffffff38; }
+.document-workspace-runtime.document-narrow #viewer-screen:has(#chat-sidebar:not(.hidden)) #floating-scroll-nav { display: none; }
+
+/* Large originals must remain reachable from the left edge when panels are open. */
+.document-workspace-runtime .viewer-scroll-container { align-items: safe center; }
+.document-workspace-runtime .page-pair { justify-content: safe center; }
+.document-workspace-runtime #viewer-screen[data-reading-mode=original] .page-pair { max-width: none; flex-shrink: 0; }

@@ -73,7 +73,11 @@ export async function moveLibraryDocuments(docIds, folderId) {
 
 export async function fetchLibraryDoc(docId, options = {}) {
   const res = await fetch(`${API_BASE}/library/${docId}${buildQuery(options)}`)
-  if (!res.ok) throw new Error('문서 조회 실패')
+  if (!res.ok) {
+    const error = new Error('문서 조회 실패')
+    error.status = res.status
+    throw error
+  }
   return res.json()
 }
 

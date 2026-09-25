@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp } from './helpers.js'
 
 // Short landscape pages make the difference from the 841pt placeholder visible.
 function makePDF(pageCount, mixedSizes) {
@@ -37,12 +37,12 @@ for (const mixedSizes of [false, true]) {
       await route.fulfill({ json: doc })
     })
     const expectRestored = async () => {
-      await expect(page.locator(`.pdf-page-wrapper[data-page="${expectedPage}"] canvas`)).toBeAttached()
+      await expect(activeReader(page).locator(`.pdf-page-wrapper[data-page="${expectedPage}"] canvas`)).toBeAttached()
       // Allow lazy rendering, smooth scrolling and the bookmark debounce to settle.
       await page.waitForTimeout(2200)
-      await expect(page.locator('#page-input')).toHaveValue(String(expectedPage))
+      await expect(activeReader(page).locator('#page-input')).toHaveValue(String(expectedPage))
       expect(savedPages.every(pageNum => pageNum === 15 || pageNum === 19)).toBe(true)
-      const offset = await page.locator(`.page-pair[data-page="${expectedPage}"]`).evaluate(pair =>
+      const offset = await activeReader(page).locator(`.page-pair[data-page="${expectedPage}"]`).evaluate(pair =>
         pair.getBoundingClientRect().top - document.querySelector('#viewer-scroll-container').getBoundingClientRect().top)
       expect(Math.abs(offset)).toBeLessThan(50)
     }
@@ -50,12 +50,12 @@ for (const mixedSizes of [false, true]) {
     await page.evaluate(() => { location.hash = '#viewer?id=reading-position' })
     await expectRestored()
     expectedPage = 19
-    await page.locator('.page-pair[data-page="19"]').evaluate(pair => pair.scrollIntoView({ behavior: 'instant', block: 'start' }))
+    await activeReader(page).locator('.page-pair[data-page="19"]').evaluate(pair => pair.scrollIntoView({ behavior: 'instant', block: 'start' }))
     await expect.poll(() => doc.metadata.last_page).toBe(19)
     await page.reload()
     await expectRestored()
-    await page.locator('#back-btn').click()
-    await expect(page.locator('#viewer-screen')).not.toHaveClass(/active/)
+    await activeReader(page).locator('#back-btn').click()
+    await expect(page.locator('.workspace-document-frame:not([hidden])')).toHaveCount(0)
     await page.evaluate(() => { location.hash = '#viewer?id=reading-position' })
     await expectRestored()
   })

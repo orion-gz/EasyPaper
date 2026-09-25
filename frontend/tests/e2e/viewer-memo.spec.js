@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 async function openViewerWithMemo(page, memoOverrides = {}) {
   const doc = {
@@ -43,14 +43,15 @@ async function openViewerWithMemo(page, memoOverrides = {}) {
     location.hash = '#viewer?id=doc-memo'
   }, memoOverrides)
 
-  await expect(page.locator('.floating-memo[data-id="memo-regression"]')).toBeVisible()
-  await expect(page.locator('#trans-content-1 .trans-text')).toContainText('Cached translation')
+  await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
+  await expect(activeReader(page).locator('.floating-memo[data-id="memo-regression"]')).toBeVisible()
+  await expect(activeReader(page).locator('#trans-content-1 .trans-text')).toContainText('Cached translation')
 }
 
 test('스크롤 가시성 갱신 시 이미 렌더링된 메모 DOM을 유지한다', async ({ page }) => {
   await openViewerWithMemo(page)
 
-  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await memo.evaluate(el => { el.dataset.instanceMarker = 'original' })
 
   await page.setViewportSize({ width: 1280, height: 500 })
@@ -64,9 +65,9 @@ test('스크롤 가시성 갱신 시 이미 렌더링된 메모 DOM을 유지한
 test('사용자가 조절한 메모 크기를 저장하고 다시 복원한다', async ({ page }) => {
   await openViewerWithMemo(page)
 
-  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await memo.locator('.auto-size-btn').click()
-  await expect(page.locator('.floating-memo')).toHaveCount(1)
+  await expect(activeReader(page).locator('.floating-memo')).toHaveCount(1)
   await memo.evaluate(el => {
     el.style.width = '360px'
     el.style.height = '900px'
@@ -87,7 +88,7 @@ test('사용자가 조절한 메모 크기를 저장하고 다시 복원한다',
 test('뷰어 메모 입력창에 포커스 테두리를 표시하지 않는다', async ({ page }) => {
   await openViewerWithMemo(page)
 
-  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await memo.locator('.edit-btn').click()
 
   const textarea = memo.locator('.floating-memo-textarea')
@@ -112,19 +113,19 @@ test('뷰어 메모 입력창에 포커스 테두리를 표시하지 않는다',
 test('메모 편집 중 목차가 메모를 덮고 포커스를 빼앗지 않는다', async ({ page }) => {
   await openViewerWithMemo(page)
 
-  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await memo.locator('.edit-btn').click()
   const textarea = memo.locator('.floating-memo-textarea')
   await expect(textarea).toBeFocused()
 
-  await page.locator('#outline-toggle-btn').click()
-  const outline = page.locator('#outline-sidebar')
+  await activeReader(page).locator('#outline-toggle-btn').click()
+  const outline = activeReader(page).locator('#outline-sidebar')
   await expect(outline).not.toHaveClass(/hidden/)
   await page.waitForTimeout(200)
   await expect(textarea).toBeFocused()
   await expect(memo.locator('.floating-memo-render')).toHaveCount(0)
 
-  const layers = await page.evaluate(() => ({
+  const layers = await evaluateReader(page, () => ({
     outline: Number(getComputedStyle(document.querySelector('#outline-sidebar')).zIndex),
     memo: Number(getComputedStyle(document.querySelector('.floating-memo')).zIndex),
   }))
@@ -150,11 +151,11 @@ test('메모 편집 중 원격 snapshot은 입력 DOM 교체를 편집 종료까
     }),
   }))
 
-  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await memo.locator('.edit-btn').click()
   const textarea = memo.locator('.floating-memo-textarea')
   await expect(textarea).toBeFocused()
-  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  await evaluateReader(page, () => window.dispatchEvent(new Event('online')))
   await expect.poll(() => page.evaluate(() => {
     const saved = JSON.parse(localStorage.getItem('easypaper_memos_doc-memo') || '{}')
     return saved.page_1?.[0]?.content
@@ -170,7 +171,7 @@ test('메모 편집 중 원격 snapshot은 입력 DOM 교체를 편집 종료까
 test("키보드로 메모를 이동하고 크기를 조절하면 변경 사항을 알린다", async ({ page }) => {
   await openViewerWithMemo(page)
 
-  const memo = page.locator(`.floating-memo[data-id="memo-regression"]`)
+  const memo = activeReader(page).locator(`.floating-memo[data-id="memo-regression"]`)
   const header = memo.locator(".floating-memo-header")
   const resizeHandle = memo.locator(".floating-memo-resize-handle")
   const beforeMove = await memo.boundingBox()
@@ -179,7 +180,7 @@ test("키보드로 메모를 이동하고 크기를 조절하면 변경 사항�
   await header.focus()
   await header.press("ArrowRight")
   await expect.poll(async () => (await memo.boundingBox()).x).toBeGreaterThan(beforeMove.x + 3)
-  await expect(page.locator("#a11y-live-region")).toContainText("메모 위치")
+  await expect(activeReader(page).locator("#a11y-live-region")).toContainText("메모 위치")
   await page.waitForTimeout(1500)
   await expect(memo).toHaveAttribute('data-instance-marker', 'before-move')
 
@@ -187,13 +188,13 @@ test("키보드로 메모를 이동하고 크기를 조절하면 변경 사항�
   await resizeHandle.focus()
   await resizeHandle.press("Shift+ArrowRight")
   await expect.poll(async () => (await memo.boundingBox()).width).toBeGreaterThan(beforeResize.width + 15)
-  await expect(page.locator("#a11y-live-region")).toContainText("메모 크기")
+  await expect(activeReader(page).locator("#a11y-live-region")).toContainText("메모 크기")
 })
 
 test('자동 크기 모드에서 입력 내용에 맞춰 높이를 늘리고 줄인다', async ({ page }) => {
   await openViewerWithMemo(page, { content: '짧은 메모' })
 
-  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await expect(memo).toHaveClass(/auto-size/)
   await memo.locator('.edit-btn').click()
   const textarea = memo.locator('.floating-memo-textarea')
@@ -213,7 +214,7 @@ test('자동 크기 모드에서 입력 내용에 맞춰 높이를 늘리고 줄
 
 test('메모 Markdown 서식과 줄 단축키를 토글한다', async ({ page }) => {
   await openViewerWithMemo(page)
-  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await memo.locator('.edit-btn').click()
   const textarea = memo.locator('.floating-memo-textarea')
 
@@ -280,7 +281,7 @@ test('메모 Markdown 서식과 줄 단축키를 토글한다', async ({ page })
 
 test('메모 서식 단축키를 서로 다른 선택 영역에 독립적으로 적용한다', async ({ page }) => {
   await openViewerWithMemo(page)
-  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await memo.locator('.edit-btn').click()
   const textarea = memo.locator('.floating-memo-textarea')
 
@@ -309,7 +310,7 @@ test('메모 서식 단축키를 서로 다른 선택 영역에 독립적으로 
 
 test('메모 편집 중 Control/Cmd+Z는 브라우저 기본 실행 취소를 유지한다', async ({ page }) => {
   await openViewerWithMemo(page)
-  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await memo.locator('.edit-btn').click()
   const textarea = memo.locator('.floating-memo-textarea')
 
@@ -323,7 +324,7 @@ test('메모 편집 중 Control/Cmd+Z는 브라우저 기본 실행 취소를 �
 
 test('메모 목록 자동 편집과 완료 및 취소를 지원한다', async ({ page }) => {
   await openViewerWithMemo(page)
-  const memo = page.locator('.floating-memo[data-id="memo-regression"]')
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await memo.locator('.edit-btn').click()
   const textarea = memo.locator('.floating-memo-textarea')
 
@@ -384,7 +385,7 @@ test('코드블록, 콜아웃, 중첩 목록과 표를 메모에서 렌더링한
     ].join('\n'),
   })
 
-  const rendered = page.locator('.floating-memo-render')
+  const rendered = activeReader(page).locator('.floating-memo-render')
   await expect(rendered.locator('pre code')).toContainText('const answer = 42')
   await expect(rendered.locator('blockquote .memo-callout-marker')).toContainText('확인 필요')
   await expect(rendered.locator('ul ul')).toContainText('하위 항목')

@@ -23,6 +23,8 @@ let pageVisibilityObserver = null
 let visiblePageHeights = {}
 let loadGeneration = 0
 let disposeScrollView = () => {}
+let suspended = false
+let lastScrollView = null
 // renderScrollView가 호출될 때마다(문서 전환, 줌 변경) 증가하는 세대 카운터.
 // pdf-page-wrapper DOM 노드는 문서를 바꿔도 새로 만들지 않고 재사용하는데,
 // 이전 문서/줌에 대한 _renderPage 호출이 비동기 대기 중일 때 사용자가 빠르게
@@ -126,7 +128,8 @@ export async function renderFigureCrop(pageNum, imgPercent) {
  *   onPageVisible(pageNum)  - 페이지가 뷰포트에 들어올 때마다 호출
  */
 export async function renderScrollView(container, zoom, { onPageVisible } = {}) {
-  if (!pdfDoc) return
+  lastScrollView = { container, zoom, onPageVisible }
+  if (!pdfDoc || suspended) return
   disposeScrollView()
   currentScale = zoom
   renderedTextLayers.clear()
@@ -519,4 +522,32 @@ export function sourceMappingRects(pageNum, mapping) {
   const layer = renderedTextLayers.get(Number(pageNum))
   if (!layer || !sourceMappingMatchesRevision(mapping, layer.container.dataset.sourceRevision)) return []
   return projectSourceRects(mapping, layer.viewport)
+}
+
+
+export function suspendPDFRendering() {
+  suspended = true
+  renderGeneration++
+  disposeScrollView()
+  renderedTextLayers.clear()
+  figureCropCache.clear()
+}
+export async function resumePDFRendering() {
+  if (!suspended) return
+  suspended = false
+  if (!lastScrollView) return
+  const { container, zoom, onPageVisible } = lastScrollView
+  const top = container.scrollTop
+  await renderScrollView(container, zoom, { onPageVisible })
+  container.scrollTop = top
+}
+export async function renderPDFThumbnail(pageNum, canvas) {
+  if (!pdfDoc || suspended) return
+  const source = pdfDoc
+  const page = await source.getPage(pageNum)
+  if (source !== pdfDoc || suspended || !canvas.isConnected) return
+  const viewport = page.getViewport({ scale: 110 / page.getViewport({ scale: 1 }).width })
+  canvas.width = Math.ceil(viewport.width)
+  canvas.height = Math.ceil(viewport.height)
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
 }

@@ -10,7 +10,7 @@ for (const uiScale of [0.8, 0.9, 1, 1.25]) {
     await gotoApp(page)
 
     const viewport = page.viewportSize()
-    const activeScreen = await page.locator('.screen.active').boundingBox()
+    const activeScreen = await page.locator('#tab-workspace').boundingBox()
     expect(activeScreen).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height })
 
     await page.locator('#sidebar-settings-btn').click()

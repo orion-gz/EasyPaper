@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 const doc = {
   id: 'doc-notes',
@@ -88,7 +88,7 @@ test('Notes 하이라이트 클릭 시 뷰어의 저장 오프셋 위치를 강�
   await page.click('.notes-tab-btn[data-subtab="highlight"]')
   await page.locator('.notes-annotation-card').click()
 
-  await expect(page.locator('#viewer-screen')).toHaveClass(/active/)
-  await expect(page.locator('.pdf-annotation-highlight[data-start-offset="0"][data-end-offset="6"]')).toHaveAttribute('data-viewer-note-jump-target', 'true', { timeout: 10_000 })
-  await expect(page.locator('#page-input')).toHaveValue('1')
+  await expect(activeReader(page).locator('#viewer-screen')).toHaveClass(/active/)
+  await expect(activeReader(page).locator('.pdf-annotation-highlight[data-start-offset="0"][data-end-offset="6"]')).toHaveAttribute('data-viewer-note-jump-target', 'true', { timeout: 10_000 })
+  await expect(activeReader(page).locator('#page-input')).toHaveValue('1')
 })

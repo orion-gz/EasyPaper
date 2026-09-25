@@ -4427,5 +4427,89 @@
   },
   "errors:pdf_reading_order_review": {
     "description": "Status shown on PDF pages whose reading order or source coordinates require review."
+  },
+  "navigation:tabs.label": {
+    "description": "Workspace tabs: Workspace tabs"
+  },
+  "navigation:tabs.new": {
+    "description": "Workspace tabs: New tab"
+  },
+  "navigation:tabs.all": {
+    "description": "Workspace tabs: All tabs"
+  },
+  "navigation:tabs.close": {
+    "description": "Workspace tabs: Close {{title}}"
+  },
+  "navigation:tabs.open": {
+    "description": "Workspace tabs: Open existing document"
+  },
+  "navigation:tabs.upload": {
+    "description": "Workspace tabs: Upload document"
+  },
+  "navigation:tabs.loading": {
+    "description": "Workspace tabs: Loading document…"
+  },
+  "navigation:tabs.loadError": {
+    "description": "Workspace tabs: This document could not be loaded. Try again."
+  },
+  "navigation:tabs.retry": {
+    "description": "Workspace tabs: Retry"
+  },
+  "navigation:tabs.unavailable": {
+    "description": "Workspace tabs: The document was deleted or is no longer accessible."
+  },
+  "navigation:tabs.storageError": {
+    "description": "Workspace tabs: Workspace changes could not be saved on this device."
+  },
+  "navigation:tabs.saveError": {
+    "description": "Workspace tabs: Your notes have not finished saving. Try again before leaving this tab."
+  },
+  "navigation:tabs.tools": {
+    "description": "Workspace tabs: Document tools"
+  },
+  "navigation:tabs.annotation": {
+    "description": "Workspace tabs: Annotation"
+  },
+  "navigation:tabs.noNotes": {
+    "description": "Workspace tabs: No notes yet. Select text in the document to add a note."
+  },
+  "navigation:tabs.noAnnotations": {
+    "description": "Workspace tabs: No highlights or underlines yet."
+  },
+  "navigation:tabs.outline": {
+    "description": "Workspace tabs: Outline"
+  },
+  "navigation:tabs.thumbnails": {
+    "description": "Workspace tabs: Thumbnails"
+  },
+  "navigation:tabs.readingMode": {
+    "description": "Workspace tabs: Reading mode"
+  },
+  "navigation:tabs.original": {
+    "description": "Workspace tabs: Original"
+  },
+  "navigation:tabs.translation": {
+    "description": "Workspace tabs: Translation"
+  },
+  "navigation:tabs.parallel": {
+    "description": "Workspace tabs: Side by side"
+  },
+  "navigation:tabs.fullscreen": {
+    "description": "Workspace tabs: Full screen"
+  },
+  "navigation:tabs.fullscreenUnavailable": {
+    "description": "Workspace tabs: Full screen is not available in this window."
+  },
+  "navigation:tabs.busy": {
+    "description": "Workspace tabs: Processing"
+  },
+  "navigation:tabs.complete": {
+    "description": "Workspace tabs: Completed"
+  },
+  "navigation:tabs.error": {
+    "description": "Workspace tabs: Error"
+  },
+  "navigation:tabs.forward": {
+    "description": "Move forward in workspace navigation history."
   }
 }
