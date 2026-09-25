@@ -16,5 +16,5 @@ def test_tauri_and_frontend_csp_match():
 def test_frontend_csp_blocks_unsafe_embedding_and_plugins():
     assert "default-src 'self'" in FRONTEND_CSP
     assert "object-src 'none'" in FRONTEND_CSP
-    assert "frame-ancestors 'none'" in FRONTEND_CSP
+    assert "frame-ancestors 'self'" in FRONTEND_CSP
     assert "http://127.0.0.1:*" in FRONTEND_CSP

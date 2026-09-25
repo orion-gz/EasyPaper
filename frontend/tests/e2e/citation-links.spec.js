@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_CITATION } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_CITATION } from './helpers.js'
 
 test('Focus reference preview follows its sentence and is hidden only in Focus mode when configured', async ({ page }) => {
   test.setTimeout(60000)
@@ -13,22 +13,22 @@ test('Focus reference preview follows its sentence and is hidden only in Focus m
     localStorage.setItem('easypaper_focus_scale_research', '150')
     location.hash = '#viewer?id=doc-C'
   })
-  const marker = page.locator('.citation-marker-box').first()
+  const marker = activeReader(page).locator('.citation-marker-box').first()
   await expect(marker).toBeVisible()
   await marker.hover()
   await page.waitForTimeout(250)
-  const tooltip = page.locator('.citation-tooltip')
+  const tooltip = activeReader(page).locator('.citation-tooltip')
   await expect(tooltip).toBeVisible()
-  await expect(page.locator('.focus-mode-layer')).toBeVisible()
+  await expect(activeReader(page).locator('.focus-mode-layer')).toBeVisible()
   await expect(tooltip).toHaveCSS('filter', 'none')
-  await expect.poll(() => page.evaluate(() => {
+  await expect.poll(() => evaluateReader(page, () => {
     const preview = document.querySelector('.citation-tooltip').getBoundingClientRect()
     return [...document.querySelectorAll('.focus-mode-magnification')].flatMap(e => e.focusRects).every(r =>
       preview.right <= r.left || preview.left >= r.left + r.width || preview.bottom <= r.top || preview.top >= r.top + r.height)
   })).toBe(true)
   await page.mouse.move(10, 10)
   await page.evaluate(() => { location.hash = '#library' })
-  await expect(page.locator('#viewer-screen')).not.toHaveClass(/active/)
+  await expect(page.locator('.workspace-document-frame:not([hidden])')).toHaveCount(0)
   await page.locator('#sidebar-settings-btn').click()
   await page.locator('[data-tab="tab-viewer"]').click()
   await page.locator('#setting-focus-hide-overlays').locator('..').click()
@@ -36,7 +36,7 @@ test('Focus reference preview follows its sentence and is hidden only in Focus m
   await page.evaluate(() => { location.hash = '#viewer?id=doc-C' })
   await marker.hover()
   await expect(tooltip).toBeHidden()
-  await page.locator('#viewer-focus-toggle').click()
+  await activeReader(page).locator('#viewer-focus-toggle').click()
   await marker.hover()
   await expect(tooltip).toBeVisible()
 })
@@ -57,13 +57,13 @@ test('참고문헌 목록에 있는 번호의 본문 인용 표기만 클릭 가
   await page.evaluate(() => { location.hash = '#viewer?id=doc-C' })
   await page.waitForTimeout(1500)
 
-  const markerBoxes = page.locator('.citation-marker-box')
+  const markerBoxes = activeReader(page).locator('.citation-marker-box')
   await expect(markerBoxes).toHaveCount(1)
   await expect(markerBoxes.first()).toHaveAttribute('data-ref-num', '1')
 
   await markerBoxes.first().click()
-  await expect(page.locator('.citation-tooltip')).not.toHaveClass(/hidden/)
-  await expect(page.locator('.citation-tooltip-text')).toHaveText('Vaswani et al. Attention Is All You Need. 2017.')
+  await expect(activeReader(page).locator('.citation-tooltip')).not.toHaveClass(/hidden/)
+  await expect(activeReader(page).locator('.citation-tooltip-text')).toHaveText('Vaswani et al. Attention Is All You Need. 2017.')
 })
 
 test('툴팁에서 원문 링크 찾기를 누르면 결과 링크가 표시되고, 클릭하면 새 탭으로 열린다', async ({ page, context }) => {
@@ -88,13 +88,13 @@ test('툴팁에서 원문 링크 찾기를 누르면 결과 링크가 표시되�
   await page.evaluate(() => { location.hash = '#viewer?id=doc-C' })
   await page.waitForTimeout(1500)
 
-  await page.locator('.citation-marker-box').first().click()
-  await page.click('.citation-tooltip-resolve-btn')
-  await expect(page.locator('.citation-tooltip-result a')).toContainText('Attention Is All You Need (2017)')
+  await activeReader(page).locator('.citation-marker-box').first().click()
+  await activeReader(page).locator('.citation-tooltip-resolve-btn').click()
+  await expect(activeReader(page).locator('.citation-tooltip-result a')).toContainText('Attention Is All You Need (2017)')
 
   const [popup] = await Promise.all([
     context.waitForEvent('page'),
-    page.click('.citation-tooltip-result a'),
+    activeReader(page).locator('.citation-tooltip-result a').click(),
   ])
   await popup.waitForLoadState('domcontentloaded')
   expect(popup.url()).toBe('https://arxiv.org/abs/1706.03762')
@@ -119,13 +119,13 @@ test('원문 링크를 찾지 못하면 안내 문구가 뜨고, Google Scholar 
   await page.evaluate(() => { location.hash = '#viewer?id=doc-C' })
   await page.waitForTimeout(1500)
 
-  await page.locator('.citation-marker-box').first().click()
-  await page.click('.citation-tooltip-resolve-btn')
-  await expect(page.locator('.citation-tooltip-result')).toHaveText('원문 링크를 찾지 못했습니다. Google Scholar 검색을 이용해보세요.')
+  await activeReader(page).locator('.citation-marker-box').first().click()
+  await activeReader(page).locator('.citation-tooltip-resolve-btn').click()
+  await expect(activeReader(page).locator('.citation-tooltip-result')).toHaveText('원문 링크를 찾지 못했습니다. Google Scholar 검색을 이용해보세요.')
 
   const [popup] = await Promise.all([
     context.waitForEvent('page'),
-    page.click('.citation-tooltip-scholar-btn'),
+    activeReader(page).locator('.citation-tooltip-scholar-btn').click(),
   ])
   await popup.waitForLoadState('domcontentloaded')
   expect(decodeURIComponent(popup.url())).toBe('https://scholar.google.com/scholar?q="Attention Is All You Need"')
@@ -146,11 +146,11 @@ test('인용 표기가 아닌 다른 곳을 클릭하면(예: 스크롤) 열려 
   await page.evaluate(() => { location.hash = '#viewer?id=doc-C' })
   await page.waitForTimeout(1500)
 
-  await page.locator('.citation-marker-box').first().click()
-  await expect(page.locator('.citation-tooltip')).not.toHaveClass(/hidden/)
+  await activeReader(page).locator('.citation-marker-box').first().click()
+  await expect(activeReader(page).locator('.citation-tooltip')).not.toHaveClass(/hidden/)
 
-  await page.evaluate(() => document.querySelector('#viewer-scroll-container')?.dispatchEvent(new Event('scroll', { bubbles: true })))
-  await expect(page.locator('.citation-tooltip')).toHaveClass(/hidden/)
+  await evaluateReader(page, () => document.querySelector('#viewer-scroll-container')?.dispatchEvent(new Event('scroll', { bubbles: true })))
+  await expect(activeReader(page).locator('.citation-tooltip')).toHaveClass(/hidden/)
 })
 
 test('참고문헌이 길어 툴팁 내부를 스크롤해도 툴팁이 닫히지 않는다', async ({ page }) => {
@@ -168,8 +168,8 @@ test('참고문헌이 길어 툴팁 내부를 스크롤해도 툴팁이 닫히�
   await page.evaluate(() => { location.hash = '#viewer?id=doc-C' })
   await page.waitForTimeout(1500)
 
-  await page.locator('.citation-marker-box').first().dispatchEvent('mouseenter')
-  const tooltip = page.locator('.citation-tooltip')
+  await activeReader(page).locator('.citation-marker-box').first().dispatchEvent('mouseenter')
+  const tooltip = activeReader(page).locator('.citation-tooltip')
   await expect(tooltip).not.toHaveClass(/hidden/)
   await expect.poll(() => tooltip.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true)
 

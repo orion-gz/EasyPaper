@@ -162,7 +162,7 @@ export class ReadingAnalyticsTracker {
   tickActiveReadingTime() {
     if (!this.isTracking || !this.paperId) return
     // Use the same PDF-vs-chat and idle state as Reading History heartbeats.
-    if (document.visibilityState !== 'visible' || !document.hasFocus()) return
+    if (document.body?.dataset.workspaceInactive === 'true' || document.visibilityState !== 'visible' || !document.hasFocus()) return
     if (globalReadingTimeActivityTracker.getCategory({
       chatAvailable: !document.getElementById('chat-sidebar')?.classList.contains('hidden'),
     }) !== 'reading') return

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 test('연구와 일반 문서 워크스페이스의 번역 모드를 따로 저장한다', async ({ page }) => {
   await mockBaseRoutes(page, { documents: [] })
@@ -112,10 +112,10 @@ test('번역 범위 선택에서 문서 전체 페이지 목록을 잡 API에 �
 
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=doc-scope' })
-  await expect(page.locator('#viewer-screen')).toHaveClass(/active/)
-  await page.locator('#toolbar-kebab-btn').click()
-  await page.locator('#translation-scope-btn').click()
-  await page.locator('.translation-scope-modal [data-scope="all"]').click()
+  await expect(activeReader(page).locator('#viewer-screen')).toHaveClass(/active/)
+  await activeReader(page).locator('#toolbar-kebab-btn').click()
+  await activeReader(page).locator('#translation-scope-btn').click()
+  await activeReader(page).locator('.translation-scope-modal [data-scope="all"]').click()
 
   await expect.poll(() => restartPayload).not.toBeNull()
   expect(restartPayload.page_numbers).toEqual([1])

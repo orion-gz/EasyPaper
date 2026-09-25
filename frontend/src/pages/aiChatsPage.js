@@ -20,6 +20,7 @@ const RECENT_MS = 24 * 60 * 60 * 1000       // "최근 대화" 기준: 24시간 
 const ACTIVE_MS = 7 * 24 * 60 * 60 * 1000   // "활성" 기준: 7일 이내
 const PREVIEW_CONCURRENCY = 6
 let renderGeneration = 0
+const viewPreferences = new Map()
 
 function formatRelativeTime(isoString) {
   if (!isoString) return '-'
@@ -111,8 +112,7 @@ export async function renderAiChatsPage(documentMode = 'research') {
   const sortMenu = container.querySelector('#aic-sort-menu')
   const viewToggle = container.querySelector('#aic-view-toggle')
 
-  // ── 페이지 인스턴스 로컬 상태 (재방문 시 renderAiChatsPage()가 다시 호출되어
-  //    이 클로저 전체가 새로 만들어지므로, 별도 초기화 로직 없이 항상 초기값으로 시작한다) ──
+  // Preserve controls across tab activation, while fetching fresh session data.
   const state = {
     sessions: [],
     previews: new Map(), // doc_id -> { text, error }
@@ -123,7 +123,12 @@ export async function renderAiChatsPage(documentMode = 'research') {
     currentPage: 1,
     loading: true,
     loadError: null,
+    ...viewPreferences.get(documentMode),
   }
+  const rememberView = () => viewPreferences.set(documentMode, {
+    searchQuery: state.searchQuery, activeTab: state.activeTab, sortMode: state.sortMode,
+    viewMode: state.viewMode, currentPage: state.currentPage,
+  })
 
   const TABS = [
     { id: 'all', label: '전체' },
@@ -265,6 +270,7 @@ export async function renderAiChatsPage(documentMode = 'research') {
   }
 
   function renderBody() {
+    rememberView()
     if (state.loading) {
       bodyEl.innerHTML = `<div class="aic-state"><div class="aic-spinner"></div><p>채팅 세션을 불러오는 중...</p></div>`
       return
@@ -455,6 +461,12 @@ export async function renderAiChatsPage(documentMode = 'research') {
     })
   })
 
+  if (searchInput) searchInput.value = state.searchQuery
+  sortMenu.querySelectorAll('.aic-sort-option').forEach(option => {
+    option.classList.toggle('active', option.dataset.sort === state.sortMode)
+    if (option.dataset.sort === state.sortMode) sortLabel.textContent = option.textContent
+  })
+  viewToggle.querySelectorAll('.aic-view-btn').forEach(button => button.classList.toggle('active', button.dataset.view === state.viewMode))
   renderTabs()
   await load()
 }

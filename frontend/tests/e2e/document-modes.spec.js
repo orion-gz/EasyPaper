@@ -95,7 +95,7 @@ test('좁은 화면에서도 문서 홈 카드가 화면 밖으로 넘치지 않
     body: JSON.stringify({ onboarding_version: 1, current_onboarding_version: 1, preferred_workspace_mode: 'research', document_type_options: {} }),
   }))
   await gotoApp(page)
-  await page.locator('#workspace-mode-switch-compact [data-workspace-mode="general"]').click()
+  await page.locator('button[data-workspace-mode="general"]:visible').first().click()
 
   await expect(page.locator('.dash-root')).toBeVisible()
   await expect(page.locator('.dash-stat-card').first()).toContainText('문서')

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
-import { mockBaseRoutes, gotoApp } from './helpers.js'
+import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp } from './helpers.js'
 
 test.setTimeout(60_000)
 
@@ -28,9 +28,9 @@ async function openDocument(page, mode, scale) {
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=geometry' })
   try {
-    await expect(page.locator('.textLayer[data-segmented="true"]')).toBeVisible({ timeout: 15_000 })
+    await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible({ timeout: 15_000 })
   } catch (error) {
-    console.log('PDF diagnostics', errors, await page.locator('.pdf-page-inner').evaluateAll(els => els.map(el => ({ html: el.innerHTML.slice(0,600), rect: el.getBoundingClientRect().toJSON() }))))
+    console.log('PDF diagnostics', errors, await activeReader(page).locator('.pdf-page-inner').evaluateAll(els => els.map(el => ({ html: el.innerHTML.slice(0,600), rect: el.getBoundingClientRect().toJSON() }))))
     throw error
   }
 }
@@ -43,7 +43,7 @@ for (const mode of ['general', 'research']) {
         test(`PDF glyphs and hover align at UI scale ${uiScale}`, async ({ page }) => {
           await openDocument(page, mode, uiScale)
           for (const line of lines) {
-            const span = page.locator('.textLayer span').filter({ hasText: line.text }).first()
+            const span = activeReader(page).locator('.textLayer span').filter({ hasText: line.text }).first()
             const metrics = await span.evaluate(el => {
               const canvas = el.closest('.pdf-page-inner').querySelector('canvas').getBoundingClientRect()
               const rect = el.getBoundingClientRect()
@@ -53,7 +53,7 @@ for (const mode of ['general', 'research']) {
             expect(Math.abs(metrics.x - 72 * metrics.expectedScale)).toBeLessThan(1)
             const bounds = await span.boundingBox()
             await page.mouse.move(bounds.x + 8, bounds.y + bounds.height / 2)
-            const boxes = page.locator('.sentence-hover-box')
+            const boxes = activeReader(page).locator('.sentence-hover-box')
             await expect(boxes.first()).toBeVisible()
             const error = await span.evaluate(el => {
               const range = document.createRange(); range.selectNodeContents(el)
@@ -73,7 +73,7 @@ for (const mode of ['general', 'research']) {
 }
 
 async function expectGeometryRefresh(page, action) {
-  await page.evaluate(() => {
+  await evaluateReader(page, () => {
     window.geometryRefreshDone = new Promise(resolve => {
       const original = window.onTextLayerRendered
       window.onTextLayerRendered = (...args) => {
@@ -84,8 +84,8 @@ async function expectGeometryRefresh(page, action) {
     })
   })
   await action()
-  await page.evaluate(() => window.geometryRefreshDone)
-  await page.evaluate(() => Promise.all(document.getAnimations()
+  await evaluateReader(page, () => window.geometryRefreshDone)
+  await evaluateReader(page, () => Promise.all(document.getAnimations()
     .filter(animation => animation.effect.getComputedTiming().iterations !== Infinity)
     .map(animation => animation.finished.catch(() => {}))))
 }
@@ -99,11 +99,11 @@ test.describe('selection lifecycle', () => {
       ] }))
     })
     await openDocument(page, 'research', 1)
-    const span = page.locator('.textLayer span').filter({ hasText: lines[0].text }).first()
-    const annotation = page.locator('.pdf-annotation-highlight')
+    const span = activeReader(page).locator('.textLayer span').filter({ hasText: lines[0].text }).first()
+    const annotation = activeReader(page).locator('.pdf-annotation-highlight')
     await expect(annotation).toHaveCount(1)
     for (const scale of [1, 0.8, 1.25]) {
-      await expectGeometryRefresh(page, () => page.locator('#setting-ui-scale').evaluate((select, value) => {
+      if (scale !== 1) await expectGeometryRefresh(page, () => page.locator('#setting-ui-scale').evaluate((select, value) => {
         select.value = String(value); select.dispatchEvent(new Event('change'))
       }, scale))
       // The refresh is debounced; annotation geometry is the observable completion.
@@ -114,7 +114,7 @@ test.describe('selection lifecycle', () => {
         return Math.max(Math.abs(box.left - expected.left), Math.abs(box.right - expected.right))
       })).toBeLessThan(1)
       for (const reverse of [false, true]) {
-        await page.evaluate(() => window.getSelection().removeAllRanges())
+        await evaluateReader(page, () => window.getSelection().removeAllRanges())
         const r = await span.evaluate(el => {
           const range = document.createRange(); range.setStart(el.firstChild, 4); range.setEnd(el.firstChild, 5)
           const first = range.getBoundingClientRect()
@@ -124,22 +124,24 @@ test.describe('selection lifecycle', () => {
           // fractional screen coordinates differently from DOM Range edges.
           return { left: first.left + first.width * 0.25, right: last.left + last.width * 0.75, y: first.top + first.height / 2 }
         })
-        await page.mouse.move(reverse ? r.right : r.left, r.y)
+        const left = await readerPoint(page, r.left, r.y)
+        const right = await readerPoint(page, r.right, r.y)
+        await page.mouse.move(reverse ? right.x : left.x, left.y)
         await page.mouse.down()
-        await page.mouse.move(reverse ? r.left : r.right, r.y, { steps: 8 })
+        await page.mouse.move(reverse ? left.x : right.x, left.y, { steps: 8 })
         await page.mouse.up()
-        await expect.poll(() => page.evaluate(() => window.getSelection().toString()), { message: `Native selection at UI scale ${scale}` }).toBe('quick brown fox')
+        await expect.poll(() => evaluateReader(page, () => window.getSelection().toString()), { message: `Native selection at UI scale ${scale}` }).toBe('quick brown fox')
       }
       await expectGeometryRefresh(page, () => page.setViewportSize({ width: 1550 + Math.round(scale * 10), height: 1200 }))
-      await expect.poll(() => page.evaluate(() => window.getSelection().toString()), { message: `Native selection at UI scale ${scale}` }).toBe('quick brown fox')
+      await expect.poll(() => evaluateReader(page, () => window.getSelection().toString()), { message: `Native selection at UI scale ${scale}` }).toBe('quick brown fox')
     }
     // PDF zoom replaces the layer; offsets must still restore the same annotation.
-    await page.evaluate(() => window.getSelection().removeAllRanges())
+    await evaluateReader(page, () => window.getSelection().removeAllRanges())
     for (const zoom of ['1.0', '1.5', '2.0']) {
-      await page.locator('#setting-default-zoom').evaluate((select, value) => {
+      await activeReader(page).locator('#setting-default-zoom').evaluate((select, value) => {
         select.value = value; select.dispatchEvent(new Event('change'))
       }, zoom)
-      await expect.poll(() => page.locator('.textLayer[data-segmented="true"]').evaluateAll(layers =>
+      await expect.poll(() => activeReader(page).locator('.textLayer[data-segmented="true"]').evaluateAll(layers =>
         layers.map(layer => Number(layer.style.getPropertyValue('--scale-factor')))), { timeout: 15_000 }).toEqual([Number(zoom)])
       await expect(annotation).toHaveCount(1)
       await expect(annotation).toHaveAttribute('data-annotation-text', 'quick brown fox')
@@ -156,8 +158,8 @@ test.describe('selection lifecycle', () => {
     const rotated = fs.readFileSync(new URL('./fixtures/text-geometry-rotated.pdf', import.meta.url))
     await page.route('**/api/library/geometry/pdf', route => route.fulfill({ contentType: 'application/pdf', body: rotated }))
     await page.reload()
-    await expect(page.locator('.textLayer[data-segmented="true"]')).toBeVisible({ timeout: 15_000 })
-    const span = page.locator('.textLayer span').filter({ hasText: lines[0].text }).first()
+    await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible({ timeout: 15_000 })
+    const span = activeReader(page).locator('.textLayer span').filter({ hasText: lines[0].text }).first()
     const metrics = await span.evaluate(el => {
       const canvas = el.closest('.pdf-page-inner').querySelector('canvas').getBoundingClientRect()
       const r = el.getBoundingClientRect()
@@ -165,9 +167,9 @@ test.describe('selection lifecycle', () => {
     })
     expect(Math.abs(metrics.length - lines[0].width * metrics.scale)).toBeLessThan(1)
     expect(Math.abs(metrics.top - 62 * metrics.scale)).toBeLessThan(1)
-    await page.mouse.move(...await span.evaluate(el => {
-      const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + 8]
-    }))
-    await expect(page.locator('.sentence-hover-box').first()).toBeVisible()
+    await span.scrollIntoViewIfNeeded()
+    const bounds = await span.boundingBox()
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 8)
+    await expect(activeReader(page).locator('.sentence-hover-box').first()).toBeVisible()
   })
 })

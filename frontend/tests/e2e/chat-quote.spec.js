@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 // AI 채팅 답변에서 텍스트를 선택하면 "Ask AI"로 후속 질문을 인용할 수 있어야 한다
 // (PDF/번역본 인용 기능을 채팅 답변에도 확장한 기능의 회귀 테스트)
@@ -19,15 +19,15 @@ test('AI 채팅 답변 텍스트를 선택하면 Ask AI로 인용할 수 있다'
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1200)
 
-  await page.click('#chat-toggle-btn')
-  await page.fill('#chat-input', '트랜스포머 아키텍처가 뭐야?')
-  await page.click('#chat-send-btn')
+  await expect(activeReader(page).locator('#chat-input')).toBeVisible()
+  await activeReader(page).locator('#chat-input').fill('트랜스포머 아키텍처가 뭐야?')
+  await activeReader(page).locator('#chat-send-btn').click()
   await page.waitForTimeout(800)
 
   const bubbleSelector = '.chat-message.assistant:not(.temp-typing) .message-bubble'
-  await page.waitForSelector(bubbleSelector)
+  await activeReader(page).locator(bubbleSelector).last().waitFor()
 
-  const selection = await page.evaluate((sel) => {
+  const selection = await evaluateReader(page, (sel) => {
     const bubbles = document.querySelectorAll(sel)
     const bubble = bubbles[bubbles.length - 1]
     const text = bubble.textContent
@@ -63,18 +63,19 @@ test('AI 채팅 답변 텍스트를 선택하면 Ask AI로 인용할 수 있다'
   expect(selection).not.toBeNull()
   expect(selection.text).toBe('셀프 어텐션')
 
-  await page.mouse.move(selection.rect.x + 5, selection.rect.y + 5)
+  const point = await readerPoint(page, selection.rect.x + 5, selection.rect.y + 5)
+  await page.mouse.move(point.x, point.y)
   await page.mouse.up()
 
-  await expect(page.locator('.selection-menu .ask-ai-btn')).toBeVisible()
+  await expect(activeReader(page).locator('.selection-menu .ask-ai-btn')).toBeVisible()
 
-  await page.click('.selection-menu .ask-ai-btn')
+  await activeReader(page).locator('.selection-menu .ask-ai-btn').click()
 
-  await expect(page.locator('#chat-quote-area')).not.toHaveClass(/hidden/)
-  await expect(page.locator('#chat-quote-text')).toHaveText('셀프 어텐션')
+  await expect(activeReader(page).locator('#chat-quote-area')).not.toHaveClass(/hidden/)
+  await expect(activeReader(page).locator('#chat-quote-text')).toHaveText('셀프 어텐션')
 
-  await page.fill('#chat-input', '이 부분을 더 설명해줘')
-  await page.click('#chat-send-btn')
+  await activeReader(page).locator('#chat-input').fill('이 부분을 더 설명해줘')
+  await activeReader(page).locator('#chat-send-btn').click()
   await expect.poll(() => chatRequests.length).toBe(2)
 
   expect(chatRequests[1].selected_text).toBeUndefined()
@@ -93,12 +94,12 @@ test('사용자 자신의 채팅 메시지는 Ask AI 인용 대상이 아니다'
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1200)
-  await page.click('#chat-toggle-btn')
-  await page.fill('#chat-input', '이것은 사용자 질문 텍스트')
-  await page.click('#chat-send-btn')
+  await expect(activeReader(page).locator('#chat-input')).toBeVisible()
+  await activeReader(page).locator('#chat-input').fill('이것은 사용자 질문 텍스트')
+  await activeReader(page).locator('#chat-send-btn').click()
   await page.waitForTimeout(500)
 
-  const userBubbleFound = await page.evaluate(() => {
+  const userBubbleFound = await evaluateReader(page, () => {
     const bubble = document.querySelector('.chat-message.user .message-bubble')
     if (!bubble) return false
     const range = document.createRange()
@@ -109,12 +110,11 @@ test('사용자 자신의 채팅 메시지는 Ask AI 인용 대상이 아니다'
   })
   expect(userBubbleFound).toBe(true)
 
-  await page.mouse.move(200, 200)
-  await page.mouse.up()
+  await activeReader(page).locator('.message-bubble').last().dispatchEvent('mouseup', { bubbles: true, clientX: 200, clientY: 200 })
   await page.waitForTimeout(300)
 
   // 사용자 메시지 선택으로는 Ask AI 메뉴가 뜨지 않아야 한다
-  const menuHidden = await page.evaluate(() => {
+  const menuHidden = await evaluateReader(page, () => {
     const menu = document.querySelector('.selection-menu')
     return !menu || menu.classList.contains('hidden')
   })
@@ -136,18 +136,18 @@ test('수식이 포함된 답변을 인용하면 중복이나 줄바꿈 없이 �
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1200)
 
-  await page.click('#chat-toggle-btn')
-  await page.fill('#chat-input', '크기가 뭐야?')
-  await page.click('#chat-send-btn')
+  await expect(activeReader(page).locator('#chat-input')).toBeVisible()
+  await activeReader(page).locator('#chat-input').fill('크기가 뭐야?')
+  await activeReader(page).locator('#chat-send-btn').click()
   await page.waitForTimeout(800)
 
   const bubbleSelector = '.chat-message.assistant:not(.temp-typing) .message-bubble'
-  await page.waitForSelector(bubbleSelector)
+  await activeReader(page).locator(bubbleSelector).last().waitFor()
   // 수식이 실제로 KaTeX로 렌더링됐는지(katex-mathml이 존재하는지) 확인 -
   // 렌더링 자체가 안 됐다면 이 테스트는 애초에 버그를 재현하지 못한다
-  await expect(page.locator(`${bubbleSelector} .katex-mathml`).first()).toBeAttached()
+  await expect(activeReader(page).locator(`${bubbleSelector} .katex-mathml`).first()).toBeAttached()
 
-  await page.evaluate((sel) => {
+  await evaluateReader(page, (sel) => {
     const bubbles = document.querySelectorAll(sel)
     const bubble = bubbles[bubbles.length - 1]
     const range = document.createRange()
@@ -157,14 +157,13 @@ test('수식이 포함된 답변을 인용하면 중복이나 줄바꿈 없이 �
     selection.addRange(range)
   }, bubbleSelector)
 
-  await page.mouse.move(200, 200)
-  await page.mouse.up()
+  await activeReader(page).locator('.message-bubble').last().dispatchEvent('mouseup', { bubbles: true, clientX: 200, clientY: 200 })
   await page.waitForTimeout(300)
 
-  await page.click('.selection-menu .ask-ai-btn')
+  await activeReader(page).locator('.selection-menu .ask-ai-btn').click()
 
-  await expect(page.locator('#chat-quote-area')).not.toHaveClass(/hidden/)
-  const quotedText = await page.locator('#chat-quote-text').textContent()
+  await expect(activeReader(page).locator('#chat-quote-area')).not.toHaveClass(/hidden/)
+  const quotedText = await activeReader(page).locator('#chat-quote-text').textContent()
   expect(quotedText).toBe('이 값은 3×3×3 크기입니다.')
 })
 
@@ -202,7 +201,7 @@ test('새로고침 후에도 로컬에 저장된 인용 이미지가 채팅 히�
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1200)
 
-  const quoteImg = page.locator('.chat-message.user .message-quote-img')
+  const quoteImg = activeReader(page).locator('.chat-message.user .message-quote-img')
   await expect(quoteImg).toHaveCount(1)
   await expect(quoteImg).toHaveAttribute('src', fakeImg)
 })
@@ -229,8 +228,8 @@ test('로컬에 저장된 인용 이미지가 없으면 텍스트 placeholder로
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1200)
 
-  await expect(page.locator('.chat-message.user .message-quote-img')).toHaveCount(0)
-  await expect(page.locator('.chat-message.user .quote-body')).toContainText('Page 2')
+  await expect(activeReader(page).locator('.chat-message.user .message-quote-img')).toHaveCount(0)
+  await expect(activeReader(page).locator('.chat-message.user .quote-body')).toContainText('Page 2')
 })
 
 
@@ -256,15 +255,15 @@ test('본문 인용 질문의 AI 답변을 원래 선택 범위의 메모로 생
     localStorage.setItem('easypaper_hydrated_doc-A', '1')
     location.hash = '#viewer?id=doc-A'
   })
-  await page.click('#chat-toggle-btn')
-  await expect(page.locator('.create-answer-memo-btn')).toHaveText('메모 생성')
+  await expect(activeReader(page).locator('#chat-input')).toBeVisible()
+  await expect(activeReader(page).locator('.create-answer-memo-btn')).toHaveText('메모 생성')
 
-  await page.locator('.create-answer-memo-btn').click()
+  await activeReader(page).locator('.create-answer-memo-btn').click()
 
-  await expect(page.locator('.floating-memo')).toHaveCount(1)
-  await expect(page.locator('.floating-memo')).toContainText('왜 중요한가요?')
-  await expect(page.locator('.floating-memo')).toContainText('문맥의 핵심 관계를 직접 학습하기 때문입니다.')
-  const memo = await page.evaluate(() => {
+  await expect(activeReader(page).locator('.floating-memo')).toHaveCount(1)
+  await expect(activeReader(page).locator('.floating-memo')).toContainText('왜 중요한가요?')
+  await expect(activeReader(page).locator('.floating-memo')).toContainText('문맥의 핵심 관계를 직접 학습하기 때문입니다.')
+  const memo = await evaluateReader(page, () => {
     const saved = JSON.parse(localStorage.getItem('easypaper_memos_doc-A') || '{}')
     return saved.page_1?.[0]
   })

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
-import { mockBaseRoutes, gotoApp } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp } from './helpers.js'
 
 const moduleSource = fs.readFileSync(new URL('../../src/focusPreview.js', import.meta.url), 'utf8') + '\n'
   + fs.readFileSync(new URL('../../src/focusMode.js', import.meta.url), 'utf8').replace(/^import .*from '\.\/focusPreview.js'\n/, '')
@@ -494,6 +494,7 @@ for (const scale of [0.8, 1, 1.25]) {
 }
 
 test('real PDF hover reveals source and translation together and clears on viewer exit', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 })
   test.setTimeout(60000)
   const doc = { id: 'focus-pdf', filename: 'focus.pdf', total_pages: 1, translated_pages: [1], metadata: { title: 'Focus' } }
   const pdf = fs.readFileSync(new URL('./fixtures/text-geometry.pdf', import.meta.url))
@@ -509,9 +510,10 @@ test('real PDF hover reveals source and translation together and clears on viewe
     localStorage.setItem('easypaper_disable_hover_tooltip', 'true')
     location.hash = '#viewer?id=focus-pdf'
   })
-  const source = page.locator('.textLayer span').filter({ hasText: 'The quick brown fox' }).first()
+  await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
+  const source = activeReader(page).locator('.textLayer span').filter({ hasText: 'The quick brown fox' }).first()
   await expect(source).toBeVisible({ timeout: 15000 })
-  const translation = page.locator('.trans-sentence').first()
+  const translation = activeReader(page).locator('.trans-sentence').first()
   await expect(translation).toBeVisible()
   // Put the matching translation below its own scroll viewport, not below the page.
   await translation.evaluate(element => {
@@ -525,7 +527,7 @@ test('real PDF hover reveals source and translation together and clears on viewe
   })
   const sourceBefore = await source.boundingBox()
   await source.hover()
-  await expect(page.locator('.focus-mode-layer')).toBeVisible()
+  await expect(activeReader(page).locator('.focus-mode-layer')).toBeVisible()
   await expect.poll(() => translation.evaluate(element => {
     const pane = element.closest('.trans-page-content')
     const bounds = pane.getBoundingClientRect(), rect = element.getBoundingClientRect()
@@ -533,23 +535,23 @@ test('real PDF hover reveals source and translation together and clears on viewe
   })).toBe(true)
   expect((await source.boundingBox()).y).toBeCloseTo(sourceBefore.y, 0)
   await source.click()
-  const sourceMask = await page.locator('.focus-tint-hole').evaluateAll(elements => elements.map(e => ['x', 'y', 'width', 'height'].map(p => Number(e.getAttribute(p)))))
+  const sourceMask = await activeReader(page).locator('.focus-tint-hole').evaluateAll(elements => elements.map(e => ['x', 'y', 'width', 'height'].map(p => Number(e.getAttribute(p)))))
   // Compare actual PDF canvas and translation glyph pixels, not just geometry
   // or CSS declarations. Keep native layout/scroll positions fixed for both.
   const focused = (await page.screenshot({ scale: 'css', path: test.info().outputPath('focused.png') })).toString('base64')
-  await page.evaluate(() => {
+  await evaluateReader(page, () => {
     window.focusFilterStyles = Array.from(document.body.children).filter(e => e instanceof HTMLElement && e.style.filter).map(e => [e, e.style.filter, e.style.getPropertyPriority('filter')])
     for (const [element] of window.focusFilterStyles) element.style.setProperty('filter', 'none', 'important')
     document.querySelector('.focus-mode-layer').style.visibility = 'hidden'
   })
   const original = (await page.screenshot({ scale: 'css', path: test.info().outputPath('original.png') })).toString('base64')
-  await page.evaluate(() => {
+  await evaluateReader(page, () => {
     for (const [element, value, priority] of window.focusFilterStyles) element.style.setProperty('filter', value, priority)
     document.querySelector('.focus-mode-layer').style.visibility = ''
     delete window.focusFilterStyles
   })
   const boxes = [await source.boundingBox(), await translation.boundingBox()]
-  const differences = await page.evaluate(async ({ focused, original, boxes }) => {
+  const differences = await evaluateReader(page, async ({ focused, original, boxes }) => {
     const pixels = async data => {
       const image = new Image(); image.src = `data:image/png;base64,${data}`; await image.decode()
       const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
@@ -574,20 +576,20 @@ test('real PDF hover reveals source and translation together and clears on viewe
     expect(result.focused.edges).toBeGreaterThan(result.original.edges * 0.9)
     expect(result.focused.contrast).toBeGreaterThan(result.original.contrast * 0.95)
   }
-  await page.evaluate(() => {
+  await evaluateReader(page, () => {
     document.querySelector('#setting-focus-mode').checked = true
     const range = document.querySelector('#setting-focus-scale')
     range.value = '150'; range.dispatchEvent(new Event('input', { bubbles: true }))
   })
-  const enlargedSource = page.locator('.focus-mode-magnification[data-kind="source"]')
+  const enlargedSource = activeReader(page).locator('.focus-mode-magnification[data-kind="source"]')
   await expect(enlargedSource).toBeVisible()
-  await expect(page.locator('.focus-mode-magnification[data-kind="translation"]').first()).toBeVisible()
-  await expect(page.locator('.focus-mode-magnification .sentence-highlight, .focus-mode-magnification .active-mapped-sentence')).toHaveCount(0)
+  await expect(activeReader(page).locator('.focus-mode-magnification[data-kind="translation"]').first()).toBeVisible()
+  await expect(activeReader(page).locator('.focus-mode-magnification .sentence-highlight, .focus-mode-magnification .active-mapped-sentence')).toHaveCount(0)
   expect((await enlargedSource.boundingBox()).width).toBeGreaterThan(sourceBefore.width * 1.4)
   expect((await source.boundingBox()).width).toBeCloseTo(sourceBefore.width, 0)
   const magnified = (await page.screenshot({ scale: 'css', path: test.info().outputPath('magnified-150.png') })).toString('base64')
-  const enlargedBoxes = await page.locator('.focus-mode-magnification').evaluateAll(elements => elements.map(e => e.getBoundingClientRect().toJSON()))
-  const glyphs = await page.evaluate(async ({ magnified, enlargedBoxes }) => {
+  const enlargedBoxes = await Promise.all((await activeReader(page).locator('.focus-mode-magnification').all()).map(element => element.boundingBox()))
+  const glyphs = await evaluateReader(page, async ({ magnified, enlargedBoxes }) => {
     const image = new Image(); image.src = `data:image/png;base64,${magnified}`; await image.decode()
     const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
     const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
@@ -601,27 +603,27 @@ test('real PDF hover reveals source and translation together and clears on viewe
     expect(glyph.contrast).toBeGreaterThan(100)
     expect(glyph.edges).toBeGreaterThan(4)
   }
-  await page.evaluate(() => {
+  await evaluateReader(page, () => {
     const range = document.querySelector('#setting-focus-scale')
     range.value = '100'; range.dispatchEvent(new Event('input', { bubbles: true }))
   })
-  await expect(page.locator('.focus-mode-magnification')).toHaveCount(0)
+  await expect(activeReader(page).locator('.focus-mode-magnification')).toHaveCount(0)
   await translation.hover()
   // Native hover can scroll the pane by a fractional pixel in WebKit.
-  await expect.poll(() => page.locator('.focus-tint-hole').evaluateAll((elements, before) => {
+  await expect.poll(() => activeReader(page).locator('.focus-tint-hole').evaluateAll((elements, before) => {
     if (elements.length !== before.length) return Infinity
     return Math.max(...elements.flatMap((e, i) => ['x', 'y', 'width', 'height'].map((p, j) => Math.abs(Number(e.getAttribute(p)) - before[i][j]))))
   }, sourceMask)).toBeLessThanOrEqual(2)
-  await expect(page.locator('.focus-mode-outline')).toHaveCount(0)
+  await expect(activeReader(page).locator('.focus-mode-outline')).toHaveCount(0)
   await expect(translation).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await expect(translation).toHaveCSS('box-shadow', 'none')
   await translation.click()
   await page.keyboard.press('Escape')
-  await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
+  await expect(activeReader(page).locator('.focus-mode-layer')).toHaveCount(0)
   await source.hover()
-  await expect(page.locator('.focus-mode-layer')).toBeVisible()
+  await expect(activeReader(page).locator('.focus-mode-layer')).toBeVisible()
   await page.evaluate(() => { location.hash = '#library' })
-  await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
+  await expect(page.locator('.workspace-document-frame:not([hidden])')).toHaveCount(0)
 })
 
 for (const previewClass of ['figure-preview-tooltip', 'citation-tooltip']) {
@@ -747,37 +749,39 @@ test('viewer focus button and Shift+F toggle persisted focus without affecting t
     localStorage.setItem('easypaper_disable_hover_tooltip', 'true')
     location.hash = '#viewer?id=focus-pdf'
   })
-  const source = page.locator('.textLayer span').filter({ hasText: 'The quick brown fox' }).first()
+  await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
+  const source = activeReader(page).locator('.textLayer span').filter({ hasText: 'The quick brown fox' }).first()
   await expect(source).toBeVisible({ timeout: 15000 })
-  const translation = page.locator('.trans-sentence').first()
+  const translation = activeReader(page).locator('.trans-sentence').first()
   await expect(translation).toBeVisible()
 
-  const toggle = page.locator('#viewer-focus-toggle')
+  const toggle = activeReader(page).locator('#viewer-focus-toggle')
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   const buttonBounds = await toggle.boundingBox()
-  const navBounds = await page.locator('#scroll-top-btn').boundingBox()
-  expect(buttonBounds.y + buttonBounds.height).toBeLessThan(navBounds.y)
+  const navBounds = await activeReader(page).locator('#floating-scroll-nav').boundingBox()
+  expect(buttonBounds.y).toBeGreaterThanOrEqual(navBounds.y)
+  expect(buttonBounds.y + buttonBounds.height).toBeLessThanOrEqual(navBounds.y + navBounds.height)
   await source.hover()
-  await expect(page.locator('.focus-mode-layer')).toBeVisible()
+  await expect(activeReader(page).locator('.focus-mode-layer')).toBeVisible()
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
-  await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
+  await expect(activeReader(page).locator('.focus-mode-layer')).toHaveCount(0)
   expect(await page.evaluate(() => localStorage.getItem('easypaper_focus_mode_enabled_research'))).toBe('false')
   await page.keyboard.press('Shift+F')
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   await source.hover()
-  await expect(page.locator('.focus-mode-layer')).toBeVisible()
+  await expect(activeReader(page).locator('.focus-mode-layer')).toBeVisible()
   await page.keyboard.press('Shift+F')
-  await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
-  await expect(page.locator('#setting-focus-mode')).not.toBeChecked()
-  await page.locator('#page-input').focus()
+  await expect(activeReader(page).locator('.focus-mode-layer')).toHaveCount(0)
+  await expect(activeReader(page).locator('#setting-focus-mode')).not.toBeChecked()
+  await activeReader(page).locator('#page-input').focus()
   await page.keyboard.press('Shift+F')
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
   await page.reload()
   await expect(toggle).toBeVisible({ timeout: 15000 })
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
   await page.evaluate(() => { location.hash = '#library' })
-  await expect(page.locator('#viewer-screen')).not.toHaveClass(/active/)
+  await expect(page.locator('.workspace-document-frame:not([hidden])')).toHaveCount(0)
   await page.keyboard.press('Shift+F')
   expect(await page.evaluate(() => localStorage.getItem('easypaper_focus_mode_enabled_research'))).toBe('false')
 })

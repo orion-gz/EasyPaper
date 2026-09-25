@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 const recovered = [
   { text: '日本語の文章です。', bbox: [72, 100, 240, 116] },
@@ -27,8 +27,9 @@ async function openRecovered(page, pdf, spans, recovery = 'ocr', sources = [], t
   } }))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=recovered' })
-  await expect(page.locator(recovery ? '.textLayer[data-recovery]' : '.textLayer span').first()).toBeVisible()
-  await page.evaluate(() => Promise.all(document.getAnimations()
+  if (sources.length) await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
+  await expect(activeReader(page).locator(recovery ? '.textLayer[data-recovery]' : '.textLayer span').first()).toBeVisible()
+  await evaluateReader(page, () => Promise.all(document.getAnimations()
     .filter(animation => animation.effect.getComputedTiming().iterations !== Infinity)
     .map(animation => animation.finished.catch(() => {}))))
 }
@@ -43,38 +44,38 @@ for (const scale of [0.8, 1.25]) {
       hasEOL: col === [...sources[line]].length - 1,
     })))
     await openRecovered(page, geometryPdf, spans, 'ocr', sources)
-    await expect(page.locator('.trans-sentence').first()).toBeVisible()
+    await expect(activeReader(page).locator('.trans-sentence').first()).toBeVisible()
     for (let i = 0; i < sources.length; i++) {
-      await page.locator(`.trans-sentence[data-sentence-idx="${i}"]`).first().hover()
-      await expect(page.locator('.sentence-hover-box')).toHaveCount(1)
-      const box = await page.locator('.sentence-hover-box').boundingBox()
-      const metrics = await page.locator('.textLayer').evaluate(el => {
-        const r = el.getBoundingClientRect(); return { left: r.left, scale: r.width / 600 }
-      })
+      await activeReader(page).locator(`.trans-sentence[data-sentence-idx="${i}"]`).first().hover()
+      await expect(activeReader(page).locator('.sentence-hover-box')).toHaveCount(1)
+      const box = await activeReader(page).locator('.sentence-hover-box').boundingBox()
+      const layerBounds = await activeReader(page).locator('.textLayer').boundingBox()
+      const metrics = { left: layerBounds.x, scale: layerBounds.width / 600 }
       expect(Math.abs(box.x - metrics.left - 72 * metrics.scale)).toBeLessThan(1)
       expect(Math.abs(box.width - (16 * ([...sources[i]].length - 1) + 12) * metrics.scale)).toBeLessThan(2)
     }
-    const glyphs = page.locator('.textLayer span')
+    const glyphs = activeReader(page).locator('.textLayer span')
     await glyphs.first().scrollIntoViewIfNeeded()
     await glyphs.first().hover()
-    await expect(page.locator('.sentence-hover-box')).toHaveCount(1)
-    await expect(page.locator('.trans-sentence[data-sentence-idx="0"]').first()).toHaveClass(/sentence-highlight/)
+    await expect(activeReader(page).locator('.sentence-hover-box')).toHaveCount(1)
+    await expect(activeReader(page).locator('.trans-sentence[data-sentence-idx="0"]').first()).toHaveClass(/sentence-highlight/)
     const first = await glyphs.nth(0).boundingBox(), last = await glyphs.nth(sources[0].length - 1).boundingBox()
     await page.mouse.move(first.x + 1, first.y + first.height / 2)
     await page.mouse.down()
     await page.mouse.move(last.x + last.width - 1, last.y + last.height / 2, { steps: 12 })
-    await expect(page.locator('.sentence-selection-box')).toHaveCount(1)
+    await expect(activeReader(page).locator('.sentence-selection-box')).toHaveCount(1)
     await page.mouse.up()
-    await expect(page.locator('.sentence-selection-box')).toHaveCount(1)
-    expect(await page.evaluate(() => getSelection().toString().replace(/\s/g, ''))).toBe(sources[0])
-    await page.evaluate(() => getSelection().removeAllRanges())
-    await expect(page.locator('.sentence-selection-box')).toHaveCount(0)
-    await expect(page.locator('.pdf-box-selection')).toHaveCount(0)
+    await expect(activeReader(page).locator('.sentence-selection-box')).toHaveCount(1)
+    expect(await evaluateReader(page, () => getSelection().toString().replace(/\s/g, ''))).toBe(sources[0])
+    await evaluateReader(page, () => getSelection().removeAllRanges())
+    await expect(activeReader(page).locator('.sentence-selection-box')).toHaveCount(0)
+    await expect(activeReader(page).locator('.pdf-box-selection')).toHaveCount(0)
   })
 }
 
 async function enableFocus(page, uiScale, focusScale) {
-  await page.setViewportSize({ width: 1600, height: 1200 })
+  // Leave the same document area available after adding the persistent sidebar.
+  await page.setViewportSize({ width: 2000, height: 1200 })
   await page.addInitScript(({ uiScale, focusScale }) => {
     localStorage.setItem('easypaper_ui_scale', String(uiScale))
     localStorage.setItem('easypaper_focus_mode_enabled_research', 'true')
@@ -94,22 +95,24 @@ for (const uiScale of [0.8, 1.25]) {
         hasEOL: col === [...line].length - 1,
       })))
       await openRecovered(page, geometryPdf, spans, 'ocr', [lines.slice(0, 2).join(' '), lines[2]])
-      const translated = page.locator('.trans-sentence[data-sentence-idx="0"]').first()
+      const translated = activeReader(page).locator('.trans-sentence[data-sentence-idx="0"]').first()
       await translated.hover()
       // Two source lines and one translated line, with no glyph-sized holes.
-      await expect(page.locator('.focus-tint-hole')).toHaveCount(3)
+      await expect(activeReader(page).locator('.focus-tint-hole')).toHaveCount(3)
       if (focusScale > 100) {
-        const source = page.locator('.focus-mode-magnification[data-kind="source"]')
+        const source = activeReader(page).locator('.focus-mode-magnification[data-kind="source"]')
         await expect(source.locator('canvas')).toHaveCount(2)
         const sizes = await source.evaluate(el => el.focusRects.map(r => r.width))
         expect(Math.min(...sizes)).toBeGreaterThan(100)
       }
       // Pin and resize also use continuous line geometry.
       await translated.click()
-      await page.setViewportSize({ width: 1500, height: 1100 })
-      await expect(page.locator('.focus-tint-hole')).toHaveCount(3)
+      await page.setViewportSize({ width: 1900, height: 1100 })
+      await expect(activeReader(page).locator('.focus-tint-hole')).toHaveCount(3)
+      // Keep a pending resize/scroll mouse event from immediately focusing text again.
+      await activeReader(page).locator('#viewer-topbar').hover()
       await page.keyboard.press('Escape')
-      await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
+      await expect(activeReader(page).locator('.focus-mode-layer')).toHaveCount(0)
     })
   }
 }
@@ -123,18 +126,21 @@ for (const matched of [true, false]) {
       text, bbox: [72, 100 + row * 35, 240, 116 + row * 35], hasEOL: true,
     })), 'ocr', [lines.join('')], translations)
     // One cached mapping ID remains, even while Focus subdivides it.
-    await expect(page.locator('.trans-sentence').first()).toBeVisible()
-    expect(await page.locator('.trans-sentence').evaluateAll(els => [...new Set(els.map(e => e.dataset.sentenceIdx))])).toEqual(['0'])
-    const source = page.locator('.focus-mode-magnification[data-kind="source"]')
+    await expect(activeReader(page).locator('.trans-sentence').first()).toBeVisible()
+    expect(await activeReader(page).locator('.trans-sentence').evaluateAll(els => [...new Set(els.map(e => e.dataset.sentenceIdx))])).toEqual(['0'])
+    const source = activeReader(page).locator('.focus-mode-magnification[data-kind="source"]')
     for (const line of lines) {
-      const glyph = page.locator('.textLayer span').filter({ hasText: line }).first()
+      const glyph = activeReader(page).locator('.textLayer span').filter({ hasText: line }).first()
       await glyph.hover()
       await expect(source.locator('canvas')).toHaveCount(1)
-      const target = await glyph.boundingBox(), focused = await source.boundingBox()
-      expect(Math.abs(focused.y + focused.height / 2 - target.y - target.height / 2)).toBeLessThan(8)
+      await expect.poll(async () => {
+        const target = await glyph.boundingBox(), focused = await source.boundingBox()
+        if (!target || !focused) return Infinity
+        return Math.abs(focused.y + focused.height / 2 - target.y - target.height / 2)
+      }).toBeLessThan(8)
     }
     if (matched) {
-      const target = await page.locator('.trans-sentence').first().evaluate(el => {
+      const target = await activeReader(page).locator('.trans-sentence').first().evaluate(el => {
         const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
           const start = node.nodeValue.indexOf('두 번째')
@@ -143,19 +149,20 @@ for (const matched of [true, false]) {
           const r = range.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
         }
       })
-      await page.mouse.move(target.x, target.y)
+      const point = await readerPoint(page, target.x, target.y)
+      await page.mouse.move(point.x, point.y)
       await expect(source.locator('canvas')).toHaveCount(1)
-      const middle = await page.locator('.textLayer span').filter({ hasText: lines[1] }).first().boundingBox()
-      await expect.poll(async () => Math.abs((await source.boundingBox()).y - middle.y)).toBeLessThan(8)
+      const middle = await activeReader(page).locator('.textLayer span').filter({ hasText: lines[1] }).first().boundingBox()
+      await expect.poll(async () => Math.abs(((await source.boundingBox())?.y ?? Infinity) - middle.y)).toBeLessThan(8)
     }
-    await page.locator('.textLayer span').filter({ hasText: lines[1] }).first().click()
+    await activeReader(page).locator('.textLayer span').filter({ hasText: lines[1] }).first().click()
     await expect(source.locator('canvas')).toHaveCount(1)
     await page.keyboard.press('ArrowRight')
     await expect(source.locator('canvas')).toHaveCount(1)
-    const last = await page.locator('.textLayer span').filter({ hasText: lines[2] }).first().boundingBox()
-    await expect.poll(async () => Math.abs((await source.boundingBox()).y - last.y)).toBeLessThan(8)
+    const last = await activeReader(page).locator('.textLayer span').filter({ hasText: lines[2] }).first().boundingBox()
+    await expect.poll(async () => Math.abs(((await source.boundingBox())?.y ?? Infinity) - last.y)).toBeLessThan(8)
     await page.keyboard.press('Escape')
-    await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
+    await expect(activeReader(page).locator('.focus-mode-layer')).toHaveCount(0)
   })
 }
 
@@ -165,8 +172,8 @@ test('cached textbook paragraph focuses its first sentence without retranslating
   const data = JSON.parse(fs.readFileSync(`${root}.json`, 'utf8'))
   await enableFocus(page, 1, 125)
   await openRecovered(page, fs.readFileSync(`${root}.pdf`), data.text_layer, 'ocr', data.text.split(/\n\s*\n/).filter(Boolean))
-  await page.locator('.textLayer span').filter({ hasText: /^1960$/ }).first().hover()
-  const crops = page.locator('.focus-mode-magnification[data-kind="source"] canvas')
+  await activeReader(page).locator('.textLayer span').filter({ hasText: /^1960$/ }).first().hover()
+  const crops = activeReader(page).locator('.focus-mode-magnification[data-kind="source"] canvas')
   await expect(crops.first()).toBeVisible()
   expect(await crops.count()).toBeLessThanOrEqual(2)
   await page.screenshot({ path: '/tmp/easypaper-cjk-sentence-focus.png', fullPage: true })
@@ -178,9 +185,9 @@ test('Focus enlarges the original Japanese textbook paragraph as two complete li
   const data = JSON.parse(fs.readFileSync(`${root}.json`, 'utf8'))
   await enableFocus(page, 1, 125)
   await openRecovered(page, fs.readFileSync(`${root}.pdf`), data.text_layer, 'ocr', data.text.split(/\n\s*\n/).filter(Boolean))
-  await page.locator('.trans-sentence[data-sentence-idx="2"]').first().hover()
-  await expect(page.locator('.focus-mode-magnification[data-kind="source"] canvas')).toHaveCount(2)
-  await expect(page.locator('.focus-tint-hole')).toHaveCount(3)
+  await activeReader(page).locator('.trans-sentence[data-sentence-idx="2"]').first().hover()
+  await expect(activeReader(page).locator('.focus-mode-magnification[data-kind="source"] canvas')).toHaveCount(2)
+  await expect(activeReader(page).locator('.focus-tint-hole')).toHaveCount(3)
   await page.screenshot({ path: '/tmp/easypaper-japanese-focus-unified.png', fullPage: true })
 })
 
@@ -190,11 +197,11 @@ test('translation hover and click include source fragments on both sides of an e
   await openRecovered(page, geometryPdf, lines.map((text, i) => ({
     text, bbox: [72, 100 + i * 30, 260, 116 + i * 30], hasEOL: true,
   })), 'ocr', [lines.join(' ')])
-  const translated = page.locator('.trans-sentence').first()
+  const translated = activeReader(page).locator('.trans-sentence').first()
   await translated.hover()
-  await expect(page.locator('.sentence-hover-box')).toHaveCount(3)
+  await expect(activeReader(page).locator('.sentence-hover-box')).toHaveCount(3)
   await translated.click()
-  await expect(page.locator('.sentence-active-box')).toHaveCount(3)
+  await expect(activeReader(page).locator('.sentence-active-box')).toHaveCount(3)
 })
 
 test('original Japanese textbook paragraphs map to all recovered glyphs', async ({ page }) => {
@@ -205,13 +212,13 @@ test('original Japanese textbook paragraphs map to all recovered glyphs', async 
   const warnings = []
   page.on('console', m => { if (m.text().includes('Failed to match sentence')) warnings.push(m.text()) })
   await openRecovered(page, fs.readFileSync(`${root}.pdf`), data.text_layer, 'ocr', sources)
-  await expect(page.locator('.trans-sentence').first()).toBeVisible()
+  await expect(activeReader(page).locator('.trans-sentence').first()).toBeVisible()
   expect(warnings).toEqual([])
   // Verify every paragraph, not just the first fragment returned by .find().
   let searchStart = 0
   for (let i = 0; i < sources.length; i++) {
-    await page.locator(`.trans-sentence[data-sentence-idx="${i}"]`).first().hover()
-    const result = await page.locator('.textLayer').evaluate((layer, { source, searchStart }) => {
+    await activeReader(page).locator(`.trans-sentence[data-sentence-idx="${i}"]`).first().hover()
+    const result = await activeReader(page).locator('.textLayer').evaluate((layer, { source, searchStart }) => {
       const clean = text => text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, '')
       let full = ''
       const spans = [...layer.querySelectorAll('span')].map(el => {
@@ -232,11 +239,11 @@ test('original Japanese textbook paragraphs map to all recovered glyphs', async 
     searchStart = result.end
   }
   // Paragraph 3 ends in kana: the old matcher clipped the ending and OCR boxes.
-  await page.locator('.trans-sentence[data-sentence-idx="2"]').first().hover()
-  const boxes = page.locator('.sentence-hover-box')
+  await activeReader(page).locator('.trans-sentence[data-sentence-idx="2"]').first().hover()
+  const boxes = activeReader(page).locator('.sentence-hover-box')
   await expect(boxes.first()).toBeVisible()
   expect(await boxes.count()).toBeLessThan(8)
-  const ending = page.locator('.textLayer span').filter({ hasText: 'ます' }).first()
+  const ending = activeReader(page).locator('.textLayer span').filter({ hasText: 'ます' }).first()
   const covered = await ending.evaluate(el => {
     const r = el.getBoundingClientRect()
     return [...document.querySelectorAll('.sentence-hover-box')].some(box => {
@@ -253,7 +260,7 @@ for (const scale of [0.8, 1, 1.25]) {
     await page.addInitScript(scale => localStorage.setItem('easypaper_ui_scale', scale), String(scale))
     await openRecovered(page, geometryPdf, recovered)
     for (const span of recovered) {
-      const locator = page.locator('.textLayer span').filter({ hasText: span.text }).first()
+      const locator = activeReader(page).locator('.textLayer span').filter({ hasText: span.text }).first()
       await expect(locator).toBeVisible()
       const geometry = await locator.evaluate(el => {
         const rect = el.getBoundingClientRect()
@@ -271,9 +278,9 @@ for (const scale of [0.8, 1, 1.25]) {
 
 test('OCR failure preserves the page and explains why text is unavailable', async ({ page }) => {
   await openRecovered(page, SAMPLE_PDF_A, [], 'failed')
-  await expect(page.locator('.pdf-text-recovery-notice')).toContainText('Tesseract')
-  await expect(page.locator('.pdf-page-inner canvas')).toBeVisible()
-  await expect(page.locator('.textLayer span')).toHaveCount(0)
+  await expect(activeReader(page).locator('.pdf-text-recovery-notice')).toContainText('Tesseract')
+  await expect(activeReader(page).locator('.pdf-page-inner canvas')).toBeVisible()
+  await expect(activeReader(page).locator('.textLayer span')).toHaveCount(0)
 })
 
 test('native CJK text loads local CMaps and fallback fonts without OCR', async ({ page }) => {
@@ -287,7 +294,7 @@ test('native CJK text loads local CMaps and fallback fonts without OCR', async (
   })
   const pdf = fs.readFileSync(new URL('./fixtures/multilingual-native.pdf', import.meta.url))
   await openRecovered(page, pdf, [], null)
-  const layer = page.locator('.textLayer')
+  const layer = activeReader(page).locator('.textLayer')
   for (const text of ['日本語の文章です。', '한국어 문장입니다.', '这是中文文本。', '這是中文文本。']) {
     await expect(layer).toContainText(text)
   }
@@ -302,7 +309,7 @@ test('original Japanese textbook renders recovered selectable text', async ({ pa
   const root = process.env.EASYPAPER_TEST_RECOVERY_FIXTURE
   const spans = JSON.parse(fs.readFileSync(`${root}.json`, 'utf8'))
   await openRecovered(page, fs.readFileSync(`${root}.pdf`), spans)
-  await expect(page.locator('.textLayer')).toContainText('基本ソフト')
-  await expect(page.locator('.page-render-error')).toHaveCount(0)
+  await expect(activeReader(page).locator('.textLayer')).toContainText('基本ソフト')
+  await expect(activeReader(page).locator('.page-render-error')).toHaveCount(0)
   await page.screenshot({ path: '/tmp/easypaper-japanese-recovered.png', fullPage: true })
 })

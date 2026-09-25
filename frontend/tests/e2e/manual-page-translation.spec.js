@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 test('수동 번역 모드는 버튼을 누른 한 페이지만 번역한다', async ({ page }) => {
   const doc = {
@@ -37,14 +37,15 @@ test('수동 번역 모드는 버튼을 누른 한 페이지만 번역한다', a
     location.hash = '#viewer?id=doc-manual'
   })
 
-  const translateButton = page.locator('#trans-content-1 .translate-page-btn')
+  await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
+  const translateButton = activeReader(page).locator('#trans-content-1 .translate-page-btn')
   await expect(translateButton).toBeVisible()
   expect(translationRequests).toBe(0)
   expect(restartRequests).toBe(0)
 
   await translateButton.click()
 
-  await expect(page.locator('#trans-content-1 .trans-text')).toContainText('수동 페이지 번역')
+  await expect(activeReader(page).locator('#trans-content-1 .trans-text')).toContainText('수동 페이지 번역')
   expect(translationRequests).toBe(1)
   expect(restartRequests).toBe(0)
 })
@@ -84,7 +85,8 @@ for (const failure of ['sse', 'http', 'network', 'truncated']) {
       localStorage.setItem('easypaper_translation_mode', 'pane')
       location.hash = '#viewer?id=doc-retry'
     })
-    const content = page.locator('#trans-content-1')
+    await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
+    const content = activeReader(page).locator('#trans-content-1')
     await content.getByRole('button', { name: '이 페이지 번역하기' }).click()
     const retry = content.getByRole('button', { name: '다시 시도' })
     await expect(retry).toBeVisible()
