@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
-import { mockBaseRoutes, gotoApp } from './helpers.js'
+import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp } from './helpers.js'
 
 for (const rotation of [0, 90]) {
   for (const unresolved of [false, true]) {
@@ -25,18 +25,19 @@ for (const rotation of [0, 90]) {
         localStorage.setItem('easypaper_focus_scale_research', '100')
         location.hash = '#viewer?id=order'
       }, focus)
-      await expect(page.locator('.textLayer[data-segmented="true"]')).toBeVisible()
-      await expect(page.locator('.trans-sentence').first()).toBeVisible()
+      await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
+      await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible()
+      await expect(activeReader(page).locator('.trans-sentence').first()).toBeVisible()
       for (let i = 0; i < 2; i++) {
-        await page.locator(`.trans-sentence[data-sentence-idx="${i}"]`).first().hover()
+        await activeReader(page).locator(`.trans-sentence[data-sentence-idx="${i}"]`).first().hover()
         if (unresolved && i === 1) {
-          await expect(page.locator('.sentence-hover-box')).toHaveCount(0)
-          await expect(page.locator('.pdf-text-recovery-notice')).toHaveText('읽기 순서 확인 필요')
+          await expect(activeReader(page).locator('.sentence-hover-box')).toHaveCount(0)
+          await expect(activeReader(page).locator('.pdf-text-recovery-notice')).toHaveText('읽기 순서 확인 필요')
           continue
         }
-        await expect(page.locator('.sentence-hover-box')).toHaveCount(1)
-        const box = await page.locator('.sentence-hover-box').boundingBox()
-        const canvas = await page.locator('.pdf-page-inner canvas').first().boundingBox()
+        await expect(activeReader(page).locator('.sentence-hover-box')).toHaveCount(1)
+        const box = await activeReader(page).locator('.sentence-hover-box').boundingBox()
+        const canvas = await activeReader(page).locator('.pdf-page-inner canvas').first().boundingBox()
         const scale = canvas.width / (rotation ? 800 : 600)
         const x = i ? 340 : 40, y = i ? 180 : 80
         // Native glyph boxes begin slightly above the insertion baseline.
@@ -45,8 +46,8 @@ for (const rotation of [0, 90]) {
         expect(Math.abs(box.x - canvas.x - expectedX * scale)).toBeLessThan(3)
         expect(Math.abs(box.y - canvas.y - expectedY * scale)).toBeLessThan(3)
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-        await expect(page.locator(`.trans-sentence[data-sentence-idx="${i}"]`).first()).toHaveClass(/sentence-highlight/)
-        if (focus) await expect(page.locator('.focus-mode-layer')).toBeVisible()
+        await expect(activeReader(page).locator(`.trans-sentence[data-sentence-idx="${i}"]`).first()).toHaveClass(/sentence-highlight/)
+        if (focus) await expect(activeReader(page).locator('.focus-mode-layer')).toBeVisible()
       }
     })
   }

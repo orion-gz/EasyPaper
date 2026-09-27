@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A, SAMPLE_PDF_CITATION } from "./helpers.js"
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A, SAMPLE_PDF_CITATION } from "./helpers.js"
 
 const documentFixture = {
   id: "doc-accessibility",
@@ -26,15 +26,15 @@ async function openViewer(page) {
     localStorage.setItem("easypaper_hydrated_doc-accessibility", "1")
     location.hash = "#viewer?id=doc-accessibility"
   })
-  await expect(page.locator("#viewer-screen.active")).toBeVisible()
-  await expect(page.locator(`.pdf-page-wrapper[data-page="1"]`)).toBeVisible()
+  await expect(activeReader(page).locator("#viewer-screen.active")).toBeVisible()
+  await expect(activeReader(page).locator(`.pdf-page-wrapper[data-page="1"]`)).toBeVisible()
 }
 
 test("뷰어 핵심 화면이 WCAG 2.2 AA 자동 검사를 통과한다", async ({ page }) => {
   await openViewer(page)
 
   const results = await new AxeBuilder({ page })
-    .include("#viewer-screen")
+    .include([".workspace-document-frame:not([hidden])", "#viewer-screen"])
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze()
 
@@ -46,25 +46,23 @@ test("뷰어 툴바를 Tab만으로 논리적인 순서로 이동하고 포커�
 
   const tabOrder = [
     "#back-btn",
-    "#logo-btn",
+    "#workspace-forward-btn",
     "#outline-toggle-btn",
     "#doc-title-edit-btn",
-    "#page-input",
-    "#zoom-out-btn",
-    "#zoom-in-btn",
+    "#workspace-reading-mode",
     "#capture-area-btn",
     "#chat-toggle-btn",
     "#toolbar-kebab-btn",
   ]
 
-  await page.locator(tabOrder[0]).focus()
+  await activeReader(page).locator(tabOrder[0]).focus()
   for (let index = 0; index < tabOrder.length; index += 1) {
-    const control = page.locator(tabOrder[index])
+    const control = activeReader(page).locator(tabOrder[index])
     await expect(control).toBeFocused()
     if (index < tabOrder.length - 1) await page.keyboard.press("Tab")
   }
 
-  const focusStyle = await page.locator("#toolbar-kebab-btn").evaluate(element => {
+  const focusStyle = await activeReader(page).locator("#toolbar-kebab-btn").evaluate(element => {
     const style = getComputedStyle(element)
     return { style: style.outlineStyle, width: style.outlineWidth }
   })
@@ -75,15 +73,16 @@ test("뷰어 툴바를 Tab만으로 논리적인 순서로 이동하고 포커�
 test("열린 채팅 패널과 메뉴도 WCAG 2.2 AA 자동 검사를 통과한다", async ({ page }) => {
   await openViewer(page)
 
-  await page.locator("#chat-toggle-btn").press("Enter")
-  await expect(page.locator("#chat-sidebar")).toBeVisible()
-  await page.locator("#toolbar-kebab-btn").press("Space")
-  await expect(page.locator("#toolbar-kebab-menu")).toBeVisible()
-  await expect(page.locator("#toolbar-kebab-btn")).toHaveAttribute("aria-haspopup", "dialog")
-  await expect(page.locator("#toolbar-kebab-menu")).toHaveAttribute("role", "dialog")
+  await activeReader(page).locator("#chat-toggle-btn").press("Enter")
+  await activeReader(page).locator("#chat-toggle-btn").press("Enter")
+  await expect(activeReader(page).locator("#chat-sidebar")).toBeVisible()
+  await activeReader(page).locator("#toolbar-kebab-btn").press("Space")
+  await expect(activeReader(page).locator("#toolbar-kebab-menu")).toBeVisible()
+  await expect(activeReader(page).locator("#toolbar-kebab-btn")).toHaveAttribute("aria-haspopup", "dialog")
+  await expect(activeReader(page).locator("#toolbar-kebab-menu")).toHaveAttribute("role", "dialog")
 
   const results = await new AxeBuilder({ page })
-    .include("#viewer-screen")
+    .include([".workspace-document-frame:not([hidden])", "#viewer-screen"])
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze()
 
@@ -93,16 +92,16 @@ test("열린 채팅 패널과 메뉴도 WCAG 2.2 AA 자동 검사를 통과한�
 test("메뉴와 개요를 키보드로 열고 Escape로 원래 트리거에 복귀한다", async ({ page }) => {
   await openViewer(page)
 
-  const menuButton = page.locator("#toolbar-kebab-btn")
+  const menuButton = activeReader(page).locator("#toolbar-kebab-btn")
   await menuButton.focus()
   await menuButton.press("Enter")
   await expect(menuButton).toHaveAttribute("aria-expanded", "true")
-  await expect(page.locator("#viewer-read-toggle-btn")).toBeFocused()
+  await expect(activeReader(page).locator("#viewer-read-toggle-btn")).toBeFocused()
   await page.keyboard.press("Escape")
   await expect(menuButton).toBeFocused()
   await expect(menuButton).toHaveAttribute("aria-expanded", "false")
 
-  const outlineButton = page.locator("#outline-toggle-btn")
+  const outlineButton = activeReader(page).locator("#outline-toggle-btn")
   await outlineButton.focus()
   await outlineButton.press("Enter")
   await expect(outlineButton).toHaveAttribute("aria-expanded", "true")
@@ -114,18 +113,18 @@ test("메뉴와 개요를 키보드로 열고 Escape로 원래 트리거에 복�
 test("케밥 메뉴의 정보 항목이 문서 정보 다이얼로그를 연다", async ({ page }) => {
   await openViewer(page)
 
-  const menuButton = page.locator("#toolbar-kebab-btn")
+  const menuButton = activeReader(page).locator("#toolbar-kebab-btn")
   await menuButton.click()
-  await page.locator("#viewer-document-info-btn").click()
+  await activeReader(page).locator("#viewer-document-info-btn").click()
 
-  const modal = page.locator("#viewer-document-info-modal")
+  const modal = activeReader(page).locator("#viewer-document-info-modal")
   await expect(modal).toBeVisible()
   await expect(modal).toHaveAttribute("role", "dialog")
-  await expect(page.locator("#viewer-document-info-name")).toHaveText("Accessible document")
-  await expect(page.locator("#viewer-document-info-filename")).toHaveText("Accessible.pdf")
-  await expect(page.locator("#viewer-document-type-chip")).not.toBeEmpty()
-  await expect(page.locator("#viewer-processing-badge")).toHaveText("외부 전송")
-  await expect(page.locator("#toolbar-kebab-menu")).toBeHidden()
+  await expect(activeReader(page).locator("#viewer-document-info-name")).toHaveText("Accessible document")
+  await expect(activeReader(page).locator("#viewer-document-info-filename")).toHaveText("Accessible.pdf")
+  await expect(activeReader(page).locator("#viewer-document-type-chip")).not.toBeEmpty()
+  await expect(activeReader(page).locator("#viewer-processing-badge")).toHaveText("외부 전송")
+  await expect(activeReader(page).locator("#toolbar-kebab-menu")).toBeHidden()
 
   await page.keyboard.press("Escape")
   await expect(modal).toBeHidden()
@@ -135,11 +134,12 @@ test("케밥 메뉴의 정보 항목이 문서 정보 다이얼로그를 연다"
 test("채팅 패널과 리사이저를 키보드로 조작하고 닫을 때 포커스를 복귀한다", async ({ page }) => {
   await openViewer(page)
 
-  const toggle = page.locator("#chat-toggle-btn")
+  const toggle = activeReader(page).locator("#chat-toggle-btn")
   await toggle.click()
-  await expect(page.locator("#chat-sidebar")).toBeVisible()
+  await toggle.click()
+  await expect(activeReader(page).locator("#chat-sidebar")).toBeVisible()
 
-  const resizer = page.locator("#chat-resizer")
+  const resizer = activeReader(page).locator("#chat-resizer")
   await resizer.focus()
   const initial = Number(await resizer.getAttribute("aria-valuenow"))
   await resizer.press("ArrowLeft")
@@ -147,10 +147,10 @@ test("채팅 패널과 리사이저를 키보드로 조작하고 닫을 때 포�
   await resizer.press("Shift+ArrowRight")
   await expect(resizer).toHaveAttribute("aria-valuenow", String(initial - 30))
   await resizer.press("Home")
-  await expect(resizer).toHaveAttribute("aria-valuenow", "390")
+  await expect(resizer).toHaveAttribute("aria-valuenow", "360")
 
-  await page.locator("#chat-input").press("Escape")
-  await expect(page.locator("#chat-sidebar")).toBeHidden()
+  await activeReader(page).locator("#chat-input").press("Escape")
+  await expect(activeReader(page).locator("#chat-sidebar")).toBeHidden()
   await expect(toggle).toBeFocused()
 })
 
@@ -176,12 +176,12 @@ test("인용 오버레이를 키보드로 열고 Escape로 트리거에 복귀�
 
   await gotoApp(page)
   await page.evaluate(() => { location.hash = "#viewer?id=doc-C" })
-  const trigger = page.locator(".citation-marker-box").first()
+  const trigger = activeReader(page).locator(".citation-marker-box").first()
   await expect(trigger).toBeVisible()
   await trigger.focus()
   await trigger.press("Space")
 
-  const tooltip = page.locator(".citation-tooltip")
+  const tooltip = activeReader(page).locator(".citation-tooltip")
   await expect(tooltip).toBeVisible()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
   await expect(tooltip.locator(".citation-tooltip-resolve-btn")).toBeFocused()

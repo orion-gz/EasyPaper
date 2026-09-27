@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 test('stored locale is applied on the unauthenticated login screen', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('easypaper_ui_locale', 'en'))
@@ -39,8 +39,9 @@ test('locale selector updates onboarding immediately without reload', async ({ p
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
 })
 
-async function visibleKoreanUi(page) {
-  return page.evaluate(() => {
+async function visibleKoreanUi(page, reader = false) {
+  const evaluate = reader ? (fn => evaluateReader(page, fn)) : (fn => page.evaluate(fn))
+  return evaluate(() => {
     const excluded = '[dir="auto"], [data-i18n-skip], .pdf-page, .translation-content, .chat-message-content, .memo-content'
     const visible = element => {
       const style = getComputedStyle(element)
@@ -89,19 +90,19 @@ test('English locale has no visible Korean UI in the PDF viewer', async ({ page 
   await page.route('**/api/library/doc-i18n-viewer/pdf', route => route.fulfill({ status: 200, contentType: 'application/pdf', body: SAMPLE_PDF_A }))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=doc-i18n-viewer' })
-  await expect(page.locator('#viewer-screen')).toHaveClass(/active/)
-  await expect(page.locator('#viewer-scroll-container')).toBeVisible()
-  await expect.poll(() => visibleKoreanUi(page)).toEqual([])
-  await page.click('#chat-toggle-btn')
-  await expect(page.locator('#chat-sidebar')).not.toHaveClass(/hidden/)
-  await expect.poll(() => visibleKoreanUi(page)).toEqual([])
-  await page.evaluate(() => {
+  await expect(activeReader(page).locator('#viewer-screen')).toHaveClass(/active/)
+  await expect(activeReader(page).locator('#viewer-scroll-container')).toBeVisible()
+  await expect.poll(() => visibleKoreanUi(page, true)).toEqual([])
+  await expect(activeReader(page).locator('#workspace-reading-mode')).toBeVisible()
+  await expect(activeReader(page).locator('#chat-sidebar')).not.toHaveClass(/hidden/)
+  await expect.poll(() => visibleKoreanUi(page, true)).toEqual([])
+  await evaluateReader(page, () => {
     document.querySelector('#primer-modal').classList.remove('hidden')
     document.querySelector('#primer-loading').classList.add('hidden')
     document.querySelector('#primer-body').classList.remove('hidden')
   })
-  await expect(page.locator('#primer-modal')).not.toHaveClass(/hidden/)
-  await expect.poll(() => visibleKoreanUi(page)).toEqual([])
+  await expect(activeReader(page).locator('#primer-modal')).not.toHaveClass(/hidden/)
+  await expect.poll(() => visibleKoreanUi(page, true)).toEqual([])
 })
 
 test('viewer language pickers share the model picker grid and persist custom selections', async ({ page }) => {
@@ -132,28 +133,28 @@ test('viewer language pickers share the model picker grid and persist custom sel
 
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=doc-language-picker' })
-  await expect(page.locator('#viewer-screen')).toHaveClass(/active/)
-  await page.locator('#toolbar-kebab-btn').click()
+  await expect(activeReader(page).locator('#viewer-screen')).toHaveClass(/active/)
+  await activeReader(page).locator('#toolbar-kebab-btn').click()
 
   const buttons = [
-    page.locator('#document-source-lang').locator('..').locator('.provider-picker-btn'),
-    page.locator('#document-target-lang').locator('..').locator('.provider-picker-btn'),
-    page.locator('#viewer-trans-provider .provider-picker-btn'),
+    activeReader(page).locator('#document-source-lang').locator('..').locator('.provider-picker-btn'),
+    activeReader(page).locator('#document-target-lang').locator('..').locator('.provider-picker-btn'),
+    activeReader(page).locator('#viewer-trans-provider .provider-picker-btn'),
   ]
   const boxes = await Promise.all(buttons.map(button => button.boundingBox()))
   expect(boxes.every(Boolean)).toBe(true)
   expect(Math.max(...boxes.map(box => box.width)) - Math.min(...boxes.map(box => box.width))).toBeLessThan(1)
   expect(Math.max(...boxes.map(box => box.x)) - Math.min(...boxes.map(box => box.x))).toBeLessThan(1)
   expect(Math.abs((boxes[1].y - boxes[0].y) - (boxes[2].y - boxes[1].y))).toBeLessThan(1)
-  const labelColumn = await page.locator('.kebab-translation-grid').evaluate(grid => {
+  const labelColumn = await activeReader(page).locator('.kebab-translation-grid').evaluate(grid => {
     const firstTrack = parseFloat(getComputedStyle(grid).gridTemplateColumns)
     const widestLabel = Math.max(...[...grid.querySelectorAll('.kebab-menu-label')]
       .map(label => label.getBoundingClientRect().width))
     return { firstTrack, widestLabel }
   })
   expect(labelColumn.firstTrack - labelColumn.widestLabel).toBeLessThan(1)
-  await expect(page.locator('#document-language-status')).toContainText('Multiple source languages detected')
-  const statusStyle = await page.locator('#document-language-status').evaluate(status => {
+  await expect(activeReader(page).locator('#document-language-status')).toContainText('Multiple source languages detected')
+  const statusStyle = await activeReader(page).locator('#document-language-status').evaluate(status => {
     const style = getComputedStyle(status)
     return {
       bodyColor: getComputedStyle(document.body).color,
@@ -168,7 +169,7 @@ test('viewer language pickers share the model picker grid and persist custom sel
 
   await buttons[0].click()
   await expect(buttons[0]).toHaveAttribute('aria-expanded', 'true')
-  await page.locator('#document-source-lang-picker-panel [data-value="ja"]').click()
+  await activeReader(page).locator('#document-source-lang-picker-panel [data-value="ja"]').click()
   await expect(buttons[0]).toContainText('Japanese')
   await expect(buttons[0]).toHaveAttribute('aria-expanded', 'false')
   await expect.poll(() => languagePayload).toEqual({
