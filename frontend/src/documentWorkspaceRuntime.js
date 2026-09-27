@@ -187,9 +187,10 @@ export function installDocumentRuntime(adapter) {
 
   function snapshot() {
     if (!active && suspendedSnapshot) return suspendedSnapshot
-    const page = adapter.state.currentPage
-    const pair = scroll.querySelector(`.page-pair[data-page="${page}"], .article-unit[data-unit-index="${page}"]`)
-    const offset = pair ? (scroll.getBoundingClientRect().top - pair.getBoundingClientRect().top) / pair.getBoundingClientRect().height : 0
+    const viewportTop = scroll.getBoundingClientRect().top
+    const pair = [...scroll.querySelectorAll('.page-pair, .article-unit')].find(item => item.getBoundingClientRect().bottom > viewportTop)
+    const page = pair ? Number(pair.dataset.page ?? pair.dataset.unitIndex) || adapter.state.currentPage : adapter.state.currentPage
+    const offset = pair ? Math.max(0, Math.min(1, (viewportTop - pair.getBoundingClientRect().top) / pair.getBoundingClientRect().height)) : 0
     return sanitizeReading({ page, offset, fitWidth: readerTools?.fit() ?? false, zoom: adapter.state.zoom, panel, panelOpen: !sidebar.classList.contains('hidden'), navigation, panelWidth: parseFloat(sidebar.style.width) || 360 })
   }
   function publishSnapshot() {

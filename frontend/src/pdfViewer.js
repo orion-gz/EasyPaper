@@ -301,20 +301,26 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
       }
     })
 
-    // 가장 많이 노출되고 있는 페이지 산출
-    let maxPageNum = -1
-    let maxHeight = -1
-    for (const [page, height] of Object.entries(visiblePageHeights)) {
-      if (height > maxHeight) {
-        maxHeight = height
-        maxPageNum = parseInt(page)
-      }
+    // Track the first page entering from the top of the reader. A taller next
+    // page can occupy more pixels than a short page even while the short page
+    // remains anchored at the top (for example, mixed-size PDFs).
+    const viewportTop = container.getBoundingClientRect().top
+    let currentPageNum = -1
+    let currentPageTop = Infinity
+    for (const page of Object.keys(visiblePageHeights)) {
+      const pageNum = Number(page)
+      const element = container.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+      if (!element) continue
+      const rect = element.getBoundingClientRect()
+      if (rect.bottom <= viewportTop || rect.top >= currentPageTop) continue
+      currentPageTop = rect.top
+      currentPageNum = pageNum
     }
 
-    if (maxPageNum !== -1 && maxPageNum !== lastNotifiedPage) {
-      currentPage = maxPageNum
-      lastNotifiedPage = maxPageNum
-      onPageVisible?.(maxPageNum)
+    if (currentPageNum !== -1 && currentPageNum !== lastNotifiedPage) {
+      currentPage = currentPageNum
+      lastNotifiedPage = currentPageNum
+      onPageVisible?.(currentPageNum)
     }
   }, {
     root: container,
