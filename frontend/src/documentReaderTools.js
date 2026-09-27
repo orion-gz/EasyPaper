@@ -20,6 +20,7 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
   let pointerDown = false
   let drag = null
   let locateRevision = 0
+  let deferredFit = false
   const texts = new Map()
   const button = (id, label, content, parent, action) => {
     const element = document.createElement('button')
@@ -74,7 +75,9 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
 
   function isInteracting() {
     const selection = window.getSelection()
-    return pointerDown || scroll.querySelector('.floating-memo-textarea') || document.activeElement?.closest('.floating-memo') || (selection && !selection.isCollapsed && scroll.contains(selection.anchorNode))
+    const focusOverlay = document.querySelector('#viewer-screen .focus-mode-layer:not(.hidden)')
+    if (focusOverlay && fit) deferredFit = true
+    return Boolean(focusOverlay) || pointerDown || scroll.querySelector('.floating-memo-textarea') || document.activeElement?.closest('.floating-memo') || (selection && !selection.isCollapsed && scroll.contains(selection.anchorNode))
   }
   async function applyFit() {
     if (!fit || !active || disposed || fitting || !scroll.clientWidth) return
@@ -112,6 +115,12 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
   document.addEventListener('pointerdown', pointerStart, true)
   document.addEventListener('pointerup', pointerEnd, true)
   document.addEventListener('pointercancel', pointerEnd, true)
+  const focusObserver = new MutationObserver(() => {
+    if (!deferredFit || !fit || document.querySelector('#viewer-screen .focus-mode-layer:not(.hidden)')) return
+    deferredFit = false
+    scheduleFit()
+  })
+  focusObserver.observe(document.getElementById('viewer-screen'), { childList: true, subtree: true })
   const resize = new ResizeObserver(scheduleFit)
   resize.observe(scroll)
 
@@ -242,6 +251,6 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
         else if (!search.hidden && results[selected]) void highlightResult(results[selected], ++locateRevision)
       }
     },
-    destroy() { searchController?.abort(); disposed = true; ++revision; clearTimeout(fitTimer); clearTimeout(queryTimer); resize.disconnect(); document.removeEventListener('pointerdown', pointerStart, true); document.removeEventListener('pointerup', pointerEnd, true); document.removeEventListener('pointercancel', pointerEnd, true); document.removeEventListener('change', manualZoom, true); document.removeEventListener('keydown', keydown); document.removeEventListener('click', manualZoom, true); texts.clear() },
+    destroy() { searchController?.abort(); disposed = true; ++revision; clearTimeout(fitTimer); clearTimeout(queryTimer); resize.disconnect(); focusObserver.disconnect(); document.removeEventListener('pointerdown', pointerStart, true); document.removeEventListener('pointerup', pointerEnd, true); document.removeEventListener('pointercancel', pointerEnd, true); document.removeEventListener('change', manualZoom, true); document.removeEventListener('keydown', keydown); document.removeEventListener('click', manualZoom, true); texts.clear() },
   }
 }

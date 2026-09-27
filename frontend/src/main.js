@@ -2232,9 +2232,30 @@ async function setZoom(newZoom) {
   lastCommittedZoom = newZoom
   if (!state.sessionId) { clearZoomPreviewTransform(); return }
   focusModeController?.scheduleRender()
-  await reRenderAll(viewerScrollContainer, newZoom, {
-    onPageVisible: handleReaderPageVisible
+  const detachedMemoCards = new Map()
+  viewerScrollContainer.querySelectorAll('.page-pair').forEach(pair => {
+    const pageNum = Number(pair.dataset.page)
+    const wrapper = pair.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+    const cards = [...(wrapper?.querySelectorAll(':scope > .floating-memo') || [])]
+    if (!cards.length) return
+    zoomPreservedMemoPages.set(pageNum, state.sessionId)
+    detachedMemoCards.set(pageNum, cards)
+    cards.forEach(card => card.remove())
   })
+  try {
+    await reRenderAll(viewerScrollContainer, newZoom, {
+      onPageVisible: handleReaderPageVisible
+    })
+  } finally {
+    for (const [pageNum, cards] of detachedMemoCards) {
+      const wrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+      if (!wrapper) continue
+      cards.forEach(card => wrapper.appendChild(card))
+      for (const memo of loadMemos(state.sessionId)[`page_${pageNum}`] || []) {
+        updateMemoConnectorLine(wrapper, memo)
+      }
+    }
+  }
   const restoredAnchor = viewerScrollContainer.querySelector(`.page-pair[data-page="${anchorPage}"]`)
   if (restoredAnchor && Number.isFinite(anchorOffset)) {
     const scale = viewerScrollContainer.getBoundingClientRect().width / viewerScrollContainer.offsetWidth || 1
@@ -13554,6 +13575,12 @@ let pdfGeometryRefreshTimer
 function schedulePdfGeometryRefresh() {
   clearTimeout(pdfGeometryRefreshTimer)
   pdfGeometryRefreshTimer = setTimeout(() => {
+    geometryPreservedMemoPages.clear()
+    viewerScrollContainer?.querySelectorAll('.pdf-page-wrapper').forEach(wrapper => {
+      if (!wrapper.querySelector(':scope > .floating-memo')) return
+      const pageNum = Number(wrapper.dataset.page)
+      if (Number.isFinite(pageNum)) geometryPreservedMemoPages.add(pageNum)
+    })
     refreshTextLayerGeometry((layer, pageNum) => {
       window.onTextLayerRendered(layer, pageNum)
       const sentences = state.pdfPageSentences?.[pageNum] || []
@@ -13572,11 +13599,15 @@ function schedulePdfGeometryRefresh() {
 window.addEventListener('resize', schedulePdfGeometryRefresh)
 document.fonts.addEventListener('loadingdone', schedulePdfGeometryRefresh)
 
+const zoomPreservedMemoPages = new Map()
+const geometryPreservedMemoPages = new Set()
+
 // PDF.js 텍스트 레이어 렌더 완료 콜백 등록
 window.onTextLayerReleased = (textLayerDiv, pageNum) => {
   if (!textLayerDiv) return
   delete state.virtualTextMaps?.[pageNum]
   delete state.pdfPageSentences?.[pageNum]
+  if (zoomPreservedMemoPages.get(pageNum) === state.sessionId) return
   textLayerDiv.closest('.pdf-page-wrapper')?.querySelectorAll(':scope > .floating-memo').forEach(memo => {
     memo._memoResizeObserver?.disconnect()
     clearTimeout(memo._memoResizeSaveTimer)
@@ -13607,6 +13638,17 @@ window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   renderImageOverlayLayer(textLayerDiv, pageNum)
   renderCitationOverlayLayer(textLayerDiv, pageNum)
   renderFigureRefOverlayLayer(textLayerDiv, pageNum)
+
+  // Keep existing memo cards mounted through fit/zoom rerenders so focus, DOM
+  // state and keyboard actions survive. Recalculate their connector geometry.
+  if (zoomPreservedMemoPages.get(pageNum) === state.sessionId || geometryPreservedMemoPages.delete(pageNum)) {
+    zoomPreservedMemoPages.delete(pageNum)
+    const wrapper = textLayerDiv.closest('.pdf-page-wrapper')
+    for (const memo of loadMemos(state.sessionId)[`page_${pageNum}`] || []) {
+      updateMemoConnectorLine(wrapper, memo)
+    }
+    return
+  }
 
   // 이미 번역된 적이 있는 페이지인데 아직 번역 문장 데이터(state.translationSentences)가
   // 로드되지 않았다면, 방금 위에서 실행한 세그멘테이션은 정규식 기반 폴백

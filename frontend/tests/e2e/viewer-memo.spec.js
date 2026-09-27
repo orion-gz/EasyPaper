@@ -64,6 +64,7 @@ test('스크롤 가시성 갱신 시 이미 렌더링된 메모 DOM을 유지한
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.waitForTimeout(300)
 
+
   await expect(memo).toHaveAttribute('data-instance-marker', 'original')
 })
 
@@ -323,6 +324,7 @@ test('메모 편집 중 Control/Cmd+Z는 브라우저 기본 실행 취소를 �
     document.body.append(reference)
   })
   const reference = activeReader(page).locator('#native-undo-reference')
+  await reference.fill('메모 내용')
   await reference.fill('실행 취소 전')
   await reference.press('End')
   await reference.type(' 추가')

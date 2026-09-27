@@ -173,7 +173,7 @@ test('참고문헌이 길어 툴팁 내부를 스크롤해도 툴팁이 닫히�
   await page.evaluate(() => { location.hash = '#viewer?id=doc-C' })
   await page.waitForTimeout(1500)
 
-  await activeReader(page).locator('.citation-marker-box').first().dispatchEvent('mouseenter')
+  await activeReader(page).locator('.citation-marker-box').first().evaluate(marker => marker.click())
   const tooltip = activeReader(page).locator('.citation-tooltip')
   await expect(tooltip).not.toHaveClass(/hidden/)
   await expect.poll(() => tooltip.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true)
