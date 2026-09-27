@@ -129,7 +129,8 @@ body.sidebar-collapsed #tab-workspace .workspace-mode-switch-compact { display: 
 
 /* Large originals must remain reachable from the left edge when panels are open. */
 .document-workspace-runtime .viewer-scroll-container { align-items: safe center; }
-.document-workspace-runtime .page-pair { justify-content: safe center; max-width: none; flex-shrink: 0; }
+.document-workspace-runtime .page-pair { justify-content: safe center; }
+.document-workspace-runtime #viewer-screen:has(#document-fit-width[aria-pressed="false"]) .page-pair { max-width: none; flex-shrink: 0; }
 
 /* Reading tools remain within the visible page area, independently of zoom. */
 .document-pointer-tools { display: flex; border-right: 1px solid #ffffff38; padding-right: 4px; margin-right: 4px; }
