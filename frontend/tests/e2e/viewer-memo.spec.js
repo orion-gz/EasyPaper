@@ -321,10 +321,10 @@ test('메모 편집 중 Control/Cmd+Z는 브라우저 기본 실행 취소를 �
     const reference = document.createElement('textarea')
     reference.id = 'native-undo-reference'
     reference.style.cssText = 'position:fixed;top:0;left:0;z-index:99999'
+    reference.defaultValue = '메모 내용'
     document.body.append(reference)
   })
   const reference = activeReader(page).locator('#native-undo-reference')
-  await reference.fill('메모 내용')
   await reference.fill('실행 취소 전')
   await reference.press('End')
   await reference.type(' 추가')
