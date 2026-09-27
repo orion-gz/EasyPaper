@@ -4512,12 +4512,9 @@
   "navigation:tabs.fitWidth": {
     "description": "Document workspace tool: Fit page width"
   },
-  "navigation:tabs.selectTool": {
-    "description": "Document workspace tool: Select text"
-  },
-  "navigation:tabs.panTool": {
-    "description": "Document workspace tool: Drag to pan"
-  },
+  "navigation:tabs.highlight": { "description": "Highlight the last hovered sentence in the document workspace." },
+  "navigation:tabs.underline": { "description": "Underline the last hovered sentence in the document workspace." },
+  "navigation:tabs.memo": { "description": "Create a memo for the last hovered sentence in the document workspace." },
   "navigation:tabs.find": {
     "description": "Document workspace tool: Find in document"
   },
