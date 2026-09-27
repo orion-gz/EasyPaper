@@ -34,6 +34,8 @@ export function installDocumentRuntime(adapter) {
   let suspendedSnapshot = null
   let snapshotTimer
   let readerTools
+  let refreshing = false
+  const initialDefaultZoom = localStorage.getItem('easypaper_default_zoom') || '1.5'
 
   const tabs = document.createElement('div')
   tabs.className = 'document-panel-tabs'
@@ -180,6 +182,16 @@ export function installDocumentRuntime(adapter) {
   })
   floating.append(fullscreen)
   readerTools = installReaderTools(adapter, { scroll, toolbar: $('viewer-topbar').querySelector('.topbar-right'), floating, changed: publishSnapshot })
+  const refreshButton = document.createElement('button')
+  refreshButton.type = 'button'
+  refreshButton.id = 'viewer-refresh-btn'
+  refreshButton.className = 'icon-btn'
+  refreshButton.innerHTML = icon('refreshCw', 16)
+  refreshButton.dataset.i18nAriaLabel = refreshButton.dataset.i18nTitle = 'navigation:tabs.refresh'
+  refreshButton.setAttribute('aria-label', t('navigation:tabs.refresh'))
+  refreshButton.title = t('navigation:tabs.refresh')
+  refreshButton.addEventListener('click', () => notifyWorkspace('refresh'))
+  $('viewer-topbar').querySelector('.topbar-right').prepend(refreshButton)
   const refreshResources = () => { if (active && panel !== 'chat') showResources() }
   document.addEventListener('easypaper:resources-changed', refreshResources)
   const refreshStorage = event => { if (event.key?.includes(adapter.state.sessionId)) refreshResources() }
@@ -194,7 +206,7 @@ export function installDocumentRuntime(adapter) {
     return sanitizeReading({ page, offset, fitWidth: readerTools?.fit() ?? false, zoom: adapter.state.zoom, panel, panelOpen: !sidebar.classList.contains('hidden'), navigation, panelWidth: parseFloat(sidebar.style.width) || 360 })
   }
   function publishSnapshot() {
-    if (restoring || !window.__easypaperDocument?.ready || !active) return
+    if (restoring || refreshing || !window.__easypaperDocument?.ready || !active) return
     clearTimeout(snapshotTimer)
     snapshotTimer = setTimeout(() => {
       const value = snapshot()
@@ -268,6 +280,61 @@ export function installDocumentRuntime(adapter) {
       document.activeElement?.blur?.()
       await adapter.flush()
       publishSnapshot()
+    },
+    async prepareRefresh() {
+      if (refreshing) return null
+      if (runtime.busy()) { adapter.toast(t('navigation:tabs.refreshBusy'), 'info'); return null }
+      refreshing = true
+      refreshButton.disabled = true
+      refreshButton.setAttribute('aria-busy', 'true')
+      clearTimeout(snapshotTimer)
+      try {
+        await runtime.flush()
+        // A scroll translation or chat may have started while edits were saved.
+        if (runtime.busy()) {
+          runtime.cancelRefresh()
+          adapter.toast(t('navigation:tabs.refreshBusy'), 'info')
+          return null
+        }
+        const reading = snapshot()
+        const defaultZoom = localStorage.getItem('easypaper_default_zoom') || '1.5'
+        if (defaultZoom !== initialDefaultZoom) {
+          reading.zoom = sanitizeReading({ zoom: defaultZoom }).zoom
+          reading.fitWidth = false
+        }
+        const draft = {
+          text: $('chat-input').value,
+          quotedText: structuredClone(adapter.state.quotedText),
+          quotedImage: adapter.state.quotedImage,
+          quotedImagePage: adapter.state.quotedImagePage,
+        }
+        viewer.inert = true
+        readerTools.setActive(false)
+        return { reading, draft }
+      } catch (error) {
+        runtime.cancelRefresh()
+        throw error
+      }
+    },
+    cancelRefresh() {
+      refreshing = false
+      refreshButton.disabled = false
+      refreshButton.removeAttribute('aria-busy')
+      viewer.inert = false
+      readerTools.setActive(active)
+    },
+    restoreDraft(draft) {
+      if (!draft) return
+      Object.assign(adapter.state, { quotedText: draft.quotedText, quotedImage: draft.quotedImage, quotedImagePage: draft.quotedImagePage })
+      $('chat-input').value = draft.text || ''
+      $('chat-input').dispatchEvent(new Event('input', { bubbles: true }))
+      const quote = typeof draft.quotedText === 'string' ? draft.quotedText : draft.quotedText?.text
+      $('chat-quote-text').textContent = quote || ''
+      $('chat-quote-text').classList.toggle('hidden', Boolean(draft.quotedImage))
+      if (draft.quotedImage) $('chat-quote-img').src = draft.quotedImage
+      else $('chat-quote-img').removeAttribute('src')
+      $('chat-quote-img').classList.toggle('hidden', !draft.quotedImage)
+      $('chat-quote-area').classList.toggle('hidden', !quote && !draft.quotedImage)
     },
     syncScale: scale => adapter.uiScale(scale),
     async syncAppearance(light, locale) {

@@ -1,4 +1,10 @@
 {
+  "navigation:tabs.refresh": {
+    "description": "Reload the current document viewer and its saved viewer and translation settings."
+  },
+  "navigation:tabs.refreshBusy": {
+    "description": "Refresh is postponed while translation or chat generation is active to preserve the ongoing request."
+  },
   "viewer:translation.reset": { "description": "Viewer menu action that deletes existing translations without starting a batch job." },
   "viewer:translation.full": { "description": "Viewer menu action to translate all missing pages, available in automatic mode." },
   "viewer:translation.resetConfirm": { "description": "Confirmation before deleting all document translations." },
