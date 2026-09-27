@@ -7,6 +7,20 @@ const documents = [
 ]
 async function setup(page) {
   await mockBaseRoutes(page, { documents })
+  // WebKit reports browser-level CORS errors for cross-origin API mocks unless
+  // the mocked response opts into the local test origin.
+  await page.route('**/api/settings/update-check-config', route => route.fulfill({
+    status: 200,
+    headers: { 'access-control-allow-origin': '*' },
+    contentType: 'application/json',
+    body: JSON.stringify({ interval: 'never', last_checked_at: null }),
+  }))
+  await page.route('**/api/settings/post-update-notice', route => route.fulfill({
+    status: 200,
+    headers: { 'access-control-allow-origin': '*' },
+    contentType: 'application/json',
+    body: JSON.stringify({ show: false, version: 'test0000', version_date: '2026-01-01', changelog: [] }),
+  }))
   await page.route('**/api/library/tab-a/pdf', route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_A }))
   await page.route('**/api/library/tab-b/pdf', route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_B }))
   await gotoApp(page)
