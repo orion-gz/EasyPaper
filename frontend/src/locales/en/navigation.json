@@ -1,4 +1,6 @@
 {
+  "tabs.refresh": "Refresh viewer and reload viewer and translation settings",
+  "tabs.refreshBusy": "Refresh after translation or response generation finishes.",
   "dashboard": "Dashboard",
   "library": "Library",
   "settings": "Settings",

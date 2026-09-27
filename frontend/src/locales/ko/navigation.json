@@ -1,4 +1,6 @@
 {
+  "tabs.refresh": "뷰어 새로고침 — 뷰어·번역 설정 다시 적용",
+  "tabs.refreshBusy": "번역 또는 답변 생성이 끝난 후 새로고침해 주세요.",
   "dashboard": "대시보드",
   "library": "라이브러리",
   "settings": "설정",
