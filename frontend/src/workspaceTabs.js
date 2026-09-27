@@ -51,6 +51,10 @@ export function createWorkspaceTabs(adapter) {
   main.append(topnav, outlet)
   document.body.append(shell)
   outlet.append(library, compare, $('chat-drawer'))
+  const tabResize = new ResizeObserver(() => {
+    if (!shell.hidden) tablist.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  })
+  tabResize.observe(tablist)
   shell.hidden = true
   document.body.classList.add('has-tab-workspace')
 
@@ -251,11 +255,17 @@ export function createWorkspaceTabs(adapter) {
     if (next !== undefined) {
       event.preventDefault()
       if (event.altKey) {
+        if (event.key === 'ArrowLeft' && index === 0 || event.key === 'ArrowRight' && index === store.tabs.length - 1) return
         const destination = event.key === 'ArrowRight' ? index + 2 : next
         store.reorderTabs(item.dataset.tabId, store.tabs[destination]?.id)
       }
       else enqueue(async () => { await activate(store.tabs[next].id); tablist.querySelector('[aria-selected="true"]')?.focus() })
     }
+  })
+  document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'f' || shell.hidden) return
+    const runtime = frames.get(visibleId)?.frame.contentWindow?.__easypaperDocument
+    if (runtime?.ready) { event.preventDefault(); runtime.find?.() }
   })
   overflow.addEventListener('change', () => enqueue(() => activate(overflow.value)))
   add.addEventListener('click', () => {

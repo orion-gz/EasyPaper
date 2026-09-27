@@ -23,9 +23,10 @@ function makePDF(pageCount, mixedSizes) {
 
 for (const mixedSizes of [false, true]) {
   test(`읽던 페이지가 최초 복원, 새로고침, 재진입 후에도 유지된다 (${mixedSizes ? '혼합 크기' : '가로 페이지'})`, async ({ page }) => {
-    const doc = { id: 'reading-position', filename: 'Landscape.pdf', total_pages: 30, metadata: { last_page: 15 }, translated_pages: [] }
+    const doc = { id: 'reading-position', filename: 'Landscape.pdf', total_pages: 30, metadata: { last_page: 15 }, translated_pages: [19] }
     await mockBaseRoutes(page, { documents: [doc] })
     await page.route('**/api/library/reading-position/pdf', route => route.fulfill({ contentType: 'application/pdf', body: makePDF(30, mixedSizes) }))
+    await page.route('**/api/library/reading-position/translation/19**', route => route.fulfill({ json: { translation: 'Cached page nineteen', sentences: [] } }))
     const savedPages = []
     let expectedPage = 15
     await page.route('**/api/library/reading-position/metadata', async route => {
@@ -52,6 +53,8 @@ for (const mixedSizes of [false, true]) {
     expectedPage = 19
     await activeReader(page).locator('.page-pair[data-page="19"]').evaluate(pair => pair.scrollIntoView({ behavior: 'instant', block: 'start' }))
     await expect.poll(() => doc.metadata.last_page).toBe(19)
+    // Fit/zoom must retain the visibility callback that lazily loads translations.
+    await expect(activeReader(page).locator('#trans-content-19 .trans-text')).toHaveText('Cached page nineteen')
     await page.reload()
     await expectRestored()
     await activeReader(page).locator('#back-btn').click()

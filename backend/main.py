@@ -137,6 +137,18 @@ FRONTEND_CSP = (
 )
 
 
+def frontend_file_response(path: str):
+    """Apply the embedding policy to both SPA fallback and direct HTML URLs."""
+    headers = {"Content-Security-Policy": FRONTEND_CSP}
+    if path.lower().endswith(".html"):
+        headers.update({
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        })
+    return FileResponse(path, headers=headers)
+
+
 FRONTEND_DIST = os.getenv("EASYPAPER_FRONTEND_DIST") or os.path.join(os.path.dirname(__file__), "../frontend/dist")
 if os.path.exists(FRONTEND_DIST):
     # /assets 등 정적 자산
@@ -159,18 +171,10 @@ if os.path.exists(FRONTEND_DIST):
             dist_root = os.path.realpath(FRONTEND_DIST)
             file_path = os.path.realpath(os.path.join(FRONTEND_DIST, full_path))
             if file_path.startswith(dist_root + os.sep) and os.path.isfile(file_path):
-                return FileResponse(file_path)
+                return frontend_file_response(file_path)
 
         index = os.path.join(FRONTEND_DIST, "index.html")
-        return FileResponse(
-            index,
-            headers={
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0",
-                "Content-Security-Policy": FRONTEND_CSP,
-            }
-        )
+        return frontend_file_response(index)
 else:
     @app.get("/")
     async def root():

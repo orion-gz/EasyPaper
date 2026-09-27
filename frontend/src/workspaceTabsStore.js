@@ -8,6 +8,7 @@ export function sanitizeReading(value = {}) {
   return {
     page: Math.max(1, Math.floor(Number(value.page) || 1)),
     offset: Math.max(0, Math.min(1, Number(value.offset) || 0)),
+    fitWidth: value.fitWidth === true,
     zoom: Math.max(0.5, Math.min(3, Number(value.zoom) || 1.5)),
     readingMode: ['original', 'translation', 'parallel'].includes(value.readingMode) ? value.readingMode : 'original',
     panel: ['chat', 'notes', 'annotations'].includes(value.panel) ? value.panel : 'chat',

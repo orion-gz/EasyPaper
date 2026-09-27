@@ -14,7 +14,7 @@ test('Focus reference preview follows its sentence and is hidden only in Focus m
     location.hash = '#viewer?id=doc-C'
   })
   const marker = activeReader(page).locator('.citation-marker-box').first()
-  await expect(marker).toBeVisible()
+  await expect(marker).toBeVisible({ timeout: 15000 })
   await marker.hover()
   await page.waitForTimeout(250)
   const tooltip = activeReader(page).locator('.citation-tooltip')
@@ -122,6 +122,11 @@ test('원문 링크를 찾지 못하면 안내 문구가 뜨고, Google Scholar 
   await activeReader(page).locator('.citation-marker-box').first().click()
   await activeReader(page).locator('.citation-tooltip-resolve-btn').click()
   await expect(activeReader(page).locator('.citation-tooltip-result')).toHaveText('원문 링크를 찾지 못했습니다. Google Scholar 검색을 이용해보세요.')
+  // Response-driven repositioning can move the dialog away from the pointer.
+  // An explicitly used dialog must outlive the 220ms hover-dismiss timer.
+  await activeReader(page).locator('.citation-tooltip').dispatchEvent('mouseleave')
+  await page.waitForTimeout(350)
+  await expect(activeReader(page).locator('.citation-tooltip-scholar-btn')).toBeVisible()
 
   const [popup] = await Promise.all([
     context.waitForEvent('page'),

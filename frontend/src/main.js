@@ -1,6 +1,6 @@
 import { createWorkspaceTabs } from './workspaceTabs.js'
 import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './documentWorkspaceRuntime.js'
-import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail } from './pdfViewer.js'
+import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail, getPDFPageText, getPDFPageWidth } from './pdfViewer.js'
 import { translationFeedback } from './translationFeedback.js'
 import './style.css'
 import { applyDesktopUpdate } from './desktopUpdate.js'
@@ -1593,78 +1593,79 @@ async function initScrollViewer() {
     viewerScrollContainer.appendChild(createPagePair(i))
   }
 
-  await renderScrollView(viewerScrollContainer, state.zoom, {
-    onPageVisible: async (pageNum) => {
-      const revision = translationRevision
-      if (translationResetSession === state.sessionId) return
-      updatePageDisplay(pageNum)
-      globalAnalyticsTracker.setCurrentPage(pageNum)
-      const visiblePageEl = viewerScrollContainer.querySelector('.pdf-page-wrapper[data-page="' + pageNum + '"]')
-      globalAnalyticsTracker.trackScroll(pageNum, visiblePageEl, viewerScrollContainer, true, false)
-
-      // 페이지가 가시화되었을 때 번역 완료된 페이지인데 캐시가 없는 경우 레이지 로딩 적용
-      if (state.translationCache[pageNum]) {
-        if (state.translationCache[pageNum] !== '__fetching__') {
-          renderTransContent(pageNum, state.translationCache[pageNum], true)
-        }
-      } else if (state.translatedPages.has(pageNum)) {
-        state.translationCache[pageNum] = '__fetching__'
-        const currentSessionId = state.sessionId
-        try {
-          const opts = getTranslationOptions()
-          const res = await fetchLibraryTranslation(currentSessionId, pageNum, opts)
-          if (state.sessionId !== currentSessionId || revision !== translationRevision) return
-          state.translationCache[pageNum] = res.translation
-          state.translationSentences[pageNum] = res.sentences || []
-          state.translationWarnings[pageNum] = res.warnings || []
-          // 패치하는 중에 사용자가 다른 세션으로 이동하지 않았는지 확인
-          if (state.sessionId === currentSessionId) {
-            renderTransContent(pageNum, res.translation, true)
-          }
-        } catch (err) {
-          if (state.sessionId !== currentSessionId || revision !== translationRevision) return
-          console.warn(`Failed to lazy load translation for page ${pageNum}:`, err)
-          delete state.translationCache[pageNum]
-          // 번역 로딩 실패 시 폴백 세그멘테이션 상태로 메모가 계속 숨겨져 있지
-          // 않도록, 이미 그려진 문장 분할 기준으로 메모를 다시 그려준다.
-          renderPageMemos(pageNum)
-        }
-      } else if (getEffectiveTranslationMode() === 'scroll') {
-        // 번역 모드가 'scroll'이면 전체 문서 백그라운드 잡이 아예 시작되지
-        // 않으므로, 스크롤로 보이게 된 페이지를 그때그때 개별 번역한다.
-        scheduleVisiblePageTranslation(pageNum)
-      }
-
-      // 비동기 다음 페이지 번역 프리페칭 및 미리 렌더링
-      const nextPage = pageNum + 1
-      if (nextPage <= state.totalPages && !state.translationCache[nextPage]) {
-        if (state.translatedPages.has(nextPage)) {
-          state.translationCache[nextPage] = '__fetching__'
-          const currentSessionId = state.sessionId
-          const opts = getTranslationOptions()
-          fetchLibraryTranslation(currentSessionId, nextPage, opts).then(res => {
-            if (state.sessionId === currentSessionId && revision === translationRevision) {
-              state.translationCache[nextPage] = res.translation
-              state.translationSentences[nextPage] = res.sentences || []
-              state.translationWarnings[nextPage] = res.warnings || []
-              renderTransContent(nextPage, res.translation, true)
-            }
-          }).catch(err => {
-            if (state.sessionId === currentSessionId && revision === translationRevision) {
-              delete state.translationCache[nextPage]
-              renderPageMemos(nextPage)
-            }
-          })
-        } else if (getEffectiveTranslationMode() === 'scroll' && !isLongDocument()) {
-          // 다음 페이지도 미리 번역해둬 스크롤이 도착했을 때 바로 보이게 한다.
-          translatePage(nextPage)
-        }
-      }
-    }
-  })
+  await renderScrollView(viewerScrollContainer, state.zoom, { onPageVisible: handleReaderPageVisible })
 
   // 백그라운드 잡 폴링 시작
   startJobPolling(state.sessionId)
+}
+
+// Keep translation loading and analytics active after fit/zoom rerenders.
+async function handleReaderPageVisible(pageNum) {
+  const revision = translationRevision
+  if (translationResetSession === state.sessionId) return
+  updatePageDisplay(pageNum)
+  globalAnalyticsTracker.setCurrentPage(pageNum)
+  const visiblePageEl = viewerScrollContainer.querySelector('.pdf-page-wrapper[data-page="' + pageNum + '"]')
+  globalAnalyticsTracker.trackScroll(pageNum, visiblePageEl, viewerScrollContainer, true, false)
+
+  // 페이지가 가시화되었을 때 번역 완료된 페이지인데 캐시가 없는 경우 레이지 로딩 적용
+  if (state.translationCache[pageNum]) {
+    if (state.translationCache[pageNum] !== '__fetching__') {
+      renderTransContent(pageNum, state.translationCache[pageNum], true)
+    }
+  } else if (state.translatedPages.has(pageNum)) {
+    state.translationCache[pageNum] = '__fetching__'
+    const currentSessionId = state.sessionId
+    try {
+      const opts = getTranslationOptions()
+      const res = await fetchLibraryTranslation(currentSessionId, pageNum, opts)
+      if (state.sessionId !== currentSessionId || revision !== translationRevision) return
+      state.translationCache[pageNum] = res.translation
+      state.translationSentences[pageNum] = res.sentences || []
+      state.translationWarnings[pageNum] = res.warnings || []
+      // 패치하는 중에 사용자가 다른 세션으로 이동하지 않았는지 확인
+      if (state.sessionId === currentSessionId) {
+        renderTransContent(pageNum, res.translation, true)
+      }
+    } catch (err) {
+      if (state.sessionId !== currentSessionId || revision !== translationRevision) return
+      console.warn(`Failed to lazy load translation for page ${pageNum}:`, err)
+      delete state.translationCache[pageNum]
+      // 번역 로딩 실패 시 폴백 세그멘테이션 상태로 메모가 계속 숨겨져 있지
+      // 않도록, 이미 그려진 문장 분할 기준으로 메모를 다시 그려준다.
+      renderPageMemos(pageNum)
+    }
+  } else if (getEffectiveTranslationMode() === 'scroll') {
+    // 번역 모드가 'scroll'이면 전체 문서 백그라운드 잡이 아예 시작되지
+    // 않으므로, 스크롤로 보이게 된 페이지를 그때그때 개별 번역한다.
+    scheduleVisiblePageTranslation(pageNum)
+  }
+
+  // 비동기 다음 페이지 번역 프리페칭 및 미리 렌더링
+  const nextPage = pageNum + 1
+  if (nextPage <= state.totalPages && !state.translationCache[nextPage]) {
+    if (state.translatedPages.has(nextPage)) {
+      state.translationCache[nextPage] = '__fetching__'
+      const currentSessionId = state.sessionId
+      const opts = getTranslationOptions()
+      fetchLibraryTranslation(currentSessionId, nextPage, opts).then(res => {
+        if (state.sessionId === currentSessionId && revision === translationRevision) {
+          state.translationCache[nextPage] = res.translation
+          state.translationSentences[nextPage] = res.sentences || []
+          state.translationWarnings[nextPage] = res.warnings || []
+          renderTransContent(nextPage, res.translation, true)
+        }
+      }).catch(err => {
+        if (state.sessionId === currentSessionId && revision === translationRevision) {
+          delete state.translationCache[nextPage]
+          renderPageMemos(nextPage)
+        }
+      })
+    } else if (getEffectiveTranslationMode() === 'scroll' && !isLongDocument()) {
+      // 다음 페이지도 미리 번역해둬 스크롤이 도착했을 때 바로 보이게 한다.
+      translatePage(nextPage)
+    }
+  }
 }
 
 let isTransPaneCollapsed = false
@@ -2224,13 +2225,22 @@ function clearZoomPreviewTransform() {
 }
 
 async function setZoom(newZoom) {
+  const anchorPage = state.currentPage
+  const anchor = viewerScrollContainer.querySelector(`.page-pair[data-page="${anchorPage}"]`)
+  const anchorOffset = anchor ? (viewerScrollContainer.getBoundingClientRect().top - anchor.getBoundingClientRect().top) / anchor.getBoundingClientRect().height : 0
   newZoom = previewZoom(newZoom)
   lastCommittedZoom = newZoom
   if (!state.sessionId) { clearZoomPreviewTransform(); return }
   focusModeController?.scheduleRender()
   await reRenderAll(viewerScrollContainer, newZoom, {
-    onPageVisible: (pageNum) => updatePageDisplay(pageNum)
+    onPageVisible: handleReaderPageVisible
   })
+  const restoredAnchor = viewerScrollContainer.querySelector(`.page-pair[data-page="${anchorPage}"]`)
+  if (restoredAnchor && Number.isFinite(anchorOffset)) {
+    const scale = viewerScrollContainer.getBoundingClientRect().width / viewerScrollContainer.offsetWidth || 1
+    const delta = (restoredAnchor.getBoundingClientRect().top - viewerScrollContainer.getBoundingClientRect().top) / scale
+    viewerScrollContainer.scrollTo({ top: viewerScrollContainer.scrollTop + delta + restoredAnchor.offsetHeight * anchorOffset, behavior: 'instant' })
+  }
   // 재렌더링이 끝나 새 배율의 캔버스로 이미 교체된 뒤에 transform을 지워야
   // "확대된 미리보기 → 원래 크기로 순간 복귀 → 새 크기로 점프"하는 깜빡임이 없다.
   clearZoomPreviewTransform()
@@ -10544,6 +10554,7 @@ async function syncAnnotationsNow(docId, { keepalive = false, refresh = true } =
   const promise = syncDocumentAnnotations(docId, { keepalive })
     .then(result => {
       annotationSyncDelayNotified = false
+      document.dispatchEvent(new CustomEvent('easypaper:resources-changed'))
       const conflicts = [...result.annotations.conflicts, ...result.memos.conflicts]
       if (conflicts.length) showToast(t('viewer:sync.conflict'), 'warning')
       const annotationViewAfterSync = annotationViewBeforeSync === null
@@ -11067,6 +11078,7 @@ function loadAnnotations(sessionId) {
 function saveAnnotations(sessionId, annotations) {
   if (!sessionId) return
   recordLocalResourceChange('annotations', sessionId, annotations)
+  document.dispatchEvent(new CustomEvent('easypaper:resources-changed'))
   scheduleAnnotationSync(sessionId)
 }
 
@@ -11425,6 +11437,7 @@ function loadMemos(sessionId) {
 function saveMemos(sessionId, memos) {
   if (!sessionId) return
   recordLocalResourceChange('memos', sessionId, memos)
+  document.dispatchEvent(new CustomEvent('easypaper:resources-changed'))
   scheduleAnnotationSync(sessionId)
 }
 
@@ -13083,8 +13096,9 @@ function positionAndShowAnnHoverTooltip(rect) {
   const tooltipWidth = tooltip.offsetWidth || 110
   const tooltipHeight = tooltip.offsetHeight || 32
 
-  const left = rect.left + rect.width / 2 - tooltipWidth / 2 + window.scrollX
-  const top = rect.top - tooltipHeight - 6 + window.scrollY
+  const uiScale = Number(document.documentElement.style.zoom) || 1
+  const left = (rect.left + rect.width / 2) / uiScale - tooltipWidth / 2 + window.scrollX
+  const top = rect.top / uiScale - tooltipHeight - 6 + window.scrollY
 
   tooltip.style.left = `${Math.max(8, left)}px`
   tooltip.style.top = `${Math.max(8, top)}px`
@@ -13384,8 +13398,9 @@ function showSelectionMenu(rect, showAnnotateGroup, hasExistingAnnotation = true
   const menuWidth = menu.offsetWidth || 120
   const menuHeight = menu.offsetHeight || 36
 
-  const left = rect.left + rect.width / 2 - menuWidth / 2 + window.scrollX
-  const top = rect.top - menuHeight - 8 + window.scrollY
+  const uiScale = Number(document.documentElement.style.zoom) || 1
+  const left = (rect.left + rect.width / 2) / uiScale - menuWidth / 2 + window.scrollX
+  const top = rect.top / uiScale - menuHeight - 8 + window.scrollY
 
   menu.style.left = `${Math.max(8, left)}px`
   menu.style.top = `${Math.max(8, top)}px`
@@ -14665,6 +14680,7 @@ let citationTooltipHideTimer = null
 let citationTooltipDocId = null
 let citationTooltipReferences = []
 let citationTooltipBoxEl = null
+let citationTooltipPinned = false
 
 // Tauri 데스크탑 webview는 보안상 window.open()/target="_blank"로 외부
 // URL을 새 탭으로 열어주지 않는다(웹 브라우저와 달리 시스템 기본 브라우저를
@@ -14706,6 +14722,12 @@ function getOrCreateCitationTooltip() {
     if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   })
   el.addEventListener('mouseleave', scheduleCitationTooltipHide)
+  // Resolving a reference can resize/reposition this dialog under the pointer.
+  // Once interacted with, keep it open until Escape, outside click or scroll.
+  el.addEventListener('click', () => {
+    citationTooltipPinned = true
+    if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
+  }, true)
   el.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return
     event.preventDefault()
@@ -14780,6 +14802,7 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
   if (!prepareFocusPreview(boxEl)) { hideCitationTooltip(); return }
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   if (citationTooltipBoxEl && citationTooltipBoxEl !== boxEl) citationTooltipBoxEl.setAttribute('aria-expanded', 'false')
+  if (citationTooltipBoxEl !== boxEl) citationTooltipPinned = false
   citationTooltipDocId = docId
   citationTooltipReferences = refKeys.map(key => ({ key, text: refMap[key] || '' }))
   citationTooltipBoxEl = boxEl
@@ -14807,6 +14830,7 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
 }
 
 function hideCitationTooltip() {
+  citationTooltipPinned = false
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   if (citationTooltipEl) citationTooltipEl.classList.add('hidden')
   citationTooltipBoxEl?.setAttribute('aria-expanded', 'false')
@@ -14814,6 +14838,7 @@ function hideCitationTooltip() {
 }
 
 function scheduleCitationTooltipHide() {
+  if (citationTooltipPinned || citationTooltipEl?.contains(document.activeElement)) return
   if (citationTooltipHideTimer) clearTimeout(citationTooltipHideTimer)
   citationTooltipHideTimer = setTimeout(hideCitationTooltip, 220)
 }
@@ -16241,6 +16266,7 @@ document.addEventListener('mousedown', (e) => {
   }
   if (e.target.closest(".pdf-figure-overlay")) return;
   if (e.target.closest(".textLayer")) {
+    hideAnnHoverTooltip()
     viewerScrollContainer?.querySelectorAll(".pdf-highlight-overlay").forEach(overlay => {
       clearOverlayBoxes(overlay, "sentence-hover-box", "sentence-equation-box")
     })
@@ -18739,6 +18765,10 @@ function installReaderWorkspaceRuntime() {
     memos: () => loadMemos(state.sessionId),
     annotations: () => loadAnnotations(state.sessionId),
     thumbnail: renderPDFThumbnail,
+    pageWidth: () => getPDFPageWidth(state.currentPage),
+    pageText: (page, signal) => Boolean(viewerScrollContainer.querySelector('.article-unit'))
+      ? Promise.resolve(viewerScrollContainer.querySelector(`.article-unit[data-unit-index="${page}"] .article-original`)?.textContent || '')
+      : getPDFPageText(page, signal),
     goToPage: page => {
       const unit = viewerScrollContainer.querySelector(`.article-unit[data-unit-index="${page}"]`)
       if (unit) unit.scrollIntoView({ block: 'start', behavior: 'instant' })
@@ -18766,8 +18796,9 @@ function installReaderWorkspaceRuntime() {
     flush: async () => {
       await flushSaveLastReadPage()
       if (hasPendingAnnotationSync(state.sessionId)) {
-        await syncAnnotationsNow(state.sessionId, { refresh: false })
-        if (hasPendingAnnotationSync(state.sessionId)) throw new Error(t('navigation:tabs.saveError'))
+        // Mutations are already persisted locally; server availability must not
+        // block workspace navigation. Retry uses the existing durable queue.
+        void syncAnnotationsNow(state.sessionId, { keepalive: true, refresh: false })
       }
     },
     suspend: () => { focusModeController?.clear(); suspendPDFRendering(); globalAnalyticsTracker.sendHeartbeat() },

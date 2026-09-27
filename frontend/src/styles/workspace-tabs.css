@@ -139,3 +139,42 @@ body.sidebar-collapsed #tab-workspace .workspace-mode-switch-compact { display: 
 .document-workspace-runtime .viewer-scroll-container { align-items: safe center; }
 .document-workspace-runtime .page-pair { justify-content: safe center; }
 .document-workspace-runtime #viewer-screen[data-reading-mode=original] .page-pair { max-width: none; flex-shrink: 0; }
+
+/* Reading tools remain within the visible page area, independently of zoom. */
+.document-pointer-tools { display: flex; border-right: 1px solid #ffffff38; padding-right: 4px; margin-right: 4px; }
+.document-workspace-runtime #floating-scroll-nav button[aria-pressed=true] { background: #ffffff24; }
+.document-workspace-runtime #floating-scroll-nav { max-width: calc(100% - 32px); }
+.document-pan-mode, .document-pan-mode * { cursor: grab !important; user-select: none !important; }
+.document-panning, .document-panning * { cursor: grabbing !important; }
+.document-pan-mode { touch-action: none; }
+.document-search { position: absolute; top: 64px; right: 24px; z-index: 60; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: min(420px, calc(100% - 48px)); padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface); color: var(--text-primary); box-shadow: var(--shadow-lg); }
+.document-search[hidden] { display: none; }
+.document-search input { flex: 1; min-width: 80px; width: 100px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); }
+.document-search output { font-size: 12px; }
+.document-search button { color: var(--text-primary); background: var(--bg-hover); border: 0; border-radius: 5px; padding: 6px; }
+.document-search-snippet { width: 100%; font-size: 12px; overflow-wrap: anywhere; line-height: 1.5; }
+.document-search-snippet:empty { display: none; }
+.document-search mark { background: #ffe28a; color: #242424; }
+.document-workspace-runtime .pdf-page-wrapper { box-shadow: 0 2px 14px #16244912; }
+::highlight(document-find) { background: #ffe28a; color: #242424; }
+
+/* The tools card has its own header, matching the workspace mockup. */
+.document-workspace-runtime #viewer-topbar { right: calc(10px + var(--document-panel-space, 0px)); }
+.document-workspace-runtime .panels { right: calc(10px + var(--document-panel-space, 0px)); }
+.document-workspace-runtime #viewer-screen > #chat-sidebar { position: absolute; inset: 10px 10px 10px auto; height: auto; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 2px 12px #16244908; }
+.document-workspace-runtime #viewer-screen > #chat-resizer { position: absolute; top: 10px; bottom: 10px; right: calc(12px + var(--document-panel-width, 360px)); height: auto; z-index: 25; }
+.document-workspace-runtime #floating-scroll-nav { left: calc((100% + var(--document-outline-space, 0px) - var(--document-panel-space, 0px)) / 2); right: auto; transform: translateX(-50%); width: max-content; }
+.document-workspace-runtime.document-narrow #viewer-screen > #chat-sidebar { top: 58px; z-index: 30; }
+.document-workspace-runtime #viewer-topbar .topbar-right { gap: 6px; }
+@media (max-width: 1000px) { .document-workspace-runtime #doc-title { max-width: 160px !important; } }
+.document-thumbnails canvas { min-height: 0; height: auto; align-self: flex-start; }
+.document-workspace-runtime #viewer-scroll-container:focus-visible { outline: 2px solid var(--control-accent-text, #95b3f5); outline-offset: -3px; }
+.document-workspace-runtime #floating-scroll-nav button { border-radius: 6px; }
+.document-workspace-runtime #viewer-screen > #chat-sidebar { background: #101018; }
+.document-workspace-runtime.light-theme #viewer-screen > #chat-sidebar { background: #fff; }
+.document-workspace-runtime #viewer-screen.document-workspace-loading { visibility: hidden; }
+
+/* Document anchors must stay still while selecting text or moving a memo. */
+.document-workspace-runtime .page-pair { transition: box-shadow .2s, border-color .2s; }
+.document-workspace-runtime .page-pair:hover { transform: none; }
+.document-workspace-runtime .floating-memo { animation: none; }
