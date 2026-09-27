@@ -10,10 +10,8 @@ export function sanitizeReading(value = {}) {
     offset: Math.max(0, Math.min(1, Number(value.offset) || 0)),
     fitWidth: value.fitWidth === true,
     zoom: Math.max(0.5, Math.min(3, Number(value.zoom) || 1.5)),
-    readingMode: ['original', 'translation', 'parallel'].includes(value.readingMode) ? value.readingMode : 'original',
     panel: ['chat', 'notes', 'annotations'].includes(value.panel) ? value.panel : 'chat',
     panelOpen: value.panelOpen !== false,
-    outlineOpen: value.outlineOpen !== false,
     navigation: value.navigation === 'thumbnails' ? 'thumbnails' : 'outline',
     panelWidth: Math.max(300, Math.min(480, Number(value.panelWidth) || 360)),
   }

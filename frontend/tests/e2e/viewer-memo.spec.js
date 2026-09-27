@@ -43,7 +43,6 @@ async function openViewerWithMemo(page, memoOverrides = {}) {
     location.hash = '#viewer?id=doc-memo'
   }, memoOverrides)
 
-  await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
   // Wait for the asynchronous parallel fit before measuring or editing cards.
   await expect.poll(() => activeReader(page).locator('#viewer-scroll-container').evaluate(el => {
     const paper = el.querySelector('.pdf-page-wrapper')

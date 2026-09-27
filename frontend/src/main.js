@@ -2835,7 +2835,6 @@ resumeTransBtn.addEventListener('click', async () => {
 
 // ── 뒤로 가기 ─────────────────────────────────────
 backBtn.addEventListener('click', () => {
-  if (isDocumentRuntime) { notifyWorkspace('history', 'back'); return }
   showLibraryScreen()
 })
 
@@ -18823,12 +18822,6 @@ function installReaderWorkspaceRuntime() {
     },
     zoom: setZoom,
     uiScale: scale => { applyUiScale(scale); syncSelectValue(settingUiScale, scale); schedulePdfGeometryRefresh() },
-    closePanels: () => {
-      hideOutlineSidebar()
-      chatSidebar.classList.add('hidden')
-      chatResizer.classList.add('hidden')
-      chatToggleBtn.classList.remove('active')
-    },
     setPanels: ({ panel, outline }) => {
       if (outline) showOutlineSidebar(); else hideOutlineSidebar()
       chatSidebar.classList.toggle('hidden', !panel)

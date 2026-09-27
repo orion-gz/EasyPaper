@@ -9,7 +9,7 @@ for (const uiScale of [0.8, 0.9]) {
     await page.route(`**/api/library/${doc.id}/pdf`, route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_A }))
     await gotoApp(page)
     await page.evaluate(id => { location.hash = `#viewer?id=${id}` }, doc.id)
-    await expect(activeReader(page).locator('#workspace-reading-mode')).toBeVisible()
+    await expect(activeReader(page).locator('#document-find')).toBeVisible()
     const host = await page.locator('#workspace-tab-panel').boundingBox()
     const frame = await page.locator('.workspace-document-frame:not([hidden])').boundingBox()
     expect(Math.abs(host.height - frame.height)).toBeLessThanOrEqual(1)

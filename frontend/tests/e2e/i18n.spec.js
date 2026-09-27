@@ -93,7 +93,7 @@ test('English locale has no visible Korean UI in the PDF viewer', async ({ page 
   await expect(activeReader(page).locator('#viewer-screen')).toHaveClass(/active/)
   await expect(activeReader(page).locator('#viewer-scroll-container')).toBeVisible()
   await expect.poll(() => visibleKoreanUi(page, true)).toEqual([])
-  await expect(activeReader(page).locator('#workspace-reading-mode')).toBeVisible()
+  await expect(activeReader(page).locator('#document-find')).toBeVisible()
   await expect(activeReader(page).locator('#chat-sidebar')).not.toHaveClass(/hidden/)
   await expect.poll(() => visibleKoreanUi(page, true)).toEqual([])
   await evaluateReader(page, () => {

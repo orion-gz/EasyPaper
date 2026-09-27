@@ -4479,18 +4479,6 @@
   "navigation:tabs.thumbnails": {
     "description": "Workspace tabs: Thumbnails"
   },
-  "navigation:tabs.readingMode": {
-    "description": "Workspace tabs: Reading mode"
-  },
-  "navigation:tabs.original": {
-    "description": "Workspace tabs: Original"
-  },
-  "navigation:tabs.translation": {
-    "description": "Workspace tabs: Translation"
-  },
-  "navigation:tabs.parallel": {
-    "description": "Workspace tabs: Side by side"
-  },
   "navigation:tabs.fullscreen": {
     "description": "Workspace tabs: Full screen"
   },
@@ -4505,9 +4493,6 @@
   },
   "navigation:tabs.error": {
     "description": "Workspace tabs: Error"
-  },
-  "navigation:tabs.forward": {
-    "description": "Move forward in workspace navigation history."
   },
   "navigation:tabs.fitWidth": {
     "description": "Document workspace tool: Fit page width"
