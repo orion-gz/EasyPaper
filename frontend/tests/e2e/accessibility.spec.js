@@ -45,11 +45,8 @@ test("뷰어 툴바를 Tab만으로 논리적인 순서로 이동하고 포커�
   await openViewer(page)
 
   const tabOrder = [
-    "#back-btn",
-    "#workspace-forward-btn",
     "#outline-toggle-btn",
     "#doc-title-edit-btn",
-    "#workspace-reading-mode",
     "#capture-area-btn",
     "#chat-toggle-btn",
     "#toolbar-kebab-btn",

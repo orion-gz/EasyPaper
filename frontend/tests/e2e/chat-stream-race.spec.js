@@ -21,7 +21,7 @@ test('문서 전환 시 이전 문서의 채팅 스트림이 새 문서에 섞�
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1000)
 
-  await expect(activeReader(page).locator('#workspace-reading-mode')).toBeVisible()
+  await expect(activeReader(page).locator('#document-find')).toBeVisible()
   await activeReader(page).locator('#chat-input').fill('문서 A에 대한 질문')
   await activeReader(page).locator('#chat-send-btn').click()
   await page.waitForTimeout(400)

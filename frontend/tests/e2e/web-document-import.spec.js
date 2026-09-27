@@ -23,7 +23,6 @@ test('문서 추가 소스 모달은 키보드 포커스를 가두고 Escape로 
 
 test('저장된 HTML 원문과 번역, 목차, 검색, 원본 폴백을 표시한다', async ({ page }) => {
   await openArticle(page)
-  await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
   await expect(activeReader(page).locator('.article-original').first()).toContainText('Unique searchable source text')
   await expect(activeReader(page).locator('.article-translation').first()).toContainText('Translated introduction')
   await activeReader(page).locator('.article-search input').fill('searchable'); await expect(activeReader(page).locator('[data-block-id="block-1"]')).toHaveClass(/article-search-hit/)

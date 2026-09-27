@@ -27,7 +27,6 @@ async function openRecovered(page, pdf, spans, recovery = 'ocr', sources = [], t
   } }))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=recovered' })
-  if (sources.length) await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
   await expect(activeReader(page).locator(recovery ? '.textLayer[data-recovery]' : '.textLayer span').first()).toBeVisible()
   await evaluateReader(page, () => Promise.all(document.getAnimations()
     .filter(animation => animation.effect.getComputedTiming().iterations !== Infinity)

@@ -306,7 +306,6 @@ export function createWorkspaceTabs(adapter) {
     const { type, payload } = event.data
     if (type === 'navigate') { api.route(payload, { push: true }); return }
     if (type === 'auth-expired') { adapter.authExpired(); return }
-    if (type === 'history') { window.history.go(payload === 'forward' ? 1 : -1); return }
     if (type === 'title') {
       record.frame.title = String(payload || '')
       record.store.update(id, { title: record.frame.title })
