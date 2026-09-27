@@ -44,7 +44,12 @@ async function openViewerWithMemo(page, memoOverrides = {}) {
   }, memoOverrides)
 
   await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
-  await expect(activeReader(page).locator('.floating-memo[data-id="memo-regression"]')).toBeVisible()
+  // Wait for the asynchronous parallel fit before measuring or editing cards.
+  await expect.poll(() => activeReader(page).locator('#viewer-scroll-container').evaluate(el => {
+    const paper = el.querySelector('.pdf-page-wrapper')
+    return Boolean(paper?.querySelector('.textLayer') && paper.offsetWidth * 2 < el.clientWidth)
+  }), { timeout: 15000 }).toBe(true)
+  await expect(activeReader(page).locator('.floating-memo[data-id="memo-regression"]')).toBeVisible({ timeout: 15000 })
   await expect(activeReader(page).locator('#trans-content-1 .trans-text')).toContainText('Cached translation')
 }
 
@@ -58,6 +63,7 @@ test('스크롤 가시성 갱신 시 이미 렌더링된 메모 DOM을 유지한
   await page.waitForTimeout(200)
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.waitForTimeout(300)
+
 
   await expect(memo).toHaveAttribute('data-instance-marker', 'original')
 })
@@ -310,6 +316,22 @@ test('메모 서식 단축키를 서로 다른 선택 영역에 독립적으로 
 
 test('메모 편집 중 Control/Cmd+Z는 브라우저 기본 실행 취소를 유지한다', async ({ page }) => {
   await openViewerWithMemo(page)
+  // Native undo groups typed characters differently in Chromium and WebKit.
+  await evaluateReader(page, () => {
+    const reference = document.createElement('textarea')
+    reference.id = 'native-undo-reference'
+    reference.style.cssText = 'position:fixed;top:0;left:0;z-index:99999'
+    reference.defaultValue = '메모 내용'
+    document.body.append(reference)
+  })
+  const reference = activeReader(page).locator('#native-undo-reference')
+  await reference.fill('실행 취소 전')
+  await reference.press('End')
+  await reference.type(' 추가')
+  await reference.press('ControlOrMeta+z')
+  const nativeValue = await reference.inputValue()
+  expect(nativeValue).not.toBe('실행 취소 전 추가')
+  await reference.evaluate(el => el.remove())
   const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await memo.locator('.edit-btn').click()
   const textarea = memo.locator('.floating-memo-textarea')
@@ -319,7 +341,7 @@ test('메모 편집 중 Control/Cmd+Z는 브라우저 기본 실행 취소를 �
   await textarea.type(' 추가')
   await expect(textarea).toHaveValue('실행 취소 전 추가')
   await textarea.press('ControlOrMeta+z')
-  await expect(textarea).toHaveValue('실행 취소 전 추')
+  await expect(textarea).toHaveValue(nativeValue)
 })
 
 test('메모 목록 자동 편집과 완료 및 취소를 지원한다', async ({ page }) => {

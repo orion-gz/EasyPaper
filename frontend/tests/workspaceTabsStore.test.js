@@ -55,3 +55,15 @@ test('storage failure leaves an operable in-memory workspace', () => {
   assert.ok(errors > 0)
   assert.notEqual(workspaceStorageKey('server', 'alice', 'research'), workspaceStorageKey('server', 'bob', 'research'))
 })
+
+test('fit width preference is opt-in for old snapshots and persists for new readers', () => {
+  assert.equal(sanitizeReading({ zoom: 2 }).fitWidth, false)
+  const { store, data } = setup()
+  store.restoreWorkspace()
+  store.openTab('document', 'fit', 'Fit.pdf')
+  store.update('document:fit', { reading: { fitWidth: true, zoom: 0.9 } })
+  const restored = setup(JSON.parse(data.get('test'))).store
+  restored.restoreWorkspace()
+  assert.equal(restored.active.reading.fitWidth, true)
+  assert.equal(restored.active.reading.zoom, 0.9)
+})

@@ -1,3 +1,4 @@
+import { installReaderTools } from './documentReaderTools.js'
 import { sanitizeReading } from './workspaceTabsStore.js'
 import { t, changeLocale, getLocale } from './i18n.js'
 import { icon } from './icons.js'
@@ -12,9 +13,15 @@ export function installDocumentRuntime(adapter) {
   const $ = id => document.getElementById(id)
   document.body.classList.add('document-workspace-runtime')
   const viewer = $('viewer-screen')
+  viewer.classList.add('document-workspace-loading')
   const scroll = $('viewer-scroll-container')
+  scroll.tabIndex = 0
+  scroll.setAttribute('role', 'region')
+  scroll.setAttribute('aria-label', t('navigation:tabs.content'))
+  scroll.dataset.i18nAriaLabel = 'navigation:tabs.content'
   const sidebar = $('chat-sidebar')
   const outline = $('outline-sidebar')
+  viewer.append(sidebar, $('chat-resizer'))
   let active = true
   let panel = 'chat'
   let navigation = 'outline'
@@ -28,6 +35,7 @@ export function installDocumentRuntime(adapter) {
   let lastSnapshot = ''
   let suspendedSnapshot = null
   let snapshotTimer
+  let readerTools
 
   const tabs = document.createElement('div')
   tabs.className = 'document-panel-tabs'
@@ -86,10 +94,11 @@ export function installDocumentRuntime(adapter) {
     if (panel !== 'chat') showResources()
     publishSnapshot()
   }
-  for (const [name, label] of [['chat', 'AI Chat'], ['notes', 'Notes'], ['annotations', 'Annotations']]) {
+  for (const [name, label] of [['chat', t('navigation:tabs.chat')], ['notes', t('navigation:tabs.notes')], ['annotations', t('navigation:tabs.annotations')]]) {
     const button = document.createElement('button')
     button.type = 'button'
     button.dataset.panel = name
+    button.dataset.i18n = `navigation:tabs.${name}`
     button.id = `document-tool-${name}`
     button.setAttribute('role', 'tab')
     button.setAttribute('aria-controls', name === 'chat' ? 'chat-messages' : list.id)
@@ -178,6 +187,7 @@ export function installDocumentRuntime(adapter) {
     readingMode = next
     reading.value = next
     viewer.dataset.readingMode = next
+    readerTools?.refresh()
     publishSnapshot()
   }
   for (const option of reading.options) option.dataset.i18n = `navigation:tabs.${option.value}`
@@ -202,13 +212,18 @@ export function installDocumentRuntime(adapter) {
     } catch { adapter.toast(t('navigation:tabs.fullscreenUnavailable'), 'warning') }
   })
   floating.append(fullscreen)
+  readerTools = installReaderTools(adapter, { scroll, toolbar: $('viewer-topbar').querySelector('.topbar-right'), floating, changed: publishSnapshot })
+  const refreshResources = () => { if (active && panel !== 'chat') showResources() }
+  document.addEventListener('easypaper:resources-changed', refreshResources)
+  const refreshStorage = event => { if (event.key?.includes(adapter.state.sessionId)) refreshResources() }
+  window.addEventListener('storage', refreshStorage)
 
   function snapshot() {
     if (!active && suspendedSnapshot) return suspendedSnapshot
     const page = adapter.state.currentPage
     const pair = scroll.querySelector(`.page-pair[data-page="${page}"], .article-unit[data-unit-index="${page}"]`)
     const offset = pair ? (scroll.getBoundingClientRect().top - pair.getBoundingClientRect().top) / pair.getBoundingClientRect().height : 0
-    return sanitizeReading({ page, offset, zoom: adapter.state.zoom, readingMode, panel, panelOpen: beforeParallel?.panel ?? !sidebar.classList.contains('hidden'), outlineOpen: beforeParallel?.outline ?? !outline.classList.contains('hidden'), navigation, panelWidth: parseFloat(sidebar.style.width) || 360 })
+    return sanitizeReading({ page, offset, fitWidth: readerTools?.fit() ?? false, zoom: adapter.state.zoom, readingMode, panel, panelOpen: beforeParallel?.panel ?? !sidebar.classList.contains('hidden'), outlineOpen: beforeParallel?.outline ?? !outline.classList.contains('hidden'), navigation, panelWidth: parseFloat(sidebar.style.width) || 360 })
   }
   function publishSnapshot() {
     if (restoring || !window.__easypaperDocument?.ready || !active) return
@@ -223,7 +238,19 @@ export function installDocumentRuntime(adapter) {
   document.addEventListener('click', publishSnapshot)
   document.addEventListener('input', publishSnapshot)
   let previousOpen = { panel: false, outline: false }
+  const updateLayout = () => {
+    const narrow = window.parent.innerWidth < 1100
+    const panelWidth = sidebar.classList.contains('hidden') || narrow ? 0 : sidebar.offsetWidth + 14
+    const outlineWidth = outline.classList.contains('hidden') || narrow ? 0 : 220
+    viewer.style.setProperty('--document-panel-space', `${panelWidth}px`)
+    viewer.style.setProperty('--document-outline-space', `${outlineWidth}px`)
+    viewer.style.setProperty('--document-panel-width', `${sidebar.offsetWidth || 360}px`)
+    readerTools?.refresh()
+  }
+  const panelResize = new ResizeObserver(updateLayout)
+  panelResize.observe(sidebar)
   const panelObserver = new MutationObserver(() => {
+    updateLayout()
     if (!restoring && active && readingMode !== 'parallel') {
       desiredOpen = { panel: !sidebar.classList.contains('hidden'), outline: !outline.classList.contains('hidden') }
       if (window.parent.innerWidth < 1100 && desiredOpen.panel && desiredOpen.outline) {
@@ -243,6 +270,7 @@ export function installDocumentRuntime(adapter) {
   })
   const syncViewport = () => {
     document.body.classList.toggle('document-narrow', window.parent.innerWidth < 1100)
+    updateLayout()
     if (window.parent.innerWidth < 1100 && !sidebar.classList.contains('hidden') && !outline.classList.contains('hidden')) adapter.setPanels({ panel: true, outline: false })
   }
   window.addEventListener('resize', syncViewport)
@@ -251,8 +279,9 @@ export function installDocumentRuntime(adapter) {
   const statusTimer = setInterval(() => {
     if (adapter.state.title !== lastTitle) { lastTitle = adapter.state.title; notifyWorkspace('title', lastTitle) }
     const busy = runtime.busy()
-    const next = JSON.stringify({ busy, error })
-    if (next !== lastStatus) { lastStatus = next; notifyWorkspace('status', { busy, error }) }
+    const failed = error || Boolean(document.querySelector('.trans-error')) || ['failed', 'partial_failed', 'error'].includes(adapter.state.translationTaskStatus)
+    const next = JSON.stringify({ busy, error: failed })
+    if (next !== lastStatus) { lastStatus = next; notifyWorkspace('status', { busy, error: failed }) }
     if (active) {
       publishSnapshot()
       for (const button of thumbnails.querySelectorAll('button')) button.classList.toggle('active', Number(button.dataset.page) === adapter.state.currentPage)
@@ -263,6 +292,7 @@ export function installDocumentRuntime(adapter) {
   errors.observe($('chat-messages'), { childList: true, subtree: true })
   const runtime = {
     ready: true,
+    find: () => readerTools.openFind(),
     snapshot,
     title: () => adapter.state.title || adapter.state.filename,
     busy: () => Boolean(adapter.state.chatActiveStream || adapter.state.translatingPages?.size || ['queued', 'running', 'retry_wait'].includes(adapter.state.translationTaskStatus)),
@@ -285,11 +315,13 @@ export function installDocumentRuntime(adapter) {
       if (active === next) return
       if (!next) suspendedSnapshot = snapshot()
       active = next
+      if (!next) readerTools.setActive(false)
       document.body.dataset.workspaceInactive = String(!next)
       if (next) {
         const token = ++generation
         await adapter.resume()
         if (token !== generation || !active) { adapter.suspend(); return }
+        readerTools.setActive(true)
         if (panel !== 'chat') showResources()
         thumbnails.querySelectorAll('button').forEach(button => thumbnailObserver?.observe(button))
       } else {
@@ -304,6 +336,7 @@ export function installDocumentRuntime(adapter) {
       try {
         if (saved) {
           const value = sanitizeReading(saved)
+          readerTools.restore(value.fitWidth)
           if (Math.abs(adapter.state.zoom - value.zoom) > 0.001) await adapter.zoom(value.zoom)
           setPanel(value.panel)
           setNavigation(value.navigation)
@@ -315,11 +348,17 @@ export function installDocumentRuntime(adapter) {
           const pair = scroll.querySelector(`.page-pair[data-page="${value.page}"], .article-unit[data-unit-index="${value.page}"]`)
           if (pair) scroll.scrollTop += pair.offsetHeight * value.offset
         } else {
+          readerTools.restore(true)
           setPanel('chat'); setNavigation('outline'); setReadingMode('original')
         }
         if (window.parent.innerWidth < 1100 && desiredOpen.panel) desiredOpen.outline = false
         adapter.setPanels(readingMode === 'parallel' ? { panel: false, outline: false } : desiredOpen)
-      } finally { restoring = false }
+      } finally {
+        updateLayout()
+        await readerTools.fitNow()
+        restoring = false
+        viewer.classList.remove('document-workspace-loading')
+      }
     },
     async navigate(hash) {
       const params = new URLSearchParams(hash.split('?')[1])
@@ -329,8 +368,9 @@ export function installDocumentRuntime(adapter) {
   }
   window.__easypaperDocument = runtime
   window.addEventListener('pagehide', () => {
+    readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); window.removeEventListener('storage', refreshStorage)
     clearInterval(statusTimer); clearTimeout(snapshotTimer); window.removeEventListener('resize', syncViewport)
-    panelObserver.disconnect(); errors.disconnect(); thumbnailObserver?.disconnect()
+    panelResize.disconnect(); panelObserver.disconnect(); errors.disconnect(); thumbnailObserver?.disconnect()
   }, { once: true })
   notifyWorkspace('ready')
   return runtime

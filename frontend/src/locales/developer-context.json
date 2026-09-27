@@ -4461,9 +4461,6 @@
   "navigation:tabs.storageError": {
     "description": "Workspace tabs: Workspace changes could not be saved on this device."
   },
-  "navigation:tabs.saveError": {
-    "description": "Workspace tabs: Your notes have not finished saving. Try again before leaving this tab."
-  },
   "navigation:tabs.tools": {
     "description": "Workspace tabs: Document tools"
   },
@@ -4511,5 +4508,47 @@
   },
   "navigation:tabs.forward": {
     "description": "Move forward in workspace navigation history."
+  },
+  "navigation:tabs.fitWidth": {
+    "description": "Document workspace tool: Fit page width"
+  },
+  "navigation:tabs.selectTool": {
+    "description": "Document workspace tool: Select text"
+  },
+  "navigation:tabs.panTool": {
+    "description": "Document workspace tool: Drag to pan"
+  },
+  "navigation:tabs.find": {
+    "description": "Document workspace tool: Find in document"
+  },
+  "navigation:tabs.previousMatch": {
+    "description": "Document workspace tool: Previous match"
+  },
+  "navigation:tabs.nextMatch": {
+    "description": "Document workspace tool: Next match"
+  },
+  "navigation:tabs.closeSearch": {
+    "description": "Document workspace tool: Close search"
+  },
+  "navigation:tabs.noMatches": {
+    "description": "Document workspace tool: No matches"
+  },
+  "navigation:tabs.searching": {
+    "description": "Document workspace tool: Searching…"
+  },
+  "navigation:tabs.searchFailed": {
+    "description": "Document workspace tool: Search failed. Try again."
+  },
+  "navigation:tabs.chat": {
+    "description": "Document workspace tool: AI Chat"
+  },
+  "navigation:tabs.notes": {
+    "description": "Document workspace tool: Notes"
+  },
+  "navigation:tabs.annotations": {
+    "description": "Document workspace tool: Annotations"
+  },
+  "navigation:tabs.content": {
+    "description": "Accessible name of the keyboard-scrollable document region."
   }
 }

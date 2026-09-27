@@ -585,8 +585,8 @@ test('real PDF hover reveals source and translation together and clears on viewe
   await expect(enlargedSource).toBeVisible()
   await expect(activeReader(page).locator('.focus-mode-magnification[data-kind="translation"]').first()).toBeVisible()
   await expect(activeReader(page).locator('.focus-mode-magnification .sentence-highlight, .focus-mode-magnification .active-mapped-sentence')).toHaveCount(0)
-  expect((await enlargedSource.boundingBox()).width).toBeGreaterThan(sourceBefore.width * 1.4)
-  expect((await source.boundingBox()).width).toBeCloseTo(sourceBefore.width, 0)
+  await expect.poll(async () => (await enlargedSource.boundingBox())?.width || 0).toBeGreaterThan(sourceBefore.width * 1.4)
+  await expect.poll(async () => (await source.boundingBox())?.width || 0).toBeCloseTo(sourceBefore.width, 0)
   const magnified = (await page.screenshot({ scale: 'css', path: test.info().outputPath('magnified-150.png') })).toString('base64')
   const enlargedBoxes = await Promise.all((await activeReader(page).locator('.focus-mode-magnification').all()).map(element => element.boundingBox()))
   const glyphs = await evaluateReader(page, async ({ magnified, enlargedBoxes }) => {

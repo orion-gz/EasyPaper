@@ -14,6 +14,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 let pdfjsLib = null
 let pdfDoc = null
+let widestPageWidth = 0
 let pdfLoadingTask = null
 let pdfTextUrl = null
 const renderedTextLayers = new Map()
@@ -71,6 +72,7 @@ export async function loadPDF(url) {
   }
   renderGeneration++
   pdfDoc = nextPdfDoc
+  widestPageWidth = 0
   const match = String(url).match(/\/api\/(?:pdf-file\/([^/?]+)|library\/([^/?]+)\/pdf)(?:\?|$)/)
   pdfTextUrl = match ? `/api/pdf-text/${match[1] || match[2]}` : null
   figureCropCache.clear()
@@ -226,6 +228,7 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
   }
   if (!isCurrent()) return
 
+  widestPageWidth = viewports.reduce((maximum, viewport) => Math.max(maximum, viewport.width / zoom), 0)
   let wrappers = container.querySelectorAll('.pdf-page-wrapper')
 
   const wrapperShapeMatches = wrappers.length === numPages
@@ -550,4 +553,28 @@ export async function renderPDFThumbnail(pageNum, canvas) {
   canvas.width = Math.ceil(viewport.width)
   canvas.height = Math.ceil(viewport.height)
   await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+}
+
+// Read text independently of lazy canvas rendering for workspace find.
+export async function getPDFPageText(pageNumber, signal) {
+  const document = pdfDoc
+  if (!document) return ''
+  const rendered = renderedTextLayers.get(pageNumber)?.textContent
+  if (rendered) return rendered.items.map(item => item.str + (item.hasEOL ? ' ' : '')).join('')
+  if (pdfTextUrl) {
+    try {
+      const response = await fetch(`${pdfTextUrl}/${pageNumber}`, { signal })
+      if (response.ok) {
+        const recovered = await response.json()
+        if (recovered.recovery && recovered.spans?.length) return recovered.spans.map(span => span.text + (span.hasEOL ? ' ' : '')).join('')
+      }
+    } catch (error) { if (signal?.aborted) throw error }
+  }
+  const page = await document.getPage(pageNumber)
+  const content = await page.getTextContent()
+  return content.items.map(item => item.str + (item.hasEOL ? ' ' : '')).join('')
+}
+export async function getPDFPageWidth(pageNumber = 1) {
+  if (!pdfDoc) return null
+  return widestPageWidth || (await pdfDoc.getPage(pageNumber)).getViewport({ scale: 1 }).width
 }
