@@ -7194,18 +7194,23 @@ async function requestDeleteFolder(folder) {
   await renderLibrary()
 }
 
+let openFolderCardMenu = null
+
 function closeFolderCardMenus() {
-  document.querySelectorAll('.folder-card-actions').forEach(menu => {
-    menu.classList.add('hidden')
-    const folderId = menu.dataset.folderId
-    const ownerCard = folderId ? document.querySelector(`.library-folder-card[data-folder-id="${CSS.escape(folderId)}"]`) : null
-    const actionGroup = ownerCard?.querySelector('.folder-card-cta')
-    if (actionGroup && menu.parentElement !== actionGroup) {
-      const openButton = actionGroup.querySelector('.folder-card-open-btn')
-      actionGroup.insertBefore(menu, openButton)
-    }
-    menu.removeAttribute('style')
-  })
+  // This also runs for PDF/translation scroll events. A closed library must
+  // not scan and mutate every folder card on each frame of viewer scrolling.
+  const menu = openFolderCardMenu
+  if (!menu) return
+  openFolderCardMenu = null
+  menu.classList.add('hidden')
+  const folderId = menu.dataset.folderId
+  const ownerCard = folderId ? document.querySelector(`.library-folder-card[data-folder-id="${CSS.escape(folderId)}"]`) : null
+  const actionGroup = ownerCard?.querySelector('.folder-card-cta')
+  if (actionGroup && menu.parentElement !== actionGroup) {
+    const openButton = actionGroup.querySelector('.folder-card-open-btn')
+    actionGroup.insertBefore(menu, openButton)
+  }
+  menu.removeAttribute('style')
 }
 
 function positionFolderCardMenu(menu, trigger) {
@@ -7266,6 +7271,7 @@ function createFolderCard(folder) {
     const shouldOpen = menu.classList.contains('hidden')
     closeFolderCardMenus()
     if (!shouldOpen) return
+    openFolderCardMenu = menu
     if (isListView) positionFolderCardMenu(menu, menuTrigger)
     else menu.classList.remove('hidden')
   })
@@ -14103,6 +14109,9 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
   if (!pageWrapper) return
 
   const overlay = getOrCreateOverlay(pageWrapper)
+  // Keep new markers detached until every range has been measured. Appending
+  // each marker immediately forces layout again for the next range.
+  const markers = document.createDocumentFragment()
   overlay.querySelectorAll('.citation-marker-box').forEach(el => el.remove())
   if (state.disableCitationOverlay) return
 
@@ -14168,7 +14177,7 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
         globalAnalyticsTracker.trackInteraction('citationClick', pageNum)
         showCitationTooltip(docId, validKeys, refMap, box)
       })
-      overlay.appendChild(box)
+      markers.appendChild(box)
     })
   }
 
@@ -14231,6 +14240,7 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
       }
     }
   }
+  overlay.appendChild(markers)
 }
 
 // 본문 중 "Figure 1", "Figs. 3-5", "Table 2", "Eq. (3)" 같은 표기를 감지해,
@@ -14378,6 +14388,9 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
   if (!pageWrapper) return
 
   const overlay = getOrCreateOverlay(pageWrapper)
+  // Keep new markers detached until every range has been measured. Appending
+  // each marker immediately forces layout again for the next range.
+  const markers = document.createDocumentFragment()
   overlay.querySelectorAll('.figure-ref-marker-box').forEach(el => el.remove())
   if (state.disableFigureOverlay) return
 
@@ -14437,9 +14450,10 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
         hideFigurePreviewTooltip()
         scrollToPage(viewerScrollContainer, targets[0].page)
       })
-      overlay.appendChild(box)
+      markers.appendChild(box)
     })
   }
+  overlay.appendChild(markers)
 }
 
 // ── Figure/Table/Equation 참조 호버 미리보기 툴팁 ──────────
@@ -16407,6 +16421,7 @@ function buildVirtualTextMap(container, pageNum) {
 
   // 줄 번호 필터링 + 노드 메타데이터 수집
   const spans = [];
+  const lineNumbers = [];
   allElements.forEach(el => {
     const text = el.textContent.trim();
     // 텍스트가 없는(공백뿐이거나 빈) 요소는 건너뛴다. PDF.js가 줄마다 끼워 넣는
@@ -16426,15 +16441,20 @@ function buildVirtualTextMap(container, pageNum) {
 
     // 줄 번호: 3~4자리 숫자, 좌측 마진 8% 이내
     if (ratio < 0.08 && /^\d{3,4}$/.test(text)) {
-      el.style.userSelect = 'none';
-      el.style.webkitUserSelect = 'none';
-      el.style.pointerEvents = 'none';
-      el.classList.add('pdf-line-number-noise');
+      lineNumbers.push(el);
       return;
     }
 
     spans.push({ el, left: leftVal, top: topVal, fontSize: fsVal, isLineNumber: false });
   });
+
+  // Finish geometry reads before changing any connected span's styles.
+  for (const el of lineNumbers) {
+    el.style.userSelect = 'none';
+    el.style.webkitUserSelect = 'none';
+    el.style.pointerEvents = 'none';
+    el.classList.add('pdf-line-number-noise');
+  }
 
   if (spans.length === 0) return null;
 
@@ -17291,6 +17311,30 @@ function splitIntoSentences(fullText) {
 // 현재 호버 중인 페이지/문장 인덱스
 let currentHoverPage = null;
 let currentHoverSentenceIdx = null;
+// Wheel scrolling moves sentences under a stationary pointer and still emits
+// mouseover/mouseout. Suspend decorative hover work until scrolling settles.
+let viewerHoverPausedUntil = 0;
+function isViewerScrolling() { return !focusModeController?.settings.enabled && performance.now() < viewerHoverPausedUntil; }
+function markViewerScrolling() {
+  // Focus mode owns scrolling/revealing its current sentence separately.
+  if (focusModeController?.settings.enabled) return;
+  const alreadyScrolling = isViewerScrolling();
+  viewerHoverPausedUntil = performance.now() + 150;
+  if (alreadyScrolling) return;
+  hideSelectionMenu();
+  hideAnnHoverTooltip();
+  viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => el.classList.remove('sentence-highlight'));
+  viewerScrollContainer.querySelectorAll('.pdf-highlight-overlay').forEach(overlay => {
+    clearOverlayBoxes(overlay, 'sentence-hover-box', 'sentence-equation-box');
+  });
+  currentHoverPage = null;
+  currentHoverSentenceIdx = null;
+}
+viewerScrollContainer?.addEventListener('wheel', event => {
+  if (!event.ctrlKey) markViewerScrolling();
+}, { passive: true, capture: true });
+viewerScrollContainer?.addEventListener('scroll', markViewerScrolling, { passive: true, capture: true });
+
 function annotateHoveredSentence(type) {
   if (currentHoverPage == null || currentHoverSentenceIdx == null || !state.sessionId) return
   const pageNum = currentHoverPage
@@ -17703,7 +17747,7 @@ if (viewerScrollContainer) {
     }
     state.hoverSelectionDisabled = false;
 
-    if (state.isSelectionDragging) return;
+    if (state.isSelectionDragging || isViewerScrolling()) return;
 
     // overlay는 pointer-events:none으로 native 드래그를 방해하지 않는다.
     // 주석 hover 대상은 아래에서 textLayer 문자 위치로 판정한다.
@@ -17712,7 +17756,10 @@ if (viewerScrollContainer) {
     // 번역 패널 호버는 mouseover로 처리됨 (기존 trans-sentence 방식 유지)
     if (e.target.closest('.trans-page-block')) {
       const element = e.target.closest('.trans-sentence')
-      if (element) focusModeController.focus(translationFocusRef(Number(element.dataset.page), Number(element.dataset.sentenceIdx), element, e))
+      if (element) {
+        focusModeController.focus(translationFocusRef(Number(element.dataset.page), Number(element.dataset.sentenceIdx), element, e))
+        if (!element.classList.contains('sentence-highlight')) handleViewerMouseOver(e);
+      }
       return;
     }
 
@@ -17785,8 +17832,8 @@ if (viewerScrollContainer) {
   });
 
   // mouseover: trans-sentence 호버 처리 (기존 방식 유지)
-  viewerScrollContainer.addEventListener('mouseover', (e) => {
-    if (state.isSelectionDragging) return;
+  function handleViewerMouseOver(e) {
+    if (state.isSelectionDragging || isViewerScrolling()) return;
     try {
       const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
       if (annSpan) showAnnHoverTooltipForSpan(annSpan);
@@ -17831,11 +17878,12 @@ if (viewerScrollContainer) {
         }
       }
     } catch(err) { /* no-op */ }
-  });
+  }
+  viewerScrollContainer.addEventListener('mouseover', handleViewerMouseOver);
 
   // mouseout: 호버 클리어
   viewerScrollContainer.addEventListener('mouseout', (e) => {
-    if (state.isSelectionDragging) return;
+    if (state.isSelectionDragging || isViewerScrolling()) return;
     try {
       const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
       if (annSpan) {
