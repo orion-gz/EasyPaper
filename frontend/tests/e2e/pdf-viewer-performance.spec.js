@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test'
 import { mockBaseRoutes, gotoApp } from './helpers.js'
 
+test.use({ deviceScaleFactor: 2 })
+
 // Generate a real multipage PDF without an additional fixture dependency.
 function multipagePdf(count, contentForPage) {
   const objects = [
@@ -54,6 +56,7 @@ test('long PDF loads lazily, bounds canvases and restores evicted pages', async 
   await expect(wrapper(1).locator('canvas')).toHaveCount(0)
   await expect(page.locator('.floating-memo[data-id="retained-memo"]')).toHaveCount(0)
   expect(await page.locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(8)
+
   expect(await wrapper(1).evaluate(node => node.getBoundingClientRect().height)).toBeCloseTo(originalHeight, 0)
 
   await wrapper(1).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
@@ -161,4 +164,88 @@ test('dense page overlays batch layout and page hover keeps reading geometry sta
   const hovered = await card.boundingBox()
   expect(hovered.y).toBeCloseTo(original.y, 1)
   expect(await card.evaluate(node => getComputedStyle(node).transitionProperty)).not.toBe('all')
+})
+
+
+test('scrolling a loaded page does not revisit closed library folder menus', async ({ page }) => {
+  await page.addInitScript(() => { localStorage.setItem('easypaper_ui_scale', '0.9') })
+  const doc = { id: 'steady', filename: 'Steady.pdf', total_pages: 2, metadata: { title: 'Steady' }, translated_pages: [] }
+  const folders = Array.from({ length: 100 }, (_, index) => ({ id: `folder-${index}`, name: `Folder ${index}`, color: '#888888', parent_id: null }))
+  await mockBaseRoutes(page, { documents: [doc], folders })
+  await page.route('**/api/library/steady/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(2) }))
+  await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
+  await gotoApp(page)
+  await page.evaluate(() => { location.hash = '#viewer?id=steady' })
+  await expect(page.locator('.textLayer').first()).toContainText('Performance page 1')
+  await expect(page.locator('.folder-card-actions')).toHaveCount(100)
+  await expect(page.locator('.citation-marker-box, .figure-ref-marker-box')).toHaveCount(0)
+  const viewer = page.locator('#viewer-scroll-container')
+  await page.evaluate(() => {
+    window.steadyScroll = { events: 0, menuScans: 0, menuMutations: 0 }
+    const query = document.querySelectorAll.bind(document)
+    document.querySelectorAll = selector => {
+      if (selector.includes('.folder-card-actions')) window.steadyScroll.menuScans++
+      return query(selector)
+    }
+    const observer = new MutationObserver(records => { window.steadyScroll.menuMutations += records.length })
+    for (const menu of query('.folder-card-actions')) observer.observe(menu, { attributes: true })
+    document.querySelector('#viewer-scroll-container').addEventListener('scroll', () => window.steadyScroll.events++, { passive: true })
+  })
+  const bounds = await viewer.boundingBox()
+  await page.mouse.move(bounds.x + 100, bounds.y + 100)
+  for (const delta of [100, 100, -100]) {
+    const previous = await viewer.evaluate(node => node.scrollTop)
+    await page.mouse.wheel(0, delta)
+    await expect.poll(() => viewer.evaluate(node => node.scrollTop)).not.toBe(previous)
+  }
+  const stats = await page.evaluate(() => window.steadyScroll)
+  expect(stats.events).toBeGreaterThanOrEqual(3)
+  expect(stats.menuScans).toBe(0)
+  expect(stats.menuMutations).toBe(0)
+})
+
+// Match the reported light theme, UI scale and Retina display. Wheel over the
+// translation itself: scrolling dispatches hover events without mouse movement.
+test('translation scrolling pauses hover repaint and hover resumes after scrolling', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('easypaper_ui_scale', '0.9')
+    localStorage.setItem('easypaper_theme_research', 'light')
+  })
+  const doc = { id: 'hover-scroll', filename: 'Hover.pdf', total_pages: 2, metadata: { title: 'Hover' }, translated_pages: [1] }
+  await mockBaseRoutes(page, { documents: [doc] })
+  await page.route('**/api/library/hover-scroll/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(2) }))
+  await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
+  await page.route('**/api/library/hover-scroll/translation/1**', route => route.fulfill({ json: {
+    translation: Array.from({ length: 50 }, (_, i) => `Paragraph ${i + 1} describes the scientific findings in detail. Another sentence explains the methods and results.`).join('\n\n'), sentences: [],
+  } }))
+  await gotoApp(page)
+  await page.evaluate(() => { location.hash = '#viewer?id=hover-scroll' })
+  const sentence = page.locator('.trans-sentence').first()
+  const pane = page.locator('#trans-content-1')
+  await expect(sentence).toBeVisible()
+  await sentence.scrollIntoViewIfNeeded()
+  await page.waitForTimeout(200)
+  await sentence.hover()
+  await expect(sentence).toHaveClass(/sentence-highlight/)
+  const initial = await pane.evaluate(node => node.scrollTop)
+  await page.mouse.wheel(0, 40)
+  await expect.poll(() => pane.evaluate(node => node.scrollTop)).toBeGreaterThan(initial)
+  await expect(page.locator('.trans-sentence.sentence-highlight')).toHaveCount(0)
+  await pane.evaluate(node => {
+    window.hoverWritesDuringScroll = 0
+    new MutationObserver(records => {
+      window.hoverWritesDuringScroll += records.filter(record => record.target.classList?.contains('trans-sentence')).length
+    }).observe(node, { subtree: true, attributes: true, attributeFilter: ['class'] })
+  })
+  for (let i = 0; i < 8; i++) {
+    await page.mouse.wheel(0, 35)
+    await page.waitForTimeout(30)
+  }
+  expect(await page.evaluate(() => window.hoverWritesDuringScroll)).toBe(0)
+  // A real mouse move over the same sentence after scrolling must restore hover,
+  // even if the pointer never left that sentence's DOM element.
+  await pane.evaluate(node => { node.scrollTop = 0 })
+  await page.waitForTimeout(200)
+  await sentence.hover()
+  await expect(sentence).toHaveClass(/sentence-highlight/)
 })

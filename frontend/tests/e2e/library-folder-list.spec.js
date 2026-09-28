@@ -57,3 +57,23 @@ test('폴더 리스트를 논문 행처럼 표시하고 메뉴가 스크롤 높�
   await expect(menu).toBeHidden()
   expect(await menu.evaluate(el => el.parentElement?.classList.contains('folder-card-cta'))).toBe(true)
 })
+
+for (const view of ['grid', 'list']) {
+  test(`only the open folder menu closes on scroll (${view})`, async ({ page }) => {
+    await mockBaseRoutes(page, { folders: folders.filter(folder => !folder.parent_id), documents: docs })
+    await gotoApp(page)
+    await page.locator('.sidebar-nav-item[data-page="library"]').click()
+    await page.getByRole('button', { name: view === 'list' ? '리스트 보기' : '큰 카드 보기' }).click()
+    const card = page.locator('.library-folder-card[data-folder-id="folder-root"]')
+    const menu = page.locator('.folder-card-actions[data-folder-id="folder-root"]')
+    await card.getByTitle('폴더 관리').click()
+    await expect(menu).toBeVisible()
+    await page.locator('#page-outlet').dispatchEvent('scroll')
+    await expect(menu).toBeHidden()
+    await card.getByTitle('폴더 관리').click()
+    await expect(menu).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeHidden()
+    if (view === 'list') expect(await menu.evaluate(node => node.parentElement.classList.contains('folder-card-cta'))).toBe(true)
+  })
+}

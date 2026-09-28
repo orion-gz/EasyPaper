@@ -7087,18 +7087,23 @@ async function requestDeleteFolder(folder) {
   await renderLibrary()
 }
 
+let openFolderCardMenu = null
+
 function closeFolderCardMenus() {
-  document.querySelectorAll('.folder-card-actions').forEach(menu => {
-    menu.classList.add('hidden')
-    const folderId = menu.dataset.folderId
-    const ownerCard = folderId ? document.querySelector(`.library-folder-card[data-folder-id="${CSS.escape(folderId)}"]`) : null
-    const actionGroup = ownerCard?.querySelector('.folder-card-cta')
-    if (actionGroup && menu.parentElement !== actionGroup) {
-      const openButton = actionGroup.querySelector('.folder-card-open-btn')
-      actionGroup.insertBefore(menu, openButton)
-    }
-    menu.removeAttribute('style')
-  })
+  // This also runs for PDF/translation scroll events. A closed library must
+  // not scan and mutate every folder card on each frame of viewer scrolling.
+  const menu = openFolderCardMenu
+  if (!menu) return
+  openFolderCardMenu = null
+  menu.classList.add('hidden')
+  const folderId = menu.dataset.folderId
+  const ownerCard = folderId ? document.querySelector(`.library-folder-card[data-folder-id="${CSS.escape(folderId)}"]`) : null
+  const actionGroup = ownerCard?.querySelector('.folder-card-cta')
+  if (actionGroup && menu.parentElement !== actionGroup) {
+    const openButton = actionGroup.querySelector('.folder-card-open-btn')
+    actionGroup.insertBefore(menu, openButton)
+  }
+  menu.removeAttribute('style')
 }
 
 function positionFolderCardMenu(menu, trigger) {
@@ -7159,6 +7164,7 @@ function createFolderCard(folder) {
     const shouldOpen = menu.classList.contains('hidden')
     closeFolderCardMenus()
     if (!shouldOpen) return
+    openFolderCardMenu = menu
     if (isListView) positionFolderCardMenu(menu, menuTrigger)
     else menu.classList.remove('hidden')
   })
@@ -17152,6 +17158,30 @@ function splitIntoSentences(fullText) {
 // 현재 호버 중인 페이지/문장 인덱스
 let currentHoverPage = null;
 let currentHoverSentenceIdx = null;
+// Wheel scrolling moves sentences under a stationary pointer and still emits
+// mouseover/mouseout. Suspend decorative hover work until scrolling settles.
+let viewerHoverPausedUntil = 0;
+function isViewerScrolling() { return !focusModeController?.settings.enabled && performance.now() < viewerHoverPausedUntil; }
+function markViewerScrolling() {
+  // Focus mode owns scrolling/revealing its current sentence separately.
+  if (focusModeController?.settings.enabled) return;
+  const alreadyScrolling = isViewerScrolling();
+  viewerHoverPausedUntil = performance.now() + 150;
+  if (alreadyScrolling) return;
+  hideSelectionMenu();
+  hideAnnHoverTooltip();
+  viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(el => el.classList.remove('sentence-highlight'));
+  viewerScrollContainer.querySelectorAll('.pdf-highlight-overlay').forEach(overlay => {
+    clearOverlayBoxes(overlay, 'sentence-hover-box', 'sentence-equation-box');
+  });
+  currentHoverPage = null;
+  currentHoverSentenceIdx = null;
+}
+viewerScrollContainer?.addEventListener('wheel', event => {
+  if (!event.ctrlKey) markViewerScrolling();
+}, { passive: true, capture: true });
+viewerScrollContainer?.addEventListener('scroll', markViewerScrolling, { passive: true, capture: true });
+
 // 현재 클릭 고정 중인 active 하이라이트
 let activeHighlightPage = null;
 let activeHighlightSentenceIdx = null;
@@ -17547,7 +17577,7 @@ if (viewerScrollContainer) {
     }
     state.hoverSelectionDisabled = false;
 
-    if (state.isSelectionDragging) return;
+    if (state.isSelectionDragging || isViewerScrolling()) return;
 
     // overlay는 pointer-events:none으로 native 드래그를 방해하지 않는다.
     // 주석 hover 대상은 아래에서 textLayer 문자 위치로 판정한다.
@@ -17556,7 +17586,10 @@ if (viewerScrollContainer) {
     // 번역 패널 호버는 mouseover로 처리됨 (기존 trans-sentence 방식 유지)
     if (e.target.closest('.trans-page-block')) {
       const element = e.target.closest('.trans-sentence')
-      if (element) focusModeController.focus(translationFocusRef(Number(element.dataset.page), Number(element.dataset.sentenceIdx), element, e))
+      if (element) {
+        focusModeController.focus(translationFocusRef(Number(element.dataset.page), Number(element.dataset.sentenceIdx), element, e))
+        if (!element.classList.contains('sentence-highlight')) handleViewerMouseOver(e);
+      }
       return;
     }
 
@@ -17629,8 +17662,8 @@ if (viewerScrollContainer) {
   });
 
   // mouseover: trans-sentence 호버 처리 (기존 방식 유지)
-  viewerScrollContainer.addEventListener('mouseover', (e) => {
-    if (state.isSelectionDragging) return;
+  function handleViewerMouseOver(e) {
+    if (state.isSelectionDragging || isViewerScrolling()) return;
     try {
       const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
       if (annSpan) showAnnHoverTooltipForSpan(annSpan);
@@ -17675,11 +17708,12 @@ if (viewerScrollContainer) {
         }
       }
     } catch(err) { /* no-op */ }
-  });
+  }
+  viewerScrollContainer.addEventListener('mouseover', handleViewerMouseOver);
 
   // mouseout: 호버 클리어
   viewerScrollContainer.addEventListener('mouseout', (e) => {
-    if (state.isSelectionDragging) return;
+    if (state.isSelectionDragging || isViewerScrolling()) return;
     try {
       const annSpan = e.target.closest('.pdf-annotation-highlight, .pdf-annotation-underline');
       if (annSpan) {
