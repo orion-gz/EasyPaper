@@ -81,14 +81,23 @@ export function createWorkspaceTabs(adapter) {
       if (runtime?.ready) record.store.update(id, { reading: runtime.snapshot(), title: runtime.title() })
     }
   }
-  async function leaveCurrent() {
+  function flushFrame(record, runtime) {
+    // Keep the iframe alive until all saves finish when the tab is closed.
+    const pending = Promise.all([record.pendingFlush, runtime.flush()])
+    record.pendingFlush = pending
+    const clear = () => { if (record.pendingFlush === pending) record.pendingFlush = null }
+    pending.then(clear, error => { clear(); report(error) })
+    return pending
+  }
+  async function leaveCurrent({ waitForSave = false } = {}) {
     const record = frames.get(visibleId)
     if (record) {
       const runtime = record.frame.contentWindow?.__easypaperDocument
       if (runtime?.ready) {
-        await runtime.flush()
+        const saving = flushFrame(record, runtime)
         store.update(visibleId, { reading: runtime.snapshot(), title: runtime.title() })
         await runtime.setActive(false)
+        if (waitForSave) await saving
       }
       record.frame.hidden = true
     } else if (visibleId) {
@@ -189,8 +198,11 @@ export function createWorkspaceTabs(adapter) {
       record.frame.hidden = false
       const runtime = record.frame.contentWindow?.__easypaperDocument
       if (runtime?.ready) {
-        await runtime.setActive(true)
-        if (route) await runtime.navigate(route)
+        // PDF resumption belongs to this document, not the navigation queue.
+        runtime.setActive(true).then(async () => {
+          if (token !== generation || record.closed) return
+          if (route) await runtime.navigate(route)
+        }).catch(report)
       }
     } else {
       library.classList.add('active')
@@ -212,8 +224,8 @@ export function createWorkspaceTabs(adapter) {
     const active = store.activeTabId === id
     const record = frames.get(id)
     const runtime = record?.frame.contentWindow?.__easypaperDocument
-    if (active) await leaveCurrent()
-    else if (runtime?.ready) await runtime.flush()
+    if (active) await leaveCurrent({ waitForSave: true })
+    else if (runtime?.ready) await flushFrame(record, runtime)
     store.closeTab(id)
     if (record) {
       record.closed = true

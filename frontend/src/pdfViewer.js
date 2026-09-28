@@ -547,7 +547,10 @@ export async function resumePDFRendering() {
   if (!lastScrollView) return
   const { container, zoom, onPageVisible } = lastScrollView
   const top = container.scrollTop
-  await renderScrollView(container, zoom, { onPageVisible })
+  const resuming = renderScrollView(container, zoom, { onPageVisible })
+  const token = renderGeneration
+  await resuming
+  if (token !== renderGeneration || suspended) return
   container.scrollTop = top
 }
 export async function renderPDFThumbnail(pageNum, canvas) {
