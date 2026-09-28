@@ -16064,13 +16064,14 @@ if (viewerScrollContainer && viewerTopbar) {
 
     if (currentScrollTop <= TOOLBAR_TOP_ZONE) {
       setToolbarHidden(false)
+      lastToolbarScrollTop = currentScrollTop
     } else if (delta > TOOLBAR_HIDE_THRESHOLD) {
       setToolbarHidden(true)
+      lastToolbarScrollTop = currentScrollTop
     } else if (delta < -TOOLBAR_HIDE_THRESHOLD) {
       setToolbarHidden(false)
+      lastToolbarScrollTop = currentScrollTop
     }
-
-    lastToolbarScrollTop = currentScrollTop
   })
 }
 

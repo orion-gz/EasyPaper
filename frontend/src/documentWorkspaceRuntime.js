@@ -48,13 +48,6 @@ export function installDocumentRuntime(adapter) {
   list.hidden = true
   sidebar.prepend(tabs)
   sidebar.append(list)
-  const header = sidebar.querySelector('.chat-header')
-  const provider = $('chat-sidebar-provider')
-  const modelRow = document.createElement('div')
-  modelRow.className = 'document-model-row'
-  modelRow.append(provider)
-  header.after(modelRow)
-
   function showResources() {
     list.replaceChildren()
     const resources = panel === 'notes' ? adapter.memos() : adapter.annotations()
