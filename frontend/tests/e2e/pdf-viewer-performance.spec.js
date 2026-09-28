@@ -2,14 +2,14 @@ import { test, expect } from '@playwright/test'
 import { mockBaseRoutes, gotoApp } from './helpers.js'
 
 // Generate a real multipage PDF without an additional fixture dependency.
-function multipagePdf(count) {
+function multipagePdf(count, contentForPage) {
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     `<< /Type /Pages /Count ${count} /Kids [${Array.from({ length: count }, (_, i) => `${4 + i * 2} 0 R`).join(' ')}] >>`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
   ]
   for (let i = 0; i < count; i++) {
-    const content = `BT /F1 18 Tf 50 700 Td (Performance page ${i + 1}) Tj ET`
+    const content = contentForPage?.(i + 1) ?? `BT /F1 18 Tf 50 700 Td (Performance page ${i + 1}) Tj ET`
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`)
     objects.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`)
   }
@@ -105,4 +105,60 @@ test('rapid jumps cancel stale text requests and finish the destination page', a
   expect(stats.cancelled).toBeGreaterThan(0)
   await expect(page.locator('.page-render-error')).toHaveCount(0)
   expect(errors).toEqual([])
+})
+
+test('dense page overlays batch layout and page hover keeps reading geometry stable', async ({ page, context, browserName }) => {
+  const doc = { id: 'dense', filename: 'Dense.pdf', total_pages: 4, metadata: { title: 'Dense PDF' }, translated_pages: [] }
+  await mockBaseRoutes(page, { documents: [doc] })
+  const pdf = multipagePdf(4, () => Array.from({ length: 45 }, (_, i) =>
+    `BT /F1 10 Tf 15 ${750 - i * 15} Td (${100 + i}) Tj ET\nBT /F1 10 Tf 60 ${750 - i * 15} Td (Reading line ${i + 1} cites [1] and Figure 1.) Tj ET`
+  ).join('\n'))
+  await page.route('**/api/library/dense/pdf', route => route.fulfill({ contentType: 'application/pdf', body: pdf }))
+  await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
+  await page.route('**/api/library/dense/references', route => route.fulfill({ json: { references: { '1': 'Example reference.' } } }))
+  await page.route('**/api/library/dense/images', route => route.fulfill({ json: { images: [
+    { page: 1, label: 'Figure 1', left: 75, top: 90, width: 10, height: 5 },
+  ] } }))
+  await gotoApp(page)
+  await page.evaluate(() => { location.hash = '#viewer?id=dense' })
+  // Exercise a newly rendered page reached by scrolling, not just startup.
+  const wrapper = page.locator('.pdf-page-wrapper[data-page="4"]')
+  await wrapper.evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
+  await expect(wrapper.locator('.citation-marker-box')).toHaveCount(45)
+  await expect(wrapper.locator('.figure-ref-marker-box')).toHaveCount(45)
+  await expect(wrapper.locator('.pdf-line-number-noise')).toHaveCount(45)
+  await page.mouse.move(0, 0)
+  await page.waitForTimeout(500)
+
+  // Chromium's layout counter measures forced layout, without a machine-speed
+  // dependent millisecond threshold. Rebuild the same dense page synchronously.
+  if (browserName === 'chromium') {
+    const cdp = await context.newCDPSession(page)
+    await cdp.send('Performance.enable')
+    const layoutCount = async () => (await cdp.send('Performance.getMetrics')).metrics.find(m => m.name === 'LayoutCount').value
+    const before = await layoutCount()
+    await wrapper.locator('.textLayer').evaluate(layer => window.onTextLayerRendered(layer, 4))
+    const layouts = await layoutCount() - before
+    console.log(`Dense page overlay rebuild: ${layouts} layouts`)
+    expect(layouts).toBeLessThan(15)
+    await cdp.detach()
+  } else {
+    await wrapper.locator('.textLayer').evaluate(layer => window.onTextLayerRendered(layer, 4))
+  }
+  await expect(wrapper.locator('.citation-marker-box')).toHaveCount(45)
+  await expect(wrapper.locator('.figure-ref-marker-box')).toHaveCount(45)
+
+  const card = wrapper.locator('..')
+  const original = await card.boundingBox()
+  const hoverPoint = await wrapper.evaluate(node => {
+    const page = node.getBoundingClientRect()
+    const viewport = node.closest('#viewer-scroll-container').getBoundingClientRect()
+    return { x: Math.max(page.left, viewport.left) + 30, y: Math.max(page.top, viewport.top) + 30 }
+  })
+  await page.mouse.move(hoverPoint.x, hoverPoint.y)
+  await page.waitForTimeout(500)
+  expect(await card.evaluate(node => node.matches(':hover'))).toBe(true)
+  const hovered = await card.boundingBox()
+  expect(hovered.y).toBeCloseTo(original.y, 1)
+  expect(await card.evaluate(node => getComputedStyle(node).transitionProperty)).not.toBe('all')
 })

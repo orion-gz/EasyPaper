@@ -13962,6 +13962,9 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
   if (!pageWrapper) return
 
   const overlay = getOrCreateOverlay(pageWrapper)
+  // Keep new markers detached until every range has been measured. Appending
+  // each marker immediately forces layout again for the next range.
+  const markers = document.createDocumentFragment()
   overlay.querySelectorAll('.citation-marker-box').forEach(el => el.remove())
   if (state.disableCitationOverlay) return
 
@@ -14027,7 +14030,7 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
         globalAnalyticsTracker.trackInteraction('citationClick', pageNum)
         showCitationTooltip(docId, validKeys, refMap, box)
       })
-      overlay.appendChild(box)
+      markers.appendChild(box)
     })
   }
 
@@ -14090,6 +14093,7 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
       }
     }
   }
+  overlay.appendChild(markers)
 }
 
 // 본문 중 "Figure 1", "Figs. 3-5", "Table 2", "Eq. (3)" 같은 표기를 감지해,
@@ -14237,6 +14241,9 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
   if (!pageWrapper) return
 
   const overlay = getOrCreateOverlay(pageWrapper)
+  // Keep new markers detached until every range has been measured. Appending
+  // each marker immediately forces layout again for the next range.
+  const markers = document.createDocumentFragment()
   overlay.querySelectorAll('.figure-ref-marker-box').forEach(el => el.remove())
   if (state.disableFigureOverlay) return
 
@@ -14296,9 +14303,10 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
         hideFigurePreviewTooltip()
         scrollToPage(viewerScrollContainer, targets[0].page)
       })
-      overlay.appendChild(box)
+      markers.appendChild(box)
     })
   }
+  overlay.appendChild(markers)
 }
 
 // ── Figure/Table/Equation 참조 호버 미리보기 툴팁 ──────────
@@ -16254,6 +16262,7 @@ function buildVirtualTextMap(container, pageNum) {
 
   // 줄 번호 필터링 + 노드 메타데이터 수집
   const spans = [];
+  const lineNumbers = [];
   allElements.forEach(el => {
     const text = el.textContent.trim();
     // 텍스트가 없는(공백뿐이거나 빈) 요소는 건너뛴다. PDF.js가 줄마다 끼워 넣는
@@ -16273,15 +16282,20 @@ function buildVirtualTextMap(container, pageNum) {
 
     // 줄 번호: 3~4자리 숫자, 좌측 마진 8% 이내
     if (ratio < 0.08 && /^\d{3,4}$/.test(text)) {
-      el.style.userSelect = 'none';
-      el.style.webkitUserSelect = 'none';
-      el.style.pointerEvents = 'none';
-      el.classList.add('pdf-line-number-noise');
+      lineNumbers.push(el);
       return;
     }
 
     spans.push({ el, left: leftVal, top: topVal, fontSize: fsVal, isLineNumber: false });
   });
+
+  // Finish geometry reads before changing any connected span's styles.
+  for (const el of lineNumbers) {
+    el.style.userSelect = 'none';
+    el.style.webkitUserSelect = 'none';
+    el.style.pointerEvents = 'none';
+    el.classList.add('pdf-line-number-noise');
+  }
 
   if (spans.length === 0) return null;
 

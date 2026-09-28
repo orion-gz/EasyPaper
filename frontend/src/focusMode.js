@@ -341,8 +341,7 @@ export class FocusModeController {
     if (this.settings.enabled && this.settings.hideOverlays) {
       for (const preview of this.previews.values()) preview.hide()
     }
-    // Suppress the card lift before the pointer enters, not when the focus
-    // overlay appears: changing it on activation shifts the source by 2px.
+    // Disable card hover transitions before focus overlays are activated.
     this.root?.classList.toggle('focus-mode-enabled', this.settings.enabled)
     if (!this.settings.enabled) this.clear(); else if (this.current) this.scheduleRender()
   }
