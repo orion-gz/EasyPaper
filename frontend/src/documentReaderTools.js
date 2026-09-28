@@ -18,7 +18,6 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
   let selected = -1
   let query = ''
   let pointerDown = false
-  let drag = null
   let locateRevision = 0
   let deferredFit = false
   const texts = new Map()
@@ -41,37 +40,14 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
   const tools = document.createElement('div')
   tools.className = 'document-pointer-tools'
   floating.prepend(tools)
-  const selectButton = button('document-select-tool', t('navigation:tabs.selectTool'), '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"><path d="M5 3v17l5-5 4 7 3-2-4-7 7-1Z"/></svg>', tools, () => setPan(false))
-  const panButton = button('document-pan-tool', t('navigation:tabs.panTool'), '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"><path d="M8 12V5a2 2 0 0 1 4 0v7-9a2 2 0 0 1 4 0v9-6a2 2 0 0 1 4 0v10c0 4-2 6-6 6h-2c-2 0-3-1-4-3l-4-6a2 2 0 0 1 3-2l1 1Z"/></svg>', tools, () => setPan(true))
-  selectButton.dataset.i18nAriaLabel = 'navigation:tabs.selectTool'
-  panButton.dataset.i18nAriaLabel = 'navigation:tabs.panTool'
-  function setPan(value) {
-    scroll.classList.toggle('document-pan-mode', value)
-    panButton.setAttribute('aria-pressed', String(value))
-    selectButton.setAttribute('aria-pressed', String(!value))
-    endDrag()
+  for (const [name, label, glyph] of [
+    ['highlight', t('navigation:tabs.highlight'), '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>'],
+    ['underline', t('navigation:tabs.underline'), '<path d="M6 3v7a6 6 0 0 0 12 0V3"/><path d="M4 21h16"/>'],
+    ['memo', t('navigation:tabs.memo'), '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>'],
+  ]) {
+    const tool = button(`document-${name}-tool`, label, `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${glyph}</svg>`, tools, () => adapter.annotateHoveredSentence(name))
+    tool.dataset.i18nAriaLabel = tool.dataset.i18nTitle = `navigation:tabs.${name}`
   }
-  function endDrag() {
-    if (drag && scroll.hasPointerCapture(drag.id)) scroll.releasePointerCapture(drag.id)
-    drag = null
-    scroll.classList.remove('document-panning')
-  }
-  scroll.addEventListener('pointerdown', event => {
-    if (!scroll.classList.contains('document-pan-mode') || event.button !== 0 || event.target.closest('button, input, textarea, select, a')) return
-    event.preventDefault()
-    event.stopImmediatePropagation()
-    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: scroll.scrollLeft, top: scroll.scrollTop }
-    scroll.setPointerCapture(event.pointerId)
-    scroll.classList.add('document-panning')
-  }, true)
-  scroll.addEventListener('pointermove', event => {
-    if (!drag || event.pointerId !== drag.id) return
-    const scale = scroll.getBoundingClientRect().width / scroll.offsetWidth || 1
-    scroll.scrollLeft = drag.left + (drag.x - event.clientX) / scale
-    scroll.scrollTop = drag.top + (drag.y - event.clientY) / scale
-  })
-  for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) scroll.addEventListener(event, endDrag)
-  setPan(false)
 
   function isInteracting() {
     const selection = window.getSelection()
@@ -244,7 +220,7 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
     fitNow: applyFit,
     refresh: scheduleFit,
     setActive(value) {
-      active = value; endDrag()
+      active = value
       if (!value) { pointerDown = false; ++locateRevision; ++revision; searchController?.abort(); clearTimeout(queryTimer) }
       else {
         scheduleFit()

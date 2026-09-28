@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import fs from 'node:fs'
 import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A, SAMPLE_PDF_B } from './helpers.js'
 
 const documents = [
@@ -234,23 +235,36 @@ test('document find searches PDF text, shows a highlighted result, and keeps que
   await expect(frame.locator('#document-search')).toBeHidden()
 })
 
-test('hand tool pans without selecting text and select tool restores selection', async ({ page }) => {
+test('bottom tools annotate the hovered sentence and follow theme and scroll visibility', async ({ page }) => {
   await setup(page)
+  await page.route('**/api/library/tab-a/pdf', route => route.fulfill({ contentType: 'application/pdf', body: fs.readFileSync(new URL('./fixtures/text-geometry.pdf', import.meta.url)) }))
   await open(page, 'tab-a')
   const frame = reader(page, 'tab-a')
-  await frame.locator('#zoom-in-btn').click({ clickCount: 12, delay: 150 })
-  await frame.locator('#document-pan-tool').click()
-  await expect(frame.locator('#document-pan-tool')).toHaveAttribute('aria-pressed', 'true')
-  const viewport = frame.locator('#viewer-scroll-container')
-  const box = await viewport.boundingBox()
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(box.x + box.width / 2 - 90, box.y + box.height / 2 - 100, { steps: 5 })
-  await page.mouse.up()
-  await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBeGreaterThan(40)
-  expect(await viewport.evaluate(() => window.getSelection().toString())).toBe('')
-  await frame.locator('#document-select-tool').click()
-  await expect(viewport).not.toHaveClass(/document-pan-mode/)
+  const toolbar = frame.locator('#floating-scroll-nav')
+  await expect(frame.locator('#document-pan-tool')).toHaveCount(0)
+  const dark = await toolbar.evaluate(el => getComputedStyle(el).backgroundColor)
+  await page.locator('#sidebar-theme-toggle-btn').click()
+  await expect(frame.locator('body')).toHaveClass(/light-theme/)
+  expect(await toolbar.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe(dark)
+
+  await expect(frame.locator('.pdf-page-wrapper .textLayer[data-segmented="true"]')).toBeVisible()
+  const text = frame.locator('.pdf-page-wrapper .textLayer span').filter({ visible: true }).first()
+  await expect(text).toBeVisible()
+  await text.hover()
+  await expect(frame.locator('.sentence-hover-box')).toHaveCount(1)
+  await frame.locator('#document-highlight-tool').click()
+  await expect.poll(() => frame.locator('body').evaluate(() => JSON.parse(localStorage.getItem('easypaper_annotations_tab-a') || '{}').page_1?.filter(item => item.type === 'highlight').length || 0)).toBe(1)
+  await frame.locator('#document-underline-tool').click()
+  await expect.poll(() => frame.locator('body').evaluate(() => JSON.parse(localStorage.getItem('easypaper_annotations_tab-a') || '{}').page_1?.filter(item => item.type === 'underline').length || 0)).toBe(1)
+  await frame.locator('#document-memo-tool').click()
+  await expect.poll(() => frame.locator('body').evaluate(() => JSON.parse(localStorage.getItem('easypaper_memos_tab-a') || '{}').page_1?.length || 0)).toBe(1)
+
+  await frame.locator('#setting-toolbar-autohide').evaluate(input => { input.checked = true; input.dispatchEvent(new Event('change', { bubbles: true })) })
+  await frame.locator('#zoom-in-btn').click({ clickCount: 4, delay: 100 })
+  await frame.locator('#viewer-scroll-container').evaluate(el => { el.scrollTop = 300; el.dispatchEvent(new Event('scroll')) })
+  await expect(toolbar).toBeHidden()
+  await frame.locator('#viewer-scroll-container').evaluate(el => { el.scrollTop = 0; el.dispatchEvent(new Event('scroll')) })
+  await expect(toolbar).toBeVisible()
 })
 
 test('resource list updates across runtimes and pending sync does not block switching or closing', async ({ page }) => {

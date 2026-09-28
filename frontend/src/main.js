@@ -17290,6 +17290,23 @@ function splitIntoSentences(fullText) {
 // 현재 호버 중인 페이지/문장 인덱스
 let currentHoverPage = null;
 let currentHoverSentenceIdx = null;
+function annotateHoveredSentence(type) {
+  if (currentHoverPage == null || currentHoverSentenceIdx == null || !state.sessionId) return
+  const pageNum = currentHoverPage
+  const sentence = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [], currentHoverSentenceIdx)
+  const vtm = state.virtualTextMaps?.[pageNum]
+  const textLayer = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"] .textLayer`)
+  if (!sentence || !vtm || !textLayer) return
+  const range = createDomRangeFromVtmRange(vtm, sentence.charStart, sentence.charEnd)
+  if (!range || range.collapsed) return
+  if (type === 'memo') {
+    const sentenceIdx = sentence.sentenceIdx >= 10000 ? (sentence.originalSentenceIdx ?? sentence.sentenceIdx) : sentence.sentenceIdx
+    createFloatingMemoForSentence(pageNum, sentenceIdx, { charStart: sentence.charStart, charEnd: sentence.charEnd })
+  } else if (type === 'highlight' || type === 'underline') {
+    applyAnnotationToRange(range, type, textLayer, pageNum)
+  }
+  hideSelectionMenu()
+}
 // 현재 클릭 고정 중인 active 하이라이트
 let activeHighlightPage = null;
 let activeHighlightSentenceIdx = null;
@@ -18816,6 +18833,7 @@ function installReaderWorkspaceRuntime() {
       else scrollToPage(viewerScrollContainer, page, { instant: true })
     },
     navigateAnnotation: navigateToViewerAnnotation,
+    annotateHoveredSentence,
     navigateHash: async hash => {
       const target = viewerAnnotationTargetFromParams(new URLSearchParams(hash.split('?')[1]))
       if (target) await navigateToViewerAnnotation(target)

@@ -68,9 +68,10 @@
 .document-thumbnails button { display: flex; gap: 8px; width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--text-secondary); cursor: pointer; }
 .document-thumbnails button.active { border-color: var(--control-accent, #4e6aff); background: var(--bg-hover); }
 .document-thumbnails canvas { width: 110px; min-height: 140px; background: white; box-shadow: 0 1px 5px #0001; }
-.document-workspace-runtime #floating-scroll-nav { position: fixed; bottom: 26px; right: calc(26px + var(--chat-sidebar-offset, 0px)); display: flex; flex-direction: row; gap: 4px; background: #1d2a4a; color: #fff; padding: 6px; border-radius: 10px; box-shadow: 0 4px 14px #16244933; }
+.document-workspace-runtime #floating-scroll-nav { position: fixed; bottom: 26px; right: calc(26px + var(--chat-sidebar-offset, 0px)); display: flex; flex-direction: row; gap: 4px; background: var(--bg-elevated); color: var(--text-primary); padding: 6px; border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: var(--shadow-md); transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1), bottom 0.3s ease, opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease; }
+.document-workspace-runtime.toolbar-hidden #floating-scroll-nav { opacity: 0; visibility: hidden; pointer-events: none; transform: translate(-50%, calc(100% + 26px)); }
 .document-workspace-runtime #floating-scroll-nav .view-group { display: flex; align-items: center; }
-.document-workspace-runtime #floating-scroll-nav button, .document-workspace-runtime #floating-scroll-nav .zoom-label { color: white; }
+.document-workspace-runtime #floating-scroll-nav button, .document-workspace-runtime #floating-scroll-nav .zoom-label { color: var(--text-primary); }
 .document-workspace-runtime #scroll-top-btn, .document-workspace-runtime #scroll-bottom-btn { display: none; }
 body.light-theme #tab-workspace { background: #f3f7fc; }
 body.light-theme #tab-workspace .app-sidebar { background: #f7faff; }
@@ -117,14 +118,14 @@ body.sidebar-collapsed #tab-workspace .workspace-mode-switch-compact { display: 
 .document-workspace-runtime #floating-scroll-nav #viewer-focus-toggle { position: static; margin: 0; width: 32px; height: 32px; }
 @media (max-width: 1100px) { #tab-workspace .workspace-mode-switch-compact { display: grid; width: 108px; flex-shrink: 0; } }
 
-/* The reading controls keep their dark surface in both application themes. */
+/* Reading controls follow the active viewer theme. */
 .document-workspace-runtime #floating-scroll-nav .view-group,
 .document-workspace-runtime #floating-scroll-nav .page-display,
 .document-workspace-runtime #floating-scroll-nav button { background: transparent; border-color: transparent; box-shadow: none; }
-.document-workspace-runtime #floating-scroll-nav button { color: #fff !important; }
+.document-workspace-runtime #floating-scroll-nav button { color: var(--text-primary) !important; }
 .document-workspace-runtime #floating-scroll-nav button:hover,
-.document-workspace-runtime #floating-scroll-nav #viewer-focus-toggle[aria-pressed=true] { background: #ffffff24; }
-.document-workspace-runtime #floating-scroll-nav #page-input { border-color: #ffffff38; }
+.document-workspace-runtime #floating-scroll-nav #viewer-focus-toggle[aria-pressed=true] { background: var(--bg-hover); }
+.document-workspace-runtime #floating-scroll-nav #page-input { border-color: var(--border-strong); color: var(--text-primary); }
 .document-workspace-runtime.document-narrow #viewer-screen:has(#chat-sidebar:not(.hidden)) #floating-scroll-nav { display: none; }
 
 /* Large originals must remain reachable from the left edge when panels are open. */
@@ -133,12 +134,9 @@ body.sidebar-collapsed #tab-workspace .workspace-mode-switch-compact { display: 
 .document-workspace-runtime #viewer-screen:has(#document-fit-width[aria-pressed="false"]) .page-pair { max-width: none; flex-shrink: 0; }
 
 /* Reading tools remain within the visible page area, independently of zoom. */
-.document-pointer-tools { display: flex; border-right: 1px solid #ffffff38; padding-right: 4px; margin-right: 4px; }
-.document-workspace-runtime #floating-scroll-nav button[aria-pressed=true] { background: #ffffff24; }
+.document-pointer-tools { display: flex; border-right: 1px solid var(--border-strong); padding-right: 4px; margin-right: 4px; }
+.document-workspace-runtime #floating-scroll-nav button[aria-pressed=true] { background: var(--bg-hover); }
 .document-workspace-runtime #floating-scroll-nav { max-width: calc(100% - 32px); }
-.document-pan-mode, .document-pan-mode * { cursor: grab !important; user-select: none !important; }
-.document-panning, .document-panning * { cursor: grabbing !important; }
-.document-pan-mode { touch-action: none; }
 .document-search { position: absolute; top: 64px; right: 24px; z-index: 60; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: min(420px, calc(100% - 48px)); padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface); color: var(--text-primary); box-shadow: var(--shadow-lg); }
 .document-search[hidden] { display: none; }
 .document-search input { flex: 1; min-width: 80px; width: 100px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); }
