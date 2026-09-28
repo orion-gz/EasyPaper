@@ -72,6 +72,29 @@ test('keyboard tabs and all menu entries share the tab bar', async ({ page }) =>
   await page.keyboard.press('Home')
   await expect(page.locator('.workspace-tab:first-child [role="tab"]')).toHaveAttribute('aria-selected', 'true')
 })
+test('compact tabs and original chat composer keep working with toolbar auto hide', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('easypaper_toolbar_autohide', 'true'))
+  await setup(page)
+  await open(page, 'tab-a')
+  const frame = reader(page, 'tab-a')
+  await expect(page.locator('.workspace-tab-add, .workspace-tab-overflow')).toHaveCount(0)
+  expect(await page.locator('#tab-workspace .workspace-topnav').evaluate(element => element.getBoundingClientRect().height)).toBe(48)
+  await expect(frame.locator('.document-panel-tabs')).toContainText('메모')
+  await expect(frame.locator('.document-panel-tabs')).toContainText('주석')
+  await expect(frame.locator('.chat-input-footer #chat-sidebar-provider')).toBeAttached()
+
+  const scroll = frame.locator('#viewer-scroll-container')
+  await scroll.evaluate(element => {
+    const spacer = document.createElement('div')
+    spacer.style.cssText = 'height: 2000px; flex-shrink: 0;'
+    element.append(spacer)
+  })
+  for (const top of [80, 84, 88, 92]) await scroll.evaluate((element, value) => { element.scrollTop = value; element.dispatchEvent(new Event('scroll')) }, top)
+  await expect(frame.locator('#viewer-topbar')).toHaveClass(/toolbar-hidden/)
+  await expect.poll(() => frame.locator('#viewer-topbar').evaluate(element => getComputedStyle(element).transform)).not.toBe('none')
+  for (const top of [88, 84, 80, 76]) await scroll.evaluate((element, value) => { element.scrollTop = value; element.dispatchEvent(new Event('scroll')) }, top)
+  await expect(frame.locator('#viewer-topbar')).not.toHaveClass(/toolbar-hidden/)
+})
 test('document tools and responsive reading layout', async ({ page }) => {
   await page.setViewportSize({ width: 1591, height: 988 })
   await setup(page)

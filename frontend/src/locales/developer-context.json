@@ -4437,20 +4437,8 @@
   "navigation:tabs.label": {
     "description": "Workspace tabs: Workspace tabs"
   },
-  "navigation:tabs.new": {
-    "description": "Workspace tabs: New tab"
-  },
-  "navigation:tabs.all": {
-    "description": "Workspace tabs: All tabs"
-  },
   "navigation:tabs.close": {
     "description": "Workspace tabs: Close {{title}}"
-  },
-  "navigation:tabs.open": {
-    "description": "Workspace tabs: Open existing document"
-  },
-  "navigation:tabs.upload": {
-    "description": "Workspace tabs: Upload document"
   },
   "navigation:tabs.loading": {
     "description": "Workspace tabs: Loading document…"

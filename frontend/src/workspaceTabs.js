@@ -31,21 +31,7 @@ export function createWorkspaceTabs(adapter) {
   tablist.className = 'workspace-tab-list'
   tablist.setAttribute('role', 'tablist')
   tablist.setAttribute('aria-label', t('navigation:tabs.label'))
-  const add = document.createElement('button')
-  add.className = 'workspace-tab-add icon-btn'
-  add.dataset.i18nAriaLabel = 'navigation:tabs.new'
-  add.type = 'button'
-  add.textContent = '+'
-  add.setAttribute('aria-label', t('navigation:tabs.new'))
-  add.setAttribute('aria-expanded', 'false')
-  const menu = document.createElement('div')
-  menu.className = 'workspace-tab-menu'
-  menu.hidden = true
-  const overflow = document.createElement('select')
-  overflow.className = 'workspace-tab-overflow'
-  overflow.dataset.i18nAriaLabel = 'navigation:tabs.all'
-  overflow.setAttribute('aria-label', t('navigation:tabs.all'))
-  controls.append(tablist, add, overflow, menu)
+  controls.append(tablist)
   topnav.prepend(controls)
   shell.append(sidebar, main)
   main.append(topnav, outlet)
@@ -114,7 +100,6 @@ export function createWorkspaceTabs(adapter) {
   function render() {
     const focusedId = tablist.contains(document.activeElement) ? document.activeElement.closest('[data-tab-id]')?.dataset.tabId : null
     tablist.replaceChildren()
-    overflow.replaceChildren()
     for (const tab of store.tabs) {
       const item = document.createElement('div')
       item.className = 'workspace-tab' + (tab.id === store.activeTabId ? ' active' : '')
@@ -155,9 +140,6 @@ export function createWorkspaceTabs(adapter) {
         store.reorderTabs(event.dataTransfer.getData('text/x-easypaper-tab'), tab.id)
       })
       tablist.append(item)
-      const option = new Option(title(tab), tab.id)
-      option.selected = tab.id === store.activeTabId
-      overflow.append(option)
     }
     if (store.active) outlet.setAttribute('aria-labelledby', `workspace-tab-${encodeURIComponent(store.activeTabId)}`)
     const active = tablist.querySelector('[aria-selected="true"]')
@@ -267,22 +249,6 @@ export function createWorkspaceTabs(adapter) {
     const runtime = frames.get(visibleId)?.frame.contentWindow?.__easypaperDocument
     if (runtime?.ready) { event.preventDefault(); runtime.find?.() }
   })
-  overflow.addEventListener('change', () => enqueue(() => activate(overflow.value)))
-  add.addEventListener('click', () => {
-    menu.hidden = !menu.hidden
-    add.setAttribute('aria-expanded', String(!menu.hidden))
-    if (!menu.hidden) menu.querySelector('button')?.focus()
-  })
-  for (const [label, action] of [['open', () => api.openPage('library')], ['upload', () => adapter.upload()]]) {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.dataset.i18n = `navigation:tabs.${label}`
-    button.textContent = label === 'open' ? t('navigation:tabs.open') : t('navigation:tabs.upload')
-    button.addEventListener('click', () => { menu.hidden = true; add.setAttribute('aria-expanded', 'false'); action() })
-    menu.append(button)
-  }
-  document.addEventListener('pointerdown', event => { if (!controls.contains(event.target)) { menu.hidden = true; add.setAttribute('aria-expanded', 'false') } })
-  controls.addEventListener('keydown', event => { if (event.key === 'Escape') { menu.hidden = true; add.setAttribute('aria-expanded', 'false'); add.focus() } })
   document.addEventListener('easypaper:locale-changed', () => store && render())
   const appearance = new MutationObserver(() => {
     for (const record of frames.values()) record.frame.contentWindow?.__easypaperDocument?.syncAppearance?.(document.body.classList.contains('light-theme'), adapter.locale())
