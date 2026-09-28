@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 async function setupModelChangeScenario(page, translationMode) {
   const doc = {
@@ -49,11 +49,11 @@ async function setupModelChangeScenario(page, translationMode) {
     localStorage.setItem('easypaper_translation_mode', mode)
     location.hash = '#viewer?id=doc-model-change'
   }, translationMode)
-  await expect(page.locator('#viewer-screen.active')).toBeVisible()
+  await expect(activeReader(page).locator('#viewer-screen.active')).toBeVisible()
 
-  await page.locator('#toolbar-kebab-btn').click()
-  await page.locator('#viewer-trans-provider .provider-picker-btn').click()
-  await page.locator('#viewer-trans-provider .picker-model-item', { hasText: 'new-model' }).click()
+  await activeReader(page).locator('#toolbar-kebab-btn').click()
+  await activeReader(page).locator('#viewer-trans-provider .provider-picker-btn').click()
+  await activeReader(page).locator('#viewer-trans-provider .picker-model-item', { hasText: 'new-model' }).click()
 
   return {
     restartBodies,
@@ -65,9 +65,9 @@ for (const translationMode of ['pane', 'scroll']) {
   test(`${translationMode} 번역 모드에서 모델 변경 시 기존 번역 페이지만 재번역한다`, async ({ page }) => {
     const scenario = await setupModelChangeScenario(page, translationMode)
 
-    await expect(page.locator('.custom-confirm-modal-body')).toContainText('기존에 번역한 1개 페이지만')
-    await expect(page.locator('.custom-confirm-modal-body')).toContainText('번역하지 않은 페이지는 자동으로 번역하지 않습니다')
-    await page.locator('.custom-confirm-modal-wrapper .confirm-btn').click()
+    await expect(activeReader(page).locator('.custom-confirm-modal-body')).toContainText('기존에 번역한 1개 페이지만')
+    await expect(activeReader(page).locator('.custom-confirm-modal-body')).toContainText('번역하지 않은 페이지는 자동으로 번역하지 않습니다')
+    await activeReader(page).locator('.custom-confirm-modal-wrapper .confirm-btn').click()
 
     await expect.poll(() => scenario.restartBodies.length).toBe(1)
     expect(scenario.getClearRequests()).toBe(1)
@@ -78,8 +78,8 @@ for (const translationMode of ['pane', 'scroll']) {
 test('업로드 시 번역 모드에서 모델 변경 시 문서 전체 재번역을 유지한다', async ({ page }) => {
   const scenario = await setupModelChangeScenario(page, 'auto')
 
-  await expect(page.locator('.custom-confirm-modal-body')).toContainText('문서 전체를 새 모델로 다시 번역')
-  await page.locator('.custom-confirm-modal-wrapper .confirm-btn').click()
+  await expect(activeReader(page).locator('.custom-confirm-modal-body')).toContainText('문서 전체를 새 모델로 다시 번역')
+  await activeReader(page).locator('.custom-confirm-modal-wrapper .confirm-btn').click()
 
   await expect.poll(() => scenario.restartBodies.length).toBe(1)
   expect(scenario.getClearRequests()).toBe(1)

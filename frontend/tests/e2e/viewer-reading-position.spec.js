@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp } from './helpers.js'
 
 // Short landscape pages make the difference from the 841pt placeholder visible.
 function makePDF(pageCount, mixedSizes) {
@@ -23,9 +23,10 @@ function makePDF(pageCount, mixedSizes) {
 
 for (const mixedSizes of [false, true]) {
   test(`읽던 페이지가 최초 복원, 새로고침, 재진입 후에도 유지된다 (${mixedSizes ? '혼합 크기' : '가로 페이지'})`, async ({ page }) => {
-    const doc = { id: 'reading-position', filename: 'Landscape.pdf', total_pages: 30, metadata: { last_page: 15 }, translated_pages: [] }
+    const doc = { id: 'reading-position', filename: 'Landscape.pdf', total_pages: 30, metadata: { last_page: 15 }, translated_pages: [19] }
     await mockBaseRoutes(page, { documents: [doc] })
     await page.route('**/api/library/reading-position/pdf', route => route.fulfill({ contentType: 'application/pdf', body: makePDF(30, mixedSizes) }))
+    await page.route('**/api/library/reading-position/translation/19**', route => route.fulfill({ json: { translation: 'Cached page nineteen', sentences: [] } }))
     const savedPages = []
     let expectedPage = 15
     await page.route('**/api/library/reading-position/metadata', async route => {
@@ -37,12 +38,12 @@ for (const mixedSizes of [false, true]) {
       await route.fulfill({ json: doc })
     })
     const expectRestored = async () => {
-      await expect(page.locator(`.pdf-page-wrapper[data-page="${expectedPage}"] canvas`)).toBeAttached()
+      await expect(activeReader(page).locator(`.pdf-page-wrapper[data-page="${expectedPage}"] canvas`)).toBeAttached()
       // Allow lazy rendering, smooth scrolling and the bookmark debounce to settle.
       await page.waitForTimeout(2200)
-      await expect(page.locator('#page-input')).toHaveValue(String(expectedPage))
+      await expect(activeReader(page).locator('#page-input')).toHaveValue(String(expectedPage))
       expect(savedPages.every(pageNum => pageNum === 15 || pageNum === 19)).toBe(true)
-      const offset = await page.locator(`.page-pair[data-page="${expectedPage}"]`).evaluate(pair =>
+      const offset = await activeReader(page).locator(`.page-pair[data-page="${expectedPage}"]`).evaluate(pair =>
         pair.getBoundingClientRect().top - document.querySelector('#viewer-scroll-container').getBoundingClientRect().top)
       expect(Math.abs(offset)).toBeLessThan(50)
     }
@@ -50,12 +51,15 @@ for (const mixedSizes of [false, true]) {
     await page.evaluate(() => { location.hash = '#viewer?id=reading-position' })
     await expectRestored()
     expectedPage = 19
-    await page.locator('.page-pair[data-page="19"]').evaluate(pair => pair.scrollIntoView({ behavior: 'instant', block: 'start' }))
+    await activeReader(page).locator('.page-pair[data-page="19"]').evaluate(pair => pair.scrollIntoView({ behavior: 'instant', block: 'start' }))
     await expect.poll(() => doc.metadata.last_page).toBe(19)
+    // Fit/zoom must retain the visibility callback that lazily loads translations.
+    await expect(activeReader(page).locator('#trans-content-19 .trans-text')).toHaveText('Cached page nineteen')
     await page.reload()
     await expectRestored()
-    await page.locator('#back-btn').click()
-    await expect(page.locator('#viewer-screen')).not.toHaveClass(/active/)
+    await page.locator('.sidebar-nav-item[data-page="library"]').click()
+    await expect(page.locator('.workspace-tab[data-tab-id="page:library"] [role=tab]')).toHaveAttribute('aria-selected', 'true')
+    await page.locator('.workspace-tab[data-tab-id="document:reading-position"] [role=tab]').click()
     await page.evaluate(() => { location.hash = '#viewer?id=reading-position' })
     await expectRestored()
   })

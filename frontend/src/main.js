@@ -1,3 +1,6 @@
+import { createWorkspaceTabs } from './workspaceTabs.js'
+import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './documentWorkspaceRuntime.js'
+import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail, getPDFPageText, getPDFPageWidth } from './pdfViewer.js'
 import { translationFeedback } from './translationFeedback.js'
 import './style.css'
 import { applyDesktopUpdate } from './desktopUpdate.js'
@@ -17,7 +20,7 @@ import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
 import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
 import { sourceMappingRects, refreshTextLayerGeometry, loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
+import { invalidateLibraryGetCache, fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
 import { icon } from './icons.js'
 import { formatTranslationHtml, applyKatexToElement, linkPageCitations } from './textFormat.js'
@@ -35,6 +38,10 @@ import { applyUiScale, loadUiScale, saveUiScale, syncSelectValue, syncUiScaleCon
 import { adaptiveBriefingSummary, hasAdaptiveBriefing, renderAdaptiveBriefingHtml } from './adaptiveBriefing.js'
 import { classificationModalMarkup, recommendedClassification } from './classificationConfirmationView.js'
 import { renderChapterSummaryHtml, renderFullSummaryHtml } from './chapterSummaryView.js'
+
+let tabWorkspace = null
+let documentLoadFailed = false
+if (isDocumentRuntime) document.body.classList.add('document-workspace-runtime')
 
 const i18nReady = initI18n()
 applyUiScale(loadUiScale())
@@ -799,6 +806,11 @@ const workspaceModeController = createWorkspaceModeController({
     if (workspaceSearchInput) workspaceSearchInput.value = incoming.search
     // 모드 전환은 열려 있던 문서를 재분류하지 않고 대상 워크스페이스 홈으로 이동한다.
     state.currentWorkspacePage = 'dashboard'
+    if (tabWorkspace) {
+      history.replaceState(null, '', location.pathname + location.search)
+      await tabWorkspace.start(state.username, mode)
+      return
+    }
     if (libraryScreen?.classList.contains("active")) {
       await showWorkspacePage('dashboard', { pushState: false })
     }
@@ -1141,6 +1153,8 @@ async function checkAIStatus() {
 
 // ── 화면 전환 ─────────────────────────────────────
 function showLogin() {
+  tabWorkspace?.hide()
+  notifyWorkspace('auth-expired')
   stopLibraryPolling()
   viewerScreen.classList.remove('active')
   libraryScreen.classList.remove('active')
@@ -1425,6 +1439,11 @@ async function handleFiles(uploadItems, targetFolderId = null) {
     showToast(`${successes.length}개의 문서가 라이브러리에 추가되었습니다 ✓`, 'success')
     if (successes.length === uploadItems.length) setTimeout(() => uploadPopup.classList.add('hidden'), 1500)
 
+    if (tabWorkspace) {
+      tabWorkspace.invalidate()
+      for (const { result } of successes) await tabWorkspace.openDocument({ ...result, id: result.session_id })
+      return
+    }
     if (!isLibraryActive && uploadItems.length === 1 && successes.length === 1) {
       const { result } = successes[0]
       const title = result.metadata?.title || result.filename
@@ -1574,78 +1593,79 @@ async function initScrollViewer() {
     viewerScrollContainer.appendChild(createPagePair(i))
   }
 
-  await renderScrollView(viewerScrollContainer, state.zoom, {
-    onPageVisible: async (pageNum) => {
-      const revision = translationRevision
-      if (translationResetSession === state.sessionId) return
-      updatePageDisplay(pageNum)
-      globalAnalyticsTracker.setCurrentPage(pageNum)
-      const visiblePageEl = viewerScrollContainer.querySelector('.pdf-page-wrapper[data-page="' + pageNum + '"]')
-      globalAnalyticsTracker.trackScroll(pageNum, visiblePageEl, viewerScrollContainer, true, false)
-
-      // 페이지가 가시화되었을 때 번역 완료된 페이지인데 캐시가 없는 경우 레이지 로딩 적용
-      if (state.translationCache[pageNum]) {
-        if (state.translationCache[pageNum] !== '__fetching__') {
-          renderTransContent(pageNum, state.translationCache[pageNum], true)
-        }
-      } else if (state.translatedPages.has(pageNum)) {
-        state.translationCache[pageNum] = '__fetching__'
-        const currentSessionId = state.sessionId
-        try {
-          const opts = getTranslationOptions()
-          const res = await fetchLibraryTranslation(currentSessionId, pageNum, opts)
-          if (state.sessionId !== currentSessionId || revision !== translationRevision) return
-          state.translationCache[pageNum] = res.translation
-          state.translationSentences[pageNum] = res.sentences || []
-          state.translationWarnings[pageNum] = res.warnings || []
-          // 패치하는 중에 사용자가 다른 세션으로 이동하지 않았는지 확인
-          if (state.sessionId === currentSessionId) {
-            renderTransContent(pageNum, res.translation, true)
-          }
-        } catch (err) {
-          if (state.sessionId !== currentSessionId || revision !== translationRevision) return
-          console.warn(`Failed to lazy load translation for page ${pageNum}:`, err)
-          delete state.translationCache[pageNum]
-          // 번역 로딩 실패 시 폴백 세그멘테이션 상태로 메모가 계속 숨겨져 있지
-          // 않도록, 이미 그려진 문장 분할 기준으로 메모를 다시 그려준다.
-          renderPageMemos(pageNum)
-        }
-      } else if (getEffectiveTranslationMode() === 'scroll') {
-        // 번역 모드가 'scroll'이면 전체 문서 백그라운드 잡이 아예 시작되지
-        // 않으므로, 스크롤로 보이게 된 페이지를 그때그때 개별 번역한다.
-        scheduleVisiblePageTranslation(pageNum)
-      }
-
-      // 비동기 다음 페이지 번역 프리페칭 및 미리 렌더링
-      const nextPage = pageNum + 1
-      if (nextPage <= state.totalPages && !state.translationCache[nextPage]) {
-        if (state.translatedPages.has(nextPage)) {
-          state.translationCache[nextPage] = '__fetching__'
-          const currentSessionId = state.sessionId
-          const opts = getTranslationOptions()
-          fetchLibraryTranslation(currentSessionId, nextPage, opts).then(res => {
-            if (state.sessionId === currentSessionId && revision === translationRevision) {
-              state.translationCache[nextPage] = res.translation
-              state.translationSentences[nextPage] = res.sentences || []
-              state.translationWarnings[nextPage] = res.warnings || []
-              renderTransContent(nextPage, res.translation, true)
-            }
-          }).catch(err => {
-            if (state.sessionId === currentSessionId && revision === translationRevision) {
-              delete state.translationCache[nextPage]
-              renderPageMemos(nextPage)
-            }
-          })
-        } else if (getEffectiveTranslationMode() === 'scroll' && !isLongDocument()) {
-          // 다음 페이지도 미리 번역해둬 스크롤이 도착했을 때 바로 보이게 한다.
-          translatePage(nextPage)
-        }
-      }
-    }
-  })
+  await renderScrollView(viewerScrollContainer, state.zoom, { onPageVisible: handleReaderPageVisible })
 
   // 백그라운드 잡 폴링 시작
   startJobPolling(state.sessionId)
+}
+
+// Keep translation loading and analytics active after fit/zoom rerenders.
+async function handleReaderPageVisible(pageNum) {
+  const revision = translationRevision
+  if (translationResetSession === state.sessionId) return
+  updatePageDisplay(pageNum)
+  globalAnalyticsTracker.setCurrentPage(pageNum)
+  const visiblePageEl = viewerScrollContainer.querySelector('.pdf-page-wrapper[data-page="' + pageNum + '"]')
+  globalAnalyticsTracker.trackScroll(pageNum, visiblePageEl, viewerScrollContainer, true, false)
+
+  // 페이지가 가시화되었을 때 번역 완료된 페이지인데 캐시가 없는 경우 레이지 로딩 적용
+  if (state.translationCache[pageNum]) {
+    if (state.translationCache[pageNum] !== '__fetching__') {
+      renderTransContent(pageNum, state.translationCache[pageNum], true)
+    }
+  } else if (state.translatedPages.has(pageNum)) {
+    state.translationCache[pageNum] = '__fetching__'
+    const currentSessionId = state.sessionId
+    try {
+      const opts = getTranslationOptions()
+      const res = await fetchLibraryTranslation(currentSessionId, pageNum, opts)
+      if (state.sessionId !== currentSessionId || revision !== translationRevision) return
+      state.translationCache[pageNum] = res.translation
+      state.translationSentences[pageNum] = res.sentences || []
+      state.translationWarnings[pageNum] = res.warnings || []
+      // 패치하는 중에 사용자가 다른 세션으로 이동하지 않았는지 확인
+      if (state.sessionId === currentSessionId) {
+        renderTransContent(pageNum, res.translation, true)
+      }
+    } catch (err) {
+      if (state.sessionId !== currentSessionId || revision !== translationRevision) return
+      console.warn(`Failed to lazy load translation for page ${pageNum}:`, err)
+      delete state.translationCache[pageNum]
+      // 번역 로딩 실패 시 폴백 세그멘테이션 상태로 메모가 계속 숨겨져 있지
+      // 않도록, 이미 그려진 문장 분할 기준으로 메모를 다시 그려준다.
+      renderPageMemos(pageNum)
+    }
+  } else if (getEffectiveTranslationMode() === 'scroll') {
+    // 번역 모드가 'scroll'이면 전체 문서 백그라운드 잡이 아예 시작되지
+    // 않으므로, 스크롤로 보이게 된 페이지를 그때그때 개별 번역한다.
+    scheduleVisiblePageTranslation(pageNum)
+  }
+
+  // 비동기 다음 페이지 번역 프리페칭 및 미리 렌더링
+  const nextPage = pageNum + 1
+  if (nextPage <= state.totalPages && !state.translationCache[nextPage]) {
+    if (state.translatedPages.has(nextPage)) {
+      state.translationCache[nextPage] = '__fetching__'
+      const currentSessionId = state.sessionId
+      const opts = getTranslationOptions()
+      fetchLibraryTranslation(currentSessionId, nextPage, opts).then(res => {
+        if (state.sessionId === currentSessionId && revision === translationRevision) {
+          state.translationCache[nextPage] = res.translation
+          state.translationSentences[nextPage] = res.sentences || []
+          state.translationWarnings[nextPage] = res.warnings || []
+          renderTransContent(nextPage, res.translation, true)
+        }
+      }).catch(err => {
+        if (state.sessionId === currentSessionId && revision === translationRevision) {
+          delete state.translationCache[nextPage]
+          renderPageMemos(nextPage)
+        }
+      })
+    } else if (getEffectiveTranslationMode() === 'scroll' && !isLongDocument()) {
+      // 다음 페이지도 미리 번역해둬 스크롤이 도착했을 때 바로 보이게 한다.
+      translatePage(nextPage)
+    }
+  }
 }
 
 let isTransPaneCollapsed = false
@@ -2205,13 +2225,43 @@ function clearZoomPreviewTransform() {
 }
 
 async function setZoom(newZoom) {
+  const anchorPage = state.currentPage
+  const anchor = viewerScrollContainer.querySelector(`.page-pair[data-page="${anchorPage}"]`)
+  const anchorOffset = anchor ? (viewerScrollContainer.getBoundingClientRect().top - anchor.getBoundingClientRect().top) / anchor.getBoundingClientRect().height : 0
   newZoom = previewZoom(newZoom)
   lastCommittedZoom = newZoom
   if (!state.sessionId) { clearZoomPreviewTransform(); return }
   focusModeController?.scheduleRender()
-  await reRenderAll(viewerScrollContainer, newZoom, {
-    onPageVisible: (pageNum) => updatePageDisplay(pageNum)
+  const detachedMemoCards = new Map()
+  viewerScrollContainer.querySelectorAll('.page-pair').forEach(pair => {
+    const pageNum = Number(pair.dataset.page)
+    const wrapper = pair.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+    const cards = [...(wrapper?.querySelectorAll(':scope > .floating-memo') || [])]
+    if (!cards.length) return
+    zoomPreservedMemoPages.set(pageNum, state.sessionId)
+    detachedMemoCards.set(pageNum, cards)
+    cards.forEach(card => card.remove())
   })
+  try {
+    await reRenderAll(viewerScrollContainer, newZoom, {
+      onPageVisible: handleReaderPageVisible
+    })
+  } finally {
+    for (const [pageNum, cards] of detachedMemoCards) {
+      const wrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+      if (!wrapper) continue
+      cards.forEach(card => wrapper.appendChild(card))
+      for (const memo of loadMemos(state.sessionId)[`page_${pageNum}`] || []) {
+        updateMemoConnectorLine(wrapper, memo)
+      }
+    }
+  }
+  const restoredAnchor = viewerScrollContainer.querySelector(`.page-pair[data-page="${anchorPage}"]`)
+  if (restoredAnchor && Number.isFinite(anchorOffset)) {
+    const scale = viewerScrollContainer.getBoundingClientRect().width / viewerScrollContainer.offsetWidth || 1
+    const delta = (restoredAnchor.getBoundingClientRect().top - viewerScrollContainer.getBoundingClientRect().top) / scale
+    viewerScrollContainer.scrollTo({ top: viewerScrollContainer.scrollTop + delta + restoredAnchor.offsetHeight * anchorOffset, behavior: 'instant' })
+  }
   // 재렌더링이 끝나 새 배율의 캔버스로 이미 교체된 뒤에 transform을 지워야
   // "확대된 미리보기 → 원래 크기로 순간 복귀 → 새 크기로 점프"하는 깜빡임이 없다.
   clearZoomPreviewTransform()
@@ -2931,7 +2981,42 @@ async function checkAuthentication() {
     loginScreen.classList.remove('active')
     globalLogoutBtn.classList.remove('hidden')
     globalSettingsBtn.classList.remove('hidden')
-    if (location.hash && location.hash.startsWith('#viewer?id=')) {
+    if (!isDocumentRuntime) {
+      await workspaceModeController.initialize()
+      lastWorkspaceMode = workspaceModeController.getMode()
+      tabWorkspace ||= createWorkspaceTabs({
+        mode: () => workspaceModeController.getMode(),
+        pageLabel: page => workspaceModeController.getPageLabel(page),
+        locale: getLocale,
+        toast: showToast, upload: openDocumentSourceModal, authExpired: showLogin,
+        hideChatDrawer: () => { chatDrawerEl?.classList.remove('open'); chatDrawerOverlayEl?.classList.remove('open'); chatDrawerEl?.setAttribute('aria-hidden', 'true') },
+        flushPage: async () => {
+          if (state.currentWorkspacePage === 'library') {
+            Object.assign(workspaceLibraryState[workspaceModeController.getMode()], {
+              tab: state.currentLibraryTab, category: activeCategoryFilter, status: activeStatusFilter,
+              search: librarySearchInput?.value || '', detail: libraryDetailDoc,
+            })
+          }
+          await flushSaveLastReadPage()
+        },
+        showPage: async (page, preserve) => {
+          loginScreen.classList.remove('active')
+          libraryScreen.classList.add('active')
+          viewerScreen.classList.remove('active')
+          globalLogoutBtn.classList.add('hidden')
+          globalSettingsBtn.classList.add('hidden')
+          $('global-theme-toggle')?.classList.add('hidden')
+          await renderWorkspacePage(page, { pushState: false, preserve })
+          startLibraryPolling()
+        },
+        openChat: async id => { if (id) await openChatDrawer(await fetchLibraryDoc(id)) },
+        openCompare: async hash => {
+          const ids = new URLSearchParams(hash.split('?')[1]).get('ids')?.split(',') || []
+          if (ids.length >= COMPARE_MIN_DOCS && ids.length <= COMPARE_MAX_DOCS) await openCompareScreen(await Promise.all(ids.map(fetchLibraryDoc)), false, true)
+        },
+      })
+      await tabWorkspace.start(state.username, workspaceModeController.getMode())
+    } else if (location.hash && location.hash.startsWith('#viewer?id=')) {
       // 뷰어로 바로 진입하는 경로라 라이브러리 화면이 렌더링되지 않으므로,
       // 안읽음 배지/휴지통 탭 표시는 별도로 한 번 조회해서 채워야 한다.
       await workspaceModeController.initialize()
@@ -2950,6 +3035,10 @@ async function checkAuthentication() {
     }
     applyModeTheme(workspaceModeController.getMode())
     await refreshSystemSettings()
+    if (isDocumentRuntime) {
+      if (!documentLoadFailed && state.sessionId && !window.__easypaperDocument) installReaderWorkspaceRuntime()
+      return
+    }
     await maybeShowOnboarding()
     // 업데이트 직후(방금 재시작됨) 안내가 있으면 그것부터 먼저 보여주고, 없을
     // 때만 "새 업데이트가 있는지" 확인 - 두 팝업이 동시에 겹쳐 뜨지 않도록 함.
@@ -5437,7 +5526,7 @@ let readingHeartbeatContextKey = null
 const readingTimeActivityTracker = globalReadingTimeActivityTracker
 
 function recordReadingTimeInteraction(event) {
-  if (!viewerScreen?.classList.contains('active')) return
+  if (document.body.dataset.workspaceInactive === 'true' || !viewerScreen?.classList.contains('active')) return
   const target = event.target
   const isChatInteraction = chatSidebar
     && !chatSidebar.classList.contains('hidden')
@@ -5454,7 +5543,7 @@ for (const eventName of ['pointerdown', 'wheel', 'keydown', 'input']) {
 }
 
 function isReadingTimeActive() {
-  if (document.visibilityState !== 'visible' || !document.hasFocus()) return false
+  if (document.body.dataset.workspaceInactive === 'true' || document.visibilityState !== 'visible' || !document.hasFocus()) return false
   if (viewerScreen && viewerScreen.classList.contains('active') && state.sessionId) return true
   if (compareScreen && compareScreen.classList.contains('active') && compareChatState.docIds.length > 0) return true
   return false
@@ -5666,6 +5755,8 @@ document.querySelectorAll('.view-toggle-btn').forEach(btn => {
 updateViewToggleUI()
 
 async function showLibraryScreen(shouldPushState = true, targetPage) {
+  if (tabWorkspace) return tabWorkspace.openPage(targetPage || state.currentWorkspacePage || 'dashboard', { pushState: shouldPushState })
+  if (isDocumentRuntime) { notifyWorkspace('navigate', `#${targetPage || 'library'}`); return }
   await loadFeatureNamespaces(targetPage === 'dashboard' ? 'dashboard' : targetPage === 'chats' ? 'chat' : 'library')
   // 뷰어에서 나가는 시점이므로, 아직 디바운스 대기 중인 "마지막으로 읽은
   // 페이지" 저장이 있으면 Dashboard/Library가 새 데이터를 가져오기 전에
@@ -5693,7 +5784,11 @@ async function showLibraryScreen(shouldPushState = true, targetPage) {
 // 6개 페이지(Dashboard/Library/Reading History/AI Chats/Notes/Research Graph)는
 // 각각 #page-<id> 섹션으로 존재하며, 사이드바 클릭이나 해시 변경 시 이 함수 하나로 전환한다.
 const WORKSPACE_PAGES = ['dashboard', 'library', 'history', 'chats', 'notes', 'graph']
-async function showWorkspacePage(pageId, { pushState = true } = {}) {
+async function showWorkspacePage(pageId, options = {}) {
+  if (tabWorkspace) return tabWorkspace.openPage(pageId, options)
+  return renderWorkspacePage(pageId, options)
+}
+async function renderWorkspacePage(pageId, { pushState = true, preserve = false } = {}) {
   if (!WORKSPACE_PAGES.includes(pageId)) pageId = 'dashboard'
   if (state.currentWorkspacePage === 'library' && pageId !== 'library') {
     const saved = workspaceLibraryState[workspaceModeController.getMode()]
@@ -5706,7 +5801,7 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
   // 채팅 드로어가 열린 채로 다른 워크스페이스 페이지로 이동하면(사이드바 클릭 등)
   // 드로어를 닫아준다. '#chat?id=' 라우팅 분기가 이 함수 호출 직후 다시
   // openChatDrawer()를 부르는 경우엔 그냥 무해한 no-op이다.
-  if (pageId !== 'chats' || state.currentWorkspacePage !== 'chats') closeChatDrawer()
+  if (!tabWorkspace && (pageId !== 'chats' || state.currentWorkspacePage !== 'chats')) closeChatDrawer()
   state.currentWorkspacePage = pageId
   await loadFeatureNamespaces(pageId === 'chats' ? 'chat' : pageId)
 
@@ -5728,6 +5823,8 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
     history.pushState({ screen: 'library', page: pageId }, '', `#${pageId}`)
   }
 
+  // Notes synchronizes annotations on entry; dashboard and history read fresh activity.
+  if (preserve && !['library', 'chats', 'notes', 'dashboard', 'history'].includes(pageId)) return
   if (pageId === 'library') {
     const saved = workspaceLibraryState[workspaceModeController.getMode()]
     state.currentLibraryTab = saved.tab
@@ -5739,6 +5836,7 @@ async function showWorkspacePage(pageId, { pushState = true } = {}) {
       librarySearchInput.value = saved.search
       librarySearchInput.dispatchEvent(new Event('input'))
     }
+    if (preserve && saved.detail) openLibraryDetailPanel(saved.detail)
   } else if (pageId === 'chats') {
     const { renderAiChatsPage } = await import('./pages/aiChatsPage.js')
     await renderAiChatsPage(workspaceModeController.getMode())
@@ -5787,7 +5885,7 @@ if (sidebarNav) {
       // syncLibraryTabUI가 담당하므로 여기서 updateTabUI를 별도로 호출하지 않는다.
       // (updateTabUI → renderLibrary 가 fire-and-forget으로 실행되어
       //  showWorkspacePage → renderLibrary 와 동시에 돌면 태그 필터가 2배로 렌더링되는 Race Condition 발생)
-      if (state.currentWorkspacePage === btn.dataset.page) return
+      if (!tabWorkspace && state.currentWorkspacePage === btn.dataset.page) return
       showWorkspacePage(btn.dataset.page)
     })
   })
@@ -5802,10 +5900,12 @@ if (sidebarLogoutBtn) sidebarLogoutBtn.addEventListener('click', () => globalLog
 // 탑네비 검색창은 새 검색 기능이 아니라 기존 라이브러리 검색으로 그대로 위임한다
 // (Global Search는 기존 검색 기능을 그대로 사용 - 동작 변경 금지 원칙).
 if (workspaceSearchInput) {
-  workspaceSearchInput.addEventListener('input', () => {
-    if (state.currentWorkspacePage !== 'library') {
-      showWorkspacePage('library')
+  workspaceSearchInput.addEventListener('input', async () => {
+    const query = workspaceSearchInput.value
+    if (state.currentWorkspacePage !== 'library' || tabWorkspace?.active?.kind === 'document') {
+      await showWorkspacePage('library')
     }
+    if (query !== workspaceSearchInput.value) return
     if (librarySearchInput) {
       librarySearchInput.value = workspaceSearchInput.value
       librarySearchInput.dispatchEvent(new Event('input'))
@@ -6197,12 +6297,13 @@ function renderCompareGreeting() {
 // 첫 호출이 아직 비동기 작업 중일 때 같은 조합의 재진입 호출을 걸러낸다.
 let compareOpeningIdsKey = null
 
-async function openCompareScreen(docs, shouldPushState = true) {
+async function openCompareScreen(docs, shouldPushState = true, fromWorkspace = false) {
+  if (tabWorkspace && !fromWorkspace) return tabWorkspace.route(`#compare?ids=${docs.map(doc => encodeURIComponent(doc.id)).join(',')}`, { push: shouldPushState })
   const docIds = docs.map(d => d.id)
   const idsKey = JSON.stringify([...docIds].sort())
 
   if (compareOpeningIdsKey === idsKey) return
-  if (compareScreen.classList.contains('active') && JSON.stringify([...compareChatState.docIds].sort()) === idsKey) return
+  if (JSON.stringify([...compareChatState.docIds].sort()) === idsKey) { showCompareScreen(); return }
   compareOpeningIdsKey = idsKey
 
   if (compareChatState.activeStream) { compareChatState.activeStream(); compareChatState.activeStream = null }
@@ -6477,7 +6578,12 @@ let chatDrawerOpeningDocId = null
 // 호출부에서 이미 끝난 상태) - 그래서 여기서는 URL을 직접 건드리지 않는다.
 async function openChatDrawer(doc) {
   if (chatDrawerOpeningDocId === doc.id) return
-  if (chatDrawerEl.classList.contains('open') && chatDrawerState.docId === doc.id) return
+  if (chatDrawerState.docId === doc.id) {
+    chatDrawerOverlayEl.classList.add('open')
+    chatDrawerEl.classList.add('open')
+    chatDrawerEl.setAttribute('aria-hidden', 'false')
+    return
+  }
   chatDrawerOpeningDocId = doc.id
 
   if (chatDrawerState.activeStream) { chatDrawerState.activeStream(); chatDrawerState.activeStream = null }
@@ -6535,6 +6641,7 @@ function closeChatDrawer() {
 // 같이 정리한다(뒤로가기로 닫힌 경우는 popstate가 이미 hash를 바꿔놨음).
 function requestCloseChatDrawer() {
   closeChatDrawer()
+  if (tabWorkspace) { tabWorkspace.openPage('chats'); return }
   if (location.hash.startsWith('#chat?id=')) {
     history.pushState(null, '', '#chats')
   }
@@ -9408,10 +9515,12 @@ function ensureLibraryDetailPanel() {
     if (!ok) return
     try {
       const updated = await patchDocumentClassificationAPI(doc.id, { document_mode: selected.documentMode, document_type: selected.documentType })
+      invalidateLibraryGetCache()
+      tabWorkspace?.invalidate()
       libraryDetailDoc = { ...doc, ...updated }
       closeLibraryDetailPanel()
       await workspaceModeController.setMode(selected.documentMode)
-      await showLibraryScreen()
+      await showLibraryScreen(true, 'library')
       showToast('문서 분류를 변경했습니다.', 'success')
     } catch (error) {
       showToast(error.message || '문서 분류 변경 실패', 'error')
@@ -10471,6 +10580,7 @@ async function syncAnnotationsNow(docId, { keepalive = false, refresh = true } =
   const promise = syncDocumentAnnotations(docId, { keepalive })
     .then(result => {
       annotationSyncDelayNotified = false
+      document.dispatchEvent(new CustomEvent('easypaper:resources-changed'))
       const conflicts = [...result.annotations.conflicts, ...result.memos.conflicts]
       if (conflicts.length) showToast(t('viewer:sync.conflict'), 'warning')
       const annotationViewAfterSync = annotationViewBeforeSync === null
@@ -10508,7 +10618,12 @@ async function hydrateAnnotationsAndMemosFromServer(docId) {
 }
 
 async function openFromLibrary(doc, shouldPushState = true) {
-  await loadFeatureNamespaces('viewer')
+  if (tabWorkspace) return tabWorkspace.openDocument(doc, shouldPushState)
+  if (isDocumentRuntime && window.__easypaperDocument?.ready && state.sessionId !== doc.id) {
+    notifyWorkspace('navigate', `#viewer?id=${encodeURIComponent(doc.id)}`)
+    return
+  }
+  await Promise.all([loadFeatureNamespaces('viewer'), loadFeatureNamespaces('library')])
   if (docOpeningId === doc.id) return
   focusModeController?.clear()
   if (focusModeController) focusModeController.performanceFallback = false
@@ -10722,6 +10837,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
     }
   } catch (err) {
     console.error('논문 열기 실패:', err)
+    if (isDocumentRuntime) showDocumentLoadError(err)
     showToast('논문을 불러오지 못했습니다.', 'error')
   } finally {
     if (docOpeningId === doc.id) docOpeningId = null
@@ -10988,6 +11104,7 @@ function loadAnnotations(sessionId) {
 function saveAnnotations(sessionId, annotations) {
   if (!sessionId) return
   recordLocalResourceChange('annotations', sessionId, annotations)
+  document.dispatchEvent(new CustomEvent('easypaper:resources-changed'))
   scheduleAnnotationSync(sessionId)
 }
 
@@ -11346,6 +11463,7 @@ function loadMemos(sessionId) {
 function saveMemos(sessionId, memos) {
   if (!sessionId) return
   recordLocalResourceChange('memos', sessionId, memos)
+  document.dispatchEvent(new CustomEvent('easypaper:resources-changed'))
   scheduleAnnotationSync(sessionId)
 }
 
@@ -13004,8 +13122,9 @@ function positionAndShowAnnHoverTooltip(rect) {
   const tooltipWidth = tooltip.offsetWidth || 110
   const tooltipHeight = tooltip.offsetHeight || 32
 
-  const left = rect.left + rect.width / 2 - tooltipWidth / 2 + window.scrollX
-  const top = rect.top - tooltipHeight - 6 + window.scrollY
+  const uiScale = Number(document.documentElement.style.zoom) || 1
+  const left = (rect.left + rect.width / 2) / uiScale - tooltipWidth / 2 + window.scrollX
+  const top = rect.top / uiScale - tooltipHeight - 6 + window.scrollY
 
   tooltip.style.left = `${Math.max(8, left)}px`
   tooltip.style.top = `${Math.max(8, top)}px`
@@ -13305,8 +13424,9 @@ function showSelectionMenu(rect, showAnnotateGroup, hasExistingAnnotation = true
   const menuWidth = menu.offsetWidth || 120
   const menuHeight = menu.offsetHeight || 36
 
-  const left = rect.left + rect.width / 2 - menuWidth / 2 + window.scrollX
-  const top = rect.top - menuHeight - 8 + window.scrollY
+  const uiScale = Number(document.documentElement.style.zoom) || 1
+  const left = (rect.left + rect.width / 2) / uiScale - menuWidth / 2 + window.scrollX
+  const top = rect.top / uiScale - menuHeight - 8 + window.scrollY
 
   menu.style.left = `${Math.max(8, left)}px`
   menu.style.top = `${Math.max(8, top)}px`
@@ -13460,6 +13580,12 @@ let pdfGeometryRefreshTimer
 function schedulePdfGeometryRefresh() {
   clearTimeout(pdfGeometryRefreshTimer)
   pdfGeometryRefreshTimer = setTimeout(() => {
+    geometryPreservedMemoPages.clear()
+    viewerScrollContainer?.querySelectorAll('.pdf-page-wrapper').forEach(wrapper => {
+      if (!wrapper.querySelector(':scope > .floating-memo')) return
+      const pageNum = Number(wrapper.dataset.page)
+      if (Number.isFinite(pageNum)) geometryPreservedMemoPages.add(pageNum)
+    })
     refreshTextLayerGeometry((layer, pageNum) => {
       window.onTextLayerRendered(layer, pageNum)
       const sentences = state.pdfPageSentences?.[pageNum] || []
@@ -13478,11 +13604,15 @@ function schedulePdfGeometryRefresh() {
 window.addEventListener('resize', schedulePdfGeometryRefresh)
 document.fonts.addEventListener('loadingdone', schedulePdfGeometryRefresh)
 
+const zoomPreservedMemoPages = new Map()
+const geometryPreservedMemoPages = new Set()
+
 // PDF.js 텍스트 레이어 렌더 완료 콜백 등록
 window.onTextLayerReleased = (textLayerDiv, pageNum) => {
   if (!textLayerDiv) return
   delete state.virtualTextMaps?.[pageNum]
   delete state.pdfPageSentences?.[pageNum]
+  if (zoomPreservedMemoPages.get(pageNum) === state.sessionId) return
   textLayerDiv.closest('.pdf-page-wrapper')?.querySelectorAll(':scope > .floating-memo').forEach(memo => {
     memo._memoResizeObserver?.disconnect()
     clearTimeout(memo._memoResizeSaveTimer)
@@ -13513,6 +13643,17 @@ window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   renderImageOverlayLayer(textLayerDiv, pageNum)
   renderCitationOverlayLayer(textLayerDiv, pageNum)
   renderFigureRefOverlayLayer(textLayerDiv, pageNum)
+
+  // Keep existing memo cards mounted through fit/zoom rerenders so focus, DOM
+  // state and keyboard actions survive. Recalculate their connector geometry.
+  if (zoomPreservedMemoPages.get(pageNum) === state.sessionId || geometryPreservedMemoPages.delete(pageNum)) {
+    zoomPreservedMemoPages.delete(pageNum)
+    const wrapper = textLayerDiv.closest('.pdf-page-wrapper')
+    for (const memo of loadMemos(state.sessionId)[`page_${pageNum}`] || []) {
+      updateMemoConnectorLine(wrapper, memo)
+    }
+    return
+  }
 
   // 이미 번역된 적이 있는 페이지인데 아직 번역 문장 데이터(state.translationSentences)가
   // 로드되지 않았다면, 방금 위에서 실행한 세그멘테이션은 정규식 기반 폴백
@@ -14594,6 +14735,7 @@ let citationTooltipHideTimer = null
 let citationTooltipDocId = null
 let citationTooltipReferences = []
 let citationTooltipBoxEl = null
+let citationTooltipPinned = false
 
 // Tauri 데스크탑 webview는 보안상 window.open()/target="_blank"로 외부
 // URL을 새 탭으로 열어주지 않는다(웹 브라우저와 달리 시스템 기본 브라우저를
@@ -14635,6 +14777,12 @@ function getOrCreateCitationTooltip() {
     if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   })
   el.addEventListener('mouseleave', scheduleCitationTooltipHide)
+  // Resolving a reference can resize/reposition this dialog under the pointer.
+  // Once interacted with, keep it open until Escape, outside click or scroll.
+  el.addEventListener('click', () => {
+    citationTooltipPinned = true
+    if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
+  }, true)
   el.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return
     event.preventDefault()
@@ -14709,6 +14857,7 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
   if (!prepareFocusPreview(boxEl)) { hideCitationTooltip(); return }
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   if (citationTooltipBoxEl && citationTooltipBoxEl !== boxEl) citationTooltipBoxEl.setAttribute('aria-expanded', 'false')
+  if (citationTooltipBoxEl !== boxEl) citationTooltipPinned = false
   citationTooltipDocId = docId
   citationTooltipReferences = refKeys.map(key => ({ key, text: refMap[key] || '' }))
   citationTooltipBoxEl = boxEl
@@ -14736,6 +14885,7 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
 }
 
 function hideCitationTooltip() {
+  citationTooltipPinned = false
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   if (citationTooltipEl) citationTooltipEl.classList.add('hidden')
   citationTooltipBoxEl?.setAttribute('aria-expanded', 'false')
@@ -14743,6 +14893,7 @@ function hideCitationTooltip() {
 }
 
 function scheduleCitationTooltipHide() {
+  if (citationTooltipPinned || citationTooltipEl?.contains(document.activeElement)) return
   if (citationTooltipHideTimer) clearTimeout(citationTooltipHideTimer)
   citationTooltipHideTimer = setTimeout(hideCitationTooltip, 220)
 }
@@ -15704,10 +15855,10 @@ function initChatListeners() {
     })
   }
 
-  const CHAT_DEFAULT_WIDTH = 390
-  const chatMaxWidth = () => Math.round(Math.min(800, window.innerWidth * 0.8))
+  const CHAT_DEFAULT_WIDTH = isDocumentRuntime ? 360 : 390
+  const chatMaxWidth = () => Math.round(Math.min(isDocumentRuntime ? 480 : 800, window.innerWidth * 0.8))
   const applyChatWidth = (requestedWidth, { persist = false, announce = false } = {}) => {
-    const width = Math.round(Math.max(280, Math.min(chatMaxWidth(), requestedWidth)))
+    const width = Math.round(Math.max(isDocumentRuntime ? 300 : 280, Math.min(chatMaxWidth(), requestedWidth)))
     chatSidebar.style.width = `${width}px`
     chatResizer.setAttribute('aria-valuemax', String(chatMaxWidth()))
     chatResizer.setAttribute('aria-valuenow', String(width))
@@ -15927,13 +16078,14 @@ if (viewerScrollContainer && viewerTopbar) {
 
     if (currentScrollTop <= TOOLBAR_TOP_ZONE) {
       setToolbarHidden(false)
+      lastToolbarScrollTop = currentScrollTop
     } else if (delta > TOOLBAR_HIDE_THRESHOLD) {
       setToolbarHidden(true)
+      lastToolbarScrollTop = currentScrollTop
     } else if (delta < -TOOLBAR_HIDE_THRESHOLD) {
       setToolbarHidden(false)
+      lastToolbarScrollTop = currentScrollTop
     }
-
-    lastToolbarScrollTop = currentScrollTop
   })
 }
 
@@ -16170,6 +16322,7 @@ document.addEventListener('mousedown', (e) => {
   }
   if (e.target.closest(".pdf-figure-overlay")) return;
   if (e.target.closest(".textLayer")) {
+    hideAnnHoverTooltip()
     viewerScrollContainer?.querySelectorAll(".pdf-highlight-overlay").forEach(overlay => {
       clearOverlayBoxes(overlay, "sentence-hover-box", "sentence-equation-box")
     })
@@ -17182,6 +17335,23 @@ viewerScrollContainer?.addEventListener('wheel', event => {
 }, { passive: true, capture: true });
 viewerScrollContainer?.addEventListener('scroll', markViewerScrolling, { passive: true, capture: true });
 
+function annotateHoveredSentence(type) {
+  if (currentHoverPage == null || currentHoverSentenceIdx == null || !state.sessionId) return
+  const pageNum = currentHoverPage
+  const sentence = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [], currentHoverSentenceIdx)
+  const vtm = state.virtualTextMaps?.[pageNum]
+  const textLayer = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"] .textLayer`)
+  if (!sentence || !vtm || !textLayer) return
+  const range = createDomRangeFromVtmRange(vtm, sentence.charStart, sentence.charEnd)
+  if (!range || range.collapsed) return
+  if (type === 'memo') {
+    const sentenceIdx = sentence.sentenceIdx >= 10000 ? (sentence.originalSentenceIdx ?? sentence.sentenceIdx) : sentence.sentenceIdx
+    createFloatingMemoForSentence(pageNum, sentenceIdx, { charStart: sentence.charStart, charEnd: sentence.charEnd })
+  } else if (type === 'highlight' || type === 'underline') {
+    applyAnnotationToRange(range, type, textLayer, pageNum)
+  }
+  hideSelectionMenu()
+}
 // 현재 클릭 고정 중인 active 하이라이트
 let activeHighlightPage = null;
 let activeHighlightSentenceIdx = null;
@@ -17775,7 +17945,7 @@ if (viewerScrollContainer) {
             const rects = getSentenceRects(sRange, vtm, textLayer);
             if (rects.length > 0) {
               // 해당 pageWrapper가 뷰포트에 없으면 스크롤
-              pw.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              pw.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
 
               // pulse 애니메이션
               const overlay = getOrCreateOverlay(pw);
@@ -18159,6 +18329,11 @@ async function navigateToViewerAnnotation(target) {
 }
 
 async function handleRouting() {
+  if (tabWorkspace) return tabWorkspace.route(location.hash)
+  if (isDocumentRuntime && window.__easypaperDocument?.ready) {
+    const requestedId = new URLSearchParams(location.hash.split('?')[1]).get('id')
+    if (!location.hash.startsWith('#viewer?') || requestedId !== state.sessionId) { notifyWorkspace('navigate', location.hash); return }
+  }
   try {
     const hash = location.hash
     console.log("[Router] handleRouting triggered. Current hash:", hash)
@@ -18264,6 +18439,7 @@ async function handleRouting() {
     }
   } catch (err) {
     console.error("[Router] Error in handleRouting:", err)
+    if (isDocumentRuntime) showDocumentLoadError(err)
   }
 }
 
@@ -18686,4 +18862,66 @@ async function renderArticleDocument(doc) {
       }
     },
   })
+}
+
+
+// A reader owns its state, DOM, worker, streams and annotation queue.
+function installReaderWorkspaceRuntime() {
+  installDocumentRuntime({
+    state, toast: showToast,
+    memos: () => loadMemos(state.sessionId),
+    annotations: () => loadAnnotations(state.sessionId),
+    thumbnail: renderPDFThumbnail,
+    pageWidth: () => getPDFPageWidth(state.currentPage),
+    pageText: (page, signal) => Boolean(viewerScrollContainer.querySelector('.article-unit'))
+      ? Promise.resolve(viewerScrollContainer.querySelector(`.article-unit[data-unit-index="${page}"] .article-original`)?.textContent || '')
+      : getPDFPageText(page, signal),
+    goToPage: page => {
+      const unit = viewerScrollContainer.querySelector(`.article-unit[data-unit-index="${page}"]`)
+      if (unit) unit.scrollIntoView({ block: 'start', behavior: 'instant' })
+      else scrollToPage(viewerScrollContainer, page, { instant: true })
+    },
+    navigateAnnotation: navigateToViewerAnnotation,
+    annotateHoveredSentence,
+    navigateHash: async hash => {
+      const target = viewerAnnotationTargetFromParams(new URLSearchParams(hash.split('?')[1]))
+      if (target) await navigateToViewerAnnotation(target)
+    },
+    zoom: setZoom,
+    uiScale: scale => { applyUiScale(scale); syncSelectValue(settingUiScale, scale); schedulePdfGeometryRefresh() },
+    setPanels: ({ panel, outline }) => {
+      if (outline) showOutlineSidebar(); else hideOutlineSidebar()
+      chatSidebar.classList.toggle('hidden', !panel)
+      chatResizer.classList.toggle('hidden', !panel)
+      chatToggleBtn.classList.toggle('active', panel)
+    },
+    flush: async () => {
+      await flushSaveLastReadPage()
+      if (hasPendingAnnotationSync(state.sessionId)) {
+        // Mutations are already persisted locally; server availability must not
+        // block workspace navigation. Retry uses the existing durable queue.
+        void syncAnnotationsNow(state.sessionId, { keepalive: true, refresh: false })
+      }
+    },
+    suspend: () => { focusModeController?.clear(); suspendPDFRendering(); globalAnalyticsTracker.sendHeartbeat() },
+    resume: async () => { applyModeViewerSettings(state.currentDocumentMode); await resumePDFRendering() },
+  })
+}
+
+function showDocumentLoadError(error) {
+  documentLoadFailed = true
+  if (error?.status === 404 || error?.status === 403) { notifyWorkspace('unavailable'); return }
+  notifyWorkspace('status', { busy: false, error: true })
+  const panel = document.createElement('div')
+  panel.className = 'workspace-load-error'
+  panel.setAttribute('role', 'alert')
+  const text = document.createElement('p')
+  text.textContent = t('navigation:tabs.loadError')
+  const retry = document.createElement('button')
+  retry.type = 'button'
+  retry.textContent = t('navigation:tabs.retry')
+  retry.addEventListener('click', () => location.reload())
+  panel.append(text, retry)
+  viewerScreen.replaceChildren(panel)
+  viewerScreen.classList.add('active')
 }

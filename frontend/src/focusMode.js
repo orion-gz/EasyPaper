@@ -463,6 +463,12 @@ export class FocusModeController {
   render() {
     if (!this.current || !this.settings.enabled) return
     let pair = this.resolvePair?.(this.current) || {}
+    // Fit/zoom rerenders temporarily remove the PDF text layer. Keep the last
+    // source magnification until the new layer is segmented and can be measured.
+    const page = this.current.pageNum
+    const sourceWrapper = pair.sourceCanvas?.closest('.pdf-page-wrapper')
+    const sourceLayerReady = sourceWrapper?.querySelector('.textLayer[data-segmented="true"]')
+    if (sourceWrapper && !sourceLayerReady && this.layer?.querySelector('.focus-mode-magnification[data-kind=source]')) return
     if (this.current.revealTranslation && !this.revealedTranslation && pair.elements?.length) {
       revealFocusTranslation(pair.elements)
       this.revealedTranslation = true

@@ -1,4 +1,10 @@
 {
+  "navigation:tabs.refresh": {
+    "description": "Reload the current document viewer and its saved viewer and translation settings."
+  },
+  "navigation:tabs.refreshBusy": {
+    "description": "Refresh is postponed while translation or chat generation is active to preserve the ongoing request."
+  },
   "viewer:translation.reset": { "description": "Viewer menu action that deletes existing translations without starting a batch job." },
   "viewer:translation.full": { "description": "Viewer menu action to translate all missing pages, available in automatic mode." },
   "viewer:translation.resetConfirm": { "description": "Confirmation before deleting all document translations." },
@@ -4427,5 +4433,98 @@
   },
   "errors:pdf_reading_order_review": {
     "description": "Status shown on PDF pages whose reading order or source coordinates require review."
+  },
+  "navigation:tabs.label": {
+    "description": "Workspace tabs: Workspace tabs"
+  },
+  "navigation:tabs.close": {
+    "description": "Workspace tabs: Close {{title}}"
+  },
+  "navigation:tabs.loading": {
+    "description": "Workspace tabs: Loading document…"
+  },
+  "navigation:tabs.loadError": {
+    "description": "Workspace tabs: This document could not be loaded. Try again."
+  },
+  "navigation:tabs.retry": {
+    "description": "Workspace tabs: Retry"
+  },
+  "navigation:tabs.unavailable": {
+    "description": "Workspace tabs: The document was deleted or is no longer accessible."
+  },
+  "navigation:tabs.storageError": {
+    "description": "Workspace tabs: Workspace changes could not be saved on this device."
+  },
+  "navigation:tabs.tools": {
+    "description": "Workspace tabs: Document tools"
+  },
+  "navigation:tabs.annotation": {
+    "description": "Workspace tabs: Annotation"
+  },
+  "navigation:tabs.noNotes": {
+    "description": "Workspace tabs: No notes yet. Select text in the document to add a note."
+  },
+  "navigation:tabs.noAnnotations": {
+    "description": "Workspace tabs: No highlights or underlines yet."
+  },
+  "navigation:tabs.outline": {
+    "description": "Workspace tabs: Outline"
+  },
+  "navigation:tabs.thumbnails": {
+    "description": "Workspace tabs: Thumbnails"
+  },
+  "navigation:tabs.fullscreen": {
+    "description": "Workspace tabs: Full screen"
+  },
+  "navigation:tabs.fullscreenUnavailable": {
+    "description": "Workspace tabs: Full screen is not available in this window."
+  },
+  "navigation:tabs.busy": {
+    "description": "Workspace tabs: Processing"
+  },
+  "navigation:tabs.complete": {
+    "description": "Workspace tabs: Completed"
+  },
+  "navigation:tabs.error": {
+    "description": "Workspace tabs: Error"
+  },
+  "navigation:tabs.fitWidth": {
+    "description": "Document workspace tool: Fit page width"
+  },
+  "navigation:tabs.highlight": { "description": "Highlight the last hovered sentence in the document workspace." },
+  "navigation:tabs.underline": { "description": "Underline the last hovered sentence in the document workspace." },
+  "navigation:tabs.memo": { "description": "Create a memo for the last hovered sentence in the document workspace." },
+  "navigation:tabs.find": {
+    "description": "Document workspace tool: Find in document"
+  },
+  "navigation:tabs.previousMatch": {
+    "description": "Document workspace tool: Previous match"
+  },
+  "navigation:tabs.nextMatch": {
+    "description": "Document workspace tool: Next match"
+  },
+  "navigation:tabs.closeSearch": {
+    "description": "Document workspace tool: Close search"
+  },
+  "navigation:tabs.noMatches": {
+    "description": "Document workspace tool: No matches"
+  },
+  "navigation:tabs.searching": {
+    "description": "Document workspace tool: Searching…"
+  },
+  "navigation:tabs.searchFailed": {
+    "description": "Document workspace tool: Search failed. Try again."
+  },
+  "navigation:tabs.chat": {
+    "description": "Document workspace tool: AI Chat"
+  },
+  "navigation:tabs.notes": {
+    "description": "Document workspace tool: Notes"
+  },
+  "navigation:tabs.annotations": {
+    "description": "Document workspace tool: Annotations"
+  },
+  "navigation:tabs.content": {
+    "description": "Accessible name of the keyboard-scrollable document region."
   }
 }

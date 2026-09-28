@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 test('AI 어시스턴트 입력창을 확장하고 다시 축소할 수 있다', async ({ page }) => {
   const doc = { id: 'doc-A', filename: 'DocA.pdf', total_pages: 1, metadata: { title: 'Document A' }, translated_pages: [] }
@@ -10,11 +10,11 @@ test('AI 어시스턴트 입력창을 확장하고 다시 축소할 수 있다',
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1000)
-  await page.click('#chat-toggle-btn')
+  await expect(activeReader(page).locator('#chat-input')).toBeVisible()
 
-  const input = page.locator('#chat-input')
+  const input = activeReader(page).locator('#chat-input')
   const inputBox = input.locator('..')
-  const expandButton = page.locator('#chat-input-expand-btn')
+  const expandButton = activeReader(page).locator('#chat-input-expand-btn')
   const collapsedHeight = await input.evaluate(element => element.getBoundingClientRect().height)
 
   await expect(expandButton).toHaveAttribute('aria-expanded', 'false')
@@ -42,9 +42,9 @@ test('뷰어 AI 어시스턴트 입력창에 포커스 테두리를 표시하지
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1000)
-  await page.click('#chat-toggle-btn')
+  await expect(activeReader(page).locator('#chat-input')).toBeVisible()
 
-  const input = page.locator('#chat-input')
+  const input = activeReader(page).locator('#chat-input')
   const inputBox = input.locator('..')
   const borderColor = await inputBox.evaluate(element => getComputedStyle(element).borderColor)
 

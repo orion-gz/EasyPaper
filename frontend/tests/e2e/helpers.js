@@ -115,7 +115,7 @@ export async function mockBaseRoutes(page, {
 /** 새로고침 초기 라우팅이 끝난 뒤 라이브러리로 이동한다. */
 export async function reloadToLibrary(page) {
   await page.reload()
-  await page.locator('#page-dashboard.active').waitFor({ state: 'visible' })
+  await page.locator('#workspace-tab-panel').waitFor({ state: 'visible' })
   await page.locator('.sidebar-nav-item[data-page="library"]').click()
   await page.locator('#page-library.active').waitFor({ state: 'visible' })
 }
@@ -131,9 +131,30 @@ export async function gotoApp(page, { navigateToLibrary = true } = {}) {
   await page.reload()
   if (navigateToLibrary) {
     await page.locator('#page-dashboard.active').waitFor({ state: 'visible' })
+    if (await page.locator('#app-sidebar').evaluate(element => element.classList.contains('collapsed'))) await page.locator('#sidebar-toggle-btn').click()
     const libraryNav = page.locator('.sidebar-nav-item[data-page="library"]')
     await libraryNav.waitFor({ state: 'visible' })
     await libraryNav.click()
-    await page.locator('#library-screen.active').waitFor()
+    await page.locator('#page-library.active').waitFor({ state: 'visible' })
+    await page.waitForFunction(() => location.hash === '#library')
   }
+}
+
+// Reader DOM now belongs to the active document's isolated browsing context.
+export function activeReader(page) {
+  return page.frameLocator('.workspace-document-frame:not([hidden])')
+}
+export async function evaluateReader(page, callback, argument) {
+  const handle = await page.locator('.workspace-document-frame:not([hidden])').elementHandle()
+  const frame = await handle.contentFrame()
+  return frame.evaluate(callback, argument)
+}
+
+// Convert reader viewport coordinates to top-level mouse coordinates, including UI zoom.
+export async function readerPoint(page, x, y) {
+  const frame = page.locator('.workspace-document-frame:not([hidden])')
+  const bounds = await frame.boundingBox()
+  const width = await evaluateReader(page, () => window.innerWidth)
+  const scale = bounds.width / width
+  return { x: bounds.x + x * scale, y: bounds.y + y * scale }
 }

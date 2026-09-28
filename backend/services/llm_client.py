@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import threading
+import weakref
 from typing import AsyncGenerator
 from services.atomic_io import atomic_write_text
 from services.generation_errors import GenerationError
@@ -1317,6 +1318,19 @@ async def check_ollama_health() -> dict:
         return {"status": "error", "detail": str(e), "model_available": False}
 
 
+# 사용자 인증 및 Claude Code 설정을 공유하는 CLI 호출을 직렬화한다.
+# 백엔드의 이벤트 루프마다 하나씩 두어 테스트/재시작 시 다른 루프에 묶인
+# asyncio.Lock을 재사용하지 않는다. 데스크톱 sidecar는 단일 이벤트 루프를 쓴다.
+_claude_code_call_locks = weakref.WeakKeyDictionary()
+
+
+def _get_claude_code_call_lock():
+    loop = asyncio.get_running_loop()
+    if loop not in _claude_code_call_locks:
+        _claude_code_call_locks[loop] = asyncio.Lock()
+    return _claude_code_call_locks[loop]
+
+
 # 문서(session_id)당 하나의 Claude Code 대화 세션만 사용하도록 직렬화하는 락.
 # 번역/채팅/카테고리 태깅 호출이 모두 같은 --session-id를 공유하므로,
 # 동시 호출이 세션 생성/재개 순서를 어긋나게 하지 않도록 보장한다.
@@ -1330,6 +1344,15 @@ def _get_claude_code_session_lock(session_id: str):
     if session_id not in _claude_code_session_locks:
         _claude_code_session_locks[session_id] = asyncio.Lock()
     return _claude_code_session_locks[session_id]
+
+
+_CLAUDE_CODE_CONTROL_PREFIXES = ("Not logged in", "Login expired", "No conversation found")
+
+
+def _may_be_claude_code_control_output(text: str) -> bool:
+    """실패 안내가 답변처럼 스트리밍되지 않도록 출력 앞부분만 잠시 보류한다."""
+    stripped = text.lstrip()
+    return any(prefix.startswith(stripped) or stripped.startswith(prefix) for prefix in _CLAUDE_CODE_CONTROL_PREFIXES)
 
 
 async def stream_claude_code(prompt: str, model: str = None, session_id: str = None, is_chat: bool = False, usage_label: str = None, effort_override: str = None) -> AsyncGenerator[str, None]:
@@ -1368,35 +1391,9 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
     # 안에도 굳이 실행/수정 도구까지 열어줄 이유는 없다.
     base_cmd = [claude_path, "--permission-mode", "dontAsk", "--tools", "Read", "--output-format", "text", "--print", "-"]
 
-    # Prepare custom HOME for Claude Code session isolation to prevent concurrent locks
+    # 인증은 사용자의 Claude Code 설정(로그인 키체인/자격증명 파일)을 그대로 쓴다.
+    # 문서별 대화는 cwd와 --session-id로 분리하며 호출은 아래 락으로 직렬화한다.
     env = get_agy_env()
-    if session_id:
-        import shutil
-        cache_dir = os.path.join(get_project_root(), "cache")
-        home_dir = os.path.join(cache_dir, f"claude_home_{session_id}")
-        claude_dir = os.path.join(home_dir, ".claude")
-        os.makedirs(claude_dir, exist_ok=True)
-
-        orig_credentials = os.path.expanduser("~/.claude/.credentials.json")
-        dest_credentials = os.path.join(claude_dir, ".credentials.json")
-        if os.path.exists(orig_credentials) and not os.path.exists(dest_credentials):
-            shutil.copy2(orig_credentials, dest_credentials)
-
-        orig_settings = os.path.expanduser("~/.claude/settings.json")
-        dest_settings = os.path.join(claude_dir, "settings.json")
-        if os.path.exists(orig_settings) and not os.path.exists(dest_settings):
-            shutil.copy2(orig_settings, dest_settings)
-
-        # ~/.claude/ 안의 credentials/settings만으로는 부족하다 - 최신 Claude Code CLI는
-        # 최상위 ~/.claude.json(계정/세션 메타데이터)도 있어야 로그인 상태로 인식한다.
-        # 이게 빠지면 격리된 $HOME에서는 자격증명을 그대로 복사해도 "Not logged in"으로
-        # 실패한다.
-        orig_top_level_config = os.path.expanduser("~/.claude.json")
-        dest_top_level_config = os.path.join(home_dir, ".claude.json")
-        if os.path.exists(orig_top_level_config) and not os.path.exists(dest_top_level_config):
-            shutil.copy2(orig_top_level_config, dest_top_level_config)
-
-        env["HOME"] = home_dir
 
     # model 값이 'sonnet|high' 처럼 파이프(|)로 모델과 effort를 구분할 수 있음
     model_name = None
@@ -1430,7 +1427,7 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
     session_flag = ["--resume", session_id] if session_id else []
 
     lock = _get_claude_code_session_lock(session_id)
-    async with lock:
+    async with lock, _get_claude_code_call_lock():
         # 락을 기다리는 동안 앞선 호출이 last_provider를 갱신했을 수 있으므로,
         # 실제 요청 직전에 전환 여부와 캐치업 문맥을 계산한다.
         last_provider = get_last_provider(session_id)
@@ -1450,6 +1447,8 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
 
         for attempt in range(2):
             cmd = base_cmd + session_flag
+            process = None
+            stderr_task = None
             try:
                 process = await asyncio.create_subprocess_exec(
                     *_exec_args(cmd),
@@ -1467,6 +1466,8 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
 
                 decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
                 produced_output = False
+                held_output = ""
+                stdout_tail = ""
 
                 while True:
                     chunk = await _read_chunk_with_timeout(process, label="Claude Code CLI")
@@ -1474,17 +1475,28 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
                         break
                     decoded = decoder.decode(chunk)
                     if decoded:
+                        stdout_tail = (stdout_tail + decoded)[-2000:]
+                        if not produced_output:
+                            held_output += decoded
+                            if len(held_output) <= 2000 and _may_be_claude_code_control_output(held_output):
+                                continue
+                            decoded, held_output = held_output, ""
                         produced_output = True
                         yield decoded
 
                 final_decoded = decoder.decode(b"", final=True)
                 if final_decoded:
-                    produced_output = True
-                    yield final_decoded
+                    stdout_tail = (stdout_tail + final_decoded)[-2000:]
+                    if produced_output:
+                        yield final_decoded
+                    else:
+                        held_output += final_decoded
 
                 await _wait_with_timeout(process, label="Claude Code CLI")
 
                 if process.returncode == 0:
+                    if held_output:
+                        yield held_output
                     try:
                         from services.usage_tracker import record_call
                         record_call(usage_label or ("translate" if not is_chat else "chat"))
@@ -1510,7 +1522,7 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
                     not produced_output
                     and attempt == 0
                     and session_flag[:1] == ["--resume"]
-                    and "No conversation found" in stderr_out
+                    and "No conversation found" in (stderr_out + stdout_tail)
                 ):
                     session_flag = ["--session-id", session_id]
                     # 위의 provider_switched 캐치업과 동일한 이유: 새로 만드는
@@ -1531,7 +1543,12 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
                         encoded_prompt = guided_prompt.encode("utf-8")
                     continue
 
-                logger.error(f"Claude Code CLI 실패: code={process.returncode} stderr={stderr_out}")
+                logger.error("Claude Code CLI 실패: code=%s stderr=%s", process.returncode, stderr_out)
+                if any(marker in (stderr_out + stdout_tail) for marker in ("Not logged in", "Login expired", "Please run /login")):
+                    raise GenerationError(
+                        "authentication_failed",
+                        "Claude Code CLI 로그인이 필요합니다. 터미널에서 `claude`에 로그인한 뒤 다시 시도해 주세요.",
+                    )
                 # 실패를 조용히 삼키고 그냥 return하면, 호출부는 빈 결과를 "정상
                 # 번역 완료"로 착각해 빈 문자열을 캐시에 영구 저장해버린다.
                 # 예외를 던져서 라우터/job 쪽의 기존 실패 처리 로직(에러 응답,
@@ -1543,6 +1560,13 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
             except Exception as e:
                 logger.error(f"Claude Code CLI 실행 예외: {e}")
                 raise
+            finally:
+                # 스트림 소비가 취소되어도 자식 프로세스를 먼저 끝내야 다음 호출이
+                # 공유 설정에 접근할 때 이전 CLI가 남아 있지 않다.
+                if process is not None and process.returncode is None:
+                    await _kill_process_safely(process)
+                if stderr_task is not None and not stderr_task.done():
+                    stderr_task.cancel()
 
 
 _codex_session_locks = {}

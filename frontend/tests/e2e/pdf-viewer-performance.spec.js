@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp } from './helpers.js'
+import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp } from './helpers.js'
 
 test.use({ deviceScaleFactor: 2 })
 
@@ -41,12 +41,12 @@ test('long PDF loads lazily, bounds canvases and restores evicted pages', async 
     }] }))
     location.hash = '#viewer?id=performance'
   })
-  const wrapper = number => page.locator(`.pdf-page-wrapper[data-page="${number}"]`)
+  const wrapper = number => activeReader(page).locator(`.pdf-page-wrapper[data-page="${number}"]`)
   const text = number => wrapper(number).locator('.textLayer')
   await expect(text(1)).toContainText('Performance page 1')
-  await expect(page.locator('.floating-memo[data-id="retained-memo"]')).toBeVisible()
-  await expect(page.locator('.pdf-page-wrapper')).toHaveCount(24)
-  expect(await page.locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(3)
+  await expect(activeReader(page).locator('.floating-memo[data-id="retained-memo"]')).toBeVisible()
+  await expect(activeReader(page).locator('.pdf-page-wrapper')).toHaveCount(24)
+  expect(await activeReader(page).locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(3)
   const originalHeight = await wrapper(1).evaluate(node => node.getBoundingClientRect().height)
 
   for (const number of [4, 7, 10, 13, 16, 19, 22, 24]) {
@@ -54,16 +54,15 @@ test('long PDF loads lazily, bounds canvases and restores evicted pages', async 
     await expect(text(number)).toContainText(`Performance page ${number}`)
   }
   await expect(wrapper(1).locator('canvas')).toHaveCount(0)
-  await expect(page.locator('.floating-memo[data-id="retained-memo"]')).toHaveCount(0)
-  expect(await page.locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(8)
-
+  await expect(activeReader(page).locator('.floating-memo[data-id="retained-memo"]')).toHaveCount(0)
+  expect(await activeReader(page).locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(8)
   expect(await wrapper(1).evaluate(node => node.getBoundingClientRect().height)).toBeCloseTo(originalHeight, 0)
 
   await wrapper(1).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
   await expect(text(1)).toContainText('Performance page 1')
   expect(await wrapper(1).locator('canvas').evaluate(canvas => canvas.width)).toBeGreaterThan(0)
-  await expect(page.locator('.floating-memo[data-id="retained-memo"]')).toContainText('Keep this memo')
-  await expect(page.locator('.page-render-error')).toHaveCount(0)
+  await expect(activeReader(page).locator('.floating-memo[data-id="retained-memo"]')).toContainText('Keep this memo')
+  await expect(activeReader(page).locator('.page-render-error')).toHaveCount(0)
   expect(errors).toEqual([])
 })
 
@@ -95,18 +94,18 @@ test('rapid jumps cancel stale text requests and finish the destination page', a
   page.on('pageerror', error => errors.push(error.message))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=rapid' })
-  await expect.poll(() => page.evaluate(() => window.pdfTextRequests.active)).toBeGreaterThan(0)
+  await expect.poll(() => evaluateReader(page, () => window.pdfTextRequests.active)).toBeGreaterThan(0)
   for (const number of [8, 16, 24]) {
-    await page.locator(`.pdf-page-wrapper[data-page="${number}"]`).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
+    await activeReader(page).locator(`.pdf-page-wrapper[data-page="${number}"]`).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
     await page.waitForTimeout(50)
   }
-  await expect.poll(() => page.evaluate(() => window.pdfTextRequests.cancelled)).toBeGreaterThan(0)
+  await expect.poll(() => evaluateReader(page, () => window.pdfTextRequests.cancelled)).toBeGreaterThan(0)
   releaseText()
-  await expect(page.locator('.pdf-page-wrapper[data-page="24"] .textLayer')).toContainText('Performance page 24')
-  const stats = await page.evaluate(() => window.pdfTextRequests)
+  await expect(activeReader(page).locator('.pdf-page-wrapper[data-page="24"] .textLayer')).toContainText('Performance page 24')
+  const stats = await evaluateReader(page, () => window.pdfTextRequests)
   expect(stats.max).toBeLessThanOrEqual(2)
   expect(stats.cancelled).toBeGreaterThan(0)
-  await expect(page.locator('.page-render-error')).toHaveCount(0)
+  await expect(activeReader(page).locator('.page-render-error')).toHaveCount(0)
   expect(errors).toEqual([])
 })
 
@@ -125,7 +124,7 @@ test('dense page overlays batch layout and page hover keeps reading geometry sta
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=dense' })
   // Exercise a newly rendered page reached by scrolling, not just startup.
-  const wrapper = page.locator('.pdf-page-wrapper[data-page="4"]')
+  const wrapper = activeReader(page).locator('.pdf-page-wrapper[data-page="4"]')
   await wrapper.evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
   await expect(wrapper.locator('.citation-marker-box')).toHaveCount(45)
   await expect(wrapper.locator('.figure-ref-marker-box')).toHaveCount(45)
@@ -158,7 +157,8 @@ test('dense page overlays batch layout and page hover keeps reading geometry sta
     const viewport = node.closest('#viewer-scroll-container').getBoundingClientRect()
     return { x: Math.max(page.left, viewport.left) + 30, y: Math.max(page.top, viewport.top) + 30 }
   })
-  await page.mouse.move(hoverPoint.x, hoverPoint.y)
+  const pointer = await readerPoint(page, hoverPoint.x, hoverPoint.y)
+  await page.mouse.move(pointer.x, pointer.y)
   await page.waitForTimeout(500)
   expect(await card.evaluate(node => node.matches(':hover'))).toBe(true)
   const hovered = await card.boundingBox()
@@ -176,10 +176,10 @@ test('scrolling a loaded page does not revisit closed library folder menus', asy
   await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=steady' })
-  await expect(page.locator('.textLayer').first()).toContainText('Performance page 1')
+  await expect(activeReader(page).locator('.textLayer').first()).toContainText('Performance page 1')
   await expect(page.locator('.folder-card-actions')).toHaveCount(100)
-  await expect(page.locator('.citation-marker-box, .figure-ref-marker-box')).toHaveCount(0)
-  const viewer = page.locator('#viewer-scroll-container')
+  await expect(activeReader(page).locator('.citation-marker-box, .figure-ref-marker-box')).toHaveCount(0)
+  const viewer = activeReader(page).locator('#viewer-scroll-container')
   await page.evaluate(() => {
     window.steadyScroll = { events: 0, menuScans: 0, menuMutations: 0 }
     const query = document.querySelectorAll.bind(document)
@@ -189,7 +189,10 @@ test('scrolling a loaded page does not revisit closed library folder menus', asy
     }
     const observer = new MutationObserver(records => { window.steadyScroll.menuMutations += records.length })
     for (const menu of query('.folder-card-actions')) observer.observe(menu, { attributes: true })
-    document.querySelector('#viewer-scroll-container').addEventListener('scroll', () => window.steadyScroll.events++, { passive: true })
+  })
+  await viewer.evaluate(node => {
+    window.steadyScrollEvents = 0
+    node.addEventListener('scroll', () => window.steadyScrollEvents++, { passive: true })
   })
   const bounds = await viewer.boundingBox()
   await page.mouse.move(bounds.x + 100, bounds.y + 100)
@@ -199,7 +202,7 @@ test('scrolling a loaded page does not revisit closed library folder menus', asy
     await expect.poll(() => viewer.evaluate(node => node.scrollTop)).not.toBe(previous)
   }
   const stats = await page.evaluate(() => window.steadyScroll)
-  expect(stats.events).toBeGreaterThanOrEqual(3)
+  expect(await evaluateReader(page, () => window.steadyScrollEvents)).toBeGreaterThanOrEqual(3)
   expect(stats.menuScans).toBe(0)
   expect(stats.menuMutations).toBe(0)
 })
@@ -220,8 +223,8 @@ test('translation scrolling pauses hover repaint and hover resumes after scrolli
   } }))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=hover-scroll' })
-  const sentence = page.locator('.trans-sentence').first()
-  const pane = page.locator('#trans-content-1')
+  const sentence = activeReader(page).locator('.trans-sentence').first()
+  const pane = activeReader(page).locator('#trans-content-1')
   await expect(sentence).toBeVisible()
   await sentence.scrollIntoViewIfNeeded()
   await page.waitForTimeout(200)
@@ -230,7 +233,7 @@ test('translation scrolling pauses hover repaint and hover resumes after scrolli
   const initial = await pane.evaluate(node => node.scrollTop)
   await page.mouse.wheel(0, 40)
   await expect.poll(() => pane.evaluate(node => node.scrollTop)).toBeGreaterThan(initial)
-  await expect(page.locator('.trans-sentence.sentence-highlight')).toHaveCount(0)
+  await expect(activeReader(page).locator('.trans-sentence.sentence-highlight')).toHaveCount(0)
   await pane.evaluate(node => {
     window.hoverWritesDuringScroll = 0
     new MutationObserver(records => {
@@ -241,7 +244,7 @@ test('translation scrolling pauses hover repaint and hover resumes after scrolli
     await page.mouse.wheel(0, 35)
     await page.waitForTimeout(30)
   }
-  expect(await page.evaluate(() => window.hoverWritesDuringScroll)).toBe(0)
+  expect(await evaluateReader(page, () => window.hoverWritesDuringScroll)).toBe(0)
   // A real mouse move over the same sentence after scrolling must restore hover,
   // even if the pointer never left that sentence's DOM element.
   await pane.evaluate(node => { node.scrollTop = 0 })

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 test('전역 자간이 PDF 텍스트 레이어의 위치와 크기에 영향을 주지 않는다', async ({ page }) => {
   const document = {
@@ -20,15 +20,15 @@ test('전역 자간이 PDF 텍스트 레이어의 위치와 크기에 영향을 
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=text-layer-alignment' })
 
-  const textLayer = page.locator('.pdf-page-wrapper[data-page="1"] .textLayer')
+  const textLayer = activeReader(page).locator('.pdf-page-wrapper[data-page="1"] .textLayer')
   await expect(textLayer).toBeVisible()
   await expect(textLayer).toHaveAttribute('data-segmented', 'true')
   // Compare settled geometry, not two frames of the viewer entrance transition.
-  await page.evaluate(() => Promise.all(document.getAnimations()
+  await evaluateReader(page, () => Promise.all(document.getAnimations()
     .filter(animation => animation.effect.getComputedTiming().iterations !== Infinity)
     .map(animation => animation.finished.catch(() => {}))))
 
-  const readGeometry = () => page.locator('.textLayer span').evaluateAll(spans => spans.map(span => {
+  const readGeometry = () => activeReader(page).locator('.textLayer span').evaluateAll(spans => spans.map(span => {
     const rect = span.getBoundingClientRect()
     const layerRect = span.closest('.textLayer').getBoundingClientRect()
     return {
@@ -42,7 +42,7 @@ test('전역 자간이 PDF 텍스트 레이어의 위치와 크기에 영향을 
   const before = await readGeometry()
   expect(before.length).toBeGreaterThan(0)
 
-  await page.evaluate(() => { document.body.style.letterSpacing = '-0.2em' })
+  await evaluateReader(page, () => { document.body.style.letterSpacing = '-0.2em' })
   const after = await readGeometry()
 
   expect(after).toHaveLength(before.length)
