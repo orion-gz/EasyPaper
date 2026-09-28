@@ -444,3 +444,48 @@ test('find includes pages outside the rendered viewport', async ({ page }) => {
   await expect(frame.locator('.document-search-snippet')).toContainText('3:')
   await expect.poll(() => frame.locator('body').evaluate(() => CSS.highlights?.has('document-find'))).toBe(true)
 })
+
+
+test('pending reader save does not block opening or switching tabs; close waits for it', async ({ page }) => {
+  await setup(page)
+  await open(page, 'tab-a')
+  await reader(page, 'tab-a').locator('body').evaluate(() => {
+    const runtime = window.__easypaperDocument
+    const flush = runtime.flush.bind(runtime)
+    const pending = new Promise(resolve => { window.releaseTabSave = resolve })
+    runtime.flush = async () => { await flush(); await pending }
+  })
+  await open(page, 'tab-b')
+  await tab(page, 'document:tab-a').click()
+  await expect(tab(page, 'document:tab-a')).toHaveAttribute('aria-selected', 'true')
+  await tab(page, 'document:tab-b').click()
+  await expect(tab(page, 'document:tab-b')).toHaveAttribute('aria-selected', 'true')
+  await page.locator('.workspace-tab[data-tab-id="document:tab-a"] .workspace-tab-close').click()
+  await expect(page.locator('iframe[data-document-id="tab-a"]')).toHaveCount(1)
+  await page.evaluate(() => document.querySelector('iframe[data-document-id="tab-a"]').contentWindow.releaseTabSave())
+  await expect(page.locator('iframe[data-document-id="tab-a"]')).toHaveCount(0)
+})
+
+test('pending PDF activation does not block subsequent tab navigation', async ({ page }) => {
+  await setup(page)
+  await open(page, 'tab-a')
+  await open(page, 'tab-b')
+  await reader(page, 'tab-a').locator('body').evaluate(() => {
+    const runtime = window.__easypaperDocument
+    const setActive = runtime.setActive.bind(runtime)
+    const pending = new Promise(resolve => { window.releaseTabResume = resolve })
+    runtime.setActive = async next => {
+      await setActive(next)
+      if (next) await pending
+    }
+  })
+  await tab(page, 'document:tab-a').click()
+  await expect(tab(page, 'document:tab-a')).toHaveAttribute('aria-selected', 'true')
+  await tab(page, 'document:tab-b').click()
+  await expect(reader(page, 'tab-b').locator('body')).toHaveAttribute('data-workspace-inactive', 'false')
+  await tab(page, 'document:tab-a').click()
+  await reader(page, 'tab-a').locator('body').evaluate(() => window.releaseTabResume())
+  await expect(reader(page, 'tab-a').locator('body')).toHaveAttribute('data-workspace-inactive', 'false')
+  await expect(reader(page, 'tab-a').locator('.pdf-page-wrapper canvas')).toBeAttached()
+  await expect(reader(page, 'tab-b').locator('body')).toHaveAttribute('data-workspace-inactive', 'true')
+})

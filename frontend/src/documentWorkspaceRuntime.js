@@ -348,7 +348,8 @@ export function installDocumentRuntime(adapter) {
       if (next) {
         const token = ++generation
         await adapter.resume()
-        if (token !== generation || !active) { adapter.suspend(); return }
+        // A newer activation owns rendering; an old resume must not suspend it.
+        if (token !== generation || !active) return
         readerTools.setActive(true)
         if (panel !== 'chat') showResources()
         thumbnails.querySelectorAll('button').forEach(button => thumbnailObserver?.observe(button))
