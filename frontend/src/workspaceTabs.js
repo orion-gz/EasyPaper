@@ -306,7 +306,26 @@ export function createWorkspaceTabs(adapter) {
     const { type, payload } = event.data
     if (type === 'navigate') { api.route(payload, { push: true }); return }
     if (type === 'auth-expired') { adapter.authExpired(); return }
-    if (type === 'history') { window.history.go(payload === 'forward' ? 1 : -1); return }
+    if (type === 'refresh') {
+      enqueue(async () => {
+        if (record.closed || record.store !== store || id !== visibleId) return
+        const runtime = record.frame.contentWindow?.__easypaperDocument
+        if (!runtime?.ready) return
+        const context = await runtime.prepareRefresh()
+        if (!context) return
+        try {
+          // Drafts and quotes stay in memory; only reading preferences are persisted.
+          record.refreshContext = context
+          record.store.update(id, { reading: context.reading })
+          record.frame.contentWindow.location.reload()
+        } catch (error) {
+          delete record.refreshContext
+          runtime.cancelRefresh()
+          throw error
+        }
+      })
+      return
+    }
     if (type === 'title') {
       record.frame.title = String(payload || '')
       record.store.update(id, { title: record.frame.title })
@@ -315,10 +334,16 @@ export function createWorkspaceTabs(adapter) {
       const runtime = record.frame.contentWindow.__easypaperDocument
       runtime.syncScale(Number(document.documentElement.style.zoom) || 1)
       const tab = record.store.tabs.find(tab => tab.id === id)
-      runtime.restore(tab?.reading).then(async () => {
-        await runtime.navigate(tab?.route || '')
+      const refreshContext = record.refreshContext
+      runtime.restore(refreshContext?.reading || tab?.reading).then(async () => {
+        if (refreshContext) runtime.restoreDraft(refreshContext.draft)
+        else await runtime.navigate(tab?.route || '')
+        delete record.refreshContext
         await runtime.setActive(record.store === store && id === visibleId && !document.hidden)
-        runtime.syncAppearance?.(document.body.classList.contains('light-theme'), adapter.locale())
+        await runtime.syncAppearance?.(document.body.classList.contains('light-theme'), adapter.locale())
+        if (refreshContext && record.store === store && id === visibleId && !document.hidden) {
+          record.frame.contentDocument?.getElementById('viewer-refresh-btn')?.focus({ preventScroll: true })
+        }
       }).catch(report)
       if (tab) record.store.update(id, { title: runtime.title() })
     }

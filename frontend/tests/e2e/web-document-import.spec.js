@@ -23,7 +23,6 @@ test('문서 추가 소스 모달은 키보드 포커스를 가두고 Escape로 
 
 test('저장된 HTML 원문과 번역, 목차, 검색, 원본 폴백을 표시한다', async ({ page }) => {
   await openArticle(page)
-  await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
   await expect(activeReader(page).locator('.article-original').first()).toContainText('Unique searchable source text')
   await expect(activeReader(page).locator('.article-translation').first()).toContainText('Translated introduction')
   await activeReader(page).locator('.article-search input').fill('searchable'); await expect(activeReader(page).locator('[data-block-id="block-1"]')).toHaveClass(/article-search-hit/)
@@ -63,4 +62,25 @@ test('봇 확인으로 차단된 URL 오류를 가져오기 모달에 표시한�
   await expect(error).toContainText('브라우저 확인을 요구합니다')
   await expect(page.locator('#url-import-input')).toHaveAttribute('aria-invalid', 'true')
   await expect(error).toBeFocused()
+})
+
+test('웹 문서 새로고침은 일반 문서 번역 설정과 질문 초안을 반영한다', async ({ page }) => {
+  await openArticle(page)
+  const frame = activeReader(page)
+  await expect(frame.locator('#viewer-refresh-btn')).toBeVisible()
+  await frame.locator('#chat-input').fill('Article draft')
+  await page.evaluate(() => localStorage.setItem('easypaper_style_general', 'formal'))
+  let refreshedStyle
+  await page.route('**/api/jobs/web-1/page/1**', route => {
+    refreshedStyle = new URL(route.request().url()).searchParams.get('style')
+    return route.fulfill({ json: { translation: 'Refreshed article translation' } })
+  })
+  const navigated = page.waitForEvent('framenavigated', frame => Boolean(frame.parentFrame()))
+  await frame.locator('#viewer-refresh-btn').click()
+  await navigated
+  await expect(frame.locator('#viewer-refresh-btn')).toBeVisible({ timeout: 20000 })
+  await expect(frame.locator('.article-translation').first()).toContainText('Refreshed article translation')
+  expect(refreshedStyle).toBe('formal')
+  await expect(frame.locator('#chat-input')).toHaveValue('Article draft')
+  await expect(frame.locator('#outline-sidebar')).toBeHidden()
 })

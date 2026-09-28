@@ -37,7 +37,6 @@ test('수동 번역 모드는 버튼을 누른 한 페이지만 번역한다', a
     location.hash = '#viewer?id=doc-manual'
   })
 
-  await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
   const translateButton = activeReader(page).locator('#trans-content-1 .translate-page-btn')
   await expect(translateButton).toBeVisible()
   expect(translationRequests).toBe(0)
@@ -85,7 +84,6 @@ for (const failure of ['sse', 'http', 'network', 'truncated']) {
       localStorage.setItem('easypaper_translation_mode', 'pane')
       location.hash = '#viewer?id=doc-retry'
     })
-    await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
     const content = activeReader(page).locator('#trans-content-1')
     await content.getByRole('button', { name: '이 페이지 번역하기' }).click()
     const retry = content.getByRole('button', { name: '다시 시도' })

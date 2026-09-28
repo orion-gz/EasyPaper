@@ -25,7 +25,6 @@ for (const rotation of [0, 90]) {
         localStorage.setItem('easypaper_focus_scale_research', '100')
         location.hash = '#viewer?id=order'
       }, focus)
-      await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
       await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible()
       await expect(activeReader(page).locator('.trans-sentence').first()).toBeVisible()
       for (let i = 0; i < 2; i++) {

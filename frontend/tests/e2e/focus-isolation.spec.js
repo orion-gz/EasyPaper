@@ -510,7 +510,6 @@ test('real PDF hover reveals source and translation together and clears on viewe
     localStorage.setItem('easypaper_disable_hover_tooltip', 'true')
     location.hash = '#viewer?id=focus-pdf'
   })
-  await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
   const source = activeReader(page).locator('.textLayer span').filter({ hasText: 'The quick brown fox' }).first()
   await expect(source).toBeVisible({ timeout: 15000 })
   const translation = activeReader(page).locator('.trans-sentence').first()
@@ -749,7 +748,6 @@ test('viewer focus button and Shift+F toggle persisted focus without affecting t
     localStorage.setItem('easypaper_disable_hover_tooltip', 'true')
     location.hash = '#viewer?id=focus-pdf'
   })
-  await activeReader(page).locator('#workspace-reading-mode').selectOption('parallel')
   const source = activeReader(page).locator('.textLayer span').filter({ hasText: 'The quick brown fox' }).first()
   await expect(source).toBeVisible({ timeout: 15000 })
   const translation = activeReader(page).locator('.trans-sentence').first()

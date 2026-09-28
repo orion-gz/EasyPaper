@@ -1,4 +1,10 @@
 {
+  "navigation:tabs.refresh": {
+    "description": "Reload the current document viewer and its saved viewer and translation settings."
+  },
+  "navigation:tabs.refreshBusy": {
+    "description": "Refresh is postponed while translation or chat generation is active to preserve the ongoing request."
+  },
   "viewer:translation.reset": { "description": "Viewer menu action that deletes existing translations without starting a batch job." },
   "viewer:translation.full": { "description": "Viewer menu action to translate all missing pages, available in automatic mode." },
   "viewer:translation.resetConfirm": { "description": "Confirmation before deleting all document translations." },
@@ -4479,18 +4485,6 @@
   "navigation:tabs.thumbnails": {
     "description": "Workspace tabs: Thumbnails"
   },
-  "navigation:tabs.readingMode": {
-    "description": "Workspace tabs: Reading mode"
-  },
-  "navigation:tabs.original": {
-    "description": "Workspace tabs: Original"
-  },
-  "navigation:tabs.translation": {
-    "description": "Workspace tabs: Translation"
-  },
-  "navigation:tabs.parallel": {
-    "description": "Workspace tabs: Side by side"
-  },
   "navigation:tabs.fullscreen": {
     "description": "Workspace tabs: Full screen"
   },
@@ -4505,9 +4499,6 @@
   },
   "navigation:tabs.error": {
     "description": "Workspace tabs: Error"
-  },
-  "navigation:tabs.forward": {
-    "description": "Move forward in workspace navigation history."
   },
   "navigation:tabs.fitWidth": {
     "description": "Document workspace tool: Fit page width"

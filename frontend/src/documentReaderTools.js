@@ -63,10 +63,11 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
     try {
       const width = await adapter.pageWidth()
       if (!fit || !active || disposed || !width || isInteracting()) return
-      const parallel = document.getElementById('viewer-screen').dataset.readingMode === 'parallel'
       const scrollStyle = getComputedStyle(scroll)
       const pair = scroll.querySelector('.page-pair')
       const pairStyle = pair ? getComputedStyle(pair) : null
+      const translation = pair?.querySelector('.trans-page-block')
+      const parallel = translation && getComputedStyle(translation).display !== 'none' && pairStyle.flexDirection !== 'column'
       const horizontal = style => style ? ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0) : 0
       const available = scroll.clientWidth - horizontal(scrollStyle) - horizontal(pairStyle) - 6 - (parallel ? parseFloat(pairStyle?.gap) || 18 : 0)
       const zoom = Math.max(0.5, Math.min(3, available / (width * (parallel ? 2 : 1))))

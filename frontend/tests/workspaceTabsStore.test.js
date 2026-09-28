@@ -67,3 +67,10 @@ test('fit width preference is opt-in for old snapshots and persists for new read
   assert.equal(restored.active.reading.fitWidth, true)
   assert.equal(restored.active.reading.zoom, 0.9)
 })
+
+test('obsolete viewer modes and automatic outline state are discarded', () => {
+  const reading = sanitizeReading({ readingMode: 'translation', outlineOpen: true, page: 3 })
+  assert.equal('readingMode' in reading, false)
+  assert.equal('outlineOpen' in reading, false)
+  assert.equal(reading.page, 3)
+})

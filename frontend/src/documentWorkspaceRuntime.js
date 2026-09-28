@@ -25,9 +25,7 @@ export function installDocumentRuntime(adapter) {
   let active = true
   let panel = 'chat'
   let navigation = 'outline'
-  let readingMode = 'original'
-  let beforeParallel = null
-  let desiredOpen = { panel: window.parent.innerWidth >= 1100, outline: window.parent.innerWidth >= 1440 }
+  let desiredOpen = { panel: window.parent.innerWidth >= 1100, outline: false }
   let restoring = false
   let generation = 0
   let error = false
@@ -36,6 +34,8 @@ export function installDocumentRuntime(adapter) {
   let suspendedSnapshot = null
   let snapshotTimer
   let readerTools
+  let refreshing = false
+  const initialDefaultZoom = localStorage.getItem('easypaper_default_zoom') || '1.5'
 
   const tabs = document.createElement('div')
   tabs.className = 'document-panel-tabs'
@@ -158,42 +158,11 @@ export function installDocumentRuntime(adapter) {
     button.type = 'button'
     button.dataset.navigation = name
     button.dataset.i18n = `navigation:tabs.${name}`
-    button.textContent = { outline: t('navigation:tabs.outline'), thumbnails: t('navigation:tabs.thumbnails'), original: t('navigation:tabs.original'), translation: t('navigation:tabs.translation'), parallel: t('navigation:tabs.parallel') }[name]
+    button.textContent = { outline: t('navigation:tabs.outline'), thumbnails: t('navigation:tabs.thumbnails') }[name]
     button.addEventListener('click', () => setNavigation(name))
     outlineTabs.append(button)
   }
-  const forward = document.createElement('button')
-  forward.type = 'button'
-  forward.className = 'icon-btn'
-  forward.id = 'workspace-forward-btn'
-  forward.innerHTML = icon('arrowRight', 16)
-  forward.setAttribute('aria-label', t('navigation:tabs.forward'))
-  forward.addEventListener('click', () => notifyWorkspace('history', 'forward'))
-  $('back-btn').after(forward)
-  const reading = document.createElement('select')
-  reading.id = 'workspace-reading-mode'
-  reading.dataset.customSelectReady = 'true'
-  reading.setAttribute('aria-label', t('navigation:tabs.readingMode'))
-  for (const name of ['original', 'translation', 'parallel']) reading.append(new Option({ outline: t('navigation:tabs.outline'), thumbnails: t('navigation:tabs.thumbnails'), original: t('navigation:tabs.original'), translation: t('navigation:tabs.translation'), parallel: t('navigation:tabs.parallel') }[name], name))
-  $('viewer-topbar').querySelector('.topbar-right').prepend(reading)
-  function setReadingMode(next) {
-    if (next === 'parallel' && readingMode !== 'parallel') {
-      beforeParallel = { panel: !sidebar.classList.contains('hidden'), outline: !outline.classList.contains('hidden') }
-      adapter.closePanels()
-    } else if (readingMode === 'parallel' && next !== 'parallel' && beforeParallel) {
-      adapter.setPanels(beforeParallel)
-      beforeParallel = null
-    }
-    readingMode = next
-    reading.value = next
-    viewer.dataset.readingMode = next
-    readerTools?.refresh()
-    publishSnapshot()
-  }
-  for (const option of reading.options) option.dataset.i18n = `navigation:tabs.${option.value}`
-  reading.dataset.i18nAriaLabel = 'navigation:tabs.readingMode'
-  forward.dataset.i18nAriaLabel = 'navigation:tabs.forward'
-  reading.addEventListener('change', () => setReadingMode(reading.value))
+  $('back-btn').remove()
   const floating = $('floating-scroll-nav')
   floating.append($('viewer-topbar').querySelector('.page-display'))
   const zoomGroup = $('viewer-topbar').querySelector('.view-group')
@@ -213,6 +182,16 @@ export function installDocumentRuntime(adapter) {
   })
   floating.append(fullscreen)
   readerTools = installReaderTools(adapter, { scroll, toolbar: $('viewer-topbar').querySelector('.topbar-right'), floating, changed: publishSnapshot })
+  const refreshButton = document.createElement('button')
+  refreshButton.type = 'button'
+  refreshButton.id = 'viewer-refresh-btn'
+  refreshButton.className = 'icon-btn'
+  refreshButton.innerHTML = icon('refreshCw', 16)
+  refreshButton.dataset.i18nAriaLabel = refreshButton.dataset.i18nTitle = 'navigation:tabs.refresh'
+  refreshButton.setAttribute('aria-label', t('navigation:tabs.refresh'))
+  refreshButton.title = t('navigation:tabs.refresh')
+  refreshButton.addEventListener('click', () => notifyWorkspace('refresh'))
+  $('viewer-topbar').querySelector('.topbar-right').prepend(refreshButton)
   const refreshResources = () => { if (active && panel !== 'chat') showResources() }
   document.addEventListener('easypaper:resources-changed', refreshResources)
   const refreshStorage = event => { if (event.key?.includes(adapter.state.sessionId)) refreshResources() }
@@ -220,13 +199,14 @@ export function installDocumentRuntime(adapter) {
 
   function snapshot() {
     if (!active && suspendedSnapshot) return suspendedSnapshot
-    const page = adapter.state.currentPage
-    const pair = scroll.querySelector(`.page-pair[data-page="${page}"], .article-unit[data-unit-index="${page}"]`)
-    const offset = pair ? (scroll.getBoundingClientRect().top - pair.getBoundingClientRect().top) / pair.getBoundingClientRect().height : 0
-    return sanitizeReading({ page, offset, fitWidth: readerTools?.fit() ?? false, zoom: adapter.state.zoom, readingMode, panel, panelOpen: beforeParallel?.panel ?? !sidebar.classList.contains('hidden'), outlineOpen: beforeParallel?.outline ?? !outline.classList.contains('hidden'), navigation, panelWidth: parseFloat(sidebar.style.width) || 360 })
+    const viewportTop = scroll.getBoundingClientRect().top
+    const pair = [...scroll.querySelectorAll('.page-pair, .article-unit')].find(item => item.getBoundingClientRect().bottom > viewportTop)
+    const page = pair ? Number(pair.dataset.page ?? pair.dataset.unitIndex) || adapter.state.currentPage : adapter.state.currentPage
+    const offset = pair ? Math.max(0, Math.min(1, (viewportTop - pair.getBoundingClientRect().top) / pair.getBoundingClientRect().height)) : 0
+    return sanitizeReading({ page, offset, fitWidth: readerTools?.fit() ?? false, zoom: adapter.state.zoom, panel, panelOpen: !sidebar.classList.contains('hidden'), navigation, panelWidth: parseFloat(sidebar.style.width) || 360 })
   }
   function publishSnapshot() {
-    if (restoring || !window.__easypaperDocument?.ready || !active) return
+    if (restoring || refreshing || !window.__easypaperDocument?.ready || !active) return
     clearTimeout(snapshotTimer)
     snapshotTimer = setTimeout(() => {
       const value = snapshot()
@@ -251,7 +231,7 @@ export function installDocumentRuntime(adapter) {
   panelResize.observe(sidebar)
   const panelObserver = new MutationObserver(() => {
     updateLayout()
-    if (!restoring && active && readingMode !== 'parallel') {
+    if (!restoring && active) {
       desiredOpen = { panel: !sidebar.classList.contains('hidden'), outline: !outline.classList.contains('hidden') }
       if (window.parent.innerWidth < 1100 && desiredOpen.panel && desiredOpen.outline) {
         const openedOutline = !previousOpen.outline
@@ -301,6 +281,61 @@ export function installDocumentRuntime(adapter) {
       await adapter.flush()
       publishSnapshot()
     },
+    async prepareRefresh() {
+      if (refreshing) return null
+      if (runtime.busy()) { adapter.toast(t('navigation:tabs.refreshBusy'), 'info'); return null }
+      refreshing = true
+      refreshButton.disabled = true
+      refreshButton.setAttribute('aria-busy', 'true')
+      clearTimeout(snapshotTimer)
+      try {
+        await runtime.flush()
+        // A scroll translation or chat may have started while edits were saved.
+        if (runtime.busy()) {
+          runtime.cancelRefresh()
+          adapter.toast(t('navigation:tabs.refreshBusy'), 'info')
+          return null
+        }
+        const reading = snapshot()
+        const defaultZoom = localStorage.getItem('easypaper_default_zoom') || '1.5'
+        if (defaultZoom !== initialDefaultZoom) {
+          reading.zoom = sanitizeReading({ zoom: defaultZoom }).zoom
+          reading.fitWidth = false
+        }
+        const draft = {
+          text: $('chat-input').value,
+          quotedText: structuredClone(adapter.state.quotedText),
+          quotedImage: adapter.state.quotedImage,
+          quotedImagePage: adapter.state.quotedImagePage,
+        }
+        viewer.inert = true
+        readerTools.setActive(false)
+        return { reading, draft }
+      } catch (error) {
+        runtime.cancelRefresh()
+        throw error
+      }
+    },
+    cancelRefresh() {
+      refreshing = false
+      refreshButton.disabled = false
+      refreshButton.removeAttribute('aria-busy')
+      viewer.inert = false
+      readerTools.setActive(active)
+    },
+    restoreDraft(draft) {
+      if (!draft) return
+      Object.assign(adapter.state, { quotedText: draft.quotedText, quotedImage: draft.quotedImage, quotedImagePage: draft.quotedImagePage })
+      $('chat-input').value = draft.text || ''
+      $('chat-input').dispatchEvent(new Event('input', { bubbles: true }))
+      const quote = typeof draft.quotedText === 'string' ? draft.quotedText : draft.quotedText?.text
+      $('chat-quote-text').textContent = quote || ''
+      $('chat-quote-text').classList.toggle('hidden', Boolean(draft.quotedImage))
+      if (draft.quotedImage) $('chat-quote-img').src = draft.quotedImage
+      else $('chat-quote-img').removeAttribute('src')
+      $('chat-quote-img').classList.toggle('hidden', !draft.quotedImage)
+      $('chat-quote-area').classList.toggle('hidden', !quote && !draft.quotedImage)
+    },
     syncScale: scale => adapter.uiScale(scale),
     async syncAppearance(light, locale) {
       document.body.classList.toggle('light-theme', light)
@@ -340,19 +375,17 @@ export function installDocumentRuntime(adapter) {
           if (Math.abs(adapter.state.zoom - value.zoom) > 0.001) await adapter.zoom(value.zoom)
           setPanel(value.panel)
           setNavigation(value.navigation)
-          setReadingMode(value.readingMode)
-          desiredOpen = { panel: value.panelOpen, outline: value.outlineOpen }
-          if (readingMode === 'parallel') beforeParallel = { ...desiredOpen }
+          desiredOpen = { panel: value.panelOpen, outline: false }
           sidebar.style.width = `${value.panelWidth}px`
           adapter.goToPage(Math.min(value.page, adapter.state.totalPages))
           const pair = scroll.querySelector(`.page-pair[data-page="${value.page}"], .article-unit[data-unit-index="${value.page}"]`)
           if (pair) scroll.scrollTop += pair.offsetHeight * value.offset
         } else {
           readerTools.restore(true)
-          setPanel('chat'); setNavigation('outline'); setReadingMode('original')
+          setPanel('chat'); setNavigation('outline')
         }
         if (window.parent.innerWidth < 1100 && desiredOpen.panel) desiredOpen.outline = false
-        adapter.setPanels(readingMode === 'parallel' ? { panel: false, outline: false } : desiredOpen)
+        adapter.setPanels(desiredOpen)
       } finally {
         updateLayout()
         await readerTools.fitNow()
