@@ -502,6 +502,7 @@ const settingsCategoryMeta = {
   'tab-general': [() => t('settings:categoryGeneral'), () => t('settings:categoryGeneralDescription')],
   'tab-translation': [() => t('settings:categoryTranslation'), () => t('settings:categoryTranslationDescription')],
   'tab-viewer': [() => t('settings:categoryViewer'), () => t('settings:categoryViewerDescription')],
+  'tab-shortcuts': [() => t('settings:categoryShortcuts'), () => t('settings:categoryShortcutsDescription')],
   'tab-automation': [() => t('settings:categoryAutomation'), () => t('settings:categoryAutomationDescription')],
   'tab-model': [() => t('settings:categoryModel'), () => t('settings:categoryModelDescription')],
   'tab-account': [() => t('settings:categoryAccount'), () => t('settings:categoryAccountDescription')],

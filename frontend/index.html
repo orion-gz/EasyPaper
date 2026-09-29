@@ -919,6 +919,7 @@
           <button class="tab-btn active" id="settings-nav-general" data-tab="tab-general" data-i18n="settings:categoryGeneral" role="tab" aria-controls="tab-general" aria-selected="true">General</button>
           <button class="tab-btn" id="settings-nav-translation" data-tab="tab-translation" data-i18n="settings:categoryTranslation" role="tab" aria-controls="tab-translation" aria-selected="false" tabindex="-1">Translation</button>
           <button class="tab-btn" id="settings-nav-viewer" data-tab="tab-viewer" data-i18n="settings:categoryViewer" role="tab" aria-controls="tab-viewer" aria-selected="false" tabindex="-1">Viewer</button>
+          <button class="tab-btn" id="settings-nav-shortcuts" data-tab="tab-shortcuts" data-i18n="settings:categoryShortcuts" role="tab" aria-controls="tab-shortcuts" aria-selected="false" tabindex="-1">Shortcuts</button>
           <button class="tab-btn" id="settings-nav-automation" data-tab="tab-automation" data-i18n="settings:categoryAutomation" role="tab" aria-controls="tab-automation" aria-selected="false" tabindex="-1">Generation &amp; Automation</button>
           <button class="tab-btn" id="settings-nav-model" data-tab="tab-model" data-i18n="settings:categoryModel" role="tab" aria-controls="tab-model" aria-selected="false" tabindex="-1">AI &amp; Models</button>
           <button class="tab-btn" id="settings-nav-account" data-tab="tab-account" data-i18n="settings:categoryAccount" role="tab" aria-controls="tab-account" aria-selected="false" tabindex="-1">Account &amp; Security</button>
@@ -1144,6 +1145,65 @@
 
       <div id="tab-viewer" class="tab-pane" role="tabpanel" aria-labelledby="settings-nav-viewer">
         <div class="modal-form" data-settings-category-body="viewer"></div>
+      </div>
+
+      <div id="tab-shortcuts" class="tab-pane" role="tabpanel" aria-labelledby="settings-nav-shortcuts">
+        <div class="modal-form shortcut-settings">
+          <p class="shortcut-note" data-i18n="settings:shortcutsBrowserNote">Ctrl/Cmd means Ctrl on Windows and Linux or Command on macOS. Browsers may handle some reserved shortcuts first. Shortcuts work in their respective screens; memo shortcuts take priority while editing. Workspace shortcuts are disabled while a modal is open.</p>
+          <section class="shortcut-group" aria-labelledby="shortcut-workspace-heading">
+            <h4 id="shortcut-workspace-heading" data-i18n="settings:shortcutsWorkspace">Workspace and tabs</h4>
+            <dl>
+              <div><dt data-i18n="settings:shortcutSidebar">Collapse or expand sidebar</dt><dd><kbd>Ctrl/Cmd+B</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutMode">Switch research or general document mode</dt><dd><kbd>Ctrl/Cmd+Shift+M</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutCloseTab">Close active tab</dt><dd><kbd>Ctrl/Cmd+W</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutNextTab">Next tab</dt><dd><kbd>Ctrl/Cmd+Tab</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutPreviousTab">Previous tab</dt><dd><kbd>Ctrl/Cmd+Shift+Tab</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutNumberTab">Open tab 1–9</dt><dd><kbd>Ctrl/Cmd+1~9</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutTabFocus">Move across the tab bar</dt><dd><kbd>←</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutTabReorder">Reorder a tab in the tab bar</dt><dd><kbd>Alt+←/→</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutDeleteTab">Close a tab in the tab bar</dt><dd><kbd>Delete</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutModeFocus">Switch mode on a mode button</dt><dd><kbd>←</kbd> <kbd>→</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutSettingsFocus">Move between settings categories</dt><dd><kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd></dd></div>
+            </dl>
+          </section>
+          <section class="shortcut-group" aria-labelledby="shortcut-viewer-heading">
+            <h4 id="shortcut-viewer-heading" data-i18n="settings:shortcutsViewer">Document viewer</h4>
+            <dl>
+              <div><dt data-i18n="settings:shortcutFind">Find in document</dt><dd><kbd>Ctrl/Cmd+F</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutFindResults">Next or previous search result</dt><dd><kbd>Enter</kbd> <kbd>Shift+Enter</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutCloseFind">Close search</dt><dd><kbd>Esc</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutFocusMode">Toggle Focus mode</dt><dd><kbd>Shift+F</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutFocusSentence">Move between pinned sentences</dt><dd><kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutFocusRelease">Release pinned sentence</dt><dd><kbd>Esc</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutViewerUndo">Undo deleted annotation or memo</dt><dd><kbd>Ctrl/Cmd+Z</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutToolTabs">Move between document tool tabs</dt><dd><kbd>←</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutChatSend">Send chat message or insert line break</dt><dd><kbd>Enter</kbd> <kbd>Shift+Enter</kbd></dd></div>
+            </dl>
+          </section>
+          <section class="shortcut-group" aria-labelledby="shortcut-library-heading">
+            <h4 id="shortcut-library-heading" data-i18n="settings:shortcutsLibrary">Library</h4>
+            <dl>
+              <div><dt data-i18n="settings:shortcutHistory">Go back or forward</dt><dd><kbd>Ctrl/Cmd+[</kbd> <kbd>Ctrl/Cmd+]</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutLibraryUndo">Undo recent action</dt><dd><kbd>Ctrl/Cmd+Z</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutLibraryMove">Cut and paste selection</dt><dd><kbd>Ctrl/Cmd+X</kbd> <kbd>Ctrl/Cmd+V</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutLibraryDelete">Delete selected documents or folder</dt><dd><kbd>Delete</kbd> <kbd>Backspace</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutLibraryRename">Rename selected folder</dt><dd><kbd>F2</kbd> <kbd>Enter</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutLibraryClear">Clear selection or cut state</dt><dd><kbd>Esc</kbd></dd></div>
+            </dl>
+          </section>
+          <section class="shortcut-group" aria-labelledby="shortcut-memo-heading">
+            <h4 id="shortcut-memo-heading" data-i18n="settings:shortcutsMemo">Memo editing</h4>
+            <dl>
+              <div><dt data-i18n="settings:shortcutMemoInline">Bold, italic, link, or inline code</dt><dd><kbd>Ctrl/Cmd+B</kbd> <kbd>Ctrl/Cmd+I</kbd> <kbd>Ctrl/Cmd+K</kbd> <kbd>Ctrl/Cmd+E</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutMemoBlock">Strikethrough or code block</dt><dd><kbd>Ctrl/Cmd+Shift+X</kbd> <kbd>Ctrl/Cmd+Shift+C</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutMemoList">Numbered, bullet, task, or quote list</dt><dd><kbd>Ctrl/Cmd+Shift+7</kbd> <kbd>Ctrl/Cmd+Shift+8</kbd> <kbd>Ctrl/Cmd+Shift+L</kbd> <kbd>Ctrl/Cmd+Shift+.</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutMemoIndent">Indent or outdent</dt><dd><kbd>Tab</kbd> <kbd>Shift+Tab</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutMemoTask">Toggle task or finish editing</dt><dd><kbd>Ctrl/Cmd+Enter</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutMemoContinue">Continue a list automatically</dt><dd><kbd>Enter</kbd></dd></div>
+              <div><dt data-i18n="settings:shortcutMemoCancel">Cancel editing</dt><dd><kbd>Esc</kbd></dd></div>
+            </dl>
+          </section>
+        </div>
       </div>
 
       <div id="tab-automation" class="tab-pane" role="tabpanel" aria-labelledby="settings-nav-automation">
