@@ -1301,6 +1301,7 @@ def db_list_assistant_chat_sessions(username: str, document_mode: Optional[str] 
         sessions.append({
             "doc_id": row["doc_id"],
             "title": metadata.get("title") or row["filename"],
+            "read": metadata.get("read") is True,
             "created_at": row["created_at"],
             "last_message_at": row["last_message_at"],
             "document_mode": row["document_mode"],

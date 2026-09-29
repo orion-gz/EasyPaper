@@ -108,30 +108,33 @@
 .notes-filter-tabs {
   flex-shrink: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 16px 12px;
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 0 8px 12px;
   border-bottom: 1px solid var(--border);
 }
 .notes-filter-tab-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px 4px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: 12.5px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .notes-filter-tab-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .notes-filter-tab-btn.active { background: var(--control-accent-soft); color: var(--control-accent-text); }
 .notes-filter-tab-btn span {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: inherit;
   opacity: 0.8;
