@@ -5793,6 +5793,33 @@ if (sidebarNav) {
   })
 }
 
+// 표시되는 사이드바 순서로 이동하며, 입력 중에도 명시적인 Ctrl 조합은 허용한다.
+document.addEventListener('keydown', event => {
+  if (event.defaultPrevented || event.isComposing || !event.ctrlKey
+    || event.metaKey || event.altKey || !libraryScreen.classList.contains('active')
+    || document.querySelector('.modal-overlay:not(.hidden), [role="dialog"][aria-modal="true"]:not(.hidden)')) return
+
+  const buttons = Array.from(sidebarNav?.querySelectorAll('.sidebar-nav-item[data-page]') || [])
+    .filter(button => !button.disabled && button.getClientRects().length > 0)
+  if (!buttons.length) return
+
+  let targetIndex
+  if (event.key === 'Tab') {
+    const currentIndex = buttons.findIndex(button => button.dataset.page === state.currentWorkspacePage)
+    targetIndex = (currentIndex + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length
+  } else if (!event.shiftKey && /^[1-9]$/.test(event.key)) {
+    targetIndex = Number(event.key) - 1
+  } else {
+    return
+  }
+
+  const target = buttons[targetIndex]
+  if (!target) return
+  event.preventDefault()
+  target.click()
+  target.focus({ preventScroll: true })
+})
+
 // 사이드바 Settings/로그아웃은 기존 로직(비밀번호 변경 모달 / 로그아웃)을 그대로
 // 재사용한다 - 새 UI 진입점만 추가하고 동작 자체는 기존 global-settings-btn/
 // global-logout-btn 클릭 핸들러에 위임한다.
