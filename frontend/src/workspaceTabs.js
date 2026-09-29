@@ -109,7 +109,7 @@ export function createWorkspaceTabs(adapter) {
   function render() {
     const focusedId = tablist.contains(document.activeElement) ? document.activeElement.closest('[data-tab-id]')?.dataset.tabId : null
     tablist.replaceChildren()
-    for (const tab of store.tabs) {
+    for (const [index, tab] of store.tabs.entries()) {
       const item = document.createElement('div')
       item.className = 'workspace-tab' + (tab.id === store.activeTabId ? ' active' : '')
       item.dataset.tabId = tab.id
@@ -118,6 +118,7 @@ export function createWorkspaceTabs(adapter) {
       button.type = 'button'
       button.id = `workspace-tab-${encodeURIComponent(tab.id)}`
       button.setAttribute('role', 'tab')
+      if (index < 9) button.setAttribute('aria-keyshortcuts', `Control+${index + 1}`)
       button.setAttribute('aria-selected', String(tab.id === store.activeTabId))
       button.setAttribute('aria-controls', outlet.id)
       button.tabIndex = tab.id === store.activeTabId ? 0 : -1
@@ -176,6 +177,13 @@ export function createWorkspaceTabs(adapter) {
     url.searchParams.set('documentRuntime', '1')
     url.searchParams.set('workspaceMode', adapter.mode())
     url.hash = tab.route || `#viewer?id=${encodeURIComponent(tab.target)}`
+    // Keyboard events inside a document iframe do not bubble to the host.
+    frame.addEventListener('load', () => {
+      frame.contentDocument?.addEventListener('keydown', event => {
+        if (record.closed || record.store !== store || visibleId !== tab.id) return
+        handleTabShortcut(event)
+      })
+    })
     frame.src = url.href
     outlet.append(frame)
     return record
@@ -256,6 +264,27 @@ export function createWorkspaceTabs(adapter) {
       else enqueue(async () => { await activate(store.tabs[next].id); tablist.querySelector('[aria-selected="true"]')?.focus() })
     }
   })
+  function handleTabShortcut(event) {
+    if (event.defaultPrevented || event.isComposing || !event.ctrlKey
+      || event.metaKey || event.altKey || shell.hidden || !store?.tabs.length) return
+    const sourceDocument = event.target?.ownerDocument || document
+    const modalSelector = '.modal-overlay:not(.hidden), dialog[open]'
+    if (document.querySelector(modalSelector) || sourceDocument.querySelector(modalSelector)) return
+    const cycling = event.key === 'Tab'
+    const index = !event.shiftKey && /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : -1
+    if (!cycling && !store.tabs[index]) return
+    event.preventDefault()
+    const direction = event.shiftKey ? -1 : 1
+    enqueue(async () => {
+      if (shell.hidden || !store?.tabs.length) return
+      const current = store.tabs.findIndex(tab => tab.id === store.activeTabId)
+      const target = store.tabs[cycling ? (current + direction + store.tabs.length) % store.tabs.length : index]
+      if (!target) return
+      if (target.id !== store.activeTabId) await activate(target.id)
+      tablist.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true })
+    })
+  }
+  document.addEventListener('keydown', handleTabShortcut)
   document.addEventListener('keydown', event => {
     if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'f' || shell.hidden) return
     const runtime = frames.get(visibleId)?.frame.contentWindow?.__easypaperDocument
