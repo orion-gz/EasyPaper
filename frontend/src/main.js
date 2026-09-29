@@ -3002,20 +3002,27 @@ async function checkAuthentication() {
           }
           await flushSaveLastReadPage()
         },
-        showPage: async (page, preserve) => {
+        showPage: async (page, preserve, isCurrent) => {
           loginScreen.classList.remove('active')
           libraryScreen.classList.add('active')
           viewerScreen.classList.remove('active')
           globalLogoutBtn.classList.add('hidden')
           globalSettingsBtn.classList.add('hidden')
           $('global-theme-toggle')?.classList.add('hidden')
-          await renderWorkspacePage(page, { pushState: false, preserve })
-          startLibraryPolling()
+          await renderWorkspacePage(page, { pushState: false, preserve, isCurrent })
+          if (isCurrent()) startLibraryPolling()
         },
-        openChat: async id => { if (id) await openChatDrawer(await fetchLibraryDoc(id)) },
-        openCompare: async hash => {
+        openChat: async (id, isCurrent) => {
+          if (!id) return
+          const doc = await fetchLibraryDoc(id)
+          if (isCurrent()) await openChatDrawer(doc)
+        },
+        openCompare: async (hash, isCurrent) => {
           const ids = new URLSearchParams(hash.split('?')[1]).get('ids')?.split(',') || []
-          if (ids.length >= COMPARE_MIN_DOCS && ids.length <= COMPARE_MAX_DOCS) await openCompareScreen(await Promise.all(ids.map(fetchLibraryDoc)), false, true)
+          if (ids.length >= COMPARE_MIN_DOCS && ids.length <= COMPARE_MAX_DOCS) {
+            const docs = await Promise.all(ids.map(fetchLibraryDoc))
+            if (isCurrent()) await openCompareScreen(docs, false, true)
+          }
         },
       })
       await tabWorkspace.start(state.username, workspaceModeController.getMode())
@@ -5791,7 +5798,7 @@ async function showWorkspacePage(pageId, options = {}) {
   if (tabWorkspace) return tabWorkspace.openPage(pageId, options)
   return renderWorkspacePage(pageId, options)
 }
-async function renderWorkspacePage(pageId, { pushState = true, preserve = false } = {}) {
+async function renderWorkspacePage(pageId, { pushState = true, preserve = false, isCurrent = () => true } = {}) {
   if (!WORKSPACE_PAGES.includes(pageId)) pageId = 'dashboard'
   if (state.currentWorkspacePage === 'library' && pageId !== 'library') {
     const saved = workspaceLibraryState[workspaceModeController.getMode()]
@@ -5806,7 +5813,6 @@ async function renderWorkspacePage(pageId, { pushState = true, preserve = false 
   // openChatDrawer()를 부르는 경우엔 그냥 무해한 no-op이다.
   if (!tabWorkspace && (pageId !== 'chats' || state.currentWorkspacePage !== 'chats')) closeChatDrawer()
   state.currentWorkspacePage = pageId
-  await loadFeatureNamespaces(pageId === 'chats' ? 'chat' : pageId)
 
   if (sidebarNav) {
     sidebarNav.querySelectorAll('.sidebar-nav-item[data-page]').forEach(btn => {
@@ -5826,6 +5832,9 @@ async function renderWorkspacePage(pageId, { pushState = true, preserve = false 
     history.pushState({ screen: 'library', page: pageId }, '', `#${pageId}`)
   }
 
+  await loadFeatureNamespaces(pageId === 'chats' ? 'chat' : pageId)
+  if (!isCurrent()) return
+
   // Notes synchronizes annotations on entry; dashboard and history read fresh activity.
   if (preserve && !['library', 'chats', 'notes', 'dashboard', 'history'].includes(pageId)) return
   if (pageId === 'library') {
@@ -5835,6 +5844,7 @@ async function renderWorkspacePage(pageId, { pushState = true, preserve = false 
     activeStatusFilter = saved.status
     syncLibraryTabUI(saved.tab, { resetFilters: false })
     await renderLibrary()
+    if (!isCurrent()) return
     if (librarySearchInput && saved.search) {
       librarySearchInput.value = saved.search
       librarySearchInput.dispatchEvent(new Event('input'))
@@ -5842,17 +5852,21 @@ async function renderWorkspacePage(pageId, { pushState = true, preserve = false 
     if (preserve && saved.detail) openLibraryDetailPanel(saved.detail)
   } else if (pageId === 'chats') {
     const { renderAiChatsPage } = await import('./pages/aiChatsPage.js')
+    if (!isCurrent()) return
     await renderAiChatsPage(workspaceModeController.getMode())
   } else if (pageId === 'notes') {
     const { renderNotesPage } = await import('./pages/notesPage.js')
+    if (!isCurrent()) return
     await renderNotesPage(workspaceModeController.getMode())
   } else if (pageId === 'graph') {
     await renderLibraryGraphTab()
   } else if (pageId === 'dashboard') {
     const { renderDashboardPage } = await import('./pages/dashboardPage.js')
+    if (!isCurrent()) return
     await renderDashboardPage(workspaceModeController.getMode())
   } else if (pageId === 'history') {
     const { renderReadingHistoryPage } = await import('./pages/readingHistoryPage.js')
+    if (!isCurrent()) return
     await renderReadingHistoryPage(workspaceModeController.getMode())
   }
 }
