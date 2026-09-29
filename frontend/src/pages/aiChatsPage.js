@@ -134,10 +134,12 @@ export async function renderAiChatsPage(documentMode = 'research') {
     { id: 'all', label: '전체' },
     { id: 'active', label: '활성' },
     { id: 'recent', label: '최근 대화' },
+    { id: 'read', label: '읽음' },
   ]
 
   function tabMatches(tabId, session) {
     if (tabId === 'all') return true
+    if (tabId === 'read') return session.read === true
     const t = session.last_message_at ? new Date(session.last_message_at).getTime() : 0
     const diff = Date.now() - t
     if (tabId === 'recent') return diff <= RECENT_MS
