@@ -1159,6 +1159,9 @@ function showViewer() {
   libraryScreen.classList.remove('active')
   if (compareScreen) compareScreen.classList.remove('active')
   closeChatDrawer()
+  chatSidebar?.classList.add('hidden')
+  chatResizer?.classList.add('hidden')
+  chatToggleBtn?.classList.remove('active')
   viewerScreen.classList.add('active')
   // 글로벌 테마 토글 숨김 (뷰어 상단바 테마 버튼 사용)
   const globalToggle = $('global-theme-toggle')
@@ -18118,14 +18121,12 @@ async function handleRouting() {
     if (hash.startsWith('#viewer?id=')) {
       const params = new URLSearchParams(hash.slice('#viewer?'.length))
       const docId = params.get('id')
-      const wantChatOpen = params.get('chat') === '1'
       const annotationTarget = viewerAnnotationTargetFromParams(params)
       activeViewerAnnotationTarget = annotationTarget
       if (docId) {
         if (state.sessionId === docId && viewerScreen.classList.contains('active')) {
           console.log("[Router] Viewer already active for document:", docId)
           if (annotationTarget) await navigateToViewerAnnotation(annotationTarget)
-          if (wantChatOpen) openChatSidebar()
           return
         }
         console.log("[Router] Routing to viewer for document:", docId)
@@ -18133,7 +18134,6 @@ async function handleRouting() {
         if (doc) {
           await openFromLibrary(doc, false)
           if (annotationTarget && state.sessionId === docId) await navigateToViewerAnnotation(annotationTarget)
-          if (wantChatOpen) openChatSidebar()
           return
         }
       }

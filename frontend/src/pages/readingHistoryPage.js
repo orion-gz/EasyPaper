@@ -1058,16 +1058,16 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     appendTimelineGroups()
   })
 
-  const openDoc = (docId, type) => {
+  const openDoc = (docId) => {
     if (!docId) return
-    location.hash = 'viewer?id=' + encodeURIComponent(docId) + (type === 'question' ? '&chat=1' : '')
+    location.hash = 'viewer?id=' + encodeURIComponent(docId)
   }
 
   timelineListEl.addEventListener('click', (event) => {
     const entry = event.target.closest('.rh-timeline-entry')
     if (!entry) return
     if (entry.dataset.isDeleted === 'true') return
-    openDoc(entry.dataset.docId, entry.dataset.type)
+    openDoc(entry.dataset.docId)
   })
   timelineListEl.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return
