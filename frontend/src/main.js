@@ -502,6 +502,7 @@ const settingsCategoryMeta = {
   'tab-general': [() => t('settings:categoryGeneral'), () => t('settings:categoryGeneralDescription')],
   'tab-translation': [() => t('settings:categoryTranslation'), () => t('settings:categoryTranslationDescription')],
   'tab-viewer': [() => t('settings:categoryViewer'), () => t('settings:categoryViewerDescription')],
+  'tab-shortcuts': [() => t('settings:categoryShortcuts'), () => t('settings:categoryShortcutsDescription')],
   'tab-automation': [() => t('settings:categoryAutomation'), () => t('settings:categoryAutomationDescription')],
   'tab-model': [() => t('settings:categoryModel'), () => t('settings:categoryModelDescription')],
   'tab-account': [() => t('settings:categoryAccount'), () => t('settings:categoryAccountDescription')],
@@ -2989,6 +2990,12 @@ async function checkAuthentication() {
       lastWorkspaceMode = workspaceModeController.getMode()
       tabWorkspace ||= createWorkspaceTabs({
         mode: () => workspaceModeController.getMode(),
+        toggleSidebar: () => setSidebarCollapsed(!appSidebar.classList.contains('collapsed')),
+        toggleMode: () => {
+          const next = workspaceModeController.getMode() === 'research' ? 'general' : 'research'
+          const option = document.querySelector(`button[data-workspace-mode="${next}"]`)
+          if (option && !option.hidden && !option.disabled) workspaceModeController.setMode(next)
+        },
         pageLabel: page => workspaceModeController.getPageLabel(page),
         locale: getLocale,
         toast: showToast, upload: openDocumentSourceModal, authExpired: showLogin,
@@ -5885,6 +5892,7 @@ if (appSidebar) {
   setSidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true')
 }
 if (sidebarToggleBtn) {
+  sidebarToggleBtn.setAttribute('aria-keyshortcuts', 'Control+B Meta+B')
   sidebarToggleBtn.addEventListener('click', () => {
     setSidebarCollapsed(!appSidebar.classList.contains('collapsed'))
   })

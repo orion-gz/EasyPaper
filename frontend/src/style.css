@@ -7772,6 +7772,22 @@ body.light-theme .chat-drawer {
   line-height: 1.5;
 }
 
+.shortcut-settings .shortcut-note {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.shortcut-group { padding: 14px 0; border-bottom: 1px solid var(--border); }
+.shortcut-group:last-child { border-bottom: 0; }
+.shortcut-group h4 { margin: 0 0 8px; color: var(--text-primary); font-size: 13px; }
+.shortcut-group dl { margin: 0; }
+.shortcut-group dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; }
+.shortcut-group dt { color: var(--text-primary); font-size: 12.5px; }
+.shortcut-group dd { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px; margin: 0; text-align: right; }
+.shortcut-group kbd { white-space: nowrap; padding: 3px 6px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--bg-elevated); color: var(--text-secondary); font: 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; }
+
 .settings-content .modal-form {
   padding: 12px 28px 24px;
   gap: 0;
@@ -7983,6 +7999,9 @@ body.light-theme .chat-drawer {
   .settings-category-header {
     padding: 20px 18px 14px;
   }
+
+  .shortcut-group dl > div { flex-direction: column; gap: 5px; }
+  .shortcut-group dd { justify-content: flex-start; text-align: left; }
 
   .settings-content .modal-form {
     padding: 14px 18px 22px;

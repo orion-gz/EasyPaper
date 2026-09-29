@@ -172,7 +172,8 @@ test('설정 카테고리를 키보드로 전환하고 좁은 화면에서 상�
   await page.locator('#sidebar-settings-btn').click()
 
   const categoryButtons = page.locator('.settings-nav .tab-btn')
-  await expect(categoryButtons).toHaveCount(8)
+  await expect(categoryButtons).toHaveCount(9)
+  await expect(page.locator('#settings-nav-shortcuts')).toHaveText('단축키')
   await expect(page.locator('#settings-nav-general')).toHaveAttribute('aria-selected', 'true')
 
   await page.locator('#settings-nav-general').focus()
