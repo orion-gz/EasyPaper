@@ -648,13 +648,12 @@ function attachHandlers(root) {
     })
   })
 
-  // 연구 타임라인 항목 → 해당 논문 열기(질문 이벤트는 채팅까지 함께 열기).
+  // 연구 타임라인 항목 → 해당 논문 열기.
   root.querySelectorAll('.dash-timeline-item[data-doc-id]').forEach(elm => {
     elm.addEventListener('click', () => {
       const id = elm.dataset.docId
       if (!id || elm.dataset.isDeleted === 'true') return
-      const wantChat = elm.dataset.type === 'question'
-      location.hash = `viewer?id=${encodeURIComponent(id)}${wantChat ? '&chat=1' : ''}`
+      location.hash = `viewer?id=${encodeURIComponent(id)}`
     })
   })
 
