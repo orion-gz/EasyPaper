@@ -89,21 +89,20 @@ export function createWorkspaceTabs(adapter) {
     pending.then(clear, error => { clear(); report(error) })
     return pending
   }
-  async function leaveCurrent({ waitForSave = false } = {}) {
+  async function leaveCurrent() {
     const record = frames.get(visibleId)
     if (record) {
       const runtime = record.frame.contentWindow?.__easypaperDocument
       if (runtime?.ready) {
-        const saving = flushFrame(record, runtime)
+        flushFrame(record, runtime)
         store.update(visibleId, { reading: runtime.snapshot(), title: runtime.title() })
         await runtime.setActive(false)
-        if (waitForSave) await saving
       }
       record.frame.hidden = true
     } else if (visibleId) {
       const page = document.querySelector('.workspace-page.active')
       if (page) pageScroll.set(visibleId, page.scrollTop)
-      await adapter.flushPage()
+      Promise.resolve(adapter.flushPage()).catch(report)
     }
   }
   function render() {
@@ -207,15 +206,23 @@ export function createWorkspaceTabs(adapter) {
     } else {
       library.classList.add('active')
       const restored = initializedPages.has(tab.id) && document.getElementById(`page-${tab.target}`)?.dataset.renderedMode === adapter.mode()
-      await adapter.showPage(tab.target, restored)
-      if (token !== generation) return
-      initializedPages.add(tab.id)
-      const renderedPage = document.getElementById(`page-${tab.target}`)
-      if (renderedPage) renderedPage.dataset.renderedMode = adapter.mode()
-      const page = document.querySelector('.workspace-page.active')
-      if (page) page.scrollTop = pageScroll.get(tab.id) || 0
-      if (tab.route?.startsWith('#chat?')) await adapter.openChat(new URLSearchParams(tab.route.split('?')[1]).get('id'))
-      if (tab.route?.startsWith('#compare?')) await adapter.openCompare(tab.route)
+      const ownerStore = store
+      const ownerPages = initializedPages
+      const mode = adapter.mode()
+      const isCurrent = () => token === generation && ownerStore === store && !shell.hidden
+      // Loading must never occupy the navigation queue. Only the current
+      // activation may restore scroll or open a route-specific overlay.
+      Promise.resolve(adapter.showPage(tab.target, restored, isCurrent)).then(async () => {
+        if (!isCurrent()) return
+        ownerPages.add(tab.id)
+        const page = document.getElementById(`page-${tab.target}`)
+        if (page) {
+          page.dataset.renderedMode = mode
+          page.scrollTop = pageScroll.get(tab.id) || 0
+        }
+        if (tab.route?.startsWith('#chat?')) await adapter.openChat(new URLSearchParams(tab.route.split('?')[1]).get('id'), isCurrent)
+        if (isCurrent() && tab.route?.startsWith('#compare?')) await adapter.openCompare(tab.route, isCurrent)
+      }).catch(error => { if (isCurrent()) report(error) })
     }
     writeHistory(tab, push)
     render()
@@ -224,13 +231,20 @@ export function createWorkspaceTabs(adapter) {
     const active = store.activeTabId === id
     const record = frames.get(id)
     const runtime = record?.frame.contentWindow?.__easypaperDocument
-    if (active) await leaveCurrent({ waitForSave: true })
-    else if (runtime?.ready) await flushFrame(record, runtime)
+    if (active) await leaveCurrent()
+    else if (runtime?.ready) flushFrame(record, runtime)
     store.closeTab(id)
     if (record) {
       record.closed = true
       record.frame.hidden = true
-      if (!runtime?.busy()) { record.frame.remove(); frames.delete(id) }
+      const release = () => {
+        if (record.closed && !record.pendingFlush && !runtime?.busy()) {
+          record.frame.remove()
+          record.ownerFrames.delete(id)
+        }
+      }
+      if (record.pendingFlush) record.pendingFlush.then(release, release)
+      else release()
     }
     if (active) { visibleId = null; await activate(store.activeTabId) }
     render()
@@ -332,7 +346,7 @@ export function createWorkspaceTabs(adapter) {
       const unviewed = record.store !== store || id !== visibleId
       const status = payload.error ? 'error' : payload.busy ? 'busy' : unviewed && (finished || record.status === 'complete') ? 'complete' : undefined
       if (record.status !== status) { record.status = status; record.store.update(id, { status }) }
-      if (record.closed && !payload.busy) { record.frame.remove(); record.ownerFrames.delete(id) }
+      if (record.closed && !record.pendingFlush && !payload.busy) { record.frame.remove(); record.ownerFrames.delete(id) }
     }
     if (type === 'unavailable') enqueue(async () => {
       adapter.toast(t('navigation:tabs.unavailable'), 'warning')
@@ -411,6 +425,7 @@ export function createWorkspaceTabs(adapter) {
       return api.openPage(path === 'heatmap' ? 'graph' : path, { pushState: push })
     },
     hide() {
+      ++generation
       snapshotFrames()
       for (const [, record] of allFrames()) record.frame.remove()
       scopes.clear()

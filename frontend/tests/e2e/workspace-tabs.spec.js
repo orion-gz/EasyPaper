@@ -6,7 +6,7 @@ const documents = [
   { id: 'tab-a', filename: 'Attention.pdf', total_pages: 1, metadata: { primer_shown: true }, translated_pages: [] },
   { id: 'tab-b', filename: 'BERT.pdf', total_pages: 1, metadata: { primer_shown: true }, translated_pages: [] },
 ]
-async function setup(page) {
+async function setup(page, beforeNavigation = async () => {}) {
   await mockBaseRoutes(page, { documents })
   // WebKit reports browser-level CORS errors for cross-origin API mocks unless
   // the mocked response opts into the local test origin.
@@ -24,6 +24,7 @@ async function setup(page) {
   }))
   await page.route('**/api/library/tab-a/pdf', route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_A }))
   await page.route('**/api/library/tab-b/pdf', route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_B }))
+  await beforeNavigation()
   await gotoApp(page)
 }
 const tab = (page, id) => page.locator(`.workspace-tab[data-tab-id="${id}"] [role="tab"]`)
@@ -462,6 +463,9 @@ test('pending reader save does not block opening or switching tabs; close waits 
   await expect(tab(page, 'document:tab-b')).toHaveAttribute('aria-selected', 'true')
   await page.locator('.workspace-tab[data-tab-id="document:tab-a"] .workspace-tab-close').click()
   await expect(page.locator('iframe[data-document-id="tab-a"]')).toHaveCount(1)
+  await expect(tab(page, 'document:tab-a')).toHaveCount(0)
+  await tab(page, 'page:dashboard').click()
+  await expect(tab(page, 'page:dashboard')).toHaveAttribute('aria-selected', 'true')
   await page.evaluate(() => document.querySelector('iframe[data-document-id="tab-a"]').contentWindow.releaseTabSave())
   await expect(page.locator('iframe[data-document-id="tab-a"]')).toHaveCount(0)
 })
@@ -488,4 +492,58 @@ test('pending PDF activation does not block subsequent tab navigation', async ({
   await expect(reader(page, 'tab-a').locator('body')).toHaveAttribute('data-workspace-inactive', 'false')
   await expect(reader(page, 'tab-a').locator('.pdf-page-wrapper canvas')).toBeAttached()
   await expect(reader(page, 'tab-b').locator('body')).toHaveAttribute('data-workspace-inactive', 'true')
+})
+
+for (const pageName of ['dashboard', 'history']) {
+  test(`pending ${pageName} load allows switching and closing`, async ({ page }) => {
+    let release
+    let started = false
+    let finished = false
+    const pending = new Promise(resolve => { release = resolve })
+    await setup(page, async () => {
+      await page.route('**/api/library/dashboard', async route => {
+        started = true
+        await pending
+        await route.fulfill({ json: { stats: {}, recent_papers: [] } }).catch(() => {})
+        finished = true
+      })
+    })
+    await page.locator(`.sidebar-nav-item[data-page="${pageName}"]`).click()
+    await expect(page.locator(`#page-${pageName}`)).toContainText('불러오는 중')
+    await expect.poll(() => started).toBe(true)
+    await expect(tab(page, `page:${pageName}`)).toHaveAttribute('aria-selected', 'true')
+    await page.locator('.sidebar-nav-item[data-page="library"]').click()
+    await expect(tab(page, 'page:library')).toHaveAttribute('aria-selected', 'true')
+    await tab(page, `page:${pageName}`).click()
+    await page.locator(`.workspace-tab[data-tab-id="page:${pageName}"] .workspace-tab-close`).click()
+    await expect(tab(page, `page:${pageName}`)).toHaveCount(0)
+    await expect(tab(page, 'page:library')).toHaveAttribute('aria-selected', 'true')
+    release()
+    await expect.poll(() => finished).toBe(true)
+    await expect(page.locator('#page-library')).toHaveClass(/active/)
+    await expect(page).toHaveURL(/#library$/)
+    await expect(tab(page, `page:${pageName}`)).toHaveCount(0)
+  })
+}
+
+test('pending document load allows switching and closing', async ({ page }) => {
+  await setup(page)
+  let release
+  let started = false
+  const pending = new Promise(resolve => { release = resolve })
+  await page.route('**/api/library/tab-a', async route => {
+    started = true
+    await pending
+    await route.fulfill({ json: documents[0] }).catch(() => {})
+  })
+  await page.evaluate(() => { location.hash = '#viewer?id=tab-a' })
+  await expect.poll(() => started).toBe(true)
+  await tab(page, 'page:dashboard').click()
+  await expect(tab(page, 'page:dashboard')).toHaveAttribute('aria-selected', 'true')
+  await tab(page, 'document:tab-a').click()
+  await page.locator('.workspace-tab[data-tab-id="document:tab-a"] .workspace-tab-close').click()
+  await expect(tab(page, 'document:tab-a')).toHaveCount(0)
+  await expect(page.locator('iframe[data-document-id="tab-a"]')).toHaveCount(0)
+  release()
+  await expect(tab(page, 'page:library')).toHaveAttribute('aria-selected', 'true')
 })
