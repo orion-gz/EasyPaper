@@ -119,6 +119,7 @@ export function createWorkspaceModeController({
   }
 
   document.querySelectorAll('button[data-workspace-mode]').forEach(button => {
+    button.setAttribute('aria-keyshortcuts', 'Control+Shift+M Meta+Shift+M')
     button.addEventListener('click', () => setMode(button.dataset.workspaceMode))
     button.addEventListener('keydown', event => {
       if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return

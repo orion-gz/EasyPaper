@@ -117,7 +117,7 @@ export function createWorkspaceTabs(adapter) {
       button.type = 'button'
       button.id = `workspace-tab-${encodeURIComponent(tab.id)}`
       button.setAttribute('role', 'tab')
-      if (index < 9) button.setAttribute('aria-keyshortcuts', `Control+${index + 1}`)
+      if (index < 9) button.setAttribute('aria-keyshortcuts', `Control+${index + 1} Meta+${index + 1}`)
       button.setAttribute('aria-selected', String(tab.id === store.activeTabId))
       button.setAttribute('aria-controls', outlet.id)
       button.tabIndex = tab.id === store.activeTabId ? 0 : -1
@@ -140,6 +140,7 @@ export function createWorkspaceTabs(adapter) {
       close.className = 'workspace-tab-close'
       close.textContent = '×'
       close.setAttribute('aria-label', t('navigation:tabs.close', { title: title(tab) }))
+      if (tab.id === store.activeTabId) close.setAttribute('aria-keyshortcuts', 'Control+W Meta+W')
       close.addEventListener('click', () => enqueue(() => closeTab(tab.id)))
       item.append(button, close)
       item.addEventListener('dragstart', event => event.dataTransfer.setData('text/x-easypaper-tab', tab.id))
@@ -279,11 +280,27 @@ export function createWorkspaceTabs(adapter) {
     }
   })
   function handleTabShortcut(event) {
-    if (event.defaultPrevented || event.isComposing || !event.ctrlKey
-      || event.metaKey || event.altKey || shell.hidden || !store?.tabs.length) return
+    if (event.defaultPrevented || event.isComposing
+      || event.ctrlKey === event.metaKey || event.altKey || shell.hidden || !store?.tabs.length) return
     const sourceDocument = event.target?.ownerDocument || document
     const modalSelector = '.modal-overlay:not(.hidden), dialog[open]'
     if (document.querySelector(modalSelector) || sourceDocument.querySelector(modalSelector)) return
+    const key = event.key.toLowerCase()
+    if (!event.shiftKey && key === 'w') {
+      event.preventDefault()
+      if (!event.repeat) enqueue(() => closeTab(store.activeTabId))
+      return
+    }
+    if (!event.shiftKey && key === 'b') {
+      event.preventDefault()
+      if (!event.repeat) adapter.toggleSidebar()
+      return
+    }
+    if (event.shiftKey && key === 'm') {
+      event.preventDefault()
+      if (!event.repeat) adapter.toggleMode()
+      return
+    }
     const cycling = event.key === 'Tab'
     const index = !event.shiftKey && /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : -1
     if (!cycling && !store.tabs[index]) return
