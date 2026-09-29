@@ -686,14 +686,14 @@ body.toolbar-hidden .panels {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-md);
   box-sizing: border-box;
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Scrolling changes the hovered page; keep text geometry stationary. */
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .page-pair:hover {
   border-color: rgba(74, 135, 181, 0.15);
   background: var(--bg-page-pair-hover);
   box-shadow: var(--shadow-hover);
-  transform: translateY(-2px);
 }
 
 /* 개별 페이지 wrapper */

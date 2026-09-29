@@ -14,6 +14,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 let pdfjsLib = null
 let pdfDoc = null
+let widestPageWidth = 0
 let pdfLoadingTask = null
 let pdfTextUrl = null
 const renderedTextLayers = new Map()
@@ -23,6 +24,8 @@ let pageVisibilityObserver = null
 let visiblePageHeights = {}
 let loadGeneration = 0
 let disposeScrollView = () => {}
+let suspended = false
+let lastScrollView = null
 // renderScrollView가 호출될 때마다(문서 전환, 줌 변경) 증가하는 세대 카운터.
 // pdf-page-wrapper DOM 노드는 문서를 바꿔도 새로 만들지 않고 재사용하는데,
 // 이전 문서/줌에 대한 _renderPage 호출이 비동기 대기 중일 때 사용자가 빠르게
@@ -69,6 +72,7 @@ export async function loadPDF(url) {
   }
   renderGeneration++
   pdfDoc = nextPdfDoc
+  widestPageWidth = 0
   const match = String(url).match(/\/api\/(?:pdf-file\/([^/?]+)|library\/([^/?]+)\/pdf)(?:\?|$)/)
   pdfTextUrl = match ? `/api/pdf-text/${match[1] || match[2]}` : null
   figureCropCache.clear()
@@ -126,7 +130,8 @@ export async function renderFigureCrop(pageNum, imgPercent) {
  *   onPageVisible(pageNum)  - 페이지가 뷰포트에 들어올 때마다 호출
  */
 export async function renderScrollView(container, zoom, { onPageVisible } = {}) {
-  if (!pdfDoc) return
+  lastScrollView = { container, zoom, onPageVisible }
+  if (!pdfDoc || suspended) return
   disposeScrollView()
   currentScale = zoom
   renderedTextLayers.clear()
@@ -223,6 +228,7 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
   }
   if (!isCurrent()) return
 
+  widestPageWidth = viewports.reduce((maximum, viewport) => Math.max(maximum, viewport.width / zoom), 0)
   let wrappers = container.querySelectorAll('.pdf-page-wrapper')
 
   const wrapperShapeMatches = wrappers.length === numPages
@@ -295,20 +301,26 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
       }
     })
 
-    // 가장 많이 노출되고 있는 페이지 산출
-    let maxPageNum = -1
-    let maxHeight = -1
-    for (const [page, height] of Object.entries(visiblePageHeights)) {
-      if (height > maxHeight) {
-        maxHeight = height
-        maxPageNum = parseInt(page)
-      }
+    // Track the first page entering from the top of the reader. A taller next
+    // page can occupy more pixels than a short page even while the short page
+    // remains anchored at the top (for example, mixed-size PDFs).
+    const viewportTop = container.getBoundingClientRect().top
+    let currentPageNum = -1
+    let currentPageTop = Infinity
+    for (const page of Object.keys(visiblePageHeights)) {
+      const pageNum = Number(page)
+      const element = container.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+      if (!element) continue
+      const rect = element.getBoundingClientRect()
+      if (rect.bottom <= viewportTop || rect.top >= currentPageTop) continue
+      currentPageTop = rect.top
+      currentPageNum = pageNum
     }
 
-    if (maxPageNum !== -1 && maxPageNum !== lastNotifiedPage) {
-      currentPage = maxPageNum
-      lastNotifiedPage = maxPageNum
-      onPageVisible?.(maxPageNum)
+    if (currentPageNum !== -1 && currentPageNum !== lastNotifiedPage) {
+      currentPage = currentPageNum
+      lastNotifiedPage = currentPageNum
+      onPageVisible?.(currentPageNum)
     }
   }, {
     root: container,
@@ -519,4 +531,59 @@ export function sourceMappingRects(pageNum, mapping) {
   const layer = renderedTextLayers.get(Number(pageNum))
   if (!layer || !sourceMappingMatchesRevision(mapping, layer.container.dataset.sourceRevision)) return []
   return projectSourceRects(mapping, layer.viewport)
+}
+
+
+export function suspendPDFRendering() {
+  suspended = true
+  renderGeneration++
+  disposeScrollView()
+  renderedTextLayers.clear()
+  figureCropCache.clear()
+}
+export async function resumePDFRendering() {
+  if (!suspended) return
+  suspended = false
+  if (!lastScrollView) return
+  const { container, zoom, onPageVisible } = lastScrollView
+  const top = container.scrollTop
+  const resuming = renderScrollView(container, zoom, { onPageVisible })
+  const token = renderGeneration
+  await resuming
+  if (token !== renderGeneration || suspended) return
+  container.scrollTop = top
+}
+export async function renderPDFThumbnail(pageNum, canvas) {
+  if (!pdfDoc || suspended) return
+  const source = pdfDoc
+  const page = await source.getPage(pageNum)
+  if (source !== pdfDoc || suspended || !canvas.isConnected) return
+  const viewport = page.getViewport({ scale: 110 / page.getViewport({ scale: 1 }).width })
+  canvas.width = Math.ceil(viewport.width)
+  canvas.height = Math.ceil(viewport.height)
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+}
+
+// Read text independently of lazy canvas rendering for workspace find.
+export async function getPDFPageText(pageNumber, signal) {
+  const document = pdfDoc
+  if (!document) return ''
+  const rendered = renderedTextLayers.get(pageNumber)?.textContent
+  if (rendered) return rendered.items.map(item => item.str + (item.hasEOL ? ' ' : '')).join('')
+  if (pdfTextUrl) {
+    try {
+      const response = await fetch(`${pdfTextUrl}/${pageNumber}`, { signal })
+      if (response.ok) {
+        const recovered = await response.json()
+        if (recovered.recovery && recovered.spans?.length) return recovered.spans.map(span => span.text + (span.hasEOL ? ' ' : '')).join('')
+      }
+    } catch (error) { if (signal?.aborted) throw error }
+  }
+  const page = await document.getPage(pageNumber)
+  const content = await page.getTextContent()
+  return content.items.map(item => item.str + (item.hasEOL ? ' ' : '')).join('')
+}
+export async function getPDFPageWidth(pageNumber = 1) {
+  if (!pdfDoc) return null
+  return widestPageWidth || (await pdfDoc.getPage(pageNumber)).getViewport({ scale: 1 }).width
 }

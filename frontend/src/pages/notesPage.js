@@ -55,7 +55,7 @@ function escapeHtml(str) {
 
 // ── 모듈 상태 (페이지를 재방문해도 마지막 선택/탭/검색어를 기억한다) ──
 let allPapers = []          // PaperEntry[] - renderNotesPage()마다 새로 집계
-let filterMode = 'all'      // 'all' | 'hasNotes' | 'favorites'
+let filterMode = 'all'      // 'all' | 'hasNotes' | 'read' | 'favorites'
 let sortMode = 'recent'     // 'recent' | 'title' | 'uploaded'
 let searchQuery = ''
 let selectedDocId = null
@@ -225,6 +225,7 @@ function getFilteredPapers() {
   const q = searchQuery.trim().toLowerCase()
   const filtered = allPapers.filter(entry => {
     if (filterMode === 'hasNotes' && totalCount(entry) === 0) return false
+    if (filterMode === 'read' && !entry.read) return false
     if (filterMode === 'favorites' && !entry.favorite) return false
     if (!q) return true
     return entry.title.toLowerCase().includes(q) || (entry.author || '').toLowerCase().includes(q)
@@ -271,9 +272,11 @@ function renderPaperList(root) {
   const listEl = root.querySelector('.notes-paper-list-items')
   const countAllEl = root.querySelector('.notes-filter-count-all')
   const countHasNotesEl = root.querySelector('.notes-filter-count-hasnotes')
+  const countReadEl = root.querySelector('.notes-filter-count-read')
   const countFavEl = root.querySelector('.notes-filter-count-fav')
   if (countAllEl) countAllEl.textContent = String(allPapers.length)
   if (countHasNotesEl) countHasNotesEl.textContent = String(allPapers.filter(e => totalCount(e) > 0).length)
+  if (countReadEl) countReadEl.textContent = String(allPapers.filter(e => e.read).length)
   if (countFavEl) countFavEl.textContent = String(allPapers.filter(e => e.favorite).length)
 
   const filtered = getFilteredPapers()
@@ -720,6 +723,7 @@ function shellHtml() {
           <div class="notes-filter-tabs">
             <button type="button" class="notes-filter-tab-btn active" data-filter="all">전체 <span class="notes-filter-count-all">0</span></button>
             <button type="button" class="notes-filter-tab-btn" data-filter="hasNotes">메모 있음 <span class="notes-filter-count-hasnotes">0</span></button>
+            <button type="button" class="notes-filter-tab-btn" data-filter="read">읽음 <span class="notes-filter-count-read">0</span></button>
             <button type="button" class="notes-filter-tab-btn" data-filter="favorites">${icon('star', 12)} 즐겨찾기 <span class="notes-filter-count-fav">0</span></button>
           </div>
           <div class="notes-paper-list-items">

@@ -108,6 +108,7 @@
 .notes-filter-tabs {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 0 16px 12px;
   border-bottom: 1px solid var(--border);

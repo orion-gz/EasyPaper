@@ -341,8 +341,7 @@ export class FocusModeController {
     if (this.settings.enabled && this.settings.hideOverlays) {
       for (const preview of this.previews.values()) preview.hide()
     }
-    // Suppress the card lift before the pointer enters, not when the focus
-    // overlay appears: changing it on activation shifts the source by 2px.
+    // Disable card hover transitions before focus overlays are activated.
     this.root?.classList.toggle('focus-mode-enabled', this.settings.enabled)
     if (!this.settings.enabled) this.clear(); else if (this.current) this.scheduleRender()
   }
@@ -464,6 +463,12 @@ export class FocusModeController {
   render() {
     if (!this.current || !this.settings.enabled) return
     let pair = this.resolvePair?.(this.current) || {}
+    // Fit/zoom rerenders temporarily remove the PDF text layer. Keep the last
+    // source magnification until the new layer is segmented and can be measured.
+    const page = this.current.pageNum
+    const sourceWrapper = pair.sourceCanvas?.closest('.pdf-page-wrapper')
+    const sourceLayerReady = sourceWrapper?.querySelector('.textLayer[data-segmented="true"]')
+    if (sourceWrapper && !sourceLayerReady && this.layer?.querySelector('.focus-mode-magnification[data-kind=source]')) return
     if (this.current.revealTranslation && !this.revealedTranslation && pair.elements?.length) {
       revealFocusTranslation(pair.elements)
       this.revealedTranslation = true
