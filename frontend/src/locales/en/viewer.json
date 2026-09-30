@@ -86,5 +86,16 @@
   "chapter.cancel": "Cancel full summary",
   "chapter.cancelled": "The full summary task was cancelled.",
   "chapter.cancelFailed": "Failed to cancel the full summary.",
-  "cacheClearedReload": "PDF extraction and translation cache deleted. Reloading viewer."
+  "cacheClearedReload": "PDF extraction and translation cache deleted. Reloading viewer.",
+  "easyEnglish.englishOnly": "English source only. Check the document language setting.",
+  "easyEnglish.generating": "Generating and checking sentence matches…",
+  "easyEnglish.ready": "Select a sentence to see its source match.",
+  "easyEnglish.empty": "Simplify sentence structures while preserving the original content.",
+  "easyEnglish.generate": "Convert to Easy English",
+  "easyEnglish.regenerate": "Convert again",
+  "easyEnglish.retry": "Retry",
+  "easyEnglish.noText": "This page has no text to convert.",
+  "easyEnglish.matchLabel": "Show matching source: {{text}}",
+  "easyEnglish.sourcePairs": "Source and Easy English sentence pairs",
+  "easyEnglish.locationMissing": "The exact source location is unavailable. See the source text below."
 }

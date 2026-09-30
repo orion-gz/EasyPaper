@@ -303,7 +303,10 @@ def permanently_delete_document(doc_id: str) -> bool:
     doc_dir = os.path.join(LIBRARY_DIR, doc_id)
     upload_dir = os.path.join(UPLOAD_DIR, doc_id)
 
+    from services.easy_english import cancel_document, cli_session_id
+    cancel_document(doc_id)
     # 1. 채팅 세션 삭제
+    delete_chat_sessions(cli_session_id(doc_id))
     delete_chat_sessions(doc_id)
     # 2. 라이브러리 보관 파일 삭제 (PDF 사본, 커버 이미지, MD 등)
     if os.path.exists(doc_dir):

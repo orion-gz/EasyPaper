@@ -94,3 +94,29 @@ def test_delete_document_removes_orphan_rows_in_related_tables(isolated_dirs):
 def test_delete_document_returns_false_for_nonexistent_doc(isolated_dirs):
     db = isolated_dirs["db"]
     assert db.db_delete_document("does-not-exist") is False
+
+
+def test_permanent_delete_removes_nested_easy_english_conversations(isolated_dirs, tmp_path, monkeypatch):
+    import json
+    from pathlib import Path
+    from services import library
+    from services.easy_english import cli_session_id
+
+    doc_id = 'doc-with-easy-english'
+    isolated_dirs['db'].db_save_document(doc_id, 'admin', 'p.pdf', '/x', 1, {})
+    home = tmp_path / 'home'
+    monkeypatch.setattr(library.os.path, 'expanduser', lambda value: str(home / value.removeprefix('~/')))
+    cli_home = home / '.gemini/antigravity-cli'
+    for session, conversation in [(doc_id, 'parent'), (cli_session_id(doc_id), 'easy'), ('other-doc', 'unrelated')]:
+        folder = Path(library.LIBRARY_DIR) / session
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / 'ai_session.json').write_text(json.dumps({'providers': {'antigravity': {'conversation_id': conversation}}}))
+        (cli_home / 'conversations').mkdir(parents=True, exist_ok=True)
+        (cli_home / 'conversations' / f'{conversation}.db').write_text('conversation')
+        (cli_home / 'brain' / conversation).mkdir(parents=True)
+    assert library.permanently_delete_document(doc_id)
+    for conversation in ['parent', 'easy']:
+        assert not (cli_home / 'conversations' / f'{conversation}.db').exists()
+        assert not (cli_home / 'brain' / conversation).exists()
+    assert (cli_home / 'conversations/unrelated.db').exists()
+    assert (cli_home / 'brain/unrelated').exists()

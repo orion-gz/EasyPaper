@@ -23,7 +23,7 @@ function setup(mode = 'scroll') {
   const context = vm.createContext({
     state: { sessionId: 'doc', totalPages: 2, currentPage: 1, translatedPages: new Set([1]),
       translatingPages: new Set(), translationCache: { 1: 'old' }, translationSentences: {}, pollingTimer: null },
-    mode, $: element, t: key => key, setTimeout, clearTimeout, clearInterval,
+    mode, $: element, t: key => key, easyEnglishController: null, setTimeout, clearTimeout, clearInterval,
     translateDocumentBtn: element('full'), translationScopeBtn: element('scope'),
     resumeTransBtn: element('resume'), cancelTransBtn: element('cancel'),
     getTranslationMode: () => context.mode, getEffectiveTranslationMode: () => context.mode,

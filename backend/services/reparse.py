@@ -496,6 +496,10 @@ async def apply_preview(doc_id: str, task_id: str, sessions: dict) -> dict:
             from services.cache import clear_derived_session_cache, clear_stale_parser_caches
             clear_derived_session_cache(doc_id)
             clear_stale_parser_caches(doc_id, new_revision)
+            from services.easy_english import cache_path, cancel_document
+            cancel_document(doc_id)
+            import shutil
+            shutil.rmtree(cache_path(doc_id, "unused").parent, ignore_errors=True)
             from services.pdf_parser import clear_parser_memory_cache
             clear_parser_memory_cache()
         except Exception:

@@ -268,7 +268,7 @@ export function installDocumentRuntime(adapter) {
     find: () => readerTools.openFind(),
     snapshot,
     title: () => adapter.state.title || adapter.state.filename,
-    busy: () => Boolean(adapter.state.chatActiveStream || adapter.state.translatingPages?.size || ['queued', 'running', 'retry_wait'].includes(adapter.state.translationTaskStatus)),
+    busy: () => Boolean(adapter.state.easyEnglishGenerating || adapter.state.chatActiveStream || adapter.state.translatingPages?.size || ['queued', 'running', 'retry_wait'].includes(adapter.state.translationTaskStatus)),
     async flush() {
       document.activeElement?.blur?.()
       await adapter.flush()

@@ -112,7 +112,13 @@ export async function mountArticleViewer(options) {
     const source = document.createElement('div'); source.className = 'article-pane article-original'; source.innerHTML = sanitize(unit.block_ids.map(id => blocks.get(id)?.html || '').join(''))
     source.querySelectorAll('img[src^="assets/"]').forEach(image => { image.src = `/api/library/${encodeURIComponent(doc.id)}/article/${image.getAttribute('src')}` })
     const translation = document.createElement('div'); translation.className = 'article-pane article-translation'; translation.dataset.unitIndex = unit.index
-    const cached = await getTranslation(unit.index); translation.textContent = cached?.translation || labels.translationPending
+    const cached = await getTranslation(unit.index)
+    if (options.createTranslationPanel) {
+      const panel = options.createTranslationPanel(unit.index)
+      const content = panel.querySelector(`#trans-content-${unit.index}`)
+      if (content) content.textContent = cached?.translation || labels.translationPending
+      translation.append(panel)
+    } else translation.textContent = cached?.translation || labels.translationPending
     pair.append(title, source, translation); snapshot.appendChild(pair); syncPanes(pair)
   }
   container.replaceChildren(root); onOutline(manifest.toc || [])
@@ -173,6 +179,6 @@ export async function mountArticleViewer(options) {
   let currentUnit = 1
   const observer = new IntersectionObserver(entries => { const visible = entries.filter(entry => entry.isIntersecting).sort((a,b) => b.intersectionRatio-a.intersectionRatio)[0]; if (visible) { currentUnit = Number(visible.target.dataset.unitIndex); onCurrentUnit(currentUnit) } }, { root: container, threshold: [.25,.5,.75] })
   root.querySelectorAll('.article-unit').forEach(unit => observer.observe(unit))
-  const timer = setInterval(async () => { for (const pane of root.querySelectorAll('.article-translation')) { const data = await getTranslation(Number(pane.dataset.unitIndex)); if (data?.translation && pane.textContent !== data.translation) pane.textContent = data.translation } }, 3000)
+  const timer = setInterval(async () => { for (const pane of root.querySelectorAll('.article-translation')) { const data = await getTranslation(Number(pane.dataset.unitIndex)); const content = pane.querySelector('.trans-page-content') || pane; if (data?.translation && content.textContent !== data.translation) content.textContent = data.translation } }, 3000)
   return { root, destroy() { clearInterval(timer); observer.disconnect(); selectionTools.remove(); referencePreview.remove() } }
 }

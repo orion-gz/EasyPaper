@@ -5,6 +5,7 @@ const MODE_DEFAULTS = {
     targetLang: 'ko',
     style: 'academic',
     translationMode: 'auto',
+    easyEnglishMode: 'manual',
     ignoreMath: false,
     ignoreTable: true,
     ignoreRefs: false,
@@ -27,6 +28,7 @@ const MODE_DEFAULTS = {
     targetLang: 'ko',
     style: 'natural',
     translationMode: 'scroll',
+    easyEnglishMode: 'manual',
     ignoreMath: false,
     ignoreTable: false,
     ignoreRefs: false,
@@ -104,9 +106,10 @@ export function getModeSetting(name, mode, storage = localStorage) {
   // 기존 전역 설정은 연구 모드의 값으로 승계한다. 테마와 번역 대상 언어는
   // 사용자의 기본 선호도라 일반 문서도 첫 사용 시 기존 값을 승계한다.
   if (raw === null && (normalizedMode === 'research' || SHARED_LEGACY_PREFERENCES.has(name))) {
-    raw = storage.getItem(LEGACY_KEYS[name])
+    raw = LEGACY_KEYS[name] ? storage.getItem(LEGACY_KEYS[name]) : null
   }
   if (raw === null) return fallback
+  if (name === 'easyEnglishMode') return raw === 'auto' ? 'auto' : 'manual'
   if (name === "targetLang") {
     const migrated = migrateTargetLanguage(raw)
     if (migrated !== raw) storage.setItem(modeSettingStorageKey(name, normalizedMode), migrated)

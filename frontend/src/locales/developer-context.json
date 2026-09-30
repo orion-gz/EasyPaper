@@ -4566,5 +4566,59 @@
   "settings:shortcutMemoIndent": { "description": "Action label for memo indentation and outdentation." },
   "settings:shortcutMemoTask": { "description": "Action label for toggling a memo task or finishing editing." },
   "settings:shortcutMemoContinue": { "description": "Action label for continuing a memo list when Enter is pressed." },
-  "settings:shortcutMemoCancel": { "description": "Action label for cancelling memo editing." }
+  "settings:shortcutMemoCancel": { "description": "Action label for cancelling memo editing." },
+  "settings:easyEnglishMode": {
+    "description": "Easy English: Easy English"
+  },
+  "settings:easyEnglishManual": {
+    "description": "Easy English: On button click"
+  },
+  "settings:easyEnglishAuto": {
+    "description": "Easy English: Automatically for the current page"
+  },
+  "settings:easyEnglishUsage": {
+    "description": "Easy English: Uses additional AI tokens independently of translation. English source documents only."
+  },
+  "viewer:easyEnglish.englishOnly": {
+    "description": "Easy English: English source only. Check the document language setting."
+  },
+  "viewer:easyEnglish.generating": {
+    "description": "Easy English: Generating and checking sentence matches…"
+  },
+  "viewer:easyEnglish.ready": {
+    "description": "Easy English: Select a sentence to see its source match."
+  },
+  "viewer:easyEnglish.empty": {
+    "description": "Easy English: Simplify sentence structures while preserving the original content."
+  },
+  "viewer:easyEnglish.generate": {
+    "description": "Easy English: Convert to Easy English"
+  },
+  "viewer:easyEnglish.regenerate": {
+    "description": "Easy English: Convert again"
+  },
+  "viewer:easyEnglish.retry": {
+    "description": "Easy English: Retry"
+  },
+  "viewer:easyEnglish.noText": {
+    "description": "Easy English: This page has no text to convert."
+  },
+  "viewer:easyEnglish.matchLabel": {
+    "description": "Easy English: Show matching source: {{text}}"
+  },
+  "viewer:easyEnglish.sourcePairs": {
+    "description": "Easy English: Source and Easy English sentence pairs"
+  },
+  "viewer:easyEnglish.locationMissing": {
+    "description": "Easy English: The exact source location is unavailable. See the source text below."
+  },
+  "errors:easy_english_requires_english": {
+    "description": "Easy English: Easy English requires an English source. Check the document language."
+  },
+  "errors:easy_english_sentence_too_long": {
+    "description": "Easy English: A source sentence is too long to convert safely."
+  },
+  "errors:easy_english_invalid_mapping": {
+    "description": "Easy English: The result did not preserve source sentence groups or values. Please retry."
+  }
 }
