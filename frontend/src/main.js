@@ -14396,7 +14396,8 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
 // lookahead는 그룹이 전부 빈 문자열로 매칭되어 공백이 "로마 숫자"로 인정되는 것을 막는다.
 const ROMAN_NUMERAL_SRC = '(?=[MDCLXVI])M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})'
 
-const FIGURE_TABLE_NUM_SRC = `(?:\\d+|${ROMAN_NUMERAL_SRC})`
+// Preserve chapter-qualified numbers such as 4.18 as a single label.
+const FIGURE_TABLE_NUM_SRC = `(?:\\d+(?:\\.\\d+)*|${ROMAN_NUMERAL_SRC})`
 // 숫자 본체 하나: "(1)"처럼 괄호로 감싼 형태(Equation 표기에 흔함) 또는 맨 숫자.
 const FIGURE_TABLE_NUM_CORE_SRC = `(?:\\(\\s*${FIGURE_TABLE_NUM_SRC}\\s*\\)|${FIGURE_TABLE_NUM_SRC})`
 // Subfigure 접미사: 숫자 바로 뒤에 공백 없이 붙는 글자 하나("Fig. 2f", "Figure 5B")
@@ -14408,7 +14409,7 @@ const FIGURE_TABLE_SUBFIG_SUFFIX_SRC =
 // 숫자 하나 + (있다면) subfigure 접미사. 접미사가 없다면 바로 뒤에 글자/숫자가
 // 이어지면 안 된다("Fig 2nd"처럼 서수나 다른 단어의 일부인 경우를 배제).
 const FIGURE_TABLE_NUM_ITEM_SRC =
-  `${FIGURE_TABLE_NUM_CORE_SRC}(?:${FIGURE_TABLE_SUBFIG_SUFFIX_SRC}|(?![a-zA-Z0-9]))`
+  `${FIGURE_TABLE_NUM_CORE_SRC}(?!\\.\\d)(?:${FIGURE_TABLE_SUBFIG_SUFFIX_SRC}|(?![a-zA-Z0-9]))`
 // 새 숫자를 잇는 느슨한 연결어(공백 허용): "Figs. 1 and 2", "Tables 1, 2", "Figs. 3-5".
 const FIGURE_TABLE_LOOSE_CONNECTOR_SRC = `\\s*(?:[-–—,]|and|&)\\s*`
 // subfigure 글자만 이어붙이는 빡빡한 연결어(공백 없음): "Fig. 6a,c"의 ",c",
@@ -14462,7 +14463,7 @@ function parseFigureTableNumberList(payload) {
     return (m && m.index === i) ? m : null
   }
 
-  const numCoreRe = new RegExp(`\\(?\\s*(\\d+|${ROMAN_NUMERAL_SRC})\\s*\\)?`, 'iy')
+  const numCoreRe = new RegExp(`\\(?\\s*(${FIGURE_TABLE_NUM_SRC})\\s*\\)?`, 'iy')
   const subfigSkipRe = new RegExp(FIGURE_TABLE_SUBFIG_SUFFIX_SRC, 'iy')
   const tightConnRe = new RegExp(FIGURE_TABLE_TIGHT_CONNECTOR_SRC, 'y')
   const looseConnRe = new RegExp(`\\s*(?:([-–—])|,|and|&)\\s*`, 'iy')
@@ -14473,7 +14474,7 @@ function parseFigureTableNumberList(payload) {
     if (!m) return null
     i += m[0].length
     const raw = m[1]
-    const isRoman = !/^\d+$/.test(raw)
+    const isRoman = !/^\d+(?:\.\d+)*$/.test(raw)
     const value = isRoman ? raw.toUpperCase() : raw
     const sm = matchHere(subfigSkipRe) // subfigure 접미사는 건너뛰기만 함
     if (sm) i += sm[0].length
@@ -14503,10 +14504,14 @@ function parseFigureTableNumberList(payload) {
       const next = readNumber()
       if (next) {
         if (isDash && lastWasPlainDecimal && !next.isRoman) {
-          const start = parseInt(numbers[numbers.length - 1], 10)
-          const end = parseInt(next.value, 10)
-          if (end >= start && end - start <= 50) {
-            for (let n = start + 1; n <= end; n++) numbers.push(String(n))
+          const startParts = numbers[numbers.length - 1].split('.')
+          const endParts = next.value.split('.')
+          const start = Number(startParts.pop())
+          const end = Number(endParts.pop())
+          const prefix = startParts.join('.')
+          // Expand only within the same chapter; never truncate 4.18 to 4.
+          if (prefix === endParts.join('.') && end >= start && end - start <= 50) {
+            for (let n = start + 1; n <= end; n++) numbers.push(prefix ? `${prefix}.${n}` : String(n))
           } else {
             numbers.push(next.value)
           }

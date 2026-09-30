@@ -1204,7 +1204,7 @@ _ROMAN_NUMERAL_RE = r"(?=[MDCLXVI])M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:
 # 대소문자를 구분해야 하므로 (?-i:...)로 지역 범위에서 대소문자 구분을 켠다.
 _CAPTION_FOLLOW_RE = r"(?=\s*(?:[:.\-–—*|]|$|(?-i:[A-Z0-9])))"
 _CAPTION_RE = re.compile(
-    rf"^\s*(Fig(?:ure)?|Table)\.?\s*(\d+|{_ROMAN_NUMERAL_RE})\b{_CAPTION_FOLLOW_RE}", re.IGNORECASE
+    rf"^\s*(Fig(?:ure)?|Table)\.?\s*(\d+(?:\.\d+)*|{_ROMAN_NUMERAL_RE})\b(?!\.\d){_CAPTION_FOLLOW_RE}", re.IGNORECASE
 )
 # 수식 번호: 줄 끝에 "(3)"처럼 소괄호 숫자(또는 로마 숫자)만 단독으로 오는 경우만
 # 인정한다. 인용 연도("...(2020)")와 헷갈리지 않도록 자릿수를 1~3자리로 제한한다
