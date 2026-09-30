@@ -11,7 +11,7 @@ export function sanitizeReading(value = {}) {
     fitWidth: value.fitWidth === true,
     zoom: Math.max(0.5, Math.min(3, Number(value.zoom) || 1.5)),
     panel: ['chat', 'notes', 'annotations'].includes(value.panel) ? value.panel : 'chat',
-    panelOpen: value.panelOpen !== false,
+    panelOpen: value.panelOpen === true,
     navigation: value.navigation === 'thumbnails' ? 'thumbnails' : 'outline',
     panelWidth: Math.max(300, Math.min(480, Number(value.panelWidth) || 360)),
   }
