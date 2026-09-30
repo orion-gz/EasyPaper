@@ -96,6 +96,5 @@
   "easyEnglish.retry": "Retry",
   "easyEnglish.noText": "This page has no text to convert.",
   "easyEnglish.matchLabel": "Show matching source: {{text}}",
-  "easyEnglish.sourcePairs": "Source and Easy English sentence pairs",
-  "easyEnglish.locationMissing": "The exact source location is unavailable. See the source text below."
+  "easyEnglish.locationMissing": "The exact source location is unavailable."
 }

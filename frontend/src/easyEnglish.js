@@ -104,15 +104,7 @@ export function createEasyEnglishController(adapter) {
       span.setAttribute('aria-label', t('viewer:easyEnglish.matchLabel', { text: span.textContent }))
       paragraph.append(span, document.createTextNode(' '))
     }
-    const details = document.createElement('details')
-    const summary = document.createElement('summary'); summary.textContent = t('viewer:easyEnglish.sourcePairs')
-    details.append(summary)
-    for (const pair of item.result.sentences) {
-      const source = document.createElement('p'); source.textContent = pair.source_text
-      const result = document.createElement('p'); result.textContent = pair.easy_sentences.join(' ')
-      details.append(source, result)
-    }
-    host.append(details)
+
   }
   async function run(page, { generate = false, regenerate = false, automaticRequest = false } = {}) {
     const current = sync()
@@ -190,7 +182,6 @@ export function createEasyEnglishController(adapter) {
       if (fromSource) target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
       else if (boxes.length) adapter.revealSource(page, boxes[0])
       else {
-        host.querySelector('details').open = true
         host.querySelector('.easy-english-status').textContent = t('viewer:easyEnglish.locationMissing')
       }
     }

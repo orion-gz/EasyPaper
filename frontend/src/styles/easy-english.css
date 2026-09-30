@@ -7,7 +7,6 @@
 .easy-sentence-highlight { background: rgba(59, 130, 246, .23); }
 .easy-english-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 100; }
 .easy-source-highlight { position: absolute; background: rgba(59, 130, 246, .2); border-bottom: 2px solid rgba(59, 130, 246, .65); }
-.easy-english-content details { margin-top: 1rem; font-size: .9em; }
 .trans-tab-btn:disabled { opacity: .5; cursor: not-allowed; }
 .article-translation .trans-page-block { width: 100%; }
 .article-translation .trans-collapse-btn, .article-translation .trans-resizer-handle { display: none; }

@@ -4606,11 +4606,8 @@
   "viewer:easyEnglish.matchLabel": {
     "description": "Easy English: Show matching source: {{text}}"
   },
-  "viewer:easyEnglish.sourcePairs": {
-    "description": "Easy English: Source and Easy English sentence pairs"
-  },
   "viewer:easyEnglish.locationMissing": {
-    "description": "Easy English: The exact source location is unavailable. See the source text below."
+    "description": "Easy English: The exact source location is unavailable."
   },
   "errors:easy_english_requires_english": {
     "description": "Easy English: Easy English requires an English source. Check the document language."
