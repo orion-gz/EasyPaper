@@ -25,7 +25,7 @@ export function installDocumentRuntime(adapter) {
   let active = true
   let panel = 'chat'
   let navigation = 'outline'
-  let desiredOpen = { panel: window.parent.innerWidth >= 1100, outline: false }
+  let desiredOpen = { panel: false, outline: false }
   let restoring = false
   let generation = 0
   let error = false
