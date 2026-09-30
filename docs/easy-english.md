@@ -17,7 +17,8 @@ A source sentence should remain one simplified sentence when possible. A complex
 sentence can become several short sentences, but those sentences remain one
 source-owned group. Hover either side to highlight its match; click or press
 Enter on a result to reveal the original. The source-pairs disclosure remains
-available when exact PDF geometry or text matching cannot be resolved.
+available when exact PDF geometry or text matching cannot be resolved. Source
+highlights are clipped to the viewport and source scroll containers.
 
 ## API and integrity
 
@@ -29,7 +30,7 @@ available when exact PDF geometry or text matching cannot be resolved.
 - Each result has `text`, `sentences`, `page_num`, `content_revision`, `warnings`,
   and `cached`. Each sentence group has `source_sentence_id`, `source_text`,
   `easy_sentences`, `paragraph`, and optional `source_mapping` geometry.
-- IDs, order, group count, nonempty outputs, numbers, citations and math literals
+- IDs, order, group count, nonempty outputs, numbers with signs, recognized scientific units, citations and math literals
   are validated. There is no approximate alignment fallback. Unvalidated model
   output is not shown as a completed result or saved.
 - The translation provider/model is reused with a separate prompt and CLI
@@ -38,7 +39,9 @@ available when exact PDF geometry or text matching cannot be resolved.
 - Results live under the document's `easy_english/results` directory. Keys include
   the source page, revision, language, model/provider and prompt version.
   Regeneration replaces a result atomically after validation. Failure preserves
-  the old result. Reparse clears results; document deletion removes the directory.
+  the old result. Reparse clears results; document deletion removes the directory
+  and the external Antigravity conversation and brain data for the separate CLI session.
+  Validator changes invalidate older result caches through the prompt version.
 
 ## Quality evaluation
 

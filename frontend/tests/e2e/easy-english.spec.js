@@ -157,3 +157,42 @@ test('refresh cannot replace the document while Easy English is generating', asy
   } finally { release() }
   await expect(reader.locator('.easy-english-sentence')).toBeVisible()
 })
+
+test('web translation keeps paragraph and list line breaks after polling', async ({ page }) => {
+  const { reader } = await setup(page, { web: true })
+  const text = 'First paragraph.\n\nSecond paragraph.\n- Item one\n- Item two'
+  await page.route('**/api/jobs/easy-doc/page/1**', route => route.fulfill({ json: { translation: text } }))
+  const content = reader.locator('#trans-content-1')
+  await expect(content).toHaveText(text, { timeout: 6000 })
+  expect(await content.innerText()).toBe(text)
+  expect(await content.evaluate(node => getComputedStyle(node).whiteSpace)).toBe('pre-wrap')
+})
+
+test('web source highlights stay inside the original scroll pane', async ({ page }) => {
+  const { reader } = await setup(page, { web: true })
+  await reader.locator('[data-tab="easy-english"]').click()
+  await reader.locator('#easy-english-content-1 button').click()
+  const group = reader.locator('.easy-english-sentence')
+  await expect(group).toBeVisible()
+  const source = reader.locator('.article-original')
+  await source.evaluate(node => {
+    node.style.height = '80px'
+    node.style.maxHeight = '80px'
+    node.style.overflow = 'auto'
+    const spacer = document.createElement('div')
+    spacer.style.height = '500px'
+    node.append(spacer)
+    node.scrollTop = 150
+  })
+  await group.dispatchEvent('mouseover')
+  await expect(reader.locator('.easy-source-highlight')).toHaveCount(0)
+  await source.evaluate(node => { node.scrollTop = 0 })
+  await group.dispatchEvent('mouseover')
+  await expect(reader.locator('.easy-source-highlight')).not.toHaveCount(0)
+  const pane = await source.boundingBox()
+  for (const highlight of await reader.locator('.easy-source-highlight').all()) {
+    const box = await highlight.boundingBox()
+    expect(box.y).toBeGreaterThanOrEqual(pane.y)
+    expect(box.y + box.height).toBeLessThanOrEqual(pane.y + pane.height)
+  }
+})

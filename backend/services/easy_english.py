@@ -16,7 +16,7 @@ from services.chunker import tag_source_text
 from services.generation_errors import GenerationError
 from services.pdf_layout import attach_source_mappings
 
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 MAX_CHUNK_CHARS = 12000
 _running: dict[tuple[str, str], asyncio.Task] = {}
 PROMPT = """Rewrite English source sentences using simpler sentence structures.
@@ -59,9 +59,25 @@ def chunks(groups: list[dict]):
         yield batch
 
 
+# Match common scientific units after whitespace; attached units are always retained.
+_UNIT = r"(?:[fpnumkMGTµμ]?g|[fpnumkMGTµμ]?m|[munµμ]?s|[munµμ]?L|ml|mol|mmol|Hz|kHz|MHz|Pa|kPa|MPa|J|kJ|W|kW|V|mV|A|mA|K|°\s*[CF]|%|‰|IU|U|Da|kDa|eV|keV|MeV|Bq|Gy|Sv|h|min|hr|day|days)"
+_NUMBER = r"[+−-]?\d+(?:[.,]\d+)*(?:[eE][+−-]?\d+)?"
+_LITERAL = re.compile(
+    r'\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\[[\d,; –-]+\]'
+    + rf'|(?<!\w){_NUMBER}(?:[^\S\n]*{_UNIT}(?![A-Za-z])|[A-Za-zµμ°%‰]+)?'
+      r'(?:[²³⁻¹]+|\^[-−+]?\d+)?(?:/\s*[A-Za-zµμ]+(?:[²³⁻¹]+|\^[-−+]?\d+)?)?'
+)
+
+
 def _literals(text: str) -> Counter:
-    # Compare multiplicity too: changing 20 to 200 or duplicating a value is an error.
-    return Counter(re.findall(r'(?<!\w)[+-]?\d+(?:[.,]\d+)*(?:%|\b)|\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\[[\d,; –-]+\]', text))
+    # Preserve value, sign, unit and multiplicity; whitespace is only formatting.
+    values = []
+    for match in _LITERAL.finditer(text):
+        value = match.group()
+        if re.match(r"[+−-]?\d", value):
+            value = re.sub(r"\s+", "", value).replace("−", "-")
+        values.append(value)
+    return Counter(values)
 
 
 def validate_response(raw: str, groups: list[dict]) -> list[dict]:
@@ -92,6 +108,10 @@ def cache_key(session: dict, page: dict, provider: str, model: str) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def cli_session_id(doc_id: str) -> str:
+    return f"{doc_id}/easy_english/cli"
+
+
 def cache_path(doc_id: str, key: str) -> Path:
     return Path(LIBRARY_DIR) / doc_id / "easy_english" / "results" / f"{key}.json"
 
@@ -109,7 +129,7 @@ async def stream_completion(prompt: str, provider: str, model: str, doc_id: str)
         streamer = getattr(llm, f"stream_{provider}")
         # Keep persistent CLI conversation and its files inside this document,
         # separate from translation/chat; document deletion removes them too.
-        async for token in streamer(prompt, model=model, session_id=f"{doc_id}/easy_english/cli", usage_label="easy_english"):
+        async for token in streamer(prompt, model=model, session_id=cli_session_id(doc_id), usage_label="easy_english"):
             yield token
         return
     from services.usage_tracker import record_call

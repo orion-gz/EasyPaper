@@ -24,3 +24,12 @@ test('Easy English defaults to manual independently in both document modes', () 
   values.set('easypaper_easy_english_mode_research', 'invalid')
   assert.equal(getModeSetting('easyEnglishMode', 'research', storage), 'manual')
 })
+
+test('source highlights clip partial rectangles and omit fully hidden rectangles', async () => {
+  const { clipSourceRect } = await import('../src/easyEnglishMatching.js')
+  const bounds = { left: 100, top: 200, right: 300, bottom: 280 }
+  assert.deepEqual(clipSourceRect({ left: 90, top: 190, width: 40, height: 30 }, bounds),
+    { left: 100, top: 200, width: 30, height: 20 })
+  assert.equal(clipSourceRect({ left: 110, top: 50, width: 100, height: 19 }, bounds), null)
+  assert.equal(clipSourceRect({ left: 310, top: 210, width: 100, height: 19 }, bounds), null)
+})

@@ -1,7 +1,7 @@
 import { getEasyEnglishAPI, generateEasyEnglishAPI } from './api.js'
 import { t } from './i18n.js'
 import './styles/easy-english.css'
-import { exactSentenceOffsets } from './easyEnglishMatching.js'
+import { exactSentenceOffsets, clipSourceRect, visibleSourceBounds } from './easyEnglishMatching.js'
 
 function textRanges(root, sentences) {
   if (!root) return []
@@ -173,8 +173,10 @@ export function createEasyEnglishController(adapter) {
     if (!target || !visible(page)) return
     target.classList.add('easy-sentence-highlight')
     const boxes = rects(page, index)
-    for (const rect of boxes) {
-      if (!rect.width || !rect.height) continue
+    const bounds = visibleSourceBounds(sourceRoot(page))
+    for (const rawRect of boxes) {
+      const rect = clipSourceRect(rawRect, bounds)
+      if (!rect) continue
       const box = document.createElement('div'); box.className = 'easy-source-highlight'
       Object.assign(box.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` })
       overlay.append(box)

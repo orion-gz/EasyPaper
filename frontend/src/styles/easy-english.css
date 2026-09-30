@@ -20,3 +20,5 @@
 .article-viewer:has(.easy-english-content) .article-search { flex: 1; min-width: 160px; }
 .article-viewer:has(.easy-english-content) .article-search input { width: 100%; min-width: 0; }
 .article-viewer:has(.easy-english-content) .article-original [data-block-id] { scroll-margin-top: 120px; }
+
+.article-translation .trans-page-content { white-space: pre-wrap; }

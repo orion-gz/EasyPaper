@@ -167,3 +167,27 @@ async def test_changed_document_does_not_save(easy_context, monkeypatch):
     with pytest.raises(GenerationError):
         await service.generate('doc', session, session['pages'][0], 'stale', 'openai', 'test')
     assert service.read_result('doc', 'stale') is None
+
+
+@pytest.mark.parametrize('source,changed', [
+    ('The dose is 10mg.', 'The dose is 20mg.'),
+    ('The temperature is −15 °C.', 'The temperature is 15 °C.'),
+    ('The dose is 10 mg.', 'The dose is 10 g.'),
+    ('The rate is 10 mg/kg.', 'The rate is 10 mg/g.'),
+    ('The area is 10 m².', 'The area is 10 m³.'),
+    ('The value is 1e-5.', 'The value is 1e5.'),
+])
+def test_rejects_changed_quantity_sign_or_unit(source, changed):
+    groups = service.source_groups(source)
+    with pytest.raises(GenerationError):
+        service.validate_response(response(groups, [changed]), groups)
+
+
+@pytest.mark.parametrize('source,changed', [
+    ('The dose is 10mg.', 'It is a dose of 10 mg.'),
+    ('The temperature is −15 °C.', 'It is -15°C.'),
+    ('There were 10 participants.', 'In total, 10 people participated.'),
+])
+def test_allows_quantity_formatting_and_sentence_rewrite(source, changed):
+    groups = service.source_groups(source)
+    assert service.validate_response(response(groups, [changed]), groups)
