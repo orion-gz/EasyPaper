@@ -14,4 +14,3 @@ export function exactSentenceOffsets(text, sentences) {
     return { start: offsets[start], end: offsets[cursor - 1] + 1 }
   })
 }
-
