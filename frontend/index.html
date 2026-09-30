@@ -979,6 +979,15 @@
           </div>
 
           <div class="form-group">
+            <label for="setting-easy-english-mode" data-i18n="settings:easyEnglishMode">Easy English</label>
+            <select id="setting-easy-english-mode" class="form-select">
+              <option value="manual" data-i18n="settings:easyEnglishManual">On button click</option>
+              <option value="auto" data-i18n="settings:easyEnglishAuto">Automatically for the current page</option>
+            </select>
+            <small data-i18n="settings:easyEnglishUsage">Uses additional AI tokens independently of translation. English source documents only.</small>
+          </div>
+
+          <div class="form-group">
             <label>번역 제외 요소</label>
             <div class="toggle-switch-group">
               <label class="toggle-switch">

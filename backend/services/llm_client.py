@@ -1424,7 +1424,13 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
     # 같은 --session-id로 두 번 세션을 생성하려 하면 CLI가 즉시
     # "Session ID ... is already in use" 에러로 죽기 때문에, 최초 1회를 제외하고는
     # 항상 --resume을 써야 한다.
-    session_flag = ["--resume", session_id] if session_id else []
+    # Easy English keeps its own nested document directory, but Claude requires
+    # a UUID rather than that directory name for --session-id/--resume.
+    cli_session_id = session_id
+    if usage_label == "easy_english" and session_id:
+        import uuid
+        cli_session_id = str(uuid.uuid5(uuid.NAMESPACE_URL, session_id))
+    session_flag = ["--resume", cli_session_id] if cli_session_id else []
 
     lock = _get_claude_code_session_lock(session_id)
     async with lock, _get_claude_code_call_lock():
@@ -1524,7 +1530,7 @@ async def stream_claude_code(prompt: str, model: str = None, session_id: str = N
                     and session_flag[:1] == ["--resume"]
                     and "No conversation found" in (stderr_out + stdout_tail)
                 ):
-                    session_flag = ["--session-id", session_id]
+                    session_flag = ["--session-id", cli_session_id]
                     # 위의 provider_switched 캐치업과 동일한 이유: 새로 만드는
                     # 세션은 이전 대화 내용을 전혀 모르므로, catchup_prefix가
                     # 아직 안 붙어 있었다면(= provider_switched로는 감지되지

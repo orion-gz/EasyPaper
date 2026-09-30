@@ -27,5 +27,8 @@
   "network_error": "Could not connect to the model provider. Check the connection.",
   "authentication_failed": "Provider authentication failed. Check the API key or CLI login.",
   "unsupported_model": "The selected model is unavailable. Check the model setting.",
-  "pdf_reading_order_review": "Reading order needs review"
+  "pdf_reading_order_review": "Reading order needs review",
+  "easy_english_requires_english": "Easy English requires an English source. Check the document language.",
+  "easy_english_sentence_too_long": "A source sentence is too long to convert safely.",
+  "easy_english_invalid_mapping": "The result did not preserve source sentence groups or values. Please retry."
 }

@@ -208,3 +208,18 @@ def test_cancelled_stream_reaps_process_before_next_call(cli_env, monkeypatch):
 
     asyncio.run(scenario())
     assert len(calls) == 2
+
+
+def test_easy_english_keeps_nested_directory_with_valid_distinct_uuid(cli_env, monkeypatch):
+    processes = [FakeProcess(returncode=1, stderr=b"No conversation found"), FakeProcess(chunks=[b"[]"])]
+    calls = install_fake_cli(monkeypatch, processes)
+    doc_id = str(uuid.uuid4())
+    session = f"{doc_id}/easy_english/cli"
+    async def run():
+        return [part async for part in llm_client.stream_claude_code("Simplify.", session_id=session, usage_label="easy_english")]
+    assert asyncio.run(run()) == ['[]']
+    identifier = str(uuid.uuid5(uuid.NAMESPACE_URL, session))
+    assert identifier != doc_id
+    assert calls[0]['args'][-2:] == ('--resume', identifier)
+    assert calls[1]['args'][-2:] == ('--session-id', identifier)
+    assert calls[0]['kwargs']['cwd'] == str(cli_env['library'] / session)

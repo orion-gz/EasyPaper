@@ -11,6 +11,7 @@ VALID_PROCESSING_POLICIES = {"inherit", "local_only"}
 
 _TRANSFER_ITEMS = {
     "translate": ["document_text", "page_image"],
+    "easy_english": ["document_text"],
     "chat": ["document_text", "chat_history", "page_image"],
     "insight": ["document_text"],
     "primer": ["document_text", "document_metadata", "page_image"],
@@ -56,7 +57,7 @@ def provider_for_operation(operation: str) -> str:
         get_analysis_provider, get_chat_provider, get_library_provider,
         get_trans_provider,
     )
-    if operation == "translate":
+    if operation in {"translate", "easy_english"}:
         return get_trans_provider()
     if operation == "chat":
         return get_chat_provider()
@@ -79,7 +80,7 @@ def processing_disclosure(provider: str, operation: str) -> dict:
 
 def ensure_processing_allowed(document: dict, operation: str, provider: str | None = None) -> dict:
     """Raise before work/rate accounting starts when policy or classification blocks it."""
-    if operation in {"translate", "insight", "primer"} and document.get("classification_status", "confirmed") != "confirmed":
+    if operation in {"translate", "easy_english", "insight", "primer"} and document.get("classification_status", "confirmed") != "confirmed":
         raise HTTPException(status_code=409, detail={
             "code": "classification_confirmation_required",
             "params": {"status": document.get("classification_status", "pending")},

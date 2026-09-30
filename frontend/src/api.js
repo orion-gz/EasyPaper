@@ -1184,3 +1184,40 @@ export async function getFullSummaryStatusAPI(docId) {
   if (!res.ok) throw await apiError(res)
   return res.json()
 }
+
+export async function getEasyEnglishAPI(sessionId, page, signal) {
+  const response = await fetch(`/api/easy-english/${encodeURIComponent(sessionId)}/${page}`, { signal, cache: 'no-store' })
+  if (response.status === 404) return null
+  if (!response.ok) throw await apiError(response)
+  return response.json()
+}
+
+export async function generateEasyEnglishAPI(sessionId, page, regenerate, signal) {
+  const response = await fetch(`/api/easy-english/${encodeURIComponent(sessionId)}/${page}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ regenerate }), signal,
+  })
+  if (!response.ok) throw await apiError(response)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      buffer += decoder.decode(value, { stream: !done })
+      const frames = buffer.split(/\r?\n\r?\n/)
+      buffer = frames.pop()
+      for (const frame of frames) {
+        const line = frame.split('\n').find(value => value.startsWith('data: '))
+        if (!line) continue
+        const data = JSON.parse(line.slice(6))
+        if (data.error) throw new Error(errorMessage(data.error))
+        if (data.done) return data
+      }
+      if (done) throw new Error('The generation stream ended before completion.')
+    }
+  } finally {
+    await reader.cancel().catch(() => {})
+    reader.releaseLock()
+  }
+}

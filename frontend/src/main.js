@@ -1,3 +1,4 @@
+import { createEasyEnglishController } from './easyEnglish.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
 import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './documentWorkspaceRuntime.js'
 import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail, getPDFPageText, getPDFPageWidth } from './pdfViewer.js'
@@ -344,6 +345,7 @@ async function persistDocumentLanguageOverride() {
   state.preferredTargetLanguage = saved.preferred_target_language
   state.pageInsightCache = {}
   renderDocumentLanguageStatus()
+  easyEnglishController?.schedule()
   showToast(t('viewer:language.saved'), 'success')
 }
 
@@ -536,7 +538,7 @@ function initializeSettingsInformationArchitecture() {
 
   const translationHeading = $('settings-translation-heading')?.closest('.settings-section-heading')
   if (translationHeading) translationBody?.appendChild(translationHeading)
-  for (const id of ['setting-source-lang', 'setting-target-lang', 'setting-trans-style', 'setting-translation-mode', 'setting-ignore-math']) {
+  for (const id of ['setting-source-lang', 'setting-target-lang', 'setting-trans-style', 'setting-translation-mode', 'setting-easy-english-mode', 'setting-ignore-math']) {
     moveSettingsGroup(id, translationBody)
   }
   moveSettingsGroup('setting-prompt-template', translationBody)
@@ -559,7 +561,7 @@ function initializeSettingsInformationArchitecture() {
 
   const rowControlIds = [
     'setting-ui-locale', 'setting-ui-scale', 'setting-source-lang', 'setting-accent-swatches',
-    'setting-target-lang', 'setting-trans-style', 'setting-translation-mode',
+    'setting-target-lang', 'setting-trans-style', 'setting-translation-mode', 'setting-easy-english-mode',
     'setting-ignore-math', 'setting-default-zoom', 'setting-toolbar-position',
     'setting-disable-hover-tooltip', 'setting-auto-generate-keywords',
     'setting-ollama-host', 'setting-openai-key', 'setting-gemini-key',
@@ -1103,6 +1105,7 @@ function syncModeSettings(documentMode) {
   syncSelectValue(settingTargetLang, options.targetLang)
   syncSelectValue(settingTransStyle, options.style)
   syncSelectValue(settingTranslationMode, getTranslationMode(settingsTranslationModeContext))
+  syncSelectValue($('setting-easy-english-mode'), getModeSetting('easyEnglishMode', settingsTranslationModeContext))
   settingIgnoreMath.checked = options.ignoreMath
   settingIgnoreTable.checked = options.ignoreTable
   settingIgnoreRefs.checked = options.ignoreRefs
@@ -1206,6 +1209,7 @@ function resetState() {
   if (state.pollingTimer) { clearInterval(state.pollingTimer); state.pollingTimer = null }
   if (state.chatActiveStream) { state.chatActiveStream(); state.chatActiveStream = null }
 
+  easyEnglishController?.reset()
   Object.assign(state, {
     sessionId: null, filename: null, title: null, totalPages: 0, currentPage: 1,
     zoom: 1.5, translationCache: {}, translationWarnings: {}, translationSentences: {}, translatingPages: new Set(), translatedPages: new Set(), pollingTimer: null,
@@ -1452,6 +1456,10 @@ async function handleFiles(uploadItems, targetFolderId = null) {
       const { result } = successes[0]
       const title = result.metadata?.title || result.filename
       state.sessionId = result.session_id
+      state.sourceLanguage = result.source_language || 'auto'
+      state.detectedSourceLanguage = result.detected_source_language || 'und'
+      state.currentDocumentMode = result.document_mode || 'research'
+      state.easyEnglishRevision = result.content_revision || 1
       loadDocumentImages(result.session_id)
       state.filename = result.filename
       state.totalPages = result.total_pages
@@ -1520,6 +1528,7 @@ function syncTranslationActions() {
 }
 
 function resumeVisibleTranslation() {
+  easyEnglishController?.schedule()
   if (getEffectiveTranslationMode() === 'scroll') scheduleVisiblePageTranslation(state.currentPage)
 }
 
@@ -1551,6 +1560,7 @@ function scheduleVisiblePageTranslation(pageNum) {
 
 // ── 스크롤 뷰어 초기화 ────────────────────────────
 async function initScrollViewer() {
+  easyEnglishController?.reset()
   viewerScrollContainer.innerHTML = ''
   visibleTranslationTimers.forEach(timer => clearTimeout(timer))
   visibleTranslationTimers.clear()
@@ -1676,6 +1686,51 @@ let isTransPaneCollapsed = false
 let currentTransPaneWidth = 620
 let hasLibraryStateInHistory = false
 
+let easyEnglishController
+function easyEnglish() {
+  if (!easyEnglishController) easyEnglishController = createEasyEnglishController({
+    root: viewerScrollContainer,
+    setBusy: value => { state.easyEnglishGenerating = value },
+    context: () => ({
+      sessionId: state.sessionId, page: state.currentPage, revision: state.easyEnglishRevision || 1,
+      language: state.sourceLanguage === 'auto' ? state.detectedSourceLanguage : state.sourceLanguage,
+      mode: getModeSetting('easyEnglishMode', state.currentDocumentMode),
+      active: Boolean(state.sessionId) && viewerScreen.classList.contains('active')
+        && document.body.dataset.workspaceInactive !== 'true' && !document.hidden,
+    }),
+    sourceRoot: page => viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${page}"] .textLayer,.article-unit[data-unit-index="${page}"] .article-original`),
+    sourceRects: (page, pair) => {
+      if (!pair.source_mapping) return null
+      if (pair.source_mapping.status !== 'exact') return []
+      const canvas = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${page}"] canvas`)
+      if (!canvas) return []
+      const bounds = canvas.getBoundingClientRect()
+      const sx = bounds.width / Number.parseFloat(canvas.style.width)
+      const sy = bounds.height / Number.parseFloat(canvas.style.height)
+      return sourceMappingRects(page, pair.source_mapping).map(rect => ({
+        left: bounds.left + rect.left * sx, top: bounds.top + rect.top * sy,
+        width: rect.width * sx, height: rect.height * sy,
+      }))
+    },
+    revealSource: (page, box) => {
+      const article = viewerScrollContainer.querySelector(`.article-unit[data-unit-index="${page}"] .article-original`)
+      if (article) {
+        const pane = article.getBoundingClientRect()
+        if (box.top < pane.top || box.top + box.height > pane.bottom) {
+          article.scrollBy({ top: box.top - pane.top - pane.height / 3, behavior: 'smooth' })
+        }
+        article.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        return
+      }
+      const bounds = viewerScrollContainer.getBoundingClientRect()
+      if (box.top < bounds.top || box.top + box.height > bounds.bottom) {
+        viewerScrollContainer.scrollBy({ top: box.top - bounds.top - bounds.height / 3, behavior: 'smooth' })
+      }
+    },
+  })
+  return easyEnglishController
+}
+
 // ── 번역 블록 생성 ────────────────────────────────
 function createTransBlock(pageNum) {
   const block = document.createElement('div')
@@ -1696,6 +1751,7 @@ function createTransBlock(pageNum) {
     </div>
     <div class="trans-tabs${state.disableInsights ? ' insights-off' : ''}" id="trans-tabs-${pageNum}">
       <button class="trans-tab-btn active" data-tab="translation">번역</button>
+      <button class="trans-tab-btn" data-tab="easy-english">Easy English</button>
       <button class="trans-tab-btn insight-tab-btn" data-tab="keywords">${state.currentDocumentMode === "general" ? "고급 어휘·키워드" : "키워드·단어"}</button>
       <button class="trans-tab-btn insight-tab-btn" data-tab="summary">요약</button>
       <button class="trans-tab-refresh-btn insight-tab-btn hidden" title="다시 생성">${icon('refreshCw', 12)}</button>
@@ -1703,6 +1759,7 @@ function createTransBlock(pageNum) {
     <div class="trans-page-content" id="trans-content-${pageNum}" dir="auto">
       ${translationPlaceholder}
     </div>
+    <div class="trans-insight-content easy-english-content hidden" id="easy-english-content-${pageNum}" dir="ltr"></div>
     <div class="trans-insight-content hidden" id="keywords-content-${pageNum}" dir="auto"></div>
     <div class="trans-insight-content hidden" id="summary-content-${pageNum}" dir="auto"></div>
     <div class="trans-resizer-handle"></div>
@@ -1732,6 +1789,30 @@ function createTransBlock(pageNum) {
       })
     })
   }
+  const tabs = block.querySelector('.trans-tabs')
+  tabs.setAttribute('role', 'tablist')
+  tabs.querySelectorAll('.trans-tab-btn').forEach(button => {
+    const tab = button.dataset.tab
+    const panelId = tab === 'translation' ? `trans-content-${pageNum}` : `${tab}-content-${pageNum}`
+    button.id = `trans-tab-${pageNum}-${tab}`
+    button.setAttribute('role', 'tab')
+    button.setAttribute('aria-controls', panelId)
+    button.setAttribute('aria-selected', String(tab === 'translation'))
+    button.tabIndex = tab === 'translation' ? 0 : -1
+    const pane = block.querySelector(`#${panelId}`)
+    pane?.setAttribute('role', 'tabpanel')
+    pane?.setAttribute('aria-labelledby', button.id)
+  })
+  tabs.addEventListener('keydown', event => {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return
+    const buttons = [...tabs.querySelectorAll('.trans-tab-btn:not(:disabled)')].filter(button => !state.disableInsights || !button.classList.contains('insight-tab-btn'))
+    const index = buttons.indexOf(document.activeElement)
+    if (index < 0) return
+    event.preventDefault()
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+    buttons[next].click(); buttons[next].focus()
+  })
+  queueMicrotask(() => easyEnglish().attach(pageNum))
   return block
 }
 
@@ -1739,7 +1820,16 @@ function createTransBlock(pageNum) {
 function switchTransTab(pageNum, tab) {
   const block = $(`trans-block-${pageNum}`)
   if (!block) return
-  block.querySelectorAll('.trans-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab))
+  if (tab === 'easy-english' && block.querySelector('[data-tab="easy-english"]').disabled) return
+  easyEnglishController?.clearHighlight()
+  block.querySelectorAll('.trans-tab-btn').forEach(btn => {
+    const selected = btn.dataset.tab === tab
+    btn.classList.toggle('active', selected)
+    btn.setAttribute('aria-selected', String(selected))
+    btn.tabIndex = selected ? 0 : -1
+  })
+  $(`easy-english-content-${pageNum}`)?.classList.toggle('hidden', tab !== 'easy-english')
+  if (tab === 'easy-english') easyEnglish().open(pageNum)
 
   const transContent = $(`trans-content-${pageNum}`)
   const keywordsContent = $(`keywords-content-${pageNum}`)
@@ -1750,7 +1840,7 @@ function switchTransTab(pageNum, tab) {
 
   const refreshBtn = block.querySelector('.trans-tab-refresh-btn')
   if (refreshBtn) {
-    if (tab === 'translation') {
+    if (tab === 'translation' || tab === 'easy-english') {
       refreshBtn.classList.add('hidden')
     } else {
       refreshBtn.classList.remove('hidden')
@@ -1770,7 +1860,7 @@ function applyInsightsTabVisibility() {
     if (state.disableInsights) {
       const pageNum = tabsEl.id.replace('trans-tabs-', '')
       const activeBtn = tabsEl.querySelector('.trans-tab-btn.active')
-      if (activeBtn && activeBtn.dataset.tab !== 'translation') {
+      if (activeBtn && ['keywords', 'summary'].includes(activeBtn.dataset.tab)) {
         switchTransTab(pageNum, 'translation')
       }
     }
@@ -2013,6 +2103,7 @@ function renderTransContent(pageNum, text, cached = false) {
 function updatePageDisplay(pageNum) {
   if (pageNum === state.currentPage) return
   state.currentPage = pageNum
+  easyEnglishController?.schedule()
   pageInput.value = pageNum
   scheduleSaveLastReadPage(pageNum)
 }
@@ -4314,6 +4405,9 @@ async function changeProviderAndModel(type, newProvider, newModel) {
       pdf_parser_engine: sys.pdf_parser_engine || 'pymupdf'
     }
     await saveSystemSettingsAPI(payload)
+    localStorage.setItem('easypaper_easy_english_model_revision', String(Date.now()))
+    easyEnglishController?.reset()
+    easyEnglishController?.schedule()
     // sync settings pickers
     if (type === 'trans') {
       settingTransPicker.setValue(newProvider, newModel)
@@ -4533,6 +4627,11 @@ document.querySelectorAll('.recommend-model-btn').forEach(btn => {
 // 일반 설정: 저장 버튼 없이 필드 변경 즉시 저장한다. 번역 결과에 영향을 주는
 // 필드(대상 언어/문체/모드/제외 요소)가 바뀌면 기존과 동일하게 재번역을 제안하고,
 // 줌/툴바 위치처럼 뷰어 표시에만 영향을 주는 필드는 저장 후 바로 적용만 한다.
+$('setting-easy-english-mode')?.addEventListener('change', event => {
+  setModeSetting('easyEnglishMode', settingsTranslationModeContext, event.target.value)
+  easyEnglishController?.schedule()
+})
+
 function persistGeneralSettingsToStorage() {
   setModeSetting('targetLang', settingsTranslationModeContext, settingTargetLang.value)
   setModeSetting('style', settingsTranslationModeContext, settingTransStyle.value)
@@ -4789,6 +4888,9 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
 
   try {
     const res = await saveSystemSettingsAPI(settings)
+    localStorage.setItem('easypaper_easy_english_model_revision', String(Date.now()))
+    easyEnglishController?.reset()
+    easyEnglishController?.schedule()
     // sync compact pickers
     if (transProvider && transModel) viewerTransPicker.setValue(transProvider, transModel)
     if (chatProvider && chatModel) chatSidebarPicker.setValue(chatProvider, chatModel)
@@ -10676,6 +10778,8 @@ async function openFromLibrary(doc, shouldPushState = true) {
     if (shouldPushState) {
       history.pushState({ screen: 'viewer', docId: doc.id }, '', `#viewer?id=${doc.id}`)
     }
+    easyEnglishController?.reset()
+    state.easyEnglishRevision = doc.content_revision || 1
     state.sessionId  = doc.id
     allMemosHidden = loadAllMemosHiddenState(doc.id)
     updateMemosHideAllBtnUI()
@@ -18856,12 +18960,15 @@ async function restoreArticleChatHistory(chatRes, doc) {
 }
 
 async function renderArticleDocument(doc) {
+  easyEnglishController?.reset()
+  state.easyEnglishRevision = doc.content_revision || 1
   state.articleViewer?.destroy?.()
   const manifest = await getArticleAPI(doc.id)
   state.currentContentKind = 'html_article'
   state.articleViewer = await mountArticleViewer({
     container: viewerScrollContainer, doc, manifest,
     sanitize: html => DOMPurify.sanitize(html, { ADD_ATTR: ['data-block-id', 'data-original-url'] }),
+    createTranslationPanel: page => createTransBlock(page),
     getTranslation: page => getPageTranslation(doc.id, page, getTranslationOptions(doc.document_mode || 'research')).catch(() => null),
     loadAnnotations: () => loadAnnotations(doc.id), saveAnnotations: value => saveAnnotations(doc.id, value),
     loadMemos: () => loadMemos(doc.id), saveMemos: value => saveMemos(doc.id, value),
@@ -18873,7 +18980,7 @@ async function renderArticleDocument(doc) {
       translationPending: t('library:article.translationPending'), highlight: t('library:article.highlight'),
       underline: t('library:article.underline'), memo: t('library:article.memo'), memoPrompt: t('library:article.memoPrompt'), capture: t('library:article.capture'),
     },
-    onCurrentUnit: index => { state.currentPage = index; pageInput.value = index },
+    onCurrentUnit: index => { state.currentPage = index; pageInput.value = index; easyEnglishController?.schedule() },
     onCapture: (dataUrl, index) => askAIAssistantImage(dataUrl, index),
     onOutline: items => {
       outlineContent?.replaceChildren()
@@ -18925,8 +19032,8 @@ function installReaderWorkspaceRuntime() {
         void syncAnnotationsNow(state.sessionId, { keepalive: true, refresh: false })
       }
     },
-    suspend: () => { focusModeController?.clear(); suspendPDFRendering(); globalAnalyticsTracker.sendHeartbeat() },
-    resume: async () => { applyModeViewerSettings(state.currentDocumentMode); await resumePDFRendering() },
+    suspend: () => { easyEnglishController?.clearHighlight(); focusModeController?.clear(); suspendPDFRendering(); globalAnalyticsTracker.sendHeartbeat() },
+    resume: async () => { applyModeViewerSettings(state.currentDocumentMode); await resumePDFRendering(); easyEnglishController?.schedule() },
   })
 }
 

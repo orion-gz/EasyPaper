@@ -3,7 +3,7 @@ import { gotoApp, mockBaseRoutes } from './helpers.js'
 
 async function expectSettingsLabels(page) {
   const selects = page.locator('#settings-modal select')
-  await expect(selects).toHaveCount(10)
+  await expect(selects).toHaveCount(11)
   for (const select of await selects.all()) {
     await expect.poll(() => select.evaluate(el =>
       document.getElementById(`${el.id}-picker-value`).textContent === (el.selectedOptions[0]?.textContent || '')
