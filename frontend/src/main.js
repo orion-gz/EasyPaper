@@ -1703,7 +1703,7 @@ function easyEnglish() {
     sourceRoot: page => viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${page}"] .textLayer,.article-unit[data-unit-index="${page}"] .article-original`),
     sourceRects: (page, pair) => {
       if (!pair.source_mapping) return null
-      if (pair.source_mapping.status !== 'exact') return []
+      if (pair.source_mapping.status !== 'exact') return null
       const canvas = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${page}"] canvas`)
       if (!canvas) return []
       const bounds = canvas.getBoundingClientRect()
@@ -1831,7 +1831,17 @@ function switchTransTab(pageNum, tab) {
     btn.tabIndex = selected ? 0 : -1
   })
   $(`easy-english-content-${pageNum}`)?.classList.toggle('hidden', tab !== 'easy-english')
-  if (tab === 'easy-english') easyEnglish().open(pageNum)
+  if (tab === 'easy-english') {
+    viewerScrollContainer.querySelectorAll('.pdf-highlight-overlay').forEach(overlay => {
+      clearOverlayBoxes(overlay, 'sentence-hover-box', 'sentence-equation-box')
+    })
+    viewerScrollContainer.querySelectorAll('.sentence-highlight').forEach(node => node.classList.remove('sentence-highlight'))
+    currentHoverPage = null
+    currentHoverSentenceIdx = null
+    if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null }
+    focusModeController?.clear()
+    easyEnglish().open(pageNum)
+  }
 
   const transContent = $(`trans-content-${pageNum}`)
   const keywordsContent = $(`keywords-content-${pageNum}`)

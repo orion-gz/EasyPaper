@@ -33,3 +33,17 @@ test('source highlights clip partial rectangles and omit fully hidden rectangles
   assert.equal(clipSourceRect({ left: 110, top: 50, width: 100, height: 19 }, bounds), null)
   assert.equal(clipSourceRect({ left: 310, top: 210, width: 100, height: 19 }, bounds), null)
 })
+
+
+test('PDF ligatures and line hyphenation retain original character offsets', () => {
+  const text = 'The eﬀect is signi-\nficant. It worked.'
+  assert.deepEqual(exactSentenceOffsets(text, [
+    { source_text: 'The effect is significant.' }, { source_text: 'It worked.' },
+  ]), [{ start: 0, end: 27 }, { start: 28, end: 38 }])
+})
+
+test('punctuation differences never map an unrelated source sentence', () => {
+  assert.deepEqual(exactSentenceOffsets('It costs -5. It costs 5.', [
+    { source_text: 'It costs 5.' },
+  ]), [{ start: 13, end: 24 }])
+})

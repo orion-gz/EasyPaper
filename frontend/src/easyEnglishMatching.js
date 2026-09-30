@@ -1,17 +1,28 @@
-// Ignore whitespace only; never guess by sentence counts, prefixes or proximity.
-export function exactSentenceOffsets(text, sentences) {
+// Normalize PDF typography while retaining exact UTF-16 source offsets.
+// Punctuation and case remain significant; never infer a match from a prefix.
+function normalizeSource(text) {
   let normalized = ''
-  const offsets = []
-  for (let i = 0; i < text.length; i++) {
-    if (!/\s/.test(text[i])) { normalized += text[i]; offsets.push(i) }
+  const starts = [], ends = []
+  for (const { segment, index } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
+    if (segment === '\u00ad' || (segment === '-' && /\p{L}$/u.test(text.slice(0, index)) && /^-\s*\n\s*\p{L}/u.test(text.slice(index)))) continue
+    for (const char of segment.normalize('NFKC')) {
+      if (/\s/.test(char)) continue
+      normalized += char
+      for (let i = 0; i < char.length; i++) { starts.push(index); ends.push(index + segment.length) }
+    }
   }
+  return { normalized, starts, ends }
+}
+
+export function exactSentenceOffsets(text, sentences) {
+  const { normalized, starts, ends } = normalizeSource(text)
   let cursor = 0
   return sentences.map(sentence => {
-    const target = sentence.source_text.replace(/\s/g, '')
+    const target = normalizeSource(sentence.source_text).normalized
     const start = target ? normalized.indexOf(target, cursor) : -1
     if (start < 0) return null
     cursor = start + target.length
-    return { start: offsets[start], end: offsets[cursor - 1] + 1 }
+    return { start: starts[start], end: ends[cursor - 1] }
   })
 }
 

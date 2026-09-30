@@ -18,7 +18,7 @@ async function setup(page, { language = 'en', mode = 'manual', web = false } = {
     if (route.request().method() === 'GET') return route.fulfill(stored ? { json: stored } : { status: 404, json: {} })
     posts++
     if (failure) return route.fulfill({ contentType: 'text/event-stream', body: 'data: {"done":true,"error":{"code":"easy_english_invalid_mapping"}}\n\n' })
-    stored = { ...result, sentences: [{ ...sentence, source_text: web ? 'Sample Paper A' : sentence.source_text, easy_sentences: ['This is Sample Paper A.', 'It is a sample.'] }] }
+    stored = { ...result, sentences: [{ ...sentence, source_text: web ? 'Sample Paper A' : sentence.source_text, easy_sentences: ['This is Sample Paper A.'] }] }
     return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify(stored)}\n\n` })
   })
   await gotoApp(page)
@@ -34,7 +34,7 @@ async function setup(page, { language = 'en', mode = 'manual', web = false } = {
   return { reader, posts: () => posts, fail: () => { failure = true } }
 }
 
-test('manual tab opening does not generate; one source owns the split result; revisit is cached', async ({ page }) => {
+test('manual tab opening does not generate; source and result match one to one; revisit is cached', async ({ page }) => {
   const { reader, posts } = await setup(page)
   await reader.locator('[data-tab="easy-english"]').click()
   const host = reader.locator('#easy-english-content-1')
@@ -42,7 +42,7 @@ test('manual tab opening does not generate; one source owns the split result; re
   expect(posts()).toBe(0)
   await host.locator('button').click()
   await expect(host.locator('.easy-english-sentence')).toHaveCount(1)
-  await expect(host.locator('.easy-english-sentence')).toContainText('This is Sample Paper A. It is a sample.')
+  await expect(host.locator('.easy-english-sentence')).toContainText('This is Sample Paper A.')
   await host.locator('.easy-english-sentence').hover()
   await expect(reader.locator('.easy-source-highlight')).not.toHaveCount(0)
   await host.locator('.easy-english-sentence').focus()
@@ -195,4 +195,27 @@ test('web source highlights stay inside the original scroll pane', async ({ page
     expect(box.y).toBeGreaterThanOrEqual(pane.y)
     expect(box.y + box.height).toBeLessThanOrEqual(pane.y + pane.height)
   }
+})
+
+test('PDF fallback highlights only matching glyph spans and suppresses translation hover', async ({ page }) => {
+  const { reader } = await setup(page)
+  await reader.locator('[data-tab="easy-english"]').click()
+  await reader.locator('#easy-english-content-1 button').click()
+  const layer = reader.locator('.textLayer').first()
+  await layer.evaluate(node => {
+    node.replaceChildren()
+    for (const [text, left] of [['Sample PDF ', 10], ['A - ', 150], ['page 1', 230], ['Unmatched source.', 10]]) {
+      const span = document.createElement('span')
+      span.textContent = text
+      Object.assign(span.style, { position: 'absolute', left: `${left}px`, top: text === 'Unmatched source.' ? '90px' : '40px', fontSize: '16px', transform: 'none' })
+      node.append(span)
+    }
+  })
+  await reader.locator('.easy-english-sentence').hover()
+  const boxes = reader.locator('.easy-source-highlight')
+  await expect(boxes).toHaveCount(3)
+  for (const box of await boxes.all()) expect((await box.boundingBox()).width).toBeLessThan(140)
+  await layer.locator('span').last().hover()
+  await expect(boxes).toHaveCount(0)
+  await expect(reader.locator('.sentence-hover-box')).toHaveCount(0)
 })

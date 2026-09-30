@@ -10,16 +10,21 @@ function textRanges(root, sentences) {
   })
   const nodes = []
   let text = '', node
-  while ((node = walker.nextNode())) { nodes.push({ node, start: text.length, end: text.length + node.length }); text += node.textContent }
+  while ((node = walker.nextNode())) {
+    nodes.push({ node, start: text.length, end: text.length + node.length })
+    text += node.textContent
+    if (node.parentElement?.nextElementSibling?.tagName === 'BR') text += '\n'
+  }
   return exactSentenceOffsets(text, sentences).map(offset => {
     if (!offset) return null
-    const first = nodes.find(item => item.end > offset.start)
-    const last = nodes.find(item => item.end >= offset.end)
-    if (!first || !last) return null
-    const range = document.createRange()
-    range.setStart(first.node, offset.start - first.start)
-    range.setEnd(last.node, offset.end - last.start)
-    return range
+    // A cross-element Range can include entire intermediate PDF spans.
+    // Measure only the selected characters in each text node.
+    return nodes.filter(item => item.end > offset.start && item.start < offset.end).map(item => {
+      const range = document.createRange()
+      range.setStart(item.node, Math.max(0, offset.start - item.start))
+      range.setEnd(item.node, Math.min(item.node.length, offset.end - item.start))
+      return range
+    })
   })
 }
 
@@ -164,7 +169,7 @@ export function createEasyEnglishController(adapter) {
     // Ranges are rebuilt because PDF text layers can be recycled and web annotations
     // can split text nodes. Never retain a Range into a detached document.
     const range = (ranges || textRanges(sourceRoot(page), pairs))[index]
-    return range ? [...range.getClientRects()] : []
+    return range ? range.flatMap(part => [...part.getClientRects()]) : []
   }
   function showPair(page, index, reveal = false, fromSource = false) {
     clearHighlight()
@@ -199,7 +204,7 @@ export function createEasyEnglishController(adapter) {
     const page = Number(wrapper?.dataset.page || wrapper?.dataset.unitIndex)
     if (!visible(page)) return null
     const pairs = entry(page).result?.sentences || []
-    const ranges = pairs.some(pair => !pair.source_mapping) ? textRanges(sourceRoot(page), pairs) : []
+    const ranges = textRanges(sourceRoot(page), pairs)
     for (let index = 0; index < pairs.length; index++) {
       if (rects(page, index, ranges).some(rect => event.clientX >= rect.left && event.clientX <= rect.left + rect.width && event.clientY >= rect.top && event.clientY <= rect.top + rect.height)) return { page, index, source: true }
     }
@@ -209,7 +214,13 @@ export function createEasyEnglishController(adapter) {
     adapter.root.addEventListener(name, event => {
       if (!active()) return
       const pair = pairAt(event)
-      if (!pair) { if (name === 'mousemove') clearHighlight(); return }
+      if (!pair) {
+        if (name === 'mousemove') clearHighlight()
+        const wrapper = event.target.closest?.('.pdf-page-wrapper,.article-unit')
+        const page = Number(wrapper?.dataset.page || wrapper?.dataset.unitIndex)
+        if (visible(page) && event.target.closest?.('.textLayer,.article-original')) event.stopImmediatePropagation()
+        return
+      }
       // The existing translation matcher must not highlight a different sentence.
       event.stopImmediatePropagation()
       showPair(pair.page, pair.index, name === 'click', pair.source)
