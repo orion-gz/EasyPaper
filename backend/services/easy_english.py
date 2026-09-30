@@ -12,17 +12,16 @@ import httpx
 
 from config import LIBRARY_DIR, get_trans_model, get_trans_provider, get_ollama_host
 from services.atomic_io import atomic_write_text
-from services.chunker import tag_source_text
+from services.chunker import tag_source_text, split_into_sentences
 from services.generation_errors import GenerationError
 from services.pdf_layout import attach_source_mappings
 
-PROMPT_VERSION = 2
+PROMPT_VERSION = 3
 MAX_CHUNK_CHARS = 12000
 _running: dict[tuple[str, str], asyncio.Task] = {}
 PROMPT = """Rewrite English source sentences using simpler sentence structures.
-Keep one output sentence per source sentence whenever it can be made clear and easy.
-Only split into several short sentences if keeping one sentence would remain complex
-or unclear. Never merge source sentences or move information between their groups.
+Keep exactly one output sentence per source sentence. Never split a source sentence.
+Never merge source sentences or move information between their groups.
 Keep already simple sentences unchanged. Preserve ALL information, technical terms,
 names, numbers, units, negation, conditions, causality, citations, uncertainty and claim
 strength. Do not summarize, omit, infer, explain, or add examples. Preserve headings,
@@ -92,8 +91,10 @@ def validate_response(raw: str, groups: list[dict]) -> list[dict]:
             if row["source_sentence_id"] != source["source_sentence_id"]:
                 raise ValueError("source id/order")
             values = row["easy_sentences"]
-            if not isinstance(values, list) or not values or any(not isinstance(v, str) or not v.strip() for v in values):
+            if not isinstance(values, list) or len(values) != 1 or any(not isinstance(v, str) or not v.strip() for v in values):
                 raise ValueError("empty result")
+            if len(split_into_sentences(values[0])) != 1:
+                raise ValueError("split source sentence")
             if _literals(source["source_text"]) != _literals(" ".join(values)):
                 raise ValueError("changed source literals")
             result.append({**source, "easy_sentences": [v.strip() for v in values]})

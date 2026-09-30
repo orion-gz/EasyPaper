@@ -12,14 +12,15 @@ def response(groups, sentences=None):
                         "easy_sentences": sentences or [group["source_text"]]} for group in groups])
 
 
-def test_prefers_single_sentence_but_allows_one_group_with_multiple_sentences():
+def test_requires_one_output_sentence_per_source():
     groups = service.source_groups('Although it rained, we stayed because the road was closed.')
     single = service.validate_response(response(groups), groups)
-    split = service.validate_response(response(groups, ['It rained.', 'We stayed because the road was closed.']), groups)
-    assert len(single) == len(split) == 1
-    assert len(split[0]['easy_sentences']) == 2
-    assert single[0]['source_sentence_id'] == split[0]['source_sentence_id']
-    assert 'Keep one output sentence' in service.PROMPT
+    assert len(single) == 1
+    for values in [['It rained.', 'We stayed because the road was closed.'],
+                   ['It rained. We stayed because the road was closed.']]:
+        with pytest.raises(GenerationError):
+            service.validate_response(response(groups, values), groups)
+    assert 'Keep exactly one output sentence' in service.PROMPT
     assert 'Never merge source sentences' in service.PROMPT
 
 

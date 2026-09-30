@@ -13,9 +13,8 @@ English defaults to **On button click** in both research and general modes.
 current page, independently of translation settings. Opening the tab in manual
 mode only reads the cache. Reopening a result costs no additional generation.
 
-A source sentence should remain one simplified sentence when possible. A complex
-sentence can become several short sentences, but those sentences remain one
-source-owned group. Hover either side to highlight its match; click or press
+Each source sentence maps to exactly one simplified sentence. Responses that split
+or merge source sentences are rejected. Hover either side to highlight its match; click or press
 Enter on a result to reveal the original. The source-pairs disclosure remains
 available when exact PDF geometry or text matching cannot be resolved. Source
 highlights are clipped to the viewport and source scroll containers.
