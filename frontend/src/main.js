@@ -3,6 +3,7 @@ import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './do
 import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail, getPDFPageText, getPDFPageWidth } from './pdfViewer.js'
 import { translationFeedback } from './translationFeedback.js'
 import './style.css'
+import { mountChatQuestionNav } from './chatQuestionNav.js'
 import { applyDesktopUpdate } from './desktopUpdate.js'
 import { pageCoordinates } from './pdfCoordinates.js'
 import { mergePdfHighlightRects, mappedSentenceRange } from './pdfSentenceGeometry.js'
@@ -898,6 +899,7 @@ const chatSidebar        = $('chat-sidebar')
 const chatResizer        = $('chat-resizer')
 const chatCloseBtn       = $('chat-close-btn')
 const chatMessages       = $('chat-messages')
+mountChatQuestionNav(chatMessages)
 const floatingScrollNav  = $('floating-scroll-nav')
 const outlineToggleBtn   = $('outline-toggle-btn')
 const outlineSidebar     = $('outline-sidebar')

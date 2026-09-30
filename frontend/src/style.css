@@ -8097,3 +8097,60 @@ body.light-theme .chat-drawer {
   outline: 2px solid var(--control-accent);
   outline-offset: 3px;
 }
+
+/* User question navigation in the AI assistant sidebar. */
+.chat-message-navigation {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-message-navigation > .chat-messages {
+  min-width: 0;
+}
+
+.chat-question-nav {
+  display: flex;
+  flex-direction: column;
+  align-self: center;
+  flex-shrink: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 8px 4px;
+  scrollbar-width: thin;
+}
+
+.chat-question-nav[hidden] { display: none; }
+
+.chat-question-dot {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  min-height: 24px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.chat-question-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.chat-question-dot:hover::before,
+.chat-question-dot[aria-current='true']::before {
+  background: var(--control-accent-text);
+  transform: scale(1.4);
+}
+
+.chat-question-dot:focus-visible {
+  outline: 2px solid var(--control-accent-text);
+  outline-offset: -2px;
+}
