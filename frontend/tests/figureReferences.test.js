@@ -36,3 +36,28 @@ test('integer, roman and subfigure references retain existing behavior', () => {
   assert.deepEqual(references('Tables I and V')[0].labels, ['Table I', 'Table V'])
   assert.deepEqual(references('Fig. 6a,c')[0].labels, ['Figure 6'])
 })
+
+for (const [text, labels] of [
+  ['FIGURE 4.18', ['Figure 4.18']],
+  ['fig.\u00a04.18', ['Figure 4.18']],
+  ['Figs. 2 and 3', ['Figure 2', 'Figure 3']],
+  ['Figures 2, 3 & 4', ['Figure 2', 'Figure 3', 'Figure 4']],
+  ['Fig. S1', ['Figure S1']],
+  ['Fig. s1a', ['Figure S1']],
+  ['Figures A.1,A.2', ['Figure A.1', 'Figure A.2']],
+  ['Figs. S1–S3', ['Figure S1', 'Figure S2', 'Figure S3']],
+  ['Figs. A.1—A.3', ['Figure A.1', 'Figure A.2', 'Figure A.3']],
+  ['Figs. A1-B3', ['Figure A1', 'Figure B3']],
+  ['Fig. 2(a—c)', ['Figure 2']],
+  ['Fig. 2 (a)', ['Figure 2']],
+  ['fig. iv', ['Figure IV']],
+  ['Tab. A.2', ['Table A.2']],
+]) {
+  test(`figure spelling: ${text}`, () => {
+    assert.deepEqual(references(text), [{ text, labels }])
+  })
+}
+
+for (const text of ['Figure IVX', 'Figure Introduction', 'Figure 2nd', 'Figure 4.18th', 'Tablet A.1', 'Fig. S1st']) {
+  test(`does not link a partial identifier: ${text}`, () => assert.deepEqual(references(text), []))
+}
