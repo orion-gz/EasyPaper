@@ -15,9 +15,9 @@ mode only reads the cache. Reopening a result costs no additional generation.
 
 Each source sentence maps to exactly one simplified sentence. Responses that split
 or merge source sentences are rejected. Hover either side to highlight its match; click or press
-Enter on a result to reveal the original. The source-pairs disclosure remains
-available when exact PDF geometry or text matching cannot be resolved. Source
-highlights are clipped to the viewport and source scroll containers.
+Enter on a result to reveal the original. If the exact source location cannot be
+resolved, a status message is shown. Source highlights are clipped to the viewport
+and source scroll containers.
 
 ## API and integrity
 
