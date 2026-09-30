@@ -63,3 +63,21 @@ def test_clear_all_images_cache_removes_only_images_cache_files(isolated_dirs, t
     assert get_cached_images("doc-2", str(pdf_path)) is None
     assert get_cached_pages("doc-1", str(pdf_path)) == [{"page_num": 1, "text": "hello"}], \
         "페이지 텍스트 캐시는 지워지면 안 됨"
+
+
+def test_legacy_figure_labels_are_reextracted(isolated_dirs, tmp_path):
+    import json
+    from pathlib import Path
+    from services.cache import _images_cache_path
+
+    pdf_path = tmp_path / 'doc.pdf'
+    _make_pdf(pdf_path)
+    images = [{"page": 1, "label": "Figure 4.18"}]
+    save_images_cache('doc-1', str(pdf_path), images)
+    assert get_cached_images('doc-1', str(pdf_path)) == images
+
+    path = Path(_images_cache_path('doc-1'))
+    data = json.loads(path.read_text())
+    data.pop('images_label_version')
+    path.write_text(json.dumps(data))
+    assert get_cached_images('doc-1', str(pdf_path)) is None

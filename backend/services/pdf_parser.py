@@ -1203,8 +1203,12 @@ _ROMAN_NUMERAL_RE = r"(?=[MDCLXVI])M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:
 # 아니므로 걸러내야 한다. re.IGNORECASE가 걸린 상태에서도 이 판별만은
 # 대소문자를 구분해야 하므로 (?-i:...)로 지역 범위에서 대소문자 구분을 켠다.
 _CAPTION_FOLLOW_RE = r"(?=\s*(?:[:.\-–—*|]|$|(?-i:[A-Z0-9])))"
+# Keep appendix identifiers distinct from subfigure suffixes and Roman numerals.
+_CAPTION_NUMBER_RE = rf"(?:(?:[A-Z]\.?)?\d+(?:\.\d+)*|{_ROMAN_NUMERAL_RE}(?![A-Z]))"
+_CAPTION_SUBFIG_RE = r"(?:[A-Z](?![A-Z0-9]|\.\d)|\s*\(\s*[A-Z](?:\s*[-–—,]\s*[A-Z])*\s*\))"
 _CAPTION_RE = re.compile(
-    rf"^\s*(Fig(?:ure)?|Table)\.?\s*(\d+|{_ROMAN_NUMERAL_RE})\b{_CAPTION_FOLLOW_RE}", re.IGNORECASE
+    rf"^\s*(Fig(?:ure)?|Tab(?:le)?)\.?\s*({_CAPTION_NUMBER_RE})(?!\.\d)"
+    rf"(?:{_CAPTION_SUBFIG_RE})?(?![A-Z0-9]|\.\d){_CAPTION_FOLLOW_RE}", re.IGNORECASE
 )
 # 수식 번호: 줄 끝에 "(3)"처럼 소괄호 숫자(또는 로마 숫자)만 단독으로 오는 경우만
 # 인정한다. 인용 연도("...(2020)")와 헷갈리지 않도록 자릿수를 1~3자리로 제한한다
