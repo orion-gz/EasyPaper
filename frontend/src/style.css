@@ -8100,6 +8100,7 @@ body.light-theme .chat-drawer {
 
 /* User question navigation in the AI assistant sidebar. */
 .chat-message-navigation {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
@@ -8107,6 +8108,7 @@ body.light-theme .chat-drawer {
 }
 
 .chat-message-navigation > .chat-messages {
+  position: relative;
   min-width: 0;
 }
 
@@ -8154,3 +8156,26 @@ body.light-theme .chat-drawer {
   outline: 2px solid var(--control-accent-text);
   outline-offset: -2px;
 }
+
+
+.chat-question-tooltip {
+  position: absolute;
+  z-index: 2;
+  right: 36px;
+  width: max-content;
+  max-width: calc(100% - 48px);
+  max-height: calc(100% - 16px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-question-tooltip[hidden] { display: none; }
