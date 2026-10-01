@@ -22,3 +22,18 @@ test('production CSP permits same-origin frames and blocks external ancestors', 
   await expect.poll(() => violations.length).toBeGreaterThan(0)
   await expect(page.frameLocator('iframe').locator('#ready')).toHaveCount(0)
 })
+
+
+test('production CSP permits sandboxed HTTPS article frames', async ({ page }) => {
+  await page.route('https://article.example.org/source', route => route.fulfill({
+    contentType: 'text/html', body: '<p id="article">Original article</p><script>document.body.dataset.executed="yes"</script>',
+  }))
+  await page.route('**/article-csp-host', route => route.fulfill({
+    contentType: 'text/html', headers: { 'Content-Security-Policy': csp },
+    body: '<iframe sandbox="allow-same-origin" src="https://article.example.org/source"></iframe>',
+  }))
+  await page.goto('/article-csp-host')
+  const article = page.frameLocator('iframe')
+  await expect(article.locator('#article')).toHaveText('Original article')
+  await expect(article.locator('body')).not.toHaveAttribute('data-executed', 'yes')
+})

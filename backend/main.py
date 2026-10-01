@@ -129,7 +129,7 @@ async def serve_pdf(session_id: str, username: str = Depends(get_current_user)):
 # 두고 이 env var로 실제 위치를 알려준다. 미설정 시(서버/Docker 배포)에는
 # 기존과 동일하게 상대경로로 계산한다.
 FRONTEND_CSP = (
-    "default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; "
+    "default-src 'self'; frame-src 'self' https:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; "
     "img-src 'self' data: blob: http://127.0.0.1:*; style-src 'self' 'unsafe-inline' "
     "https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
     "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
