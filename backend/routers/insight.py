@@ -1,3 +1,4 @@
+import asyncio
 import json
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
@@ -42,7 +43,7 @@ class InsightJobStartRequest(BaseModel):
 
 @router.get("/insight-jobs/{session_id}/{kind}/estimate")
 async def estimate_page_insight_job(session_id: str, kind: str, target_lang: str = "ko", source_lang: str = "auto", current_user: str = Depends(get_current_user)):
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     target_lang, source_lang = _validated_languages(session, target_lang, source_lang)
     _require_insight_feature(session, kind)
     from services.insight_job import estimate_insight_job, VALID_JOB_KINDS
@@ -56,7 +57,7 @@ async def estimate_page_insight_job(session_id: str, kind: str, target_lang: str
 
 @router.post("/insight-jobs/{session_id}/{kind}/start")
 async def start_page_insight_job(session_id: str, kind: str, body: InsightJobStartRequest, current_user: str = Depends(get_current_user)):
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     from services.processing_policy import ensure_processing_allowed
     ensure_processing_allowed(session, "insight")
     target_lang, source_lang = _validated_languages(session, body.target_lang, body.source_lang)
@@ -76,7 +77,7 @@ async def start_page_insight_job(session_id: str, kind: str, body: InsightJobSta
 
 @router.get("/insight-jobs/{session_id}/{kind}/status")
 async def page_insight_job_status(session_id: str, kind: str, current_user: str = Depends(get_current_user)):
-    require_session_owner(session_id, current_user)
+    await asyncio.to_thread(require_session_owner, session_id, current_user)
     from services.insight_job import get_insight_job_status
     status = get_insight_job_status(session_id, kind)
     if not status:
@@ -86,7 +87,7 @@ async def page_insight_job_status(session_id: str, kind: str, current_user: str 
 
 @router.post("/insight-jobs/{session_id}/{kind}/cancel")
 async def cancel_page_insight_job(session_id: str, kind: str, current_user: str = Depends(get_current_user)):
-    require_session_owner(session_id, current_user)
+    await asyncio.to_thread(require_session_owner, session_id, current_user)
     from services.insight_job import cancel_insight_job
     return {"cancelled": cancel_insight_job(session_id, kind)}
 
@@ -109,7 +110,7 @@ async def get_page_insight_stream(
     if kind not in VALID_KINDS:
         raise HTTPException(status_code=400, detail=f"kind는 {VALID_KINDS} 중 하나여야 합니다.")
 
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     from services.processing_policy import ensure_processing_allowed
     ensure_processing_allowed(session, "insight")
     target_lang, source_lang = _validated_languages(session, target_lang, source_lang)

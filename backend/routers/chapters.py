@@ -1,6 +1,8 @@
 """Chapter boundaries and progressive document summaries."""
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -21,9 +23,9 @@ class FullSummaryStartRequest(BaseModel):
     target_lang: str | None = None
 
 
-def _context(doc_id: str, current_user: str) -> tuple[dict, dict, dict]:
+async def _context(doc_id: str, current_user: str) -> tuple[dict, dict, dict]:
     document = require_owned_document(doc_id, current_user)
-    session = require_session_owner(doc_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, doc_id, current_user)
     detected = detect_chapters(document, session.get("pages", []), session.get("pdf_path", ""))
     return document, session, detected
 
@@ -43,7 +45,7 @@ def _require_chapters(detected: dict) -> list[dict]:
 
 @router.get("/library/{doc_id}/chapters")
 async def list_document_chapters(doc_id: str, current_user: str = Depends(get_current_user)):
-    document, _, detected = _context(doc_id, current_user)
+    document, _, detected = await _context(doc_id, current_user)
     target_lang = _language(document)
     chapters = []
     for chapter in detected["chapters"]:
@@ -59,7 +61,7 @@ async def list_document_chapters(doc_id: str, current_user: str = Depends(get_cu
 
 @router.get("/library/{doc_id}/chapters/{chapter_id}/summary")
 async def get_chapter_summary(doc_id: str, chapter_id: str, current_user: str = Depends(get_current_user)):
-    document, session, detected = _context(doc_id, current_user)
+    document, session, detected = await _context(doc_id, current_user)
     chapter = find_chapter(_require_chapters(detected), chapter_id)
     if not chapter:
         raise HTTPException(status_code=404, detail="장을 찾을 수 없습니다.")
@@ -73,7 +75,7 @@ async def get_chapter_summary(doc_id: str, chapter_id: str, current_user: str = 
 
 @router.post("/library/{doc_id}/chapters/{chapter_id}/summary/regenerate")
 async def regenerate_chapter_summary(doc_id: str, chapter_id: str, current_user: str = Depends(get_current_user)):
-    document, session, detected = _context(doc_id, current_user)
+    document, session, detected = await _context(doc_id, current_user)
     chapter = find_chapter(_require_chapters(detected), chapter_id)
     if not chapter:
         raise HTTPException(status_code=404, detail="장을 찾을 수 없습니다.")
@@ -86,7 +88,7 @@ async def regenerate_chapter_summary(doc_id: str, chapter_id: str, current_user:
 
 @router.get("/library/{doc_id}/full-summary/estimate")
 async def full_summary_estimate(doc_id: str, current_user: str = Depends(get_current_user)):
-    document, session, detected = _context(doc_id, current_user)
+    document, session, detected = await _context(doc_id, current_user)
     chapters = _require_chapters(detected)
     return estimate_full_summary(document, session["pages"], chapters, _language(document))
 
@@ -95,7 +97,7 @@ async def full_summary_estimate(doc_id: str, current_user: str = Depends(get_cur
 async def start_document_full_summary(doc_id: str, body: FullSummaryStartRequest, current_user: str = Depends(get_current_user)):
     if not body.confirmed:
         raise HTTPException(status_code=400, detail="정밀 전체 요약은 confirmed: true 확인이 필요합니다.")
-    document, session, detected = _context(doc_id, current_user)
+    document, session, detected = await _context(doc_id, current_user)
     target_lang = _language(document, body.target_lang)
     cached = get_cached_full_summary(document, target_lang)
     if cached:

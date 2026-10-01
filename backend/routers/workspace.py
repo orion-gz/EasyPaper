@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -141,7 +142,7 @@ async def confirm_document_classification(doc_id: str, body: DocumentClassificat
     doc = require_owned_document(doc_id, current_user)
     if doc.get("classification_status") == "confirmed":
         return {"status": "confirmed", "document_mode": doc["document_mode"], "document_type": doc["document_type"]}
-    if not ensure_session(doc_id):
+    if not await asyncio.to_thread(ensure_session, doc_id):
         raise HTTPException(status_code=409, detail="문서 원문을 복원할 수 없습니다.")
     db_update_document_classification(doc_id, body.document_mode, body.document_type, MODE_SCHEMA_VERSION)
     sessions[doc_id]["document_mode"] = body.document_mode

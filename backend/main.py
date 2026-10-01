@@ -115,7 +115,7 @@ app.include_router(primer_router.router, prefix="/api", dependencies=[Depends(ge
 @app.get("/api/pdf-file/{session_id}")
 async def serve_pdf(session_id: str, username: str = Depends(get_current_user)):
     """PDF 파일을 직접 서빙합니다."""
-    session = upload.require_session_owner(session_id, username)
+    session = await asyncio.to_thread(upload.require_session_owner, session_id, username)
     return FileResponse(session["pdf_path"], media_type="application/pdf")
 
 

@@ -21,8 +21,8 @@ class GenerateRequest(BaseModel):
     regenerate: bool = False
 
 
-def context(doc_id, page_num, user):
-    session = require_session_owner(doc_id, user)
+async def context(doc_id, page_num, user):
+    session = await asyncio.to_thread(require_session_owner, doc_id, user)
     source = session.get("source_language", "auto")
     if source == "auto":
         source = session.get("detected_source_language", "und")
@@ -39,7 +39,7 @@ def context(doc_id, page_num, user):
 
 @router.get("/easy-english/{session_id}/{page_num}")
 async def get_result(session_id: str, page_num: int, current_user: str = Depends(get_current_user)):
-    *_, key = context(session_id, page_num, current_user)
+    *_, key = await context(session_id, page_num, current_user)
     result = service.read_result(session_id, key)
     if result is None:
         raise HTTPException(404, detail="No Easy English result")
@@ -48,7 +48,7 @@ async def get_result(session_id: str, page_num: int, current_user: str = Depends
 
 @router.post("/easy-english/{session_id}/{page_num}")
 async def generate_result(session_id: str, page_num: int, body: GenerateRequest, current_user: str = Depends(get_current_user)):
-    session, page, provider, model, key = context(session_id, page_num, current_user)
+    session, page, provider, model, key = await context(session_id, page_num, current_user)
     ensure_processing_allowed(session, "easy_english", provider=provider)
     cached = None if body.regenerate else service.read_result(session_id, key)
     task = None

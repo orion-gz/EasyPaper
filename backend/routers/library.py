@@ -663,7 +663,7 @@ async def get_document_parsing_diagnostics(doc_id: str, revision: Optional[int] 
     report = get_diagnostics(doc_id, requested_revision)
     if report is None and requested_revision == int(doc.get("content_revision") or 1):
         from routers.upload import require_session_owner
-        session = require_session_owner(doc_id, current_user)
+        session = await asyncio.to_thread(require_session_owner, doc_id, current_user)
         images = await _load_diagnostic_images(doc_id, doc, session["pdf_path"])
         from services.pdf_diagnostics import diagnose_pages
         report = diagnose_pages(
@@ -680,7 +680,7 @@ async def create_document_reparse_preview(doc_id: str, body: ReparsePreviewReque
                                           current_user: str = Depends(get_current_user)):
     doc = require_owned_document(doc_id, current_user)
     from routers.upload import require_session_owner
-    session = require_session_owner(doc_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, doc_id, current_user)
     images = await _load_diagnostic_images(doc_id, doc, session["pdf_path"])
     from services.reparse import create_preview
     try:

@@ -144,7 +144,7 @@ async def get_primer(doc_id: str, target_lang: str = "ko", current_user: str = D
     """읽기 전 브리핑 콘텐츠를 반환합니다. 업로드 직후 백그라운드로 이미 생성되어
     있으면 캐시에서 즉시 반환하고, 아직 없으면(구버전 문서 등) 백그라운드 생성을
     시작(또는 이미 진행 중이면 그대로 두고)하고 {"status": "pending"}을 반환합니다."""
-    session = require_session_owner(doc_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, doc_id, current_user)
     target_lang, source_lang = _validated_languages(session, target_lang)
     from services.processing_policy import ensure_processing_allowed
     ensure_processing_allowed(session, "primer")
@@ -179,7 +179,7 @@ async def regenerate_primer(doc_id: str, target_lang: str = "ko", current_user: 
     """캐시된 브리핑을 지우고 처음부터 다시 생성을 시작합니다. 사용자가 결과가
     부실하다고 느낄 때 수동으로 재시도할 수 있게 하는 용도. GET과 마찬가지로
     생성은 백그라운드로 돌리고 즉시 {"status": "pending"}을 반환한다."""
-    session = require_session_owner(doc_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, doc_id, current_user)
     target_lang, source_lang = _validated_languages(session, target_lang)
     from services.processing_policy import ensure_processing_allowed
     ensure_processing_allowed(session, "primer")
