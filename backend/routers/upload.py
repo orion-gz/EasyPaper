@@ -116,6 +116,8 @@ def require_session_owner(session_id: str, current_user: str) -> dict:
     경우와 동일하게 404로 응답한다. jobs.py/main.py의 세션 기반
     엔드포인트에서도 재사용한다.
     """
+    from services.document_workers import ensure_document_available
+    ensure_document_available(session_id)
     if not ensure_session(session_id):
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
     session = sessions[session_id]

@@ -116,8 +116,14 @@ def _ensure_generation_started(doc_id: str, target_lang: str, source_lang: str, 
 
         try:
             await retry_async(generate_once, on_retry=record_retry)
-            update_task(durable_task_id, status="succeeded")
+            current = get_task(durable_task_id)
+            if current and not current["cancel_requested"]:
+                update_task(durable_task_id, status="succeeded")
             _last_failure_at.pop(task_key, None)
+        except asyncio.CancelledError:
+            if get_task(durable_task_id):
+                update_task(durable_task_id, status="cancelled", cancel_requested=True)
+            raise
         except Exception as e:
             update_task(durable_task_id, status="failed",
                         last_error_code=getattr(e, "document_task_error_code", "generation_failed"))
@@ -156,6 +162,13 @@ async def get_primer(doc_id: str, target_lang: str = "ko", current_user: str = D
         )
     if cached:
         return cached
+    from services.document_tasks import list_tasks
+    matching = next((task for task in list_tasks(doc_id)
+                     if task["kind"] == "primer"
+                     and task["options"].get("target_lang") == target_lang
+                     and task["options"].get("source_lang") == source_lang), None)
+    if matching and matching["status"] == "cancelled":
+        return {"status": "cancelled"}
     _ensure_generation_started(doc_id, target_lang, source_lang, session, current_user)
     await asyncio.sleep(0)
     return {"status": "pending"}

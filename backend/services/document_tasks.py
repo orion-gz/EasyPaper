@@ -40,6 +40,8 @@ def _decode_task(row: sqlite3.Row, pages: list[sqlite3.Row]) -> dict:
 def create_task(doc_id: str, kind: str, options: Optional[dict] = None,
                 page_numbers: Optional[Iterable[int]] = None, max_attempts: int = 3,
                 task_id: Optional[str] = None, status: str = "queued") -> dict:
+    from services.document_workers import ensure_document_available
+    ensure_document_available(doc_id)
     if kind not in TASK_KINDS:
         raise ValueError("unsupported document task kind")
     if status not in TASK_STATUSES:

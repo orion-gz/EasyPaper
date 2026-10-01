@@ -207,8 +207,10 @@ async def get_library_trash(
 @router.delete("/library/trash/empty")
 async def empty_library_trash(current_user: str = Depends(get_current_user)):
     """휴지통을 완전히 비웁니다(영구 삭제)."""
-    if not empty_trash(current_user):
-        raise HTTPException(status_code=500, detail="휴지통 비우기에 실패했습니다.")
+    from services.document_workers import quiesce_document
+    for doc in list_documents(current_user, only_trash=True):
+        async with quiesce_document(doc["id"]):
+            permanently_delete_document(doc["id"])
     return {"message": "휴지통이 비워졌습니다."}
 
 
@@ -639,7 +641,12 @@ async def patch_document_processing_policy(doc_id: str, body: DocumentProcessing
         policy = normalize_processing_policy(body.processing_policy)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"code": "invalid_processing_policy", "fallback": str(exc)})
-    updated = db_update_processing_policy(doc_id, policy)
+    if policy == "local_only":
+        from services.document_workers import quiesce_document
+        async with quiesce_document(doc_id):
+            updated = db_update_processing_policy(doc_id, policy)
+    else:
+        updated = db_update_processing_policy(doc_id, policy)
     from routers.upload import sessions
     if doc_id in sessions:
         sessions[doc_id]["processing_policy"] = policy
@@ -944,8 +951,10 @@ async def restore_library_document(doc_id: str, current_user: str = Depends(get_
 async def delete_library_document_permanently(doc_id: str, current_user: str = Depends(get_current_user)):
     """라이브러리에서 문서를 영구히 삭제(Hard Delete)합니다."""
     require_owned_document(doc_id, current_user)
-    if not permanently_delete_document(doc_id):
-        raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
+    from services.document_workers import quiesce_document
+    async with quiesce_document(doc_id):
+        if not permanently_delete_document(doc_id):
+            raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
     return {"message": "문서가 영구적으로 삭제되었습니다."}
 
 

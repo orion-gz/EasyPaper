@@ -1067,6 +1067,9 @@ def db_get_content_revision(doc_id: str) -> int:
 def db_save_translation(doc_id: str, page_num: int, translation: str, suffix: str = "",
                         content_revision: Optional[int] = None) -> None:
     saved_at = datetime.now(timezone.utc).isoformat()
+    from services.document_workers import is_deleted
+    if is_deleted(doc_id):
+        return
     with get_db() as conn:
         revision = content_revision
         if revision is None:
@@ -1159,6 +1162,9 @@ def db_save_chat_message(doc_id: str, role: str, content: str) -> Optional[int]:
     이미 존재하는 경우 None을 반환하며, 이 반환값을 쓰지 않는 기존 호출부는
     영향받지 않는다."""
     created_at = datetime.now(timezone.utc).isoformat()
+    from services.document_workers import is_deleted
+    if is_deleted(doc_id):
+        return
     with get_db() as conn:
         cursor = conn.cursor()
         # Safety check: avoid duplicating the exact last message
@@ -1387,6 +1393,9 @@ def db_list_compare_chat_sessions(username: str) -> List[Dict[str, Any]]:
 def db_save_page_insight(doc_id: str, page_num: int, kind: str, content: str, suffix: str = "",
                          content_revision: Optional[int] = None) -> None:
     saved_at = datetime.now(timezone.utc).isoformat()
+    from services.document_workers import is_deleted
+    if is_deleted(doc_id):
+        return
     with get_db() as conn:
         revision = content_revision
         if revision is None:

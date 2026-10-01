@@ -34,16 +34,34 @@ async def get_document_task(task_id: str, current_user: str = Depends(get_curren
 @router.post("/tasks/{task_id}/cancel")
 async def cancel_document_task(task_id: str, current_user: str = Depends(get_current_user)):
     task = _owned_task(task_id, current_user)
+    if task["status"] not in {"queued", "running", "retry_wait"}:
+        return task
+    from services import translation_job, insight_job, chapter_summaries, document_classification
+    from routers import primer
+    import asyncio
+    workers = []
     if task["kind"] == "translate":
-        from services.translation_job import cancel_job
-        cancel_job(task["doc_id"])
+        workers = [translation_job._running_tasks.get(task["doc_id"])]
     elif task["kind"] in {"keywords", "summary"}:
-        from services.insight_job import cancel_insight_job
-        cancel_insight_job(task["doc_id"], task["kind"])
+        workers = [insight_job._running_tasks.get((task["doc_id"], task["kind"]))]
     elif task["kind"] in {"chapter_summary", "full_summary"}:
-        from services.chapter_summaries import cancel_summary_task
-        cancel_summary_task(task_id)
-    return request_cancel(task_id)
+        workers = [chapter_summaries._running.get(task_id)]
+    elif task["kind"] == "classification":
+        workers = [document_classification._running.get(task_id)]
+    elif task["kind"] == "primer":
+        options = task["options"]
+        prefix = f'{task["doc_id"]}:{options.get("source_lang", "auto")}:{options.get("target_lang", "ko")}'
+        workers = [worker for key, worker in primer._pending_generations.items() if key == prefix or key.startswith(prefix + ':')]
+    request_cancel(task_id)
+    workers = [worker for worker in workers if worker and not worker.done()]
+    for worker in workers:
+        worker.cancel()
+    if workers:
+        await asyncio.gather(*workers, return_exceptions=True)
+    if task["kind"] == "classification":
+        from services.db import db_update_document_classification_recommendation
+        db_update_document_classification_recommendation(task["doc_id"], "failed", error="classification_cancelled")
+    return get_task(task_id)
 
 
 @router.post("/tasks/{task_id}/retry")
@@ -54,8 +72,16 @@ async def retry_document_task(task_id: str, current_user: str = Depends(get_curr
     failed_pages = previous["failed_pages"] or [
         page["page_num"] for page in previous["pages"] if page["status"] == "cancelled"
     ]
-    task = reset_failed(task_id)
-    session = require_session_owner(task["doc_id"], current_user)
+    if previous["status"] not in {"failed", "partial_failed", "cancelled"}:
+        raise HTTPException(status_code=409, detail="실패하거나 취소된 작업만 재시도할 수 있습니다.")
+    session = require_session_owner(previous["doc_id"], current_user)
+    from services.processing_policy import ensure_processing_allowed
+    operation = {"translate": "translate", "classification": "classification", "primer": "primer"}.get(previous["kind"], "insight")
+    ensure_processing_allowed(session, operation)
+    try:
+        task = reset_failed(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     options = task["options"]
     if task["kind"] == "translate":
         from services.translation_job import start_job
