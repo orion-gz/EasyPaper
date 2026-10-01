@@ -39,6 +39,7 @@ a = Analysis(
         (os.path.join(BACKEND_DIR, "..", "frontend", "dist"), "frontend/dist"),
     ],
     hiddenimports=pip_hiddenimports + [
+        "parser_worker",
         # uvicorn은 프로토콜/루프 구현체를 동적으로 임포트하므로 PyInstaller의
         # 정적 분석이 놓치기 쉽다. main.py가 uvicorn.run(app, ...)으로 앱
         # 객체를 직접 넘기도록 바뀌어(문자열 임포트 아님) 최소 요구치는 줄었지만,

@@ -99,7 +99,8 @@ def _worker_command(engine: str, pdf_path: str, output_path: str) -> tuple[list[
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     command = [
         python_executable,
-        os.path.join(backend_dir, "parser_worker.py"),
+        "--easypaper-parser-worker" if venv_manager.is_packaged_desktop()
+        else os.path.join(backend_dir, "parser_worker.py"),
         "--pdf", pdf_path,
         "--engine", engine,
         "--output", output_path,
