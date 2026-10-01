@@ -1,0 +1,15 @@
+name: Docker Frontend Build
+on:
+  pull_request:
+    paths: ['Dockerfile', '.dockerignore', 'frontend/**', '.github/workflows/docker-build.yml']
+  push:
+    branches: [main]
+    paths: ['Dockerfile', '.dockerignore', 'frontend/**', '.github/workflows/docker-build.yml']
+permissions:
+  contents: read
+jobs:
+  frontend-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --target frontend-builder -t easypaper-frontend-check .
