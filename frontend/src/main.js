@@ -3285,6 +3285,13 @@ const PROVIDER_CONFIG = [
   {
     id: 'codex', label: 'Codex', icon: icon('code', 13),
     models: [
+      // GPT-6.1 Sol
+      { value: 'gpt-6.1-sol|low',    label: 'Sol · Low',    group: 'GPT-6.1 Sol' },
+      { value: 'gpt-6.1-sol|medium', label: 'Sol · Medium', group: 'GPT-6.1 Sol' },
+      { value: 'gpt-6.1-sol|high',   label: 'Sol · High',   group: 'GPT-6.1 Sol' },
+      { value: 'gpt-6.1-sol|xhigh',  label: 'Sol · xHigh',  group: 'GPT-6.1 Sol' },
+      { value: 'gpt-6.1-sol|max',    label: 'Sol · Max',    group: 'GPT-6.1 Sol' },
+      { value: 'gpt-6.1-sol|ultra',  label: 'Sol · Ultra',  group: 'GPT-6.1 Sol' },
       // GPT-6 Astra
       { value: 'gpt-6-astra|low',    label: 'Astra · Low',    group: 'GPT-6 Astra' },
       { value: 'gpt-6-astra|medium', label: 'Astra · Medium', group: 'GPT-6 Astra' },
