@@ -3,6 +3,12 @@ import pytest
 from fastapi import HTTPException
 
 
+@pytest.fixture(autouse=True)
+def isolated_sessions(monkeypatch):
+    from routers import upload
+    monkeypatch.setattr(upload, 'sessions', {})
+
+
 def seed(isolated_dirs, doc_id, **kwargs):
     db = isolated_dirs['db']
     db.db_save_document(doc_id, 'testuser', 'paper.pdf', '/unused', 2, {}, **kwargs)
