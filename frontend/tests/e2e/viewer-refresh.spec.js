@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { openReaderTools, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 const documents = ['refresh-a', 'refresh-b'].map(id => ({ id, filename: `${id}.pdf`, total_pages: 1, metadata: { primer_shown: true }, translated_pages: [1] }))
 const reader = (page, id = 'refresh-a') => page.frameLocator(`iframe[data-document-id="${id}"]`)
@@ -13,6 +13,7 @@ async function setup(page) {
 async function open(page, id = 'refresh-a') {
   await page.evaluate(id => { location.hash = `#viewer?id=${id}` }, id)
   await expect(reader(page, id).locator('#viewer-refresh-btn')).toBeVisible({ timeout: 20000 })
+  await openReaderTools(reader(page, id))
 }
 async function refresh(page, frame = reader(page)) {
   await frame.locator('body').evaluate(() => { window.__beforeRefresh = true })

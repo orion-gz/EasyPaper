@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
-import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp } from './helpers.js'
+import { waitForReaderReady, activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp } from './helpers.js'
 
 test.setTimeout(60_000)
 
@@ -27,6 +27,7 @@ async function openDocument(page, mode, scale) {
   await page.addInitScript(scale => { localStorage.setItem('easypaper_ui_scale', String(scale)) }, scale)
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=geometry' })
+  await waitForReaderReady(page)
   try {
     await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible({ timeout: 15_000 })
   } catch (error) {
@@ -158,6 +159,7 @@ test.describe('selection lifecycle', () => {
     const rotated = fs.readFileSync(new URL('./fixtures/text-geometry-rotated.pdf', import.meta.url))
     await page.route('**/api/library/geometry/pdf', route => route.fulfill({ contentType: 'application/pdf', body: rotated }))
     await page.reload()
+    await waitForReaderReady(page)
     await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible({ timeout: 15_000 })
     const span = activeReader(page).locator('.textLayer span').filter({ hasText: lines[0].text }).first()
     const metrics = await span.evaluate(el => {

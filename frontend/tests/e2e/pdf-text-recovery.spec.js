@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
-import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { waitForReaderReady, activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 const recovered = [
   { text: '日本語の文章です。', bbox: [72, 100, 240, 116] },
@@ -27,6 +27,7 @@ async function openRecovered(page, pdf, spans, recovery = 'ocr', sources = [], t
   } }))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=recovered' })
+  await waitForReaderReady(page)
   await expect(activeReader(page).locator(recovery ? '.textLayer[data-recovery]' : '.textLayer span').first()).toBeVisible()
   await evaluateReader(page, () => Promise.all(document.getAnimations()
     .filter(animation => animation.effect.getComputedTiming().iterations !== Infinity)

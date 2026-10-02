@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { openReaderTools, activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 // AI 채팅 답변에서 텍스트를 선택하면 "Ask AI"로 후속 질문을 인용할 수 있어야 한다
 // (PDF/번역본 인용 기능을 채팅 답변에도 확장한 기능의 회귀 테스트)
@@ -19,6 +19,7 @@ test('AI 채팅 답변 텍스트를 선택하면 Ask AI로 인용할 수 있다'
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1200)
 
+  await openReaderTools(activeReader(page))
   await expect(activeReader(page).locator('#chat-input')).toBeVisible()
   await activeReader(page).locator('#chat-input').fill('트랜스포머 아키텍처가 뭐야?')
   await activeReader(page).locator('#chat-send-btn').click()
@@ -94,6 +95,7 @@ test('사용자 자신의 채팅 메시지는 Ask AI 인용 대상이 아니다'
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1200)
+  await openReaderTools(activeReader(page))
   await expect(activeReader(page).locator('#chat-input')).toBeVisible()
   await activeReader(page).locator('#chat-input').fill('이것은 사용자 질문 텍스트')
   await activeReader(page).locator('#chat-send-btn').click()
@@ -136,6 +138,7 @@ test('수식이 포함된 답변을 인용하면 중복이나 줄바꿈 없이 �
   await page.evaluate(() => { location.hash = '#viewer?id=doc-A' })
   await page.waitForTimeout(1200)
 
+  await openReaderTools(activeReader(page))
   await expect(activeReader(page).locator('#chat-input')).toBeVisible()
   await activeReader(page).locator('#chat-input').fill('크기가 뭐야?')
   await activeReader(page).locator('#chat-send-btn').click()
@@ -255,6 +258,7 @@ test('본문 인용 질문의 AI 답변을 원래 선택 범위의 메모로 생
     localStorage.setItem('easypaper_hydrated_doc-A', '1')
     location.hash = '#viewer?id=doc-A'
   })
+  await openReaderTools(activeReader(page))
   await expect(activeReader(page).locator('#chat-input')).toBeVisible()
   await expect(activeReader(page).locator('.create-answer-memo-btn')).toHaveText('메모 생성')
 

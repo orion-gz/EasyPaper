@@ -71,7 +71,7 @@ test("뷰어 툴바를 Tab만으로 논리적인 순서로 이동하고 포커�
 test("열린 채팅 패널과 메뉴도 WCAG 2.2 AA 자동 검사를 통과한다", async ({ page }) => {
   await openViewer(page)
 
-  await activeReader(page).locator("#chat-toggle-btn").press("Enter")
+  await expect(activeReader(page).locator("#chat-sidebar")).toBeHidden()
   await activeReader(page).locator("#chat-toggle-btn").press("Enter")
   await expect(activeReader(page).locator("#chat-sidebar")).toBeVisible()
   await activeReader(page).locator("#toolbar-kebab-btn").press("Space")
@@ -133,7 +133,7 @@ test("채팅 패널과 리사이저를 키보드로 조작하고 닫을 때 포�
   await openViewer(page)
 
   const toggle = activeReader(page).locator("#chat-toggle-btn")
-  await toggle.click()
+  await expect(activeReader(page).locator("#chat-sidebar")).toBeHidden()
   await toggle.click()
   await expect(activeReader(page).locator("#chat-sidebar")).toBeVisible()
 

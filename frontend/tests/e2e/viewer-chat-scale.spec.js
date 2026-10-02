@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { activeReader, gotoApp, mockBaseRoutes, SAMPLE_PDF_A } from './helpers.js'
+import { openReaderTools, activeReader, gotoApp, mockBaseRoutes, SAMPLE_PDF_A } from './helpers.js'
 
 for (const uiScale of [0.8, 0.9]) {
   test(`reader and AI assistant fit their workspace at ${uiScale * 100}% UI scale`, async ({ page }) => {
@@ -14,6 +14,7 @@ for (const uiScale of [0.8, 0.9]) {
     const frame = await page.locator('.workspace-document-frame:not([hidden])').boundingBox()
     expect(Math.abs(host.height - frame.height)).toBeLessThanOrEqual(1)
     expect(Math.abs(host.width - frame.width)).toBeLessThanOrEqual(1)
+    await openReaderTools(activeReader(page))
     const sidebar = activeReader(page).locator('#chat-sidebar')
     await expect(sidebar).toBeVisible()
     const box = await sidebar.boundingBox()
