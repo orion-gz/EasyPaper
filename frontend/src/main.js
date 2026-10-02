@@ -12231,7 +12231,11 @@ function renderPageMemos(pageNum) {
       const actions = memoEl.querySelector('.floating-memo-actions')
 
       if (isEditing) {
-        body.innerHTML = `<textarea class="floating-memo-textarea" placeholder="메모를 입력하세요 (Markdown 및 LaTeX 지원)...">${memo.content}</textarea>`
+        const editor = document.createElement('textarea')
+        editor.className = 'floating-memo-textarea'
+        editor.placeholder = '메모를 입력하세요 (Markdown 및 LaTeX 지원)...'
+        editor.value = memo.content || ''
+        body.replaceChildren(editor)
         actions.innerHTML = `
           <button class="floating-memo-action-btn delete delete-btn" title="삭제">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
@@ -13758,6 +13762,7 @@ const geometryPreservedMemoPages = new Set()
 // PDF.js 텍스트 레이어 렌더 완료 콜백 등록
 window.onTextLayerReleased = (textLayerDiv, pageNum) => {
   if (!textLayerDiv) return
+  geometryPreservedMemoPages.delete(pageNum)
   delete state.virtualTextMaps?.[pageNum]
   delete state.pdfPageSentences?.[pageNum]
   if (zoomPreservedMemoPages.get(pageNum) === state.sessionId) return
