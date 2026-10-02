@@ -2,7 +2,7 @@ name: Deploy to Server
 
 # main에 push(=PR 병합 포함)될 때마다 이 서버(orion-gz-network)에 등록된
 # self-hosted runner가 배포 전용 클론(/home/ubuntu/deploy/EasyPaper)을
-# origin/main으로 동기화하고 easypaper.service를 재기동한다.
+# 테스트를 통과한 커밋으로 동기화하고 easypaper.service를 재기동한다.
 #
 # 이 디렉터리는 개발자가 로컬에서 편집하는 작업 디렉토리와는 완전히
 # 분리되어 있어(별도 클론), 로컬 작업 중인 커밋되지 않은 변경과 절대
@@ -14,20 +14,33 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy
   cancel-in-progress: false
 
 jobs:
+  backend-tests:
+    uses: ./.github/workflows/backend-test.yml
+  frontend-tests:
+    uses: ./.github/workflows/frontend-test.yml
+    with:
+      skip_macos: true
   deploy:
+    needs: [backend-tests, frontend-tests]
+    if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, easypaper]
     steps:
-      - name: Sync deploy clone to origin/main
+      - name: Sync deploy clone to validated commit
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
         working-directory: /home/ubuntu/deploy/EasyPaper
         run: |
-          git fetch origin main
-          git checkout main
-          git reset --hard origin/main
+          git fetch origin "$DEPLOY_SHA"
+          git checkout --detach "$DEPLOY_SHA"
+          git reset --hard "$DEPLOY_SHA"
 
       - name: Install backend dependencies
         working-directory: /home/ubuntu/deploy/EasyPaper/backend
