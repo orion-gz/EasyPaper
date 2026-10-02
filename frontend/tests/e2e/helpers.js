@@ -169,3 +169,11 @@ export async function openReaderTools(reader) {
   }
   await reader.locator('#chat-sidebar').waitFor({ state: 'visible' })
 }
+
+
+export async function waitForReaderReady(page) {
+  await activeReader(page).locator('#viewer-screen:not(.document-workspace-loading) #document-fit-width').waitFor({ state: 'attached' })
+  await evaluateReader(page, () => document.fonts.ready.then(() => undefined))
+  // Lazy PDF rendering continues after the reader controls are initialized.
+  await activeReader(page).locator('.textLayer[data-segmented="true"]').first().waitFor({ state: 'visible' })
+}
