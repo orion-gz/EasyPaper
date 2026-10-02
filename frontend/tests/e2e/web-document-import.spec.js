@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { activeReader, mockBaseRoutes, gotoApp } from './helpers.js'
+import { openReaderTools, activeReader, mockBaseRoutes, gotoApp } from './helpers.js'
 
 const doc = { id: 'web-1', filename: 'Article.html', total_pages: 2, total_units: 2, content_kind: 'html_article', source_origin: 'web', source_url: 'https://example.test/article', metadata: { title: 'Saved article' }, translated_pages: [1], document_mode: 'general', document_type: 'article' }
 const manifest = { schema_version: 1, title: 'Saved article', source_url: 'https://example.test/article', embed_allowed: false, toc: [{ unit_id: 'section-1', index: 1, title: 'Introduction' }, { unit_id: 'section-2', index: 2, title: 'Details' }], blocks: [{ id: 'block-1', type: 'p', text: 'Unique searchable source text', html: '<p data-block-id="block-1">Unique searchable source text</p>' }, { id: 'block-2', type: 'p', text: 'Second section body', html: '<p data-block-id="block-2">Second section body</p>' }], units: [{ index: 1, id: 'section-1', title: 'Introduction', block_ids: ['block-1'], text: 'Unique searchable source text' }, { index: 2, id: 'section-2', title: 'Details', block_ids: ['block-2'], text: 'Second section body' }] }
@@ -68,6 +68,7 @@ test('웹 문서 새로고침은 일반 문서 번역 설정과 질문 초안을
   await openArticle(page)
   const frame = activeReader(page)
   await expect(frame.locator('#viewer-refresh-btn')).toBeVisible()
+  await openReaderTools(frame)
   await frame.locator('#chat-input').fill('Article draft')
   await page.evaluate(() => localStorage.setItem('easypaper_style_general', 'formal'))
   let refreshedStyle

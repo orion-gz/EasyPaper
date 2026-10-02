@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A, SAMPLE_PDF_B } from './helpers.js'
+import { openReaderTools, activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A, SAMPLE_PDF_B } from './helpers.js'
 
 // 문서 A에서 스트리밍 중이던 채팅 응답이, 문서 B로 전환한 뒤 뒤늦게 도착해도
 // 문서 B의 채팅창에 섞여 들어가면 안 된다 (openFromLibrary가 이전 스트림을
@@ -22,6 +22,7 @@ test('문서 전환 시 이전 문서의 채팅 스트림이 새 문서에 섞�
   await page.waitForTimeout(1000)
 
   await expect(activeReader(page).locator('#document-find')).toBeVisible()
+  await openReaderTools(activeReader(page))
   await activeReader(page).locator('#chat-input').fill('문서 A에 대한 질문')
   await activeReader(page).locator('#chat-send-btn').click()
   await page.waitForTimeout(400)
