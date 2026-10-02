@@ -51,7 +51,7 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
 
   function isInteracting() {
     const selection = window.getSelection()
-    const focusOverlay = document.querySelector('#viewer-screen .focus-mode-layer:not(.hidden)')
+    const focusOverlay = document.querySelector('.focus-mode-layer:not(.hidden)')
     if (focusOverlay && fit) deferredFit = true
     return Boolean(focusOverlay) || pointerDown || scroll.querySelector('.floating-memo-textarea') || document.activeElement?.closest('.floating-memo') || (selection && !selection.isCollapsed && scroll.contains(selection.anchorNode))
   }
@@ -93,11 +93,11 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
   document.addEventListener('pointerup', pointerEnd, true)
   document.addEventListener('pointercancel', pointerEnd, true)
   const focusObserver = new MutationObserver(() => {
-    if (!deferredFit || !fit || document.querySelector('#viewer-screen .focus-mode-layer:not(.hidden)')) return
+    if (!deferredFit || !fit || document.querySelector('.focus-mode-layer:not(.hidden)')) return
     deferredFit = false
     scheduleFit()
   })
-  focusObserver.observe(document.getElementById('viewer-screen'), { childList: true, subtree: true })
+  focusObserver.observe(document.body, { childList: true })
   const resize = new ResizeObserver(scheduleFit)
   resize.observe(scroll)
 
