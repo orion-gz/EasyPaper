@@ -29,7 +29,15 @@ _restore_locks: dict[str, threading.RLock] = {}
 def ensure_session(session_id: str) -> bool:
     # Recovery also runs in startup threads; serialize restores per document.
     with _restore_locks.setdefault(session_id, threading.RLock()):
+        from services.document_workers import ensure_document_available
+        ensure_document_available(session_id)
         return _restore_session(session_id)
+
+
+def wait_for_session_restoration(session_id: str) -> None:
+    """Join an in-flight parser thread before its files can be deleted."""
+    with _restore_locks.setdefault(session_id, threading.RLock()):
+        pass
 
 
 def _restore_session(session_id: str) -> bool:

@@ -56,3 +56,37 @@ def test_foreign_owner_is_rejected_before_restore(monkeypatch):
     with pytest.raises(HTTPException) as error:
         upload.require_session_owner('foreign', 'testuser')
     assert error.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_document_mutation_waits_for_parser_thread(monkeypatch):
+    from routers import upload
+    from services import document_workers as workers
+    started, release = threading.Event(), threading.Event()
+    finished = []
+    def restore(doc_id):
+        started.set()
+        assert release.wait(2)
+        finished.append(doc_id)
+        return True
+    monkeypatch.setattr(upload, '_restore_session', restore)
+    monkeypatch.setattr(workers, 'cancel_document_now', lambda _: set())
+    parser = asyncio.create_task(asyncio.to_thread(upload.ensure_session, 'restore-delete'))
+    mutation_entered = asyncio.Event()
+    async def mutate():
+        async with workers.quiesce_document('restore-delete'):
+            mutation_entered.set()
+            assert finished == ['restore-delete']
+    try:
+        while not started.is_set():
+            await asyncio.sleep(.01)
+        mutation = asyncio.create_task(mutate())
+        await asyncio.sleep(.05)
+        assert not mutation_entered.is_set()
+        with pytest.raises(HTTPException):
+            workers.ensure_document_available('restore-delete')
+    finally:
+        release.set()
+        await parser
+    await mutation
+    assert mutation_entered.is_set()
