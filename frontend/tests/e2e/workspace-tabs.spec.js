@@ -33,7 +33,10 @@ async function open(page, id) {
   await page.evaluate(id => { location.hash = `#viewer?id=${id}` }, id)
   await expect(reader(page, id).locator('#document-find')).toBeVisible({ timeout: 20000 })
 }
-test('common shell, document isolation, menu singleton, close and restore', async ({ page }) => {
+test('common shell, document isolation, menu singleton, close and restore', async ({ page, browserName }) => {
+  // Several PDF runtimes plus a reload can exceed the shared 30s budget
+  // on macOS CI. Keep individual readiness assertions bounded as before.
+  if (browserName === 'webkit') test.slow()
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await setup(page)
