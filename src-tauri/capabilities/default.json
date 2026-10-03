@@ -18,6 +18,10 @@
     "core:window:allow-set-background-color",
     "opener:default",
     "allow-kill-backend-sidecar",
-    "allow-backend-startup-error"
+    "allow-backend-startup-error",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging"
   ]
 }
