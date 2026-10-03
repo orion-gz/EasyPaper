@@ -157,7 +157,7 @@ async def _semantic_verify_answer(answer: str, evidence: list[dict], session_id:
 @router.post("/chat/stream")
 async def chat_stream(data: ChatRequest, current_user: str = Depends(get_current_user)):
     session_id = data.session_id
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     from services.processing_policy import ensure_processing_allowed, provider_is_local
     ensure_processing_allowed(session, "chat")
 
@@ -358,7 +358,7 @@ async def chat_suggestions(data: ChatRequest, current_user: str = Depends(get_cu
     """직전 어시스턴트 답변과 논문 본문을 참고해 후속 질문 3개를 추천합니다. 채팅
     기록(chats 테이블)에는 남기지 않는 보조 UI(추천 질문 칩) 전용 엔드포인트입니다."""
     session_id = data.session_id
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     from services.processing_policy import ensure_processing_allowed
     ensure_processing_allowed(session, "chat")
 
@@ -418,7 +418,7 @@ async def chat_compare_stream(data: CompareChatRequest, current_user: str = Depe
     paper_blocks = []
     titles = []
     for idx, (doc_id, doc) in enumerate(zip(doc_ids, docs), start=1):
-        if not ensure_session(doc_id):
+        if not await asyncio.to_thread(ensure_session, doc_id):
             raise HTTPException(status_code=404, detail=f"'{doc.get('filename')}' 문서를 불러올 수 없습니다.")
 
         title = (doc.get("metadata") or {}).get("title") or doc.get("filename", "제목 없음")
@@ -528,6 +528,6 @@ async def get_compare_chat_sessions(current_user: str = Depends(get_current_user
 @router.get("/chat/{session_id}/history")
 async def get_chat_history(session_id: str, current_user: str = Depends(get_current_user)):
     """특정 문서의 이전 채팅 히스토리를 반환합니다."""
-    require_session_owner(session_id, current_user)
+    await asyncio.to_thread(require_session_owner, session_id, current_user)
     history = db_get_chat_history(session_id, include_revision=True)
     return {"history": history}

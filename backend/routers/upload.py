@@ -3,6 +3,7 @@ import os
 import shutil
 import asyncio
 import logging
+import threading
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import aiofiles
@@ -22,7 +23,24 @@ router = APIRouter()
 sessions: dict = {}
 
 
+_restore_locks: dict[str, threading.RLock] = {}
+
+
 def ensure_session(session_id: str) -> bool:
+    # Recovery also runs in startup threads; serialize restores per document.
+    with _restore_locks.setdefault(session_id, threading.RLock()):
+        from services.document_workers import ensure_document_available
+        ensure_document_available(session_id)
+        return _restore_session(session_id)
+
+
+def wait_for_session_restoration(session_id: str) -> None:
+    """Join an in-flight parser thread before its files can be deleted."""
+    with _restore_locks.setdefault(session_id, threading.RLock()):
+        pass
+
+
+def _restore_session(session_id: str) -> bool:
     """세션이 메모리에 존재하는지 확인하고, 없다면 DB에서 조회하여 복구합니다."""
     if session_id in sessions:
         return True
@@ -80,6 +98,8 @@ def ensure_session(session_id: str) -> bool:
         index_document_chunks(session_id, pages)
         # Recovery may finish after an interactive request has opened this
         # document. Preserve that live session and any edits made to it.
+        from services.document_workers import ensure_document_available
+        ensure_document_available(session_id)
         sessions.setdefault(session_id, {
             "pdf_path": pdf_path,
             "filename": doc["filename"],
@@ -118,6 +138,11 @@ def require_session_owner(session_id: str, current_user: str) -> dict:
     """
     from services.document_workers import ensure_document_available
     ensure_document_available(session_id)
+    # Reject foreign documents before parsing or OCR.
+    from services.db import db_get_document
+    owner = sessions.get(session_id) or db_get_document(session_id)
+    if not owner or owner.get("username") != current_user:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
     if not ensure_session(session_id):
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
     session = sessions[session_id]
@@ -310,7 +335,7 @@ async def get_upload_status(session_id: str, current_user: str = Depends(get_cur
         "status": task["status"], "error_code": task.get("last_error_code"),
     }
     if task["status"] == "succeeded":
-        session = require_session_owner(session_id, current_user)
+        session = await asyncio.to_thread(require_session_owner, session_id, current_user)
         response["result"] = {
             "session_id": session_id, "filename": session["filename"],
             "total_pages": session["total_pages"],
@@ -330,7 +355,7 @@ async def get_upload_status(session_id: str, current_user: str = Depends(get_cur
 @router.get("/session/{session_id}")
 async def get_session(session_id: str, current_user: str = Depends(get_current_user)):
     """세션 정보를 반환합니다."""
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     return {
         "session_id": session_id,
         "filename": session["filename"],
@@ -354,7 +379,7 @@ async def get_session(session_id: str, current_user: str = Depends(get_current_u
 @router.delete("/session/{session_id}")
 async def delete_session(session_id: str, current_user: str = Depends(get_current_user)):
     """세션 및 업로드 파일을 삭제합니다."""
-    require_session_owner(session_id, current_user)
+    await asyncio.to_thread(require_session_owner, session_id, current_user)
 
     session = sessions.pop(session_id)
     session_dir = os.path.dirname(session["pdf_path"])
@@ -373,14 +398,14 @@ async def delete_session(session_id: str, current_user: str = Depends(get_curren
 @router.get("/pdf/{session_id}")
 async def get_pdf_path(session_id: str, current_user: str = Depends(get_current_user)):
     """세션의 PDF 파일 경로를 반환합니다."""
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     return {"pdf_path": session["pdf_path"]}
 
 
 @router.get("/pdf-text/{session_id}/{page_num}")
 async def get_pdf_text_layer(session_id: str, page_num: int,
                              current_user: str = Depends(get_current_user)):
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     page = next((item for item in session["pages"] if item["page_num"] == page_num), None)
     if page is None:
         raise HTTPException(status_code=404, detail="Page not found")

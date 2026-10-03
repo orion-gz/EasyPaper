@@ -221,6 +221,9 @@ def test_translation_retry_api_runs_only_failed_pages(test_client, isolated_dirs
     from services import translation_job
     from services.document_tasks import create_task, finish_from_pages, get_task, update_page
 
+    # This test constructs task checkpoints from the test thread. Startup
+    # recovery must not consume its deliberately intermediate queued state.
+    monkeypatch.setattr(upload, "resume_incomplete_jobs", lambda _sessions: None)
     doc_id = _doc(isolated_dirs, "retry-failed-translation")
     upload.sessions[doc_id] = {
         "username": "testuser",
@@ -242,7 +245,7 @@ def test_translation_retry_api_runs_only_failed_pages(test_client, isolated_dirs
 
     try:
         response = test_client.post(f"/api/tasks/{task['id']}/retry")
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
         assert starts[0][1]["page_numbers"] == [2]
         assert starts[0][1]["durable_task_id"] == task["id"]
         pages = {page["page_num"]: page["status"] for page in get_task(task["id"])["pages"]}

@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -54,7 +55,7 @@ class RestartJobRequest(BaseModel):
 @router.get("/jobs/{session_id}/status")
 async def job_status(session_id: str, current_user: str = Depends(get_current_user)):
     """잡 진행 상황을 반환합니다."""
-    require_session_owner(session_id, current_user)
+    await asyncio.to_thread(require_session_owner, session_id, current_user)
     job = get_job_status(session_id)
     if not job:
         raise HTTPException(status_code=404, detail="잡을 찾을 수 없습니다.")
@@ -74,7 +75,7 @@ async def get_page_translation(
     current_user: str = Depends(get_current_user)
 ):
     """특정 페이지의 번역 MD 내용 및 매핑 데이터를 반환합니다."""
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     target_lang, source_lang = _validated_languages(session, target_lang, source_lang)
     from services.document_policy import translation_cache_candidates
     suffix_candidates = translation_cache_candidates(
@@ -115,7 +116,7 @@ async def download_translation(
     current_user: str = Depends(get_current_user)
 ):
     """전체 번역 MD 파일을 다운로드합니다."""
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     target_lang, source_lang = _validated_languages(session, target_lang, source_lang)
     from services.document_policy import translation_cache_candidates
     suffix_candidates = translation_cache_candidates(
@@ -146,7 +147,7 @@ async def restart_translation_job(
     current_user: str = Depends(get_current_user)
 ):
     """주어진 옵션으로 번역 작업을 중단하고 새로 재시작합니다."""
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     target_lang, source_lang = _validated_languages(session, data.target_lang, data.source_lang)
     from services.processing_policy import ensure_processing_allowed
     ensure_processing_allowed(session, "translate")
@@ -185,7 +186,7 @@ async def cancel_translation_job(
     current_user: str = Depends(get_current_user)
 ):
     """현재 진행 중인 번역 작업을 취소(중단)합니다."""
-    require_session_owner(session_id, current_user)
+    await asyncio.to_thread(require_session_owner, session_id, current_user)
 
     cancelled = cancel_job(session_id)
     return {"message": "번역 작업이 취소되었습니다." if cancelled else "진행 중인 번역 작업이 없습니다."}

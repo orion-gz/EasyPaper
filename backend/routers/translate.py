@@ -39,7 +39,7 @@ async def translate_page(
     특정 페이지를 번역하고 SSE 스트리밍으로 반환합니다.
     이미 동일한 옵션으로 번역된 페이지는 캐시에서 즉시 반환합니다.
     """
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     recovery_page = next((p for p in session["pages"] if p["page_num"] == page_num), {})
     if recovery_page.get("text_recovery") == "failed":
         raise HTTPException(status_code=422, detail={
@@ -301,7 +301,7 @@ async def get_providers_availability():
 @router.get("/translation-status/{session_id}")
 async def translation_status(session_id: str, current_user: str = Depends(get_current_user)):
     """세션의 번역 완료 페이지 목록을 반환합니다."""
-    session = require_session_owner(session_id, current_user)
+    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     total_pages = session["total_pages"]
 
     from services.cache import get_cached_translation

@@ -64,6 +64,9 @@ async def quiesce_document(doc_id: str):
         workers = cancel_document_now(doc_id)
         if workers:
             await asyncio.gather(*workers, return_exceptions=True)
+        # Cancelling an asyncio waiter cannot stop its PDF parser thread.
+        from routers.upload import wait_for_session_restoration
+        await asyncio.to_thread(wait_for_session_restoration, doc_id)
         yield
     finally:
         _mutating.discard(doc_id)

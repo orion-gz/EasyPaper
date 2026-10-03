@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -38,7 +39,6 @@ async def cancel_document_task(task_id: str, current_user: str = Depends(get_cur
         return task
     from services import translation_job, insight_job, chapter_summaries, document_classification
     from routers import primer
-    import asyncio
     workers = []
     if task["kind"] == "translate":
         workers = [translation_job._running_tasks.get(task["doc_id"])]
@@ -74,7 +74,7 @@ async def retry_document_task(task_id: str, current_user: str = Depends(get_curr
     ]
     if previous["status"] not in {"failed", "partial_failed", "cancelled"}:
         raise HTTPException(status_code=409, detail="실패하거나 취소된 작업만 재시도할 수 있습니다.")
-    session = require_session_owner(previous["doc_id"], current_user)
+    session = await asyncio.to_thread(require_session_owner, previous["doc_id"], current_user)
     from services.processing_policy import ensure_processing_allowed
     operation = {"translate": "translate", "classification": "classification", "primer": "primer"}.get(previous["kind"], "insight")
     ensure_processing_allowed(session, operation)
