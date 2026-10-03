@@ -13762,6 +13762,7 @@ const geometryPreservedMemoPages = new Set()
 // PDF.js 텍스트 레이어 렌더 완료 콜백 등록
 window.onTextLayerReleased = (textLayerDiv, pageNum) => {
   if (!textLayerDiv) return
+  geometryPreservedMemoPages.delete(pageNum)
   delete state.virtualTextMaps?.[pageNum]
   delete state.pdfPageSentences?.[pageNum]
   if (zoomPreservedMemoPages.get(pageNum) === state.sessionId) return
