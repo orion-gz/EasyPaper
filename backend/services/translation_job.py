@@ -56,6 +56,9 @@ def _load_job(session_id: str) -> Optional[dict]:
 
 def _save_job(session_id: str, job: dict) -> None:
     from services.document_tasks import create_task, finish_from_pages, get_task, update_page, update_task
+    from services.document_workers import is_deleted
+    if is_deleted(session_id):
+        return
     task_id = job.get("task_id")
     task = get_task(task_id) if task_id else None
     if task is None:
@@ -342,6 +345,12 @@ async def _run_job(session_id: str, pages: list, job: dict) -> None:
                     update_task(task_id, status="running", increment_attempt=True)
 
                 async def translate_operation():
+                    from services.document_workers import ensure_document_available
+                    from services.processing_policy import ensure_processing_allowed
+                    ensure_document_available(session_id)
+                    current = get_document(session_id)
+                    if current:
+                        ensure_processing_allowed(current, "translate")
                     return await _translate_page(
                         tagged_text,
                         target_lang=target_lang,

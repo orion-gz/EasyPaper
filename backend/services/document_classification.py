@@ -100,11 +100,13 @@ def start_classification_task(
             ensure_processing_allowed(document, "classification")
             result = await retry_async(lambda: recommend_classification(title, pages, session_id=doc_id))
             current = get_task(task["id"])
-            if current and current["cancel_requested"]:
+            if not current or current["cancel_requested"]:
+                db_update_document_classification_recommendation(doc_id, "failed", error="classification_cancelled")
                 return
             db_update_document_classification_recommendation(doc_id, "needs_confirmation", result=result)
             update_task(task["id"], status="succeeded")
         except asyncio.CancelledError:
+            db_update_document_classification_recommendation(doc_id, "failed", error="classification_cancelled")
             update_task(task["id"], status="cancelled", cancel_requested=True)
             raise
         except Exception as exc:

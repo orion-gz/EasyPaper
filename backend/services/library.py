@@ -300,6 +300,8 @@ def permanently_delete_document(doc_id: str) -> bool:
     페이지별 번역 캐시 파일은 전혀 지우지 않아, 문서를 영구 삭제해도 그
     파일들이 디스크에 계속 쌓이는 문제가 있었다.
     """
+    from services.document_workers import cancel_document_now
+    cancel_document_now(doc_id, deleted=True)
     doc_dir = os.path.join(LIBRARY_DIR, doc_id)
     upload_dir = os.path.join(UPLOAD_DIR, doc_id)
 

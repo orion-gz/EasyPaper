@@ -86,6 +86,9 @@ def ensure_processing_allowed(document: dict, operation: str, provider: str | No
             "params": {"status": document.get("classification_status", "pending")},
             "fallback": "Confirm the document classification before starting AI processing.",
         })
+    from services.document_workers import ensure_document_available
+    if document.get("id"):
+        ensure_document_available(document["id"])
     policy = normalize_processing_policy(document.get("processing_policy", "inherit"))
     selected_provider = (provider or provider_for_operation(operation)).strip().lower()
     disclosure = processing_disclosure(selected_provider, operation)
