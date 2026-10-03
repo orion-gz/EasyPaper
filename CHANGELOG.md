@@ -2,6 +2,26 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.2.0 - 2026-10-03
+
+### 한국어 (1.1.0 → 1.2.0)
+
+- Windows·macOS 데스크톱 앱의 작업 탭과 창 조작 버튼을 창 전체 너비의 상단 바 한 줄로 통합하고, 사이드바를 탭 바 아래로 배치
+- Windows에 최소화·최대화/복원·닫기 버튼을 추가하고, macOS는 Overlay 제목 표시줄에서 기본 신호등 버튼을 유지
+- 빈 영역 창 드래그와 더블클릭 최대화를 지원하면서 탭 선택·닫기·드래그 순서 변경 동작을 유지
+- 로그인 화면, 세션 만료 후 화면, 패키징된 백엔드의 시작 대기·시작 오류 화면에서도 창 조작을 지원
+- UI 배율 변경과 macOS 전체 화면에 맞춰 제목 표시줄·네이티브 버튼 여백을 조정하고, 검색 입력이 Windows 창 버튼을 가리는 문제를 방지
+- 영어/한국어 접근성 레이블과 네이티브 최대화/복원 상태 동기화를 추가하고, Chromium/WebKit 회귀 테스트를 추가
+
+### English (1.1.0 → 1.2.0)
+
+- Integrated workspace tabs and window controls into one full-width top bar in the Windows and macOS desktop apps; moved the sidebar below the tab bar.
+- Added minimize, maximize/restore, and close buttons on Windows, and retained native traffic-light controls on macOS with an overlay title bar.
+- Added window dragging from empty areas and double-click maximization while preserving tab selection, closing, and drag-to-reorder behavior.
+- Kept window controls available on the login screen, after session expiry, and while the packaged backend starts or reports a startup error.
+- Adjusted the title bar and native-button spacing for UI scale changes and macOS full screen; prevented the search input from covering Windows controls.
+- Added English/Korean accessible labels, synchronized maximize/restore indicators with native window state, and added Chromium/WebKit regression coverage.
+
 ## 1.1.0 - 2026-10-03
 
 ### 한국어 (1.0.3 → 1.1.0)
