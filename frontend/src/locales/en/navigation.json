@@ -55,5 +55,9 @@
   "tabs.chat": "AI Chat",
   "tabs.notes": "Notes",
   "tabs.annotations": "Annotations",
-  "tabs.content": "Document content"
+  "tabs.content": "Document content",
+  "window.minimize": "Minimize window",
+  "window.maximize": "Maximize window",
+  "window.restore": "Restore window",
+  "window.close": "Close window"
 }

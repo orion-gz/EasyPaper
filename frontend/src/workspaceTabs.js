@@ -2,6 +2,7 @@ import { createTabsStore, tabKey, WORKSPACE_PAGES, workspaceStorageKey } from '.
 import { t } from './i18n.js'
 import { icon } from './icons.js'
 import './styles/workspace-tabs.css'
+import { attachDesktopWindow } from './desktopWindow.js'
 
 // The legacy reader's DOM IDs and module globals are scoped to one same-origin
 // browsing context per document. The host owns navigation, auth and persistence.
@@ -42,6 +43,7 @@ export function createWorkspaceTabs(adapter) {
   })
   tabResize.observe(tablist)
   shell.hidden = true
+  attachDesktopWindow(shell, topnav, controls, tablist)
   document.body.classList.add('has-tab-workspace')
 
   let store

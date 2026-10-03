@@ -1,0 +1,24 @@
+/* Native titlebar replacement applies only to the outer desktop webview. */
+.desktop-window-titlebar { position: fixed; inset: 0 0 auto; height: calc(48px / var(--desktop-ui-scale, 1)); display: flex; background: var(--bg-primary); color: var(--text-primary); z-index: 10000; }
+.desktop-window-titlebar[hidden] { display: none; }
+.desktop-window-drag { flex: 1; min-width: 32px; user-select: none; }
+.desktop-window-controls { display: flex; align-self: stretch; flex-shrink: 0; user-select: none; }
+.desktop-window-controls button { width: calc(46px / var(--desktop-ui-scale, 1)); border: 0; padding: 0; background: transparent; color: inherit; display: grid; place-items: center; cursor: default; }
+.desktop-window-controls button:hover { background: var(--bg-hover); }
+.desktop-window-controls button[data-window-action=close]:hover { background: #c42b1c; color: white; }
+.desktop-window-controls button:focus-visible { outline: 2px solid var(--control-accent, #4e6aff); outline-offset: -3px; }
+.desktop-workspace-drag { min-width: 32px; align-self: stretch; user-select: none; }
+body.desktop-window #tab-workspace { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: calc(48px / var(--desktop-ui-scale, 1)) minmax(0, 1fr); }
+body.desktop-window #tab-workspace[hidden] { display: none !important; }
+body.desktop-window .tab-workspace-main { display: contents; }
+body.desktop-window #tab-workspace > .app-sidebar { grid-column: 1; grid-row: 2; min-height: 0; }
+body.desktop-window #tab-workspace .workspace-topnav { grid-column: 1 / -1; grid-row: 1; min-width: 0; height: calc(48px / var(--desktop-ui-scale, 1)); min-height: calc(48px / var(--desktop-ui-scale, 1)); }
+body.desktop-window #workspace-tab-panel { grid-column: 2; grid-row: 2; }
+body.desktop-windows #tab-workspace .workspace-topnav { padding-right: 0; gap: 8px; }
+/* Native traffic lights use physical logical pixels, independently of UI zoom. */
+body.desktop-macos:not(.desktop-fullscreen) #tab-workspace .workspace-topnav { padding-left: calc(88px / var(--desktop-ui-scale, 1)); }
+body.desktop-macos:not(.desktop-fullscreen) .desktop-window-titlebar { padding-left: calc(88px / var(--desktop-ui-scale, 1)); }
+/* Keep the legacy search input inside its wrapper when focused, so it
+   cannot cover the adjacent native window controls. */
+body.desktop-window #tab-workspace .workspace-search-box input,
+body.desktop-window #tab-workspace .workspace-search-box input:focus { width: 100%; min-width: 0; }
