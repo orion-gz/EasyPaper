@@ -104,6 +104,16 @@ jobs:
         shell: bash
         run: |
           current_tag="${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+          notes_file="docs/releases/$current_tag.md"
+          if [ -n "$current_tag" ] && [ -f "$notes_file" ]; then
+            {
+              echo "notes<<RELEASE_NOTES_EOF"
+              cat "$notes_file"
+              echo "RELEASE_NOTES_EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           prev_tag=$(git tag --list 'v*' --sort=-creatordate | grep -vFx "$current_tag" | head -n1 || true)
           range=HEAD
           if [ -n "$prev_tag" ]; then
