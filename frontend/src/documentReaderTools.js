@@ -7,7 +7,7 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
   let fit = true
   let active = true
   let disposed = false
-  let fitting = false
+  let fitting = null
   let fitTimer
   let queryTimer
   let searchController
@@ -55,25 +55,28 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
     if (focusOverlay && fit) deferredFit = true
     return Boolean(focusOverlay) || pointerDown || scroll.querySelector('.floating-memo-textarea') || document.activeElement?.closest('.floating-memo') || (selection && !selection.isCollapsed && scroll.contains(selection.anchorNode))
   }
-  async function applyFit() {
-    if (!fit || !active || disposed || fitting || !scroll.clientWidth) return
+  function applyFit() {
+    if (fitting) return fitting
+    if (!fit || !active || disposed || !scroll.clientWidth) return
     // Rebuilding PDF text layers must not interrupt selection or memo editing.
     if (isInteracting()) return
-    fitting = true
-    try {
-      const width = await adapter.pageWidth()
-      if (!fit || !active || disposed || !width || isInteracting()) return
-      const scrollStyle = getComputedStyle(scroll)
-      const pair = scroll.querySelector('.page-pair')
-      const pairStyle = pair ? getComputedStyle(pair) : null
-      const translation = pair?.querySelector('.trans-page-block')
-      const parallel = translation && getComputedStyle(translation).display !== 'none' && pairStyle.flexDirection !== 'column'
-      const horizontal = style => style ? ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0) : 0
-      const available = scroll.clientWidth - horizontal(scrollStyle) - horizontal(pairStyle) - 6 - (parallel ? parseFloat(pairStyle?.gap) || 18 : 0)
-      const zoom = Math.max(0.5, Math.min(3, available / (width * (parallel ? 2 : 1))))
-      if (Math.abs(adapter.state.zoom - zoom) > 0.015) await adapter.zoom(zoom)
-    } catch (error) { console.warn('Document fit failed:', error) }
-    finally { fitting = false; fitButton.setAttribute('aria-pressed', String(fit)); changed() }
+    fitting = (async () => {
+      try {
+        const width = await adapter.pageWidth()
+        if (!fit || !active || disposed || !width || isInteracting()) return
+        const scrollStyle = getComputedStyle(scroll)
+        const pair = scroll.querySelector('.page-pair')
+        const pairStyle = pair ? getComputedStyle(pair) : null
+        const translation = pair?.querySelector('.trans-page-block')
+        const parallel = translation && getComputedStyle(translation).display !== 'none' && pairStyle.flexDirection !== 'column'
+        const horizontal = style => style ? ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0) : 0
+        const available = scroll.clientWidth - horizontal(scrollStyle) - horizontal(pairStyle) - 6 - (parallel ? parseFloat(pairStyle?.gap) || 18 : 0)
+        const zoom = Math.max(0.5, Math.min(3, available / (width * (parallel ? 2 : 1))))
+        if (Math.abs(adapter.state.zoom - zoom) > 0.015) await adapter.zoom(zoom)
+      } catch (error) { console.warn('Document fit failed:', error) }
+      finally { fitting = null; fitButton.setAttribute('aria-pressed', String(fit)); changed() }
+    })()
+    return fitting
   }
   function scheduleFit() { clearTimeout(fitTimer); fitTimer = setTimeout(applyFit, 100) }
   function manualZoom(event) {

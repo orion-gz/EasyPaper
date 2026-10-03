@@ -70,6 +70,10 @@ for (const view of ['grid', 'list']) {
     await expect(menu).toBeVisible()
     await page.locator('#page-outlet').dispatchEvent('scroll')
     await expect(menu).toBeHidden()
+    // Returning the menu to its card can leave the trigger partially clipped.
+    // Finish Playwright's reveal scroll before opening a scroll-dismissed menu.
+    await card.getByTitle('폴더 관리').scrollIntoViewIfNeeded()
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     await card.getByTitle('폴더 관리').click()
     await expect(menu).toBeVisible()
     await page.keyboard.press('Escape')

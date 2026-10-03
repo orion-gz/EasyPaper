@@ -122,13 +122,12 @@ export async function reloadToLibrary(page) {
 
 /** 로그인 상태로 앱을 열고(온보딩은 건너뜀) 라이브러리 화면이 뜰 때까지 기다린다. */
 export async function gotoApp(page, { navigateToLibrary = true } = {}) {
-  await page.goto('/index.html')
-  await page.evaluate(() => {
+  await page.addInitScript(() => {
     localStorage.setItem('easypaper_onboarding_seen', '1')
     localStorage.setItem('easypaper_onboarding_version', '1')
     localStorage.setItem('easypaper_disable_primer', 'true')
   })
-  await page.reload()
+  await page.goto('/index.html')
   if (navigateToLibrary) {
     await page.locator('#page-dashboard.active').waitFor({ state: 'visible' })
     if (await page.locator('#app-sidebar').evaluate(element => element.classList.contains('collapsed'))) await page.locator('#sidebar-toggle-btn').click()
@@ -168,4 +167,12 @@ export async function openReaderTools(reader) {
     await reader.locator('#chat-toggle-btn').click()
   }
   await reader.locator('#chat-sidebar').waitFor({ state: 'visible' })
+}
+
+
+export async function waitForReaderReady(page, { text = true } = {}) {
+  await activeReader(page).locator('#viewer-screen:not(.document-workspace-loading) #document-fit-width').waitFor({ state: 'attached' })
+  await evaluateReader(page, () => document.fonts.ready.then(() => undefined))
+  // Lazy PDF rendering continues after the reader controls are initialized.
+  if (text) await activeReader(page).locator('.textLayer[data-segmented="true"]').first().waitFor({ state: 'visible' })
 }
