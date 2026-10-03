@@ -1,6 +1,12 @@
 name: Frontend Test
 
 on:
+  workflow_call:
+    inputs:
+      skip_macos:
+        description: Skip desktop WebKit checks for server-only deployment
+        type: boolean
+        default: false
   pull_request:
     paths:
       - "frontend/**"
@@ -58,6 +64,7 @@ jobs:
           if-no-files-found: ignore
 
   macos-pdf-geometry:
+    if: ${{ !inputs.skip_macos }}
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
