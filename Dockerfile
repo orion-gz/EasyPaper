@@ -1,10 +1,12 @@
 # ── Stage 1: 프론트엔드 빌드 ──
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/index.html frontend/vite.config.js ./
 COPY frontend/src ./src
+COPY frontend/scripts ./scripts
+COPY frontend/public ./public
 RUN npm run build
 
 # ── Stage 2: 백엔드 런타임 ──
