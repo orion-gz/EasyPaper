@@ -1,5 +1,11 @@
 import sys
 
+# A packaged executable cannot interpret a .py filename as a Python command.
+# Dispatch the worker before importing or starting the HTTP server.
+if len(sys.argv) > 1 and sys.argv[1] == "--easypaper-parser-worker":
+    from parser_worker import main as parser_worker_main
+    raise SystemExit(parser_worker_main(sys.argv[2:]))
+
 # PyInstaller sidecar는 일반 Python 인터프리터가 아니어서 ``-m pip``를
 # 실행할 수 없다. 설치용으로 자신을 다시 띄운 경우 서버 import 전에 분기한다.
 if len(sys.argv) > 1 and sys.argv[1] == "--easypaper-install-pdf-parser":
