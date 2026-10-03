@@ -27,7 +27,7 @@ async function openRecovered(page, pdf, spans, recovery = 'ocr', sources = [], t
   } }))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=recovered' })
-  await waitForReaderReady(page)
+  await waitForReaderReady(page, { text: recovery !== 'failed' })
   await expect(activeReader(page).locator(recovery ? '.textLayer[data-recovery]' : '.textLayer span').first()).toBeVisible()
   await evaluateReader(page, () => Promise.all(document.getAnimations()
     .filter(animation => animation.effect.getComputedTiming().iterations !== Infinity)
