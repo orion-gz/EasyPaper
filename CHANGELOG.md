@@ -1,7 +1,32 @@
 # Changelog
 
-EasyPaper의 변경 이력입니다. 이 프로젝트는 커밋 해시 기반 롤링 업데이트를 사용하며,
-별도의 버전 번호 대신 병합된 날짜 기준으로 정리합니다.
+EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
+
+## 1.1.0 - 2026-10-03
+
+### 한국어 (1.0.3 → 1.1.0)
+
+- 탭 기반 문서 작업 공간과 상단 탭·작업 공간 키보드 단축키를 추가하고, 문서 로딩 중 탭 전환 및 패널·툴바 동작을 개선
+- Easy English 읽기 모드를 추가하고, 원문 문장 대응·하이라이트 정합성을 개선하며 문장 비교 UI를 정리
+- 하단 바에 문장 도구와 설정 새로고침을 추가하고, AI 질문 점 탐색·질문 팁·채팅 이동 및 읽은 문서 필터를 개선
+- GPT-6.1 Sol 모델 옵션을 추가하고, CLI 모델 목록 및 Claude 인증 공유·호출 직렬화를 개선
+- PDF 다중 열 읽기 순서·텍스트 위치 매핑·그림과 표 번호를 수정하고, 번역 누락 처리·오류 표시·재시도를 개선
+- PDF 렌더링과 캐시 사용량을 제한하고, 스크롤 성능·읽기 위치·페이지 너비 맞춤·집중 모드 및 메모 복원을 개선
+- 문서 삭제·변경 전 작업 종료, URL 가져오기 ID 예약, SQLite 스냅샷 백업 및 비동기 세션 복구로 데이터 정합성과 응답성을 개선
+- 패키징된 PDF 파서 워커와 Docker 프론트엔드 빌드 입력을 수정하고, HTTPS 기사 프레임 격리·메모 일반 텍스트 처리·DOMPurify 보안을 강화
+- 배포 전 테스트 검증을 적용하고, Tauri 릴리스 게시 및 읽기 화면 E2E 검증의 안정성을 개선
+
+### English (1.0.3 → 1.1.0)
+
+- Added a tab-based document workspace and keyboard shortcuts for top tabs and workspace actions; improved tab navigation during loading and panel/toolbar behavior.
+- Added Easy English reading mode, improved sentence alignment and highlights, and simplified the sentence comparison UI.
+- Added sentence tools and settings refresh to the bottom toolbar; improved assistant question dot navigation, question tips, chat navigation, and read-document filters.
+- Added GPT-6.1 Sol model options and improved CLI model availability, shared Claude authentication, and serialized CLI calls.
+- Fixed multi-column PDF reading order, source mapping, and complete figure/table numbers; improved translation omission handling, error reporting, and retries.
+- Bounded PDF rendering and cache usage; improved scrolling performance, reading position, page width fitting, Focus mode, and memo restoration.
+- Improved data consistency and responsiveness by stopping document workers before mutations, reserving URL import IDs, snapshotting SQLite backups, and restoring sessions asynchronously.
+- Fixed packaged PDF parser workers and Docker frontend build inputs; strengthened HTTPS article frame isolation, plain-text memo editing, and DOMPurify security.
+- Gated deployment on passing tests and improved Tauri release publishing and reader E2E validation reliability.
 
 ## 1.0.3 - 2026-09-20
 
