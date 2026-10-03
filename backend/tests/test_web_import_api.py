@@ -97,3 +97,45 @@ def test_import_remote_pdf_uses_client_id_and_finishes_parse(test_client, isolat
     assert response.json()["content_kind"] == "pdf"
     assert isolated_dirs["db"].db_get_document(upload_id)["source_origin"] == "web"
     upload.sessions.pop(upload_id, None)
+
+@pytest.mark.asyncio
+async def test_concurrent_import_reserves_id_before_fetch(isolated_dirs, monkeypatch):
+    import asyncio
+    import threading
+    from fastapi import HTTPException
+    from models.schemas import UrlImportRequest
+    from routers import web_import as router
+    monkeypatch.setattr(router, 'LIBRARY_DIR', str(isolated_dirs['library_dir']))
+    monkeypatch.setattr(router, 'UPLOAD_DIR', str(isolated_dirs['upload_dir']))
+    started, release = threading.Event(), threading.Event()
+    def fetch(url):
+        started.set()
+        assert release.wait(5)
+        return FetchResult('web_article', url, 'text/html', {}, content=ARTICLE)
+    monkeypatch.setattr(router, 'fetch_url', fetch)
+    body = UrlImportRequest(url='https://example.test/article', upload_id='123e4567-e89b-42d3-a456-426614174099', translation_mode='manual')
+    first = asyncio.create_task(router.import_url(body, 'testuser'))
+    try:
+        assert await asyncio.to_thread(started.wait, 5)
+        with pytest.raises(HTTPException) as error:
+            await router.import_url(body, 'testuser')
+        assert error.value.status_code == 409
+        assert (isolated_dirs['upload_dir'] / body.upload_id).is_dir()
+    finally:
+        release.set()
+    result = await first
+    document = isolated_dirs['db'].db_get_document(result.session_id)
+    assert document and Path(document['pdf_path']).is_file()
+
+
+def test_import_collision_does_not_remove_existing_upload(test_client, isolated_dirs, monkeypatch):
+    from routers import web_import as router
+    monkeypatch.setattr(router, 'UPLOAD_DIR', str(isolated_dirs['upload_dir']))
+    doc_id = '123e4567-e89b-42d3-a456-426614174098'
+    reserved = isolated_dirs['upload_dir'] / doc_id
+    reserved.mkdir()
+    source = reserved / 'document.pdf'; source.write_bytes(b'winner')
+    monkeypatch.setattr(router, 'fetch_url', lambda *_: pytest.fail('must reject before downloading'))
+    response = test_client.post('/api/import-url', json={'url':'https://example.test/a.pdf', 'upload_id':doc_id})
+    assert response.status_code == 409
+    assert source.read_bytes() == b'winner'

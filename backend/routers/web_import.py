@@ -54,15 +54,24 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
             raise HTTPException(status_code=409, detail={"code": "upload_id_conflict"})
     else:
         doc_id = str(uuid.uuid4())
+    # Reserve the ID before yielding to network I/O, just like local uploads.
+    # Only the request that owns this directory may clean up this document.
+    session_dir = Path(UPLOAD_DIR) / doc_id
+    try:
+        session_dir.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        raise HTTPException(status_code=409, detail={"code": "upload_id_conflict"})
     try:
         fetched = await asyncio.to_thread(fetch_url, body.url)
     except WebImportError as exc:
+        shutil.rmtree(session_dir, ignore_errors=True)
         raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
+    except BaseException:
+        shutil.rmtree(session_dir, ignore_errors=True)
+        raise
 
     if fetched.kind == "remote_pdf":
-        session_dir = Path(UPLOAD_DIR) / doc_id
         try:
-            session_dir.mkdir(parents=True, exist_ok=False)
             pdf_path = session_dir / "document.pdf"
             partial_path = session_dir / "document.pdf.part"
             shutil.copyfile(fetched.temp_path, partial_path)
@@ -142,3 +151,5 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
         db_delete_document(doc_id)
         shutil.rmtree(staging, ignore_errors=True); shutil.rmtree(final_dir, ignore_errors=True)
         raise HTTPException(status_code=422, detail={"code": "article_processing_failed", "message": f"웹 문서 처리 실패: {exc}"}) from exc
+    finally:
+        shutil.rmtree(session_dir, ignore_errors=True)
