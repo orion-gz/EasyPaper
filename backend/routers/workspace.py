@@ -97,6 +97,9 @@ async def patch_document_classification(
     if doc.get("document_mode") == body.document_mode and doc.get("document_type") == body.document_type:
         return doc
 
+    from services.document_tasks import list_tasks
+    if any(task["status"] in {"queued", "running", "retry_wait"} for task in list_tasks(doc_id)):
+        raise HTTPException(status_code=409, detail="실행 중인 문서 작업을 종료한 뒤 분류를 변경해 주세요.")
     if db_document_has_mode_sensitive_data(doc_id):
         raise HTTPException(
             status_code=409,
@@ -106,6 +109,10 @@ async def patch_document_classification(
     db_update_document_classification(
         doc_id, body.document_mode, body.document_type, MODE_SCHEMA_VERSION,
     )
+    from routers.upload import sessions
+    if doc_id in sessions:
+        sessions[doc_id].update(document_mode=body.document_mode, document_type=body.document_type,
+                                classification_status="confirmed", mode_schema_version=MODE_SCHEMA_VERSION)
     updated = dict(doc)
     updated.update({
         "document_mode": body.document_mode,

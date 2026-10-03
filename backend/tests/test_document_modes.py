@@ -479,3 +479,19 @@ def test_prompt_versions_only_change_affected_type_caches():
     assert "document-modes-v1" in research
     assert "technical-v2" in technical
     assert "academic-book-v1" in academic
+
+
+def test_classification_updates_live_session_and_rejects_active_work(isolated_dirs, test_client, monkeypatch):
+    from routers import upload
+    from services.document_tasks import create_task, update_task
+    db = isolated_dirs['db']
+    db.db_save_document('live-mode', 'testuser', 'manual.pdf', '/x', 1, {})
+    monkeypatch.setattr(upload, 'sessions', {'live-mode': {'document_mode': 'research', 'document_type': 'research_paper', 'pages': []}})
+    task = create_task('live-mode', 'summary', {}, [1], status='running')
+    change = {'document_mode': 'general', 'document_type': 'manual'}
+    assert test_client.patch('/api/library/live-mode/classification', json=change).status_code == 409
+    assert upload.sessions['live-mode']['document_mode'] == 'research'
+    update_task(task['id'], status='cancelled')
+    assert test_client.patch('/api/library/live-mode/classification', json=change).status_code == 200
+    assert upload.sessions['live-mode']['document_mode'] == db.db_get_document('live-mode')['document_mode'] == 'general'
+    assert upload.sessions['live-mode']['document_type'] == 'manual'
