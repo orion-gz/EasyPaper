@@ -158,3 +158,14 @@ export async function readerPoint(page, x, y) {
   const scale = bounds.width / width
   return { x: bounds.x + x * scale, y: bounds.y + y * scale }
 }
+
+
+// Document tools start collapsed; tests enter the panel through its control.
+export async function openReaderTools(reader) {
+  await reader.locator('#viewer-screen:not(.document-workspace-loading) #document-tool-chat').waitFor({ state: 'attached' })
+  await reader.locator('#chat-toggle-btn').waitFor({ state: 'visible' })
+  if (await reader.locator('#chat-sidebar').evaluate(node => node.classList.contains('hidden'))) {
+    await reader.locator('#chat-toggle-btn').click()
+  }
+  await reader.locator('#chat-sidebar').waitFor({ state: 'visible' })
+}

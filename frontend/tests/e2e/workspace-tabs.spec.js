@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
-import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A, SAMPLE_PDF_B } from './helpers.js'
+import { openReaderTools, mockBaseRoutes, gotoApp, SAMPLE_PDF_A, SAMPLE_PDF_B } from './helpers.js'
 
 const documents = [
   { id: 'tab-a', filename: 'Attention.pdf', total_pages: 1, metadata: { primer_shown: true }, translated_pages: [] },
@@ -38,7 +38,9 @@ test('common shell, document isolation, menu singleton, close and restore', asyn
   page.on('pageerror', error => errors.push(error.message))
   await setup(page)
   await open(page, 'tab-a')
+  await openReaderTools(reader(page, 'tab-a'))
   await reader(page, 'tab-a').locator('#chat-input').fill('Draft A')
+  await openReaderTools(reader(page, 'tab-a'))
   await reader(page, 'tab-a').locator('#document-tool-notes').click()
   await open(page, 'tab-b')
   await expect(reader(page, 'tab-b').locator('#chat-input')).toHaveValue('')
@@ -90,10 +92,12 @@ test('compact tabs and original chat composer keep working with toolbar auto hid
     spacer.style.cssText = 'height: 2000px; flex-shrink: 0;'
     element.append(spacer)
   })
-  for (const top of [80, 84, 88, 92]) await scroll.evaluate((element, value) => { element.scrollTop = value; element.dispatchEvent(new Event('scroll')) }, top)
+  await expect(frame.locator('.textLayer').first()).toHaveAttribute('data-segmented', 'true')
+  await openReaderTools(frame)
+  for (const top of [80, 84, 88, 92]) await scroll.evaluate((element, value) => { element.scrollTo({ top: value, behavior: 'instant' }); element.dispatchEvent(new Event('scroll')) }, top)
   await expect(frame.locator('#viewer-topbar')).toHaveClass(/toolbar-hidden/)
   await expect.poll(() => frame.locator('#viewer-topbar').evaluate(element => getComputedStyle(element).transform)).not.toBe('none')
-  for (const top of [88, 84, 80, 76]) await scroll.evaluate((element, value) => { element.scrollTop = value; element.dispatchEvent(new Event('scroll')) }, top)
+  for (const top of [88, 84, 80, 76]) await scroll.evaluate((element, value) => { element.scrollTo({ top: value, behavior: 'instant' }); element.dispatchEvent(new Event('scroll')) }, top)
   await expect(frame.locator('#viewer-topbar')).not.toHaveClass(/toolbar-hidden/)
 })
 test('document tools and responsive reading layout', async ({ page }) => {
@@ -101,6 +105,7 @@ test('document tools and responsive reading layout', async ({ page }) => {
   await setup(page)
   await open(page, 'tab-a')
   const frame = reader(page, 'tab-a')
+  await openReaderTools(frame)
   await frame.getByRole('tab', { name: '메모', exact: true }).click()
   await expect(frame.locator('#document-resource-list')).toBeVisible()
   await frame.getByRole('tab', { name: '주석', exact: true }).click()
@@ -151,6 +156,7 @@ test('AI response stays in its document after switching and closing the tab', as
     await route.fulfill({ contentType: 'text/event-stream', body: 'event: answer\ndata: {"delta":"Answer for document A"}\n\nevent: done\ndata: {}\n\n' })
   })
   await open(page, 'tab-a')
+  await openReaderTools(reader(page, 'tab-a'))
   await reader(page, 'tab-a').locator('#chat-input').fill('Question A')
   await reader(page, 'tab-a').locator('#chat-input').press('Enter')
   await expect.poll(() => request?.session_id).toBe('tab-a')
@@ -221,6 +227,7 @@ test('fit width follows panels and resize; manual zoom and fit preference surviv
     return paper && paper.width <= viewport.width && paper.left >= viewport.left - 2 && paper.right <= viewport.right + 2 && el.scrollWidth <= el.clientWidth + 2
   })
   await expect.poll(fits).toBe(true)
+  await openReaderTools(frame)
   await frame.locator('#chat-close-btn').click()
   await expect.poll(fits).toBe(true)
   await page.setViewportSize({ width: 1100, height: 800 })
@@ -296,6 +303,7 @@ test('resource list updates across runtimes and pending sync does not block swit
   await page.route('**/api/library/tab-a/memos', route => route.fulfill({ status: 503, json: { detail: 'offline' } }))
   await open(page, 'tab-a')
   const frame = reader(page, 'tab-a')
+  await openReaderTools(frame)
   await frame.locator('#document-tool-notes').click()
   await page.evaluate(() => {
     const memo = { id: 'pending-note', content: 'Durable pending note', sentenceText: 'test' }

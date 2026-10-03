@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { openReaderTools, activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
 test('stored locale is applied on the unauthenticated login screen', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('easypaper_ui_locale', 'en'))
@@ -94,6 +94,7 @@ test('English locale has no visible Korean UI in the PDF viewer', async ({ page 
   await expect(activeReader(page).locator('#viewer-scroll-container')).toBeVisible()
   await expect.poll(() => visibleKoreanUi(page, true)).toEqual([])
   await expect(activeReader(page).locator('#document-find')).toBeVisible()
+  await openReaderTools(activeReader(page))
   await expect(activeReader(page).locator('#chat-sidebar')).not.toHaveClass(/hidden/)
   await expect.poll(() => visibleKoreanUi(page, true)).toEqual([])
   await evaluateReader(page, () => {

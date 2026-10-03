@@ -534,6 +534,14 @@ test('real PDF hover reveals source and translation together and clears on viewe
   })).toBe(true)
   expect((await source.boundingBox()).y).toBeCloseTo(sourceBefore.y, 0)
   await source.click()
+  // Pixel and mask comparisons require a settled reading position. Font
+  // loading and native click scrolling can otherwise finish during screenshot.
+  await evaluateReader(page, async () => {
+    await document.fonts.ready
+    const scroll = document.querySelector('#viewer-scroll-container')
+    scroll.scrollTo({ top: scroll.scrollTop, left: scroll.scrollLeft, behavior: 'instant' })
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  })
   const sourceMask = await activeReader(page).locator('.focus-tint-hole').evaluateAll(elements => elements.map(e => ['x', 'y', 'width', 'height'].map(p => Number(e.getAttribute(p)))))
   // Compare actual PDF canvas and translation glyph pixels, not just geometry
   // or CSS declarations. Keep native layout/scroll positions fixed for both.
