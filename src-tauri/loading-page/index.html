@@ -14,6 +14,13 @@
     color: #e5e5e5;
     font-family: system-ui, -apple-system, sans-serif;
   }
+  #window-titlebar { position: fixed; inset: 0 0 auto; height: 48px; display: flex; user-select: none; }
+  #window-drag { flex: 1; }
+  #window-controls { display: flex; }
+  #window-controls button { width: 46px; border: 0; background: transparent; color: inherit; font-size: 16px; }
+  #window-controls button:hover { background: #ffffff18; }
+  #window-controls button:last-child:hover { background: #c42b1c; }
+  #window-controls button:focus-visible { outline: 2px solid #95b3f5; outline-offset: -3px; }
 </style>
 </head>
 <body>
@@ -22,6 +29,38 @@
     <p id="help" hidden>앱을 종료한 뒤 다시 실행해 주세요. 문제가 반복되면 EasyPaper 로그와 함께 오류 메시지를 전달해 주세요.</p>
   </div>
   <script>
+    // Keep the window operable while the backend starts or reports an error.
+    if (/Windows|Macintosh|Mac OS X/.test(navigator.userAgent)) {
+      const titlebar = document.createElement('header');
+      titlebar.id = 'window-titlebar';
+      const drag = document.createElement('div');
+      drag.id = 'window-drag';
+      titlebar.append(drag);
+      const invokeWindow = command => window.__TAURI_INTERNALS__.invoke('plugin:window|' + command)
+        .catch(error => console.error('Window action failed', error));
+      drag.addEventListener('mousedown', event => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        invokeWindow(event.detail === 2 ? 'toggle_maximize' : 'start_dragging');
+      });
+      if (/Windows/.test(navigator.userAgent)) {
+        const controls = document.createElement('div');
+        controls.id = 'window-controls';
+        for (const [command, label, glyph] of [
+          ['minimize', '창 최소화', '−'], ['toggle_maximize', '창 최대화/복원', '□'], ['close', '창 닫기', '×']
+        ]) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.title = label;
+          button.setAttribute('aria-label', label);
+          button.textContent = glyph;
+          button.addEventListener('click', () => invokeWindow(command));
+          controls.append(button);
+        }
+        titlebar.append(controls);
+      }
+      document.body.append(titlebar);
+    }
     function showError(error) {
       clearInterval(timer);
       clearTimeout(deadline);

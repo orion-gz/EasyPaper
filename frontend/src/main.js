@@ -1,5 +1,6 @@
 import { createEasyEnglishController } from './easyEnglish.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
+import { initializeDesktopWindow } from './desktopWindow.js'
 import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './documentWorkspaceRuntime.js'
 import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail, getPDFPageText, getPDFPageWidth } from './pdfViewer.js'
 import { translationFeedback } from './translationFeedback.js'
@@ -46,6 +47,7 @@ let documentLoadFailed = false
 if (isDocumentRuntime) document.body.classList.add('document-workspace-runtime')
 
 const i18nReady = initI18n()
+if (!isDocumentRuntime) initializeDesktopWindow(i18nReady)
 applyUiScale(loadUiScale())
 
 

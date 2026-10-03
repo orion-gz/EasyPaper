@@ -4617,5 +4617,17 @@
   },
   "errors:easy_english_invalid_mapping": {
     "description": "Easy English: The result did not preserve source sentence groups or values. Please retry."
+  },
+  "navigation:window.minimize": {
+    "description": "Accessible label and tooltip for the desktop titlebar minimize window button."
+  },
+  "navigation:window.maximize": {
+    "description": "Accessible label and tooltip for the desktop titlebar maximize window button."
+  },
+  "navigation:window.restore": {
+    "description": "Accessible label and tooltip for the desktop titlebar restore window button."
+  },
+  "navigation:window.close": {
+    "description": "Accessible label and tooltip for the desktop titlebar close window button."
   }
 }
