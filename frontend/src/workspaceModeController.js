@@ -67,6 +67,15 @@ export function createWorkspaceModeController({
 
   function updateCopy() {
     const copy = modeCopy(mode)
+    for (const attribute of ['', 'title', 'placeholder', 'aria-label']) {
+      const suffix = attribute ? `-${attribute}` : ''
+      document.querySelectorAll(`[data-document-copy${suffix}]`).forEach(element => {
+        const key = `common:${element.getAttribute(`data-document-copy${suffix}`)}.${mode}`
+        element.setAttribute(`data-i18n${suffix}`, key)
+        if (attribute) element.setAttribute(attribute, t(key))
+        else element.textContent = t(key)
+      })
+    }
     document.body.dataset.workspaceMode = mode
     document.querySelectorAll('button[data-workspace-mode]').forEach(button => {
       const selected = button.dataset.workspaceMode === mode
@@ -83,7 +92,11 @@ export function createWorkspaceModeController({
         if (copy[copyName]?.key) text.dataset.i18n = copy[copyName].key
         text.textContent = label
       }
-      if (tooltip) tooltip.textContent = label
+      if (tooltip) {
+        const copyName = button.dataset.page === 'dashboard' ? 'title' : button.dataset.page
+        if (copy[copyName]?.key) tooltip.dataset.i18n = copy[copyName].key
+        tooltip.textContent = label
+      }
     })
     const search = document.getElementById('workspace-search-input')
     const librarySearch = document.getElementById('library-search-input')

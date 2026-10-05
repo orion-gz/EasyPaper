@@ -66,7 +66,7 @@ export async function deleteLibraryFolder(folderId, deletePapers = false) {
 }
 export async function moveLibraryDocuments(docIds, folderId) {
   const res = await fetch(`${API_BASE}/library/documents/move`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ doc_ids: docIds, folder_id: folderId }) })
-  if (!res.ok) throw new Error((await res.json()).detail || '논문 이동 실패')
+  if (!res.ok) throw new Error((await res.json()).detail || '문서 이동 실패')
   invalidateLibraryGetCache()
   return res.json()
 }

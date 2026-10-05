@@ -4629,5 +4629,212 @@
   },
   "navigation:window.close": {
     "description": "Accessible label and tooltip for the desktop titlebar close window button."
+  },
+  "common:legacy.documentCopy.lib-compare-toggle-btn.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 여러 논문을 선택해 비교 질문을 할 수 있습니다"
+  },
+  "common:legacy.documentCopy.lib-compare-toggle-btn.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 여러 문서를 선택해 비교 질문을 할 수 있습니다"
+  },
+  "common:legacy.documentCopy.library-view-toggle.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 논문 보기 방식"
+  },
+  "common:legacy.documentCopy.library-view-toggle.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 보기 방식"
+  },
+  "common:legacy.documentCopy.lib-select-read-btn.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 논문 읽음 상태 변경"
+  },
+  "common:legacy.documentCopy.lib-select-read-btn.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 문서 읽음 상태 변경"
+  },
+  "common:legacy.documentCopy.lib-select-fav-btn.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 논문 북마크 토글"
+  },
+  "common:legacy.documentCopy.lib-select-fav-btn.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 문서 북마크 토글"
+  },
+  "common:legacy.documentCopy.lib-select-cache-btn.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 논문의 PDF 추출 캐시 삭제"
+  },
+  "common:legacy.documentCopy.lib-select-cache-btn.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 문서의 PDF 추출 캐시 삭제"
+  },
+  "common:legacy.documentCopy.lib-select-compare-btn.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 논문들 비교 대화"
+  },
+  "common:legacy.documentCopy.lib-select-compare-btn.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 문서들 비교 대화"
+  },
+  "common:legacy.documentCopy.lib-select-delete-btn.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 논문 삭제"
+  },
+  "common:legacy.documentCopy.lib-select-delete-btn.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 문서 삭제"
+  },
+  "common:legacy.documentCopy.compare-chat-input.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 논문들에 대해 비교 질문을 해보세요..."
+  },
+  "common:legacy.documentCopy.compare-chat-input.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 선택한 문서들에 대해 비교 질문을 해보세요..."
+  },
+  "common:legacy.documentCopy.chat-drawer-input.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 이 논문에 대해 질문해보세요..."
+  },
+  "common:legacy.documentCopy.chat-drawer-input.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 이 문서에 대해 질문해보세요..."
+  },
+  "common:legacy.documentCopy.viewer-clear-cache-btn.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 현재 논문의 PDF 추출 캐시 삭제"
+  },
+  "common:legacy.documentCopy.viewer-clear-cache-btn.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 현재 문서의 PDF 추출 캐시 삭제"
+  },
+  "common:legacy.documentCopy.compareLabel.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 논문 비교"
+  },
+  "common:legacy.documentCopy.compareLabel.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 비교"
+  },
+  "common:legacy.documentCopy.compareTab.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 논문 비교"
+  },
+  "common:legacy.documentCopy.compareTab.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 비교"
+  },
+  "common:legacy.documentCopy.compareHeading.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 논문 비교 채팅"
+  },
+  "common:legacy.documentCopy.compareHeading.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 비교 채팅"
+  },
+  "common:legacy.documentCopy.outline.research": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 논문 목차"
+  },
+  "common:legacy.documentCopy.outline.general": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 목차"
+  },
+  "common:legacy.documentCopy.legacy.ui.0104": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 복사는 지원되지 않습니다. 이동하려면 잘라내기를 사용하세요."
+  },
+  "common:legacy.documentCopy.legacy.ui.0105": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 비교"
+  },
+  "common:legacy.documentCopy.legacy.ui.0107": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 비교는 2~5개 문서를 선택해야 합니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0108": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 비교는 2~5개 문서를 선택했을 때만 가능합니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0109": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 삭제"
+  },
+  "common:legacy.documentCopy.legacy.ui.0112": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서 영구 삭제"
+  },
+  "common:legacy.documentCopy.legacy.ui.0124": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서는 한 폴더에만 둘 수 있습니다. 이동하려면 Ctrl/Cmd+X를 사용하세요."
+  },
+  "common:legacy.documentCopy.legacy.ui.0125": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서를 먼저 업로드하거나 선택해주세요."
+  },
+  "common:legacy.documentCopy.legacy.ui.0126": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서를 복원했습니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0127": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서를 불러오지 못했습니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0129": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 문서가 복원되었습니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0162": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 대화할 문서 정보를 불러올 수 없습니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0224": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 모든 문서를 확인했네요"
+  },
+  "common:legacy.documentCopy.legacy.ui.0301": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 번역이 진행 중인 문서가 여기에 표시됩니다"
+  },
+  "common:legacy.documentCopy.legacy.ui.0312": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 보관함에 저장된 문서가 없습니다"
+  },
+  "common:legacy.documentCopy.legacy.ui.0314": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 보관함에서 문서의 체크 아이콘을 눌러 읽음 처리해 보세요"
+  },
+  "common:legacy.documentCopy.legacy.ui.0344": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 비교할 문서 정보를 불러올 수 없습니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0362": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 삭제한 문서가 여기에 표시됩니다"
+  },
+  "common:legacy.documentCopy.legacy.ui.0368": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 새 문서를 추가하거나 PDF를 업로드해 보세요"
+  },
+  "common:legacy.documentCopy.legacy.ui.0505": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 열려있는 문서가 없습니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0534": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 이 문서 열기"
+  },
+  "common:legacy.documentCopy.legacy.ui.0537": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 이 문서를 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0590": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 읽는 중인 문서가 없습니다"
+  },
+  "common:legacy.documentCopy.legacy.ui.0594": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 읽은 문서으로 표시되었습니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0595": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 읽은 문서가 없습니다"
+  },
+  "common:legacy.documentCopy.legacy.ui.0602": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 읽지 않은 문서가 없습니다"
+  },
+  "common:legacy.documentCopy.legacy.ui.0638": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 조건에 맞는 문서가 없습니다"
+  },
+  "common:legacy.documentCopy.legacy.ui.0650": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 즐겨찾기한 문서가 없습니다"
+  },
+  "common:legacy.documentCopy.legacy.ui.0702": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 카드 우상단 체크 버튼을 눌러 비교할 문서를 선택하세요."
+  },
+  "common:legacy.documentCopy.legacy.ui.0784": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 현재 문서"
+  },
+  "common:legacy.documentCopy.legacy.ui.0809": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 휴지통에 있는 문서입니다. 복원 후 열 수 있습니다."
+  },
+  "common:legacy.documentCopy.legacy.ui.0965": {
+    "description": "Mode-specific document terminology for shared application controls and messages: 이 문서의 채팅으로 이동"
+  },
+  "common:legacy.documentCopy.particle0": {
+    "description": "Document noun with a Korean grammatical particle in shared UI messages."
+  },
+  "common:legacy.documentCopy.particle1": {
+    "description": "Document noun with a Korean grammatical particle in shared UI messages."
+  },
+  "common:legacy.documentCopy.particle2": {
+    "description": "Document noun with a Korean grammatical particle in shared UI messages."
+  },
+  "common:legacy.documentCopy.particle3": {
+    "description": "Document noun with a Korean grammatical particle in shared UI messages."
+  },
+  "common:legacy.documentCopy.particle4": {
+    "description": "Document noun with a Korean grammatical particle in shared UI messages."
+  },
+  "common:legacy.documentCopy.particle5": {
+    "description": "Document noun with a Korean grammatical particle in shared UI messages."
+  },
+  "common:legacy.documentCopy.legacy.ui.0173": {
+    "description": "Shared document UI message: 딥러닝 비전/레이아웃 AI - 문서 전체를 깨끗한 Markdown/LaTeX 수식으로 변환."
+  },
+  "common:legacy.documentCopy.legacy.ui.0113": {
+    "description": "Shared document UI message: 문서 이동 실패"
+  },
+  "common:legacy.documentCopy.chatEmpty": {
+    "description": "Empty AI chat list guidance in general document mode."
   }
 }

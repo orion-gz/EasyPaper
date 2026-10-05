@@ -26,6 +26,10 @@ test('워크스페이스 전환은 홈과 데이터 범위를 바꾸고 문서 �
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ documents: filtered, total: filtered.length }) })
   })
 
+  await page.route('**/api/library/reading-stats?*', route => route.fulfill({
+    json: { total_seconds: 90, total_seconds_by_day: {}, paper_stats: [], total_seconds_by_category: { reading: 60, compare: 30 } },
+  }))
+
   await gotoApp(page)
   const sidebar = page.locator("#app-sidebar")
   await expect(sidebar.locator("[data-page=dashboard] .sidebar-nav-label")).toHaveText("연구 홈")
@@ -49,6 +53,10 @@ test('워크스페이스 전환은 홈과 데이터 범위를 바꾸고 문서 �
   await expect(page.locator('.dash-stat-grid')).toContainText('문서')
   await expect(page.locator('.dash-root')).toContainText('최근 읽은 문서')
   await expect(page.locator('.dash-root')).toContainText('문서 활동 타임라인')
+  await expect(page.locator('.dash-category-mix-legend')).toContainText('문서 읽기')
+  await expect(page.locator('.dash-category-mix-legend')).toContainText('문서 비교')
+  await expect(page.locator('.dash-category-mix [title]').first()).toHaveAttribute('title', /^문서 읽기:/)
+  await expect(sidebar.locator('[data-page=chats] .sidebar-tooltip')).toHaveText('문서 AI')
   await expect(page.locator('.dash-root')).not.toContainText('AI 인사이트')
   await expect(page.locator('.dash-root')).not.toContainText('개념 히트맵')
   await expect(page.locator('.dash-root')).not.toContainText('연구 그래프 미리보기')
@@ -74,6 +82,12 @@ test('워크스페이스 전환은 홈과 데이터 범위를 바꾸고 문서 �
   await expect(page.locator('.category-filter-btn', { hasText: '매뉴얼' })).toBeVisible()
 
   const manualCard = page.locator('.doc-card', { hasText: 'Setup Manual' })
+  await manualCard.click({ button: 'right' })
+  await expect(page.locator('.library-context-menu')).toContainText('문서 열기')
+  await expect(page.locator('.library-context-menu')).not.toContainText('논문')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#lib-select-read-btn')).toHaveAttribute('title', '선택한 문서 읽음 상태 변경')
+  await expect(page.locator('#library-view-toggle')).toHaveAttribute('aria-label', '문서 보기 방식')
   const manualChip = manualCard.locator('.document-type-chip.general')
   await expect(manualCard).toHaveAttribute('data-document-mode', 'general')
   await expect(manualChip).toHaveText('일반 · 매뉴얼')
@@ -84,6 +98,9 @@ test('워크스페이스 전환은 홈과 데이터 범위를 바꾸고 문서 �
   await page.locator('#library-grid .document-type-chip.general', { hasText: '매뉴얼' }).click()
   await expect(page.locator('#library-grid').getByText('Setup Manual')).toBeVisible()
   await expect(page.locator('#library-grid').getByText('Example Book')).not.toBeVisible()
+  await page.locator('#workspace-mode-switch [data-workspace-mode="research"]').click()
+  await expect(page.locator('#lib-select-read-btn')).toHaveAttribute('title', '선택한 논문 읽음 상태 변경')
+  await expect(sidebar.locator('[data-page=chats] .sidebar-tooltip')).toHaveText('논문 AI')
 })
 
 

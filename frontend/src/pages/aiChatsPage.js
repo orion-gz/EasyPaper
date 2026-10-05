@@ -1,3 +1,4 @@
+import { documentUiCopy } from '../documentUiCopy.js'
 // AI Chats 워크스페이스 페이지 — 논문별(단일 논문) AI 어시스턴트 채팅 세션 목록
 // 검색 / 탭 필터 / 정렬 / 표·카드 보기 전환 / 페이지네이션을 지원한다.
 // 데이터 원본: getChatSessionsAPI() → { sessions: [{ doc_id, title, created_at, last_message_at }] }
@@ -296,7 +297,7 @@ export async function renderAiChatsPage(documentMode = 'research') {
         <div class="aic-state">
           <div class="aic-state-icon">${icon('messageCircle', 32)}</div>
           <p>AI와 나눈 대화가 없습니다</p>
-          <p class="aic-state-sub">논문 뷰어에서 AI 어시스턴트에게 질문을 시작해 보세요</p>
+          <p class="aic-state-sub">${documentUiCopy('논문 뷰어에서 AI 어시스턴트에게 질문을 시작해 보세요', documentMode)}</p>
         </div>
       `
       return

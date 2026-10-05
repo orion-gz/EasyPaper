@@ -1,3 +1,4 @@
+import { documentUiCopy } from '../documentUiCopy.js'
 // 대시보드 페이지 — 워크스페이스 셸의 #page-dashboard 컨테이너를 전담 렌더링한다.
 // 모든 위젯은 실제 백엔드 데이터(/api/library/dashboard, /timeline, /library,
 // /graph, /graph/recommendations, /library/reading-stats)에서 가져오거나 그
@@ -239,14 +240,14 @@ function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySec
             const seconds = weeklyCategoryStats[c] || 0
             const pct = catTotal ? (seconds / catTotal) * 100 : 0
             if (pct <= 0) return ''
-            return `<div class="rh-mix-seg" style="width:${pct}%;background:var(${CATEGORY_COLOR_VAR[c]})" title="${escapeHtml(CATEGORY_LABEL[c])}: ${formatDuration(seconds)}"></div>`
+            return `<div class="rh-mix-seg" style="width:${pct}%;background:var(${CATEGORY_COLOR_VAR[c]})" title="${escapeHtml(documentUiCopy(CATEGORY_LABEL[c], isGeneralDocumentMode ? 'general' : 'research'))}: ${formatDuration(seconds)}"></div>`
           }).join('')}
         </div>
         <div class="dash-category-mix-legend">
           ${CATEGORY_ORDER.map(c => {
             const seconds = weeklyCategoryStats[c] || 0
             const pct = catTotal ? Math.round((seconds / catTotal) * 100) : 0
-            return `<span class="dash-category-mix-item"><i class="dash-mix-dot" style="background:var(${CATEGORY_COLOR_VAR[c]})"></i>${escapeHtml(CATEGORY_LABEL[c])} ${pct}%</span>`
+            return `<span class="dash-category-mix-item"><i class="dash-mix-dot" style="background:var(${CATEGORY_COLOR_VAR[c]})"></i>${escapeHtml(documentUiCopy(CATEGORY_LABEL[c], isGeneralDocumentMode ? 'general' : 'research'))} ${pct}%</span>`
           }).join('')}
         </div>
       </div>
@@ -375,7 +376,7 @@ function renderRecentPapersCard(docs, isGeneralDocumentMode = false) {
 
 // ── 최근 질문 ── dashboard.recent_questions를 그대로 사용(이미 timeline에서
 // type==='question'만 골라 최신순으로 내려준다).
-function renderRecentQuestionsCard(list) {
+function renderRecentQuestionsCard(list, isGeneralDocumentMode = false) {
   const items = (list || []).slice(0, 5)
   return `
     <div class="dash-card dash-card-list">
@@ -386,7 +387,7 @@ function renderRecentQuestionsCard(list) {
       ${items.length === 0 ? emptyNote('최근 질문이 없습니다.') : `
       <ul class="dash-question-list">
         ${items.map(q => `
-          <li class="dash-question-item" data-doc-id="${escapeHtml(q.doc_id || '')}" title="이 논문의 채팅으로 이동" tabindex="0" role="button">
+          <li class="dash-question-item" data-doc-id="${escapeHtml(q.doc_id || '')}" title="${documentUiCopy('이 논문의 채팅으로 이동', isGeneralDocumentMode ? 'general' : 'research')}" tabindex="0" role="button">
             <span class="dash-question-icon">${icon('messageCircle', 13)}</span>
             <div class="dash-question-body">
               <div class="dash-question-text">${escapeHtml(q.summary || '')}</div>
@@ -493,7 +494,7 @@ function renderTimelineCard(events, isGeneralDocumentMode = false) {
         ${recent.map(e => {
           const isDeleted = Boolean(e.is_deleted)
           return `
-          <li class="dash-timeline-item dash-timeline-${escapeHtml(e.type || '')} ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type || '')}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${isDeleted ? '삭제된 논문입니다' : '이 논문 열기'}" tabindex="0" role="button">
+          <li class="dash-timeline-item dash-timeline-${escapeHtml(e.type || '')} ${isDeleted ? 'is-deleted' : ''}" data-doc-id="${escapeHtml(e.doc_id || '')}" data-type="${escapeHtml(e.type || '')}" data-is-deleted="${isDeleted ? 'true' : 'false'}" title="${documentUiCopy(isDeleted ? '삭제된 논문입니다' : '이 논문 열기', isGeneralDocumentMode ? 'general' : 'research')}" tabindex="0" role="button">
             <span class="dash-timeline-dot"></span>
             <div class="dash-timeline-body">
               <div class="dash-timeline-top">
@@ -784,7 +785,7 @@ export async function renderDashboardPage(documentMode = 'research') {
         </div>
         <div class="dash-row dash-row-recent">
           ${renderRecentPapersCard(docs, isGeneralDocumentMode)}
-          ${renderRecentQuestionsCard(recentQuestions)}
+          ${renderRecentQuestionsCard(recentQuestions, isGeneralDocumentMode)}
           ${isGeneralDocumentMode ? '' : renderRecommendationsCard(cachedRecs && cachedRecs.recommendations)}
         </div>
         <div class="dash-row dash-row-bottom">
