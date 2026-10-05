@@ -1,0 +1,141 @@
+name: Tauri Linux Release Recovery
+
+# Retry Linux packaging for an existing draft after the other platforms pass.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing draft release tag (for example v1.2.1)
+        required: true
+        type: string
+
+concurrency:
+  group: tauri-linux-recovery-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+
+      - name: Verify release tag, versions, and existing platform assets
+        shell: bash
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          package_version=$(node -p "require('./package.json').version")
+          tauri_version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          cargo_version=$(sed -n '/^\[package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' src-tauri/Cargo.toml | head -n1)
+          test "$RELEASE_TAG" = "v$package_version"
+          test "$package_version" = "$tauri_version"
+          test "$package_version" = "$cargo_version"
+          test -f "docs/releases/$RELEASE_TAG.md"
+          gh release view "$RELEASE_TAG" --json isDraft,assets > "$RUNNER_TEMP/release.json"
+          node <<'JS'
+          const fs = require('fs');
+          const release = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release.json`));
+          const version = require('./package.json').version;
+          const names = new Set(release.assets.map(asset => asset.name));
+          const required = [
+            `EasyPaper_${version}_aarch64.dmg`,
+            `EasyPaper_${version}_aarch64.app.tar.gz`,
+            `EasyPaper_${version}_aarch64.app.tar.gz.sig`,
+            `EasyPaper_${version}_x64-setup.exe`,
+            `EasyPaper_${version}_x64-setup.exe.sig`,
+            `EasyPaper_${version}_x64_en-US.msi`,
+            `EasyPaper_${version}_x64_en-US.msi.sig`,
+            'latest.json',
+          ];
+          if (!release.isDraft || required.some(name => !names.has(name))) {
+            throw new Error('Recovery requires an existing draft with complete Windows/macOS assets');
+          }
+          JS
+
+      - name: Load release notes
+        id: relnotes
+        shell: bash
+        run: |
+          {
+            echo "notes<<RELEASE_NOTES_EOF"
+            cat "docs/releases/$RELEASE_TAG.md"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install backend deps and PyInstaller
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build and copy sidecar
+        run: |
+          backend/packaging/build.sh
+          src-tauri/scripts/copy-sidecar.sh
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux Tauri build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install Tauri CLI
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ inputs.release_tag }}
+          releaseName: EasyPaper Desktop ${{ inputs.release_tag }}
+          releaseBody: ${{ steps.relnotes.outputs.notes }}
+          # The checked-out tag can predate tauri.linux.conf.json.
+          args: >-
+            --bundles deb,rpm --config '{"bundle":{"linux":{"rpm":{"compression":{"type":"zstd","level":3}}}}}'
+          releaseDraft: true
+          prerelease: false
+
+      - name: Verify Linux assets and publish complete release
+        shell: bash
+        run: |
+          gh release view "$RELEASE_TAG" --json assets > "$RUNNER_TEMP/release.json"
+          node <<'JS'
+          const fs = require('fs');
+          const release = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release.json`));
+          const version = require('./package.json').version;
+          const names = new Set(release.assets.map(asset => asset.name));
+          const required = [
+            `EasyPaper_${version}_amd64.deb`,
+            `EasyPaper-${version}-1.x86_64.rpm`,
+            'latest.json',
+          ];
+          if (required.some(name => !names.has(name))) {
+            throw new Error('Linux recovery did not upload every required asset');
+          }
+          JS
+          gh release edit "$RELEASE_TAG" --draft=false --latest

@@ -1,0 +1,12 @@
+{
+  "bundle": {
+    "linux": {
+      "rpm": {
+        "compression": {
+          "type": "zstd",
+          "level": 3
+        }
+      }
+    }
+  }
+}
