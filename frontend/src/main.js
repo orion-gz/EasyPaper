@@ -3253,8 +3253,12 @@ const PROVIDER_CONFIG = [
       { value: 'Gemini 3.1 Pro (Low)',  label: 'Pro · Low',  group: 'Gemini 3.1 Pro' },
       { value: 'Gemini 3.1 Pro (High)', label: 'Pro · High', group: 'Gemini 3.1 Pro' },
       // Claude
-      { value: 'Claude Sonnet 5.5 (Thinking)', label: 'Sonnet 5.5 · Thinking', group: 'Claude' },
-      { value: 'Claude Opus 5.5 (Thinking)',   label: 'Opus 5.5 · Thinking',   group: 'Claude' },
+      { value: 'Claude Sonnet 5.5 (Low)', label: 'Sonnet · Low', group: 'Claude Sonnet 5.5' },
+      { value: 'Claude Sonnet 5.5 (Medium)', label: 'Sonnet · Medium', group: 'Claude Sonnet 5.5' },
+      { value: 'Claude Sonnet 5.5 (High)', label: 'Sonnet · High', group: 'Claude Sonnet 5.5' },
+      { value: 'Claude Opus 5.5 (Low)', label: 'Opus · Low', group: 'Claude Opus 5.5' },
+      { value: 'Claude Opus 5.5 (Medium)', label: 'Opus · Medium', group: 'Claude Opus 5.5' },
+      { value: 'Claude Opus 5.5 (High)', label: 'Opus · High', group: 'Claude Opus 5.5' },
       // GPT
       { value: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B · Medium', group: 'GPT' },
     ]
