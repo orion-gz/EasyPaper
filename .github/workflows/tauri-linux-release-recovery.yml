@@ -100,7 +100,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
-            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm cpio
 
       - name: Install Tauri CLI
         run: npm ci
@@ -114,11 +114,25 @@ jobs:
           tagName: ${{ inputs.release_tag }}
           releaseName: EasyPaper Desktop ${{ inputs.release_tag }}
           releaseBody: ${{ steps.relnotes.outputs.notes }}
-          # The checked-out tag can predate tauri.linux.conf.json.
-          args: >-
-            --bundles deb,rpm --config '{"bundle":{"linux":{"rpm":{"compression":{"type":"zstd","level":3}}}}}'
+          args: --bundles deb
           releaseDraft: true
           prerelease: false
+
+      - name: Load native RPM packaging tools
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-packaging-tools
+          sparse-checkout: src-tauri/scripts
+
+      - name: Build native RPM from the verified Tauri DEB payload
+        run: python release-packaging-tools/src-tauri/scripts/build-native-rpm.py
+
+      - name: Sign and upload native RPM and updater metadata
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: python release-packaging-tools/src-tauri/scripts/upload-native-rpm.py "$RELEASE_TAG"
 
       - name: Verify Linux assets and publish complete release
         shell: bash
@@ -132,6 +146,7 @@ jobs:
           const required = [
             `EasyPaper_${version}_amd64.deb`,
             `EasyPaper-${version}-1.x86_64.rpm`,
+            `EasyPaper-${version}-1.x86_64.rpm.sig`,
             'latest.json',
           ];
           if (required.some(name => !names.has(name))) {
