@@ -14,7 +14,7 @@ def run(*args, **kwargs):
 
 def release(repository, tag):
     return json.loads(subprocess.check_output(
-        ['gh', 'api', f'repos/{repository}/releases/tags/{tag}'], text=True,
+        ['gh', 'release', 'view', tag, '--repo', repository, '--json', 'isDraft,assets'], text=True,
     ))
 
 
@@ -24,7 +24,7 @@ config = json.loads(Path('src-tauri/tauri.conf.json').read_text())
 version = config['version']
 rpm = Path('src-tauri/target/release/bundle/rpm') / f"{config['productName']}-{version}-1.x86_64.rpm"
 assert rpm.is_file()
-assert release(repository, tag)['draft'], 'Upload requires a draft release'
+assert release(repository, tag)['isDraft'], 'Upload requires a draft release'
 signer = ['npm', 'run', 'tauri', '--', 'signer', 'sign']
 help_text = subprocess.check_output([*signer, '--help'], text=True)
 if '--app-version' in help_text:
@@ -43,7 +43,7 @@ with tempfile.TemporaryDirectory(prefix='easypaper-updater-', dir=os.environ.get
     manifest = json.loads(manifest_path.read_text())
     assert manifest['version'].removeprefix('v') == version
     manifest['platforms']['linux-x86_64-rpm'] = {
-        'url': asset['browser_download_url'],
+        'url': asset['apiUrl'],
         'signature': signature,
     }
     manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
