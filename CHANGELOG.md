@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.2.1 - 2026-10-05
+
+### 한국어 (1.2.0 → 1.2.1)
+
+- Antigravity의 Claude 모델 목록을 Claude Sonnet 5.5·Opus 5.5로 업데이트
+- Antigravity Claude의 추론 강도 선택지를 지원되는 Low·Medium·High로 정리
+- 일반 모드의 라이브러리·대시보드·뷰어·비교 대화와 안내 메시지에서 ‘논문’ 대신 ‘문서’ 용어를 사용하도록 한국어·영어 UI를 정리
+
+### English (1.2.0 → 1.2.1)
+
+- Updated Antigravity's Claude model list to Claude Sonnet 5.5 and Opus 5.5.
+- Aligned Antigravity Claude reasoning effort options with the supported Low, Medium, and High levels.
+- Updated Korean and English UI copy to use document terminology in general mode across the library, dashboard, viewer, comparison chats, and status messages.
+
 ## 1.2.0 - 2026-10-03
 
 ### 한국어 (1.1.0 → 1.2.0)
