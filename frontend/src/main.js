@@ -1,3 +1,4 @@
+import { documentUiCopy } from './documentUiCopy.js'
 import { createEasyEnglishController } from './easyEnglish.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
 import { initializeDesktopWindow } from './desktopWindow.js'
@@ -2635,10 +2636,10 @@ if (viewerClearCacheBtn) {
   viewerClearCacheBtn.addEventListener('click', async () => {
     toolbarKebabMenu?.classList.add('hidden')
     if (!state.sessionId) {
-      showToast('열려있는 논문이 없습니다.', 'error')
+      showToast(documentUiCopy('열려있는 논문이 없습니다.', state.currentDocumentMode), 'error')
       return
     }
-    const currentDocTitle = $('doc-title')?.textContent || '현재 논문'
+    const currentDocTitle = $('doc-title')?.textContent || documentUiCopy('현재 논문', state.currentDocumentMode)
     const ok = await showCustomConfirm(
       `"${currentDocTitle}"의 PDF 추출 및 번역 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하며, 기존 번역본도 초기화됩니다.)`,
       { title: '캐시 삭제', confirmText: '캐시 삭제', danger: true }
@@ -2972,7 +2973,7 @@ if (viewerReadToggleBtn) {
       state.currentDocMetadata.read_at = payload.read_at
       viewerReadToggleBtn.classList.toggle('active', nextReadState)
       toolbarKebabMenu?.classList.add('hidden')
-      showToast(nextReadState ? '읽은 논문으로 표시되었습니다.' : '보관함으로 이동되었습니다.', 'success')
+      showToast(nextReadState ? documentUiCopy('읽은 논문으로 표시되었습니다.', state.currentDocumentMode) : '보관함으로 이동되었습니다.', 'success')
       await loadLibraryCount()
     } catch (err) {
       showToast('상태 변경 실패: ' + err.message, 'error')
@@ -3213,7 +3214,7 @@ globalLogoutBtn.addEventListener('click', async () => {
 // 휴지통 비우기 버튼 클릭 이벤트
 if (libEmptyTrashBtn) {
   libEmptyTrashBtn.addEventListener('click', async () => {
-    const ok = await showCustomConfirm('휴지통에 있는 모든 논문을 영구 삭제할까요?\n이 작업은 복구할 수 없습니다.', {
+    const ok = await showCustomConfirm(documentUiCopy('휴지통에 있는 모든 논문을 영구 삭제할까요?\n이 작업은 복구할 수 없습니다.', workspaceModeController.getMode()), {
       title: '휴지통 비우기',
       confirmText: '휴지통 비우기',
       danger: true
@@ -4208,7 +4209,7 @@ let targetInstallParserId = null
 const PARSER_FALLBACK_META = {
   pymupdf: { id: 'pymupdf', name: 'PyMuPDF (fitz)', installed: true, size_info: '0 MB', description: '기본 제공 파서 - 텍스트 중심 문서에서 초고속으로 작동합니다.', pros: '초고속 (몇 ms 내 처리), 별도 설치 필요 없음', cons: '2단 복잡 구조, 수식 텍스트 엉킴 발생 가능' },
   pdfplumber: { id: 'pdfplumber', name: 'pdfplumber', installed: false, size_info: '약 15 MB', description: 'Python 기반 파서 - 표(Table) 추출 및 텍스트 위치 정밀 추적에 강점.', pros: '표(Table) 파싱 우수, 정밀 좌표 추적', cons: '소폭 더 큼, 수식 OCR 미지정' },
-  marker: { id: 'marker', name: 'Marker (AI Markdown)', installed: false, size_info: '약 2.5 GB', description: '딥러닝 비전/레이아웃 AI - 논문 전체를 깨끗한 Markdown/LaTeX 수식으로 변환.', pros: '수식, 표, 2단 레이아웃 매우 정밀 분석', cons: '최초 모델 설치 시 대용량 다운로드 필요' },
+  marker: { id: 'marker', name: 'Marker (AI Markdown)', installed: false, size_info: '약 2.5 GB', description: '딥러닝 비전/레이아웃 AI - 문서 전체를 깨끗한 Markdown/LaTeX 수식으로 변환.', pros: '수식, 표, 2단 레이아웃 매우 정밀 분석', cons: '최초 모델 설치 시 대용량 다운로드 필요' },
   mineru: { id: 'mineru', name: 'MinerU (Magic-PDF)', installed: false, size_info: '약 3.0 GB', description: 'OpenDataLab 학술 서적 및 복잡 레이아웃 전문 추출 파서.', pros: '복잡 서적, 수식, 다단 구조 추출 최강', cons: '최초 모델 설치 시 대용량 다운로드 필요' }
 }
 
@@ -6173,7 +6174,7 @@ function initSelectToolbarEvents() {
 
     try {
       await Promise.all(Array.from(selectedDocIds).map(id => updateLibraryDocMetadata(id, payload)))
-      showToast(nextReadState ? `${selectedDocIds.size}개 논문을 읽음으로 표시했습니다.` : `${selectedDocIds.size}개 논문의 완독 상태를 해제했습니다.`, 'success')
+      showToast(nextReadState ? `${selectedDocIds.size}개 ${documentUiCopy('논문을', workspaceModeController.getMode())} 읽음으로 표시했습니다.` : `${selectedDocIds.size}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 완독 상태를 해제했습니다.`, 'success')
       clearDocSelection()
       await renderLibrary()
     } catch (err) {
@@ -6185,7 +6186,7 @@ function initSelectToolbarEvents() {
     if (selectedDocIds.size === 0) return
     const count = selectedDocIds.size
     selectedDocIds.forEach(id => toggleFavoriteDoc(id))
-    showToast(`${count}개 논문의 북마크 상태가 변경되었습니다.`, 'success')
+    showToast(`${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 북마크 상태가 변경되었습니다.`, 'success')
     clearDocSelection()
     await renderLibrary()
   })
@@ -6193,11 +6194,11 @@ function initSelectToolbarEvents() {
   $('lib-select-cache-btn')?.addEventListener('click', async () => {
     if (selectedDocIds.size === 0) return
     const count = selectedDocIds.size
-    const ok = await showCustomConfirm(`선택한 ${count}개 논문의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+    const ok = await showCustomConfirm(`선택한 ${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
     if (!ok) return
     try {
       await Promise.allSettled(Array.from(selectedDocIds).map(id => clearSingleDocCacheAPI(id)))
-      showToast(`선택한 ${count}개 논문의 PDF 추출 캐시가 삭제되었습니다.`, 'success')
+      showToast(`선택한 ${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 PDF 추출 캐시가 삭제되었습니다.`, 'success')
       clearDocSelection()
     } catch (err) {
       showToast('캐시 삭제 실패: ' + err.message, 'error')
@@ -6207,7 +6208,7 @@ function initSelectToolbarEvents() {
   $('lib-select-compare-btn')?.addEventListener('click', () => {
     const ids = Array.from(selectedDocIds)
     if (ids.length < 2 || ids.length > 5) {
-      showToast('논문 비교는 2~5개 논문을 선택했을 때만 가능합니다.', 'warning')
+      showToast(documentUiCopy('논문 비교는 2~5개 논문을 선택했을 때만 가능합니다.', workspaceModeController.getMode()), 'warning')
       return
     }
     clearDocSelection()
@@ -6217,11 +6218,11 @@ function initSelectToolbarEvents() {
   $('lib-select-delete-btn')?.addEventListener('click', async () => {
     if (selectedDocIds.size === 0) return
     const count = selectedDocIds.size
-    const ok = await showCustomConfirm(`선택한 ${count}개 논문을 삭제할까요? (휴지통으로 이동합니다)`, { title: '논문 삭제', confirmText: '삭제', danger: true })
+    const ok = await showCustomConfirm(`선택한 ${count}개 ${documentUiCopy('논문을', workspaceModeController.getMode())} 삭제할까요? (휴지통으로 이동합니다)`, { title: documentUiCopy('논문 삭제', workspaceModeController.getMode()), confirmText: '삭제', danger: true })
     if (!ok) return
     try {
       await Promise.allSettled(Array.from(selectedDocIds).map(id => deleteLibraryDoc(id)))
-      showToast(`${count}개 논문이 휴지통으로 이동되었습니다.`, 'success')
+      showToast(`${count}개 ${documentUiCopy('논문이', workspaceModeController.getMode())} 휴지통으로 이동되었습니다.`, 'success')
       clearDocSelection()
       await renderLibrary()
     } catch {
@@ -6236,13 +6237,13 @@ function initSelectToolbarEvents() {
   if (libCompareToggleBtn) {
     libCompareToggleBtn.addEventListener('click', () => {
       if (selectedDocIds.size === 0) {
-        showToast('카드 우상단 체크 버튼을 눌러 비교할 논문을 선택하세요.', 'info')
+        showToast(documentUiCopy('카드 우상단 체크 버튼을 눌러 비교할 논문을 선택하세요.', workspaceModeController.getMode()), 'info')
       } else if (selectedDocIds.size >= 2 && selectedDocIds.size <= 5) {
         const ids = Array.from(selectedDocIds)
         clearDocSelection()
         location.hash = `#compare?ids=${ids.map(encodeURIComponent).join(',')}`
       } else {
-        showToast('논문 비교는 2~5개 논문을 선택해야 합니다.', 'warning')
+        showToast(documentUiCopy('논문 비교는 2~5개 논문을 선택해야 합니다.', workspaceModeController.getMode()), 'warning')
       }
     })
   }
@@ -6436,10 +6437,10 @@ function renderCompareGreeting() {
     .map((d, i) => `${i + 1}. ${escapeHtml((d.metadata && d.metadata.title) ? d.metadata.title : d.filename)}`)
     .join('<br>')
   renderCompareChatMessage('assistant',
-    `선택하신 ${compareChatState.docs.length}편의 논문을 비교해서 답변해 드릴게요.<br><br>` +
+    `선택하신 ${compareChatState.docs.length}편의 ${documentUiCopy('논문을', workspaceModeController.getMode())} 비교해서 답변해 드릴게요.<br><br>` +
     `<strong>비교 대상:</strong><br>${titles}<br><br>` +
     `<strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong>` +
-    `<ul><li>두 논문의 핵심 방법론 차이가 뭐야?</li><li>실험 결과를 비교했을 때 어느 쪽이 더 우수해?</li><li>공통적으로 다루는 한계점이 있어?</li></ul>`,
+    `<ul><li>두 ${documentUiCopy('논문', workspaceModeController.getMode())}의 핵심 방법론 차이가 뭐야?</li><li>실험 결과를 비교했을 때 어느 쪽이 더 우수해?</li><li>공통적으로 다루는 한계점이 있어?</li></ul>`,
     true)
 }
 
@@ -6717,7 +6718,7 @@ function renderChatDrawerGreeting(doc) {
   renderChatDrawerMessage('assistant',
     `<strong>${escapeHtml(title)}</strong>에 대해 무엇이든 물어보세요.<br><br>` +
     `<strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong>` +
-    `<ul><li>이 논문의 핵심 기여는 무엇인가요?</li><li>실험 설정을 요약해줄 수 있나요?</li><li>이 방법론의 한계점은 뭔가요?</li></ul>`,
+    `<ul><li>이 ${documentUiCopy('논문', doc.document_mode)}의 핵심 기여는 무엇인가요?</li><li>실험 설정을 요약해줄 수 있나요?</li><li>이 방법론의 한계점은 뭔가요?</li></ul>`,
     true, false)
 }
 
@@ -6980,11 +6981,11 @@ document.addEventListener('keydown', async e => {
   } else if (mod && e.key.toLowerCase() === 'x' && selectedDocIds.size) {
     e.preventDefault()
     libraryClipboard = { kind: 'documents', mode: 'cut', ids: Array.from(selectedDocIds) }
-    showToast(`${selectedDocIds.size}개 논문을 잘라냈습니다.`, 'info')
+    showToast(`${selectedDocIds.size}개 ${documentUiCopy('논문을', workspaceModeController.getMode())} 잘라냈습니다.`, 'info')
   } else if (mod && e.key.toLowerCase() === 'c' && selectedDocIds.size) {
     e.preventDefault()
     libraryClipboard = null
-    showToast('논문은 한 폴더에만 둘 수 있습니다. 이동하려면 Ctrl/Cmd+X를 사용하세요.', 'info')
+    showToast(documentUiCopy('논문은 한 폴더에만 둘 수 있습니다. 이동하려면 Ctrl/Cmd+X를 사용하세요.', workspaceModeController.getMode()), 'info')
   } else if (mod && e.key.toLowerCase() === 'x' && focusedFolder) {
     e.preventDefault()
     libraryClipboard = { kind: 'folder', mode: 'cut', id: focusedFolder.id }
@@ -6992,7 +6993,7 @@ document.addEventListener('keydown', async e => {
   } else if (mod && e.key.toLowerCase() === 'v' && libraryClipboard) {
     e.preventDefault()
     try {
-      if (libraryClipboard.mode === 'copy') throw new Error('논문 복사는 지원되지 않습니다. 이동하려면 잘라내기를 사용하세요.')
+      if (libraryClipboard.mode === 'copy') throw new Error(documentUiCopy('논문 복사는 지원되지 않습니다. 이동하려면 잘라내기를 사용하세요.', workspaceModeController.getMode()))
       if (libraryClipboard.kind === 'folder') {
         const folder = libraryFolders.find(candidate => candidate.id === libraryClipboard.id)
         if (!folder) throw new Error('잘라낸 폴더를 찾을 수 없습니다.')
@@ -7305,7 +7306,7 @@ function showFolderContentsDeleteDialog(paperCount) {
   return new Promise(resolve => {
     const modal = document.createElement('div')
     modal.className = 'custom-confirm-modal-wrapper'
-    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 안 논문 처리</span></div><div class="custom-confirm-modal-body">이 폴더와 하위 폴더에 논문 ${paperCount}개가 있습니다.<br>폴더 트리 삭제 후 논문을 어떻게 처리할까요?</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn keep-btn">루트에 유지</button><button class="custom-confirm-btn confirm-btn">함께 휴지통으로 이동</button></div></div>`
+    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 안 ${documentUiCopy('논문을', workspaceModeController.getMode())} 처리</span></div><div class="custom-confirm-modal-body">이 폴더와 하위 폴더에 ${documentUiCopy('논문', workspaceModeController.getMode())} ${paperCount}개가 있습니다.<br>폴더 트리 삭제 후 ${documentUiCopy('논문', workspaceModeController.getMode())} 어떻게 처리할까요?</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn keep-btn">루트에 유지</button><button class="custom-confirm-btn confirm-btn">함께 휴지통으로 이동</button></div></div>`
     document.body.appendChild(modal)
     const close = value => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(value) }, 200) }
     modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
@@ -7332,7 +7333,7 @@ async function requestDeleteFolder(folder) {
   const childFolderCount = folderIds.size - 1
   const paperCount = papersInTree.length
   const childFolderNotice = childFolderCount > 0 ? `\n하위 폴더 ${childFolderCount}개도 함께 삭제됩니다.` : ''
-  const paperNotice = paperCount ? '' : '\n포함된 논문은 없으며 논문에는 영향이 없습니다.'
+  const paperNotice = paperCount ? '' : documentUiCopy('\n포함된 논문은 없으며 논문에는 영향이 없습니다.', workspaceModeController.getMode())
   const ok = await showCustomConfirm(`“${folder.name}” 폴더를 삭제할까요?${childFolderNotice}${paperNotice}`, { title: '폴더 삭제', confirmText: '삭제', danger: true })
   if (!ok) return
   let deletePapers = false
@@ -7469,7 +7470,7 @@ function positionLibraryContextMenu(menu, clientX, clientY) {
 
 async function deleteDocFromContextMenu(doc) {
   const displayTitle = doc.metadata?.title || doc.filename
-  const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요? (휴지통으로 이동합니다)`, { title: '논문 삭제', confirmText: '삭제', danger: true })
+  const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요? (휴지통으로 이동합니다)`, { title: documentUiCopy('논문 삭제', workspaceModeController.getMode()), confirmText: '삭제', danger: true })
   if (!ok) return
   await deleteLibraryDoc(doc.id)
   showToast('휴지통으로 이동되었습니다.', 'success')
@@ -7498,7 +7499,7 @@ function showLibraryContextMenu(event, { doc = null, folder = null } = {}) {
     ].join('')
   } else if (doc) {
     menu.innerHTML = [
-      libraryContextMenuItem('open', '논문 열기', 'externalLink'),
+      libraryContextMenuItem('open', documentUiCopy('논문 열기', workspaceModeController.getMode()), 'externalLink'),
       libraryContextMenuItem('details', '상세 정보', 'info'),
       '<div class="library-context-menu-separator" role="separator"></div>',
       libraryContextMenuItem('select', selectedDocIds.has(doc.id) ? '선택 해제' : '선택', 'checkCircle'),
@@ -7520,7 +7521,7 @@ function showLibraryContextMenu(event, { doc = null, folder = null } = {}) {
     menu.innerHTML = libraryContextMenuItem('empty-trash', '휴지통 비우기', 'trash2', { danger: true })
   } else {
     menu.innerHTML = [
-      libraryContextMenuItem('add-paper', '논문 추가', 'fileText'),
+      libraryContextMenuItem('add-paper', documentUiCopy('논문 추가', workspaceModeController.getMode()), 'fileText'),
       libraryContextMenuItem('add-folder', '폴더 추가', 'folder'),
       '<div class="library-context-menu-separator" role="separator"></div>',
       libraryContextMenuItem('select-all', '전체 선택', 'checkCircle'),
@@ -7551,10 +7552,10 @@ function showLibraryContextMenu(event, { doc = null, folder = null } = {}) {
       else if (action === 'delete') await deleteDocFromContextMenu(doc)
       else if (action === 'restore') {
         await restoreLibraryDoc(doc.id)
-        showToast('논문을 복원했습니다.', 'success')
+        showToast(documentUiCopy('논문을 복원했습니다.', workspaceModeController.getMode()), 'success')
         await renderLibrary()
       } else if (action === 'permanent-delete') {
-        const ok = await showCustomConfirm('이 논문을 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.', { title: '논문 영구 삭제', confirmText: '영구 삭제', danger: true })
+        const ok = await showCustomConfirm(documentUiCopy('이 논문을 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.', workspaceModeController.getMode()), { title: documentUiCopy('논문 영구 삭제', workspaceModeController.getMode()), confirmText: '영구 삭제', danger: true })
         if (ok) {
           await deleteLibraryDocPermanently(doc.id)
           await renderLibrary()
@@ -8701,7 +8702,7 @@ async function openAnnotationTarget(doc, pageNum) {
     scrollToPage(viewerScrollContainer, pageNum)
   } catch (err) {
     console.error('주석에서 논문 열기 실패:', err)
-    showToast('논문을 불러오지 못했습니다.', 'error')
+    showToast(documentUiCopy('논문을 불러오지 못했습니다.', workspaceModeController.getMode()), 'error')
   }
 }
 
@@ -8912,8 +8913,8 @@ function createEmptyState(variant = 'library') {
   el.className = 'lib-empty'
   const c = LIBRARY_EMPTY_STATE_VARIANTS[variant] || LIBRARY_EMPTY_STATE_VARIANTS.library
   el.innerHTML = `<div style="margin-bottom:16px;color:var(--text-muted)">${icon(c.iconName, 48)}</div>
-    <p>${c.title}</p>
-    <p style="font-size:13px;color:var(--text-muted);margin-top:8px">${c.desc}</p>`
+    <p>${documentUiCopy(c.title, workspaceModeController.getMode())}</p>
+    <p style="font-size:13px;color:var(--text-muted);margin-top:8px">${documentUiCopy(c.desc, workspaceModeController.getMode())}</p>`
   return el
 }
 
@@ -9035,7 +9036,7 @@ function createLibraryDragPreview(count) {
   preview.innerHTML = `${Array.from({ length: stackDepth }, (_, index) => `<span class="library-drag-stack-sheet" style="--stack-index:${index + 1}"></span>`).join('')}
     <div class="library-drag-stack-card">
       <span class="library-drag-stack-icon">${icon('fileText', 22)}</span>
-      <span class="library-drag-stack-copy"><strong>${count}개 논문</strong><small>선택 항목 이동</small></span>
+      <span class="library-drag-stack-copy"><strong>${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}</strong><small>선택 항목 이동</small></span>
       <span class="library-drag-stack-count">${count}</span>
     </div>`
   document.body.appendChild(preview)
@@ -9118,7 +9119,7 @@ function wireDocItemEvents(container, doc, displayTitle) {
       e.stopPropagation()
       kebabMenu?.classList.add('hidden')
       const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
-      const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요? (휴지통으로 이동합니다)`, { title: '논문 삭제', confirmText: '삭제', danger: true })
+      const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요? (휴지통으로 이동합니다)`, { title: documentUiCopy('논문 삭제', workspaceModeController.getMode()), confirmText: '삭제', danger: true })
       if (!ok) return
       try {
         await deleteLibraryDoc(doc.id)
@@ -9154,7 +9155,7 @@ function wireDocItemEvents(container, doc, displayTitle) {
       e.stopPropagation()
       try {
         await restoreLibraryDoc(doc.id)
-        showToast('논문이 복원되었습니다.', 'success')
+        showToast(documentUiCopy('논문이 복원되었습니다.', workspaceModeController.getMode()), 'success')
         await renderLibrary()
       } catch (err) {
         showToast('복원 실패: ' + err.message, 'error')
@@ -9168,7 +9169,7 @@ function wireDocItemEvents(container, doc, displayTitle) {
       e.stopPropagation()
       const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
       const ok = await showCustomConfirm(`"${displayTitle}"을 영구적으로 삭제할까요?\n이 작업은 되돌릴 수 없으며, 모든 번역 데이터 및 채팅 기록이 지워집니다.`, {
-        title: '논문 영구 삭제',
+        title: documentUiCopy('논문 영구 삭제', workspaceModeController.getMode()),
         confirmText: '영구 삭제',
         danger: true
       })
@@ -9256,7 +9257,7 @@ function wireDocItemEvents(container, doc, displayTitle) {
       return
     }
     if (state.currentLibraryTab === 'trash') {
-      showToast('휴지통에 있는 논문입니다. 복원 후 열 수 있습니다.', 'warning')
+      showToast(documentUiCopy('휴지통에 있는 논문입니다. 복원 후 열 수 있습니다.', workspaceModeController.getMode()), 'warning')
       return
     }
     openFromLibrary(doc)
@@ -9382,7 +9383,7 @@ function createDocCard(doc) {
       return
     }
     if (state.currentLibraryTab === 'trash') {
-      showToast('휴지통에 있는 논문입니다. 복원 후 열 수 있습니다.', 'warning')
+      showToast(documentUiCopy('휴지통에 있는 논문입니다. 복원 후 열 수 있습니다.', workspaceModeController.getMode()), 'warning')
       e.stopImmediatePropagation()
       return
     }
@@ -9712,7 +9713,7 @@ function ensureLibraryDetailPanel() {
     const doc = libraryDetailDoc
     const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
     moreMenu?.classList.add('hidden')
-    const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요? (휴지통으로 이동합니다)`, { title: '논문 삭제', confirmText: '삭제', danger: true })
+    const ok = await showCustomConfirm(`"${displayTitle}"을 삭제할까요? (휴지통으로 이동합니다)`, { title: documentUiCopy('논문 삭제', workspaceModeController.getMode()), confirmText: '삭제', danger: true })
     if (!ok) return
     try {
       await deleteLibraryDoc(doc.id)
@@ -9898,7 +9899,7 @@ async function openPaperTagEditor(doc) {
   const labels = { primary_topic: '핵심 주제', domain: '적용 분야', method: '방법' }
   const modal = document.createElement('div')
   modal.className = 'custom-confirm-modal-wrapper paper-tag-editor-wrap'
-  modal.innerHTML = `<div class="custom-confirm-modal paper-tag-editor"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">논문 태그 편집</span></div><div class="custom-confirm-modal-body paper-tag-editor-body">${Object.entries(roles).map(([role, names]) => `<fieldset class="paper-tag-fieldset"><legend>${labels[role] || role}</legend><div class="paper-tag-options">${names.map((name, index) => `<label><input type="checkbox" data-role="${role}" value="${escapeHtml(name)}" ${selected[role]?.has(name) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label>`).join('')}</div></fieldset>`).join('')}</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn confirm-btn primary-btn">저장</button></div></div>`
+  modal.innerHTML = `<div class="custom-confirm-modal paper-tag-editor"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">${documentUiCopy('논문', workspaceModeController.getMode())} 태그 편집</span></div><div class="custom-confirm-modal-body paper-tag-editor-body">${Object.entries(roles).map(([role, names]) => `<fieldset class="paper-tag-fieldset"><legend>${labels[role] || role}</legend><div class="paper-tag-options">${names.map((name, index) => `<label><input type="checkbox" data-role="${role}" value="${escapeHtml(name)}" ${selected[role]?.has(name) ? 'checked' : ''}><span>${escapeHtml(name)}</span></label>`).join('')}</div></fieldset>`).join('')}</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn confirm-btn primary-btn">저장</button></div></div>`
   document.body.appendChild(modal)
   return new Promise(resolve => {
     const close = result => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(result) }, 200) }
@@ -10992,7 +10993,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
   } catch (err) {
     console.error('논문 열기 실패:', err)
     if (isDocumentRuntime) showDocumentLoadError(err)
-    showToast('논문을 불러오지 못했습니다.', 'error')
+    showToast(documentUiCopy('논문을 불러오지 못했습니다.', state.currentDocumentMode), 'error')
   } finally {
     if (docOpeningId === doc.id) docOpeningId = null
   }
@@ -15140,7 +15141,7 @@ document.addEventListener('click', (e) => {
 // ── AI Chat Sidebar ──────────────────────────────
 function toggleChatSidebar() {
   if (!state.sessionId) {
-    showToast('논문을 먼저 업로드하거나 선택해주세요.', 'error')
+    showToast(documentUiCopy('논문을 먼저 업로드하거나 선택해주세요.', state.currentDocumentMode), 'error')
     return
   }
   const isHidden = chatSidebar.classList.toggle('hidden')
@@ -16141,7 +16142,7 @@ initChatListeners()
 
 function askAIAssistant(text, { sourcePage = null, charStart = null, charEnd = null } = {}) {
   if (!state.sessionId) {
-    showToast('논문을 먼저 업로드하거나 선택해주세요.', 'error');
+    showToast(documentUiCopy('논문을 먼저 업로드하거나 선택해주세요.', state.currentDocumentMode), 'error');
     return;
   }
 
@@ -16181,7 +16182,7 @@ function askAIAssistant(text, { sourcePage = null, charStart = null, charEnd = n
 
 function askAIAssistantImage(base64Img, pageNum) {
   if (!state.sessionId) {
-    showToast('논문을 먼저 업로드하거나 선택해주세요.', 'error');
+    showToast(documentUiCopy('논문을 먼저 업로드하거나 선택해주세요.', state.currentDocumentMode), 'error');
     return;
   }
 
@@ -18302,7 +18303,7 @@ function toggleCropMode(forceState) {
 if (captureAreaBtn) {
   captureAreaBtn.addEventListener('click', () => {
     if (!state.sessionId) {
-      showToast("논문을 먼저 업로드하거나 선택해주세요.", "error")
+      showToast(documentUiCopy("논문을 먼저 업로드하거나 선택해주세요.", state.currentDocumentMode), "error")
       return
     }
     toggleCropMode()
@@ -18539,7 +18540,7 @@ async function handleRouting() {
           console.warn('[Router] 비교 문서 로드 실패:', err)
         }
       }
-      showToast('비교할 논문 정보를 불러올 수 없습니다.', 'error')
+      showToast(documentUiCopy('비교할 논문 정보를 불러올 수 없습니다.', workspaceModeController.getMode()), 'error')
       location.hash = 'library'
     } else if (hash.startsWith('#chat?id=')) {
       // AI Chats 목록의 "대화" 버튼이 이 해시로 바꾸면(hashchange) 여기로
@@ -18567,7 +18568,7 @@ async function handleRouting() {
           console.warn('[Router] 논문 채팅 문서 로드 실패:', err)
         }
       }
-      showToast('대화할 논문 정보를 불러올 수 없습니다.', 'error')
+      showToast(documentUiCopy('대화할 논문 정보를 불러올 수 없습니다.', workspaceModeController.getMode()), 'error')
       location.hash = 'chats'
     } else {
       let rawPage = hash.replace('#', '') || 'dashboard'
