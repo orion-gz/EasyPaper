@@ -325,7 +325,7 @@ export function createWorkspaceTabs(adapter) {
   })
   document.addEventListener('easypaper:locale-changed', () => store && render())
   const appearance = new MutationObserver(() => {
-    for (const record of frames.values()) record.frame.contentWindow?.__easypaperDocument?.syncAppearance?.(document.body.classList.contains('light-theme'), adapter.locale())
+    for (const [, record] of allFrames()) record.frame.contentWindow?.__easypaperDocument?.syncAppearance?.(document.body.classList.contains('light-theme'), adapter.locale())
   })
   appearance.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] })
   document.addEventListener('easypaper:locale-changed', () => {

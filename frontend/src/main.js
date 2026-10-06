@@ -1,3 +1,5 @@
+import { applyTheme, selectedTheme, loadThemes, saveThemes, THEME_STORAGE_KEY } from './themes/themeEngine.js'
+import { createThemeEditor } from './themes/themeEditor.js'
 import { documentUiCopy } from './documentUiCopy.js'
 import { createEasyEnglishController } from './easyEnglish.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
@@ -47,6 +49,12 @@ let tabWorkspace = null
 let documentLoadFailed = false
 if (isDocumentRuntime) document.body.classList.add('document-workspace-runtime')
 
+// Apply persisted colors before locale initialization reveals the document.
+let themeEditor = null
+const initialThemeMode = localStorage.getItem('easypaper_workspace_mode') === 'general' ? 'general' : 'research'
+const initialThemeState = loadThemes()
+applyTheme(document.body, selectedTheme(initialThemeMode, getModeSetting('theme', initialThemeMode) === 'light' ? 'light' : 'dark', initialThemeState))
+try { if (!localStorage.getItem(THEME_STORAGE_KEY)) saveThemes(initialThemeState) } catch { /* Appearance still works when storage is unavailable. */ }
 const i18nReady = initI18n()
 if (!isDocumentRuntime) initializeDesktopWindow(i18nReady)
 applyUiScale(loadUiScale())
@@ -443,7 +451,7 @@ function closeOverlayModal(modal) {
 // 열린 모달 안에서 Tab 순환을 유지한다. Escape 닫기는 각 모달의 기존
 // 취소/닫기 로직이 담당하므로 데이터 상태 변경 경로를 우회하지 않는다.
 document.addEventListener('keydown', (event) => {
-  if (event.key !== 'Tab') return
+  if (event.key !== 'Tab' || document.querySelector('.theme-dialog[open]')) return
   const openModals = Array.from(document.querySelectorAll('.modal-overlay.is-visible:not(.hidden)'))
   const modal = openModals.at(-1)
   if (!modal) return
@@ -702,10 +710,6 @@ for (const id of ['document-source-lang', 'document-target-lang']) {
 const viewerTopbar = $('viewer-topbar')
 const clearCacheBtn       = $('clear-cache-btn')
 const clearPagesCacheBtn  = $('clear-pages-cache-btn')
-const settingAccentSwatches = $('setting-accent-swatches')
-const settingAccentPicker   = $('setting-accent-picker')
-const settingAccentHex      = $('setting-accent-hex')
-const settingAccentResetBtn = $('setting-accent-reset-btn')
 
 const settingOllamaHost    = $('setting-ollama-host')
 const settingOpenAIKey     = $('setting-openai-key')
@@ -1127,7 +1131,7 @@ function syncModeSettings(documentMode) {
   settingFocusScale.value = getModeSetting('focusScale', settingsTranslationModeContext)
   settingFocusHideOverlays.checked = getModeSetting('focusHideOverlays', settingsTranslationModeContext)
   syncFocusSettingsControls()
-  updateAccentSettingsUI(getModeSetting('accentColor', settingsTranslationModeContext))
+  updateAccentSettingsUI()
 
   settingsModeBadge.textContent = isGeneral ? '일반 문서 모드' : '연구 모드'
   settingsTranslationHeading.textContent = '번역'
@@ -4471,7 +4475,7 @@ globalSettingsBtn.addEventListener('click', async () => {
   settingDisableHoverTooltip.checked = !state.disableHoverTooltip
   settingDisableBookmark.checked = !state.disableBookmark
   settingToolbarAutoHide.checked = state.toolbarAutoHide
-  updateAccentSettingsUI(currentAccentColor)
+  updateAccentSettingsUI()
 
   // 3. 시스템 설정값 로드 (백엔드 통신)
   await refreshSystemSettings()
@@ -11037,211 +11041,51 @@ libUploadBtn.addEventListener('click', () => setLibraryAddMenuOpen(!document.que
 $('lib-add-paper-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); openDocumentSourceModal() })
 $('lib-add-folder-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); openCreateFolderDialog() })
 
-// ── 테마 토글 기능 ──────────────────────────────
-
-// Tauri 데스크탑 창의 타이틀바(테마)와 배경색을 앱의 라이트/다크 토글과 맞춘다.
-// 웹 배포에서는 window.__TAURI_INTERNALS__가 없어 isTauriDesktop이 항상
-// false라 이 함수가 조용히 아무 일도 하지 않는다 - 동일한 frontend/dist를
-// 웹/데스크탑에 그대로 재사용하기 위함(별도 빌드 분기 없음).
-const LIGHT_THEME_BG = '#f8fafc'
-const DARK_THEME_BG = '#06050a'
-
+// Theme application is shared by settings, mode switches and document frames.
 async function syncDesktopWindowTheme(isLight) {
   if (!isTauriDesktop) return
   try {
     const { getCurrentWindow } = await import('@tauri-apps/api/window')
     const win = getCurrentWindow()
     await win.setTheme(isLight ? 'light' : 'dark')
-    await win.setBackgroundColor(isLight ? LIGHT_THEME_BG : DARK_THEME_BG)
+    await win.setBackgroundColor(getComputedStyle(document.body).getPropertyValue('--bg-base').trim())
   } catch (err) {
-    console.warn('데스크탑 타이틀바 테마 동기화 실패:', err)
+    console.warn('Desktop theme sync failed:', err)
   }
 }
-
-function initTheme() {
-  const savedTheme = getModeSetting('theme', workspaceModeController.getMode())
-  const isLight = savedTheme === 'light'
-  document.body.classList.toggle('light-theme', isLight)
-  updateThemeIcons(isLight)
-  syncDesktopWindowTheme(isLight)
+function updateThemeIcons(isLight) {
+  document.querySelectorAll('.sun-icon').forEach(icon => icon.classList.toggle('hidden', !isLight))
+  document.querySelectorAll('.moon-icon').forEach(icon => icon.classList.toggle('hidden', isLight))
 }
-
+function applyModeTheme(mode) {
+  const normalized = normalizeSettingsMode(mode)
+  const scheme = getModeSetting('theme', normalized) === 'light' ? 'light' : 'dark'
+  applyTheme(document.body, selectedTheme(normalized, scheme, loadThemes()))
+  updateThemeIcons(scheme === 'light')
+  syncDesktopWindowTheme(scheme === 'light')
+}
 function toggleTheme() {
   const mode = workspaceModeController.getMode()
-  const isLight = document.body.classList.toggle('light-theme')
-  setModeSetting('theme', mode, isLight ? 'light' : 'dark')
-  updateThemeIcons(isLight)
-  applyAccentColor(currentAccentColor, { persist: false })
-  showToast(isLight ? t('settings:themeLightEnabled') : t('settings:themeDarkEnabled'), 'success')
-  syncDesktopWindowTheme(isLight)
+  const scheme = document.body.classList.contains('light-theme') ? 'dark' : 'light'
+  try { setModeSetting('theme', mode, scheme) } catch { showToast(t('settings:customTheme.saveError'), 'error'); return }
+  applyModeTheme(mode)
+  themeEditor?.setMode(mode, scheme)
+  showToast(scheme === 'light' ? t('settings:themeLightEnabled') : t('settings:themeDarkEnabled'), 'success')
 }
-
-function updateThemeIcons(isLight) {
-  const sunIcons = document.querySelectorAll('.sun-icon')
-  const moonIcons = document.querySelectorAll('.moon-icon')
-  sunIcons.forEach(icon => icon.classList.toggle('hidden', !isLight))
-  moonIcons.forEach(icon => icon.classList.toggle('hidden', isLight))
+function updateAccentSettingsUI() {
+  if (isDocumentRuntime) return
+  const host = $('setting-accent-swatches')
+  if (!host) return
+  themeEditor ||= createThemeEditor({ host, t, onApply: () => applyModeTheme(workspaceModeController.getMode()) })
+  themeEditor.refreshLocale()
+  themeEditor.setMode(settingsTranslationModeContext, getModeSetting('theme', settingsTranslationModeContext) === 'light' ? 'light' : 'dark')
 }
-
-const themeToggleBtn = $('theme-toggle-btn')
-const globalThemeToggleBtn = $('global-theme-toggle-btn')
-const sidebarThemeToggleBtn = $('sidebar-theme-toggle-btn')
-
-if (themeToggleBtn) {
-  themeToggleBtn.addEventListener('click', toggleTheme)
-}
-if (globalThemeToggleBtn) {
-  globalThemeToggleBtn.addEventListener('click', toggleTheme)
-}
-if (sidebarThemeToggleBtn) {
-  sidebarThemeToggleBtn.addEventListener('click', toggleTheme)
-}
-
-// 초기 테마 적용
-initTheme()
-
-// ── 테마 색상(강조색) 커스터마이징 ──────────────────────────────
-const DEFAULT_ACCENT_COLOR = '#2563eb'
-const ACCENT_PRESETS = [
-  { name: '강한 블루', hex: '#2563eb' },
-  { name: '딥 틸',     hex: '#1f8a8c' },
-  { name: '에메랄드',   hex: '#1c9c6b' },
-  { name: '인디고',    hex: '#5457b8' },
-  { name: '코랄 로즈',  hex: '#e0677a' },
-  { name: '터콰이즈',   hex: '#17a2b8' },
-  { name: '플럼',      hex: '#9c4f96' },
-  { name: '오커 클레이', hex: '#c08a45' },
-]
-
-let currentAccentColor = DEFAULT_ACCENT_COLOR
-
-function hexToRgb(hex) {
-  const n = parseInt(hex.replace('#', ''), 16)
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
-}
-function rgbToHex(r, g, b) {
-  const clamp = v => Math.max(0, Math.min(255, Math.round(v)))
-  return '#' + [r, g, b].map(v => clamp(v).toString(16).padStart(2, '0')).join('')
-}
-function rgbToHsl(r, g, b) {
-  r /= 255; g /= 255; b /= 255
-  const max = Math.max(r, g, b), min = Math.min(r, g, b)
-  let h = 0, s = 0
-  const l = (max + min) / 2
-  if (max !== min) {
-    const d = max - min
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
-    if (max === r) h = (g - b) / d + (g < b ? 6 : 0)
-    else if (max === g) h = (b - r) / d + 2
-    else h = (r - g) / d + 4
-    h /= 6
-  }
-  return { h, s, l }
-}
-function hslToRgb(h, s, l) {
-  if (s === 0) return { r: l * 255, g: l * 255, b: l * 255 }
-  const hue2rgb = (p, q, t) => {
-    if (t < 0) t += 1
-    if (t > 1) t -= 1
-    if (t < 1 / 6) return p + (q - p) * 6 * t
-    if (t < 1 / 2) return q
-    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6
-    return p
-  }
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s
-  const p = 2 * l - q
-  return {
-    r: hue2rgb(p, q, h + 1 / 3) * 255,
-    g: hue2rgb(p, q, h) * 255,
-    b: hue2rgb(p, q, h - 1 / 3) * 255,
-  }
-}
-// 기준 색상의 명도(lightness)만 delta만큼 옮긴 색상 반환 (그라데이션/텍스트 톤 파생용)
-function shadeHex(hex, lightnessDelta) {
-  const { r, g, b } = hexToRgb(hex)
-  const hsl = rgbToHsl(r, g, b)
-  hsl.l = Math.max(0.08, Math.min(0.92, hsl.l + lightnessDelta))
-  const rgb = hslToRgb(hsl.h, hsl.s, hsl.l)
-  return rgbToHex(rgb.r, rgb.g, rgb.b)
-}
-
-function deriveAccentTokens(baseHex) {
-  const base = hexToRgb(baseHex)
-  const fromHex = shadeHex(baseHex, -0.16)
-  const toHex = shadeHex(baseHex, 0.18)
-  const fromRgb = hexToRgb(fromHex)
-  return {
-    from: fromHex,
-    to: toHex,
-    glow: `rgba(${base.r}, ${base.g}, ${base.b}, 0.3)`,
-    controlSoft: `rgba(${base.r}, ${base.g}, ${base.b}, 0.16)`,
-    textDark: shadeHex(baseHex, 0.24),   // 다크 테마에서 태그 텍스트로 쓸 밝은 톤
-    textLight: shadeHex(baseHex, -0.24), // 라이트 테마에서 태그 텍스트로 쓸 어두운 톤
-    borderGlowDark: `rgba(${base.r}, ${base.g}, ${base.b}, 0.2)`,
-    borderGlowLight: `rgba(${fromRgb.r}, ${fromRgb.g}, ${fromRgb.b}, 0.1)`,
-  }
-}
-
-function applyAccentColor(hex, { persist = true } = {}) {
-  const tokens = deriveAccentTokens(hex)
-  const root = document.documentElement.style
-  root.setProperty('--accent-from', tokens.from)
-  root.setProperty('--accent-mid', hex)
-  root.setProperty('--accent-to', tokens.to)
-  root.setProperty('--accent-glow', tokens.glow)
-  root.setProperty('--control-accent-soft', tokens.controlSoft)
-
-  const isLight = document.body.classList.contains('light-theme')
-  document.body.style.setProperty('--control-accent-text', isLight ? tokens.textLight : tokens.textDark)
-  document.body.style.setProperty('--border-glow', isLight ? tokens.borderGlowLight : tokens.borderGlowDark)
-
-  currentAccentColor = hex
-  if (persist) setModeSetting('accentColor', workspaceModeController.getMode(), hex)
-  updateAccentSettingsUI(hex)
-}
-
-function updateAccentSettingsUI(hex) {
-  if (settingAccentPicker) settingAccentPicker.value = hex
-  if (settingAccentHex) settingAccentHex.textContent = hex.toUpperCase()
-  if (settingAccentSwatches) {
-    settingAccentSwatches.querySelectorAll('.accent-swatch').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.hex.toLowerCase() === hex.toLowerCase())
-    })
-  }
-}
-
-function renderAccentSwatches() {
-  if (!settingAccentSwatches) return
-  settingAccentSwatches.innerHTML = ACCENT_PRESETS.map(p => `
-    <button type="button" class="accent-swatch" data-hex="${p.hex}" title="${p.name}" style="background:${p.hex}"></button>
-  `).join('')
-  settingAccentSwatches.querySelectorAll('.accent-swatch').forEach(btn => {
-    btn.addEventListener('click', () => applyAccentColor(btn.dataset.hex))
-  })
-}
-renderAccentSwatches()
-
-if (settingAccentPicker) {
-  settingAccentPicker.addEventListener('input', () => applyAccentColor(settingAccentPicker.value))
-}
-if (settingAccentResetBtn) {
-  settingAccentResetBtn.addEventListener('click', () => applyAccentColor(DEFAULT_ACCENT_COLOR))
-}
-
-function initAccentColor() {
-  const saved = getModeSetting('accentColor', workspaceModeController.getMode())
-  applyAccentColor(saved, { persist: false })
-}
-initAccentColor()
-
-function applyModeTheme(mode) {
-  const normalizedMode = normalizeSettingsMode(mode)
-  const isLight = getModeSetting('theme', normalizedMode) === 'light'
-  document.body.classList.toggle('light-theme', isLight)
-  updateThemeIcons(isLight)
-  applyAccentColor(getModeSetting('accentColor', normalizedMode), { persist: false })
-  syncDesktopWindowTheme(isLight)
-}
+document.addEventListener('easypaper:locale-changed', () => themeEditor?.refreshLocale())
+for (const id of ['theme-toggle-btn', 'global-theme-toggle-btn', 'sidebar-theme-toggle-btn']) $(id)?.addEventListener('click', toggleTheme)
+window.addEventListener('storage', event => {
+  if (event.key === THEME_STORAGE_KEY || event.key === null || event.key?.startsWith('easypaper_theme_')) applyModeTheme(workspaceModeController.getMode())
+})
+applyModeTheme(workspaceModeController.getMode())
 
 // ── PDF 텍스트 하이라이트 & 밑줄 (Annotation) 기능 ──────────────────
 

@@ -1,3 +1,4 @@
+import { applyTheme, THEME_TOKEN_NAMES } from './themes/themeEngine.js'
 import { installReaderTools } from './documentReaderTools.js'
 import { sanitizeReading } from './workspaceTabsStore.js'
 import { t, changeLocale, getLocale } from './i18n.js'
@@ -333,10 +334,11 @@ export function installDocumentRuntime(adapter) {
     async syncAppearance(light, locale) {
       document.body.classList.toggle('light-theme', light)
       const host = window.parent.document
-      for (const name of ['--accent-from', '--accent-mid', '--accent-to', '--accent-glow', '--control-accent-soft']) {
-        document.documentElement.style.setProperty(name, host.documentElement.style.getPropertyValue(name))
-      }
-      for (const name of ['--control-accent-text', '--border-glow']) document.body.style.setProperty(name, host.body.style.getPropertyValue(name))
+      const computed = host.defaultView.getComputedStyle(host.body)
+      applyTheme(document.body, {
+        id: host.body.dataset.themeId || '', scheme: light ? 'light' : 'dark',
+        tokens: Object.fromEntries(THEME_TOKEN_NAMES.map(name => [name, computed.getPropertyValue(`--${name}`).trim()])),
+      })
       if (getLocale() !== locale) await changeLocale(locale)
     },
     async setActive(next) {

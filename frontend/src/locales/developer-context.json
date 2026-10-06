@@ -4836,5 +4836,317 @@
   },
   "common:legacy.documentCopy.chatEmpty": {
     "description": "Empty AI chat list guidance in general document mode."
+  },
+  "settings:customTheme.title": {
+    "description": "Custom theme settings: Custom themes"
+  },
+  "settings:customTheme.mode": {
+    "description": "Custom theme settings: Document mode"
+  },
+  "settings:customTheme.research": {
+    "description": "Custom theme settings: Research"
+  },
+  "settings:customTheme.general": {
+    "description": "Custom theme settings: General documents"
+  },
+  "settings:customTheme.scheme": {
+    "description": "Custom theme settings: Appearance"
+  },
+  "settings:customTheme.light": {
+    "description": "Custom theme settings: Light"
+  },
+  "settings:customTheme.dark": {
+    "description": "Custom theme settings: Dark"
+  },
+  "settings:customTheme.search": {
+    "description": "Custom theme settings: Search themes"
+  },
+  "settings:customTheme.name": {
+    "description": "Custom theme settings: Theme name"
+  },
+  "settings:customTheme.copy": {
+    "description": "Custom theme settings: Duplicate"
+  },
+  "settings:customTheme.delete": {
+    "description": "Custom theme settings: Delete"
+  },
+  "settings:customTheme.export": {
+    "description": "Custom theme settings: Export JSON"
+  },
+  "settings:customTheme.import": {
+    "description": "Custom theme settings: Import JSON"
+  },
+  "settings:customTheme.apply": {
+    "description": "Custom theme settings: Apply"
+  },
+  "settings:customTheme.reset": {
+    "description": "Custom theme settings: Reset theme"
+  },
+  "settings:customTheme.resetColor": {
+    "description": "Custom theme settings: Reset color"
+  },
+  "settings:customTheme.preview": {
+    "description": "Custom theme settings: Preview"
+  },
+  "settings:customTheme.library": {
+    "description": "Custom theme settings: Library"
+  },
+  "settings:customTheme.reader": {
+    "description": "Custom theme settings: Reader & chat"
+  },
+  "settings:customTheme.colors": {
+    "description": "Custom theme settings: Edit colors"
+  },
+  "settings:customTheme.opacity": {
+    "description": "Custom theme settings: Opacity"
+  },
+  "settings:customTheme.discard": {
+    "description": "Custom theme settings: Discard"
+  },
+  "settings:customTheme.continue": {
+    "description": "Custom theme settings: Keep editing"
+  },
+  "settings:customTheme.unsaved": {
+    "description": "Custom theme settings: Apply your theme changes before leaving?"
+  },
+  "settings:customTheme.deleteConfirm": {
+    "description": "Custom theme settings: Delete this theme? Its selected slots will use the EasyPaper default."
+  },
+  "settings:customTheme.cancel": {
+    "description": "Custom theme settings: Cancel"
+  },
+  "settings:customTheme.invalidTheme": {
+    "description": "Custom theme settings: Invalid theme file, unsupported version, or invalid color."
+  },
+  "settings:customTheme.saveError": {
+    "description": "Custom theme settings: Could not save. Your previous theme is still applied."
+  },
+  "settings:customTheme.saved": {
+    "description": "Custom theme settings: Theme applied."
+  },
+  "settings:customTheme.draft": {
+    "description": "Custom theme settings: Unsaved changes"
+  },
+  "settings:customTheme.nameRequired": {
+    "description": "Custom theme settings: Enter a theme name (1–80 characters)."
+  },
+  "settings:customTheme.contrast": {
+    "description": "Custom theme settings: Low contrast:"
+  },
+  "settings:customTheme.external": {
+    "description": "Custom theme settings: Themes changed in another window. Reload before applying."
+  },
+  "settings:customTheme.reload": {
+    "description": "Custom theme settings: Reload"
+  },
+  "settings:customTheme.usedBy": {
+    "description": "Custom theme settings: Used by:"
+  },
+  "settings:customTheme.source": {
+    "description": "Custom theme settings: Source & license"
+  },
+  "settings:customTheme.sampleTitle": {
+    "description": "Custom theme settings: Understanding a new idea"
+  },
+  "settings:customTheme.sampleText": {
+    "description": "Custom theme settings: Read, translate, and connect your documents."
+  },
+  "settings:customTheme.sampleChat": {
+    "description": "Custom theme settings: How do these findings compare?"
+  },
+  "settings:customTheme.sampleInput": {
+    "description": "Custom theme settings: Ask a question…"
+  },
+  "settings:customTheme.background": {
+    "description": "Custom theme settings: Backgrounds"
+  },
+  "settings:customTheme.text": {
+    "description": "Custom theme settings: Text"
+  },
+  "settings:customTheme.border": {
+    "description": "Custom theme settings: Borders & selection"
+  },
+  "settings:customTheme.accent": {
+    "description": "Custom theme settings: Accent"
+  },
+  "settings:customTheme.status": {
+    "description": "Custom theme settings: Status"
+  },
+  "settings:customTheme.sidebar": {
+    "description": "Custom theme settings: Sidebar"
+  },
+  "settings:customTheme.topbar": {
+    "description": "Custom theme settings: Top bar"
+  },
+  "settings:customTheme.card": {
+    "description": "Custom theme settings: Cards"
+  },
+  "settings:customTheme.viewer": {
+    "description": "Custom theme settings: Viewer"
+  },
+  "settings:customTheme.translation": {
+    "description": "Custom theme settings: Translation"
+  },
+  "settings:customTheme.chat": {
+    "description": "Custom theme settings: Chat"
+  },
+  "settings:customTheme.token.bg-base": {
+    "description": "Custom theme settings: App background"
+  },
+  "settings:customTheme.token.bg-surface": {
+    "description": "Custom theme settings: Surface"
+  },
+  "settings:customTheme.token.bg-elevated": {
+    "description": "Custom theme settings: Elevated surface"
+  },
+  "settings:customTheme.token.bg-panel": {
+    "description": "Custom theme settings: Panel"
+  },
+  "settings:customTheme.token.bg-hover": {
+    "description": "Custom theme settings: Hover"
+  },
+  "settings:customTheme.token.text-primary": {
+    "description": "Custom theme settings: Primary text"
+  },
+  "settings:customTheme.token.text-secondary": {
+    "description": "Custom theme settings: Secondary text"
+  },
+  "settings:customTheme.token.text-tertiary": {
+    "description": "Custom theme settings: Descriptions"
+  },
+  "settings:customTheme.token.text-muted": {
+    "description": "Custom theme settings: Muted text"
+  },
+  "settings:customTheme.token.link": {
+    "description": "Custom theme settings: Links"
+  },
+  "settings:customTheme.token.border": {
+    "description": "Custom theme settings: Border"
+  },
+  "settings:customTheme.token.border-strong": {
+    "description": "Custom theme settings: Strong border"
+  },
+  "settings:customTheme.token.focus-ring": {
+    "description": "Custom theme settings: Focus ring"
+  },
+  "settings:customTheme.token.selection-bg": {
+    "description": "Custom theme settings: Selection background"
+  },
+  "settings:customTheme.token.selection-text": {
+    "description": "Custom theme settings: Selection text"
+  },
+  "settings:customTheme.token.accent-mid": {
+    "description": "Custom theme settings: Accent"
+  },
+  "settings:customTheme.token.accent-from": {
+    "description": "Custom theme settings: Gradient start"
+  },
+  "settings:customTheme.token.accent-to": {
+    "description": "Custom theme settings: Gradient end"
+  },
+  "settings:customTheme.token.on-accent": {
+    "description": "Custom theme settings: Button text"
+  },
+  "settings:customTheme.token.control-accent-soft": {
+    "description": "Custom theme settings: Soft accent background"
+  },
+  "settings:customTheme.token.control-accent-text": {
+    "description": "Custom theme settings: Accent text"
+  },
+  "settings:customTheme.token.success": {
+    "description": "Custom theme settings: Success"
+  },
+  "settings:customTheme.token.warning": {
+    "description": "Custom theme settings: Warning"
+  },
+  "settings:customTheme.token.error": {
+    "description": "Custom theme settings: Error"
+  },
+  "settings:customTheme.token.info": {
+    "description": "Custom theme settings: Information"
+  },
+  "settings:customTheme.token.sidebar-bg": {
+    "description": "Custom theme settings: Background"
+  },
+  "settings:customTheme.token.sidebar-text": {
+    "description": "Custom theme settings: Text"
+  },
+  "settings:customTheme.token.sidebar-border": {
+    "description": "Custom theme settings: Border"
+  },
+  "settings:customTheme.token.sidebar-selected": {
+    "description": "Custom theme settings: Selected background"
+  },
+  "settings:customTheme.token.topbar-bg": {
+    "description": "Custom theme settings: Background"
+  },
+  "settings:customTheme.token.topbar-text": {
+    "description": "Custom theme settings: Text"
+  },
+  "settings:customTheme.token.topbar-border": {
+    "description": "Custom theme settings: Border"
+  },
+  "settings:customTheme.token.topbar-selected": {
+    "description": "Custom theme settings: Selected background"
+  },
+  "settings:customTheme.token.card-bg": {
+    "description": "Custom theme settings: Background"
+  },
+  "settings:customTheme.token.card-text": {
+    "description": "Custom theme settings: Text"
+  },
+  "settings:customTheme.token.card-border": {
+    "description": "Custom theme settings: Border"
+  },
+  "settings:customTheme.token.card-selected": {
+    "description": "Custom theme settings: Selected background"
+  },
+  "settings:customTheme.token.viewer-bg": {
+    "description": "Custom theme settings: Background"
+  },
+  "settings:customTheme.token.viewer-text": {
+    "description": "Custom theme settings: Text"
+  },
+  "settings:customTheme.token.viewer-border": {
+    "description": "Custom theme settings: Border"
+  },
+  "settings:customTheme.token.viewer-selected": {
+    "description": "Custom theme settings: Selected background"
+  },
+  "settings:customTheme.token.translation-bg": {
+    "description": "Custom theme settings: Background"
+  },
+  "settings:customTheme.token.translation-text": {
+    "description": "Custom theme settings: Text"
+  },
+  "settings:customTheme.token.translation-border": {
+    "description": "Custom theme settings: Border"
+  },
+  "settings:customTheme.token.translation-selected": {
+    "description": "Custom theme settings: Selected background"
+  },
+  "settings:customTheme.token.chat-bg": {
+    "description": "Custom theme settings: Background"
+  },
+  "settings:customTheme.token.chat-text": {
+    "description": "Custom theme settings: Text"
+  },
+  "settings:customTheme.token.chat-border": {
+    "description": "Custom theme settings: Border"
+  },
+  "settings:customTheme.token.chat-selected": {
+    "description": "Custom theme settings: Selected background"
+  },
+  "settings:customTheme.builtIn": {
+    "description": "Custom theme settings: Presets"
+  },
+  "settings:customTheme.custom": {
+    "description": "Custom theme settings: My themes"
+  },
+  "settings:customTheme.original": {
+    "description": "Custom theme settings: Original"
+  },
+  "settings:customTheme.copySuffix": {
+    "description": "Custom theme settings: copy"
   }
 }
