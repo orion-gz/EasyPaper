@@ -274,3 +274,28 @@ for (const scheme of ['light', 'dark']) {
     await expect(page.locator('.workspace-tab.active')).toHaveCSS('background-color', 'rgb(68, 85, 102)')
   })
 }
+
+test('preview preserves workspace and parallel reader geometry at desktop and phone widths', async ({ page }, testInfo) => {
+  await setup(page)
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 })
+    await page.locator('[data-preview-tab="library"]').click()
+    const sidebar = await page.locator('.theme-sample-sidebar').boundingBox()
+    const topbar = await page.locator('.theme-sample-topbar').boundingBox()
+    expect(topbar.x).toBeGreaterThanOrEqual(sidebar.x + sidebar.width - 1)
+    expect(Math.abs(topbar.y - sidebar.y)).toBeLessThan(1)
+    await expect(page.locator('.theme-sample-card')).toHaveCount(2)
+    await expect(page.locator('[data-theme-preview] button')).toHaveCount(0)
+    await page.locator('[data-preview-tab="reader"]').click()
+    const paper = await page.locator('.theme-sample-paper').boundingBox()
+    const translation = await page.locator('.theme-sample-translation').boundingBox()
+    const chat = await page.locator('.theme-sample-chat').boundingBox()
+    expect(translation.x).toBeGreaterThan(paper.x + paper.width)
+    expect(chat.x).toBeGreaterThan(translation.x + translation.width)
+    expect(Math.abs(paper.y - translation.y)).toBeLessThan(1)
+    expect(await page.locator('[data-theme-preview]').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
+    await page.locator('[data-theme-preview]').screenshot({ path: testInfo.outputPath(`preview-reader-${width}.png`), style: '.theme-footer { visibility: hidden; }' })
+    await page.locator('[data-preview-tab="library"]').click()
+    await page.locator('[data-theme-preview]').screenshot({ path: testInfo.outputPath(`preview-library-${width}.png`), style: '.theme-footer { visibility: hidden; }' })
+  }
+})
