@@ -35,32 +35,48 @@ export function createThemeEditor({ host, t, onApply }) {
   new MutationObserver(syncViewport).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] })
   const status = el('p', '', { role: 'status', class: 'theme-status' })
   const choices = el('div', '', { class: 'theme-targets' })
+  const modeGroup = el('div', '', { class: 'theme-segment', role: 'group', 'aria-label': labels.mode })
+  const schemeGroup = el('div', '', { class: 'theme-segment', role: 'group', 'aria-label': labels.scheme })
+  choices.append(modeGroup, schemeGroup)
   const modeButtons = {}, schemeButtons = {}
   for (const value of ['research', 'general']) {
     modeButtons[value] = button(labels[value], () => guard(() => { mode = value; loadSelection() }), { 'data-theme-mode': value })
-    choices.append(modeButtons[value])
+    modeGroup.append(modeButtons[value])
   }
   for (const value of ['light', 'dark']) {
     schemeButtons[value] = button(labels[value], () => guard(() => { scheme = value; loadSelection() }), { 'data-theme-scheme': value })
-    choices.append(schemeButtons[value])
+    schemeGroup.append(schemeButtons[value])
   }
   const search = el('input', '', { type: 'search', placeholder: labels.search, 'aria-label': labels.search, 'data-theme-search': '' })
   const cards = el('div', '', { class: 'theme-presets', 'aria-label': labels.search })
-  const nameLabel = el('label', labels.name)
+  const nameLabel = el('label', labels.name, { class: 'theme-name-label' })
   const nameInput = el('input', '', { type: 'text', maxlength: '80', 'data-theme-name': '' })
   nameLabel.append(nameInput)
   const usage = el('p', '', { class: 'theme-usage' })
-  const actions = el('div', '', { class: 'theme-actions' })
+  const actions = el('div', '', { class: 'theme-actions theme-footer' })
+  const nameActions = el('div', '', { class: 'theme-name-actions' })
+  const utilities = el('div', '', { class: 'theme-utilities' })
+  const fieldHeading = el('div', '', { class: 'theme-field-heading' })
+  fieldHeading.append(el('strong', labels.colors))
   const layout = el('div', '', { class: 'theme-layout' })
   const fields = el('div', '', { class: 'theme-fields' })
   const previewWrap = el('div', '', { class: 'theme-preview-wrap' })
-  const previewNav = el('div', '', { class: 'theme-actions' })
-  for (const tab of ['library', 'reader']) previewNav.append(button(labels[tab], () => { previewTab = tab; renderPreview() }))
+  const previewNav = el('div', '', { class: 'theme-segment theme-preview-nav', role: 'group', 'aria-label': labels.preview })
+  for (const tab of ['library', 'reader']) previewNav.append(button(labels[tab], () => { previewTab = tab; renderPreview() }, { 'data-preview-tab': tab }))
   const preview = el('div', '', { class: 'theme-preview', 'aria-label': labels.preview, 'data-theme-preview': '' })
   const warning = el('p', '', { class: 'theme-contrast', role: 'status', id: 'theme-contrast-warning' })
-  previewWrap.append(el('strong', labels.preview), previewNav, preview, warning)
-  layout.append(fields, previewWrap)
-  root.append(el('h3', labels.title), choices, search, cards, nameLabel, usage, status, layout, actions)
+  const previewHeading = el('div', '', { class: 'theme-preview-heading' })
+  previewHeading.append(el('strong', labels.preview), previewNav)
+  previewWrap.append(previewHeading, preview, warning)
+  const controls = el('div', '', { class: 'theme-controls' })
+  const identity = el('div', '', { class: 'theme-identity' })
+  identity.append(nameLabel, nameActions, usage)
+  controls.append(search, cards, identity, fieldHeading, fields, utilities)
+  layout.append(controls, previewWrap)
+  const heading = el('div', '', { class: 'theme-heading' })
+  heading.append(el('h3', labels.title), choices)
+  actions.append(status)
+  root.append(heading, layout, actions)
   const choose = (message, options) => new Promise(resolve => {
     const dialog = el('dialog', '', { class: 'theme-dialog', 'aria-label': message })
     dialog.append(el('p', message))
@@ -109,13 +125,14 @@ export function createThemeEditor({ host, t, onApply }) {
     cards.replaceChildren()
     const query = search.value.trim().toLowerCase()
     for (const theme of [...PRESETS, ...state.themes].filter(theme => theme.scheme === scheme && theme.name.toLowerCase().includes(query))) {
-      const card = button(theme.name, () => guard(() => loadSelection(theme.id)), { class: 'theme-preset', 'aria-pressed': String(theme.id === selection), 'data-preset': theme.id })
-      card.removeAttribute('data-theme-label')
+      const card = button('', () => guard(() => loadSelection(theme.id)), { class: 'theme-preset', 'aria-pressed': String(theme.id === selection), 'data-preset': theme.id })
+      card.append(el('span', theme.name, { class: 'theme-preset-name' }))
+      card.querySelector('.theme-preset-name').removeAttribute('data-theme-label')
       card.append(el('small', theme.basePresetId ? labels.custom : labels.builtIn, { class: 'theme-preset-kind' }))
       const colors = resolveTheme(theme.id, state).tokens
       const swatches = el('span', '', { class: 'theme-swatches', 'aria-hidden': 'true' })
       for (const key of ['bg-base', 'bg-elevated', 'text-primary', 'accent-mid']) {
-        const dot = el('span'); dot.style.backgroundColor = colors[key]; swatches.append(dot)
+        const dot = el('span'); dot.style.backgroundColor = colors[key]; dot.style.color = colors[key]; swatches.append(dot)
       }
       card.prepend(swatches); cards.append(card)
     }
@@ -150,6 +167,7 @@ export function createThemeEditor({ host, t, onApply }) {
   }
   function renderPreview() {
     const theme = resolveTheme(selection, state, draft)
+    for (const node of previewNav.children) node.setAttribute('aria-pressed', String(node.dataset.previewTab === previewTab))
     for (const input of fields.querySelectorAll('[data-color-token]')) {
       if (input === document.activeElement || input.getAttribute('aria-invalid') === 'true') continue
       const key = input.dataset.colorToken, value = theme.tokens[key]
@@ -213,7 +231,7 @@ export function createThemeEditor({ host, t, onApply }) {
   }
   nameInput.addEventListener('input', () => { draft.name = nameInput.value; markDirty() })
   search.addEventListener('input', renderCards)
-  actions.append(button(labels.copy, () => { draft.id = crypto.randomUUID(); draft.name += ` (${labels.copySuffix})`; nameInput.value = draft.name; selection = draft.id; deleteButton.disabled = true; usage.textContent = ''; renderCards(); markDirty() }, { 'data-theme-copy': '' }))
+  nameActions.append(button(labels.copy, () => { draft.id = crypto.randomUUID(); draft.name += ` (${labels.copySuffix})`; nameInput.value = draft.name; selection = draft.id; deleteButton.disabled = true; usage.textContent = ''; renderCards(); markDirty() }, { 'data-theme-copy': '' }))
   const deleteButton = button(labels.delete, async () => {
     const target = state.themes.find(theme => theme.id === draft.id)
     if (!target) return
@@ -223,7 +241,9 @@ export function createThemeEditor({ host, t, onApply }) {
     try { saveThemes(next) } catch { status.textContent = labels.saveError; return }
     state = next; dirty = false; loadSelection(); onApply(state)
   }, { 'data-theme-delete': '' })
-  actions.append(deleteButton, button(labels.reset, () => { draft.overrides = {}; markDirty(); renderFields() }), button(labels.export, () => {
+  nameActions.append(deleteButton)
+  fieldHeading.append(button(labels.reset, () => { draft.overrides = {}; markDirty(); renderFields() }))
+  utilities.append(button(labels.export, () => {
     const theme = resolveTheme(selection, state, draft)
     const url = URL.createObjectURL(new Blob([exportTheme(theme)], { type: 'application/json' }))
     const anchor = el('a', '', { href: url, download: 'easypaper-theme.json' }); anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
@@ -237,10 +257,10 @@ export function createThemeEditor({ host, t, onApply }) {
       await guard(() => { scheme = imported.scheme; selection = imported.id; draft = imported; nameInput.value = imported.name; dirty = true; renderCards(); renderFields(); renderPreview(); status.textContent = labels.draft; deleteButton.disabled = true; for (const [s, node] of Object.entries(schemeButtons)) node.setAttribute('aria-pressed', String(s === scheme)) })
     } catch { status.textContent = labels.invalidTheme }
   })
-  actions.append(button(labels.import, () => file.click()), file,
-    button(labels.reload, () => guard(() => { state = loadThemes(); conflict = false; loadSelection() })),
-    button(labels.apply, commit, { class: 'theme-apply', 'data-theme-apply': '' }))
-  const source = el('a', labels.source, { href: '/theme-licenses/index.html', target: '_blank', rel: 'noopener' }); actions.append(source)
+  utilities.append(button(labels.import, () => file.click()), file,
+    button(labels.reload, () => guard(() => { state = loadThemes(); conflict = false; loadSelection() })))
+  actions.append(button(labels.apply, commit, { class: 'theme-apply', 'data-theme-apply': '' }))
+  const source = el('a', labels.source, { href: '/theme-licenses/index.html', target: '_blank', rel: 'noopener' }); utilities.append(source)
   window.addEventListener('storage', event => {
     if (event.key !== THEME_STORAGE_KEY && event.key !== null) return
     if (dirty) { conflict = true; status.textContent = labels.external }
@@ -273,6 +293,7 @@ export function createThemeEditor({ host, t, onApply }) {
       }
       search.placeholder = labels.search; search.setAttribute('aria-label', labels.search)
       root.setAttribute('aria-label', labels.title); preview.setAttribute('aria-label', labels.preview)
+      modeGroup.setAttribute('aria-label', labels.mode); schemeGroup.setAttribute('aria-label', labels.scheme); previewNav.setAttribute('aria-label', labels.preview)
       renderCards(); renderFields(true); renderPreview()
     },
   }
