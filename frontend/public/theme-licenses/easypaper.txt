@@ -1,0 +1,4 @@
+EasyPaper default palette
+https://github.com/orion-gz/EasyPaper
+
+Original EasyPaper UI colors.
