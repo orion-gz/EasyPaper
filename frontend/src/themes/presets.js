@@ -49,5 +49,46 @@ export const THEME_SOURCES = {
   everforest: 'https://github.com/sainnhe/everforest-vscode',
   vscode: 'https://github.com/microsoft/vscode',
 }
-export const PRESETS = rows.map(([id, name, scheme, base, surface, elevated, text, secondary, accent, source]) =>
-  Object.freeze({ id, name, scheme, source: THEME_SOURCES[source], license: `/theme-licenses/${source}.txt`, colors: { base, surface, elevated, text, secondary, accent } }))
+// Semantic adaptations: upstream diagnostic/ANSI colors and editor selection colors.
+// Provenance and mapping policy: docs/custom-themes.md.
+const semanticColors = {
+  'catppuccin-latte': ['#40a02b', '#df8e1d', '#d20f39', '#1e66f5', '#acb0be'],
+  'catppuccin-mocha': ['#a6e3a1', '#f9e2af', '#f38ba8', '#89b4fa', '#585b70'],
+  'catppuccin-frappe': ['#a6d189', '#e5c890', '#e78284', '#8caaee', '#626880'],
+  'catppuccin-macchiato': ['#a6da95', '#eed49f', '#ed8796', '#8aadf4', '#5b6078'],
+  'one-dark': ['#98c379', '#e5c07b', '#e06c75', '#61afef', '#3e4451'],
+  'one-light': ['#50a14f', '#c18401', '#e45649', '#4078f2', '#e5e5e6'],
+  'nord': ['#a3be8c', '#ebcb8b', '#bf616a', '#81a1c1', '#434c5ecc'],
+  'tokyo-night': ['#41a6b5', '#e0af68', '#db4b4b', '#0da0ba', '#515c7e4d'],
+  'tokyo-storm': ['#73daca', '#e0af68', '#db4b4b', '#0da0ba', '#6f7bb640'],
+  'tokyo-day': ['#33635c', '#8f5e15', '#bd4040', '#0da0ba', '#acb0bf40'],
+  'rose-pine': ['#31748f', '#f6c177', '#eb6f92', '#9ccfd8', '#6e6a8633'],
+  'rose-moon': ['#3e8fb0', '#f6c177', '#eb6f92', '#9ccfd8', '#817c9c26'],
+  'rose-dawn': ['#286983', '#ea9d34', '#b4637a', '#56949f', '#6e6a8614'],
+  'everforest-dark': ['#a7c080', '#bf983d', '#da6362', '#5a93a2', '#475258c0'],
+  'everforest-light': ['#8da101', '#e4b649', '#f1706f', '#6cb3c6', '#e6e2cca0'],
+  'night-owl': ['#22da6e', '#b39554', '#ef5350', '#82aaff', '#1d3b53'],
+  'light-owl': ['#08916a', '#daaa01', '#e64d49', '#288ed7', '#e0e0e0'],
+  'monokai': ['#86b42b', '#b3b42b', '#c4265e', '#6a7ec8', '#878b9180'],
+  'solarized-dark': ['#859900', '#b58900', '#dc322f', '#268bd2', '#274642'],
+  'solarized-light': ['#859900', '#b58900', '#dc322f', '#268bd2', '#eee8d5'],
+  'dracula': ['#50fa7b', '#f1fa8c', '#ff5555', '#8be9fd', '#44475a'],
+  'github-dark': ['#85e89d', '#ffea7f', '#f97583', '#79b8ff', '#032f62'],
+  'github-light': ['#22863a', '#f9c513', '#cb2431', '#005cc5', '#dbedff'],
+  'gruvbox-dark': ['#98971a', '#d79921', '#cc241d', '#458588', '#504945'],
+  'gruvbox-light': ['#98971a', '#d79921', '#cc241d', '#458588', '#d5c4a1'],
+  'ayu-dark': ['#aad94c', '#ffb454', '#f07178', '#59c2ff', '#3388ff40'],
+  'ayu-mirage': ['#d5ff80', '#ffcd66', '#f28779', '#73d0ff', '#409fff40'],
+  'ayu-light': ['#86b300', '#eba400', '#f07171', '#22a4e6', '#035bd626'],
+  'vscode-dark': ['#73c991', '#cca700', '#f48771', '#3794ff', '#264f78'],
+  'vscode-light': ['#16825d', '#bf8803', '#a1260d', '#006ab1', '#add6ff'],
+}
+export const PRESETS = rows.map(([id, name, scheme, base, surface, elevated, text, secondary, accent, source]) => {
+  const semantic = semanticColors[id]
+  const colors = { base, surface, elevated, text, secondary, accent }
+  if (semantic) {
+    const [success, warning, error, info, selection] = semantic
+    Object.assign(colors, { success, warning, error, info, selection })
+  }
+  return Object.freeze({ id, name, scheme, source: THEME_SOURCES[source], license: `/theme-licenses/${source}.txt`, colors: Object.freeze(colors) })
+})

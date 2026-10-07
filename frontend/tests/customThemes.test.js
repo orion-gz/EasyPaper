@@ -95,3 +95,21 @@ test('legacy accent derivation ignores alpha bytes when calculating RGB channels
   const alpha = resolveTheme('draft', undefined, { basePresetId: 'easypaper-dark', overrides: { 'accent-mid': '#12345680' } })
   assert.equal(opaque.tokens['accent-from'], alpha.tokens['accent-from'])
 })
+
+test('preset diagnostic and selection colors preserve palette identity and override precedence', () => {
+  const mocha = resolveTheme('catppuccin-mocha').tokens
+  assert.equal(mocha.success, '#a6e3a1')
+  assert.equal(mocha.error, '#f38ba8')
+  assert.equal(mocha['selection-bg'], '#585b70')
+  const dracula = resolveTheme('dracula').tokens
+  assert.equal(dracula.success, '#50fa7b')
+  assert.equal(dracula['card-selected'], '#44475a')
+  for (const preset of PRESETS.filter(p => !p.id.startsWith('easypaper-'))) {
+    for (const key of ['success', 'warning', 'error', 'info', 'selection']) assert.ok(isColor(preset.colors[key]), `${preset.id}: ${key}`)
+  }
+  const overridden = resolveTheme('draft', undefined, { basePresetId: 'dracula', overrides: { success: '#123456', 'accent-mid': '#abcdef', 'card-selected': '#112233' } }).tokens
+  assert.equal(overridden.success, '#123456')
+  assert.equal(overridden['card-selected'], '#112233')
+  assert.equal(overridden['selection-bg'], '#abcdef')
+  assert.notEqual(overridden['sidebar-selected'], dracula['sidebar-selected'])
+})

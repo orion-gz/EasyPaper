@@ -105,17 +105,19 @@ export function resolveTheme(id, state, draft) {
     'bg-base': base, 'bg-surface': surface, 'bg-elevated': elevated, 'bg-panel': surface,
     'bg-hover': mix(elevated, text, 0.08), 'text-primary': text, 'text-secondary': secondary,
     'text-tertiary': secondary, 'text-muted': secondary, border: rgba(text, 0.12), 'border-strong': rgba(text, 0.24),
-    'accent-mid': accent, success: light ? '#167647' : '#73c991', warning: light ? '#936000' : '#e5c07b',
-    error: light ? '#c62828' : '#f48771', info: light ? '#0969da' : '#75beff', ...legacyBase, ...o,
+    'accent-mid': accent, success: preset.colors.success || '#10b981', warning: preset.colors.warning || '#f59e0b',
+    error: preset.colors.error || '#ef4444', info: preset.colors.info || (light ? '#0969da' : '#75beff'), ...legacyBase, ...o,
   }
   const a = tokens['accent-mid'], fg = tokens['text-primary']
+  // A custom accent regenerates selection colors unless explicitly overridden.
+  const selection = !o['accent-mid'] && preset.colors.selection
   Object.assign(tokens, {
     'accent-from': legacy ? shadeHex(a, -0.16) : mix(a, '#000000', 0.2), 'accent-to': legacy ? shadeHex(a, 0.18) : mix(a, '#ffffff', 0.25),
-    'accent-glow': rgba(a, 0.3), 'control-accent': a, 'control-accent-soft': rgba(a, 0.16),
+    'accent-glow': rgba(a, 0.3), 'control-accent': a, 'control-accent-soft': selection || rgba(a, 0.16),
     'control-accent-text': legacy ? shadeHex(a, light ? -0.24 : 0.24) : mix(a, light ? '#000000' : '#ffffff', 0.25),
     'on-accent': contrast(a, '#ffffff') >= contrast(a, '#000000') ? '#ffffff' : '#000000',
-    'border-glow': rgba(a, 0.2), 'focus-ring': a, 'selection-bg': a,
-    'selection-text': contrast(a, '#ffffff') >= contrast(a, '#000000') ? '#ffffff' : '#000000', link: a,
+    'border-glow': rgba(a, 0.2), 'focus-ring': a, 'selection-bg': selection || a,
+    'selection-text': selection ? fg : contrast(a, '#ffffff') >= contrast(a, '#000000') ? '#ffffff' : '#000000', link: a,
     ...o,
   })
   for (const region of regions) {

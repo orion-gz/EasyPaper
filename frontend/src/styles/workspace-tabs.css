@@ -67,10 +67,10 @@
 .document-workspace-runtime #floating-scroll-nav .view-group { display: flex; align-items: center; }
 .document-workspace-runtime #floating-scroll-nav button, .document-workspace-runtime #floating-scroll-nav .zoom-label { color: var(--text-primary); }
 .document-workspace-runtime #scroll-top-btn, .document-workspace-runtime #scroll-bottom-btn { display: none; }
-body.light-theme #tab-workspace { background: #f3f7fc; }
-body.light-theme #tab-workspace .app-sidebar { background: #f7faff; }
-body.light-theme #tab-workspace .workspace-topnav { background: #eff4fa; }
-.document-workspace-runtime.light-theme #viewer-screen, .document-workspace-runtime.light-theme .viewer-scroll-container { background: #f5f8fd; }
+body.light-theme #tab-workspace { background: var(--bg-base, #f3f7fc); }
+body.light-theme #tab-workspace .app-sidebar { background: var(--sidebar-bg, #f7faff); }
+body.light-theme #tab-workspace .workspace-topnav { background: var(--topbar-bg, #eff4fa); }
+.document-workspace-runtime.light-theme #viewer-screen, .document-workspace-runtime.light-theme .viewer-scroll-container { background: var(--viewer-bg, #f5f8fd); }
 .workspace-load-error { padding: 32px; color: var(--text-primary); }
 @media (max-width: 859px) {
   .document-workspace-runtime #viewer-screen:has(#outline-sidebar:not(.hidden)) .panels { left: 10px; }

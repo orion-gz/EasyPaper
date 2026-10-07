@@ -120,7 +120,8 @@ export function createThemeEditor({ host, t, onApply }) {
       card.prepend(swatches); cards.append(card)
     }
   }
-  function renderFields() {
+  function renderFields(preserveInvalid = false) {
+    const invalid = new Map(preserveInvalid ? [...fields.querySelectorAll('[aria-invalid="true"]')].map(input => [input.dataset.colorToken, input.value]) : [])
     const expanded = [...fields.querySelectorAll('details[open]')].map(node => node.dataset.group)
     fields.replaceChildren()
     for (const [group, keys] of Object.entries(COLOR_GROUPS)) {
@@ -133,6 +134,7 @@ export function createThemeEditor({ host, t, onApply }) {
         const alpha = el('input', '', { type: 'range', min: '0', max: '100', 'aria-label': label + ' ' + labels.opacity })
         const sync = () => { const value = resolveTheme(selection, state, draft).tokens[key]; picker.value = value.slice(0, 7); hex.value = value; alpha.value = Math.round((value.length === 9 ? parseInt(value.slice(7), 16) : 255) / 255 * 100) }
         sync()
+        if (invalid.has(key)) { hex.value = invalid.get(key); hex.setAttribute('aria-invalid', 'true') }
         picker.addEventListener('input', () => { draft.overrides[key] = picker.value + (Number(alpha.value) < 100 ? Math.round(Number(alpha.value) * 2.55).toString(16).padStart(2, '0') : ''); hex.value = draft.overrides[key]; hex.removeAttribute('aria-invalid'); markDirty() })
         hex.addEventListener('input', () => {
           const valid = isColor(hex.value); hex.setAttribute('aria-invalid', String(!valid))
@@ -140,7 +142,7 @@ export function createThemeEditor({ host, t, onApply }) {
           draft.overrides[key] = hex.value.toLowerCase(); sync(); markDirty()
         })
         alpha.addEventListener('input', () => { draft.overrides[key] = picker.value + Math.round(Number(alpha.value) * 255 / 100).toString(16).padStart(2, '0'); hex.value = draft.overrides[key]; hex.removeAttribute('aria-invalid'); markDirty() })
-        row.append(el('span', label), picker, hex, alpha, button('↺', () => { delete draft.overrides[key]; markDirty(); renderFields() }, { 'aria-label': labels.resetColor + ': ' + label }))
+        row.append(el('span', label), picker, hex, alpha, button('↺', () => { delete draft.overrides[key]; sync(); hex.removeAttribute('aria-invalid'); markDirty() }, { 'aria-label': labels.resetColor + ': ' + label }))
         details.append(row)
       }
       fields.append(details)
@@ -159,6 +161,7 @@ export function createThemeEditor({ host, t, onApply }) {
     applyTheme(preview, theme)
     preview.replaceChildren()
     const top = el('div', 'EasyPaper', { class: 'theme-sample-topbar' })
+    top.append(button(labels.library, () => {}, { class: 'theme-sample-tab', 'aria-pressed': 'true' }))
     const body = el('div', '', { class: 'theme-sample-body' })
     const side = el('aside', '', { class: 'theme-sample-sidebar' })
     side.append(el('strong', labels.library), button(labels.research, () => {}, { class: 'selected' }), button(labels.general, () => {}))
@@ -174,7 +177,7 @@ export function createThemeEditor({ host, t, onApply }) {
     main.append(card)
     if (previewTab === 'reader') {
       const chat = el('section', '', { class: 'theme-sample-chat' })
-      chat.append(el('strong', labels.chat), el('p', labels.sampleChat), el('input', '', { placeholder: labels.sampleInput, 'aria-label': labels.sampleInput }))
+      chat.append(el('strong', labels.chat), el('p', labels.sampleInput, { class: 'theme-sample-chat-user' }), el('p', labels.sampleChat), el('input', '', { placeholder: labels.sampleInput, 'aria-label': labels.sampleInput }))
       main.append(chat)
     }
     const statuses = el('div', '', { class: 'theme-sample-status' })
@@ -210,11 +213,13 @@ export function createThemeEditor({ host, t, onApply }) {
   }
   nameInput.addEventListener('input', () => { draft.name = nameInput.value; markDirty() })
   search.addEventListener('input', renderCards)
-  actions.append(button(labels.copy, () => { draft.id = crypto.randomUUID(); draft.name += ` (${labels.copySuffix})`; nameInput.value = draft.name; markDirty() }, { 'data-theme-copy': '' }))
+  actions.append(button(labels.copy, () => { draft.id = crypto.randomUUID(); draft.name += ` (${labels.copySuffix})`; nameInput.value = draft.name; selection = draft.id; deleteButton.disabled = true; usage.textContent = ''; renderCards(); markDirty() }, { 'data-theme-copy': '' }))
   const deleteButton = button(labels.delete, async () => {
-    if (await choose(labels.deleteConfirm + ' ' + usage.textContent, [['delete', labels.delete], ['cancel', labels.cancel]]) !== 'delete') return
+    const target = state.themes.find(theme => theme.id === draft.id)
+    if (!target) return
+    if (await choose(labels.deleteConfirm + ' ' + target.name + ' ' + usage.textContent, [['delete', labels.delete], ['cancel', labels.cancel]]) !== 'delete') return
     if (conflict) { status.textContent = labels.external; return }
-    const next = deleteTheme(state, selection)
+    const next = deleteTheme(state, target.id)
     try { saveThemes(next) } catch { status.textContent = labels.saveError; return }
     state = next; dirty = false; loadSelection(); onApply(state)
   }, { 'data-theme-delete': '' })
@@ -268,7 +273,7 @@ export function createThemeEditor({ host, t, onApply }) {
       }
       search.placeholder = labels.search; search.setAttribute('aria-label', labels.search)
       root.setAttribute('aria-label', labels.title); preview.setAttribute('aria-label', labels.preview)
-      renderCards(); renderFields(); renderPreview()
+      renderCards(); renderFields(true); renderPreview()
     },
   }
 }

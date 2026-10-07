@@ -80,12 +80,22 @@ test('all preset previews render without horizontal overflow at narrow widths', 
   await page.setViewportSize({ width: 720, height: 900 })
   await setup(page)
   for (const scheme of ['dark', 'light']) {
+    if (scheme === 'light') {
+      await page.locator('#close-settings-btn').click()
+      await page.locator('#sidebar-theme-toggle-btn').click()
+      await page.locator('#sidebar-settings-btn').click()
+    }
     await page.locator('[data-theme-scheme="' + scheme + '"]').click()
     const ids = await page.locator('[data-preset]').evaluateAll(nodes => nodes.map(node => node.dataset.preset))
     for (const id of ids) {
       await page.locator('[data-preset="' + id + '"]').click()
       await page.locator('[data-theme-apply]').click()
       await expect(page.locator('[data-theme-preview]')).toHaveAttribute('data-theme-id', id)
+      await expect(page.locator('body')).toHaveAttribute('data-theme-id', id)
+      for (const [actual, sample] of [['#tab-workspace', '[data-theme-preview]'], ['#app-sidebar', '.theme-sample-sidebar'], ['.workspace-topnav', '.theme-sample-topbar']]) {
+        const expected = await page.locator(sample).evaluate(node => getComputedStyle(node).backgroundColor)
+        await expect(page.locator(actual)).toHaveCSS('background-color', expected)
+      }
     }
   }
   expect(await page.locator('.theme-editor').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
@@ -187,3 +197,80 @@ test('full theme and region tokens reach active, inactive and newly opened reade
   await open('theme-a')
   await expect(frame('theme-a').locator('#viewer-scroll-container')).toHaveCSS('background-color', 'rgb(18, 52, 86)')
 })
+
+test('unsaved copy cannot delete its saved original and discarding preserves it', async ({ page }) => {
+  await setup(page)
+  await page.locator('[data-theme-name]').fill('Original theme')
+  await page.locator('[data-theme-apply]').click()
+  const original = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), key)
+  await page.locator('[data-theme-copy]').click()
+  await expect(page.locator('[data-theme-name]')).toHaveValue('Original theme (복사본)')
+  await expect(page.locator('[data-theme-delete]')).toBeDisabled()
+  await page.locator('#close-settings-btn').click()
+  await page.locator('.theme-dialog').getByRole('button', { name: '버리기' }).click()
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)), key)).toEqual(original)
+  await page.locator('#sidebar-settings-btn').click()
+  await page.locator('[data-theme-copy]').click()
+  await page.locator('[data-theme-apply]').click()
+  await expect(page.locator('[data-theme-delete]')).toBeEnabled()
+  await page.locator('[data-theme-delete]').click()
+  await expect(page.locator('.theme-dialog')).toContainText('Original theme (복사본)')
+  await page.locator('.theme-dialog').getByRole('button', { name: '삭제', exact: true }).click()
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).themes, key)).toEqual(original.themes)
+})
+
+test('resetting one color preserves invalid input in another color', async ({ page }) => {
+  await setup(page)
+  await page.locator('[data-group=background] summary').click()
+  await page.locator('[data-color-token="bg-base"]').fill('#112233')
+  const invalid = page.locator('[data-color-token="bg-panel"]')
+  await invalid.fill('invalid')
+  await page.locator('.theme-color-row').filter({ has: page.locator('[data-color-token="bg-base"]') }).getByRole('button').click()
+  await expect(invalid).toHaveValue('invalid')
+  await expect(invalid).toHaveAttribute('aria-invalid', 'true')
+  await page.locator('[data-theme-apply]').click()
+  expect(await base(page)).toBe('#06050a')
+})
+
+for (const scheme of ['light', 'dark']) {
+  test(`${scheme} custom region colors reach actual shell, cards and reader elements`, async ({ page }) => {
+    const doc = { id: 'theme-colors', filename: 'theme-colors.pdf', total_pages: 1, metadata: { primer_shown: true }, translated_pages: [1] }
+    await mockBaseRoutes(page, { documents: [doc] })
+    await page.route('**/api/library/*/pdf', route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_A }))
+    await page.route('**/api/library/*/translation/1**', route => route.fulfill({ json: { translation: 'Theme text', sentences: [] } }))
+    await page.addInitScript(({ key, scheme }) => {
+      const id = 'region-test'
+      localStorage.setItem('easypaper_theme_research', scheme)
+      localStorage.setItem(key, JSON.stringify({ version: 1, themes: [{ id, name: 'Region test', scheme, basePresetId: scheme === 'light' ? 'catppuccin-latte' : 'nord', overrides: {
+        'bg-base': '#123456', 'sidebar-bg': '#223344', 'topbar-bg': '#334455', 'topbar-selected': '#445566',
+        'card-selected': '#556677', 'translation-text': '#abcdef', 'translation-border': '#00ff00', 'translation-selected': '#aabbcc', 'viewer-selected': '#ccbbaa', 'viewer-border': '#120034', 'chat-bg': '#112233',
+      } }], selections: { research: { light: scheme === 'light' ? id : 'easypaper-light', dark: scheme === 'dark' ? id : 'easypaper-dark' }, general: { light: 'easypaper-light', dark: 'easypaper-dark' } } }))
+    }, { key, scheme })
+    await gotoApp(page)
+    await expect(page.locator('#tab-workspace')).toHaveCSS('background-color', 'rgb(18, 52, 86)')
+    await expect(page.locator('#app-sidebar')).toHaveCSS('background-color', 'rgb(34, 51, 68)')
+    await expect(page.locator('.workspace-topnav')).toHaveCSS('background-color', 'rgb(51, 68, 85)')
+    const card = page.locator('.doc-card').first()
+    await card.hover()
+    await card.locator('.doc-card-check-btn').click()
+    await expect(card).toHaveClass(/doc-card-selected/)
+    await expect(card).toHaveCSS('background-color', 'rgb(85, 102, 119)')
+    await page.evaluate(() => { location.hash = '#viewer?id=theme-colors' })
+    const frame = page.frameLocator('iframe[data-document-id="theme-colors"]')
+    await expect(frame.locator('.trans-text').first()).toBeVisible({ timeout: 20000 })
+    await expect(frame.locator('.trans-text').first()).toHaveCSS('color', 'rgb(171, 205, 239)')
+    await expect(frame.locator('.panels')).toHaveCSS('border-top-color', 'rgb(18, 0, 52)')
+    await expect(frame.locator('.trans-page-block').first()).toHaveCSS('border-top-color', 'rgb(0, 255, 0)')
+    const selection = await frame.locator('.trans-text').first().evaluate(node => {
+      const probe = document.createElement('span')
+      probe.style.backgroundColor = 'var(--translation-selected)'
+      node.append(probe)
+      const expected = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      return { actual: getComputedStyle(node, '::selection').backgroundColor, expected }
+    })
+    expect(selection.actual).toBe(selection.expected)
+    await expect(frame.locator('#chat-sidebar')).toHaveCSS('background-color', 'rgb(17, 34, 51)')
+    await expect(page.locator('.workspace-tab.active')).toHaveCSS('background-color', 'rgb(68, 85, 102)')
+  })
+}
