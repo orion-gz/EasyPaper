@@ -3809,9 +3809,6 @@
   "common:addMenu.close": {
     "description": "Accessible label for closing the library add menu"
   },
-  "settings:themeHeading": {
-    "description": "Heading for document-mode-specific display theme settings"
-  },
   "settings:viewerReadingBehavior": {
     "description": "Label for reading behavior settings shared by the active mode"
   },
@@ -3823,9 +3820,6 @@
   },
   "settings:suggestedQuestionsDescription": {
     "description": "Description of the AI answer follow-up question toggle."
-  },
-  "settings:accentColor": {
-    "description": "Accent color setting label"
   },
   "settings:themeLightEnabled": {
     "description": "Toast shown after switching to light mode"
