@@ -1,5 +1,6 @@
 import { PRESETS, COLOR_GROUPS, EDITABLE_TOKENS, THEME_STORAGE_KEY, loadThemes, saveThemes, resolveTheme, applyTheme, deleteTheme, exportTheme, importTheme, contrast, isColor } from './themeEngine.js'
 import { themeLabels } from './themeLabels.js'
+import { renderThemePreview } from './themePreview.js'
 import './themes.css'
 
 export function createThemeEditor({ host, t, onApply }) {
@@ -177,30 +178,7 @@ export function createThemeEditor({ host, t, onApply }) {
       row.querySelector('[type=range]').value = Math.round((value.length === 9 ? parseInt(value.slice(7), 16) : 255) / 255 * 100)
     }
     applyTheme(preview, theme)
-    preview.replaceChildren()
-    const top = el('div', 'EasyPaper', { class: 'theme-sample-topbar' })
-    top.append(button(labels.library, () => {}, { class: 'theme-sample-tab', 'aria-pressed': 'true' }))
-    const body = el('div', '', { class: 'theme-sample-body' })
-    const side = el('aside', '', { class: 'theme-sample-sidebar' })
-    side.append(el('strong', labels.library), button(labels.research, () => {}, { class: 'selected' }), button(labels.general, () => {}))
-    const main = el('main', '', { class: 'theme-sample-viewer' })
-    const card = el('article', '', { class: previewTab === 'library' ? 'theme-sample-card' : 'theme-sample-translation' })
-    card.append(el('h4', labels.sampleTitle), el('p', labels.sampleText), button(labels.apply, () => {}, { class: 'theme-primary' }))
-    if (previewTab === 'reader') {
-      const original = el('article', '', { class: 'theme-sample-paper' })
-      original.append(el('strong', labels.original), el('h4', labels.sampleTitle), el('p', labels.sampleText))
-      main.append(original)
-      card.prepend(el('strong', labels.translation))
-    }
-    main.append(card)
-    if (previewTab === 'reader') {
-      const chat = el('section', '', { class: 'theme-sample-chat' })
-      chat.append(el('strong', labels.chat), el('p', labels.sampleInput, { class: 'theme-sample-chat-user' }), el('p', labels.sampleChat), el('input', '', { placeholder: labels.sampleInput, 'aria-label': labels.sampleInput }))
-      main.append(chat)
-    }
-    const statuses = el('div', '', { class: 'theme-sample-status' })
-    for (const key of ['success', 'warning', 'error', 'info']) { const span = el('span', labels['token.' + key]); span.style.color = `var(--${key})`; statuses.append(span) }
-    main.append(statuses); body.append(side, main); preview.append(top, body)
+    renderThemePreview(preview, { labels, t, mode, tab: previewTab })
     const pairs = [['text-primary', 'bg-base'], ['text-secondary', 'bg-base'], ['on-accent', 'accent-mid'], ...['sidebar', 'topbar', 'card', 'viewer', 'translation', 'chat'].map(r => [r + '-text', r + '-bg'])]
     const low = pairs.filter(([fg, bg]) => contrast(theme.tokens[fg], theme.tokens[bg], theme.tokens['bg-base']) < 4.5).map(([fg]) => fg)
     for (const input of fields.querySelectorAll('[data-color-token]')) {
