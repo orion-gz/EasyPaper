@@ -5142,5 +5142,35 @@
   },
   "settings:customTheme.copySuffix": {
     "description": "Custom theme settings: copy"
+  },
+  "settings:minimalUi": {
+    "description": "Minimal UI setting or library action: Minimal UI"
+  },
+  "settings:minimalUiDescription": {
+    "description": "Minimal UI setting or library action: Show only the library and document tabs. All reader tools remain available."
+  },
+  "settings:minimalMove": {
+    "description": "Minimal UI setting or library action: Move to folder"
+  },
+  "settings:minimalRoot": {
+    "description": "Minimal UI setting or library action: Library root"
+  },
+  "settings:minimalActions": {
+    "description": "Minimal UI setting or library action: Actions"
+  },
+  "settings:minimalCancel": {
+    "description": "Minimal UI setting or library action: Cancel"
+  },
+  "settings:minimalRestore": {
+    "description": "Minimal UI setting or library action: Restore"
+  },
+  "settings:minimalDeleteForever": {
+    "description": "Minimal UI setting or library action: Delete permanently"
+  },
+  "settings:minimalRename": {
+    "description": "Minimal UI setting or library action: Rename"
+  },
+  "settings:minimalDelete": {
+    "description": "Minimal UI setting or library action: Delete"
   }
 }

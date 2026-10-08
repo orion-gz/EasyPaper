@@ -146,3 +146,25 @@ test('desktop reader has one window control group and keeps tab drag separate', 
   await expect(page.locator('iframe[data-document-id=desktop-doc]')).toHaveCount(0)
   expect(await commands(page)).toEqual([])
 })
+
+for (const platform of ['windows', 'macos']) {
+  test(`minimal workspace fills the desktop content area on ${platform}`, async ({ page }) => {
+    await mockDesktop(page, platform)
+    await page.addInitScript(() => localStorage.setItem('easypaper_minimal_ui', 'true'))
+    await mockBaseRoutes(page)
+    await gotoApp(page, { navigateToLibrary: false })
+    await expect(page.locator('#tab-workspace')).toBeVisible()
+    await expect(page.locator('#app-sidebar')).toBeHidden()
+    await expect(page.locator('#workspace-mode-switch-compact')).toBeVisible()
+    const panel = await page.locator('#workspace-tab-panel').boundingBox()
+    expect(panel.x).toBe(0)
+    expect(panel.width).toBe(page.viewportSize().width)
+    if (platform === 'windows') {
+      const controls = page.locator('#tab-workspace .desktop-window-controls')
+      await expect(controls).toBeVisible()
+      const actions = await page.locator('#minimal-shell-actions').boundingBox()
+      const bounds = await controls.boundingBox()
+      expect(actions.x + actions.width).toBeLessThanOrEqual(bounds.x)
+    }
+  })
+}

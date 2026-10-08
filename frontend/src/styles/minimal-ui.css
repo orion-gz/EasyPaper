@@ -1,0 +1,38 @@
+
+body.minimal-ui #tab-workspace > .app-sidebar,
+body.minimal-ui #tab-workspace .workspace-search-box,
+body.minimal-ui #library-status-tabs,
+body.minimal-ui .library-category-filter-group,
+body.minimal-ui #library-category-filter-toggle,
+body.minimal-ui #library-view-toggle,
+body.minimal-ui #lib-compare-toggle-btn,
+body.minimal-ui #lib-select-toolbar { display: none !important; }
+body.minimal-ui #tab-workspace .workspace-mode-switch-compact { display: grid; flex-shrink: 0; }
+body.minimal-ui.desktop-window #workspace-tab-panel { grid-column: 1 / -1; }
+.minimal-shell-actions { display: none; align-items: center; gap: 4px; }
+body.minimal-ui .minimal-shell-actions { display: flex; }
+.minimal-shell-actions button { background: transparent; color: var(--text-primary); border: 0; padding: 8px; cursor: pointer; }
+.doc-card.minimal-doc-card { padding: 16px; }
+.doc-card.minimal-doc-card .minimal-card-open { display: flex; align-items: center; gap: 14px; cursor: pointer; min-height: 80px; }
+.doc-card.minimal-doc-card .lib-card-thumb { flex-shrink: 0; }
+.doc-card.minimal-doc-card .doc-card-kebab-wrapper { margin-left: auto; }
+.doc-card.minimal-doc-card :focus-visible { outline: 2px solid var(--control-accent); outline-offset: 2px; }
+body.minimal-ui #tab-workspace .workspace-topnav { gap: 4px; padding-right: 4px; }
+body.minimal-ui .workspace-topnav-actions { gap: 4px; }
+body.minimal-ui .library-header-subtitle { display: none; }
+body.minimal-ui .library-header { margin-bottom: 0; }
+body.minimal-ui .library-folder-header { padding: 4px 0; border: 0; background: transparent; box-shadow: none; }
+body.minimal-ui .library-toolbar-row { margin-bottom: 8px; }
+.doc-card.minimal-doc-card .doc-card-kebab-menu button { display: block; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
+.doc-card.minimal-doc-card .doc-card-kebab-menu button:hover { background: var(--bg-hover); }
+.doc-card.minimal-doc-card .doc-card-title { min-width: 0; overflow-wrap: anywhere; }
+
+.minimal-move-dialog .modal-content { padding: 24px; }
+.minimal-move-dialog .custom-select-picker { margin: 12px 0 20px; }
+.minimal-move-dialog .modal-content { overflow: visible; }
+.doc-card.minimal-doc-card { overflow: visible; }
+.doc-card.minimal-doc-card:has(.doc-card-kebab-menu:not(.hidden)) { z-index: 3; }
+.doc-card.minimal-doc-card .doc-card-kebab-menu button { height: auto; min-height: 34px; }
+
+/* The page outlet owns scrolling; let the first card menu extend above the grid. */
+body.minimal-ui #library-grid { overflow: visible; }

@@ -189,5 +189,15 @@
   "customTheme.builtIn": "기본 프리셋",
   "customTheme.custom": "내 테마",
   "customTheme.original": "원문",
-  "customTheme.copySuffix": "복사본"
+  "customTheme.copySuffix": "복사본",
+  "minimalUi": "Minimal UI",
+  "minimalUiDescription": "라이브러리와 문서 탭만 표시합니다. 문서 뷰어 기능은 유지됩니다.",
+  "minimalMove": "폴더 이동",
+  "minimalRoot": "라이브러리 루트",
+  "minimalActions": "작업",
+  "minimalCancel": "취소",
+  "minimalRestore": "복원",
+  "minimalDeleteForever": "영구 삭제",
+  "minimalRename": "이름 변경",
+  "minimalDelete": "삭제"
 }
