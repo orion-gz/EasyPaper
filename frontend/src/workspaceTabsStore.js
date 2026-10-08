@@ -94,8 +94,9 @@ export function createTabsStore({ storage, key, mode = 'research', minimal = fal
       if (minimal && id === 'page:library') return api.active
       const index = tabs.findIndex(tab => tab.id === id)
       if (index < 0) return api.active
+      const visibleIndex = api.visibleTabs.findIndex(tab => tab.id === id)
       tabs.splice(index, 1)
-      if (activeTabId === id) activeTabId = (tabs[index] || tabs[index - 1])?.id || null
+      if (activeTabId === id) activeTabId = (api.visibleTabs[visibleIndex] || api.visibleTabs[visibleIndex - 1])?.id || null
       if (!tabs.length) return api.openTab('page', minimal ? 'library' : 'dashboard')
       if (minimal && !isMinimalTabAllowed(api.active || {})) activeTabId = 'page:library'
       notify()

@@ -1,15 +1,17 @@
 import { test, expect } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A, openReaderTools } from './helpers.js'
 
 const documents = [{ id: 'minimal-a', filename: 'Minimal.pdf', total_pages: 1,
   metadata: { title: 'Minimal paper', categories: ['hidden-tag'], primer_shown: true }, translated_pages: [] }]
-async function setup(page, minimal = true, folders = []) {
+async function setup(page, minimal = true, folders = [], beforeNavigation = async () => {}) {
   await page.addInitScript(enabled => {
     if (localStorage.getItem('easypaper_minimal_ui') === null) localStorage.setItem('easypaper_minimal_ui', String(enabled))
     localStorage.setItem('easypaper_library_view', 'list')
   }, minimal)
   await mockBaseRoutes(page, { documents, folders })
   await page.route('**/api/library/minimal-a/pdf', route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_A }))
+  await beforeNavigation()
   await gotoApp(page, { navigateToLibrary: !minimal })
 }
 async function toggle(page, checked) {
@@ -156,4 +158,56 @@ test('minimal card menus rename, move and delete through existing APIs', async (
   const deleted = page.waitForRequest(request => request.url().endsWith('/api/library/minimal-a') && request.method() === 'DELETE')
   await page.locator('.custom-confirm-modal-wrapper .confirm-btn').click()
   await deleted
+})
+
+test('enabling minimal while reading stops pending graph polling', async ({ page }) => {
+  let requests = 0
+  await setup(page, false, [], async () => {
+    await page.route('**/api/library/graph', route => {
+      requests++
+      return route.fulfill({ json: { nodes: [], edges: [], pending_docs: ['minimal-a'], pending_tag_docs: [] } })
+    })
+  })
+  await page.locator('.sidebar-nav-item[data-page="graph"]').click()
+  await expect(page.locator('#library-graph-pending-banner')).toBeVisible()
+  await page.evaluate(() => { location.hash = '#viewer?id=minimal-a' })
+  const reader = page.frameLocator('iframe[data-document-id="minimal-a"]')
+  await expect(reader.locator('#document-find')).toBeVisible({ timeout: 20000 })
+  await toggle(page, true)
+  await expect(page.locator('.workspace-tab[data-tab-id="page:graph"]')).toHaveCount(0)
+  const before = requests
+  // Wait beyond the graph's five-second polling interval.
+  await page.waitForTimeout(6000)
+  expect(requests).toBe(before)
+  await expect(reader.locator('#document-find')).toBeVisible()
+  await toggle(page, false)
+  await page.locator('.workspace-tab[data-tab-id="page:graph"] [role=tab]').click()
+  await expect.poll(() => requests).toBeGreaterThan(before)
+})
+
+test('inline rename is accessible and restores keyboard opening after cancel, no-op and failure', async ({ page }) => {
+  await setup(page)
+  const card = page.locator('.minimal-doc-card')
+  const opener = card.locator('.minimal-card-open')
+  const input = card.locator('.doc-card-title input')
+  for (const outcome of ['cancel', 'unchanged', 'failure']) {
+    await card.locator('.doc-card-kebab-btn').click()
+    await card.locator('.doc-edit-btn').click()
+    await expect(input).toBeFocused()
+    const results = await new AxeBuilder({ page }).include('.minimal-doc-card').withRules(['nested-interactive', 'label']).analyze()
+    expect(results.violations).toEqual([])
+    await input.click()
+    if (outcome === 'failure') {
+      await page.route('**/api/library/minimal-a/title', route => route.fulfill({ status: 500, json: { detail: 'Test failure' } }))
+      await input.fill('Changed')
+    }
+    await input.press(outcome === 'cancel' ? 'Escape' : 'Enter')
+    await expect(input).toHaveCount(0)
+    await expect(opener).toHaveAttribute('role', 'button')
+    await expect(opener).toBeFocused()
+    await expect(card.locator('.doc-card-title')).toHaveText('Minimal paper')
+    await expect(page.locator('iframe[data-document-id="minimal-a"]')).toHaveCount(0)
+  }
+  await opener.press('Enter')
+  await expect(page.frameLocator('iframe[data-document-id="minimal-a"]').locator('#document-find')).toBeVisible({ timeout: 20000 })
 })

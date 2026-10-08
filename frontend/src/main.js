@@ -59,6 +59,7 @@ syncMinimalUi()
 async function applyMinimalUi() {
   syncMinimalUi()
   if (isDocumentRuntime) return
+  if (isMinimalUi()) stopLibraryGraphPolling()
   if (state.currentWorkspacePage === 'library' && tabWorkspace?.active?.kind === 'page') {
     Object.assign(workspaceLibraryState[workspaceModeController.getMode()], {
       tab: state.currentLibraryTab, category: activeCategoryFilter, status: activeStatusFilter,
@@ -8436,12 +8437,16 @@ function renderGraphMyActivityStats(docId) {
   `
 }
 
-async function renderLibraryGraphTab() {
+function stopLibraryGraphPolling() {
   if (libraryGraphPollTimeout) {
     clearTimeout(libraryGraphPollTimeout)
     libraryGraphPollTimeout = null
   }
-  if (!libraryGraphCanvas) return
+}
+
+async function renderLibraryGraphTab() {
+  stopLibraryGraphPolling()
+  if (isMinimalUi() || !libraryGraphCanvas) return
   ensureGraphLayout()
   loadCachedGraphRecommendations()
   if (libraryGraphDetailPanel) {
@@ -8458,7 +8463,7 @@ async function renderLibraryGraphTab() {
   try {
     const data = await fetchLibraryGraph()
     // 응답을 기다리는 사이 사용자가 다른 탭으로 이동했다면 그리지 않는다.
-    if (state.currentWorkspacePage !== 'graph') return
+    if (isMinimalUi() || state.currentWorkspacePage !== 'graph') return
 
     if (libraryGraphCyInstance) {
       libraryGraphCyInstance.destroy()
@@ -8466,6 +8471,7 @@ async function renderLibraryGraphTab() {
     }
     libraryGraphCanvas.innerHTML = ''
     const { renderKnowledgeGraph } = await import('./knowledgeGraph.js')
+    if (isMinimalUi() || state.currentWorkspacePage !== 'graph') return
     libraryGraphCyInstance = renderKnowledgeGraph(libraryGraphCanvas, data, { onNodeClick: showGraphDetailPanel })
 
     rgGraphLoadedAt = new Date()
@@ -8480,7 +8486,7 @@ async function renderLibraryGraphTab() {
     if (focusNodeId) {
       sessionStorage.removeItem('easypaper_graph_focus_node')
       setTimeout(() => {
-        if (!libraryGraphCyInstance) return
+        if (isMinimalUi() || state.currentWorkspacePage !== 'graph' || !libraryGraphCyInstance) return
         const node = libraryGraphCyInstance.getElementById(focusNodeId)
         if (node && node.length) {
           node.trigger('tap')
@@ -8508,10 +8514,11 @@ async function renderLibraryGraphTab() {
     // 백그라운드 백필 결과가 반영되는지 확인한다(비어질 때까지 반복).
     if (pending.length > 0) {
       libraryGraphPollTimeout = setTimeout(() => {
-        if (state.currentWorkspacePage === 'graph') renderLibraryGraphTab()
+        if (!isMinimalUi() && state.currentWorkspacePage === 'graph') renderLibraryGraphTab()
       }, 5000)
     }
   } catch (err) {
+    if (isMinimalUi() || state.currentWorkspacePage !== 'graph') return
     console.error('지식 그래프 로드 실패:', err)
     libraryGraphCanvas.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">지식 그래프를 불러오지 못했습니다</p></div>'
   }
@@ -9262,6 +9269,22 @@ function wireDocItemEvents(container, doc, displayTitle) {
       const input = document.createElement('input')
     input.type = 'text'
     input.value = oldTitle
+    input.setAttribute('aria-label', t('settings:minimalRename'))
+    const openControl = container.querySelector('.minimal-card-open[role=button]')
+    if (openControl) {
+      openControl.removeAttribute('role')
+      openControl.removeAttribute('tabindex')
+      openControl.removeAttribute('aria-label')
+    }
+    function restoreTitle() {
+      titleEl.textContent = oldTitle
+      if (openControl) {
+        openControl.setAttribute('role', 'button')
+        openControl.setAttribute('tabindex', '0')
+        openControl.setAttribute('aria-label', oldTitle)
+        openControl.focus()
+      }
+    }
     input.style.width = '100%'
     input.style.padding = '4px 8px'
     input.style.background = 'var(--bg-elevated)'
@@ -9289,21 +9312,22 @@ function wireDocItemEvents(container, doc, displayTitle) {
           await renderLibrary()
         } catch (err) {
           showToast('제목 변경 실패: ' + err.message, 'error')
-          titleEl.textContent = oldTitle
+          restoreTitle()
         }
       } else {
-        titleEl.textContent = oldTitle
+        restoreTitle()
       }
     }
 
     input.addEventListener('keydown', async (ev) => {
+      ev.stopPropagation()
       if (ev.key === 'Enter') {
         ev.preventDefault()
         await save()
       } else if (ev.key === 'Escape') {
         ev.preventDefault()
         isSaving = true
-        titleEl.textContent = oldTitle
+        restoreTitle()
       }
     })
 
