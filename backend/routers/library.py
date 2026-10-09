@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, Response
 from pathlib import Path
+from datetime import date
 import mimetypes
 from services.ownership import require_owned_document
 from services.auth import get_current_user
@@ -345,6 +346,8 @@ async def get_library_dashboard(current_user: str = Depends(get_current_user)):
 class ReadingHeartbeatRequest(BaseModel):
     seconds: int
     category: str = "reading"
+    request_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    day: Optional[date] = None
 
 
 @router.get("/library/reading-stats")
@@ -935,7 +938,7 @@ async def post_reading_heartbeat(doc_id: str, body: ReadingHeartbeatRequest, cur
         raise HTTPException(status_code=400, detail="알 수 없는 category입니다.")
     seconds = max(0, min(body.seconds, 120))
     from services.db import db_add_reading_time
-    db_add_reading_time(doc_id, current_user, body.category, seconds)
+    db_add_reading_time(doc_id, current_user, body.category, seconds, request_id=body.request_id, recorded_day=body.day.isoformat() if body.day else None)
     return {"message": "ok"}
 
 

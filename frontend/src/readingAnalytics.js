@@ -1,3 +1,4 @@
+import { isReadingWindowActive } from './readingHeartbeat.js'
 import { globalReadingTimeActivityTracker } from './readingTimeActivity.js'
 
 // Reading Analytics Tracker (Frontend)
@@ -49,6 +50,7 @@ export class ReadingAnalyticsTracker {
     this.heartbeatTimer = null
     this.activeTimer = null
     this.isTracking = false
+    this.sessionGeneration = 0
 
     this.setupNetworkListeners()
   }
@@ -61,6 +63,8 @@ export class ReadingAnalyticsTracker {
 
   async startSession(paperId, totalPages = 0) {
     this.stopSession()
+    const generation = this.sessionGeneration
+    this.sessionId = null
     this.paperId = paperId
     this.version = 0
     this.activeReadingTime = 0
@@ -78,6 +82,7 @@ export class ReadingAnalyticsTracker {
       })
       if (res.ok) {
         const data = await res.json()
+        if (generation !== this.sessionGeneration) return
         this.sessionId = data.sessionId
         this.version = data.version || 0
         if (data.merged) {
@@ -99,9 +104,11 @@ export class ReadingAnalyticsTracker {
           }
         }
       } else {
+        if (generation !== this.sessionGeneration) return
         this.sessionId = 'local-' + Date.now()
       }
     } catch {
+      if (generation !== this.sessionGeneration) return
       this.sessionId = 'local-' + Date.now()
     }
 
@@ -121,6 +128,7 @@ export class ReadingAnalyticsTracker {
   }
 
   stopSession() {
+    this.sessionGeneration += 1
     if (this.activeTimer) {
       clearInterval(this.activeTimer)
       this.activeTimer = null
@@ -129,10 +137,9 @@ export class ReadingAnalyticsTracker {
       clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
     }
-    if (this.isTracking && this.sessionId && this.paperId) {
-      this.sendEndSession()
-    }
+    const pending = this.isTracking && this.sessionId && this.paperId ? this.sendEndSession() : Promise.resolve()
     this.isTracking = false
+    return pending
   }
 
   setCurrentPage(pageNumber) {
@@ -162,7 +169,7 @@ export class ReadingAnalyticsTracker {
   tickActiveReadingTime() {
     if (!this.isTracking || !this.paperId) return
     // Use the same PDF-vs-chat and idle state as Reading History heartbeats.
-    if (document.body?.dataset.workspaceInactive === 'true' || document.visibilityState !== 'visible' || !document.hasFocus()) return
+    if (!isReadingWindowActive()) return
     if (globalReadingTimeActivityTracker.getCategory({
       chatAvailable: !document.getElementById('chat-sidebar')?.classList.contains('hidden'),
     }) !== 'reading') return

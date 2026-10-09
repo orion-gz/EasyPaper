@@ -266,6 +266,8 @@ export function installDocumentRuntime(adapter) {
   errors.observe($('chat-messages'), { childList: true, subtree: true })
   const runtime = {
     ready: true,
+    attention: active => adapter.attention?.(active),
+    finish: () => adapter.finish?.(),
     find: () => readerTools.openFind(),
     snapshot,
     title: () => adapter.state.title || adapter.state.filename,

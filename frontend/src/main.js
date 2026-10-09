@@ -4,6 +4,7 @@ import { applyTheme, selectedTheme, loadThemes, saveThemes, THEME_STORAGE_KEY } 
 import { createThemeEditor } from './themes/themeEditor.js'
 import { documentUiCopy } from './documentUiCopy.js'
 import { createEasyEnglishController } from './easyEnglish.js'
+import { createReadingClock, createReadingOutbox, isReadingWindowActive } from './readingHeartbeat.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
 import { initializeDesktopWindow } from './desktopWindow.js'
 import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './documentWorkspaceRuntime.js'
@@ -1201,7 +1202,9 @@ async function checkAIStatus() {
 
 // ── 화면 전환 ─────────────────────────────────────
 function showLogin() {
+  pauseReadingHeartbeat()
   tabWorkspace?.hide()
+  state.username = null
   notifyWorkspace('auth-expired')
   stopLibraryPolling()
   viewerScreen.classList.remove('active')
@@ -1611,6 +1614,7 @@ async function initScrollViewer() {
 
   if (state.sessionId) {
     readingTimeActivityTracker.reset('reading')
+    tickReadingHeartbeat()
     globalAnalyticsTracker.startSession(state.sessionId, state.totalPages || 0)
   }
 
@@ -2166,20 +2170,12 @@ function updatePageDisplay(pageNum) {
 // 스크롤 중 페이지가 바뀔 때마다 API를 호출하지 않도록 디바운스한다.
 let saveLastReadPageTimer = null
 let pendingLastReadPage = null
+let lastReadPageSave = Promise.resolve()
 function scheduleSaveLastReadPage(pageNum) {
   if (!state.currentDocId || state.disableBookmark) return
   if (saveLastReadPageTimer) clearTimeout(saveLastReadPageTimer)
   pendingLastReadPage = pageNum
-  saveLastReadPageTimer = setTimeout(() => {
-    saveLastReadPageTimer = null
-    const p = pendingLastReadPage
-    pendingLastReadPage = null
-    // last_page와 함께 last_read_at(마지막으로 읽은 시각)도 갱신한다 - 완독
-    // 표시(read_at)를 하지 않고 읽던 중인 논문은 이 필드가 없으면 대시보드
-    // "최근 읽은 논문"의 정렬/날짜 표시가 read_at||created_at로 떨어져
-    // 계속 업로드 날짜("3일 전" 등)로만 보이는 문제가 있었다.
-    updateLibraryDocMetadata(state.currentDocId, { last_page: p, last_read_at: new Date().toISOString() }).catch(() => {})
-  }, 1500)
+  saveLastReadPageTimer = setTimeout(() => { void flushSaveLastReadPage() }, 1500)
 }
 
 // 뷰어를 나갈 때(뒤로가기 등) 위 디바운스가 아직 안 끝났으면 그대로 잊혀지진
@@ -2187,17 +2183,19 @@ function scheduleSaveLastReadPage(pageNum) {
 // 옛날 last_page로 렌더링을 끝내버린다 - "논문을 읽고 나오면 최근 읽은
 // 논문이 업데이트 안 된다"는 원인이 이것이었다. 화면을 벗어나기 직전 대기
 // 중인 저장을 즉시(await로) 끝내, 다음 화면이 최신 값을 읽어가게 한다.
-async function flushSaveLastReadPage() {
-  if (saveLastReadPageTimer === null) return
+async function flushSaveLastReadPage(force = false) {
+  if (saveLastReadPageTimer === null && !force) return lastReadPageSave
   clearTimeout(saveLastReadPageTimer)
   saveLastReadPageTimer = null
   const docId = state.currentDocId
-  const pageNum = pendingLastReadPage
+  const pageNum = pendingLastReadPage ?? state.currentPage
   pendingLastReadPage = null
   if (!docId || pageNum == null) return
-  try {
-    await updateLibraryDocMetadata(docId, { last_page: pageNum, last_read_at: new Date().toISOString() })
-  } catch {}
+  const metadata = { ...(!state.disableBookmark ? { last_page: pageNum } : {}), last_read_at: new Date().toISOString() }
+  // A previous debounce may already be saving. Serialize so a slow older page
+  // cannot overwrite the final position, and keep it alive when the tab closes.
+  lastReadPageSave = lastReadPageSave.then(() => updateLibraryDocMetadata(docId, metadata)).catch(() => {})
+  return lastReadPageSave
 }
 
 function updateProgressMini() {
@@ -3126,6 +3124,24 @@ async function checkAuthentication() {
   const auth = await checkAuthAPI()
   if (auth && auth.status === 'authenticated') {
     state.username = auth.username
+    // Delivery belongs to the shell, not to a disposable document iframe.
+    if (!isDocumentRuntime) {
+      window.__easypaperReadingOutboxes ||= new Map()
+      if (!window.__easypaperReadingOutboxes.has(auth.username)) {
+        const outbox = createReadingOutbox({
+          storage: localStorage, username: auth.username,
+          send: (...args) => state.username === outbox.username ? sendReadingHeartbeat(...args) : Promise.resolve(false),
+          onRename: username => { state.username = username },
+          onSaved: () => {
+            invalidateLibraryGetCache()
+            document.dispatchEvent(new Event('easypaper:reading-saved'))
+          },
+        })
+        window.__easypaperReadingOutboxes.set(auth.username, outbox)
+      }
+    }
+    readingOutbox = (isDocumentRuntime ? window.parent : window).__easypaperReadingOutboxes?.get(auth.username)
+    void readingOutbox?.flush()
     await syncLanguageSettingsFromServer()
     loginScreen.classList.remove('active')
     globalLogoutBtn.classList.remove('hidden')
@@ -3143,6 +3159,7 @@ async function checkAuthentication() {
         },
         pageLabel: page => workspaceModeController.getPageLabel(page),
         locale: getLocale,
+        invalidateReadData: invalidateLibraryGetCache,
         toast: showToast, upload: openDocumentSourceModal, authExpired: showLogin,
         hideChatDrawer: () => { chatDrawerEl?.classList.remove('open'); chatDrawerOverlayEl?.classList.remove('open'); chatDrawerEl?.setAttribute('aria-hidden', 'true') },
         flushPage: async () => {
@@ -3152,7 +3169,7 @@ async function checkAuthentication() {
               search: librarySearchInput?.value || '', detail: libraryDetailDoc,
             })
           }
-          await flushSaveLastReadPage()
+          await Promise.all([flushSaveLastReadPage(), flushReadingHeartbeat()])
         },
         showPage: async (page, preserve, isCurrent) => {
           loginScreen.classList.remove('active')
@@ -5679,6 +5696,13 @@ changeCredentialsForm.addEventListener('submit', async (e) => {
   try {
     const result = await changeCredentialsAPI(currentPassword, newUsername, newPassword)
     showToast(result.message || '아이디 및 비밀번호가 변경되었습니다.', 'success')
+    const owner = isDocumentRuntime ? window.parent : window
+    const oldUsername = readingOutbox?.username
+    readingOutbox?.rename(newUsername)
+    if (readingOutbox) {
+      owner.__easypaperReadingOutboxes?.delete(oldUsername)
+      owner.__easypaperReadingOutboxes?.set(newUsername, readingOutbox)
+    }
     state.username = newUsername
     closeOverlayModal(settingsModal)
   } catch (err) {
@@ -5715,14 +5739,22 @@ if (settingSkipLoginCheckbox) {
 // ── 읽기 시간 하트비트 (Reading History의 "읽은 시간" 실측) ──────────────
 // 뷰어/비교 화면이 화면에 보이고(Page Visibility) 창이 포커스된 동안만 5초
 // 간격으로 "현재 컨텍스트"(문서 id + reading/chat/compare 카테고리)에 초를
-// 적립하고, 20초마다 적립분을 서버로 보낸다. 단일 논문 뷰어에서는 사이드바의
+// 실제 경과 시간을 적립하고, 전환/종료 시와 20초마다 서버로 보낸다. 단일 논문 뷰어에서는 사이드바의
 // 열림 여부가 아니라 PDF/채팅 영역 중 사용자가 마지막으로 상호작용한 영역으로
 // 분류하며, 60초 동안 상호작용이 없으면 유휴 상태로 보고 적립하지 않는다.
 const READING_HEARTBEAT_TICK_SECONDS = 5
 const READING_HEARTBEAT_FLUSH_MS = 20000
-let readingHeartbeatBuffers = {} // `${docId}|${category}` -> 적립된 초
-let readingHeartbeatContextKey = null
+let readingOutbox
+const readingRemainders = new Map()
 const readingTimeActivityTracker = globalReadingTimeActivityTracker
+const readingClock = createReadingClock({ record: (docId, category, ms) => {
+  if (!readingOutbox) return
+  const key = `${docId}|${category}`
+  const total = (readingRemainders.get(key) || 0) + ms
+  const seconds = Math.floor(total / 1000)
+  readingRemainders.set(key, total - seconds * 1000)
+  if (seconds) readingOutbox.record(docId, category, seconds)
+} })
 
 function recordReadingTimeInteraction(event) {
   if (document.body.dataset.workspaceInactive === 'true' || !viewerScreen?.classList.contains('active')) return
@@ -5731,7 +5763,9 @@ function recordReadingTimeInteraction(event) {
     && !chatSidebar.classList.contains('hidden')
     && chatSidebar.contains(target)
     && !target.closest?.('#chat-close-btn')
+  tickReadingHeartbeat()
   readingTimeActivityTracker.record(isChatInteraction ? 'chat' : 'reading')
+  tickReadingHeartbeat()
 }
 
 // pointerdown은 클릭·선택·스크롤바 드래그·터치를, wheel/keydown/input은 각각
@@ -5742,7 +5776,7 @@ for (const eventName of ['pointerdown', 'wheel', 'keydown', 'input']) {
 }
 
 function isReadingTimeActive() {
-  if (document.body.dataset.workspaceInactive === 'true' || document.visibilityState !== 'visible' || !document.hasFocus()) return false
+  if (!isReadingWindowActive()) return false
   if (viewerScreen && viewerScreen.classList.contains('active') && state.sessionId) return true
   if (compareScreen && compareScreen.classList.contains('active') && compareChatState.docIds.length > 0) return true
   return false
@@ -5750,54 +5784,30 @@ function isReadingTimeActive() {
 
 function currentReadingContext() {
   if (viewerScreen && viewerScreen.classList.contains('active') && state.sessionId) {
-    const contextKey = `viewer|${state.sessionId}`
-    if (readingHeartbeatContextKey !== contextKey) {
-      readingHeartbeatContextKey = contextKey
-      readingTimeActivityTracker.reset('reading')
-    }
     const category = readingTimeActivityTracker.getCategory({
       chatAvailable: Boolean(chatSidebar && !chatSidebar.classList.contains('hidden')),
     })
     if (!category) return null
-    return { docIds: [state.sessionId], category }
+    return { docIds: [state.sessionId], category, until: readingTimeActivityTracker.activeUntil() }
   }
   if (compareScreen && compareScreen.classList.contains('active') && compareChatState.docIds.length > 0) {
-    readingHeartbeatContextKey = `compare|${compareChatState.docIds.join(',')}`
-    return { docIds: compareChatState.docIds, category: 'compare' }
+    return { docIds: compareChatState.docIds, category: 'compare', until: Date.now() + 5000 }
   }
   return null
 }
 
 function tickReadingHeartbeat() {
-  if (!isReadingTimeActive()) {
-    readingHeartbeatContextKey = null
-    return
-  }
-  const ctx = currentReadingContext()
-  if (!ctx) return
-  for (const docId of ctx.docIds) {
-    const key = `${docId}|${ctx.category}`
-    readingHeartbeatBuffers[key] = (readingHeartbeatBuffers[key] || 0) + READING_HEARTBEAT_TICK_SECONDS
-  }
+  readingClock.update(isReadingTimeActive() ? currentReadingContext() : null)
 }
 
-async function flushReadingHeartbeat({ keepalive = false } = {}) {
-  const buffers = readingHeartbeatBuffers
-  readingHeartbeatBuffers = {}
-  const entries = Object.entries(buffers).filter(([, seconds]) => seconds > 0)
-  if (entries.length === 0) return
+function flushReadingHeartbeat({ keepalive = false } = {}) {
+  tickReadingHeartbeat()
+  return readingOutbox?.flush({ keepalive }) || Promise.resolve()
+}
 
-  const results = await Promise.all(entries.map(async ([key, seconds]) => {
-    const sep = key.lastIndexOf('|')
-    const docId = key.slice(0, sep)
-    const category = key.slice(sep + 1)
-    const sent = await sendReadingHeartbeat(docId, seconds, category, { keepalive })
-    return { key, seconds, sent }
-  }))
-
-  for (const { key, seconds, sent } of results) {
-    if (!sent) readingHeartbeatBuffers[key] = (readingHeartbeatBuffers[key] || 0) + seconds
-  }
+function pauseReadingHeartbeat() {
+  readingClock.update(null)
+  void readingOutbox?.flush({ keepalive: true })
 }
 
 setInterval(tickReadingHeartbeat, READING_HEARTBEAT_TICK_SECONDS * 1000)
@@ -5810,12 +5820,17 @@ window.addEventListener('beforeunload', () => {
   globalAnalyticsTracker.stopSession()
 })
 window.addEventListener('pagehide', () => {
+  pauseReadingHeartbeat()
   if (state.sessionId && hasPendingAnnotationSync(state.sessionId)) {
     syncAnnotationsNow(state.sessionId, { keepalive: true, refresh: false })
   }
 })
-window.addEventListener('online', () => { if (state.sessionId) syncAnnotationsNow(state.sessionId) })
+window.addEventListener('online', () => { void readingOutbox?.flush(); if (state.sessionId) syncAnnotationsNow(state.sessionId) })
+window.addEventListener('blur', () => { if (!isReadingWindowActive()) pauseReadingHeartbeat() })
+window.addEventListener('focus', tickReadingHeartbeat)
 document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseReadingHeartbeat()
+  else tickReadingHeartbeat()
   if (document.visibilityState === 'visible' && state.sessionId) syncAnnotationsNow(state.sessionId)
 })
 
@@ -19074,16 +19089,29 @@ function installReaderWorkspaceRuntime() {
       chatResizer.classList.toggle('hidden', !panel)
       chatToggleBtn.classList.toggle('active', panel)
     },
+    finish: () => globalAnalyticsTracker.stopSession(),
+    attention: active => {
+      if (active) tickReadingHeartbeat()
+      else pauseReadingHeartbeat()
+    },
     flush: async () => {
-      await flushSaveLastReadPage()
+      await Promise.all([flushSaveLastReadPage(isReadingTimeActive()), flushReadingHeartbeat({ keepalive: true }), globalAnalyticsTracker.sendHeartbeat()])
       if (hasPendingAnnotationSync(state.sessionId)) {
         // Mutations are already persisted locally; server availability must not
         // block workspace navigation. Retry uses the existing durable queue.
         void syncAnnotationsNow(state.sessionId, { keepalive: true, refresh: false })
       }
     },
-    suspend: () => { easyEnglishController?.clearHighlight(); focusModeController?.clear(); suspendPDFRendering(); globalAnalyticsTracker.sendHeartbeat() },
-    resume: async () => { applyModeViewerSettings(state.currentDocumentMode); await resumePDFRendering(); easyEnglishController?.schedule() },
+    suspend: () => { pauseReadingHeartbeat(); easyEnglishController?.clearHighlight(); focusModeController?.clear(); suspendPDFRendering(); globalAnalyticsTracker.sendHeartbeat() },
+    resume: async () => {
+      readingTimeActivityTracker.reset('reading')
+      tickReadingHeartbeat()
+      // A closed runtime can be reopened while its final save is still pending.
+      if (!globalAnalyticsTracker.isTracking) void globalAnalyticsTracker.startSession(state.sessionId, state.totalPages || 0)
+      applyModeViewerSettings(state.currentDocumentMode)
+      await resumePDFRendering()
+      easyEnglishController?.schedule()
+    },
   })
 }
 

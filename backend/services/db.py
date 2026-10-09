@@ -537,6 +537,16 @@ def init_db():
         )
         """)
 
+        # Retrying a persisted heartbeat must not count its time twice. Keep the
+        # receipt and aggregate update in the same transaction.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reading_time_receipts (
+            username TEXT NOT NULL,
+            request_id TEXT NOT NULL,
+            PRIMARY KEY (username, request_id)
+        )
+        """)
+
         # 라이브러리 목록/문서 조회가 doc_id(+suffix)로 translations를,
         # doc_id로 documents/page_insights/chats를 매번 훑는데(문서 수 x
         # 페이지 수만큼 뻥튀기됨) 인덱스가 없어 전부 풀스캔이었다. 목록
@@ -783,6 +793,7 @@ def update_user_credentials(old_username: str, new_username: str, new_password_h
                 for table in (
                     "documents",
                     "reading_time",
+                    "reading_time_receipts",
                     "reading_sessions",
                     "reading_page_evidence",
                     "paper_reading_stats",
@@ -2126,7 +2137,7 @@ def db_get_memo_counts_for_docs(doc_ids: List[str]) -> Dict[str, int]:
     return counts
 
 
-def db_add_reading_time(doc_id: str, username: str, category: str, seconds: int) -> None:
+def db_add_reading_time(doc_id: str, username: str, category: str, seconds: int, request_id: Optional[str] = None, recorded_day: Optional[str] = None) -> None:
     """뷰어/비교 화면 하트비트로 들어온 경과 초를 (doc_id, username, 오늘 날짜,
     category) 버킷에 누적한다. 하루 단위로 쌓아두면 캘린더 히트맵/기간별 통계를
     reading_time만으로 바로 집계할 수 있다.
@@ -2134,10 +2145,17 @@ def db_add_reading_time(doc_id: str, username: str, category: str, seconds: int)
     현재 제목을 조회해 doc_title 컬럼에 스냅샷한다."""
     if seconds <= 0:
         return
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = recorded_day or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     now = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         cursor = conn.cursor()
+        if request_id:
+            cursor.execute(
+                "INSERT OR IGNORE INTO reading_time_receipts (username, request_id) VALUES (?, ?)",
+                (username, request_id),
+            )
+            if cursor.rowcount == 0:
+                return
         # 논문 제목 스냅샷: 영구 삭제 후에도 제목을 복원하기 위해 저장
         doc_title: Optional[str] = None
         try:

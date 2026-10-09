@@ -84,12 +84,24 @@ export function createWorkspaceTabs(adapter) {
       if (runtime?.ready) record.store.update(id, { reading: runtime.snapshot(), title: runtime.title() })
     }
   }
-  function flushFrame(record, runtime) {
+  let readingRefreshTimer
+  function refreshReadingPages() {
+    adapter.invalidateReadData?.()
+    clearTimeout(readingRefreshTimer)
+    readingRefreshTimer = setTimeout(() => {
+      if (shell.hidden || !['page:history', 'page:dashboard', 'page:library'].includes(visibleId)) return
+      // Reuse navigation's generation guard; a late save must not reopen a page.
+      const id = visibleId
+      enqueue(() => { if (id === visibleId && !shell.hidden) return activate(id, { push: false }) })
+    }, 50)
+  }
+  document.addEventListener('easypaper:reading-saved', refreshReadingPages)
+  function flushFrame(record, runtime, closing = false) {
     // Keep the iframe alive until all saves finish when the tab is closed.
-    const pending = Promise.all([record.pendingFlush, runtime.flush()])
+    const pending = Promise.all([record.pendingFlush, runtime.flush(), closing ? runtime.finish?.() : null])
     record.pendingFlush = pending
     const clear = () => { if (record.pendingFlush === pending) record.pendingFlush = null }
-    pending.then(clear, error => { clear(); report(error) })
+    pending.then(() => { clear(); refreshReadingPages() }, error => { clear(); report(error) })
     return pending
   }
   async function leaveCurrent() {
@@ -247,7 +259,7 @@ export function createWorkspaceTabs(adapter) {
     const record = frames.get(id)
     const runtime = record?.frame.contentWindow?.__easypaperDocument
     if (active) await leaveCurrent()
-    else if (runtime?.ready) flushFrame(record, runtime)
+    if (runtime?.ready) flushFrame(record, runtime, true)
     store.closeTab(id)
     if (record) {
       record.closed = true
@@ -335,10 +347,21 @@ export function createWorkspaceTabs(adapter) {
   document.addEventListener('easypaper:locale-changed', () => {
     for (const [, record] of allFrames()) record.frame.contentWindow?.__easypaperDocument?.syncAppearance?.(document.body.classList.contains('light-theme'), adapter.locale())
   })
-  window.addEventListener('pagehide', snapshotFrames)
+  window.addEventListener('pagehide', () => {
+    snapshotFrames()
+    for (const [, record] of allFrames()) record.frame.contentWindow?.__easypaperDocument?.attention(false)
+  })
+  window.addEventListener('blur', () => {
+    // Focusing an iframe also emits blur on the shell; it is still focused.
+    if (!document.hasFocus()) frames.get(visibleId)?.frame.contentWindow?.__easypaperDocument?.attention(false)
+  })
+  window.addEventListener('focus', () => {
+    frames.get(visibleId)?.frame.contentWindow?.__easypaperDocument?.attention(true)
+  })
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) snapshotFrames()
     const runtime = frames.get(visibleId)?.frame.contentWindow?.__easypaperDocument
+    runtime?.attention(!document.hidden)
     runtime?.setActive(!document.hidden)
   })
   // Only trusted child runtimes can publish status or request navigation.
@@ -499,7 +522,15 @@ export function createWorkspaceTabs(adapter) {
     hide() {
       ++generation
       snapshotFrames()
-      for (const [, record] of allFrames()) record.frame.remove()
+      for (const [, record] of allFrames()) {
+        const runtime = record.frame.contentWindow?.__easypaperDocument
+        runtime?.attention(false)
+        if (runtime?.ready) {
+          // Keep saves alive even when the workspace is being hidden.
+          flushFrame(record, runtime, true).then(() => record.frame.remove(), () => record.frame.remove())
+          record.frame.hidden = true
+        } else record.frame.remove()
+      }
       scopes.clear()
       frames.clear()
       shell.hidden = true

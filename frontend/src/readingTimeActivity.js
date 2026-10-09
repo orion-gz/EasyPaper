@@ -27,7 +27,7 @@ export function createReadingTimeActivityTracker({
     return at - timestamp <= idleMs ? category : null
   }
 
-  return { record, reset, getCategory }
+  return { record, reset, getCategory, activeUntil: () => Math.max(activityAt.reading, activityAt.chat) + idleMs }
 }
 
 export const globalReadingTimeActivityTracker = createReadingTimeActivityTracker()
