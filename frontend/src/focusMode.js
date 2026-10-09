@@ -244,6 +244,7 @@ export function createFocusMagnification(pair, viewportRects, scale) {
     const dx = Math.max(limits.left + insetX - (left - width * (effectiveScale - 1) / 2), Math.min(0, limits.right - insetX - (left + width * (effectiveScale + 1) / 2)))
     const dy = Math.max(limits.top + insetY - (top - height * (effectiveScale - 1) / 2), Math.min(0, limits.bottom - insetY - (top + height * (effectiveScale + 1) / 2)))
     Object.assign(group.style, { position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`, transform: `translate(${dx}px, ${dy}px) scale(${effectiveScale})`, transformOrigin: 'center' })
+    group.focusTransform = { left, top, width, height, dx, dy, scale: effectiveScale }
     group.focusRects = visible.map(rect => ({
       left: left + dx + (rect.left - left - width / 2) * effectiveScale + width / 2,
       top: top + dy + (rect.top - top - height / 2) * effectiveScale + height / 2,
@@ -312,6 +313,7 @@ export class FocusModeController {
     Object.assign(this, { root, resolvePair, listSentences, announce, notifyFallback, releaseDelay })
     this.settings = normalizeFocusSettings(); this.current = null; this.pinned = false
     this.filteredElements = new Map(); this.hiddenMemos = new Map()
+    this.previewAnchors = new Map()
     this.previews = new Map(); this.activePreviews = new Set()
     this.onKeyDown = event => this.handleKeyDown(event); this.onViewportChange = () => this.scheduleRender()
     this.onLeave = () => this.leave()
@@ -353,6 +355,32 @@ export class FocusModeController {
     this.restorePreviewLayout(element)
     this.previews.set(element, { anchor, hide })
     this.scheduleRender()
+  }
+  restorePreviewAnchors() {
+    for (const [anchor, styles] of this.previewAnchors) {
+      for (const [property, original] of Object.entries(styles)) anchor.style.setProperty(property, original.value, original.priority)
+    }
+    this.previewAnchors.clear()
+  }
+  positionPreviewAnchors(groups, pair) {
+    this.restorePreviewAnchors()
+    const transform = groups.find(group => group.dataset.kind === 'source')?.focusTransform
+    if (!transform || this.settings.hideOverlays) return
+    const { left, top, width, height, dx, dy, scale } = transform
+    for (const anchor of this.root.querySelectorAll('[data-focus-start]')) {
+      if (!this.isPreviewAnchor(anchor, pair)) continue
+      const rect = anchor.getBoundingClientRect()
+      if (!anchor.offsetWidth || !anchor.offsetHeight) continue
+      const sx = rect.width / anchor.offsetWidth, sy = rect.height / anchor.offsetHeight
+      const x = left + dx + (rect.left - left - width / 2) * scale + width / 2
+      const y = top + dy + (rect.top - top - height / 2) * scale + height / 2
+      this.previewAnchors.set(anchor, Object.fromEntries(['transform', 'transform-origin'].map(property =>
+        [property, { value: anchor.style.getPropertyValue(property), priority: anchor.style.getPropertyPriority(property) }])))
+      // Move the real controls, retaining hover, click, keyboard and ARIA state.
+      // Client rectangles include PDF/app zoom; CSS translations do not.
+      anchor.style.setProperty('transform-origin', '0 0')
+      anchor.style.setProperty('transform', `translate(${(x - rect.left) / sx}px, ${(y - rect.top) / sy}px) scale(${scale})`)
+    }
   }
   restorePreviewLayout(element) {
     const preview = this.previews.get(element)
@@ -400,6 +428,7 @@ export class FocusModeController {
   }, this.releaseDelay) }
   cancelLeave() { clearTimeout(this.releaseTimer); this.releaseTimer = null }
   clear() {
+    this.restorePreviewAnchors()
     this.cancelLeave()
     for (const element of this.previews.keys()) this.restorePreviewLayout(element)
     this.activePreviews.clear()
@@ -522,6 +551,7 @@ export class FocusModeController {
     const copies = createFocusMagnification(pair, rects, this.settings.scale / 100)
     const erasures = copies.filter(element => element.classList.contains('focus-mode-erasure'))
     const groups = copies.filter(element => element.classList.contains('focus-mode-magnification'))
+    this.positionPreviewAnchors(groups, pair)
     const obstacles = [...rects, ...groups.flatMap(element => element.focusRects)]
     previews = previews.filter(element => this.positionPreview(element, obstacles))
     previewRects = previews.map(element => element.getBoundingClientRect())

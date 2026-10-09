@@ -17923,6 +17923,10 @@ if (viewerScrollContainer) {
     state.hoverSelectionDisabled = false;
 
     if (state.isSelectionDragging || isViewerScrolling()) return;
+    if (focusModeController.isPreviewAnchor(e.target.closest('[data-focus-start]'))) {
+      focusModeController.cancelLeave();
+      return;
+    }
 
     // overlay는 pointer-events:none으로 native 드래그를 방해하지 않는다.
     // 주석 hover 대상은 아래에서 textLayer 문자 위치로 판정한다.
