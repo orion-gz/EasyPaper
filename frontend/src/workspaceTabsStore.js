@@ -1,3 +1,4 @@
+import { isMinimalTabAllowed } from './minimalUi.js'
 // Persist only navigation and reading preferences, never document/chat contents.
 export const WORKSPACE_PAGES = ['dashboard', 'library', 'chats', 'notes', 'history', 'graph']
 export const tabKey = (kind, target) => `${kind}:${target}`
@@ -17,7 +18,7 @@ export function sanitizeReading(value = {}) {
   }
 }
 
-export function createTabsStore({ storage, key, mode = 'research', onStorageError = () => {} }) {
+export function createTabsStore({ storage, key, mode = 'research', minimal = false, onStorageError = () => {} }) {
   let tabs = []
   let activeTabId = null
   const listeners = new Set()
@@ -32,6 +33,15 @@ export function createTabsStore({ storage, key, mode = 'research', onStorageErro
   }
   const api = {
     get tabs() { return tabs },
+    get visibleTabs() { return minimal ? tabs.filter(isMinimalTabAllowed) : tabs },
+    setMinimal(enabled) {
+      minimal = enabled
+      if (minimal && !tabs.some(tab => tab.id === 'page:library')) {
+        tabs.unshift({ id: 'page:library', kind: 'page', target: 'library', title: 'Library' })
+      }
+      if (minimal && !isMinimalTabAllowed(api.active || {})) activeTabId = 'page:library'
+      notify()
+    },
     get activeTabId() { return activeTabId },
     get active() { return tabs.find(tab => tab.id === activeTabId) },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) },
@@ -54,11 +64,12 @@ export function createTabsStore({ storage, key, mode = 'research', onStorageErro
           activeTabId = tabs.some(tab => tab.id === saved.activeTabId) ? saved.activeTabId : tabs[0]?.id
         }
       } catch { tabs = [] }
-      if (!tabs.length) api.openTab('page', 'dashboard', 'Dashboard')
+      if (!tabs.length) api.openTab('page', minimal ? 'library' : 'dashboard')
+      if (minimal) api.setMinimal(true)
       return api.active
     },
     openTab(kind, target, title = target) {
-      if (!allowed(kind, target)) throw new Error('Unsupported workspace tab')
+      if (!allowed(kind, target) || (minimal && !isMinimalTabAllowed({ kind, target }))) throw new Error('Unsupported workspace tab')
       const id = tabKey(kind, target)
       let tab = tabs.find(item => item.id === id)
       if (!tab) {
@@ -73,18 +84,21 @@ export function createTabsStore({ storage, key, mode = 'research', onStorageErro
     },
     activateTab(id) {
       const tab = tabs.find(item => item.id === id)
-      if (!tab) return null
+      if (!tab || (minimal && !isMinimalTabAllowed(tab))) return null
       activeTabId = id
       if (tab.status === 'complete') tab.status = undefined
       notify()
       return tab
     },
     closeTab(id) {
+      if (minimal && id === 'page:library') return api.active
       const index = tabs.findIndex(tab => tab.id === id)
       if (index < 0) return api.active
+      const visibleIndex = api.visibleTabs.findIndex(tab => tab.id === id)
       tabs.splice(index, 1)
-      if (activeTabId === id) activeTabId = (tabs[index] || tabs[index - 1])?.id || null
-      if (!tabs.length) return api.openTab('page', 'dashboard', 'Dashboard')
+      if (activeTabId === id) activeTabId = (api.visibleTabs[visibleIndex] || api.visibleTabs[visibleIndex - 1])?.id || null
+      if (!tabs.length) return api.openTab('page', minimal ? 'library' : 'dashboard')
+      if (minimal && !isMinimalTabAllowed(api.active || {})) activeTabId = 'page:library'
       notify()
       return api.active
     },

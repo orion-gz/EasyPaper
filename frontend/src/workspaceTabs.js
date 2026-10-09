@@ -1,3 +1,4 @@
+import { isMinimalUi, isMinimalTabAllowed } from './minimalUi.js'
 import { createTabsStore, tabKey, WORKSPACE_PAGES, workspaceStorageKey } from './workspaceTabsStore.js'
 import { t } from './i18n.js'
 import { icon } from './icons.js'
@@ -110,7 +111,7 @@ export function createWorkspaceTabs(adapter) {
   function render() {
     const focusedId = tablist.contains(document.activeElement) ? document.activeElement.closest('[data-tab-id]')?.dataset.tabId : null
     tablist.replaceChildren()
-    for (const [index, tab] of store.tabs.entries()) {
+    for (const [index, tab] of store.visibleTabs.entries()) {
       const item = document.createElement('div')
       item.className = 'workspace-tab' + (tab.id === store.activeTabId ? ' active' : '')
       item.dataset.tabId = tab.id
@@ -144,7 +145,8 @@ export function createWorkspaceTabs(adapter) {
       close.setAttribute('aria-label', t('navigation:tabs.close', { title: title(tab) }))
       if (tab.id === store.activeTabId) close.setAttribute('aria-keyshortcuts', 'Control+W Meta+W')
       close.addEventListener('click', () => enqueue(() => closeTab(tab.id)))
-      item.append(button, close)
+      item.append(button)
+      if (!isMinimalUi() || tab.id !== 'page:library') item.append(close)
       item.addEventListener('dragstart', event => event.dataTransfer.setData('text/x-easypaper-tab', tab.id))
       item.addEventListener('dragover', event => event.preventDefault())
       item.addEventListener('drop', event => {
@@ -191,11 +193,12 @@ export function createWorkspaceTabs(adapter) {
     return record
   }
   async function activate(id, { push = true, route } = {}) {
-    const tab = store.tabs.find(item => item.id === id)
-    if (!tab) return
+    const tab = store.visibleTabs.find(item => item.id === id)
+    if (!tab || (isMinimalUi() && !isMinimalTabAllowed(tab))) return
     if (visibleId !== id) await leaveCurrent()
     store.activateTab(id)
-    if (route) store.update(id, { route })
+    if (isMinimalUi() && tab.kind === 'page') store.update(id, { route: '#library' })
+    else if (route) store.update(id, { route })
     const token = ++generation
     visibleId = id
     library.classList.remove('active')
@@ -239,6 +242,7 @@ export function createWorkspaceTabs(adapter) {
     render()
   }
   async function closeTab(id) {
+    if (isMinimalUi() && id === 'page:library') return
     const active = store.activeTabId === id
     const record = frames.get(id)
     const runtime = record?.frame.contentWindow?.__easypaperDocument
@@ -264,21 +268,21 @@ export function createWorkspaceTabs(adapter) {
   tablist.addEventListener('keydown', event => {
     const item = event.target.closest('[data-tab-id]')
     if (!item) return
-    const index = store.tabs.findIndex(tab => tab.id === item.dataset.tabId)
+    const index = store.visibleTabs.findIndex(tab => tab.id === item.dataset.tabId)
     let next
-    if (event.key === 'ArrowRight') next = (index + 1) % store.tabs.length
-    if (event.key === 'ArrowLeft') next = (index + store.tabs.length - 1) % store.tabs.length
+    if (event.key === 'ArrowRight') next = (index + 1) % store.visibleTabs.length
+    if (event.key === 'ArrowLeft') next = (index + store.visibleTabs.length - 1) % store.visibleTabs.length
     if (event.key === 'Home') next = 0
-    if (event.key === 'End') next = store.tabs.length - 1
+    if (event.key === 'End') next = store.visibleTabs.length - 1
     if (event.key === 'Delete') { event.preventDefault(); enqueue(() => closeTab(item.dataset.tabId)); return }
     if (next !== undefined) {
       event.preventDefault()
       if (event.altKey) {
-        if (event.key === 'ArrowLeft' && index === 0 || event.key === 'ArrowRight' && index === store.tabs.length - 1) return
+        if (event.key === 'ArrowLeft' && index === 0 || event.key === 'ArrowRight' && index === store.visibleTabs.length - 1) return
         const destination = event.key === 'ArrowRight' ? index + 2 : next
-        store.reorderTabs(item.dataset.tabId, store.tabs[destination]?.id)
+        store.reorderTabs(item.dataset.tabId, store.visibleTabs[destination]?.id)
       }
-      else enqueue(async () => { await activate(store.tabs[next].id); tablist.querySelector('[aria-selected="true"]')?.focus() })
+      else enqueue(async () => { await activate(store.visibleTabs[next].id); tablist.querySelector('[aria-selected="true"]')?.focus() })
     }
   })
   function handleTabShortcut(event) {
@@ -295,7 +299,7 @@ export function createWorkspaceTabs(adapter) {
     }
     if (!event.shiftKey && key === 'b') {
       event.preventDefault()
-      if (!event.repeat) adapter.toggleSidebar()
+      if (!event.repeat && !isMinimalUi()) adapter.toggleSidebar()
       return
     }
     if (event.shiftKey && key === 'm') {
@@ -305,13 +309,13 @@ export function createWorkspaceTabs(adapter) {
     }
     const cycling = event.key === 'Tab'
     const index = !event.shiftKey && /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : -1
-    if (!cycling && !store.tabs[index]) return
+    if (!cycling && !store.visibleTabs[index]) return
     event.preventDefault()
     const direction = event.shiftKey ? -1 : 1
     enqueue(async () => {
       if (shell.hidden || !store?.tabs.length) return
-      const current = store.tabs.findIndex(tab => tab.id === store.activeTabId)
-      const target = store.tabs[cycling ? (current + direction + store.tabs.length) % store.tabs.length : index]
+      const current = store.visibleTabs.findIndex(tab => tab.id === store.activeTabId)
+      const target = store.visibleTabs[cycling ? (current + direction + store.visibleTabs.length) % store.visibleTabs.length : index]
       if (!target) return
       if (target.id !== store.activeTabId) await activate(target.id)
       tablist.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true })
@@ -373,7 +377,7 @@ export function createWorkspaceTabs(adapter) {
     if (type === 'ready') {
       const runtime = record.frame.contentWindow.__easypaperDocument
       runtime.syncScale(Number(document.documentElement.style.zoom) || 1)
-      const tab = record.store.tabs.find(tab => tab.id === id)
+      const tab = record.store.visibleTabs.find(tab => tab.id === id)
       const refreshContext = record.refreshContext
       runtime.restore(refreshContext?.reading || tab?.reading).then(async () => {
         if (refreshContext) runtime.restoreDraft(refreshContext.draft)
@@ -403,6 +407,20 @@ export function createWorkspaceTabs(adapter) {
     })
   })
   const api = {
+    applyMinimal() {
+      return enqueue(async () => {
+        ++generation
+        for (const value of scopes.values()) {
+          value.store.setMinimal(isMinimalUi())
+          value.initializedPages.clear()
+        }
+        if (!store) return
+        adapter.hideChatDrawer()
+        await activate(store.activeTabId, { push: false })
+        const tab = store.active
+        history.replaceState({ screen: tab.kind === 'document' ? 'viewer' : 'library' }, '', tab.route || (tab.kind === 'document' ? `#viewer?id=${encodeURIComponent(tab.target)}` : `#${tab.target}`))
+      })
+    },
     async start(user, mode) {
       const nextScope = workspaceStorageKey(location.origin, user, mode)
       if (scope !== nextScope) {
@@ -417,7 +435,7 @@ export function createWorkspaceTabs(adapter) {
           frames = new Map()
           initializedPages = new Set()
           pageScroll = new Map()
-          store = createTabsStore({ storage: localStorage, key: scope, mode, onStorageError: () => {
+          store = createTabsStore({ storage: localStorage, key: scope, mode, minimal: isMinimalUi(), onStorageError: () => {
             if (!saveWarningShown) { saveWarningShown = true; adapter.toast(t('navigation:tabs.storageError'), 'warning') }
           } })
           store.restoreWorkspace()
@@ -425,6 +443,7 @@ export function createWorkspaceTabs(adapter) {
           scopes.set(scope, { store, frames, initializedPages, pageScroll })
         }
       }
+      store.setMinimal(isMinimalUi())
       shell.hidden = false
       render()
       const hash = location.hash
@@ -433,6 +452,7 @@ export function createWorkspaceTabs(adapter) {
     },
     openPage(page, { pushState = true } = {}) {
       return enqueue(async () => {
+        if (isMinimalUi() && page !== 'library') page = 'library'
         if (!WORKSPACE_PAGES.includes(page) || (adapter.mode() === 'general' && page === 'graph')) page = 'dashboard'
         await leaveCurrent()
         const tab = store.openTab('page', page, adapter.pageLabel(page))
@@ -455,9 +475,13 @@ export function createWorkspaceTabs(adapter) {
       if (typeof hash !== 'string' || !hash.startsWith('#')) return Promise.resolve()
       const [path, query] = hash.slice(1).split('?')
       const params = new URLSearchParams(query)
+      if (isMinimalUi() && !(path === 'library' || (path === 'viewer' && params.get('id')))) {
+        history.replaceState({ screen: 'library', page: 'library' }, '', '#library')
+        return api.openPage('library', { pushState: false })
+      }
       if (path === 'viewer' && params.get('id')) {
         const id = params.get('id')
-        return api.openDocument({ id, filename: store.tabs.find(tab => tab.id === tabKey('document', id))?.title || t('navigation:tabs.loading') }, push, hash)
+        return api.openDocument({ id, filename: store.visibleTabs.find(tab => tab.id === tabKey('document', id))?.title || t('navigation:tabs.loading') }, push, hash)
       }
       if (path === 'chat' || path === 'compare') {
         return enqueue(async () => {

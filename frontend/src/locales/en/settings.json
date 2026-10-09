@@ -189,5 +189,15 @@
   "customTheme.builtIn": "Presets",
   "customTheme.custom": "My themes",
   "customTheme.original": "Original",
-  "customTheme.copySuffix": "copy"
+  "customTheme.copySuffix": "copy",
+  "minimalUi": "Minimal UI",
+  "minimalUiDescription": "Show only the library and document tabs. All reader tools remain available.",
+  "minimalMove": "Move to folder",
+  "minimalRoot": "Library root",
+  "minimalActions": "Actions",
+  "minimalCancel": "Cancel",
+  "minimalRestore": "Restore",
+  "minimalDeleteForever": "Delete permanently",
+  "minimalRename": "Rename",
+  "minimalDelete": "Delete"
 }

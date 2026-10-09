@@ -1,3 +1,5 @@
+import { isMinimalUi, setMinimalUi, MINIMAL_UI_KEY } from './minimalUi.js'
+import './styles/minimal-ui.css'
 import { applyTheme, selectedTheme, loadThemes, saveThemes, THEME_STORAGE_KEY } from './themes/themeEngine.js'
 import { createThemeEditor } from './themes/themeEditor.js'
 import { documentUiCopy } from './documentUiCopy.js'
@@ -46,6 +48,39 @@ import { classificationModalMarkup, recommendedClassification } from './classifi
 import { renderChapterSummaryHtml, renderFullSummaryHtml } from './chapterSummaryView.js'
 
 let tabWorkspace = null
+// The host owns shell policy; storage events also cover settings in reader frames.
+function syncMinimalUi() {
+  const enabled = isMinimalUi()
+  document.body.classList.toggle('minimal-ui', enabled && !isDocumentRuntime)
+  const checkbox = document.getElementById('setting-minimal-ui')
+  if (checkbox) checkbox.checked = enabled
+}
+syncMinimalUi()
+async function applyMinimalUi() {
+  syncMinimalUi()
+  if (isDocumentRuntime) return
+  if (isMinimalUi()) stopLibraryGraphPolling()
+  if (state.currentWorkspacePage === 'library' && tabWorkspace?.active?.kind === 'page') {
+    Object.assign(workspaceLibraryState[workspaceModeController.getMode()], {
+      tab: state.currentLibraryTab, category: activeCategoryFilter, status: activeStatusFilter,
+      search: librarySearchInput?.value || '',
+    })
+  }
+  closeLibraryDetailPanel()
+  closeLibraryContextMenu()
+  clearDocSelection()
+  await tabWorkspace?.applyMinimal()
+}
+document.getElementById('setting-minimal-ui')?.addEventListener('change', async event => {
+  try {
+    setMinimalUi(event.target.checked)
+    await applyMinimalUi()
+  } catch (error) { syncMinimalUi(); showToast(error.message, 'error') }
+})
+window.addEventListener('storage', event => {
+  if (event.key === MINIMAL_UI_KEY || event.key === null) applyMinimalUi().catch(error => showToast(error.message, 'error'))
+})
+
 let documentLoadFailed = false
 if (isDocumentRuntime) document.body.classList.add('document-workspace-runtime')
 
@@ -3142,6 +3177,21 @@ async function checkAuthentication() {
           }
         },
       })
+      if (!$('minimal-shell-actions')) {
+        const actions = document.createElement('div')
+        actions.id = 'minimal-shell-actions'
+        actions.className = 'minimal-shell-actions'
+        for (const [target, glyph, label] of [['sidebar-settings-btn', 'settings', 'settings'], ['sidebar-theme-toggle-btn', 'sun', 'theme'], ['sidebar-logout-btn', 'logOut', 'logout']]) {
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.dataset.i18nAriaLabel = `navigation:${label}`
+          button.setAttribute('aria-label', t(`navigation:${label}`))
+          button.innerHTML = label === 'theme' ? $(target).querySelector('.sidebar-nav-icon').innerHTML : icon(glyph, 18)
+          button.addEventListener('click', () => $(target)?.click())
+          actions.append(button)
+        }
+        document.querySelector('.workspace-topnav-actions').append(actions)
+      }
       await tabWorkspace.start(state.username, workspaceModeController.getMode())
     } else if (location.hash && location.hash.startsWith('#viewer?id=')) {
       // 뷰어로 바로 진입하는 경로라 라이브러리 화면이 렌더링되지 않으므로,
@@ -5844,8 +5894,8 @@ async function loadLibraryCount() {
 function syncLibraryTabUI(activeTab, { resetFilters = true } = {}) {
   state.currentLibraryTab = activeTab
   if (resetFilters) {
-    activeCategoryFilter = 'ALL'
-    activeStatusFilter = 'all'
+    if (!isMinimalUi()) activeCategoryFilter = 'ALL'
+    if (!isMinimalUi()) activeStatusFilter = 'all'
   }
   closeLibraryDetailPanel()
 
@@ -5938,6 +5988,7 @@ async function showWorkspacePage(pageId, options = {}) {
   return renderWorkspacePage(pageId, options)
 }
 async function renderWorkspacePage(pageId, { pushState = true, preserve = false, isCurrent = () => true } = {}) {
+  if (isMinimalUi() && !isDocumentRuntime) pageId = 'library'
   if (!WORKSPACE_PAGES.includes(pageId)) pageId = 'dashboard'
   if (state.currentWorkspacePage === 'library' && pageId !== 'library') {
     const saved = workspaceLibraryState[workspaceModeController.getMode()]
@@ -5988,7 +6039,7 @@ async function renderWorkspacePage(pageId, { pushState = true, preserve = false,
       librarySearchInput.value = saved.search
       librarySearchInput.dispatchEvent(new Event('input'))
     }
-    if (preserve && saved.detail) openLibraryDetailPanel(saved.detail)
+    if (preserve && saved.detail && !isMinimalUi()) openLibraryDetailPanel(saved.detail)
   } else if (pageId === 'chats') {
     const { renderAiChatsPage } = await import('./pages/aiChatsPage.js')
     if (!isCurrent()) return
@@ -6094,6 +6145,7 @@ function getVisibleDocIds() {
 }
 
 function toggleDocSelection(docId) {
+  if (isMinimalUi()) return
   if (selectedDocIds.has(docId)) {
     selectedDocIds.delete(docId)
   } else {
@@ -6127,6 +6179,7 @@ function clearDocSelection() {
 }
 
 function replaceDocSelection(nextIds) {
+  if (isMinimalUi()) { clearDocSelection(); return }
   const affectedIds = new Set([...selectedDocIds, ...nextIds])
   selectedDocIds.clear()
   nextIds.forEach(id => selectedDocIds.add(id))
@@ -6277,6 +6330,7 @@ function initLibraryDragSelection() {
   }
 
   dragSurface.addEventListener('pointerdown', event => {
+    if (isMinimalUi()) return
     const selectionTop = filterRow.getBoundingClientRect().bottom
     if (
       event.button !== 0 ||
@@ -7125,7 +7179,7 @@ function sortDocsByMode(docs) {
 // 섞여 새로 봐야 할 논문을 찾기 번거롭다는 피드백에 따른 것. 완료 탭을 직접 볼
 // 때(activeStatusFilter === 'finished')는 원래 정렬 순서를 그대로 유지한다.
 function sortLibraryDocs(docs) {
-  if (state.currentLibraryTab === 'trash' || activeStatusFilter !== 'all') {
+  if (isMinimalUi() || state.currentLibraryTab === 'trash' || activeStatusFilter !== 'all') {
     return sortDocsByMode(docs)
   }
   const unfinished = docs.filter(d => getLibraryDocStatus(d) !== 'finished')
@@ -7262,7 +7316,7 @@ function navigateLibraryFolder(folderId, { pushHistory = true } = {}) {
   if (nextFolderId === activeLibraryFolderId && activeCategoryFilter === 'ALL') return
   clearDocSelection()
   activeLibraryFolderId = nextFolderId
-  activeCategoryFilter = 'ALL'
+  if (!isMinimalUi()) activeCategoryFilter = 'ALL'
   if (pushHistory) {
     history.pushState(
       { ...(history.state || {}), screen: 'library', page: 'library', libraryFolderId: nextFolderId },
@@ -7395,7 +7449,7 @@ function createFolderCard(folder) {
   card.title = 'Enter/F2: 이름 변경 · Delete/Backspace: 삭제 · Ctrl/Cmd+X: 잘라내기'
   card.dataset.folderId = folder.id
   card.style.setProperty('--folder-color', folder.color)
-  const isListView = libraryViewMode === 'list'
+  const isListView = !isMinimalUi() && libraryViewMode === 'list'
   const paperCount = currentLibraryDocs.filter(doc => (doc.folder_id || null) === folder.id).length
   const childFolderCount = libraryFolders.filter(candidate => (candidate.parent_id || null) === folder.id).length
   const menuHtml = `<button class="folder-card-menu" title="폴더 관리">${icon('moreVertical', 16)}</button><div class="folder-card-actions hidden"><button data-action="rename">이름 변경</button><button data-action="color">폴더 색상</button><button data-action="delete">폴더 삭제</button></div>`
@@ -7532,6 +7586,11 @@ function showLibraryContextMenu(event, { doc = null, folder = null } = {}) {
     ].join('')
   }
 
+  if (isMinimalUi()) {
+    menu.querySelectorAll('[data-action]').forEach(item => {
+      if (['details', 'select', 'select-all', 'read', 'favorite', 'clear-cache'].includes(item.dataset.action)) item.remove()
+    })
+  }
   document.body.appendChild(menu)
   libraryContextMenu = menu
   positionLibraryContextMenu(menu, event.clientX, event.clientY)
@@ -7764,7 +7823,7 @@ async function renderLibrary() {
     }
 
     if (activeCategoryFilter !== 'ALL' && !filterDefs.some(item => item.value === activeCategoryFilter)) {
-      activeCategoryFilter = 'ALL'
+      if (!isMinimalUi()) activeCategoryFilter = 'ALL'
     }
     if (filterDefs.length > 0) {
       const allBtn = document.createElement('button')
@@ -7772,7 +7831,7 @@ async function renderLibrary() {
       allBtn.dataset.category = 'ALL'
       allBtn.innerHTML = `${icon('book', 13, 'style="vertical-align:-2px;margin-right:3px"')}전체 (${docs.length})`
       allBtn.addEventListener('click', () => {
-        activeCategoryFilter = 'ALL'
+        if (!isMinimalUi()) activeCategoryFilter = 'ALL'
         filterLibraryCards(docs)
       })
       libraryCategoryFilters.appendChild(allBtn)
@@ -8378,12 +8437,16 @@ function renderGraphMyActivityStats(docId) {
   `
 }
 
-async function renderLibraryGraphTab() {
+function stopLibraryGraphPolling() {
   if (libraryGraphPollTimeout) {
     clearTimeout(libraryGraphPollTimeout)
     libraryGraphPollTimeout = null
   }
-  if (!libraryGraphCanvas) return
+}
+
+async function renderLibraryGraphTab() {
+  stopLibraryGraphPolling()
+  if (isMinimalUi() || !libraryGraphCanvas) return
   ensureGraphLayout()
   loadCachedGraphRecommendations()
   if (libraryGraphDetailPanel) {
@@ -8400,7 +8463,7 @@ async function renderLibraryGraphTab() {
   try {
     const data = await fetchLibraryGraph()
     // 응답을 기다리는 사이 사용자가 다른 탭으로 이동했다면 그리지 않는다.
-    if (state.currentWorkspacePage !== 'graph') return
+    if (isMinimalUi() || state.currentWorkspacePage !== 'graph') return
 
     if (libraryGraphCyInstance) {
       libraryGraphCyInstance.destroy()
@@ -8408,6 +8471,7 @@ async function renderLibraryGraphTab() {
     }
     libraryGraphCanvas.innerHTML = ''
     const { renderKnowledgeGraph } = await import('./knowledgeGraph.js')
+    if (isMinimalUi() || state.currentWorkspacePage !== 'graph') return
     libraryGraphCyInstance = renderKnowledgeGraph(libraryGraphCanvas, data, { onNodeClick: showGraphDetailPanel })
 
     rgGraphLoadedAt = new Date()
@@ -8422,7 +8486,7 @@ async function renderLibraryGraphTab() {
     if (focusNodeId) {
       sessionStorage.removeItem('easypaper_graph_focus_node')
       setTimeout(() => {
-        if (!libraryGraphCyInstance) return
+        if (isMinimalUi() || state.currentWorkspacePage !== 'graph' || !libraryGraphCyInstance) return
         const node = libraryGraphCyInstance.getElementById(focusNodeId)
         if (node && node.length) {
           node.trigger('tap')
@@ -8450,10 +8514,11 @@ async function renderLibraryGraphTab() {
     // 백그라운드 백필 결과가 반영되는지 확인한다(비어질 때까지 반복).
     if (pending.length > 0) {
       libraryGraphPollTimeout = setTimeout(() => {
-        if (state.currentWorkspacePage === 'graph') renderLibraryGraphTab()
+        if (!isMinimalUi() && state.currentWorkspacePage === 'graph') renderLibraryGraphTab()
       }, 5000)
     }
   } catch (err) {
+    if (isMinimalUi() || state.currentWorkspacePage !== 'graph') return
     console.error('지식 그래프 로드 실패:', err)
     libraryGraphCanvas.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">지식 그래프를 불러오지 못했습니다</p></div>'
   }
@@ -8773,51 +8838,53 @@ function updateDocItemProgress(container, doc) {
 }
 
 function filterLibraryCards(docs) {
+  const category = isMinimalUi() ? 'ALL' : activeCategoryFilter
+  const status = isMinimalUi() ? 'all' : activeStatusFilter
   currentLibraryDocs = docs
   libraryGrid.innerHTML = ''
-  libraryGrid.classList.toggle('list-view', libraryViewMode === 'list')
+  libraryGrid.classList.toggle('list-view', !isMinimalUi() && libraryViewMode === 'list')
 
-  libraryGrid.classList.toggle('compact-view', libraryViewMode === 'compact')
+  libraryGrid.classList.toggle('compact-view', !isMinimalUi() && libraryViewMode === 'compact')
   // Update filter buttons active class
   document.querySelectorAll('.category-filter-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.category === activeCategoryFilter)
+    btn.classList.toggle('active', btn.dataset.category === category)
   })
-  $('library-breadcrumb')?.classList.toggle('global-filter-active', activeCategoryFilter !== 'ALL')
+  $('library-breadcrumb')?.classList.toggle('global-filter-active', category !== 'ALL')
 
   // 카테고리 칩은 폴더 경계를 무시한 전역 필터다. '전체'일 때만 현재 폴더를 적용한다.
-  let filteredDocs = state.currentLibraryTab === 'trash' || activeCategoryFilter !== 'ALL'
+  let filteredDocs = state.currentLibraryTab === 'trash' || category !== 'ALL'
     ? docs
     : docs.filter(doc => (doc.folder_id || null) === activeLibraryFolderId)
 
-  if (activeCategoryFilter.startsWith('type:')) {
-    const selectedType = activeCategoryFilter.slice(5)
+  if (category.startsWith('type:')) {
+    const selectedType = category.slice(5)
     filteredDocs = filteredDocs.filter(doc => (doc.document_type || 'other') === selectedType)
-  } else if (activeCategoryFilter !== 'ALL') {
-    filteredDocs = filteredDocs.filter(doc => (doc.metadata?.categories || []).includes(activeCategoryFilter))
+  } else if (category !== 'ALL') {
+    filteredDocs = filteredDocs.filter(doc => (doc.metadata?.categories || []).includes(category))
   }
 
   // 상태 필터(전체/읽지 않음/읽는 중/완료/즐겨찾기) 적용 - 휴지통 탭에는 없는 개념이라 건너뛴다.
-  if (state.currentLibraryTab !== 'trash' && activeStatusFilter !== 'all') {
+  if (state.currentLibraryTab !== 'trash' && status !== 'all') {
     const favIds = getFavoriteIds()
     filteredDocs = filteredDocs.filter(doc => (
-      activeStatusFilter === 'favorites' ? favIds.has(doc.id) : getLibraryDocStatus(doc) === activeStatusFilter
+      status === 'favorites' ? favIds.has(doc.id) : getLibraryDocStatus(doc) === status
     ))
   }
 
   filteredDocs = sortLibraryDocs(filteredDocs)
 
-  const childFolders = state.currentLibraryTab === 'trash' || activeCategoryFilter !== 'ALL'
+  const childFolders = state.currentLibraryTab === 'trash' || category !== 'ALL'
     ? []
     : libraryFolders.filter(folder => (folder.parent_id || null) === activeLibraryFolderId)
   if (filteredDocs.length === 0 && childFolders.length === 0) {
     const variant = state.currentLibraryTab === 'trash'
       ? 'trash'
-      : (activeStatusFilter !== 'all' ? activeStatusFilter : (docs.length > 0 ? 'filtered' : 'library'))
+      : (status !== 'all' ? status : (docs.length > 0 ? 'filtered' : 'library'))
     libraryGrid.appendChild(createEmptyState(variant)); return
   }
 
   childFolders.forEach(folder => libraryGrid.appendChild(createFolderCard(folder)))
-  const createItem = libraryViewMode === 'list' ? createDocListRow : createDocCard
+  const createItem = !isMinimalUi() && libraryViewMode === 'list' ? createDocListRow : createDocCard
   filteredDocs.forEach(doc => libraryGrid.appendChild(createItem(doc)))
 }
 
@@ -8827,8 +8894,8 @@ let librarySearchDebounceTimer = null
 
 function renderLibrarySearchResults(docs, query) {
   libraryGrid.innerHTML = ''
-  libraryGrid.classList.toggle('list-view', libraryViewMode === 'list')
-  libraryGrid.classList.toggle('compact-view', libraryViewMode === 'compact')
+  libraryGrid.classList.toggle('list-view', !isMinimalUi() && libraryViewMode === 'list')
+  libraryGrid.classList.toggle('compact-view', !isMinimalUi() && libraryViewMode === 'compact')
 
   if (docs.length === 0) {
     const el = document.createElement('div')
@@ -8838,7 +8905,7 @@ function renderLibrarySearchResults(docs, query) {
       <p style="font-size:13px;color:var(--text-muted);margin-top:8px">${workspaceModeController.getMode() === 'general' ? '문서 제목, 파일명, 번역된 본문 내용을 검색합니다' : '논문 제목, 파일명, 번역된 본문 내용을 검색합니다'}</p>`
     libraryGrid.appendChild(el)
   } else {
-    const createItem = libraryViewMode === 'list' ? createDocListRow : createDocCard
+    const createItem = !isMinimalUi() && libraryViewMode === 'list' ? createDocListRow : createDocCard
     docs.forEach(doc => libraryGrid.appendChild(createItem(doc)))
   }
 
@@ -9110,9 +9177,13 @@ function wireDocItemEvents(container, doc, displayTitle) {
     kebabBtn.addEventListener('click', (e) => {
       e.stopPropagation()
       const isHidden = kebabMenu.classList.contains('hidden')
-      document.querySelectorAll('.doc-card-kebab-menu').forEach(m => m.classList.add('hidden'))
+      document.querySelectorAll('.doc-card-kebab-menu').forEach(m => {
+        m.classList.add('hidden')
+        m.parentElement.querySelector('.doc-card-kebab-btn')?.setAttribute('aria-expanded', 'false')
+      })
       if (isHidden) {
         kebabMenu.classList.remove('hidden')
+        kebabBtn.setAttribute('aria-expanded', 'true')
       }
     })
   }
@@ -9198,6 +9269,22 @@ function wireDocItemEvents(container, doc, displayTitle) {
       const input = document.createElement('input')
     input.type = 'text'
     input.value = oldTitle
+    input.setAttribute('aria-label', t('settings:minimalRename'))
+    const openControl = container.querySelector('.minimal-card-open[role=button]')
+    if (openControl) {
+      openControl.removeAttribute('role')
+      openControl.removeAttribute('tabindex')
+      openControl.removeAttribute('aria-label')
+    }
+    function restoreTitle() {
+      titleEl.textContent = oldTitle
+      if (openControl) {
+        openControl.setAttribute('role', 'button')
+        openControl.setAttribute('tabindex', '0')
+        openControl.setAttribute('aria-label', oldTitle)
+        openControl.focus()
+      }
+    }
     input.style.width = '100%'
     input.style.padding = '4px 8px'
     input.style.background = 'var(--bg-elevated)'
@@ -9225,21 +9312,22 @@ function wireDocItemEvents(container, doc, displayTitle) {
           await renderLibrary()
         } catch (err) {
           showToast('제목 변경 실패: ' + err.message, 'error')
-          titleEl.textContent = oldTitle
+          restoreTitle()
         }
       } else {
-        titleEl.textContent = oldTitle
+        restoreTitle()
       }
     }
 
     input.addEventListener('keydown', async (ev) => {
+      ev.stopPropagation()
       if (ev.key === 'Enter') {
         ev.preventDefault()
         await save()
       } else if (ev.key === 'Escape') {
         ev.preventDefault()
         isSaving = true
-        titleEl.textContent = oldTitle
+        restoreTitle()
       }
     })
 
@@ -9309,7 +9397,84 @@ function renderViewerProcessingBadge(processing) {
   el.textContent = badge.textContent
   el.title = badge.title
 }
+
+function createMinimalDocCard(doc) {
+  const displayTitle = doc.metadata?.title || doc.filename
+  const trash = state.currentLibraryTab === 'trash'
+  const card = document.createElement('div')
+  card.className = 'doc-card minimal-doc-card'
+  card.dataset.id = doc.id
+  card.dataset.documentMode = doc.document_mode || 'research'
+  card.innerHTML = `
+    <div class="minimal-card-open" ${trash ? '' : 'role="button" tabindex="0"'} aria-label="${escapeHtml(displayTitle)}">
+      <div class="lib-card-thumb"><img src="/api/library/${encodeURIComponent(doc.id)}/cover" alt="" loading="lazy"><div class="lib-card-thumb-fallback">${icon('fileText', 18)}</div></div>
+      <div class="doc-card-title">${escapeHtml(displayTitle)}</div>
+    </div>
+    <div class="doc-card-kebab-wrapper">
+      <button type="button" class="doc-card-kebab-btn" aria-label="${escapeHtml(t('settings:minimalActions'))}" aria-expanded="false">${icon('moreVertical', 16)}</button>
+      <div class="doc-card-kebab-menu hidden">
+        ${trash ? `<button class="doc-restore-btn">${t('settings:minimalRestore')}</button><button class="doc-permanent-delete-btn">${t('settings:minimalDeleteForever')}</button>` : `<button class="doc-edit-btn">${t('settings:minimalRename')}</button><button class="minimal-move-btn">${t('settings:minimalMove')}</button><button class="doc-card-delete-btn">${t('settings:minimalDelete')}</button>`}
+      </div>
+    </div>`
+  card.querySelector('img').addEventListener('error', event => event.target.closest('.lib-card-thumb').classList.add('cover-fallback'))
+  // Keep inline title editing and destructive actions on the shared code path.
+  wireDocItemEvents(card, doc, displayTitle)
+  card.querySelector('.minimal-card-open').addEventListener('keydown', event => {
+    if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return
+    event.preventDefault()
+    if (!trash) openFromLibrary(doc)
+  })
+  card.querySelector('.minimal-card-open').addEventListener('click', event => {
+    if (event.target.closest('input')) event.stopPropagation()
+  })
+  const menu = card.querySelector('.doc-card-kebab-menu')
+  menu.addEventListener('click', () => {
+    menu.classList.add('hidden')
+    card.querySelector('.doc-card-kebab-btn').setAttribute('aria-expanded', 'false')
+  }, true)
+  card.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { menu.classList.add('hidden'); card.querySelector('.doc-card-kebab-btn').setAttribute('aria-expanded', 'false'); card.querySelector('.doc-card-kebab-btn').focus() }
+  })
+  card.querySelector('.minimal-move-btn')?.addEventListener('click', async event => {
+    event.stopPropagation()
+    menu.classList.add('hidden')
+    const modal = document.createElement('div')
+    modal.className = 'modal-overlay is-visible minimal-move-dialog'
+    modal.innerHTML = `<div class="modal-content" role="dialog" aria-modal="true" aria-label="${escapeHtml(t('settings:minimalMove'))}">
+      <label for="minimal-move-folder">${t('settings:minimalMove')}</label><select id="minimal-move-folder" class="form-select"><option value="">${t('settings:minimalRoot')}</option>${libraryFolders.map(folder => `<option value="${escapeHtml(folder.id)}">${escapeHtml(folderPath(folder.id).map(item => item.name).join(' / '))}</option>`).join('')}</select>
+      <button type="button" data-cancel>${t('settings:minimalCancel')}</button><button type="button" data-move>${t('settings:minimalMove')}</button></div>`
+    document.body.append(modal)
+    const select = modal.querySelector('select')
+    select.value = doc.folder_id || ''
+    enhanceSelects(modal)
+    const picker = select._customSelectPicker
+    picker.button.focus()
+    const close = () => { modal.remove(); card.querySelector('.doc-card-kebab-btn').focus() }
+    modal.querySelector('[data-cancel]').onclick = close
+    modal.addEventListener('keydown', event => {
+      if (event.defaultPrevented) return
+      if (event.key === 'Escape') { event.preventDefault(); close() }
+      if (event.key === 'Tab') {
+        const controls = [picker.button, ...modal.querySelectorAll('[data-cancel], [data-move]')].filter(button => !button.disabled)
+        const index = controls.indexOf(document.activeElement)
+        event.preventDefault()
+        picker.close()
+        controls[(index + (event.shiftKey ? controls.length - 1 : 1)) % controls.length].focus()
+      }
+    })
+    const moveButton = modal.querySelector('[data-move]')
+    moveButton.onclick = async () => {
+      moveButton.disabled = true
+      try { await moveDocumentsWithUndo([doc.id], select.value || null); close(); await renderLibrary() }
+      catch (error) { showToast(error.message, 'error') }
+      finally { moveButton.disabled = false }
+    }
+  })
+  return card
+}
+
 function createDocCard(doc) {
+  if (isMinimalUi()) return createMinimalDocCard(doc)
   const d = prepareDocItemHtml(doc)
   const isFav = isFavoriteDoc(doc.id)
   const docMode = doc.document_mode || 'research'
@@ -9735,6 +9900,7 @@ function ensureLibraryDetailPanel() {
 }
 
 function openLibraryDetailPanel(doc) {
+  if (isMinimalUi()) return
   ensureLibraryDetailPanel()
   libraryDetailDoc = doc
   libraryDetailLoadedTabs = new Set(['overview'])
@@ -18434,7 +18600,7 @@ async function handleRouting() {
       const pageId = rawPage
       if (pageId === 'library' && history.state?.screen === 'library' && history.state?.page === 'library') {
         activeLibraryFolderId = history.state.libraryFolderId || null
-        activeCategoryFilter = 'ALL'
+        if (!isMinimalUi()) activeCategoryFilter = 'ALL'
       }
       console.log("[Router] Routing to workspace page:", pageId, "Viewer active:", viewerScreen.classList.contains('active'), "Library active:", libraryScreen.classList.contains('active'))
       if (viewerScreen.classList.contains('active') || !libraryScreen.classList.contains('active')) {
@@ -18461,7 +18627,7 @@ window.addEventListener('popstate', (e) => {
     if (requestedFolderId && !folderExists) {
       history.replaceState({ ...(e.state || {}), screen: 'library', page: 'library', libraryFolderId: null }, '', location.href)
     }
-    activeCategoryFilter = 'ALL'
+    if (!isMinimalUi()) activeCategoryFilter = 'ALL'
     clearDocSelection()
     if (state.currentWorkspacePage === 'library') {
       filterLibraryCards(currentLibraryDocs)
