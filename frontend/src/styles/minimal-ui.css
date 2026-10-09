@@ -9,23 +9,24 @@ body.minimal-ui #lib-compare-toggle-btn,
 body.minimal-ui #lib-select-toolbar { display: none !important; }
 body.minimal-ui #tab-workspace .workspace-mode-switch-compact { display: grid; flex-shrink: 0; }
 body.minimal-ui.desktop-window #workspace-tab-panel { grid-column: 1 / -1; }
-.minimal-shell-actions { display: none; align-items: center; gap: 4px; }
+.minimal-shell-actions { display: none; align-items: center; gap: 8px; }
 body.minimal-ui .minimal-shell-actions { display: flex; }
-.minimal-shell-actions button { background: transparent; color: var(--text-primary); border: 0; padding: 8px; cursor: pointer; }
-.doc-card.minimal-doc-card { padding: 16px; }
-.doc-card.minimal-doc-card .minimal-card-open { display: flex; align-items: center; gap: 14px; cursor: pointer; min-height: 80px; }
+.minimal-shell-actions button { background: transparent; color: var(--text-primary); border: 0; padding: 0; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 9px; cursor: pointer; }
+.doc-card.minimal-doc-card { flex-direction: row; align-items: center; gap: 8px; padding: 14px; border-radius: 14px; box-shadow: none; }
+.doc-card.minimal-doc-card .minimal-card-open { display: flex; align-items: center; gap: 12px; cursor: pointer; min-width: 0; flex: 1; min-height: 68px; }
 .doc-card.minimal-doc-card .lib-card-thumb { flex-shrink: 0; }
-.doc-card.minimal-doc-card .doc-card-kebab-wrapper { margin-left: auto; }
+.doc-card.minimal-doc-card .doc-card-kebab-wrapper { flex: 0 0 auto; margin-left: auto; }
 .doc-card.minimal-doc-card :focus-visible { outline: 2px solid var(--control-accent); outline-offset: 2px; }
-body.minimal-ui #tab-workspace .workspace-topnav { gap: 4px; padding-right: 4px; }
-body.minimal-ui .workspace-topnav-actions { gap: 4px; }
+body.minimal-ui #tab-workspace .workspace-topnav { gap: 16px; padding-right: 20px; }
+body.minimal-ui .workspace-topnav-actions { gap: 16px; }
 body.minimal-ui .library-header-subtitle { display: none; }
-body.minimal-ui .library-header { margin-bottom: 0; }
-body.minimal-ui .library-folder-header { padding: 4px 0; border: 0; background: transparent; box-shadow: none; }
-body.minimal-ui .library-toolbar-row { margin-bottom: 8px; }
+body.minimal-ui .library-header { position: absolute; width: 0; height: 0; margin: 0; }
+body.minimal-ui .library-folder-header { order: 1; min-width: 0; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+body.minimal-ui .library-toolbar-row { order: 2; margin: 0; }
 .doc-card.minimal-doc-card .doc-card-kebab-menu button { display: block; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
 .doc-card.minimal-doc-card .doc-card-kebab-menu button:hover { background: var(--bg-hover); }
-.doc-card.minimal-doc-card .doc-card-title { min-width: 0; overflow-wrap: anywhere; }
+.doc-card.minimal-doc-card .doc-card-title { min-width: 0; padding-right: 0; line-height: 1.45; font-weight: 600; -webkit-line-clamp: 3; overflow-wrap: anywhere; }
+.doc-card.minimal-doc-card .doc-card-title:has(input) { display: block; overflow: visible; flex: 1; }
 
 .minimal-move-dialog .modal-content { padding: 24px; }
 .minimal-move-dialog .custom-select-picker { margin: 12px 0 20px; }
@@ -36,3 +37,57 @@ body.minimal-ui .library-toolbar-row { margin-bottom: 8px; }
 
 /* The page outlet owns scrolling; let the first card menu extend above the grid. */
 body.minimal-ui #library-grid { overflow: visible; }
+
+/* One spacing scale for shell controls, library tools and compact cards. */
+body.minimal-ui .minimal-shell-actions { padding-left: 12px; border-left: 1px solid var(--border); }
+.minimal-shell-actions button:hover { background: var(--bg-hover); }
+.minimal-shell-actions button:focus-visible { outline: 2px solid var(--control-accent); outline-offset: 2px; }
+body.minimal-ui #tab-workspace .workspace-mode-switch-compact { width: 112px; }
+body.minimal-ui #page-outlet { padding: 24px clamp(16px, 3vw, 40px) 40px; }
+body.minimal-ui #page-library.active {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: start;
+  align-items: center;
+  gap: 16px;
+  height: auto;
+  max-width: 1440px;
+  margin-inline: auto;
+}
+/* Inline margins belong to the full UI; the minimal grid owns tool spacing. */
+body.minimal-ui #library-search-box { order: 3; min-width: 0; margin-bottom: 0 !important; }
+body.minimal-ui #library-filter-row { order: 4; margin-bottom: 0 !important; }
+body.minimal-ui #library-search-status { order: 5; grid-column: 1 / -1; margin-bottom: 0 !important; }
+body.minimal-ui #library-grid {
+  order: 6;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+  padding: 4px 0 80px;
+}
+body.minimal-ui .library-folder-card {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 28px;
+  grid-template-rows: 1fr 1fr;
+  align-content: center;
+  column-gap: 12px;
+  min-height: 98px;
+  padding: 14px;
+  border-radius: 14px;
+  box-sizing: border-box;
+}
+body.minimal-ui .folder-card-icon { grid-row: 1 / 3; align-self: center; justify-self: center; margin: 0; filter: none; }
+body.minimal-ui .folder-card-name { grid-column: 2; align-self: end; font-size: 13px; }
+body.minimal-ui .folder-card-meta { grid-column: 2; align-self: start; margin-top: 4px; }
+body.minimal-ui .folder-card-menu { top: 50%; right: 14px; transform: translateY(-50%); }
+body.minimal-ui.desktop-windows #tab-workspace .workspace-topnav { padding-right: 0; }
+@media (max-width: 640px) {
+  body.minimal-ui #tab-workspace .workspace-topnav { gap: 8px; padding-right: 12px; }
+  body.minimal-ui .workspace-topnav-actions { gap: 8px; }
+  body.minimal-ui .minimal-shell-actions { gap: 4px; padding-left: 8px; }
+  body.minimal-ui #tab-workspace .workspace-mode-switch-compact { width: 100px; }
+  body.minimal-ui #page-outlet { padding-top: 20px; }
+  body.minimal-ui #page-library.active { gap: 12px; }
+  body.minimal-ui #library-search-box { grid-column: 1 / -1; }
+  body.minimal-ui #library-filter-row { grid-column: 1 / -1; }
+}
