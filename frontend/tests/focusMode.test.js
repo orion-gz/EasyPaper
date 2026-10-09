@@ -62,3 +62,31 @@ test('편집 및 메뉴 컨텍스트는 키보드 탐색에서 제외한다', ()
   assert.equal(isFocusKeyboardExcluded({ closest: selector => selector.includes('input') ? {} : null }), true)
   assert.equal(isFocusKeyboardExcluded({ closest: () => null }), false)
 })
+
+test('확대 미리보기 마커는 화면 배율을 보정하고 원래 위치로 복원한다', async () => {
+  const { FocusModeController } = await import('../src/focusMode.js')
+  const values = new Map()
+  const anchor = {
+    offsetWidth: 10, offsetHeight: 5,
+    style: {
+      getPropertyValue: name => values.get(name) || '',
+      getPropertyPriority: () => '',
+      setProperty: (name, value) => values.set(name, value),
+    },
+    getBoundingClientRect: () => ({ left: 120, top: 110, width: 20, height: 10 }),
+  }
+  const controller = Object.assign(Object.create(FocusModeController.prototype), {
+    previewAnchors: new Map(), settings: { hideOverlays: false },
+    root: { querySelectorAll: () => [anchor] }, isPreviewAnchor: () => true,
+  })
+  const groups = [{ dataset: { kind: 'source' }, focusTransform: {
+    left: 100, top: 100, width: 100, height: 40, dx: 5, dy: 3, scale: 1.5,
+  } }]
+  controller.positionPreviewAnchors(groups, {})
+  assert.equal(values.get('transform'), 'translate(-5px, -1px) scale(1.5)')
+  assert.equal(values.get('transform-origin'), '0 0')
+  controller.positionPreviewAnchors([], {})
+  assert.equal(values.get('transform'), '')
+  assert.equal(values.get('transform-origin'), '')
+  assert.equal(controller.previewAnchors.size, 0)
+})

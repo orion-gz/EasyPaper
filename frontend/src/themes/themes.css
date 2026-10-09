@@ -43,6 +43,10 @@ body[data-theme-id].document-workspace-runtime :is(#viewer-screen, .viewer-scrol
 body[data-theme-id] :is(.topbar .active, .topbar [aria-selected=true], .workspace-tab.active) { background-color: var(--topbar-selected); }
 body[data-theme-id] .viewer-scroll-container .trans-page-block ::selection { background: var(--translation-selected); }
 body[data-theme-id] .viewer-scroll-container ::selection { background: var(--viewer-selected); }
+/* PDF glyphs are painted by the canvas; selected text must stay invisible. */
+body[data-theme-id] .viewer-scroll-container .textLayer ::selection { color: transparent; }
+body[data-theme-id] .viewer-scroll-container .textLayer.pdf-box-selection ::selection { background: transparent; }
+
 body[data-theme-id] .sidebar-nav-item { color: var(--sidebar-text); }
 body[data-theme-id] .doc-card :is(h3, .doc-title) { color: var(--card-text); }
 body[data-theme-id] .trans-page-block .trans-text { color: var(--translation-text); }
