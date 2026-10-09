@@ -4,7 +4,7 @@ import { activeReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.j
 const sentence = { source_sentence_id: 'S0', source_text: 'Sample PDF A - page 1', easy_sentences: ['Sample Paper A'], paragraph: 0, source_mapping: null }
 const result = { page_num: 1, text: 'Sample Paper A', sentences: [sentence], cached: false, done: true }
 
-async function setup(page, { language = 'en', mode = 'manual', web = false } = {}) {
+async function setup(page, { language = 'en', mode = 'manual', web = false, sourceMapping = null } = {}) {
   const doc = { id: 'easy-doc', filename: 'Easy.pdf', total_pages: 1, metadata: { title: 'Easy English test' }, translated_pages: [], source_language: 'auto', detected_source_language: language,
     ...(web ? { content_kind: 'html_article', source_origin: 'web', source_url: 'https://example.test', document_mode: 'general', document_type: 'article' } : {}) }
   await mockBaseRoutes(page, { documents: [doc] })
@@ -18,7 +18,7 @@ async function setup(page, { language = 'en', mode = 'manual', web = false } = {
     if (route.request().method() === 'GET') return route.fulfill(stored ? { json: stored } : { status: 404, json: {} })
     posts++
     if (failure) return route.fulfill({ contentType: 'text/event-stream', body: 'data: {"done":true,"error":{"code":"easy_english_invalid_mapping"}}\n\n' })
-    stored = { ...result, sentences: [{ ...sentence, source_text: web ? 'Sample Paper A' : sentence.source_text, easy_sentences: ['This is Sample Paper A.'] }] }
+    stored = { ...result, sentences: [{ ...sentence, source_text: web ? 'Sample Paper A' : sentence.source_text, source_mapping: sourceMapping, easy_sentences: ['This is Sample Paper A.'] }] }
     return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify(stored)}\n\n` })
   })
   await gotoApp(page)
@@ -218,4 +218,34 @@ test('PDF fallback highlights only matching glyph spans and suppresses translati
   await layer.locator('span').last().hover()
   await expect(boxes).toHaveCount(0)
   await expect(reader.locator('.sentence-hover-box')).toHaveCount(0)
+})
+
+
+test('stale exact PDF mappings fall back to the current text layer', async ({ page }) => {
+  const { reader } = await setup(page, { sourceMapping: {
+    status: 'exact', source_revision: 'old-revision', layout_revision: 'old-revision',
+    coordinate_space: 'unrotated-top-left', segments: [],
+  } })
+  await reader.locator('[data-tab="easy-english"]').click()
+  await reader.locator('#easy-english-content-1 button').click()
+  const group = reader.locator('.easy-english-sentence')
+  await group.hover()
+  await expect(reader.locator('.easy-source-highlight')).not.toHaveCount(0)
+  await reader.locator('.textLayer span').first().hover()
+  await expect(group).toHaveClass(/easy-sentence-highlight/)
+})
+
+test('PDF line breaks inside spans preserve hyphenated source matching', async ({ page }) => {
+  const { reader } = await setup(page)
+  await reader.locator('[data-tab="easy-english"]').click()
+  await reader.locator('#easy-english-content-1 button').click()
+  const layer = reader.locator('.textLayer').first()
+  await layer.evaluate(node => {
+    const span = document.createElement('span')
+    span.append('Sam-', document.createElement('br'), 'ple PDF A - page 1')
+    Object.assign(span.style, { position: 'absolute', left: '10px', top: '40px', fontSize: '16px', transform: 'none' })
+    node.replaceChildren(span)
+  })
+  await reader.locator('.easy-english-sentence').hover()
+  await expect(reader.locator('.easy-source-highlight')).not.toHaveCount(0)
 })

@@ -17,12 +17,25 @@ function normalizeSource(text) {
 export function exactSentenceOffsets(text, sentences) {
   const { normalized, starts, ends } = normalizeSource(text)
   let cursor = 0
+  const used = []
   return sentences.map(sentence => {
     const target = normalizeSource(sentence.source_text).normalized
-    const start = target ? normalized.indexOf(target, cursor) : -1
+    if (!target) return null
+    const available = start => !used.some(range => start < range.end && start + target.length > range.start)
+    const find = from => {
+      let start = normalized.indexOf(target, from)
+      while (start >= 0 && !available(start)) start = normalized.indexOf(target, start + 1)
+      return start
+    }
+    // PDF content stream order can differ from the parser's reading order.
+    // Revisit earlier text without assigning the same occurrence twice.
+    let start = find(cursor)
+    if (start < 0) start = find(0)
     if (start < 0) return null
-    cursor = start + target.length
-    return { start: starts[start], end: ends[cursor - 1] }
+    const end = start + target.length
+    used.push({ start, end })
+    cursor = end
+    return { start: starts[start], end: ends[end - 1] }
   })
 }
 
