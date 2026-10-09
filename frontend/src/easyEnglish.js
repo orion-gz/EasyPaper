@@ -5,15 +5,18 @@ import { exactSentenceOffsets, clipSourceRect, visibleSourceBounds } from './eas
 
 function textRanges(root, sentences) {
   if (!root) return []
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: node => node.parentElement?.closest('.article-memo,script,style') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode: node => {
+      if (node.parentElement?.closest('.article-memo,script,style')) return NodeFilter.FILTER_REJECT
+      return node.nodeType === Node.TEXT_NODE || node.nodeName === 'BR' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+    },
   })
   const nodes = []
   let text = '', node
   while ((node = walker.nextNode())) {
+    if (node.nodeName === 'BR') { text += '\n'; continue }
     nodes.push({ node, start: text.length, end: text.length + node.length })
     text += node.textContent
-    if (node.parentElement?.nextElementSibling?.tagName === 'BR') text += '\n'
   }
   return exactSentenceOffsets(text, sentences).map(offset => {
     if (!offset) return null
@@ -157,7 +160,7 @@ export function createEasyEnglishController(adapter) {
     const pairs = entry(page).result?.sentences || []
     if (!pairs[index]) return []
     const mapped = adapter.sourceRects(page, pairs[index])
-    if (mapped !== null) return mapped
+    if (mapped?.length) return mapped
     // Ranges are rebuilt because PDF text layers can be recycled and web annotations
     // can split text nodes. Never retain a Range into a detached document.
     const range = (ranges || textRanges(sourceRoot(page), pairs))[index]

@@ -47,3 +47,17 @@ test('punctuation differences never map an unrelated source sentence', () => {
     { source_text: 'It costs 5.' },
   ]), [{ start: 13, end: 24 }])
 })
+
+
+test('PDF content order can differ from source sentence order', () => {
+  assert.deepEqual(exactSentenceOffsets('Second sentence. First sentence.', [
+    { source_text: 'First sentence.' }, { source_text: 'Second sentence.' },
+  ]), [{ start: 17, end: 32 }, { start: 0, end: 16 }])
+})
+
+test('out-of-order matching never reuses an already matched occurrence', () => {
+  assert.deepEqual(exactSentenceOffsets('Repeated. Last. Repeated.', [
+    { source_text: 'Last.' }, { source_text: 'Repeated.' },
+    { source_text: 'Repeated.' }, { source_text: 'Repeated.' },
+  ]), [{ start: 10, end: 15 }, { start: 16, end: 25 }, { start: 0, end: 9 }, null])
+})
