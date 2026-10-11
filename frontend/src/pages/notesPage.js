@@ -14,6 +14,7 @@ import { lastActivityIso } from '../readPages.js'
 import { formatTranslationHtml, formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
 import { documentTypeLabel } from '../documentModes.js'
 import { t } from '../i18n.js'
+import { getModeSetting } from '../modeSettings.js'
 import { hasAdaptiveBriefing, renderAdaptiveBriefingHtml } from '../adaptiveBriefing.js'
 
 let renderGeneration = 0
@@ -64,8 +65,12 @@ let annotationSortMode = 'page-asc' // 'page-asc' | 'page-desc' | 'newest' | 'ol
 
 // 요약(primer)은 문서당 LLM 호출 비용이 있으므로 탭을 실제로 열었을 때만
 // 가져오고, 한 번 가져오면 페이지 재방문 동안 재사용한다.
-// docId -> { status: 'loading'|'ready'|'error', data?: object(primer 전체) }
+// [docId, targetLang] -> { status: 'loading'|'ready'|'error', data?: object(primer 전체) }
 const summaryCache = new Map()
+
+function summaryCacheKey(docId, targetLang = getModeSetting('targetLang', activeDocumentMode)) {
+  return JSON.stringify([docId, targetLang])
+}
 
 // ── localStorage 읽기 (main.js loadAnnotations/loadMemos와 동일한 키/형태) ──
 function readLocalAnnotations(docId) {
@@ -345,7 +350,7 @@ function renderPrimerSection(labelIcon, labelText, innerHtml) {
 }
 
 function renderSummaryTabContent(docId) {
-  const cached = summaryCache.get(docId)
+  const cached = summaryCache.get(summaryCacheKey(docId))
   if (!cached || cached.status === 'loading') {
     return `<div class="notes-summary-loading">${icon('refreshCw', 15)}<span>읽기 전 브리핑을 불러오는 중...</span></div>`
   }
@@ -430,19 +435,21 @@ function renderSummaryTabContent(docId) {
 }
 
 function ensureSummaryLoaded(root, docId) {
-  const cached = summaryCache.get(docId)
+  const targetLang = getModeSetting('targetLang', activeDocumentMode)
+  const cacheKey = summaryCacheKey(docId, targetLang)
+  const cached = summaryCache.get(cacheKey)
   if (cached && (cached.status === 'ready' || cached.status === 'error')) return
   if (cached && cached.status === 'loading') return
-  summaryCache.set(docId, { status: 'loading' })
-  fetchPrimer(docId).then(data => {
-    summaryCache.set(docId, { status: 'ready', data })
+  summaryCache.set(cacheKey, { status: 'loading' })
+  fetchPrimer(docId, targetLang).then(data => {
+    summaryCache.set(cacheKey, { status: 'ready', data })
   }).catch(err => {
     console.error('Notes 요약 로드 실패:', err)
-    summaryCache.set(docId, { status: 'error' })
+    summaryCache.set(cacheKey, { status: 'error' })
   }).finally(() => {
     // 로드되는 동안 사용자가 다른 논문/탭으로 이동했을 수 있으니, 여전히
     // 같은 문서의 요약 탭을 보고 있을 때만 다시 그린다.
-    if (selectedDocId === docId && activeSubtab === 'summary') {
+    if (selectedDocId === docId && activeSubtab === 'summary' && summaryCacheKey(docId) === cacheKey) {
       const contentEl = root.querySelector('.notes-tab-content')
       if (contentEl) {
         contentEl.innerHTML = renderSummaryTabContent(docId)
