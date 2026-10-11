@@ -6225,6 +6225,20 @@ function updateSelectToolbarUI() {
   }
 }
 
+async function runLibraryBatch(ids, action) {
+  const results = await Promise.allSettled(ids.map(action))
+  const failedIds = ids.filter((id, index) => results[index].status === 'rejected')
+  const nextSelection = new Set(selectedDocIds)
+  ids.forEach(id => nextSelection.delete(id))
+  failedIds.forEach(id => nextSelection.add(id))
+  replaceDocSelection(nextSelection)
+  if (failedIds.length) {
+    showToast(t('library:batch.failure', { success: ids.length - failedIds.length, failed: failedIds.length }),
+      failedIds.length === ids.length ? 'error' : 'warning')
+  }
+  return failedIds.length === 0
+}
+
 function initSelectToolbarEvents() {
   $('lib-select-all-btn')?.addEventListener('click', () => {
     const visibleIds = getVisibleDocIds()
@@ -6266,13 +6280,13 @@ function initSelectToolbarEvents() {
 
   $('lib-select-cache-btn')?.addEventListener('click', async () => {
     if (selectedDocIds.size === 0) return
-    const count = selectedDocIds.size
+    const ids = Array.from(selectedDocIds)
+    const count = ids.length
     const ok = await showCustomConfirm(`선택한 ${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
     if (!ok) return
     try {
-      await Promise.allSettled(Array.from(selectedDocIds).map(id => clearSingleDocCacheAPI(id)))
-      showToast(`선택한 ${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 PDF 추출 캐시가 삭제되었습니다.`, 'success')
-      clearDocSelection()
+      const succeeded = await runLibraryBatch(ids, clearSingleDocCacheAPI)
+      if (succeeded) showToast(`선택한 ${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 PDF 추출 캐시가 삭제되었습니다.`, 'success')
     } catch (err) {
       showToast('캐시 삭제 실패: ' + err.message, 'error')
     }
@@ -6290,13 +6304,13 @@ function initSelectToolbarEvents() {
 
   $('lib-select-delete-btn')?.addEventListener('click', async () => {
     if (selectedDocIds.size === 0) return
-    const count = selectedDocIds.size
+    const ids = Array.from(selectedDocIds)
+    const count = ids.length
     const ok = await showCustomConfirm(`선택한 ${count}개 ${documentUiCopy('논문을', workspaceModeController.getMode())} 삭제할까요? (휴지통으로 이동합니다)`, { title: documentUiCopy('논문 삭제', workspaceModeController.getMode()), confirmText: '삭제', danger: true })
     if (!ok) return
     try {
-      await Promise.allSettled(Array.from(selectedDocIds).map(id => deleteLibraryDoc(id)))
-      showToast(`${count}개 ${documentUiCopy('논문이', workspaceModeController.getMode())} 휴지통으로 이동되었습니다.`, 'success')
-      clearDocSelection()
+      const succeeded = await runLibraryBatch(ids, deleteLibraryDoc)
+      if (succeeded) showToast(`${count}개 ${documentUiCopy('논문이', workspaceModeController.getMode())} 휴지통으로 이동되었습니다.`, 'success')
       await renderLibrary()
     } catch {
       showToast('삭제 실패', 'error')

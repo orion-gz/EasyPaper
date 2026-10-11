@@ -63,5 +63,6 @@
   "article.underline": "밑줄",
   "article.memo": "메모",
   "article.memoPrompt": "메모 내용",
-  "article.capture": "구간 캡처"
+  "article.capture": "구간 캡처",
+  "batch.failure": "{{success}}개 처리 완료, {{failed}}개 실패했습니다. 실패한 항목을 다시 시도하세요."
 }
