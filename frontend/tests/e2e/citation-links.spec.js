@@ -16,7 +16,10 @@ test('Focus reference preview follows its sentence and is hidden only in Focus m
   const marker = activeReader(page).locator('.citation-marker-box').first()
   await expect(marker).toBeVisible({ timeout: 15000 })
   await marker.hover()
-  await page.waitForTimeout(250)
+  // Focus magnifies and moves the real citation control on the next frame.
+  // Follow the relocated marker before checking its hover preview.
+  await expect(marker).toHaveCSS('transform', /matrix/)
+  await marker.hover()
   const tooltip = activeReader(page).locator('.citation-tooltip')
   await expect(tooltip).toBeVisible()
   await expect(activeReader(page).locator('.focus-mode-layer')).toBeVisible()
