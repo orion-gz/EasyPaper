@@ -1,0 +1,90 @@
+easypaper-audit-unit.log
+ℹ tests 210
+ℹ suites 0
+ℹ pass 210
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1106.322626
+
+easypaper-audit-e2e.log
+  14 failed
+  4 skipped
+  294 passed (16.7m)
+
+easypaper-audit-chromium-diagnostic.log
+  ✓  1 [chromium] › tests/e2e/pdf-viewer-performance.spec.js:28:1 › long PDF loads lazily, bounds canvases and restores evicted pages (33.8s)
+  ✓  2 [chromium] › tests/e2e/pdf-viewer-performance.spec.js:69:1 › rapid jumps cancel stale text requests and finish the destination page (24.9s)
+  ✓  3 [chromium] › tests/e2e/pdf-viewer-performance.spec.js:112:1 › dense page overlays batch layout and page hover keeps reading geometry stable (24.2s)
+  ✓  4 [chromium] › tests/e2e/pdf-viewer-performance.spec.js:170:1 › scrolling a loaded page does not revisit closed library folder menus (21.5s)
+  ✓  5 [chromium] › tests/e2e/pdf-viewer-performance.spec.js:212:1 › translation scrolling pauses hover repaint and hover resumes after scrolling (26.8s)
+  5 passed (2.3m)
+
+easypaper-audit-chromium-secondary.log
+  ✘  1 [chromium] › tests/e2e/pdf-text-geometry.spec.js:96:3 › selection lifecycle › native drag, saved annotation and selection survive UI scale and resize (1.1m)
+  ✓  2 [chromium] › tests/e2e/viewer-memo.spec.js:70:1 › 사용자가 조절한 메모 크기를 저장하고 다시 복원한다 (26.7s)
+  ✓  3 [chromium] › tests/e2e/viewer-memo.spec.js:220:1 › 메모 Markdown 서식과 줄 단축키를 토글한다 (39.8s)
+  ✓  4 [chromium] › tests/e2e/viewer-memo.spec.js:287:1 › 메모 서식 단축키를 서로 다른 선택 영역에 독립적으로 적용한다 (21.0s)
+  ✓  5 [chromium] › tests/e2e/viewer-reading-position.spec.js:25:3 › 읽던 페이지가 최초 복원, 새로고침, 재진입 후에도 유지된다 (가로 페이지) (24.9s)
+  ✘  6 [chromium] › tests/e2e/viewer-reading-position.spec.js:25:3 › 읽던 페이지가 최초 복원, 새로고침, 재진입 후에도 유지된다 (혼합 크기) (381ms)
+  2 failed
+  4 passed (3.2m)
+
+easypaper-audit-webkit-smoke.log
+  ✘   2 [webkit] › tests/e2e/accessibility.spec.js:44:1 › 뷰어 툴바를 Tab만으로 논리적인 순서로 이동하고 포커스를 식별한다 (23.8s)
+  ✘   1 [webkit] › tests/e2e/accessibility.spec.js:33:1 › 뷰어 핵심 화면이 WCAG 2.2 AA 자동 검사를 통과한다 (24.9s)
+  ✘   3 [webkit] › tests/e2e/accessibility.spec.js:71:1 › 열린 채팅 패널과 메뉴도 WCAG 2.2 AA 자동 검사를 통과한다 (34.5s)
+  ✘   4 [webkit] › tests/e2e/accessibility.spec.js:90:1 › 메뉴와 개요를 키보드로 열고 Escape로 원래 트리거에 복귀한다 (34.9s)
+  ✘   5 [webkit] › tests/e2e/accessibility.spec.js:111:1 › 케밥 메뉴의 정보 항목이 문서 정보 다이얼로그를 연다 (25.6s)
+  ✘   6 [webkit] › tests/e2e/accessibility.spec.js:132:1 › 채팅 패널과 리사이저를 키보드로 조작하고 닫을 때 포커스를 복귀한다 (35.9s)
+  ✓   8 [webkit] › tests/e2e/auth-and-library.spec.js:4:1 › 로그인 상태에서 라이브러리 화면이 정상적으로 뜬다 (12.8s)
+  ✘   7 [webkit] › tests/e2e/accessibility.spec.js:155:1 › 인용 오버레이를 키보드로 열고 Escape로 트리거에 복귀한다 (20.8s)
+  ✓   9 [webkit] › tests/e2e/auth-and-library.spec.js:12:1 › 라이브러리에 저장된 문서 카드가 표시된다 (10.7s)
+  ✓  11 [webkit] › tests/e2e/document-modes.spec.js:107:1 › 좁은 화면에서도 문서 홈 카드가 화면 밖으로 넘치지 않는다 (10.9s)
+  ✓  12 [webkit] › tests/e2e/document-modes.spec.js:125:1 › 서버 기능 플래그가 일반 문서 워크스페이스를 숨긴다 (13.6s)
+  ✘  10 [webkit] › tests/e2e/document-modes.spec.js:5:1 › 워크스페이스 전환은 홈과 데이터 범위를 바꾸고 문서 종류 필터를 제공한다 (33.3s)
+  ✘  13 [webkit] › tests/e2e/document-modes.spec.js:140:1 › 미처리 문서의 분류를 상세 패널에서 명시적으로 변경한다 (33.9s)
+  ✓  14 [webkit] › tests/e2e/settings-scale.spec.js:4:1 › 배율 드롭다운의 표시값과 펼친 목록 선택값을 동일하게 유지한다 (31.1s)
+  ✓  16 [webkit] › tests/e2e/workspace-tabs.spec.js:69:1 › keyboard tabs and all menu entries share the tab bar (30.8s)
+  ✘  17 [webkit] › tests/e2e/workspace-tabs.spec.js:81:1 › compact tabs and original chat composer keep working with toolbar auto hide (30.0s)
+  ✘  15 [webkit] › tests/e2e/workspace-tabs.spec.js:36:1 › common shell, document isolation, menu singleton, close and restore (1.6m)
+  ✘  18 [webkit] › tests/e2e/workspace-tabs.spec.js:106:1 › document tools and responsive reading layout (36.2s)
+  ✘  19 [webkit] › tests/e2e/workspace-tabs.spec.js:129:1 › legacy reading settings do not hide translations or reopen the outline (36.4s)
+  ✘  20 [webkit] › tests/e2e/workspace-tabs.spec.js:151:1 › AI response stays in its document after switching and closing the tab (36.7s)
+  ✘  22 [webkit] › tests/e2e/workspace-tabs.spec.js:187:1 › failed document can retry; deleted document is removed (37.1s)
+  ✘  21 [webkit] › tests/e2e/workspace-tabs.spec.js:175:1 › inactive PDF canvases are released and resume on activation (37.7s)
+  ✘  23 [webkit] › tests/e2e/workspace-tabs.spec.js:201:1 › theme, accent and UI scale synchronize with open documents (37.8s)
+  ✘  24 [webkit] › tests/e2e/workspace-tabs.spec.js:222:1 › fit width follows panels and resize; manual zoom and fit preference survive reload (35.6s)
+  ✘  25 [webkit] › tests/e2e/workspace-tabs.spec.js:250:1 › document find searches PDF text, shows a highlighted result, and keeps queries isolated (34.9s)
+  ✘  26 [webkit] › tests/e2e/workspace-tabs.spec.js:272:1 › bottom tools annotate the hovered sentence and follow theme and scroll visibility (35.5s)
+  ✘  28 [webkit] › tests/e2e/workspace-tabs.spec.js:323:1 › tab reorder persists and browser history activates existing document tabs (35.6s)
+  ✘  27 [webkit] › tests/e2e/workspace-tabs.spec.js:304:1 › resource list updates across runtimes and pending sync does not block switching or closing (38.4s)
+  ✘  29 [webkit] › tests/e2e/workspace-tabs.spec.js:343:1 › manual translation survives switching and closing its document (36.7s)
+  ✘  30 [webkit] › tests/e2e/workspace-tabs.spec.js:365:1 › manual translation failures appear on the tab and clear after retry (36.4s)
+  ✘  31 [webkit] › tests/e2e/workspace-tabs.spec.js:382:1 › research and general workspaces restore their own tabs (34.3s)
+  ✘  33 [webkit] › tests/e2e/workspace-tabs.spec.js:415:1 › active tab stays visible after tablet resize and global find shortcut enters the reader (36.0s)
+  ✘  34 [webkit] › tests/e2e/workspace-tabs.spec.js:431:1 › find includes pages outside the rendered viewport (33.3s)
+  ✘  32 [webkit] › tests/e2e/workspace-tabs.spec.js:395:1 › twelve document runtimes keep only the active PDF rendered and release on close (2.1m)
+  ✓  35 [webkit] › tests/e2e/workspace-tabs.spec.js:461:1 › pending reader save does not block opening or switching tabs; close waits for it (25.9s)
+  ✘  37 [webkit] › tests/e2e/workspace-tabs.spec.js:509:3 › pending dashboard load allows switching and closing (648ms)
+  ✘  38 [webkit] › tests/e2e/workspace-tabs.spec.js:509:3 › pending history load allows switching and closing (559ms)
+  ✘  39 [webkit] › tests/e2e/workspace-tabs.spec.js:540:1 › pending document load allows switching and closing (550ms)
+  ✘  36 [webkit] › tests/e2e/workspace-tabs.spec.js:484:1 › pending PDF activation does not block subsequent tab navigation (35.4s)
+  32 failed
+  7 passed (12.1m)
+
+easypaper-audit-webkit-diagnostic.log
+  ✓  1 [webkit] › tests/e2e/accessibility.spec.js:33:1 › 뷰어 핵심 화면이 WCAG 2.2 AA 자동 검사를 통과한다 (34.2s)
+  1 passed (44.5s)
+
+easypaper-audit-webkit-ime.log
+  ✘  1 [webkit] › tests/e2e/ui-ux-audit.spec.js:67:1 › audit: composing Enter must not send unfinished chat (32.6s)
+  1 failed
+
+Independent final diagnostic (Chromium, 1 worker):
+  ✘  1 [chromium] › tests/e2e/ui-ux-audit.spec.js:17:1 › audit: clearing search before debounce restores filters (22.5s)
+  ✓  2 [chromium] › tests/e2e/viewer-reading-position.spec.js:25:3 › 읽던 페이지가 최초 복원, 새로고침, 재진입 후에도 유지된다 (가로 페이지) (15.5s)
+  ✓  3 [chromium] › tests/e2e/viewer-reading-position.spec.js:25:3 › 읽던 페이지가 최초 복원, 새로고침, 재진입 후에도 유지된다 (혼합 크기) (16.1s)
+  1 failed
+  2 passed (56.3s)
