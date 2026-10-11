@@ -572,8 +572,8 @@ function renderDetail(root) {
   if (activeSubtab === 'summary') ensureSummaryLoaded(root, entry.doc.id)
 }
 
-// ── 이벤트 위임 (root는 renderNotesPage()마다 새로 생기지만, root 자체에
-// 한 번만 걸어두면 내부 재렌더링(검색/필터/탭 전환)에도 계속 살아있다) ──
+// ── root는 재방문에도 유지된다. 교체되는 컨트롤은 매번, root 위임은 한 번만 등록한다. ──
+const listenerRoots = new WeakSet()
 function attachListeners(root) {
   const searchInput = root.querySelector('.notes-search-input')
   if (searchInput) {
@@ -601,6 +601,9 @@ function attachListeners(root) {
       renderPaperList(root)
     })
   })
+
+  if (listenerRoots.has(root)) return
+  listenerRoots.add(root)
 
   root.addEventListener('click', (e) => {
     // 즐겨찾기 별 토글 (목록 행/상세 헤더 공용) - 논문 선택보다 먼저 처리해서
