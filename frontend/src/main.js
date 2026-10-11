@@ -3285,6 +3285,7 @@ globalLogoutBtn.addEventListener('click', async () => {
 // 휴지통 비우기 버튼 클릭 이벤트
 if (libEmptyTrashBtn) {
   libEmptyTrashBtn.addEventListener('click', async () => {
+    const documentMode = workspaceModeController.getMode()
     const ok = await showCustomConfirm(documentUiCopy('휴지통에 있는 모든 논문을 영구 삭제할까요?\n이 작업은 복구할 수 없습니다.', workspaceModeController.getMode()), {
       title: '휴지통 비우기',
       confirmText: '휴지통 비우기',
@@ -3292,7 +3293,7 @@ if (libEmptyTrashBtn) {
     })
     if (!ok) return
     try {
-      await emptyLibraryTrash()
+      await emptyLibraryTrash(documentMode)
       showToast('휴지통이 비워졌습니다.', 'success')
       await renderLibrary()
     } catch (err) {

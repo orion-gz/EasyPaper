@@ -206,10 +206,13 @@ async def get_library_trash(
 
 
 @router.delete("/library/trash/empty")
-async def empty_library_trash(current_user: str = Depends(get_current_user)):
+async def empty_library_trash(
+    document_mode: Literal["research", "general"] = "research",
+    current_user: str = Depends(get_current_user),
+):
     """휴지통을 완전히 비웁니다(영구 삭제)."""
     from services.document_workers import quiesce_document
-    for doc in list_documents(current_user, only_trash=True):
+    for doc in list_documents(current_user, only_trash=True, document_mode=document_mode):
         async with quiesce_document(doc["id"]):
             permanently_delete_document(doc["id"])
     return {"message": "휴지통이 비워졌습니다."}
