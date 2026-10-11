@@ -6672,7 +6672,7 @@ if (compareChatSendBtn) {
 
 if (compareChatInput) {
   compareChatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
       e.preventDefault()
       sendCompareChatMessage()
     }
@@ -7025,7 +7025,7 @@ if (chatDrawerSendBtn) {
 
 if (chatDrawerInput) {
   chatDrawerInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
       e.preventDefault()
       sendChatDrawerMessage()
     }
@@ -16112,7 +16112,7 @@ function initChatListeners() {
 
   if (chatInput) {
     chatInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault()
         sendChatMessage()
       }
