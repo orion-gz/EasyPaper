@@ -7747,6 +7747,7 @@ function ensureLibraryChrome() {
 
 let libraryRenderGeneration = 0
 async function renderLibrary() {
+  cancelLibrarySearch()
   const generation = ++libraryRenderGeneration
   const tab = state.currentLibraryTab
   const mode = workspaceModeController.getMode()
@@ -8921,6 +8922,13 @@ function filterLibraryCards(docs) {
 // ── 라이브러리 전체 검색 (파일명/제목/카테고리 + 번역된 본문 텍스트) ──────
 let isLibrarySearchActive = false
 let librarySearchDebounceTimer = null
+let librarySearchGeneration = 0
+
+function cancelLibrarySearch() {
+  clearTimeout(librarySearchDebounceTimer)
+  librarySearchDebounceTimer = null
+  librarySearchGeneration++
+}
 
 function renderLibrarySearchResults(docs, query) {
   libraryGrid.innerHTML = ''
@@ -8945,13 +8953,19 @@ function renderLibrarySearchResults(docs, query) {
   }
 }
 
-async function runLibrarySearch(query) {
+async function runLibrarySearch(query, generation) {
+  const mode = workspaceModeController.getMode()
+  const tab = state.currentLibraryTab
+  const isCurrent = () => generation === librarySearchGeneration && isLibrarySearchActive
+    && librarySearchInput.value.trim() === query
+    && mode === workspaceModeController.getMode() && tab === state.currentLibraryTab
   try {
-    const res = await searchLibrary(query, workspaceModeController.getMode())
+    const res = await searchLibrary(query, mode)
     // 디바운스 중 사용자가 입력을 더 바꿨을 수 있으므로, 지금 입력값과 다르면 버린다
-    if (librarySearchInput.value.trim() !== query) return
+    if (!isCurrent()) return
     renderLibrarySearchResults(res.documents || [], query)
   } catch (err) {
+    if (!isCurrent()) return
     console.error(err)
     if (librarySearchStatus) {
       librarySearchStatus.textContent = '검색 중 오류가 발생했습니다.'
@@ -8961,6 +8975,7 @@ async function runLibrarySearch(query) {
 }
 
 function exitLibrarySearch() {
+  cancelLibrarySearch()
   isLibrarySearchActive = false
   if (librarySearchStatus) librarySearchStatus.classList.add('hidden')
   if (libraryFilterRow) libraryFilterRow.style.display = 'flex'
@@ -8971,16 +8986,19 @@ if (librarySearchInput) {
   librarySearchInput.addEventListener('input', () => {
     const query = librarySearchInput.value.trim()
     if (librarySearchClearBtn) librarySearchClearBtn.classList.toggle('hidden', !query)
-    clearTimeout(librarySearchDebounceTimer)
+    cancelLibrarySearch()
+    const generation = librarySearchGeneration
 
     if (!query) {
       if (isLibrarySearchActive) exitLibrarySearch()
       return
     }
     librarySearchDebounceTimer = setTimeout(() => {
+      if (generation !== librarySearchGeneration || librarySearchInput.value.trim() !== query) return
+      librarySearchDebounceTimer = null
       isLibrarySearchActive = true
       if (libraryFilterRow) libraryFilterRow.style.display = 'none'
-      runLibrarySearch(query)
+      runLibrarySearch(query, generation)
     }, 300)
   })
 }
