@@ -420,8 +420,8 @@ export async function restoreLibraryDoc(docId) {
   return res.json()
 }
 
-export async function emptyLibraryTrash() {
-  const res = await fetch(`${API_BASE}/library/trash/empty`, { method: 'DELETE' })
+export async function emptyLibraryTrash(documentMode) {
+  const res = await fetch(`${API_BASE}/library/trash/empty${buildQuery({ documentMode })}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('휴지통 비우기 실패')
   invalidateLibraryGetCache()
   return res.json()
