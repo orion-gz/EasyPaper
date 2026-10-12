@@ -2,6 +2,24 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.0 - 2026-10-12
+
+### 한국어 (1.3.0 → 1.4.0)
+
+- 그림·표·수식 미리보기 고정을 추가하고 여러 창 동시 표시·드래그·방향키 이동·접기·개별 닫기를 지원
+- 작업 공간 모드별 호버·클릭 미리보기 설정을 추가하고 열린 문서 탭에 즉시 반영
+- 설정 → 데이터 및 시스템에서 문서 원본·첨부 파일, 번역, 질문·비교 대화, 메모·주석, 폴더·그래프, 읽기 이력과 사용자·브라우저 설정의 ZIP 내보내기·가져오기를 추가
+- 가져온 문서를 ID와 관계를 재매핑한 새 복사본으로 추가하고 공유 AI 모델·파서·번역 프롬프트 설정의 선택적 복원을 지원하며 인증정보·API 키는 제외
+- 백업 검증과 가져오기 실패 시 롤백, 브라우저 설정 복원 재시도 및 영구 삭제된 문서를 포함한 비교 대화 보존을 지원
+
+### English (1.3.0 → 1.4.0)
+
+- Added pinnable Figure, Table, and Equation previews with multiple floating windows, dragging, keyboard movement, collapsing, and individual closing.
+- Added a hover/click preview setting per workspace mode, applied immediately to open document tabs.
+- Added ZIP export and import in Settings → Data & System for documents and attachments, translations, chats and comparisons, notes and annotations, folders and graphs, reading history, and user/browser settings.
+- Imported documents are added as new copies with remapped IDs and relationships. Shared AI model, parser, and translation prompt settings can be restored optionally; credentials and API keys are excluded.
+- Added backup validation and rollback on import failure, retryable browser-settings restoration, and preservation of comparison chats containing permanently deleted documents.
+
 ## 1.3.0 - 2026-10-12
 
 ### 한국어 (1.2.1 → 1.3.0)
