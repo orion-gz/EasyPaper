@@ -215,5 +215,9 @@
   "dataTransfer.confirm": "Add all documents and history from this backup? Existing documents are kept. User and browser settings will be restored from the backup. Importing the same backup again creates additional copies.",
   "dataTransfer.retry": "Retry settings restore",
   "dataTransfer.reload": "Reload to apply",
-  "dataTransfer.tooLarge": "The ZIP file exceeds the 4 GiB limit."
+  "dataTransfer.tooLarge": "The ZIP file exceeds the 4 GiB limit.",
+  "figurePreviewEnabled": "Figure/Table/Equation reference previews",
+  "figureOverlayTrigger": "Show reference previews on",
+  "figureOverlayHover": "Hover",
+  "figureOverlayClick": "Click"
 }

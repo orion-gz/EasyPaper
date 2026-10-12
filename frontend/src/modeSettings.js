@@ -14,6 +14,7 @@ const MODE_DEFAULTS = {
     disableInsights: false,
     disableCitationOverlay: false,
     disableFigureOverlay: false,
+    figureOverlayTrigger: 'hover',
     disablePrimer: false,
     disableSuggestedQuestions: false,
     focusModeEnabled: false,
@@ -37,6 +38,7 @@ const MODE_DEFAULTS = {
     disableInsights: false,
     disableCitationOverlay: true,
     disableFigureOverlay: false,
+    figureOverlayTrigger: 'hover',
     disablePrimer: true,
     disableSuggestedQuestions: false,
     focusModeEnabled: false,
@@ -109,6 +111,7 @@ export function getModeSetting(name, mode, storage = localStorage) {
     raw = LEGACY_KEYS[name] ? storage.getItem(LEGACY_KEYS[name]) : null
   }
   if (raw === null) return fallback
+  if (name === 'figureOverlayTrigger') return raw === 'click' ? 'click' : 'hover'
   if (name === 'easyEnglishMode') return raw === 'auto' ? 'auto' : 'manual'
   if (name === "targetLang") {
     const migrated = migrateTargetLanguage(raw)

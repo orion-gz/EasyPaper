@@ -106,3 +106,13 @@ test('Focus 설정은 모드별로 독립 저장되고 허용 범위로 정규�
   assert.equal(getModeSetting('focusDimOpacity', 'research', storage), 25)
   assert.equal(getModeSetting('focusScale', 'general', storage), 100)
 })
+
+test('figure preview trigger defaults to hover and persists separately per mode', () => {
+  const storage = memoryStorage()
+  assert.equal(getModeSetting('figureOverlayTrigger', 'research', storage), 'hover')
+  setModeSetting('figureOverlayTrigger', 'research', 'click', storage)
+  assert.equal(getModeSetting('figureOverlayTrigger', 'research', storage), 'click')
+  assert.equal(getModeSetting('figureOverlayTrigger', 'general', storage), 'hover')
+  setModeSetting('figureOverlayTrigger', 'general', 'invalid', storage)
+  assert.equal(getModeSetting('figureOverlayTrigger', 'general', storage), 'hover')
+})

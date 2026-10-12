@@ -176,6 +176,7 @@ const state = {
   disableCitationOverlay: getModeSetting('disableCitationOverlay', 'research'),
   // Figure/Table/수식 참조 표기 호버 미리보기를 끌지 여부.
   disableFigureOverlay: getModeSetting('disableFigureOverlay', 'research'),
+  figureOverlayTrigger: getModeSetting('figureOverlayTrigger', 'research'),
   // 논문을 처음 열 때 뜨는 "읽기 전 브리핑" 게이팅 모달을 끌지 여부. 꺼도
   // 뷰어 툴바 버튼으로는 언제든 다시 열어볼 수 있다.
   disablePrimer: getModeSetting('disablePrimer', 'research'),
@@ -717,6 +718,7 @@ const settingDisableBookmark = $('setting-disable-bookmark')
 const settingDisableInsights = $('setting-disable-insights')
 const settingDisableCitationOverlay = $('setting-disable-citation-overlay')
 const settingDisableFigureOverlay = $('setting-disable-figure-overlay')
+const settingFigureOverlayTrigger = $('setting-figure-overlay-trigger')
 const settingDisablePrimer = $('setting-disable-primer')
 const settingDisableSuggestedQuestions = $('setting-disable-suggested-questions')
 const settingToolbarAutoHide = $('setting-toolbar-autohide')
@@ -1023,6 +1025,8 @@ function applyModeViewerSettings(documentMode) {
   state.disableInsights = getModeSetting('disableInsights', mode)
   state.disableCitationOverlay = getModeSetting('disableCitationOverlay', mode)
   state.disableFigureOverlay = getModeSetting('disableFigureOverlay', mode)
+  state.figureOverlayTrigger = getModeSetting('figureOverlayTrigger', mode)
+  if (state.disableFigureOverlay) clearFigurePreviews()
   state.disablePrimer = getModeSetting('disablePrimer', mode)
   state.disableSuggestedQuestions = getModeSetting('disableSuggestedQuestions', mode)
   applyFocusModeSettings(mode)
@@ -1160,6 +1164,8 @@ function syncModeSettings(documentMode) {
   settingDisableInsights.checked = !getModeSetting('disableInsights', settingsTranslationModeContext)
   settingDisableCitationOverlay.checked = !getModeSetting('disableCitationOverlay', settingsTranslationModeContext)
   settingDisableFigureOverlay.checked = !getModeSetting('disableFigureOverlay', settingsTranslationModeContext)
+  settingFigureOverlayTrigger.value = getModeSetting('figureOverlayTrigger', settingsTranslationModeContext)
+  settingFigureOverlayTrigger.disabled = !settingDisableFigureOverlay.checked
   settingDisablePrimer.checked = !getModeSetting('disablePrimer', settingsTranslationModeContext)
   settingDisableSuggestedQuestions.checked = !getModeSetting('disableSuggestedQuestions', settingsTranslationModeContext)
   settingFocusMode.checked = getModeSetting('focusModeEnabled', settingsTranslationModeContext)
@@ -1250,6 +1256,7 @@ function showCompareScreen() {
 }
 
 function resetState() {
+  clearFigurePreviews()
   focusModeController?.clear()
   state.articleViewer?.destroy?.()
   globalAnalyticsTracker.stopSession()
@@ -4908,9 +4915,35 @@ settingDisableCitationOverlay.addEventListener('change', () => {
 
 settingDisableFigureOverlay.addEventListener('change', () => {
   const disabled = !settingDisableFigureOverlay.checked
+  settingFigureOverlayTrigger.disabled = disabled
   setModeSetting('disableFigureOverlay', settingsTranslationModeContext, disabled)
   if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
     state.disableFigureOverlay = disabled
+    if (disabled) clearFigurePreviews()
+    refreshAllPageOverlays()
+  }
+})
+
+settingFigureOverlayTrigger.addEventListener('change', () => {
+  const trigger = settingFigureOverlayTrigger.value
+  setModeSetting('figureOverlayTrigger', settingsTranslationModeContext, trigger)
+  if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
+    state.figureOverlayTrigger = trigger
+    hideFigurePreviewTooltip()
+  }
+})
+
+// Viewer tabs run in separate frames; apply overlay preferences without a reload.
+window.addEventListener('storage', event => {
+  if (!state.sessionId) return
+  const mode = normalizeSettingsMode(state.currentDocumentMode)
+  if (event.key === `easypaper_figure_overlay_trigger_${mode}`) {
+    state.figureOverlayTrigger = getModeSetting('figureOverlayTrigger', mode)
+    hideFigurePreviewTooltip()
+  }
+  if (event.key === `easypaper_disable_figure_overlay_${mode}`) {
+    state.disableFigureOverlay = getModeSetting('disableFigureOverlay', mode)
+    if (state.disableFigureOverlay) clearFigurePreviews()
     refreshAllPageOverlays()
   }
 })
@@ -11033,6 +11066,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
     // 섞여 들어가는 경쟁 조건이 있었다.
     if (state.chatActiveStream) { state.chatActiveStream(); state.chatActiveStream = null }
 
+    clearFigurePreviews()
     const previousDocId = state.sessionId
     if (previousDocId && previousDocId !== doc.id && hasPendingAnnotationSync(previousDocId)) {
       syncAnnotationsNow(previousDocId, { keepalive: true, refresh: false })
@@ -14705,7 +14739,9 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
       box.setAttribute('aria-haspopup', 'dialog')
       box.setAttribute('aria-expanded', 'false')
       box.setAttribute('aria-label', t('viewer:a11y.figureTrigger', { label: targets.map(target => target.label).join(', ') }))
-      box.addEventListener('mouseenter', () => showFigurePreviewTooltip(targets, box))
+      box.addEventListener('mouseenter', () => {
+        if (state.figureOverlayTrigger === 'hover') showFigurePreviewTooltip(targets, box)
+      })
       box.addEventListener('mouseleave', scheduleFigurePreviewTooltipHide)
       box.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -14715,17 +14751,20 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
           event.preventDefault(); hideFigurePreviewTooltip(); box.focus()
         }
       })
-      // 클릭하면 해당 그림/표/수식이 실제로 있는 페이지로 이동한다. 여러 개를
-      // 한 번에 가리키는 표기("Figures 1 and 2")는 첫 번째 대상 기준으로
-      // 이동하고, 나머지는 미리보기 툴팁 안의 각 항목을 클릭해 개별 이동한다.
+      // 클릭 모드에서는 미리보기를 열고, 호버 모드에서는 첫 대상의 원문으로 이동한다.
+      // 툴팁 안에서는 각 항목을 클릭해 개별 원문으로 이동할 수 있다.
       box.addEventListener('click', (e) => {
         e.preventDefault()
         e.stopPropagation()
         window.getSelection().removeAllRanges()
         const interactionType = kind === 'Table' ? 'tableClick' : (kind === 'Equation' ? 'equationClick' : 'figureClick')
         globalAnalyticsTracker.trackInteraction(interactionType, pageNum)
-        hideFigurePreviewTooltip()
-        scrollToPage(viewerScrollContainer, targets[0].page)
+        if (state.figureOverlayTrigger === 'click') {
+          showFigurePreviewTooltip(targets, box, { focus: true })
+        } else {
+          hideFigurePreviewTooltip()
+          scrollToPage(viewerScrollContainer, targets[0].page)
+        }
       })
       markers.appendChild(box)
     })
@@ -14737,15 +14776,12 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
 let figurePreviewTooltipEl = null
 let figurePreviewHideTimer = null
 let figurePreviewBoxEl = null
-let figurePreviewRequestId = 0
+const pinnedFigurePreviews = new Set()
+let figurePreviewClickOpened = false
 // 리사이즈 드래그 도중, 아직 커지지 않은 박스 경계를 커서가 순간적으로
 // 벗어나 mouseleave가 튀는 경우가 있다 - 드래그 중엔 hide 스케줄 자체를
 // 완전히 무시해 박스가 리사이즈 도중 사라지는 것을 막는다.
 let figurePreviewIsResizing = false
-
-// showFigurePreviewTooltip이 마지막으로 그린 targets 배열 - 툴팁 안 개별
-// 항목을 클릭했을 때 어느 페이지로 이동할지 idx로 되찾기 위해 보관한다.
-let figurePreviewCurrentTargets = []
 
 // 이미지가 실제 그림/표보다 작아 보인다는 피드백에 따라, 참조 호버
 // 미리보기 툴팁 자체를 사용자가 드래그로 키울 수 있게 한다. 한 번 조절한
@@ -14761,6 +14797,12 @@ function getOrCreateFigurePreviewTooltip() {
   el.setAttribute('role', 'dialog')
   el.setAttribute('aria-label', t('viewer:a11y.figureTrigger', { label: '' }))
   el.innerHTML = `
+    <div class="figure-preview-toolbar">
+      <button type="button" class="figure-preview-drag" aria-label="${t('viewer:figurePreview.move')}" disabled></button>
+      <button type="button" class="figure-preview-pin" aria-label="${t('viewer:figurePreview.pin')}" title="${t('viewer:figurePreview.pin')}">${icon('pin', 14)}</button>
+      <button type="button" class="figure-preview-collapse hidden" aria-label="${t('viewer:figurePreview.collapse')}" aria-expanded="true">${icon('chevronUp', 14)}</button>
+      <button type="button" class="figure-preview-close" aria-label="${t('viewer:figurePreview.close')}">${icon('x', 14)}</button>
+    </div>
     <div class="figure-preview-tooltip-items"></div>
     <button type="button" class="figure-preview-tooltip-resize-handle handle-nw" data-corner="nw" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
     <button type="button" class="figure-preview-tooltip-resize-handle handle-ne" data-corner="ne" title="${t('viewer:a11y.figureResize')}" aria-label="${t('viewer:a11y.figureResize')}"></button>
@@ -14783,12 +14825,15 @@ function getOrCreateFigurePreviewTooltip() {
   el.addEventListener('mouseenter', () => {
     if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
   })
-  el.addEventListener('mouseleave', scheduleFigurePreviewTooltipHide)
+  el.addEventListener('mouseleave', () => {
+    if (!pinnedFigurePreviews.has(el)) scheduleFigurePreviewTooltipHide()
+  })
+  installFigurePreviewControls(el)
   el.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return
     event.preventDefault()
-    const trigger = figurePreviewBoxEl
-    hideFigurePreviewTooltip()
+    const trigger = el.previewAnchor
+    closeFigurePreview(el)
     trigger?.focus()
   })
   // 여러 대상이 한 툴팁에 쌓여 있을 때, 특정 항목을 클릭하면 그 항목의
@@ -14797,9 +14842,9 @@ function getOrCreateFigurePreviewTooltip() {
   el.querySelector('.figure-preview-tooltip-items').addEventListener('click', (e) => {
     const itemEl = e.target.closest('.figure-preview-tooltip-item')
     if (!itemEl) return
-    const target = figurePreviewCurrentTargets[parseInt(itemEl.dataset.idx, 10)]
+    const target = el.previewTargets[parseInt(itemEl.dataset.idx, 10)]
     if (!target) return
-    hideFigurePreviewTooltip()
+    if (!pinnedFigurePreviews.has(el)) hideFigurePreviewTooltip()
     scrollToPage(viewerScrollContainer, target.page)
   })
 
@@ -14947,10 +14992,12 @@ async function showFigurePreviewTooltip(targets, boxEl, { focus = false } = {}) 
   if (figurePreviewBoxEl && figurePreviewBoxEl !== boxEl) figurePreviewBoxEl.setAttribute('aria-expanded', 'false')
   figurePreviewBoxEl = boxEl
   boxEl?.setAttribute('aria-expanded', 'true')
-  figurePreviewCurrentTargets = targets
-  const requestId = ++figurePreviewRequestId
-
+  figurePreviewClickOpened = focus
   const tooltip = getOrCreateFigurePreviewTooltip()
+  const requestId = tooltip.previewRequestId = (tooltip.previewRequestId || 0) + 1
+  tooltip.previewTargets = targets
+  tooltip.previewAnchor = boxEl
+  tooltip.querySelector('.figure-preview-drag').textContent = targets.map(target => target.label).join(', ')
   focusModeController?.registerPreview(tooltip, boxEl, hideFigurePreviewTooltip)
   const itemsEl = tooltip.querySelector('.figure-preview-tooltip-items')
   itemsEl.innerHTML = targets.map((target, idx) => `
@@ -14974,15 +15021,17 @@ async function showFigurePreviewTooltip(targets, boxEl, { focus = false } = {}) 
     try {
       const dataUrl = await renderFigureCrop(t.page, t)
       // 그 사이 다른 표기로 호버가 옮겨갔거나 툴팁이 닫혔으면 결과를 버린다
-      if (requestId !== figurePreviewRequestId || figurePreviewTooltipEl.classList.contains('hidden')) return
+      if (requestId !== tooltip.previewRequestId || !tooltip.isConnected || tooltip.classList.contains('hidden')) return
       if (!dataUrl) throw new Error('empty crop')
-      imgEl.onload = () => positionFigurePreviewTooltip()
+      imgEl.onload = () => {
+        if (tooltip === figurePreviewTooltipEl) positionFigurePreviewTooltip()
+      }
       imgEl.src = dataUrl
       loadingEl.classList.add('hidden')
       imgEl.classList.remove('hidden')
     } catch (e) {
       console.warn('그림/표/수식 미리보기 렌더 실패:', e)
-      if (requestId !== figurePreviewRequestId) return
+      if (requestId !== tooltip.previewRequestId || !tooltip.isConnected) return
       loadingEl.innerHTML = '미리보기를 불러올 수 없습니다.'
     }
   })
@@ -14990,13 +15039,17 @@ async function showFigurePreviewTooltip(targets, boxEl, { focus = false } = {}) 
 
 function hideFigurePreviewTooltip() {
   if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
-  if (figurePreviewTooltipEl) figurePreviewTooltipEl.classList.add('hidden')
+  if (figurePreviewTooltipEl) {
+    figurePreviewTooltipEl.classList.add('hidden')
+    figurePreviewTooltipEl.previewRequestId = (figurePreviewTooltipEl.previewRequestId || 0) + 1
+  }
+  figurePreviewClickOpened = false
   figurePreviewBoxEl?.setAttribute('aria-expanded', 'false')
   figurePreviewBoxEl = null
 }
 
 function scheduleFigurePreviewTooltipHide() {
-  if (figurePreviewIsResizing) return
+  if (figurePreviewIsResizing || figurePreviewClickOpened || figurePreviewTooltipEl?.contains(document.activeElement)) return
   if (figurePreviewHideTimer) clearTimeout(figurePreviewHideTimer)
   figurePreviewHideTimer = setTimeout(hideFigurePreviewTooltip, 220)
 }
@@ -15005,6 +15058,77 @@ document.addEventListener('scroll', event => {
   if (figurePreviewTooltipEl?.contains(event.target)) return
   if (figurePreviewTooltipEl && !figurePreviewTooltipEl.classList.contains('hidden')) hideFigurePreviewTooltip()
 }, true)
+
+document.addEventListener('pointerdown', event => {
+  if (figurePreviewTooltipEl?.contains(event.target) || figurePreviewBoxEl?.contains(event.target)) return
+  hideFigurePreviewTooltip()
+})
+
+function closeFigurePreview(el) {
+  if (pinnedFigurePreviews.delete(el)) {
+    el.remove()
+  } else {
+    hideFigurePreviewTooltip()
+  }
+}
+
+function clearFigurePreviews() {
+  hideFigurePreviewTooltip()
+  for (const el of pinnedFigurePreviews) el.remove()
+  pinnedFigurePreviews.clear()
+}
+
+function installFigurePreviewControls(el) {
+  const drag = el.querySelector('.figure-preview-drag')
+  const pin = el.querySelector('.figure-preview-pin')
+  const collapse = el.querySelector('.figure-preview-collapse')
+  el.querySelector('.figure-preview-close').addEventListener('click', () => closeFigurePreview(el))
+  pin.addEventListener('click', () => {
+    if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+    focusModeController?.unregisterPreview(el)
+    pinnedFigurePreviews.add(el)
+    el.classList.add('pinned')
+    el.previewAnchor?.setAttribute('aria-expanded', 'false')
+    figurePreviewTooltipEl = null
+    figurePreviewBoxEl = null
+    figurePreviewClickOpened = false
+    pin.classList.add('hidden')
+    collapse.classList.remove('hidden')
+    drag.disabled = false
+    drag.focus()
+  })
+  collapse.addEventListener('click', () => {
+    const collapsed = el.classList.toggle('collapsed')
+    collapse.setAttribute('aria-expanded', String(!collapsed))
+    collapse.setAttribute('aria-label', collapsed ? t('viewer:figurePreview.expand') : t('viewer:figurePreview.collapse'))
+    collapse.innerHTML = icon(collapsed ? 'chevronDown' : 'chevronUp', 14)
+  })
+  const move = (left, top) => {
+    el.style.left = `${Math.max(8, Math.min(left, window.innerWidth - el.offsetWidth - 8))}px`
+    el.style.top = `${Math.max(8, Math.min(top, window.innerHeight - el.offsetHeight - 8))}px`
+  }
+  drag.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || !pinnedFigurePreviews.has(el)) return
+    event.preventDefault()
+    const rect = el.getBoundingClientRect()
+    const startX = event.clientX, startY = event.clientY
+    drag.setPointerCapture(event.pointerId)
+    const onMove = event => move(rect.left + event.clientX - startX, rect.top + event.clientY - startY)
+    const onEnd = () => {
+      drag.removeEventListener('pointermove', onMove)
+      drag.removeEventListener('lostpointercapture', onEnd)
+    }
+    drag.addEventListener('pointermove', onMove)
+    drag.addEventListener('lostpointercapture', onEnd)
+  })
+  drag.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+    event.preventDefault()
+    const rect = el.getBoundingClientRect(), step = event.shiftKey ? 20 : 4
+    move(rect.left + (event.key === 'ArrowRight' ? step : event.key === 'ArrowLeft' ? -step : 0),
+      rect.top + (event.key === 'ArrowDown' ? step : event.key === 'ArrowUp' ? -step : 0))
+  })
+}
 
 // ── 인용 표기 호버 툴팁: 참고문헌 원문 + 외부 링크 찾기 + Google Scholar 검색 ──
 let citationTooltipEl = null
