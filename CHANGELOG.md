@@ -2,6 +2,30 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.3.0 - 2026-10-12
+
+### 한국어 (1.2.1 → 1.3.0)
+
+- 라이트·다크 모드별 커스텀 테마, 테마 프리셋·색상 편집·설정 미리보기 및 문서 프레임 색상 동기화를 추가
+- 미니멀 작업 공간 UI 모드를 추가하고 작업 공간 여백·카드·테마 미리보기를 개선
+- 탭 간 읽기 기록을 유지하고 PDF 텍스트 선택·집중 모드 표시·Easy English 원문 대응을 수정
+- 라이브러리 검색 취소·응답 순서 처리를 개선하고 빈 라이브러리에서도 폴더를 표시하며 일괄 작업의 부분 실패를 안내
+- 휴지통 비우기 범위를 현재 작업 공간 모드로 제한하고 확인 대화상자 내부에 키보드 포커스를 유지
+- 메모 화면 재방문 시 이벤트 중복 등록을 방지하고 브리핑 대상 언어를 반영하며 실패한 브리핑 재시도를 지원
+- IME 조합 중 Enter 입력으로 채팅 내용이 전송되는 문제를 수정하고 API 모델 목록을 갱신
+- Linux 릴리스 패키징 복구와 초안 릴리스의 RPM 업로드를 개선
+
+### English (1.2.1 → 1.3.0)
+
+- Added separate light/dark custom themes with named presets, editable colors, settings previews, and synchronized document-frame colors.
+- Added a minimal workspace UI mode and refined workspace spacing, cards, and theme previews.
+- Preserved reading history across tabs; fixed PDF text selection, Focus mode markers, and Easy English source matching.
+- Improved library search cancellation and response ordering, kept folders visible in empty libraries, and reported partial failures in bulk actions.
+- Scoped trash emptying to the current workspace mode and contained keyboard focus within confirmation dialogs.
+- Prevented duplicate note event handlers across visits; honored the notes briefing target language and enabled retrying failed briefings.
+- Preserved chat input during IME composition when pressing Enter and refreshed the API model catalog.
+- Improved Linux release packaging recovery and draft-release RPM uploads.
+
 ## 1.2.1 - 2026-10-05
 
 ### 한국어 (1.2.0 → 1.2.1)
