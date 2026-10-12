@@ -3434,15 +3434,19 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'openai', label: 'OpenAI', icon: '✦',
+    // Text-generation API models verified 2026-10-12:
+    // https://developers.openai.com/api/docs/models
     models: [
-      { value: 'gpt-5.6-sol',   label: 'GPT-5.6 Sol' },
+      { value: 'gpt-6.1-sol', label: 'GPT-6.1 Sol' },
+      { value: 'gpt-6-astra', label: 'GPT-6 Astra' },
+      { value: 'gpt-6-sol', label: 'GPT-6 Sol' },
+      { value: 'gpt-6-luna', label: 'GPT-6 Luna' },
+      { value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' },
       { value: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
-      { value: 'gpt-5.6-luna',  label: 'GPT-5.6 Luna' },
-      { value: 'gpt-5.5-pro', label: 'GPT-5.5 Pro' },
+      { value: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
       { value: 'gpt-5.5', label: 'GPT-5.5' },
       { value: 'gpt-5.4', label: 'GPT-5.4' },
       { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
-      { value: 'gpt-5.4-nano', label: 'GPT-5.4 Nano' },
       { value: 'o3', label: 'o3' },
       { value: 'gpt-4o', label: 'GPT-4o' },
       { value: 'gpt-4o-mini', label: 'GPT-4o Mini' }
@@ -3450,21 +3454,24 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'claude', label: 'Anthropic Claude', icon: icon('cpu', 13),
+    // https://platform.claude.com/docs/en/models/overview (2026-10-12)
     models: [
-      { value: 'claude-fable-5', label: 'Claude Fable 5' },
-      { value: 'claude-opus-5', label: 'Claude Opus 5' },
-      { value: 'claude-opus-4.7', label: 'Claude Opus 4.7' },
-      { value: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
-      { value: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' }
+      { value: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+      { value: 'claude-fable-5-1', label: 'Claude Fable 5.1' },
+      { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+      { value: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' }
     ]
   },
   {
     id: 'gemini', label: 'Google Gemini', icon: icon('star', 13),
+    // https://ai.google.dev/gemini-api/docs/models (2026-10-12)
     models: [
+      { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
       { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
-      { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
       { value: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
-      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' }
+      { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' },
+      { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)' },
+      { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' }
     ]
   }
 ]
