@@ -11575,6 +11575,8 @@ function getMappedElementsAndIndices(target, pageNum, sentenceIdx) {
 // 커스텀 다이얼로그 확인 모달 유틸리티
 function showCustomConfirm(message, { title = '확인', confirmText = '확인', cancelText = '취소', danger = true } = {}) {
   return new Promise((resolve) => {
+    const trigger = document.activeElement
+    let closing = false
     const modal = document.createElement('div')
     modal.className = 'custom-confirm-modal-wrapper'
 
@@ -11599,15 +11601,49 @@ function showCustomConfirm(message, { title = '확인', confirmText = '확인', 
         </div>
       </div>
     `
+    const dialog = modal.querySelector('.custom-confirm-modal')
+    dialog.setAttribute('role', 'dialog')
+    dialog.setAttribute('aria-modal', 'true')
+    dialog.setAttribute('aria-label', title)
     document.body.appendChild(modal)
+    const cancelButton = modal.querySelector('.cancel-btn')
+    const confirmButton = modal.querySelector('.confirm-btn')
+    cancelButton.focus()
+
+    const onKeyDown = (event) => {
+      const dialogs = document.querySelectorAll('.custom-confirm-modal-wrapper')
+      if (dialogs[dialogs.length - 1] !== modal) return
+      event.stopPropagation()
+      if (closing) {
+        event.preventDefault()
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        cleanup(false)
+      } else if (event.key === 'Tab') {
+        event.preventDefault()
+        const next = document.activeElement === cancelButton
+          ? confirmButton
+          : document.activeElement === confirmButton
+            ? cancelButton
+            : event.shiftKey ? confirmButton : cancelButton
+        next.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown, true)
 
     // Trigger transition
     setTimeout(() => modal.classList.add('active'), 10)
 
     const cleanup = (value) => {
+      if (closing) return
+      closing = true
       modal.classList.remove('active')
       setTimeout(() => {
         modal.remove()
+        document.removeEventListener('keydown', onKeyDown, true)
+        if (trigger?.isConnected) trigger.focus()
         resolve(value)
       }, 200)
     }
