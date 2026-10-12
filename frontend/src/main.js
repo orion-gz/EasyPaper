@@ -7837,10 +7837,6 @@ async function renderLibrary() {
     // 항상 최신 개수로 갱신한다(휴지통 탭에서는 renderLibraryStatusTabs 내부에서 숨김).
     renderLibraryStatusTabs(docs)
 
-    if (docs.length === 0) {
-      libraryGrid.appendChild(createEmptyState(state.currentLibraryTab === 'trash' ? 'trash' : 'library')); return
-    }
-
     // 연구 모드는 기존 학술 카테고리, 일반 모드는 문서 종류를 필터로 쓴다.
     const isGeneralLibrary = workspaceModeController.getMode() === 'general'
     let filterDefs
