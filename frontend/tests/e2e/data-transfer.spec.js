@@ -57,3 +57,69 @@ test('shows invalid archive errors and permits retry without reloading', async (
   await expect(page.locator('#user-data-import')).toBeEnabled()
   await expect(page.locator('#user-data-reload')).toBeHidden()
 })
+
+for (const exportSucceeds of [true, false]) {
+  test(`pending settings recovery survives ${exportSucceeds ? 'successful' : 'failed'} export and blocks duplicate import`, async ({ page }) => {
+    await mockBaseRoutes(page)
+    let imports = 0
+    let settingsSaves = 0
+    let failSettings = true
+    let exports = 0
+    let releaseExport
+    const exportGate = new Promise(resolve => { releaseExport = resolve })
+    await page.route('**/api/user-data/import', route => {
+      imports++
+      return route.fulfill({ json: {
+        documents: 1, id_map: { source: 'restored' },
+        browser_data: { easypaper_memos_source: '{"1":[{"text":"backup memo"}]}' },
+        system_settings: { ollama_host: 'http://localhost:11434' },
+      } })
+    })
+    await page.route('**/api/settings/system', async route => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      settingsSaves++
+      return route.fulfill(failSettings
+        ? { status: 500, json: { detail: 'write failed' } }
+        : { json: { status: 'success' } })
+    })
+    await page.route('**/api/user-data/export', async route => {
+      exports++
+      await exportGate
+      return route.fulfill(exportSucceeds
+        ? { contentType: 'application/zip', body: Buffer.from('ZIP') }
+        : { status: 500, json: { detail: 'export failed' } })
+    })
+    await openTransfer(page)
+    await page.locator('#user-data-system-settings').check()
+    page.on('dialog', dialog => dialog.accept())
+    const archive = { name: 'backup.zip', mimeType: 'application/zip', buffer: Buffer.from('ZIP') }
+    await page.locator('#user-data-file').setInputFiles(archive)
+    await expect(page.locator('#user-data-status')).toContainText('write failed')
+    await expect(page.locator('#user-data-retry')).toBeEnabled()
+    await expect(page.locator('#user-data-import')).toBeDisabled()
+    await page.locator('#user-data-export').dispatchEvent('click')
+    await expect.poll(() => exports).toBe(1)
+    await expect(page.locator('#user-data-retry')).toBeDisabled()
+    // Even programmatic events must respect the in-flight operation.
+    await page.locator('#user-data-retry').dispatchEvent('click')
+    expect(settingsSaves).toBe(1)
+    releaseExport()
+    await expect(page.locator('#user-data-export')).toBeEnabled()
+    await expect(page.locator('#user-data-import')).toBeDisabled()
+    await expect(page.locator('#user-data-file')).toBeDisabled()
+    await expect(page.locator('#user-data-retry')).toBeEnabled()
+    // Removing an HTML disabled attribute must not bypass the controller guard.
+    await page.locator('#user-data-file').evaluate(input => { input.disabled = false })
+    await page.locator('#user-data-file').setInputFiles(archive)
+    expect(imports).toBe(1)
+    failSettings = false
+    await page.locator('#user-data-retry').dispatchEvent('click')
+    await expect(page.locator('#user-data-reload')).toBeVisible()
+    await expect(page.locator('#user-data-retry')).toBeHidden()
+    await expect(page.locator('#user-data-import')).toBeEnabled()
+    await expect(page.locator('#user-data-file')).toBeEnabled()
+    expect(imports).toBe(1)
+    expect(settingsSaves).toBe(2)
+    expect(await page.evaluate(() => localStorage.getItem('easypaper_memos_restored'))).toBe('{"1":[{"text":"backup memo"}]}')
+  })
+}

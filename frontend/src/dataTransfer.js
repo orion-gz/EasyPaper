@@ -18,27 +18,39 @@ export function initializeDataTransfer({ beforeExport = async () => {} } = {}) {
   const status = document.getElementById('user-data-status')
   const reloadButton = document.getElementById('user-data-reload')
   const retryButton = document.getElementById('user-data-retry')
+  const systemSettings = document.getElementById('user-data-system-settings')
   let pendingRestore = null
-  const busy = value => { exportButton.disabled = value; importButton.disabled = value; input.disabled = value }
+  let transferBusy = false
+  const busy = value => {
+    transferBusy = value
+    exportButton.disabled = value
+    importButton.disabled = value || !!pendingRestore
+    input.disabled = value || !!pendingRestore
+    systemSettings.disabled = value || !!pendingRestore
+    retryButton.disabled = value || !pendingRestore
+    retryButton.hidden = !pendingRestore
+    reloadButton.disabled = value || !!pendingRestore
+  }
   reloadButton.addEventListener('click', () => window.location.reload())
   const finishRestore = async () => {
     const { result } = pendingRestore
+    pendingRestore.browser ??= prepareBrowserRestore(result.browser_data, result.id_map, pendingRestore.username, window.location.origin)
     restoreBrowserData(pendingRestore.browser)
     if (pendingRestore.system && Object.keys(result.system_settings || {}).length) {
       await saveSystemSettingsAPI(result.system_settings)
     }
     pendingRestore = null
-    retryButton.hidden = true
-    importButton.disabled = false
     status.textContent = t('settings:dataTransfer.imported', { count: result.documents })
     reloadButton.hidden = false
   }
   retryButton.addEventListener('click', async () => {
-    retryButton.disabled = true
+    if (transferBusy || !pendingRestore) return
+    busy(true)
     try { await finishRestore() } catch (error) { status.textContent = `${t('settings:dataTransfer.partial')} ${error.message}` }
-    finally { retryButton.disabled = false }
+    finally { busy(false) }
   })
   exportButton.addEventListener('click', async () => {
+    if (transferBusy) return
     busy(true)
     status.textContent = t('settings:dataTransfer.exporting')
     try {
@@ -58,22 +70,26 @@ export function initializeDataTransfer({ beforeExport = async () => {} } = {}) {
     } catch (error) { status.textContent = `${t('settings:dataTransfer.failed')} ${error.message}` }
     finally { busy(false) }
   })
-  importButton.addEventListener('click', () => input.click())
+  importButton.addEventListener('click', () => {
+    if (!transferBusy && !pendingRestore) input.click()
+  })
   input.addEventListener('change', async () => {
+    if (transferBusy || pendingRestore) { input.value = ''; return }
     const file = input.files?.[0]
     if (!file) return
     if (!window.confirm(t('settings:dataTransfer.confirm'))) { input.value = ''; return }
+    const restoreSystemSettings = systemSettings.checked
     busy(true)
+    reloadButton.hidden = true
     status.textContent = t('settings:dataTransfer.importing')
     try {
       const auth = await checkAuthAPI()
       if (file.size > 4 * 1024 ** 3) throw new Error(t('settings:dataTransfer.tooLarge'))
       const result = await (await checked(await fetch('/api/user-data/import', { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file }))).json()
-      pendingRestore = { result, browser: prepareBrowserRestore(result.browser_data, result.id_map, auth.username, window.location.origin), system: document.getElementById('user-data-system-settings').checked }
+      pendingRestore = { result, username: auth.username, system: restoreSystemSettings }
       await finishRestore()
     } catch (error) {
       status.textContent = `${t(pendingRestore ? 'settings:dataTransfer.partial' : 'settings:dataTransfer.failed')} ${error.message}`
-      retryButton.hidden = !pendingRestore
-    } finally { input.value = ''; busy(false); importButton.disabled = !!pendingRestore }
+    } finally { input.value = ''; busy(false) }
   })
 }
