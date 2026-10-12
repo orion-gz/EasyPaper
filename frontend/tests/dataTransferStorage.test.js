@@ -52,3 +52,23 @@ test('preserve note text and remap routes and reading receipts', () => {
   assert.match(restored['easypaper_workspace_v1:origin:bob:research'], /#viewer\?id=new&page=2/)
   assert.equal(JSON.parse(restored['easypaper_reading_time:bob:new-request']).requestId, 'new-request')
 })
+
+test('quota failure restores existing settings even when a replacement initially freed space', () => {
+  const values = new Map([['easypaper_custom_themes_v1', 'A'.repeat(100)]])
+  const storage = {
+    getItem: key => values.get(key) ?? null,
+    removeItem: key => values.delete(key),
+    setItem(key, value) {
+      const next = new Map(values).set(key, value)
+      if ([...next.values()].reduce((n, value) => n + value.length, 0) > 110) throw new Error('QuotaExceededError')
+      values.set(key, value)
+    },
+  }
+  assert.throws(() => restoreBrowserData({
+    easypaper_custom_themes_v1: 'small',
+    easypaper_memos_new: 'M'.repeat(95),
+    easypaper_annotations_new: 'N'.repeat(50),
+  }, storage), /QuotaExceeded/)
+  assert.equal(storage.getItem('easypaper_custom_themes_v1'), 'A'.repeat(100))
+  assert.equal(storage.getItem('easypaper_memos_new'), null)
+})

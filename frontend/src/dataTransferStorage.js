@@ -88,9 +88,11 @@ export function restoreBrowserData(data, storage = localStorage) {
       } else storage.setItem(key, value)
     }
   } catch (error) {
+    // Free every touched slot before restoring larger original values. Otherwise
+    // new entries can consume the space needed by the rollback itself.
+    for (const key of previous.keys()) storage.removeItem(key)
     for (const [key, value] of previous) {
-      if (value === null) storage.removeItem(key)
-      else storage.setItem(key, value)
+      if (value !== null) storage.setItem(key, value)
     }
     throw error
   }
