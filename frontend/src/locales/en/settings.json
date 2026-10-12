@@ -199,5 +199,9 @@
   "minimalRestore": "Restore",
   "minimalDeleteForever": "Delete permanently",
   "minimalRename": "Rename",
-  "minimalDelete": "Delete"
+  "minimalDelete": "Delete",
+  "figurePreviewEnabled": "Figure/Table/Equation reference previews",
+  "figureOverlayTrigger": "Show reference previews on",
+  "figureOverlayHover": "Hover",
+  "figureOverlayClick": "Click"
 }

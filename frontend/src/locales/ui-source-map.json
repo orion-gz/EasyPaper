@@ -1,4 +1,8 @@
 {
+  "Figure/Table/수식 참조 미리보기": "settings:figurePreviewEnabled",
+  "참조 미리보기 표시 방식": "settings:figureOverlayTrigger",
+  "호버": "settings:figureOverlayHover",
+  "클릭": "settings:figureOverlayClick",
   "번역본 초기화": "viewer:translation.reset",
   "문서 전체 번역": "viewer:translation.full",
   "기존 번역본을 모두 삭제하시겠습니까?": "viewer:translation.resetConfirm",

@@ -356,6 +356,12 @@ export class FocusModeController {
     this.previews.set(element, { anchor, hide })
     this.scheduleRender()
   }
+  unregisterPreview(element) {
+    this.restorePreviewLayout(element)
+    this.previews.delete(element)
+    this.activePreviews.delete(element)
+    this.scheduleRender()
+  }
   restorePreviewAnchors() {
     for (const [anchor, styles] of this.previewAnchors) {
       for (const [property, original] of Object.entries(styles)) anchor.style.setProperty(property, original.value, original.priority)

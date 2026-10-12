@@ -96,5 +96,10 @@
   "easyEnglish.retry": "Retry",
   "easyEnglish.noText": "This page has no text to convert.",
   "easyEnglish.matchLabel": "Show matching source: {{text}}",
-  "easyEnglish.locationMissing": "The exact source location is unavailable."
+  "easyEnglish.locationMissing": "The exact source location is unavailable.",
+  "figurePreview.pin": "Pin",
+  "figurePreview.move": "Move (drag or arrow keys)",
+  "figurePreview.collapse": "Collapse",
+  "figurePreview.expand": "Expand",
+  "figurePreview.close": "Close"
 }
