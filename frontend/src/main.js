@@ -1,3 +1,4 @@
+import { initializeDataTransfer } from './dataTransfer.js'
 import { isMinimalUi, setMinimalUi, MINIMAL_UI_KEY } from './minimalUi.js'
 import './styles/minimal-ui.css'
 import { applyTheme, selectedTheme, loadThemes, saveThemes, THEME_STORAGE_KEY } from './themes/themeEngine.js'
@@ -19342,3 +19343,10 @@ function showDocumentLoadError(error) {
   viewerScreen.replaceChildren(panel)
   viewerScreen.classList.add('active')
 }
+
+initializeDataTransfer({ beforeExport: async () => {
+  await flushReadingHeartbeat()
+  await globalAnalyticsTracker.sendHeartbeat()
+  await globalAnalyticsTracker.syncOfflineQueue()
+  if (state.sessionId) await syncAnnotationsNow(state.sessionId)
+} })
