@@ -204,3 +204,41 @@ def test_stream_upload_limit(dataset, monkeypatch):
     monkeypatch.setattr(transfer, 'MAX_ARCHIVE_BYTES', 3)
     with TestClient(app) as client:
         assert client.post('/user-data/import', content=b'1234').status_code == 413
+
+
+@pytest.mark.parametrize('deleted', [('paper-b',), ('paper-a', 'paper-b')])
+def test_comparison_history_survives_deleted_sources(dataset, deleted):
+    db = dataset['db']
+    with db.get_db() as conn:
+        conn.execute("INSERT INTO chats(doc_id,role,content,created_at) VALUES('cmp_old','assistant','comparison answer','now')")
+        conn.execute("INSERT INTO compare_sessions VALUES('cmp_private','bob','[\"private-b\"]','now','now')")
+        conn.execute("INSERT INTO chats(doc_id,role,content,created_at) VALUES('cmp_private','user','private comparison','now')")
+    for doc_id in deleted:
+        db.db_delete_document(doc_id)
+    archive = backup(dataset)
+    with zipfile.ZipFile(archive) as handle:
+        manifest = json.loads(handle.read('manifest.json'))
+        assert [row['id'] for row in manifest['tables']['compare_sessions']] == ['cmp_old']
+        assert 'private comparison' not in str(manifest)
+        for doc_id in deleted:
+            assert not any(name.startswith(f'library/{doc_id}/') for name in handle.namelist())
+    archive.seek(0)
+    result = transfer.import_archive('bob', archive)
+    assert result['documents'] == 2 - len(deleted)
+    with db.get_db() as conn:
+        comparison = conn.execute('SELECT doc_ids FROM compare_sessions WHERE id=?', (result['id_map']['cmp_old'],)).fetchone()
+        assert json.loads(comparison['doc_ids']) == [result['id_map']['paper-a'], result['id_map']['paper-b']]
+        history = conn.execute('SELECT content FROM chats WHERE doc_id=? ORDER BY id', (result['id_map']['cmp_old'],)).fetchall()
+        assert [row['content'] for row in history] == ['compare?', 'comparison answer']
+        for doc_id in deleted:
+            assert not conn.execute('SELECT 1 FROM documents WHERE id=?', (result['id_map'][doc_id],)).fetchone()
+        if 'paper-a' in deleted:
+            reading = conn.execute('SELECT paper_id FROM reading_sessions WHERE id=?', (result['id_map']['read-a'],)).fetchone()
+            assert reading['paper_id'] == result['id_map']['paper-a']
+    # A restored archive must also preserve deleted-paper comparisons on re-export.
+    again = io.BytesIO()
+    transfer.export_archive('bob', {}, again)
+    again.seek(0)
+    with zipfile.ZipFile(again) as handle:
+        manifest = json.loads(handle.read('manifest.json'))
+        assert any(row['id'] == result['id_map']['cmp_old'] for row in manifest['tables']['compare_sessions'])

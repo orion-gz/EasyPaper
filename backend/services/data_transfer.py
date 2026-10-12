@@ -57,8 +57,9 @@ def _snapshot(conn, username):
     tables = {t: [] for t in TABLES}
     tables['documents'] = _rows(conn, 'documents', 'WHERE username = ?', (username,))
     docs = {row['id'] for row in tables['documents']}
-    tables['compare_sessions'] = [row for row in _rows(conn, 'compare_sessions', 'WHERE username = ?', (username,))
-                                  if set(json.loads(row['doc_ids'])) <= docs]
+    # Comparison conversations deliberately survive permanent document deletion.
+    # Their owner, not the continued existence of every source paper, sets scope.
+    tables['compare_sessions'] = _rows(conn, 'compare_sessions', 'WHERE username = ?', (username,))
     sessions = docs | {row['id'] for row in tables['compare_sessions']}
     for table in USER_TABLES:
         tables[table] = _rows(conn, table, 'WHERE username = ?', (username,))
@@ -202,12 +203,27 @@ def import_archive(username, source):
                 maps[table] = mapping
             docs = maps['documents']
             document_count = len(docs)
+            file_sessions = set(docs)
+
+            def map_document_id(old):
+                if not isinstance(old, str) or not SAFE_ID.fullmatch(old):
+                    raise InvalidArchive('Invalid historical document identifier.')
+                if old not in docs:
+                    docs[old] = uuid.uuid4().hex
+                return docs[old]
+
             compare = {}
             for row in tables['compare_sessions']:
-                ids = [docs[doc_id] for doc_id in json.loads(row['doc_ids'])]
+                old_ids = json.loads(row['doc_ids'])
+                if not isinstance(old_ids, list) or not old_ids:
+                    raise InvalidArchive('Invalid comparison document list.')
+                if not isinstance(row['id'], str) or not SAFE_ID.fullmatch(row['id']) or row['id'] in docs or row['id'] in compare:
+                    raise InvalidArchive('Invalid comparison identifier.')
+                ids = [map_document_id(doc_id) for doc_id in old_ids]
                 compare[row['id']] = 'cmp_' + hashlib.sha256(':'.join(sorted(ids)).encode()).hexdigest()[:20]
                 row['doc_ids'] = json.dumps(ids)
             maps['compare_sessions'] = compare
+            file_sessions.update(compare)
             sessions = {**docs, **compare}
             # Deleted documents may still have reading history. Give those IDs one
             # consistent mapping without recreating deleted documents.
@@ -215,12 +231,12 @@ def import_archive(username, source):
                 for row in tables[table]:
                     old = row.get('paper_id', row.get('doc_id'))
                     if old and old not in sessions:
-                        docs[old] = sessions[old] = uuid.uuid4().hex
+                        sessions[old] = map_document_id(old)
             # Validate every file path against IDs declared in the manifest.
             staged = []
             for name, checksum in manifest['files'].items():
                 parts = PurePosixPath(name).parts
-                if len(parts) < 3 or parts[0] not in ('library', 'uploads', 'cache') or parts[1] not in sessions:
+                if len(parts) < 3 or parts[0] not in ('library', 'uploads', 'cache') or parts[1] not in file_sessions:
                     raise InvalidArchive('Unrecognized document file.')
                 label, old = parts[:2]
                 new = sessions[old]
