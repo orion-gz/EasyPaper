@@ -63,5 +63,6 @@
   "article.underline": "Underline",
   "article.memo": "Memo",
   "article.memoPrompt": "Memo text",
-  "article.capture": "Capture section"
+  "article.capture": "Capture section",
+  "batch.failure": "{{success}} completed, {{failed}} failed. Retry the selected items."
 }

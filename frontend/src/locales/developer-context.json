@@ -1,4 +1,5 @@
 {
+  "library:batch.failure": { "description": "Reports successful and failed batch operations; failed documents remain selected for retry." },
   "navigation:tabs.refresh": {
     "description": "Reload the current document viewer and its saved viewer and translation settings."
   },
