@@ -1,4 +1,5 @@
 {
+  "briefing.retry": "다시 시도",
   "login.username": "아이디",
   "login.password": "비밀번호",
   "login.submit": "로그인",

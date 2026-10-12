@@ -355,7 +355,7 @@ function renderSummaryTabContent(docId) {
     return `<div class="notes-summary-loading">${icon('refreshCw', 15)}<span>읽기 전 브리핑을 불러오는 중...</span></div>`
   }
   if (cached.status === 'error') {
-    return `<div class="notes-empty"><p style="color:var(--error)">브리핑을 불러오지 못했습니다.</p></div>`
+    return `<div class="notes-empty"><p style="color:var(--error)">브리핑을 불러오지 못했습니다.</p><button type="button" class="notes-summary-retry">${t('common:briefing.retry')}</button></div>`
   }
   const data = cached.data || {}
   if (hasAdaptiveBriefing(data)) {
@@ -613,6 +613,12 @@ function attachListeners(root) {
   listenerRoots.add(root)
 
   root.addEventListener('click', (e) => {
+    if (e.target.closest('.notes-summary-retry') && selectedDocId) {
+      summaryCache.delete(summaryCacheKey(selectedDocId))
+      renderDetail(root)
+      return
+    }
+
     // 즐겨찾기 별 토글 (목록 행/상세 헤더 공용) - 논문 선택보다 먼저 처리해서
     // 별을 눌러도 그 논문이 함께 선택되지 않도록 한다.
     const favBtn = e.target.closest('.notes-fav-btn')
@@ -754,6 +760,9 @@ function shellHtml() {
 export async function renderNotesPage(documentMode = 'research') {
   const root = document.getElementById('page-notes')
   if (!root) return
+  for (const [key, cached] of summaryCache) {
+    if (cached.status === 'error') summaryCache.delete(key)
+  }
   const generation = ++renderGeneration
   activeDocumentMode = documentMode === 'general' ? 'general' : 'research'
   const isCurrent = () => generation === renderGeneration && root.classList.contains('active')
