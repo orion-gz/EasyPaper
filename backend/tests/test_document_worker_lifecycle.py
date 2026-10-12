@@ -23,6 +23,7 @@ async def test_delete_awaits_translation_and_prevents_late_writes(isolated_dirs,
     from routers.library import delete_library_document_permanently
     from services import translation_job as jobs, library
     session = seed(isolated_dirs, 'delete-active', document_mode='general', document_type='manual')
+    isolated_dirs['db'].db_soft_delete_document('delete-active')
     started = asyncio.Event()
     async def translate(*args, **kwargs):
         started.set()

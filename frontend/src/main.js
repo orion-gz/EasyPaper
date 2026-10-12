@@ -7745,7 +7745,13 @@ function ensureLibraryChrome() {
   ensureLibraryDetailPanel()
 }
 
+let libraryRenderGeneration = 0
 async function renderLibrary() {
+  const generation = ++libraryRenderGeneration
+  const tab = state.currentLibraryTab
+  const mode = workspaceModeController.getMode()
+  const isCurrent = () => generation === libraryRenderGeneration
+    && tab === state.currentLibraryTab && mode === workspaceModeController.getMode()
   // Library 페이지의 새 UI 조각(상태 탭/정렬 드롭다운/상세 패널)이 아직 없으면 삽입한다.
   ensureLibraryChrome()
   ensureLibraryFolderUI()
@@ -7780,9 +7786,11 @@ async function renderLibrary() {
     } else {
       data = await fetchLibrary({ ...getTranslationOptions(workspaceModeController.getMode()), documentMode: workspaceModeController.getMode() })
     }
+    if (!isCurrent()) return
     const allDocs = data.documents || []
     if (state.currentLibraryTab !== 'trash') {
       const foldersData = await fetchLibraryFolders()
+      if (!isCurrent()) return
       libraryFolders = foldersData.folders || []
       if (activeLibraryFolderId && !libraryFolders.some(f => f.id === activeLibraryFolderId)) {
         activeLibraryFolderId = null
@@ -7869,6 +7877,7 @@ async function renderLibrary() {
     // Initial card rendering
     filterLibraryCards(docs)
   } catch (err) {
+    if (!isCurrent()) return
     console.error(err)
     libraryGrid.innerHTML = `<div class="lib-empty"><p style="color:var(--error)">라이브러리 불러오기 실패</p></div>`
   }
@@ -8813,10 +8822,15 @@ async function refreshLibraryProgress() {
   const inProgress = currentLibraryDocs.some(doc => (doc.translated_pages?.length || 0) < (doc.total_pages || 1))
   if (!inProgress) return
 
+  const generation = libraryRenderGeneration
+  const mode = workspaceModeController.getMode()
+  const tab = state.currentLibraryTab
   try {
     const data = state.currentLibraryTab === 'trash'
       ? await fetchLibraryTrash({ ...getTranslationOptions(workspaceModeController.getMode()), documentMode: workspaceModeController.getMode() })
       : await fetchLibrary({ ...getTranslationOptions(workspaceModeController.getMode()), documentMode: workspaceModeController.getMode() })
+    if (generation !== libraryRenderGeneration || mode !== workspaceModeController.getMode()
+      || tab !== state.currentLibraryTab || isLibrarySearchActive) return
     const freshDocsById = new Map((data.documents || []).map(doc => [doc.id, doc]))
 
     currentLibraryDocs.forEach((doc, idx) => {

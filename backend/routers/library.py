@@ -956,9 +956,14 @@ async def restore_library_document(doc_id: str, current_user: str = Depends(get_
 @router.delete("/library/{doc_id}/permanent")
 async def delete_library_document_permanently(doc_id: str, current_user: str = Depends(get_current_user)):
     """라이브러리에서 문서를 영구히 삭제(Hard Delete)합니다."""
-    require_owned_document(doc_id, current_user)
+    doc = require_owned_document(doc_id, current_user)
+    if not doc.get("is_deleted"):
+        raise HTTPException(status_code=409, detail="휴지통에 있는 문서만 영구 삭제할 수 있습니다.")
     from services.document_workers import quiesce_document
     async with quiesce_document(doc_id):
+        doc = require_owned_document(doc_id, current_user)
+        if not doc.get("is_deleted"):
+            raise HTTPException(status_code=409, detail="휴지통에 있는 문서만 영구 삭제할 수 있습니다.")
         if not permanently_delete_document(doc_id):
             raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
     return {"message": "문서가 영구적으로 삭제되었습니다."}
