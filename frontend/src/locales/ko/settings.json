@@ -199,5 +199,21 @@
   "minimalRestore": "복원",
   "minimalDeleteForever": "영구 삭제",
   "minimalRename": "이름 변경",
-  "minimalDelete": "삭제"
+  "minimalDelete": "삭제",
+  "dataTransfer.title": "사용자 데이터 내보내기 / 가져오기",
+  "dataTransfer.description": "문서(휴지통 포함), 원본 파일, 번역, 질문·대화, 메모, 폴더, 읽기 기록과 설정을 하나의 ZIP으로 백업합니다. 가져오기는 기존 문서를 유지하고 새 복사본을 추가합니다.",
+  "dataTransfer.scope": "이 브라우저의 설정과 로컬 데이터를 포함합니다. 비밀번호, 로그인 세션과 API 키는 제외됩니다. ZIP 최대 크기: 4 GiB.",
+  "dataTransfer.systemSettings": "공유 AI 모델·파서·번역 프롬프트 설정도 복원 (모든 사용자에게 적용)",
+  "dataTransfer.export": "ZIP 내보내기",
+  "dataTransfer.import": "ZIP 가져오기",
+  "dataTransfer.exporting": "백업을 준비하고 있습니다…",
+  "dataTransfer.exported": "백업 다운로드를 시작했습니다.",
+  "dataTransfer.importing": "백업을 검증하고 복원하고 있습니다…",
+  "dataTransfer.imported": "문서 {{count}}개를 가져왔습니다. 새로고침하면 복원한 설정이 적용됩니다.",
+  "dataTransfer.failed": "데이터 전송에 실패했습니다.",
+  "dataTransfer.partial": "문서는 가져왔으나 설정 복원을 완료하지 못했습니다. ZIP을 다시 가져오지 말고 설정 복원을 재시도하세요.",
+  "dataTransfer.confirm": "백업의 모든 문서와 기록을 추가할까요? 기존 문서는 유지됩니다. 사용자·브라우저 설정은 백업의 값으로 복원됩니다. 같은 백업을 다시 가져오면 복사본이 추가됩니다.",
+  "dataTransfer.retry": "설정 복원 재시도",
+  "dataTransfer.reload": "새로고침하여 적용",
+  "dataTransfer.tooLarge": "ZIP 파일이 4 GiB 제한을 초과합니다."
 }

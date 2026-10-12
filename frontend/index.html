@@ -1518,7 +1518,22 @@
       </div>
 
       <div id="tab-data-system" class="tab-pane" role="tabpanel" aria-labelledby="settings-nav-data-system">
-        <div class="modal-form" data-settings-category-body="data-system"></div>
+        <div class="modal-form" data-settings-category-body="data-system">
+          <div class="form-group settings-action-card">
+            <label data-i18n="settings:dataTransfer.title">Export / import user data</label>
+            <p data-i18n="settings:dataTransfer.description">Back up documents, translations, chats, notes, reading history and settings in one ZIP file.</p>
+            <p data-i18n="settings:dataTransfer.scope">Includes this browser's settings. Passwords and API keys are excluded.</p>
+            <label><input type="checkbox" id="user-data-system-settings" /> <span data-i18n="settings:dataTransfer.systemSettings">Also restore shared AI model and translation prompt settings</span></label>
+            <div class="form-actions">
+              <button type="button" id="user-data-export" class="btn btn-secondary" data-i18n="settings:dataTransfer.export">Export ZIP</button>
+              <button type="button" id="user-data-import" class="btn btn-secondary" data-i18n="settings:dataTransfer.import">Import ZIP</button>
+              <input type="file" id="user-data-file" accept=".zip,application/zip" hidden />
+            </div>
+            <p id="user-data-status" role="status" aria-live="polite"></p>
+            <button type="button" id="user-data-retry" class="btn btn-secondary" hidden data-i18n="settings:dataTransfer.retry">Retry settings restore</button>
+            <button type="button" id="user-data-reload" class="btn btn-primary" hidden data-i18n="settings:dataTransfer.reload">Reload to apply</button>
+          </div>
+        </div>
       </div>
 
       <!-- 정보 탭 -->

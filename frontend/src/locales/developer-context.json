@@ -5174,5 +5174,53 @@
   },
   "settings:minimalDelete": {
     "description": "Minimal UI setting or library action: Delete"
+  },
+  "settings:dataTransfer.title": {
+    "description": "User data backup settings: Export / import user data"
+  },
+  "settings:dataTransfer.description": {
+    "description": "User data backup settings: Back up documents (including trash), originals, translations, chats, notes, folders, reading history and settings in one ZIP file. Imports add new copies without replacing existing documents."
+  },
+  "settings:dataTransfer.scope": {
+    "description": "User data backup settings: Includes settings and local data from this browser. Passwords, login sessions and API keys are excluded. Maximum ZIP size: 4 GiB."
+  },
+  "settings:dataTransfer.systemSettings": {
+    "description": "User data backup settings: Also restore shared AI model, parser and translation prompt settings (affects all users)"
+  },
+  "settings:dataTransfer.export": {
+    "description": "User data backup settings: Export ZIP"
+  },
+  "settings:dataTransfer.import": {
+    "description": "User data backup settings: Import ZIP"
+  },
+  "settings:dataTransfer.exporting": {
+    "description": "User data backup settings: Preparing backup…"
+  },
+  "settings:dataTransfer.exported": {
+    "description": "User data backup settings: Backup download started."
+  },
+  "settings:dataTransfer.importing": {
+    "description": "User data backup settings: Validating and restoring backup…"
+  },
+  "settings:dataTransfer.imported": {
+    "description": "User data backup settings: Imported {{count}} documents. Reload to apply restored settings."
+  },
+  "settings:dataTransfer.failed": {
+    "description": "User data backup settings: Data transfer failed."
+  },
+  "settings:dataTransfer.partial": {
+    "description": "User data backup settings: Documents were imported. Settings could not be fully restored. Retry settings here without importing the ZIP again."
+  },
+  "settings:dataTransfer.confirm": {
+    "description": "User data backup settings: Add all documents and history from this backup? Existing documents are kept. User and browser settings will be restored from the backup. Importing the same backup again creates additional copies."
+  },
+  "settings:dataTransfer.retry": {
+    "description": "User data backup settings: Retry settings restore"
+  },
+  "settings:dataTransfer.reload": {
+    "description": "User data backup settings: Reload to apply"
+  },
+  "settings:dataTransfer.tooLarge": {
+    "description": "User data backup settings: The ZIP file exceeds the 4 GiB limit."
   }
 }
