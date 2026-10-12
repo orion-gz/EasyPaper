@@ -8179,3 +8179,15 @@ body.light-theme .chat-drawer {
 }
 
 .chat-question-tooltip[hidden] { display: none; }
+
+/* Pinned reference previews retain their own content and viewport position. */
+.figure-preview-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.figure-preview-toolbar button { color: inherit; background: transparent; border: 0; padding: 5px; border-radius: 4px; cursor: pointer; }
+.figure-preview-toolbar button:hover { background: var(--bg-hover); }
+.figure-preview-toolbar .figure-preview-drag { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.figure-preview-drag:disabled { opacity: 1; cursor: default; }
+.figure-preview-tooltip.pinned .figure-preview-drag { cursor: move; touch-action: none; }
+.figure-preview-tooltip.collapsed { min-height: 0; height: auto !important; }
+.figure-preview-tooltip.collapsed .figure-preview-toolbar { margin-bottom: 0; }
+.figure-preview-tooltip.collapsed .figure-preview-tooltip-items,
+.figure-preview-tooltip.collapsed .figure-preview-tooltip-resize-handle { display: none; }

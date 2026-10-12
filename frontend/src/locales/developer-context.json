@@ -1,4 +1,31 @@
 {
+  "settings:figurePreviewEnabled": {
+    "description": "Mode-specific Figure/Table/Equation preview enablement and hover or click activation preference."
+  },
+  "settings:figureOverlayTrigger": {
+    "description": "Mode-specific Figure/Table/Equation preview enablement and hover or click activation preference."
+  },
+  "settings:figureOverlayHover": {
+    "description": "Mode-specific Figure/Table/Equation preview enablement and hover or click activation preference."
+  },
+  "settings:figureOverlayClick": {
+    "description": "Mode-specific Figure/Table/Equation preview enablement and hover or click activation preference."
+  },
+  "viewer:figurePreview.pin": {
+    "description": "Figure/Table/Equation preview toolbar: pin the floating preview. Movement supports dragging or arrow keys."
+  },
+  "viewer:figurePreview.move": {
+    "description": "Figure/Table/Equation preview toolbar: move the floating preview. Movement supports dragging or arrow keys."
+  },
+  "viewer:figurePreview.collapse": {
+    "description": "Figure/Table/Equation preview toolbar: collapse the floating preview. Movement supports dragging or arrow keys."
+  },
+  "viewer:figurePreview.expand": {
+    "description": "Figure/Table/Equation preview toolbar: expand the floating preview. Movement supports dragging or arrow keys."
+  },
+  "viewer:figurePreview.close": {
+    "description": "Figure/Table/Equation preview toolbar: close the floating preview. Movement supports dragging or arrow keys."
+  },
   "common:briefing.retry": { "description": "Retry loading a notes briefing after a temporary request failure." },
   "library:batch.failure": { "description": "Reports successful and failed batch operations; failed documents remain selected for retry." },
   "navigation:tabs.refresh": {

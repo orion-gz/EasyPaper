@@ -199,5 +199,9 @@
   "minimalRestore": "복원",
   "minimalDeleteForever": "영구 삭제",
   "minimalRename": "이름 변경",
-  "minimalDelete": "삭제"
+  "minimalDelete": "삭제",
+  "figurePreviewEnabled": "Figure/Table/수식 참조 미리보기",
+  "figureOverlayTrigger": "참조 미리보기 표시 방식",
+  "figureOverlayHover": "호버",
+  "figureOverlayClick": "클릭"
 }

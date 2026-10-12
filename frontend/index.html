@@ -1095,8 +1095,13 @@
               <label class="toggle-switch">
                 <input type="checkbox" id="setting-disable-figure-overlay" />
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
-                <span class="toggle-switch-label">Figure/Table/수식 참조 호버 미리보기<small>예: Fig. 1, Table 2, Eq. (3)</small></span>
+                <span class="toggle-switch-label"><span data-i18n="settings:figurePreviewEnabled">Figure/Table/수식 참조 미리보기</span><small>예: Fig. 1, Table 2, Eq. (3)</small></span>
               </label>
+              <label for="setting-figure-overlay-trigger" data-i18n="settings:figureOverlayTrigger">참조 미리보기 표시 방식</label>
+              <select id="setting-figure-overlay-trigger">
+                <option value="hover" data-i18n="settings:figureOverlayHover">호버</option>
+                <option value="click" data-i18n="settings:figureOverlayClick">클릭</option>
+              </select>
               <label class="toggle-switch" data-settings-mode-only="research">
                 <input type="checkbox" id="setting-disable-primer" />
                 <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
