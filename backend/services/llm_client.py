@@ -419,6 +419,11 @@ async def stream_openai(messages: list, model: str, temperature: float = 0.5) ->
         "temperature": temperature
     }
     
+    # GPT-6 reasoning models reject sampling parameters at their default effort.
+    # https://developers.openai.com/api/docs/guides/latest-model
+    if model.startswith(("gpt-6-", "gpt-6.")):
+        payload.pop("temperature")
+
     try:
         async with httpx.AsyncClient(timeout=360.0) as client:
             async with client.stream(
@@ -598,6 +603,10 @@ async def stream_claude(messages: list, model: str, temperature: float = 0.5) ->
         "max_tokens": 8192,
         "temperature": temperature
     }
+    # Current Claude models use adaptive thinking and default sampling settings.
+    # https://platform.claude.com/docs/en/models/opus-5-5/migration-guide
+    if model in {"claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5", "claude-haiku-5-5"}:
+        payload.pop("temperature")
     if system_prompt:
         payload["system"] = system_prompt
         
