@@ -179,6 +179,32 @@ def _insert(conn, table, row):
                         f'VALUES ({",".join("?" for _ in columns)})', [row[c] for c in columns]).lastrowid
 
 
+def _remap_insight_references(kind, content, document_ids):
+    """Remap known cache reference fields without replacing user/LLM prose.
+
+    Primer cache rows live in page_insights; their citation graph is the only
+    current insight schema containing cross-document identifiers. References to
+    papers absent from the backup cannot be reopened and must not bind to a
+    destination account's unrelated document with the same old ID.
+    """
+    if kind not in ('primer', 'primer_v2'):
+        return content
+    try:
+        value = json.loads(content)
+    except (TypeError, ValueError):
+        return content
+    graph = value.get('citation_graph') if isinstance(value, dict) else None
+    if not isinstance(graph, dict) or not isinstance(graph.get('library'), list):
+        return content
+    graph['library'] = [
+        {**item, 'doc_id': document_ids[item['doc_id']]}
+        for item in graph['library']
+        if isinstance(item, dict) and isinstance(item.get('doc_id'), str)
+        and item['doc_id'] in document_ids
+    ]
+    return json.dumps(value, ensure_ascii=False)
+
+
 def import_archive(username, source):
     """Validate and stage before writing. On failure roll back DB and new files."""
     published = []
@@ -204,6 +230,7 @@ def import_archive(username, source):
             docs = maps['documents']
             document_count = len(docs)
             file_sessions = set(docs)
+            live_document_ids = dict(docs)
 
             def map_document_id(old):
                 if not isinstance(old, str) or not SAFE_ID.fullmatch(old):
@@ -295,6 +322,8 @@ def import_archive(username, source):
                                 row[column] = mapping.setdefault(row[column], uuid.uuid4().hex)
                             else:
                                 row[column] = mapping[row[column]]
+                    if table == 'page_insights':
+                        row['content'] = _remap_insight_references(row['kind'], row['content'], live_document_ids)
                     if table == 'documents':
                         filename = 'article/article.json' if row.get('content_kind') == 'html_article' else 'document.pdf'
                         row['pdf_path'] = str(Path(library.LIBRARY_DIR) / row['id'] / filename)

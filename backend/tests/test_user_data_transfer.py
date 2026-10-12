@@ -242,3 +242,40 @@ def test_comparison_history_survives_deleted_sources(dataset, deleted):
     with zipfile.ZipFile(again) as handle:
         manifest = json.loads(handle.read('manifest.json'))
         assert any(row['id'] == result['id_map']['cmp_old'] for row in manifest['tables']['compare_sessions'])
+
+
+@pytest.mark.parametrize('username', ['alice', 'bob'])
+def test_primer_reference_cache_points_to_imported_documents(dataset, username):
+    from services.primer import get_cached_primer, _primer_cache_suffix
+    content = {
+        'hook': 'paper-b', 'questions': ['Explain paper-b'],
+        'citation_graph': {
+            'library': [{'doc_id': 'paper-b', 'title': 'paper-b', 'ref_num': 1},
+                        {'doc_id': 'missing', 'title': 'Deleted source', 'ref_num': 2}],
+            'external': [{'title': 'paper-b', 'url': 'https://example.com/paper-b'}],
+        },
+    }
+    with dataset['db'].get_db() as conn:
+        conn.execute("INSERT INTO page_insights(doc_id,page_num,kind,suffix,content,saved_at) VALUES('paper-a',0,'primer_v2',?,?,'now')", (_primer_cache_suffix('auto', 'ko'), json.dumps(content)))
+    restored = transfer.import_archive(username, backup(dataset))
+    # Exercise the same cache getter used by the primer endpoint.
+    actual = get_cached_primer(restored['id_map']['paper-a'])
+    assert actual['citation_graph']['library'] == [
+        {'doc_id': restored['id_map']['paper-b'], 'title': 'paper-b', 'ref_num': 1},
+    ]
+    assert actual['hook'] == content['hook']
+    assert actual['questions'] == content['questions']
+    assert actual['citation_graph']['external'] == content['citation_graph']['external']
+    linked = dataset['db'].db_get_document(actual['citation_graph']['library'][0]['doc_id'])
+    assert linked['username'] == username
+    assert linked['id'] != 'paper-b'
+
+
+@pytest.mark.parametrize('kind,content', [
+    ('summary', '{"doc_id":"paper-b","text":"paper-b"}'),
+    ('primer_v2', 'legacy non-JSON result'),
+    ('primer_v2', '{"hook":"paper-b"}'),
+    ('primer_v2', '["paper-b"]'),
+])
+def test_reference_remapping_leaves_unrelated_content_intact(kind, content):
+    assert transfer._remap_insight_references(kind, content, {'paper-b': 'new'}) == content
