@@ -11,7 +11,7 @@ async function checked(response) {
   return response
 }
 
-export function initializeDataTransfer({ beforeExport = async () => {} } = {}) {
+export function initializeDataTransfer({ confirmImport, beforeExport = async () => {} } = {}) {
   const exportButton = document.getElementById('user-data-export')
   const importButton = document.getElementById('user-data-import')
   const input = document.getElementById('user-data-file')
@@ -77,12 +77,12 @@ export function initializeDataTransfer({ beforeExport = async () => {} } = {}) {
     if (transferBusy || pendingRestore) { input.value = ''; return }
     const file = input.files?.[0]
     if (!file) return
-    if (!window.confirm(t('settings:dataTransfer.confirm'))) { input.value = ''; return }
     const restoreSystemSettings = systemSettings.checked
     busy(true)
-    reloadButton.hidden = true
-    status.textContent = t('settings:dataTransfer.importing')
     try {
+      if (!await confirmImport(t('settings:dataTransfer.confirm'))) return
+      reloadButton.hidden = true
+      status.textContent = t('settings:dataTransfer.importing')
       const auth = await checkAuthAPI()
       if (file.size > 4 * 1024 ** 3) throw new Error(t('settings:dataTransfer.tooLarge'))
       const result = await (await checked(await fetch('/api/user-data/import', { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file }))).json()

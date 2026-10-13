@@ -29,6 +29,7 @@ test('exports browser settings with the user archive and starts a ZIP download',
 
 test('imports a ZIP and remaps local notes without changing shared settings by default', async ({ page }) => {
   await mockBaseRoutes(page)
+  await page.addInitScript(() => { window.confirm = () => { throw new Error('Native confirm is unavailable') } })
   let uploaded = false
   await page.route('**/api/user-data/import', async route => {
     uploaded = route.request().headers()['content-type'] === 'application/zip'
@@ -39,8 +40,8 @@ test('imports a ZIP and remaps local notes without changing shared settings by d
   })
   await openTransfer(page)
   await expect(page.locator('#user-data-system-settings')).not.toBeChecked()
-  page.on('dialog', dialog => dialog.accept())
   await page.locator('#user-data-file').setInputFiles({ name: 'backup.zip', mimeType: 'application/zip', buffer: Buffer.from('ZIP') })
+  await page.locator('.custom-confirm-modal .confirm-btn').click()
   await expect(page.locator('#user-data-reload')).toBeVisible()
   expect(uploaded).toBe(true)
   expect(await page.evaluate(() => localStorage.getItem('easypaper_memos_new'))).toBe('{"1":[{"text":"memo"}]}')
@@ -51,8 +52,8 @@ test('shows invalid archive errors and permits retry without reloading', async (
   await mockBaseRoutes(page)
   await page.route('**/api/user-data/import', route => route.fulfill({ status: 400, json: { detail: 'Invalid backup checksum' } }))
   await openTransfer(page)
-  page.on('dialog', dialog => dialog.accept())
   await page.locator('#user-data-file').setInputFiles({ name: 'bad.zip', mimeType: 'application/zip', buffer: Buffer.from('bad') })
+  await page.locator('.custom-confirm-modal .confirm-btn').click()
   await expect(page.locator('#user-data-status')).toContainText('Invalid backup checksum')
   await expect(page.locator('#user-data-import')).toBeEnabled()
   await expect(page.locator('#user-data-reload')).toBeHidden()
@@ -91,9 +92,9 @@ for (const exportSucceeds of [true, false]) {
     })
     await openTransfer(page)
     await page.locator('#user-data-system-settings').check()
-    page.on('dialog', dialog => dialog.accept())
     const archive = { name: 'backup.zip', mimeType: 'application/zip', buffer: Buffer.from('ZIP') }
     await page.locator('#user-data-file').setInputFiles(archive)
+    await page.locator('.custom-confirm-modal .confirm-btn').click()
     await expect(page.locator('#user-data-status')).toContainText('write failed')
     await expect(page.locator('#user-data-retry')).toBeEnabled()
     await expect(page.locator('#user-data-import')).toBeDisabled()
@@ -123,3 +124,27 @@ for (const exportSucceeds of [true, false]) {
     expect(await page.evaluate(() => localStorage.getItem('easypaper_memos_restored'))).toBe('{"1":[{"text":"backup memo"}]}')
   })
 }
+
+test('cancelled import can select the same ZIP again through the import button', async ({ page }) => {
+  await mockBaseRoutes(page)
+  let imports = 0
+  await page.route('**/api/user-data/import', route => {
+    imports++
+    return route.fulfill({ json: { documents: 0, id_map: {}, browser_data: {}, system_settings: {} } })
+  })
+  await openTransfer(page)
+  const archive = { name: 'backup.zip', mimeType: 'application/zip', buffer: Buffer.from('ZIP') }
+  for (const accept of [false, true]) {
+    const chooser = page.waitForEvent('filechooser')
+    await page.locator('#user-data-import').click()
+    await (await chooser).setFiles(archive)
+    await expect(page.locator('.custom-confirm-modal')).toBeVisible()
+    await expect(page.locator('#user-data-import')).toBeDisabled()
+    expect(imports).toBe(0)
+    await page.locator(`.custom-confirm-modal .${accept ? 'confirm' : 'cancel'}-btn`).click()
+    await expect(page.locator('#user-data-import')).toBeEnabled()
+    await expect(page.locator('#user-data-file')).toHaveValue('')
+  }
+  await expect(page.locator('#user-data-reload')).toBeVisible()
+  expect(imports).toBe(1)
+})
