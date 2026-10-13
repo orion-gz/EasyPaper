@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.1 - 2026-10-13
+
+### 한국어 (1.4.0 → 1.4.1)
+
+- 고정된 그림·표·수식 미리보기의 고정 해제를 추가하고 일반 미리보기로 전환하며 고정 상태와 접근성 레이블을 갱신
+- 데스크톱 앱의 ZIP 데이터 가져오기에 앱 내부 확인 대화상자를 사용하도록 수정
+- 설치형 앱에서 Git 없이 번들된 릴리스 메타데이터로 버전을 표시하도록 수정하고 Git 실행 불가 상황을 처리
+
+### English (1.4.0 → 1.4.1)
+
+- Added an unpin action for pinned Figure, Table, and Equation previews, returning them to a regular preview with updated pin state and accessible labels.
+- Fixed ZIP data import to use the app's confirmation dialog in the desktop app.
+- Fixed the installed app's version display to read bundled release metadata without requiring Git, and handled unavailable Git gracefully.
+
 ## 1.4.0 - 2026-10-12
 
 ### 한국어 (1.3.0 → 1.4.0)
