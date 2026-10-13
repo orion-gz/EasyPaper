@@ -19344,7 +19344,12 @@ function showDocumentLoadError(error) {
   viewerScreen.classList.add('active')
 }
 
-initializeDataTransfer({ beforeExport: async () => {
+initializeDataTransfer({ confirmImport: message => showCustomConfirm(message, {
+  title: t('settings:dataTransfer.title'),
+  confirmText: t('settings:dataTransfer.import'),
+  cancelText: t('common:legacy.ui.0701'),
+  danger: false,
+}), beforeExport: async () => {
   await flushReadingHeartbeat()
   await globalAnalyticsTracker.sendHeartbeat()
   await globalAnalyticsTracker.syncOfflineQueue()
