@@ -98,6 +98,7 @@
   "easyEnglish.matchLabel": "Show matching source: {{text}}",
   "easyEnglish.locationMissing": "The exact source location is unavailable.",
   "figurePreview.pin": "Pin",
+  "figurePreview.unpin": "Unpin",
   "figurePreview.move": "Move (drag or arrow keys)",
   "figurePreview.collapse": "Collapse",
   "figurePreview.expand": "Expand",

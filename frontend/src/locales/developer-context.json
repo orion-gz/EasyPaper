@@ -14,6 +14,9 @@
   "viewer:figurePreview.pin": {
     "description": "Figure/Table/Equation preview toolbar: pin the floating preview. Movement supports dragging or arrow keys."
   },
+  "viewer:figurePreview.unpin": {
+    "description": "Unpin a reference preview and return it to a dismissible popup"
+  },
   "viewer:figurePreview.move": {
     "description": "Figure/Table/Equation preview toolbar: move the floating preview. Movement supports dragging or arrow keys."
   },
