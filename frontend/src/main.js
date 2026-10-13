@@ -14799,7 +14799,7 @@ function getOrCreateFigurePreviewTooltip() {
   el.innerHTML = `
     <div class="figure-preview-toolbar">
       <button type="button" class="figure-preview-drag" aria-label="${t('viewer:figurePreview.move')}" disabled></button>
-      <button type="button" class="figure-preview-pin" aria-label="${t('viewer:figurePreview.pin')}" title="${t('viewer:figurePreview.pin')}">${icon('pin', 14)}</button>
+      <button type="button" class="figure-preview-pin" aria-pressed="false" aria-label="${t('viewer:figurePreview.pin')}" title="${t('viewer:figurePreview.pin')}">${icon('pin', 14)}</button>
       <button type="button" class="figure-preview-collapse hidden" aria-label="${t('viewer:figurePreview.collapse')}" aria-expanded="true">${icon('chevronUp', 14)}</button>
       <button type="button" class="figure-preview-close" aria-label="${t('viewer:figurePreview.close')}">${icon('x', 14)}</button>
     </div>
@@ -15085,6 +15085,30 @@ function installFigurePreviewControls(el) {
   el.querySelector('.figure-preview-close').addEventListener('click', () => closeFigurePreview(el))
   pin.addEventListener('click', () => {
     if (figurePreviewHideTimer) { clearTimeout(figurePreviewHideTimer); figurePreviewHideTimer = null }
+    if (pinnedFigurePreviews.delete(el)) {
+      // Return this panel to the single transient preview slot.
+      hideFigurePreviewTooltip()
+      if (figurePreviewTooltipEl && figurePreviewTooltipEl !== el) {
+        focusModeController?.unregisterPreview(figurePreviewTooltipEl)
+        figurePreviewTooltipEl.remove()
+      }
+      figurePreviewTooltipEl = el
+      figurePreviewBoxEl = el.previewAnchor
+      figurePreviewClickOpened = true
+      el.classList.remove('pinned', 'collapsed')
+      el.previewAnchor?.setAttribute('aria-expanded', 'true')
+      pin.setAttribute('aria-pressed', 'false')
+      pin.setAttribute('aria-label', t('viewer:figurePreview.pin'))
+      pin.title = t('viewer:figurePreview.pin')
+      collapse.classList.add('hidden')
+      collapse.setAttribute('aria-expanded', 'true')
+      collapse.setAttribute('aria-label', t('viewer:figurePreview.collapse'))
+      collapse.innerHTML = icon('chevronUp', 14)
+      drag.disabled = true
+      focusModeController?.registerPreview(el, el.previewAnchor, hideFigurePreviewTooltip)
+      pin.focus()
+      return
+    }
     focusModeController?.unregisterPreview(el)
     pinnedFigurePreviews.add(el)
     el.classList.add('pinned')
@@ -15092,7 +15116,9 @@ function installFigurePreviewControls(el) {
     figurePreviewTooltipEl = null
     figurePreviewBoxEl = null
     figurePreviewClickOpened = false
-    pin.classList.add('hidden')
+    pin.setAttribute('aria-pressed', 'true')
+    pin.setAttribute('aria-label', t('viewer:figurePreview.unpin'))
+    pin.title = t('viewer:figurePreview.unpin')
     collapse.classList.remove('hidden')
     drag.disabled = false
     drag.focus()

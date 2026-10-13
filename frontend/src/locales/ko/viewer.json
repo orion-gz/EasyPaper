@@ -98,6 +98,7 @@
   "easyEnglish.matchLabel": "대응 원문 보기: {{text}}",
   "easyEnglish.locationMissing": "정확한 원문 위치를 찾지 못했습니다.",
   "figurePreview.pin": "고정",
+  "figurePreview.unpin": "고정 해제",
   "figurePreview.move": "이동 (드래그 또는 방향키)",
   "figurePreview.collapse": "접기",
   "figurePreview.expand": "펼치기",
