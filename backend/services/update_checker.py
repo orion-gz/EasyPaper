@@ -7,7 +7,10 @@
 """
 
 import asyncio
+import json
+from pathlib import Path
 import subprocess
+import sys
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -23,12 +26,15 @@ _current_version_date_cache: Optional[str] = None
 
 async def _run_git(*args: str, timeout: float = 30.0) -> tuple[int, str, str]:
     """git 명령을 프로젝트 루트에서 실행하고 (returncode, stdout, stderr)를 반환합니다."""
-    proc = await asyncio.create_subprocess_exec(
-        "git", *args,
-        cwd=get_project_root(),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git", *args,
+            cwd=get_project_root(),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError as exc:
+        return 1, "", str(exc)
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except asyncio.TimeoutError:
@@ -46,7 +52,7 @@ async def _run_git(*args: str, timeout: float = 30.0) -> tuple[int, str, str]:
 
 
 async def get_current_version() -> str:
-    """이 프로세스가 현재 실행 중인 커밋의 짧은 해시를 반환합니다.
+    """설치형 앱의 릴리스 버전 또는 현재 실행 중인 커밋의 짧은 해시를 반환합니다.
 
     실행 중에는 바뀌지 않는 값이라(재시작해야 새 버전이 반영됨) 최초 1회만
     계산해 캐시한다.
@@ -54,6 +60,16 @@ async def get_current_version() -> str:
     global _current_version_cache
     if _current_version_cache:
         return _current_version_cache
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        metadata_path = Path(sys._MEIPASS) / "app-metadata" / "tauri.conf.json"
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            version = metadata.get("version")
+            if isinstance(version, str) and version.strip():
+                _current_version_cache = version.strip()
+                return _current_version_cache
+        except (OSError, ValueError, AttributeError):
+            pass
     code, out, _ = await _run_git("rev-parse", "--short", "HEAD")
     _current_version_cache = out if code == 0 and out else "unknown"
     return _current_version_cache
