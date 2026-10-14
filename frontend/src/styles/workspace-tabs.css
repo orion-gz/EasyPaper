@@ -159,3 +159,9 @@ body.sidebar-collapsed #tab-workspace .workspace-mode-switch-compact { display: 
 .document-workspace-runtime .page-pair { transition: box-shadow .2s, border-color .2s; }
 .document-workspace-runtime .page-pair:hover { transform: none; }
 .document-workspace-runtime .floating-memo { animation: none; }
+
+/* Show the insertion boundary without moving the native drag source. */
+.workspace-tab.dragging { opacity: .45; }
+.workspace-tab.drop-before::before, .workspace-tab.drop-after::before { content: ''; position: absolute; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: var(--control-accent, #4e6aff); z-index: 2; pointer-events: none; }
+.workspace-tab.drop-before::before { left: 0; }
+.workspace-tab.drop-after::before { right: 0; }

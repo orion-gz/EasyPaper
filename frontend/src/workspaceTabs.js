@@ -40,7 +40,7 @@ export function createWorkspaceTabs(adapter) {
   document.body.append(shell)
   outlet.append(library, compare, $('chat-drawer'))
   const tabResize = new ResizeObserver(() => {
-    if (!shell.hidden) tablist.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    if (!shell.hidden && !dragId) tablist.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   })
   tabResize.observe(tablist)
   shell.hidden = true
@@ -120,7 +120,78 @@ export function createWorkspaceTabs(adapter) {
       Promise.resolve(adapter.flushPage()).catch(report)
     }
   }
+  let dragId = null
+  let dragX = 0
+  let dragScrollFrame = null
+  let dropBeforeId
+  let dropTarget = null
+  function clearDropTarget() {
+    dropTarget?.classList.remove('drop-before', 'drop-after')
+    dropTarget = null
+  }
+  function updateDropTarget() {
+    clearDropTarget()
+    const items = [...tablist.children].filter(item => item.dataset.tabId !== dragId)
+    const next = items.find(item => {
+      const rect = item.getBoundingClientRect()
+      return dragX < rect.left + rect.width / 2
+    })
+    dropBeforeId = next?.dataset.tabId
+    dropTarget = next || items.at(-1)
+    dropTarget?.classList.add(next ? 'drop-before' : 'drop-after')
+  }
+  function scrollWhileDragging() {
+    const rect = tablist.getBoundingClientRect()
+    const edge = Math.min(40, rect.width / 4)
+    const speed = dragX < rect.left + edge ? -8 : dragX > rect.right - edge ? 8 : 0
+    if (speed) {
+      tablist.scrollLeft += speed
+      updateDropTarget()
+    }
+    dragScrollFrame = requestAnimationFrame(scrollWhileDragging)
+  }
+  function endDrag() {
+    cancelAnimationFrame(dragScrollFrame)
+    dragScrollFrame = null
+    clearDropTarget()
+    tablist.querySelector('.dragging')?.classList.remove('dragging')
+    dragId = null
+  }
+  tablist.addEventListener('dragover', event => {
+    if (!dragId) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    dragX = event.clientX
+    updateDropTarget()
+    if (dragScrollFrame === null) dragScrollFrame = requestAnimationFrame(scrollWhileDragging)
+  })
+  tablist.addEventListener('dragleave', event => {
+    if (tablist.contains(event.relatedTarget)) return
+    cancelAnimationFrame(dragScrollFrame)
+    dragScrollFrame = null
+    clearDropTarget()
+  })
+  tablist.addEventListener('drop', event => {
+    if (!dragId) return
+    event.preventDefault()
+    dragX = event.clientX
+    updateDropTarget()
+    const id = dragId
+    const beforeId = dropBeforeId
+    const positions = new Map([...tablist.children].map(item => [item.dataset.tabId, item.getBoundingClientRect().left]))
+    endDrag()
+    store.reorderTabs(id, beforeId)
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      for (const item of tablist.children) {
+        const offset = positions.get(item.dataset.tabId) - item.getBoundingClientRect().left
+        if (offset) item.animate([{ transform: `translateX(${offset}px)` }, { transform: 'translateX(0)' }], { duration: 180, easing: 'ease-out' })
+      }
+    }
+  })
+  let revealedTabId = null
   function render() {
+    // Preserve the native drag source when background document status changes.
+    if (dragId) return
     const focusedId = tablist.contains(document.activeElement) ? document.activeElement.closest('[data-tab-id]')?.dataset.tabId : null
     tablist.replaceChildren()
     for (const [index, tab] of store.visibleTabs.entries()) {
@@ -159,18 +230,21 @@ export function createWorkspaceTabs(adapter) {
       close.addEventListener('click', () => enqueue(() => closeTab(tab.id)))
       item.append(button)
       if (!isMinimalUi() || tab.id !== 'page:library') item.append(close)
-      item.addEventListener('dragstart', event => event.dataTransfer.setData('text/x-easypaper-tab', tab.id))
-      item.addEventListener('dragover', event => event.preventDefault())
-      item.addEventListener('drop', event => {
-        event.preventDefault()
-        store.reorderTabs(event.dataTransfer.getData('text/x-easypaper-tab'), tab.id)
+      item.addEventListener('dragstart', event => {
+        if (event.target.closest('.workspace-tab-close')) { event.preventDefault(); return }
+        dragId = tab.id
+        event.dataTransfer.effectAllowed = 'move'
+        event.dataTransfer.setData('text/x-easypaper-tab', tab.id)
+        item.classList.add('dragging')
       })
+      item.addEventListener('dragend', () => { if (dragId) { endDrag(); render() } })
       tablist.append(item)
     }
     if (store.active) outlet.setAttribute('aria-labelledby', `workspace-tab-${encodeURIComponent(store.activeTabId)}`)
     const active = tablist.querySelector('[aria-selected="true"]')
     if (focusedId) tablist.querySelector(`[data-tab-id="${CSS.escape(focusedId)}"] [role="tab"]`)?.focus({ preventScroll: true })
-    active?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    if (revealedTabId !== store.activeTabId) active?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    revealedTabId = store.activeTabId
     sidebar.querySelectorAll('[data-page]').forEach(button => {
       button.classList.toggle('active', button.dataset.page === (store.active?.kind === 'document' ? 'library' : store.active?.target))
     })

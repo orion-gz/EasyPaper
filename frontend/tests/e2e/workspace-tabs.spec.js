@@ -558,3 +558,50 @@ test('pending document load allows switching and closing', async ({ page }) => {
   release()
   await expect(tab(page, 'page:library')).toHaveAttribute('aria-selected', 'true')
 })
+
+
+test('new tabs append and dragging supports both sides of a tab', async ({ page }) => {
+  await setup(page)
+  for (const name of ['chats', 'notes']) {
+    await page.locator(`.sidebar-nav-item[data-page="${name}"]`).click()
+    await expect(tab(page, `page:${name}`)).toHaveAttribute('aria-selected', 'true')
+  }
+  await tab(page, 'page:chats').click()
+  await page.locator('.sidebar-nav-item[data-page="history"]').click()
+  await expect(page.locator('.workspace-tab:last-child')).toHaveAttribute('data-tab-id', 'page:history')
+  const source = page.locator('.workspace-tab[data-tab-id="page:chats"]')
+  const target = page.locator('.workspace-tab[data-tab-id="page:history"]')
+  const box = await target.boundingBox()
+  await source.dragTo(target, { targetPosition: { x: box.width - 5, y: box.height / 2 } })
+  await expect(page.locator('.workspace-tab:last-child')).toHaveAttribute('data-tab-id', 'page:chats')
+  await source.dragTo(target, { targetPosition: { x: 5, y: box.height / 2 } })
+  const order = await page.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))
+  expect(order.indexOf('page:chats')).toBe(order.indexOf('page:history') - 1)
+  await expect(tab(page, 'page:history')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('.dragging, .drop-before, .drop-after')).toHaveCount(0)
+  await page.reload()
+  await expect(tab(page, 'page:history')).toBeVisible()
+  expect(await page.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))).toEqual(order)
+})
+
+
+test('tab dragging scrolls at the edge and cancellation preserves order', async ({ page }) => {
+  await setup(page)
+  for (const name of ['chats', 'notes', 'history', 'graph']) {
+    await page.locator(`.sidebar-nav-item[data-page="${name}"]`).click()
+    await expect(tab(page, `page:${name}`)).toHaveAttribute('aria-selected', 'true')
+  }
+  const list = page.locator('.workspace-tab-list')
+  await list.evaluate(element => { element.style.maxWidth = '280px'; element.scrollLeft = 0 })
+  const order = await list.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))
+  const source = list.locator('.workspace-tab').first()
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer())
+  await source.dispatchEvent('dragstart', { dataTransfer })
+  const box = await list.boundingBox()
+  await list.dispatchEvent('dragover', { dataTransfer, clientX: box.x + box.width - 2 })
+  await expect.poll(() => list.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
+  await source.dispatchEvent('dragend', { dataTransfer })
+  await expect(page.locator('.dragging, .drop-before, .drop-after')).toHaveCount(0)
+  expect(await list.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))).toEqual(order)
+  await dataTransfer.dispose()
+})
