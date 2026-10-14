@@ -4928,6 +4928,7 @@ settingFigureOverlayTrigger.addEventListener('change', () => {
   if (state.sessionId && normalizeSettingsMode(state.currentDocumentMode) === settingsTranslationModeContext) {
     state.figureOverlayTrigger = trigger
     hideFigurePreviewTooltip()
+    hideCitationTooltip()
   }
 })
 
@@ -4938,6 +4939,7 @@ window.addEventListener('storage', event => {
   if (event.key === `easypaper_figure_overlay_trigger_${mode}`) {
     state.figureOverlayTrigger = getModeSetting('figureOverlayTrigger', mode)
     hideFigurePreviewTooltip()
+    hideCitationTooltip()
   }
   if (event.key === `easypaper_disable_figure_overlay_${mode}`) {
     state.disableFigureOverlay = getModeSetting('disableFigureOverlay', mode)
@@ -14460,7 +14462,9 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
       box.setAttribute('aria-haspopup', 'dialog')
       box.setAttribute('aria-expanded', 'false')
       box.setAttribute('aria-label', t('viewer:a11y.citationTrigger', { references: validKeys.join(', ') }))
-      box.addEventListener('mouseenter', () => showCitationTooltip(docId, validKeys, refMap, box))
+      box.addEventListener('mouseenter', () => {
+        if (state.figureOverlayTrigger === 'hover') showCitationTooltip(docId, validKeys, refMap, box)
+      })
       box.addEventListener('mouseleave', scheduleCitationTooltipHide)
       box.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -14479,7 +14483,7 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
         e.preventDefault()
         e.stopPropagation()
         globalAnalyticsTracker.trackInteraction('citationClick', pageNum)
-        showCitationTooltip(docId, validKeys, refMap, box)
+        showCitationTooltip(docId, validKeys, refMap, box, { focus: state.figureOverlayTrigger === 'click' })
       })
       markers.appendChild(box)
     })
@@ -15283,6 +15287,7 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   if (citationTooltipBoxEl && citationTooltipBoxEl !== boxEl) citationTooltipBoxEl.setAttribute('aria-expanded', 'false')
   if (citationTooltipBoxEl !== boxEl) citationTooltipPinned = false
+  if (state.figureOverlayTrigger === 'click') citationTooltipPinned = true
   citationTooltipDocId = docId
   citationTooltipReferences = refKeys.map(key => ({ key, text: refMap[key] || '' }))
   citationTooltipBoxEl = boxEl
