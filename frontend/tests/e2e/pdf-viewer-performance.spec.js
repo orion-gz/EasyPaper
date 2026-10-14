@@ -252,3 +252,45 @@ test('translation scrolling pauses hover repaint and hover resumes after scrolli
   await sentence.hover()
   await expect(sentence).toHaveClass(/sentence-highlight/)
 })
+
+test('wheel zoom batches input and eases toward the final scale', async ({ page }) => {
+  const doc = { id: 'wheel-zoom', filename: 'Zoom.pdf', total_pages: 2, metadata: { title: 'Zoom' }, translated_pages: [] }
+  await mockBaseRoutes(page, { documents: [doc] })
+  await page.route('**/api/library/wheel-zoom/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(2) }))
+  await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
+  await gotoApp(page)
+  await page.evaluate(() => { location.hash = '#viewer?id=wheel-zoom' })
+  const wrapper = activeReader(page).locator('.pdf-page-wrapper[data-page="1"]')
+  await expect(wrapper.locator('.textLayer')).toContainText('Performance page 1')
+  const initialWidth = await wrapper.evaluate(node => node.getBoundingClientRect().width)
+  const preview = await wrapper.evaluate(async node => {
+    const scroll = node.closest('#viewer-scroll-container')
+    let writes = 0
+    const observer = new MutationObserver(records => { writes += records.length })
+    observer.observe(node, { attributes: true, attributeFilter: ['style'] })
+    for (let i = 0; i < 10; i++) {
+      scroll.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: -5, bubbles: true, cancelable: true }))
+    }
+    const immediate = node.style.transform
+    await new Promise(requestAnimationFrame)
+    await Promise.resolve()
+    const firstFrame = Number(node.style.transform.match(/scale\((.+)\)/)?.[1])
+    observer.disconnect()
+    return { immediate, firstFrame, writes }
+  })
+  expect(preview.immediate).toBe('')
+  expect(preview.firstFrame).toBeGreaterThan(1)
+  expect(preview.firstFrame).toBeLessThan(Math.exp(0.1))
+  expect(preview.writes).toBeLessThanOrEqual(3)
+  await expect.poll(() => wrapper.evaluate(node => node.getBoundingClientRect().width)).toBeCloseTo(initialWidth * Math.exp(0.1), 0)
+  await expect(wrapper).toHaveCSS('transform', 'none')
+  await expect(wrapper.locator('.textLayer')).toContainText('Performance page 1')
+  await wrapper.evaluate(node => {
+    node.closest('#viewer-scroll-container').dispatchEvent(new WheelEvent('wheel', {
+      ctrlKey: true, deltaY: 50, bubbles: true, cancelable: true,
+    }))
+  })
+  await expect.poll(() => wrapper.evaluate(node => node.getBoundingClientRect().width)).toBeCloseTo(initialWidth, 0)
+  await expect(wrapper).toHaveCSS('transform', 'none')
+  await expect(wrapper.locator('.textLayer')).toContainText('Performance page 1')
+})
