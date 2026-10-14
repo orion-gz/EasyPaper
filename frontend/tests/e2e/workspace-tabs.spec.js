@@ -558,3 +558,198 @@ test('pending document load allows switching and closing', async ({ page }) => {
   release()
   await expect(tab(page, 'page:library')).toHaveAttribute('aria-selected', 'true')
 })
+
+
+test('new tabs append and dragging supports both sides of a tab', async ({ page }) => {
+  await setup(page)
+  for (const name of ['chats', 'notes']) {
+    await page.locator(`.sidebar-nav-item[data-page="${name}"]`).click()
+    await expect(tab(page, `page:${name}`)).toHaveAttribute('aria-selected', 'true')
+  }
+  await tab(page, 'page:chats').click()
+  await page.locator('.sidebar-nav-item[data-page="history"]').click()
+  await expect(page.locator('.workspace-tab:last-child')).toHaveAttribute('data-tab-id', 'page:history')
+  const source = page.locator('.workspace-tab[data-tab-id="page:chats"]')
+  const target = page.locator('.workspace-tab[data-tab-id="page:history"]')
+  const box = await target.boundingBox()
+  await source.dragTo(target, { targetPosition: { x: box.width - 5, y: box.height / 2 } })
+  await expect(page.locator('.workspace-tab:last-child')).toHaveAttribute('data-tab-id', 'page:chats')
+  await source.dragTo(target, { targetPosition: { x: 5, y: box.height / 2 } })
+  const order = await page.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))
+  expect(order.indexOf('page:chats')).toBe(order.indexOf('page:history') - 1)
+  await expect(tab(page, 'page:history')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('.dragging, .drop-before, .drop-after')).toHaveCount(0)
+  await page.reload()
+  await expect(tab(page, 'page:history')).toBeVisible()
+  expect(await page.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))).toEqual(order)
+})
+
+
+test('tab dragging scrolls at the edge and cancellation preserves order', async ({ page }) => {
+  await setup(page)
+  for (const name of ['chats', 'notes', 'history', 'graph']) {
+    await page.locator(`.sidebar-nav-item[data-page="${name}"]`).click()
+    await expect(tab(page, `page:${name}`)).toHaveAttribute('aria-selected', 'true')
+  }
+  const list = page.locator('.workspace-tab-list')
+  await list.evaluate(async element => {
+    element.style.maxWidth = '280px'
+    // Let the resize observer reveal the active tab before resetting the scroll.
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    element.scrollLeft = 0
+  })
+  expect(await list.evaluate(element => element.scrollLeft)).toBe(0)
+  const order = await list.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))
+  const source = list.locator('.workspace-tab').first()
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer())
+  await source.dispatchEvent('dragstart', { dataTransfer })
+  const box = await list.boundingBox()
+  await list.dispatchEvent('dragover', { dataTransfer, clientX: box.x + box.width - 2 })
+  await expect.poll(() => list.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
+  await source.dispatchEvent('dragend', { dataTransfer })
+  await expect(page.locator('.dragging, .drop-before, .drop-after')).toHaveCount(0)
+  expect(await list.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))).toEqual(order)
+  await dataTransfer.dispose()
+})
+
+for (const scale of [0.8, 1.25]) test(`tab drop animation preserves the starting position at UI scale ${scale}`, async ({ page }) => {
+  await page.addInitScript(scale => localStorage.setItem('easypaper_ui_scale', String(scale)), scale)
+  await setup(page)
+  for (const name of ['chats', 'notes']) {
+    await page.locator(`.sidebar-nav-item[data-page="${name}"]`).click()
+    await expect(tab(page, `page:${name}`)).toHaveAttribute('aria-selected', 'true')
+  }
+  const offsets = await page.locator('.workspace-tab-list').evaluate(list => {
+    const source = list.querySelector('[data-tab-id="page:chats"]')
+    const target = list.querySelector('[data-tab-id="page:notes"]')
+    const positions = new Map([...list.children].map(item => [item.dataset.tabId, item.getBoundingClientRect().left]))
+    const dataTransfer = new DataTransfer()
+    source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }))
+    list.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer, clientX: target.getBoundingClientRect().right - 3 }))
+    for (const animation of list.getAnimations({ subtree: true })) { animation.pause(); animation.currentTime = 0 }
+    return [...list.children].map(item => Math.abs(item.getBoundingClientRect().left - positions.get(item.dataset.tabId)))
+  })
+  expect(Math.max(...offsets)).toBeLessThan(1)
+})
+
+test('keyboard reorder keeps the focused tab visible in an overflowing tab bar', async ({ page }) => {
+  await setup(page)
+  for (const name of ['chats', 'notes', 'history', 'graph']) {
+    await page.locator(`.sidebar-nav-item[data-page="${name}"]`).click()
+    await expect(tab(page, `page:${name}`)).toHaveAttribute('aria-selected', 'true')
+  }
+  const list = page.locator('.workspace-tab-list')
+  await list.evaluate(element => { element.style.maxWidth = '280px' })
+  await tab(page, 'page:dashboard').click()
+  await tab(page, 'page:dashboard').focus()
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Alt+ArrowRight')
+  const visible = await tab(page, 'page:dashboard').evaluate(element => {
+    const bounds = element.getBoundingClientRect()
+    const list = element.closest('.workspace-tab-list').getBoundingClientRect()
+    return bounds.left >= list.left && bounds.right <= list.right + 1
+  })
+  expect(visible).toBe(true)
+})
+
+test('a document removed during a drag is not left as a stale tab after drop', async ({ page }) => {
+  await setup(page)
+  await open(page, 'tab-a')
+  const source = page.locator('.workspace-tab[data-tab-id="document:tab-a"]')
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer())
+  await source.dispatchEvent('dragstart', { dataTransfer })
+  await reader(page, 'tab-a').locator('body').evaluate(() => {
+    window.parent.postMessage({ channel: 'easypaper-document', type: 'unavailable' }, location.origin)
+  })
+  await expect(page.locator('iframe[data-document-id="tab-a"]')).toHaveCount(0)
+  const list = page.locator('.workspace-tab-list')
+  const box = await list.boundingBox()
+  await list.dispatchEvent('drop', { dataTransfer, clientX: box.x + 2 })
+  await expect(source).toHaveCount(0)
+  await expect(page.locator('.workspace-tab [aria-selected="true"]')).toHaveCount(1)
+  await dataTransfer.dispose()
+})
+
+
+test('native drag survives background title updates and Escape cancels it', async ({ page }) => {
+  await setup(page)
+  await open(page, 'tab-a')
+  const source = page.locator('.workspace-tab[data-tab-id="document:tab-a"]')
+  const target = page.locator('.workspace-tab[data-tab-id="page:dashboard"]')
+  const order = await page.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))
+  await source.evaluate(element => { window.dragSourceForTest = element })
+  const from = await source.boundingBox()
+  const to = await target.boundingBox()
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x + 10, to.y + to.height / 2, { steps: 10 })
+  await page.mouse.move(to.x + 12, to.y + to.height / 2)
+  await expect(source).toHaveClass(/dragging/)
+  await reader(page, 'tab-a').locator('body').evaluate(() => {
+    window.parent.postMessage({ channel: 'easypaper-document', type: 'title', payload: 'Updated during drag' }, location.origin)
+  })
+  await expect(page.locator('iframe[data-document-id="tab-a"]')).toHaveAttribute('title', 'Updated during drag')
+  expect(await source.evaluate(element => element === window.dragSourceForTest)).toBe(true)
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  await expect(page.locator('.dragging, .drop-before, .drop-after')).toHaveCount(0)
+  expect(await page.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))).toEqual(order)
+  await expect(source).toContainText('Updated during drag')
+})
+
+test('native drag reaches the right edge without snapping back to the active tab', async ({ page }) => {
+  await setup(page)
+  for (const name of ['chats', 'notes', 'history', 'graph']) {
+    await page.locator(`.sidebar-nav-item[data-page="${name}"]`).click()
+    await expect(tab(page, `page:${name}`)).toHaveAttribute('aria-selected', 'true')
+  }
+  const list = page.locator('.workspace-tab-list')
+  await list.evaluate(element => { element.style.maxWidth = '280px' })
+  await tab(page, 'page:dashboard').click()
+  const source = page.locator('.workspace-tab[data-tab-id="page:library"]')
+  const from = await source.boundingBox()
+  const to = await list.boundingBox()
+  await page.mouse.move(from.x + 15, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x + to.width - 3, to.y + to.height / 2, { steps: 10 })
+  await page.mouse.move(to.x + to.width - 2, to.y + to.height / 2)
+  await expect(source).toHaveClass(/dragging/)
+  await expect.poll(() => list.evaluate(element => element.scrollWidth - element.clientWidth - element.scrollLeft)).toBeLessThan(2)
+  // Scrolling changes the native hit target; WebKit needs another move to emit dragover.
+  await page.mouse.move(to.x + to.width - 4, to.y + to.height / 2)
+  await page.mouse.move(to.x + to.width - 3, to.y + to.height / 2)
+  await expect(list.locator('.workspace-tab').last()).toHaveClass(/drop-after/)
+  await page.mouse.up()
+  await expect(list.locator('.workspace-tab').last()).toHaveAttribute('data-tab-id', 'page:library')
+  expect(await list.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
+  await expect(tab(page, 'page:dashboard')).toHaveAttribute('aria-selected', 'true')
+  // Explicitly opening the current tab must reveal it again.
+  await page.locator('.sidebar-nav-item[data-page="dashboard"]').click()
+  await expect.poll(() => tab(page, 'page:dashboard').evaluate(element => {
+    const bounds = element.getBoundingClientRect()
+    const list = element.closest('.workspace-tab-list').getBoundingClientRect()
+    return bounds.left >= list.left && bounds.right <= list.right + 1
+  })).toBe(true)
+})
+
+test('reduced motion disables drop animation and external drags do not reorder tabs', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await setup(page)
+  await page.locator('.sidebar-nav-item[data-page="notes"]').click()
+  await expect(tab(page, 'page:notes')).toHaveAttribute('aria-selected', 'true')
+  const list = page.locator('.workspace-tab-list')
+  const result = await list.evaluate(list => {
+    const source = list.querySelector('[data-tab-id="page:dashboard"]')
+    const dataTransfer = new DataTransfer()
+    source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }))
+    list.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer, clientX: list.lastElementChild.getBoundingClientRect().right - 2 }))
+    return { last: list.lastElementChild.dataset.tabId, animations: list.getAnimations({ subtree: true }).length }
+  })
+  expect(result).toEqual({ last: 'page:dashboard', animations: 0 })
+  const order = await list.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))
+  await list.evaluate(list => {
+    const dataTransfer = new DataTransfer()
+    dataTransfer.setData('text/x-easypaper-tab', 'page:dashboard')
+    list.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer, clientX: list.getBoundingClientRect().left + 2 }))
+  })
+  expect(await list.locator('.workspace-tab').evaluateAll(items => items.map(item => item.dataset.tabId))).toEqual(order)
+})

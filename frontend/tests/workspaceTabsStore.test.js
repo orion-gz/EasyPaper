@@ -6,19 +6,19 @@ function setup(saved, options = {}) {
   const storage = { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) }
   return { store: createTabsStore({ storage, key: 'test', ...options }), data }
 }
-test('opens unique tabs after the active tab and selects the adjacent tab on close', () => {
+test('opens unique tabs at the right edge and selects the adjacent tab on close', () => {
   const { store } = setup()
   store.restoreWorkspace()
   store.openTab('document', 'a', 'A.pdf')
   store.openTab('document', 'b', 'B.pdf')
   store.activateTab('document:a')
   store.openTab('page', 'library', 'Library')
-  assert.deepEqual(store.tabs.map(tab => tab.id), ['page:dashboard', 'document:a', 'page:library', 'document:b'])
+  assert.deepEqual(store.tabs.map(tab => tab.id), ['page:dashboard', 'document:a', 'document:b', 'page:library'])
   store.openTab('document', 'a', 'Renamed.pdf')
   assert.equal(store.tabs.length, 4)
   assert.equal(store.active.title, 'Renamed.pdf')
   store.closeTab('document:a')
-  assert.equal(store.activeTabId, 'page:library')
+  assert.equal(store.activeTabId, 'document:b')
   store.reorderTabs('document:b', 'page:dashboard')
   assert.equal(store.tabs[0].id, 'document:b')
   for (const tab of [...store.tabs]) store.closeTab(tab.id)

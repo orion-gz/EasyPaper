@@ -74,8 +74,7 @@ export function createTabsStore({ storage, key, mode = 'research', minimal = fal
       let tab = tabs.find(item => item.id === id)
       if (!tab) {
         tab = { id, kind, target, title }
-        const index = tabs.findIndex(item => item.id === activeTabId)
-        tabs.splice(index + 1, 0, tab)
+        tabs.push(tab)
       } else if (title) tab.title = title
       activeTabId = id
       tab.status = undefined
