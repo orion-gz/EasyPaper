@@ -3371,6 +3371,8 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'codex', label: 'Codex', icon: icon('code', 13),
+    // ChatGPT sign-in availability verified 2026-10-14:
+    // https://learn.chatgpt.com/docs/models (GPT-5.5 retired 2026-10-14)
     models: [
       // GPT-6.1 Sol
       { value: 'gpt-6.1-sol|low',    label: 'Sol · Low',    group: 'GPT-6.1 Sol' },
@@ -3419,11 +3421,6 @@ const PROVIDER_CONFIG = [
       { value: 'gpt-5.6-luna|high',   label: 'Luna · High',   group: 'GPT-5.6 Luna' },
       { value: 'gpt-5.6-luna|xhigh',  label: 'Luna · xHigh',  group: 'GPT-5.6 Luna' },
       { value: 'gpt-5.6-luna|max',    label: 'Luna · Max',    group: 'GPT-5.6 Luna' },
-      // GPT-5.5
-      { value: 'gpt-5.5|low',    label: 'GPT-5.5 · Low',    group: 'GPT-5.5' },
-      { value: 'gpt-5.5|medium', label: 'GPT-5.5 · Medium', group: 'GPT-5.5' },
-      { value: 'gpt-5.5|high',   label: 'GPT-5.5 · High',   group: 'GPT-5.5' },
-      { value: 'gpt-5.5|xhigh',  label: 'GPT-5.5 · xHigh',  group: 'GPT-5.5' },
     ]
   },
   {
@@ -3442,8 +3439,10 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'openai', label: 'OpenAI', icon: '✦',
-    // Text-generation API models verified 2026-10-12:
+    // Text-generation API models verified 2026-10-14:
     // https://developers.openai.com/api/docs/models
+    // https://developers.openai.com/api/docs/deprecations
+    // Excludes deprecated o3, GPT-4o and GPT-4o Mini aliases.
     models: [
       { value: 'gpt-6.1-sol', label: 'GPT-6.1 Sol' },
       { value: 'gpt-6-astra', label: 'GPT-6 Astra' },
@@ -3454,15 +3453,13 @@ const PROVIDER_CONFIG = [
       { value: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
       { value: 'gpt-5.5', label: 'GPT-5.5' },
       { value: 'gpt-5.4', label: 'GPT-5.4' },
-      { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
-      { value: 'o3', label: 'o3' },
-      { value: 'gpt-4o', label: 'GPT-4o' },
-      { value: 'gpt-4o-mini', label: 'GPT-4o Mini' }
+      { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' }
     ]
   },
   {
     id: 'claude', label: 'Anthropic Claude', icon: icon('cpu', 13),
-    // https://platform.claude.com/docs/en/models/overview (2026-10-12)
+    // https://platform.claude.com/docs/en/models/overview (2026-10-14)
+    // https://platform.claude.com/docs/en/about-claude/model-deprecations
     models: [
       { value: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
       { value: 'claude-fable-5-1', label: 'Claude Fable 5.1' },
@@ -3472,12 +3469,13 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'gemini', label: 'Google Gemini', icon: icon('star', 13),
-    // https://ai.google.dev/gemini-api/docs/models (2026-10-12)
+    // https://ai.google.dev/gemini-api/docs/models (2026-10-14)
+    // https://ai.google.dev/gemini-api/docs/deprecations
+    // Excludes Gemini 3.1 Flash-Lite (shutdown scheduled for 2027-05-07).
     models: [
       { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
       { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
       { value: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
-      { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' },
       { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)' },
       { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' }
     ]
