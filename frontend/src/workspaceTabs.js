@@ -123,6 +123,7 @@ export function createWorkspaceTabs(adapter) {
   let dragId = null
   let dragX = 0
   let dragScrollFrame = null
+  let dragScrollTime = 0
   let dropBeforeId
   let dropTarget = null
   function clearDropTarget() {
@@ -140,12 +141,15 @@ export function createWorkspaceTabs(adapter) {
     dropTarget = next || items.at(-1)
     dropTarget?.classList.add(next ? 'drop-before' : 'drop-after')
   }
-  function scrollWhileDragging() {
+  function scrollWhileDragging(time) {
+    // Native drags can throttle frames; keep the speed independent of refresh rate.
+    const elapsed = Math.min(time - (dragScrollTime || time - 16), 64)
+    dragScrollTime = time
     const rect = tablist.getBoundingClientRect()
     const edge = Math.min(40, rect.width / 4)
     const speed = dragX < rect.left + edge ? -8 : dragX > rect.right - edge ? 8 : 0
     if (speed) {
-      tablist.scrollLeft += speed
+      tablist.scrollLeft += speed * elapsed / 16
       updateDropTarget()
     }
     dragScrollFrame = requestAnimationFrame(scrollWhileDragging)
@@ -163,7 +167,10 @@ export function createWorkspaceTabs(adapter) {
     event.dataTransfer.dropEffect = 'move'
     dragX = event.clientX
     updateDropTarget()
-    if (dragScrollFrame === null) dragScrollFrame = requestAnimationFrame(scrollWhileDragging)
+    if (dragScrollFrame === null) {
+      dragScrollTime = 0
+      dragScrollFrame = requestAnimationFrame(scrollWhileDragging)
+    }
   })
   tablist.addEventListener('dragleave', event => {
     if (tablist.contains(event.relatedTarget)) return
@@ -182,8 +189,10 @@ export function createWorkspaceTabs(adapter) {
     endDrag()
     store.reorderTabs(id, beforeId)
     if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      // DOM rectangles include UI zoom; CSS transforms use unscaled pixels.
+      const scale = Number(document.documentElement.style.zoom) || 1
       for (const item of tablist.children) {
-        const offset = positions.get(item.dataset.tabId) - item.getBoundingClientRect().left
+        const offset = (positions.get(item.dataset.tabId) - item.getBoundingClientRect().left) / scale
         if (offset) item.animate([{ transform: `translateX(${offset}px)` }, { transform: 'translateX(0)' }], { duration: 180, easing: 'ease-out' })
       }
     }
@@ -191,7 +200,11 @@ export function createWorkspaceTabs(adapter) {
   let revealedTabId = null
   function render() {
     // Preserve the native drag source when background document status changes.
-    if (dragId) return
+    if (dragId) {
+      if (store.visibleTabs.some(tab => tab.id === dragId)) return
+      // A deleted or newly hidden document can no longer be a drag source.
+      endDrag()
+    }
     const focusedId = tablist.contains(document.activeElement) ? document.activeElement.closest('[data-tab-id]')?.dataset.tabId : null
     tablist.replaceChildren()
     for (const [index, tab] of store.visibleTabs.entries()) {
@@ -326,6 +339,7 @@ export function createWorkspaceTabs(adapter) {
     }
     writeHistory(tab, push)
     render()
+    if (!dragId) tablist.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }
   async function closeTab(id) {
     if (isMinimalUi() && id === 'page:library') return
@@ -367,6 +381,7 @@ export function createWorkspaceTabs(adapter) {
         if (event.key === 'ArrowLeft' && index === 0 || event.key === 'ArrowRight' && index === store.visibleTabs.length - 1) return
         const destination = event.key === 'ArrowRight' ? index + 2 : next
         store.reorderTabs(item.dataset.tabId, store.visibleTabs[destination]?.id)
+        tablist.querySelector(`[data-tab-id="${CSS.escape(item.dataset.tabId)}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
       }
       else enqueue(async () => { await activate(store.visibleTabs[next].id); tablist.querySelector('[aria-selected="true"]')?.focus() })
     }
@@ -521,6 +536,7 @@ export function createWorkspaceTabs(adapter) {
     async start(user, mode) {
       const nextScope = workspaceStorageKey(location.origin, user, mode)
       if (scope !== nextScope) {
+        endDrag()
         if (store) { await leaveCurrent(); snapshotFrames() }
         for (const record of frames.values()) record.frame.hidden = true
         scope = nextScope
@@ -594,6 +610,7 @@ export function createWorkspaceTabs(adapter) {
       return api.openPage(path === 'heatmap' ? 'graph' : path, { pushState: push })
     },
     hide() {
+      endDrag()
       ++generation
       snapshotFrames()
       for (const [, record] of allFrames()) {
