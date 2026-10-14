@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.2 - 2026-10-14
+
+### 한국어 (1.4.1 → 1.4.2)
+
+- 탭을 끌어 순서를 바꿀 때 삽입 위치를 표시하고, 탭 영역 가장자리에서 자동 스크롤하며, 이동 애니메이션과 드래그 중 화면 갱신 처리를 개선
+- 새 탭을 현재 탭 뒤가 아닌 탭 목록의 오른쪽 끝에 추가
+- Codex 로그인 모델 목록에서 GPT-5.5, OpenAI API 모델 목록에서 o3·GPT-4o·GPT-4o Mini, Gemini 모델 목록에서 Gemini 3.1 Flash-Lite를 제거
+
+### English (1.4.1 → 1.4.2)
+
+- Improved tab reordering with an insertion marker, edge scrolling, move animation, and steadier behavior during drag updates.
+- New tabs now open at the right end of the tab list.
+- Removed GPT-5.5 from the Codex sign-in model list; o3, GPT-4o, and GPT-4o Mini from the OpenAI API list; and Gemini 3.1 Flash-Lite from the Gemini list.
+
 ## 1.4.1 - 2026-10-13
 
 ### 한국어 (1.4.0 → 1.4.1)
