@@ -2,6 +2,7 @@ import './styles/reader-comfort.css'
 import { t } from './i18n.js'
 
 export const READER_FEATURES = {
+  taskProgress: () => t('viewer:comfort.taskProgress'),
   focusReading: () => t('viewer:comfort.focusReading'),
   referenceReturn: () => t('viewer:comfort.referenceReturn'),
   restoreReading: () => t('viewer:comfort.restoreReading'),

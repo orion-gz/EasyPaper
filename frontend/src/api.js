@@ -1019,7 +1019,7 @@ export function installPdfParserAPI(parserId, onProgress, onSuccess, onError) {
 }
 
 export async function getDocumentTasksAPI(docId) {
-  const res = await fetch(`${API_BASE}/tasks?doc_id=${encodeURIComponent(docId)}`)
+  const res = await fetch(`${API_BASE}/tasks${docId ? `?doc_id=${encodeURIComponent(docId)}` : ''}`)
   if (!res.ok) throw await apiError(res)
   return res.json()
 }

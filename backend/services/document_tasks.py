@@ -359,3 +359,25 @@ def recover_document_tasks(sessions: dict) -> None:
                 recover_summary_task(
                     task, document, session["pages"], session.get("pdf_path", document.get("pdf_path", "")),
                 )
+
+
+def list_user_tasks(username: str) -> list[dict]:
+    """Recent tasks for owned, non-deleted documents; active work comes first."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT t.id, d.filename FROM document_tasks t
+               JOIN documents d ON d.id = t.doc_id
+               WHERE d.username = ? AND d.is_deleted = 0
+               ORDER BY CASE WHEN t.status IN ('queued', 'running', 'retry_wait')
+                             THEN 0 ELSE 1 END, t.updated_at DESC LIMIT 100""",
+            (username,),
+        ).fetchall()
+    result = []
+    for row in rows:
+        task = get_task(row["id"])
+        if task:
+            result.append({key: task[key] for key in (
+                "id", "doc_id", "kind", "status", "cancel_requested", "total_pages",
+                "completed_pages", "failed_pages", "current_page", "updated_at",
+            )} | {"filename": row["filename"]})
+    return result

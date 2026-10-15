@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from routers.upload import require_session_owner
 from services.auth import get_current_user
-from services.document_tasks import get_task, list_tasks, request_cancel, reset_failed
+from services.document_tasks import get_task, list_tasks, list_user_tasks, request_cancel, reset_failed
 from services.ownership import require_owned_document
 
 router = APIRouter()
@@ -22,7 +22,7 @@ def _owned_task(task_id: str, current_user: str) -> dict:
 @router.get("/tasks")
 async def get_document_tasks(doc_id: Optional[str] = Query(default=None), current_user: str = Depends(get_current_user)):
     if not doc_id:
-        raise HTTPException(status_code=400, detail="doc_id가 필요합니다.")
+        return {"tasks": await asyncio.to_thread(list_user_tasks, current_user)}
     require_owned_document(doc_id, current_user)
     return {"tasks": list_tasks(doc_id)}
 

@@ -1,3 +1,4 @@
+import { installTaskCenter } from './taskCenter.js'
 import { isMinimalUi, isMinimalTabAllowed } from './minimalUi.js'
 import { createTabsStore, tabKey, WORKSPACE_PAGES, workspaceStorageKey } from './workspaceTabsStore.js'
 import { t } from './i18n.js'
@@ -44,6 +45,7 @@ export function createWorkspaceTabs(adapter) {
   })
   tabResize.observe(tablist)
   shell.hidden = true
+  installTaskCenter({ shell, mount: topnav.querySelector('.workspace-topnav-actions'), navigate: hash => { location.hash = hash }, toast: adapter.toast })
   attachDesktopWindow(shell, topnav, controls, tablist)
   document.body.classList.add('has-tab-workspace')
 
