@@ -2359,10 +2359,26 @@ function previewZoom(newZoom) {
 // 한다 - 캔버스를 다시 그리지 않아 비용이 거의 없고 즉각적이다. 제스처가
 // 멈추면(디바운스) 실제로 새 배율로 재렌더링하고 transform은 원복한다.
 let lastCommittedZoom = state.zoom
+let zoomPreviewPages = null
+let zoomGestureTimer = null
+let zoomPreviewFrame = null
+let displayedGestureZoom = null
+let zoomPreviewTime = null
+
+function cancelZoomGesture() {
+  clearTimeout(zoomGestureTimer)
+  if (zoomPreviewFrame !== null) cancelAnimationFrame(zoomPreviewFrame)
+  zoomGestureTimer = null
+  zoomPreviewFrame = null
+  displayedGestureZoom = null
+  zoomPreviewTime = null
+  zoomPreviewPages = null
+}
 
 function applyZoomPreviewTransform(previewValue) {
   const ratio = previewValue / lastCommittedZoom
-  viewerScrollContainer.querySelectorAll('.pdf-page-wrapper').forEach(w => {
+  zoomPreviewPages ??= viewerScrollContainer.querySelectorAll('.pdf-page-wrapper')
+  zoomPreviewPages.forEach(w => {
     w.style.transformOrigin = 'center top'
     w.style.transform = ratio === 1 ? '' : `scale(${ratio})`
     // 확대된 페이지가 스크롤 방향으로 인접한 카드 위로 살짝 겹쳐도 잘리거나
@@ -2380,6 +2396,7 @@ function clearZoomPreviewTransform() {
 }
 
 async function setZoom(newZoom) {
+  cancelZoomGesture()
   const anchorPage = state.currentPage
   const anchor = viewerScrollContainer.querySelector(`.page-pair[data-page="${anchorPage}"]`)
   const anchorOffset = anchor ? (viewerScrollContainer.getBoundingClientRect().top - anchor.getBoundingClientRect().top) / anchor.getBoundingClientRect().height : 0
@@ -2429,12 +2446,34 @@ zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.2))
 // 제스처 중에는 previewZoom(라벨) + CSS transform(시각적 미리보기)으로 즉시
 // 반응하다가, 제스처가 잠시 멈추면(디바운스) 그 시점의 최종 값으로 실제
 // 재렌더링을 한 번만 실행한다.
-let zoomGestureTimer = null
+function animateZoomPreview(timestamp) {
+  zoomPreviewFrame = null
+  // 시간 기반 보간으로 휠 한 칸의 큰 배율 변화도 여러 프레임에 나누어 표시한다.
+  // 입력 이벤트가 몰려도 DOM 쓰기는 화면 갱신당 한 번만 실행한다.
+  const elapsed = zoomPreviewTime === null ? 16 : timestamp - zoomPreviewTime
+  zoomPreviewTime = timestamp
+  displayedGestureZoom += (state.zoom - displayedGestureZoom) * (1 - Math.exp(-elapsed / 45))
+  const settled = Math.abs(state.zoom - displayedGestureZoom) < 0.001
+  if (settled) displayedGestureZoom = state.zoom
+  applyZoomPreviewTransform(displayedGestureZoom)
+  if (!settled) zoomPreviewFrame = requestAnimationFrame(animateZoomPreview)
+}
+
 function requestZoomFromGesture(newZoom) {
+  const previousZoom = state.zoom
   newZoom = previewZoom(newZoom)
-  applyZoomPreviewTransform(newZoom)
-  if (zoomGestureTimer) clearTimeout(zoomGestureTimer)
-  zoomGestureTimer = setTimeout(() => setZoom(state.zoom), 200)
+  if (newZoom === previousZoom) return
+  // getScale()은 문서 열기/맞춤 배율 적용 이후에도 실제 캔버스 배율을 반환한다.
+  if (displayedGestureZoom === null) {
+    lastCommittedZoom = getScale()
+    displayedGestureZoom = lastCommittedZoom
+  }
+  if (zoomPreviewFrame === null) {
+    zoomPreviewTime = null
+    zoomPreviewFrame = requestAnimationFrame(animateZoomPreview)
+  }
+  clearTimeout(zoomGestureTimer)
+  zoomGestureTimer = setTimeout(() => setZoom(state.zoom), 250)
 }
 
 // 트랙패드 핀치: 브라우저가 Ctrl+wheel 이벤트로 합성해서 보낸다(맥/윈도우 공통).
@@ -2445,7 +2484,8 @@ viewerScrollContainer.addEventListener('wheel', (e) => {
   // 지수 스케일링 사용 - 매끄러운 트랙패드 핀치(작은 deltaY가 연속으로 여러 번)와
   // 마우스 휠 한 칸(±100 안팎의 큰 deltaY가 단발성으로) 양쪽 모두에서 한 번에
   // 과도하게 확대/축소되지 않도록 함
-  requestZoomFromGesture(state.zoom * Math.exp(-e.deltaY * 0.002))
+  const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? viewerScrollContainer.clientHeight : 1)
+  requestZoomFromGesture(state.zoom * Math.exp(-delta * 0.002))
 }, { passive: false })
 
 // 터치스크린 핀치: 두 손가락 사이 거리 변화 비율만큼 확대/축소
