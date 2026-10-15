@@ -113,5 +113,10 @@
   "comfort.resumed": "Resumed on page {{page}}",
   "comfort.startOver": "Read from the beginning",
   "comfort.referenceReturn": "Return after following references",
-  "comfort.returnPage": "Back to reading · page {{page}}"
+  "comfort.returnPage": "Back to reading · page {{page}}",
+  "comfort.focusReading": "Focus reading",
+  "comfort.readingView": "Reading view",
+  "comfort.both": "Original + translation",
+  "comfort.original": "Original",
+  "comfort.translation": "Translation"
 }

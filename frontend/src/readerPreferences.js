@@ -1,6 +1,8 @@
+import './styles/reader-comfort.css'
 import { t } from './i18n.js'
 
 export const READER_FEATURES = {
+  focusReading: () => t('viewer:comfort.focusReading'),
   referenceReturn: () => t('viewer:comfort.referenceReturn'),
   restoreReading: () => t('viewer:comfort.restoreReading'),
   quickActions: () => t('viewer:comfort.quickActions'),

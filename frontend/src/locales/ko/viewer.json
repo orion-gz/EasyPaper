@@ -113,5 +113,10 @@
   "comfort.resumed": "{{page}}페이지에서 이어 읽습니다",
   "comfort.startOver": "처음부터 읽기",
   "comfort.referenceReturn": "참조 확인 후 돌아오기",
-  "comfort.returnPage": "읽던 위치로 · {{page}}페이지"
+  "comfort.returnPage": "읽던 위치로 · {{page}}페이지",
+  "comfort.focusReading": "집중 읽기",
+  "comfort.readingView": "읽기 보기 방식",
+  "comfort.both": "원문 + 번역",
+  "comfort.original": "원문",
+  "comfort.translation": "번역"
 }

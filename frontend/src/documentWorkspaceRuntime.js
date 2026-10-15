@@ -1,3 +1,4 @@
+import { installFocusReading } from './focusReading.js'
 import { createReadingTrail } from './readingTrail.js'
 import { readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { applyTheme, THEME_TOKEN_NAMES } from './themes/themeEngine.js'
@@ -276,6 +277,10 @@ export function installDocumentRuntime(adapter) {
   }
   window.addEventListener('resize', syncViewport)
   syncViewport()
+  const focusReading = installFocusReading({
+    floating, panels: () => ({ panel: !sidebar.classList.contains('hidden'), outline: !outline.classList.contains('hidden') }),
+    restorePanels: adapter.setPanels, changed: () => { updateLayout(); publishSnapshot() },
+  })
   let lastTitle = adapter.state.title
   const statusTimer = setInterval(() => {
     if (adapter.state.title !== lastTitle) { lastTitle = adapter.state.title; notifyWorkspace('title', lastTitle) }
@@ -293,6 +298,7 @@ export function installDocumentRuntime(adapter) {
   errors.observe($('chat-messages'), { childList: true, subtree: true })
   const runtime = {
     ready: true,
+    toggleFocusReading: () => focusReading.toggle(),
     attention: active => adapter.attention?.(active),
     finish: () => adapter.finish?.(),
     find: () => readerTools.openFind(),
@@ -378,6 +384,7 @@ export function installDocumentRuntime(adapter) {
       if (active === next) return
       if (!next) suspendedSnapshot = snapshot()
       active = next
+      focusReading.setActive(next)
       if (!next) readerTools.setActive(false)
       document.body.dataset.workspaceInactive = String(!next)
       if (next) {
@@ -443,7 +450,7 @@ export function installDocumentRuntime(adapter) {
   }
   window.__easypaperDocument = runtime
   window.addEventListener('pagehide', () => {
-    stopReturnPreferences(); readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); window.removeEventListener('storage', refreshStorage)
+    focusReading.destroy(); stopReturnPreferences(); readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); window.removeEventListener('storage', refreshStorage)
     clearInterval(statusTimer); clearTimeout(snapshotTimer); window.removeEventListener('resize', syncViewport)
     panelResize.disconnect(); panelObserver.disconnect(); errors.disconnect(); thumbnailObserver?.disconnect()
   }, { once: true })

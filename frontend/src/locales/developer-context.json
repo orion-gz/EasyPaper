@@ -5419,5 +5419,20 @@
   },
   "viewer:comfort.returnPage": {
     "description": "Back to reading · page {{page}}"
+  },
+  "viewer:comfort.focusReading": {
+    "description": "Focus reading"
+  },
+  "viewer:comfort.readingView": {
+    "description": "Reading view"
+  },
+  "viewer:comfort.both": {
+    "description": "Original + translation"
+  },
+  "viewer:comfort.original": {
+    "description": "Original"
+  },
+  "viewer:comfort.translation": {
+    "description": "Translation"
   }
 }
