@@ -111,5 +111,7 @@
   "comfort.explainPrompt": "Explain the quoted passage simply in the context of this document.",
   "comfort.restoreReading": "Restore reading state",
   "comfort.resumed": "Resumed on page {{page}}",
-  "comfort.startOver": "Read from the beginning"
+  "comfort.startOver": "Read from the beginning",
+  "comfort.referenceReturn": "Return after following references",
+  "comfort.returnPage": "Back to reading · page {{page}}"
 }

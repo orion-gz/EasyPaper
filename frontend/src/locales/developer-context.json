@@ -5413,5 +5413,11 @@
   },
   "viewer:comfort.startOver": {
     "description": "Read from the beginning"
+  },
+  "viewer:comfort.referenceReturn": {
+    "description": "Return after following references"
+  },
+  "viewer:comfort.returnPage": {
+    "description": "Back to reading · page {{page}}"
   }
 }

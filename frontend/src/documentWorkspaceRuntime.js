@@ -1,3 +1,4 @@
+import { createReadingTrail } from './readingTrail.js'
 import { readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { applyTheme, THEME_TOKEN_NAMES } from './themes/themeEngine.js'
 import { installReaderTools } from './documentReaderTools.js'
@@ -36,6 +37,26 @@ export function installDocumentRuntime(adapter) {
   let suspendedSnapshot = null
   let snapshotTimer
   let readerTools
+  const trail = createReadingTrail()
+  let returning = false
+  const returnButton = document.createElement('button')
+  returnButton.type = 'button'; returnButton.id = 'reader-return'; returnButton.hidden = true
+  const syncReturn = () => {
+    returnButton.hidden = !readerFeatureEnabled('referenceReturn') || !trail.last
+    if (trail.last) returnButton.textContent = t('viewer:comfort.returnPage', { page: trail.last.page })
+  }
+  const stopReturnPreferences = onReaderPreferences(() => {
+    if (!readerFeatureEnabled('referenceReturn')) trail.clear()
+    syncReturn()
+  })
+  returnButton.addEventListener('click', async () => {
+    if (returning || !readerFeatureEnabled('referenceReturn')) return
+    const previous = trail.pop()
+    if (!previous) return
+    returning = true; returnButton.disabled = true
+    try { await runtime.restore(previous, { force: true }) }
+    finally { returning = false; returnButton.disabled = false; syncReturn(); scroll.focus({ preventScroll: true }) }
+  })
   let refreshing = false
   const resumeNotice = document.createElement('button')
   resumeNotice.type = 'button'; resumeNotice.id = 'reader-resume-notice'; resumeNotice.hidden = true
@@ -180,7 +201,7 @@ export function installDocumentRuntime(adapter) {
       else await host.getElementById('workspace-tab-panel').requestFullscreen()
     } catch { adapter.toast(t('navigation:tabs.fullscreenUnavailable'), 'warning') }
   })
-  floating.append(fullscreen, resumeNotice)
+  floating.append(fullscreen, resumeNotice, returnButton)
   readerTools = installReaderTools(adapter, { scroll, toolbar: $('viewer-topbar').querySelector('.topbar-right'), floating, changed: publishSnapshot })
   const refreshButton = document.createElement('button')
   refreshButton.type = 'button'
@@ -276,6 +297,10 @@ export function installDocumentRuntime(adapter) {
     finish: () => adapter.finish?.(),
     find: () => readerTools.openFind(),
     snapshot,
+    rememberReference() {
+      if (returning || !active || restoring || !readerFeatureEnabled('referenceReturn')) return
+      trail.remember(snapshot()); syncReturn()
+    },
     title: () => adapter.state.title || adapter.state.filename,
     busy: () => Boolean(adapter.state.easyEnglishGenerating || adapter.state.chatActiveStream || adapter.state.translatingPages?.size || ['queued', 'running', 'retry_wait'].includes(adapter.state.translationTaskStatus)),
     async flush() {
@@ -418,7 +443,7 @@ export function installDocumentRuntime(adapter) {
   }
   window.__easypaperDocument = runtime
   window.addEventListener('pagehide', () => {
-    readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); window.removeEventListener('storage', refreshStorage)
+    stopReturnPreferences(); readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); window.removeEventListener('storage', refreshStorage)
     clearInterval(statusTimer); clearTimeout(snapshotTimer); window.removeEventListener('resize', syncViewport)
     panelResize.disconnect(); panelObserver.disconnect(); errors.disconnect(); thumbnailObserver?.disconnect()
   }, { once: true })

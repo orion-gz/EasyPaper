@@ -1,6 +1,7 @@
 import { t } from './i18n.js'
 
 export const READER_FEATURES = {
+  referenceReturn: () => t('viewer:comfort.referenceReturn'),
   restoreReading: () => t('viewer:comfort.restoreReading'),
   quickActions: () => t('viewer:comfort.quickActions'),
 }

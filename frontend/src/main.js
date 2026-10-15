@@ -14846,6 +14846,7 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
           showFigurePreviewTooltip(targets, box, { focus: true })
         } else {
           hideFigurePreviewTooltip()
+          window.__easypaperDocument?.rememberReference()
           scrollToPage(viewerScrollContainer, targets[0].page)
         }
       })
@@ -14928,6 +14929,7 @@ function getOrCreateFigurePreviewTooltip() {
     const target = el.previewTargets[parseInt(itemEl.dataset.idx, 10)]
     if (!target) return
     if (!pinnedFigurePreviews.has(el)) hideFigurePreviewTooltip()
+    window.__easypaperDocument?.rememberReference()
     scrollToPage(viewerScrollContainer, target.page)
   })
 
@@ -16271,6 +16273,7 @@ function initChatListeners() {
     if (!citation) return
     const page = Number(citation.dataset.pageCitation)
     if (Number.isInteger(page) && page >= 1 && page <= state.totalPages) {
+      window.__easypaperDocument?.rememberReference()
       const quote = citation.dataset.evidenceQuote
       const occurrence = Number(citation.dataset.evidenceOccurrence || 1)
       if (quote) locateTermInPdf(page, quote, occurrence)
@@ -18822,6 +18825,7 @@ function findViewerAnnotationElement(target) {
 
 async function navigateToViewerAnnotation(target) {
   if (!target || target.page > state.totalPages) return
+  window.__easypaperDocument?.rememberReference()
   activeViewerAnnotationTarget = target
   scrollToPage(viewerScrollContainer, target.page, { instant: true })
   if (target.quote) {
