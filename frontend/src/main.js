@@ -3362,6 +3362,10 @@ const PROVIDER_CONFIG = [
       { value: 'Gemini 3.8 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.8 Flash' },
       { value: 'Gemini 3.8 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.8 Flash' },
       { value: 'Gemini 3.8 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.8 Flash' },
+      // Gemini 4 Argon (Ultra / Enterprise): verified 2026-10-14
+      // https://antigravity.google/docs/cli/headless/
+      { value: 'gemini-4-argon-medium', label: 'Argon · Medium', group: 'Gemini 4 Argon' },
+      { value: 'gemini-4-argon-high',   label: 'Argon · High',   group: 'Gemini 4 Argon' },
       // Gemini 3.7 Flash
       { value: 'Gemini 3.7 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.7 Flash' },
       { value: 'Gemini 3.7 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.7 Flash' },
