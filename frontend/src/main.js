@@ -1,3 +1,4 @@
+import { installReaderPreferences, readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { initializeDataTransfer } from './dataTransfer.js'
 import { isMinimalUi, setMinimalUi, MINIMAL_UI_KEY } from './minimalUi.js'
 import './styles/minimal-ui.css'
@@ -93,6 +94,8 @@ const initialThemeState = loadThemes()
 applyTheme(document.body, selectedTheme(initialThemeMode, getModeSetting('theme', initialThemeMode) === 'light' ? 'light' : 'dark', initialThemeState))
 try { if (!localStorage.getItem(THEME_STORAGE_KEY)) saveThemes(initialThemeState) } catch { /* Appearance still works when storage is unavailable. */ }
 const i18nReady = initI18n()
+i18nReady.then(installReaderPreferences)
+onReaderPreferences(() => { if (!readerFeatureEnabled('quickActions')) hideSelectionMenu() })
 if (!isDocumentRuntime) initializeDesktopWindow(i18nReady)
 applyUiScale(loadUiScale())
 
@@ -13202,6 +13205,25 @@ function createSelectionMenu() {
     hideSelectionMenu()
   })
 
+  for (const [label, prompt] of [
+    [t('viewer:comfort.translate'), () => t('viewer:comfort.translatePrompt', { language: getModeSetting('targetLang', state.currentDocumentMode) })],
+    [t('viewer:comfort.explain'), () => t('viewer:comfort.explainPrompt')],
+  ]) {
+    const button = document.createElement('button')
+    button.type = 'button'; button.className = 'menu-btn'; button.textContent = label
+    button.addEventListener('click', () => {
+      if (state.chatActiveStream) return
+      const draft = chatInput.value
+      menu.querySelector('.ask-ai-btn').click()
+      if (!state.quotedText) return
+      chatInput.value = draft ? `${draft}\n${prompt()}` : prompt()
+      if (!draft) sendChatMessage()
+    })
+    menu.prepend(button)
+  }
+  menu.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); hideSelectionMenu(); viewerScrollContainer.focus() }
+  })
   updateActiveColors()
   return menu
 }
@@ -13747,6 +13769,7 @@ function reRenderPageAnnotations(textLayerDiv, pageNum) {
 }
 
 function showSelectionMenu(rect, showAnnotateGroup, hasExistingAnnotation = true) {
+  if (!readerFeatureEnabled('quickActions')) return
   const menu = createSelectionMenu()
   menu.classList.remove('hidden')
 
@@ -13770,9 +13793,10 @@ function showSelectionMenu(rect, showAnnotateGroup, hasExistingAnnotation = true
 
   const uiScale = Number(document.documentElement.style.zoom) || 1
   const left = (rect.left + rect.width / 2) / uiScale - menuWidth / 2 + window.scrollX
-  const top = rect.top / uiScale - menuHeight - 8 + window.scrollY
+  const above = rect.top / uiScale - menuHeight - 8 + window.scrollY
+  const top = above >= 8 ? above : rect.bottom / uiScale + 8 + window.scrollY
 
-  menu.style.left = `${Math.max(8, left)}px`
+  menu.style.left = `${Math.max(8, Math.min(left, window.innerWidth / uiScale - menuWidth - 8))}px`
   menu.style.top = `${Math.max(8, top)}px`
 }
 
@@ -13876,6 +13900,24 @@ document.addEventListener('mouseup', (e) => {
       hideSelectionMenu()
     }
   }, 20)
+})
+
+// Keyboard selection shares the pointer menu; Shift+F10 moves focus into it.
+document.addEventListener('keyup', event => {
+  if (!readerFeatureEnabled('quickActions') || event.isComposing) return
+  if (!(event.shiftKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key))) return
+  const selection = window.getSelection()
+  if (!selection?.rangeCount || selection.isCollapsed) return
+  const range = selection.getRangeAt(0)
+  const node = range.commonAncestorContainer
+  const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement
+  if (!element?.closest('.textLayer, .trans-page-content')) return
+  showSelectionMenu(range.getBoundingClientRect(), Boolean(element.closest('.textLayer')))
+})
+document.addEventListener('keydown', event => {
+  if (event.shiftKey && event.key === 'F10' && readerFeatureEnabled('quickActions') && selectionMenu && !selectionMenu.classList.contains('hidden')) {
+    event.preventDefault(); selectionMenu.querySelector('button')?.focus()
+  }
 })
 
 // Browser zoom and UI scale can change DOM font advances without a PDF rerender.
