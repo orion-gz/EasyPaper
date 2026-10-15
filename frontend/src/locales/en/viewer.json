@@ -139,5 +139,19 @@
   "comfort.keywords": "Keywords",
   "comfort.summary": "Summary",
   "comfort.primer": "Reading briefing",
-  "comfort.classification": "Document classification"
+  "comfort.classification": "Document classification",
+  "comfort.commandSearch": "Search and commands",
+  "comfort.searchHint": "Search documents, notes, questions — > for commands",
+  "comfort.searchEmpty": "No matching results",
+  "comfort.searchLoading": "Searching…",
+  "comfort.searchError": "Search failed. Type again to retry.",
+  "comfort.documentResult": "Document",
+  "comfort.memoResult": "Memo",
+  "comfort.questionResult": "Question",
+  "comfort.commandResult": "Command",
+  "comfort.readerRequired": "Open a document first",
+  "comfort.featureDisabled": "Disabled in settings",
+  "comfort.findCommand": "Find in document",
+  "comfort.translationCommand": "Toggle translation",
+  "comfort.settingsCommand": "Open settings"
 }

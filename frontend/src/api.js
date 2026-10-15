@@ -1221,3 +1221,10 @@ export async function generateEasyEnglishAPI(sessionId, page, regenerate, signal
     reader.releaseLock()
   }
 }
+
+export async function searchWorkspaceAPI(query, mode, signal) {
+  const params = new URLSearchParams({ q: query, document_mode: mode })
+  const response = await fetch(`${API_BASE}/library/command-search?${params}`, { signal })
+  if (!response.ok) throw await apiError(response)
+  return response.json()
+}

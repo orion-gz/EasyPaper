@@ -24,3 +24,14 @@
 #reader-task-list p { margin: 6px 0; }
 #reader-task-list button { padding: 6px 10px; margin: 3px; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; }
 #reader-task-list progress { display: block; width: 100%; }
+#reader-command-search[hidden] { display: none !important; }
+#reader-command-dialog { width: min(620px, calc(100vw - 32px)); max-height: 75vh; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); color: var(--text-primary); }
+#reader-command-dialog::backdrop { background: #0006; }
+#reader-command-dialog input { box-sizing: border-box; width: 100%; padding: 12px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; }
+#reader-command-results { overflow: auto; max-height: 55vh; }
+#reader-command-results [role="option"] { padding: 10px; cursor: pointer; border-radius: 6px; overflow-wrap: anywhere; }
+#reader-command-results [aria-selected="true"] { background: var(--bg-primary); outline: 2px solid var(--accent-mid); outline-offset: -2px; }
+#reader-command-results [aria-disabled="true"] { opacity: .55; cursor: default; }
+#reader-command-results p { margin: 4px 0; font-size: 12px; }
+
+#reader-command-search { flex: 0 0 32px; width: 32px; height: 32px; }

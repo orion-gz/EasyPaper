@@ -1,3 +1,4 @@
+import { installCommandSearch } from './commandSearch.js'
 import { installTaskCenter } from './taskCenter.js'
 import { isMinimalUi, isMinimalTabAllowed } from './minimalUi.js'
 import { createTabsStore, tabKey, WORKSPACE_PAGES, workspaceStorageKey } from './workspaceTabsStore.js'
@@ -60,6 +61,11 @@ export function createWorkspaceTabs(adapter) {
   const scopes = new Map()
   const allFrames = () => [...scopes.values()].flatMap(value => [...value.frames])
   let visibleId = null
+  const commandSearch = installCommandSearch({
+    shell, mount: topnav.querySelector('.workspace-topnav-actions'), mode: adapter.mode,
+    runtime: () => frames.get(visibleId)?.frame.contentWindow?.__easypaperDocument,
+    navigate: hash => { location.hash = hash },
+  })
   function syncScale() {
     const scale = Number(document.documentElement.style.zoom) || 1
     shell.style.setProperty('--workspace-ui-scale', scale)
@@ -286,6 +292,7 @@ export function createWorkspaceTabs(adapter) {
     frame.addEventListener('load', () => {
       frame.contentDocument?.addEventListener('keydown', event => {
         if (record.closed || record.store !== store || visibleId !== tab.id) return
+        commandSearch.handleShortcut(event)
         handleTabShortcut(event)
       })
     })

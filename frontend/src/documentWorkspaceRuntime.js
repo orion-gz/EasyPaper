@@ -299,6 +299,7 @@ export function installDocumentRuntime(adapter) {
   const runtime = {
     ready: true,
     toggleFocusReading: () => focusReading.toggle(),
+    toggleTranslation: () => adapter.setTranslationCollapsed?.(!adapter.translationCollapsed?.()),
     attention: active => adapter.attention?.(active),
     finish: () => adapter.finish?.(),
     find: () => readerTools.openFind(),
@@ -446,6 +447,15 @@ export function installDocumentRuntime(adapter) {
       const params = new URLSearchParams(hash.split('?')[1])
       if (params.get('chat') === '1') { setPanel('chat'); adapter.setPanels({ panel: true, outline: false }) }
       if (params.has('page')) await adapter.navigateHash(hash)
+      if (params.has('question')) {
+        setPanel('chat'); adapter.setPanels({ panel: true, outline: false })
+        const index = Number(params.get('question'))
+        if (Number.isInteger(index) && index >= 0) {
+          const question = $('chat-messages').querySelectorAll('.chat-message.user')[index]
+          question?.scrollIntoView({ block: 'center', behavior: 'instant' })
+          if (question) { question.tabIndex = -1; question.focus({ preventScroll: true }) }
+        }
+      }
     },
   }
   window.__easypaperDocument = runtime

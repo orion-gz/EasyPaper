@@ -5497,5 +5497,47 @@
   },
   "viewer:comfort.classification": {
     "description": "Document classification"
+  },
+  "viewer:comfort.commandSearch": {
+    "description": "Search and commands"
+  },
+  "viewer:comfort.searchHint": {
+    "description": "Search documents, notes, questions — > for commands"
+  },
+  "viewer:comfort.searchEmpty": {
+    "description": "No matching results"
+  },
+  "viewer:comfort.searchLoading": {
+    "description": "Searching…"
+  },
+  "viewer:comfort.searchError": {
+    "description": "Search failed. Type again to retry."
+  },
+  "viewer:comfort.documentResult": {
+    "description": "Document"
+  },
+  "viewer:comfort.memoResult": {
+    "description": "Memo"
+  },
+  "viewer:comfort.questionResult": {
+    "description": "Question"
+  },
+  "viewer:comfort.commandResult": {
+    "description": "Command"
+  },
+  "viewer:comfort.readerRequired": {
+    "description": "Open a document first"
+  },
+  "viewer:comfort.featureDisabled": {
+    "description": "Disabled in settings"
+  },
+  "viewer:comfort.findCommand": {
+    "description": "Find in document"
+  },
+  "viewer:comfort.translationCommand": {
+    "description": "Toggle translation"
+  },
+  "viewer:comfort.settingsCommand": {
+    "description": "Open settings"
   }
 }
