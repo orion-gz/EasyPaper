@@ -11243,7 +11243,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
 
     // 책갈피: 설정에서 끄지 않았고 마지막으로 읽던 위치가 저장되어 있으면 그 페이지로,
     // 아니면 1페이지로
-    const savedLastPage = state.disableBookmark ? null : doc.metadata?.last_page
+    const savedLastPage = state.disableBookmark || !readerFeatureEnabled('restoreReading') ? null : doc.metadata?.last_page
     const restorePage = (Number.isInteger(savedLastPage) && savedLastPage >= 1 && savedLastPage <= doc.total_pages)
       ? savedLastPage
       : 1
@@ -19391,6 +19391,10 @@ function installReaderWorkspaceRuntime() {
     pageText: (page, signal) => Boolean(viewerScrollContainer.querySelector('.article-unit'))
       ? Promise.resolve(viewerScrollContainer.querySelector(`.article-unit[data-unit-index="${page}"] .article-original`)?.textContent || '')
       : getPDFPageText(page, signal),
+    translationCollapsed: () => isTransPaneCollapsed,
+    setTranslationCollapsed: value => {
+      if (isTransPaneCollapsed !== value) viewerScrollContainer.querySelector('.trans-collapse-btn')?.click()
+    },
     goToPage: page => {
       const unit = viewerScrollContainer.querySelector(`.article-unit[data-unit-index="${page}"]`)
       if (unit) unit.scrollIntoView({ block: 'start', behavior: 'instant' })

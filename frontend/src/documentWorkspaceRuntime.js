@@ -1,3 +1,4 @@
+import { readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { applyTheme, THEME_TOKEN_NAMES } from './themes/themeEngine.js'
 import { installReaderTools } from './documentReaderTools.js'
 import { sanitizeReading } from './workspaceTabsStore.js'
@@ -36,6 +37,11 @@ export function installDocumentRuntime(adapter) {
   let snapshotTimer
   let readerTools
   let refreshing = false
+  const resumeNotice = document.createElement('button')
+  resumeNotice.type = 'button'; resumeNotice.id = 'reader-resume-notice'; resumeNotice.hidden = true
+  let resumeTimer
+  resumeNotice.addEventListener('click', () => { adapter.goToPage(1); resumeNotice.hidden = true })
+  onReaderPreferences(() => { if (!readerFeatureEnabled('restoreReading')) resumeNotice.hidden = true })
   const initialDefaultZoom = localStorage.getItem('easypaper_default_zoom') || '1.5'
 
   const tabs = document.createElement('div')
@@ -174,7 +180,7 @@ export function installDocumentRuntime(adapter) {
       else await host.getElementById('workspace-tab-panel').requestFullscreen()
     } catch { adapter.toast(t('navigation:tabs.fullscreenUnavailable'), 'warning') }
   })
-  floating.append(fullscreen)
+  floating.append(fullscreen, resumeNotice)
   readerTools = installReaderTools(adapter, { scroll, toolbar: $('viewer-topbar').querySelector('.topbar-right'), floating, changed: publishSnapshot })
   const refreshButton = document.createElement('button')
   refreshButton.type = 'button'
@@ -197,7 +203,7 @@ export function installDocumentRuntime(adapter) {
     const pair = [...scroll.querySelectorAll('.page-pair, .article-unit')].find(item => item.getBoundingClientRect().bottom > viewportTop)
     const page = pair ? Number(pair.dataset.page ?? pair.dataset.unitIndex) || adapter.state.currentPage : adapter.state.currentPage
     const offset = pair ? Math.max(0, Math.min(1, (viewportTop - pair.getBoundingClientRect().top) / pair.getBoundingClientRect().height)) : 0
-    return sanitizeReading({ page, offset, fitWidth: readerTools?.fit() ?? false, zoom: adapter.state.zoom, panel, panelOpen: !sidebar.classList.contains('hidden'), navigation, panelWidth: parseFloat(sidebar.style.width) || 360 })
+    return sanitizeReading({ page, offset, translationCollapsed: adapter.translationCollapsed?.(), fitWidth: readerTools?.fit() ?? false, zoom: adapter.state.zoom, panel, panelOpen: !sidebar.classList.contains('hidden'), navigation, panelWidth: parseFloat(sidebar.style.width) || 360 })
   }
   function publishSnapshot() {
     if (restoring || refreshing || !window.__easypaperDocument?.ready || !active) return
@@ -364,29 +370,42 @@ export function installDocumentRuntime(adapter) {
         adapter.suspend()
       }
     },
-    async restore(saved) {
+    async restore(saved, { force = false } = {}) {
+      if (!force && !readerFeatureEnabled('restoreReading')) saved = null
       restoring = true
       try {
         if (saved) {
           const value = sanitizeReading(saved)
+          adapter.setTranslationCollapsed?.(value.translationCollapsed)
           readerTools.restore(value.fitWidth)
           if (Math.abs(adapter.state.zoom - value.zoom) > 0.001) await adapter.zoom(value.zoom)
           setPanel(value.panel)
           setNavigation(value.navigation)
           desiredOpen = { panel: value.panelOpen, outline: false }
           sidebar.style.width = `${value.panelWidth}px`
-          adapter.goToPage(Math.min(value.page, adapter.state.totalPages))
+          adapter.setPanels(desiredOpen)
+          updateLayout()
+          value.page = Math.min(value.page, adapter.state.totalPages)
+          await readerTools.fitNow()
+          adapter.goToPage(value.page)
           const pair = scroll.querySelector(`.page-pair[data-page="${value.page}"], .article-unit[data-unit-index="${value.page}"]`)
           if (pair) scroll.scrollTop += pair.offsetHeight * value.offset
+          const explicitPage = new URLSearchParams(location.hash.split('?')[1]).has('page')
+          if (!force && !explicitPage && (value.page > 1 || value.offset > 0)) {
+            resumeNotice.textContent = `${t('viewer:comfort.resumed', { page: value.page })} · ${t('viewer:comfort.startOver')}`
+            resumeNotice.hidden = false
+            clearTimeout(resumeTimer); resumeTimer = setTimeout(() => { resumeNotice.hidden = true }, 8000)
+          }
         } else {
           readerTools.restore(true)
           setPanel('chat'); setNavigation('outline')
+          if (!readerFeatureEnabled('restoreReading')) adapter.goToPage(1)
         }
         if (window.parent.innerWidth < 1100 && desiredOpen.panel) desiredOpen.outline = false
         adapter.setPanels(desiredOpen)
       } finally {
         updateLayout()
-        await readerTools.fitNow()
+        if (!saved) await readerTools.fitNow()
         restoring = false
         viewer.classList.remove('document-workspace-loading')
       }

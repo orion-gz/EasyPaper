@@ -1,3 +1,4 @@
+import { readerFeatureEnabled } from './readerPreferenceStore.js'
 import { isMinimalTabAllowed } from './minimalUi.js'
 // Persist only navigation and reading preferences, never document/chat contents.
 export const WORKSPACE_PAGES = ['dashboard', 'library', 'chats', 'notes', 'history', 'graph']
@@ -14,17 +15,19 @@ export function sanitizeReading(value = {}) {
     panel: ['chat', 'notes', 'annotations'].includes(value.panel) ? value.panel : 'chat',
     panelOpen: value.panelOpen === true,
     navigation: value.navigation === 'thumbnails' ? 'thumbnails' : 'outline',
+    translationCollapsed: value.translationCollapsed === true,
     panelWidth: Math.max(300, Math.min(480, Number(value.panelWidth) || 360)),
   }
 }
 
 export function createTabsStore({ storage, key, mode = 'research', minimal = false, onStorageError = () => {} }) {
   let tabs = []
+  let readings = {}
   let activeTabId = null
   const listeners = new Set()
   function save() {
     try {
-      storage.setItem(key, JSON.stringify({ version: 1, activeTabId, tabs: tabs.map(({ id, kind, target, title, reading, route }) => ({ id, kind, target, title, reading, route })) }))
+      storage.setItem(key, JSON.stringify({ version: 1, activeTabId, readings, tabs: tabs.map(({ id, kind, target, title, reading, route }) => ({ id, kind, target, title, reading, route })) }))
     } catch (error) { onStorageError(error) }
   }
   function notify(change) { save(); for (const listener of listeners) listener(change) }
@@ -49,6 +52,7 @@ export function createTabsStore({ storage, key, mode = 'research', minimal = fal
       try {
         const saved = JSON.parse(storage.getItem(key))
         if (saved?.version === 1 && Array.isArray(saved.tabs)) {
+          readings = Object.fromEntries(Object.entries(saved.readings || {}).filter(([id, value]) => id && value && typeof value === 'object').map(([id, value]) => [id, sanitizeReading(value)]))
           const seen = new Set()
           tabs = saved.tabs.filter(tab => {
             if (!tab || typeof tab.target !== 'string' || !tab.target || !allowed(tab.kind, tab.target)) return false
@@ -73,7 +77,7 @@ export function createTabsStore({ storage, key, mode = 'research', minimal = fal
       const id = tabKey(kind, target)
       let tab = tabs.find(item => item.id === id)
       if (!tab) {
-        tab = { id, kind, target, title }
+        tab = { id, kind, target, title, ...(kind === 'document' && readerFeatureEnabled('restoreReading', storage) && readings[target] ? { reading: readings[target] } : {}) }
         tabs.push(tab)
       } else if (title) tab.title = title
       activeTabId = id
@@ -116,6 +120,7 @@ export function createTabsStore({ storage, key, mode = 'research', minimal = fal
       const normalized = { ...patch, ...(patch.reading ? { reading: sanitizeReading(patch.reading) } : {}) }
       const changed = Object.keys(normalized).filter(key => JSON.stringify(tab[key]) !== JSON.stringify(normalized[key]))
       if (!changed.length) return
+      if (normalized.reading && readerFeatureEnabled('restoreReading', storage)) readings[tab.target] = normalized.reading
       Object.assign(tab, normalized)
       notify(changed.every(key => key === 'reading') ? 'reading' : 'tabs')
     },

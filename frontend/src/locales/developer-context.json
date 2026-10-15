@@ -5404,5 +5404,14 @@
   },
   "viewer:comfort.explainPrompt": {
     "description": "Explain the quoted passage simply in the context of this document."
+  },
+  "viewer:comfort.restoreReading": {
+    "description": "Restore reading state"
+  },
+  "viewer:comfort.resumed": {
+    "description": "Resumed on page {{page}}"
+  },
+  "viewer:comfort.startOver": {
+    "description": "Read from the beginning"
   }
 }

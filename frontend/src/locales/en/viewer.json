@@ -108,5 +108,8 @@
   "comfort.translate": "Translate",
   "comfort.explain": "Explain simply",
   "comfort.translatePrompt": "Translate the quoted passage into {{language}}. Preserve its meaning and notation.",
-  "comfort.explainPrompt": "Explain the quoted passage simply in the context of this document."
+  "comfort.explainPrompt": "Explain the quoted passage simply in the context of this document.",
+  "comfort.restoreReading": "Restore reading state",
+  "comfort.resumed": "Resumed on page {{page}}",
+  "comfort.startOver": "Read from the beginning"
 }

@@ -130,3 +130,21 @@ test('minimal close selects visible neighbors across hidden feature tabs', () =>
   assert.ok(store.tabs.some(tab => tab.id === 'page:notes'))
   assert.ok(store.tabs.some(tab => tab.id === 'page:graph'))
 })
+
+test('closed documents retain their reading state independently of tabs', () => {
+  const { store, data } = setup()
+  store.restoreWorkspace()
+  store.openTab('document', 'a')
+  store.update('document:a', { reading: { page: 9, offset: .4, translationCollapsed: true } })
+  store.closeTab('document:a')
+  const restored = setup(JSON.parse(data.get('test'))).store
+  restored.restoreWorkspace()
+  assert.equal(restored.openTab('document', 'a').reading.page, 9)
+  assert.equal(restored.active.reading.translationCollapsed, true)
+})
+test('disabled restoration does not apply stored state on reopening', () => {
+  const { store, data } = setup({ version: 1, readings: { a: { page: 9 } }, tabs: [] })
+  data.set('easypaper_reader_restoreReading', 'false')
+  store.restoreWorkspace()
+  assert.equal(store.openTab('document', 'a').reading, undefined)
+})
