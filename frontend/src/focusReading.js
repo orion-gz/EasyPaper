@@ -3,11 +3,12 @@ import { t } from './i18n.js'
 import { readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import './styles/reader-comfort.css'
 
-export function installFocusReading({ toolbar, floating, panels, restorePanels, changed }) {
+export function installFocusReading({ toolbar, floating, panels, restorePanels, translationCollapsed, setTranslationCollapsed, changed }) {
   const host = window.parent.document.body
   let focused = false
   let active = true
   let previous
+  let previousCollapsed
   const button = document.createElement('button')
   button.type = 'button'; button.id = 'reader-focus'; button.className = 'icon-btn'
   button.innerHTML = icon('expand', 16); button.title = t('viewer:comfort.focusReading'); button.setAttribute('aria-label', button.title)
@@ -19,6 +20,9 @@ export function installFocusReading({ toolbar, floating, panels, restorePanels, 
     option.addEventListener('click', () => { selectedView = value; render() }); view.append(option)
   }
   const render = () => {
+    button.title = t('viewer:comfort.focusReading'); button.setAttribute('aria-label', button.title)
+    view.setAttribute('aria-label', t('viewer:comfort.readingView'))
+    view.querySelectorAll('button').forEach(option => { option.textContent = t(`viewer:comfort.${option.dataset.view}`) })
     button.hidden = !readerFeatureEnabled('focusReading')
     button.setAttribute('aria-pressed', String(focused))
     view.hidden = !focused
@@ -30,8 +34,8 @@ export function installFocusReading({ toolbar, floating, panels, restorePanels, 
   }
   const set = value => {
     if (value === focused || (value && !readerFeatureEnabled('focusReading'))) return
-    if (value) { previous = panels(); restorePanels({ panel: false, outline: false }) }
-    else if (previous) restorePanels(previous)
+    if (value) { previous = panels(); previousCollapsed = translationCollapsed(); setTranslationCollapsed(false); restorePanels({ panel: false, outline: false }) }
+    else if (previous) { restorePanels(previous); setTranslationCollapsed(previousCollapsed) }
     focused = value; render()
   }
   button.addEventListener('click', () => set(!focused))
@@ -43,11 +47,12 @@ export function installFocusReading({ toolbar, floating, panels, restorePanels, 
   }
   document.addEventListener('keydown', escape)
   const unsubscribe = onReaderPreferences(() => { if (!readerFeatureEnabled('focusReading')) set(false); render() })
+  document.addEventListener('easypaper:locale-changed', render)
   floating.append(button, view)
   render()
   return {
     toggle: () => set(!focused),
     setActive(value) { active = value; host.classList.toggle('reader-focus-host', active && focused) },
-    destroy() { unsubscribe(); document.removeEventListener('keydown', escape); if (active) host.classList.remove('reader-focus-host') },
+    destroy() { unsubscribe(); document.removeEventListener('easypaper:locale-changed', render); document.removeEventListener('keydown', escape); if (active) host.classList.remove('reader-focus-host') },
   }
 }

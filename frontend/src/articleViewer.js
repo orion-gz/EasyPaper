@@ -1,3 +1,5 @@
+import { t } from './i18n.js'
+
 export function buildTextAnchor(text, start, end, metadata = {}) {
   return { ...metadata, start, end, exact: text.slice(start, end), prefix: text.slice(Math.max(0, start - 32), start), suffix: text.slice(end, end + 32) }
 }
@@ -92,7 +94,7 @@ function restoreResources(root, annotations, memos, renderMarkdown, onDeleteMemo
 }
 
 export async function mountArticleViewer(options) {
-  const { container, doc, manifest, sanitize, getTranslation, translationOptions, loadAnnotations, saveAnnotations, loadMemos, saveMemos, renderMarkdown, labels, onCurrentUnit, onOutline, onCapture } = options
+  const { readerFeatureEnabled = () => true, onReaderPreferences = () => () => {}, container, doc, manifest, sanitize, getTranslation, translationOptions, loadAnnotations, saveAnnotations, loadMemos, saveMemos, renderMarkdown, labels, onCurrentUnit, onOutline, onCapture } = options
   const root = document.createElement('article'); root.className = 'article-viewer'; root.style.setProperty('--article-zoom', '1')
   const toolbar = document.createElement('div'); toolbar.className = 'article-toolbar'
   toolbar.innerHTML = `<div class="article-tabs" role="tablist"><button type="button" class="active" data-tab="snapshot">${labels.snapshot}</button><button type="button" data-tab="original">${labels.original}</button></div><label class="article-search"><span>${labels.search}</span><input type="search" autocomplete="off"></label><button type="button" data-zoom="out" aria-label="${labels.zoomOut}">−</button><button type="button" data-zoom="in" aria-label="${labels.zoomIn}">+</button><button type="button" data-capture>${labels.capture}</button><a class="btn btn-secondary" target="_blank" rel="noopener noreferrer">${labels.openOriginal}</a>`
@@ -139,15 +141,22 @@ export async function mountArticleViewer(options) {
 
   const selectionTools = document.createElement('div'); selectionTools.className = 'article-selection-tools hidden'
   selectionTools.innerHTML = `<button type="button" data-action="highlight">${labels.highlight}</button><button type="button" data-action="underline">${labels.underline}</button><button type="button" data-action="memo">${labels.memo}</button>`; document.body.appendChild(selectionTools)
+  for (const action of ['translate', 'explain']) {
+    const button = document.createElement('button'); button.type = 'button'; button.dataset.action = action; button.dataset.i18n = `viewer:comfort.${action}`; button.textContent = t(button.dataset.i18n); selectionTools.prepend(button)
+  }
+  const unsubscribePreferences = onReaderPreferences(() => { if (!readerFeatureEnabled('quickActions')) selectionTools.classList.add('hidden') })
   root.addEventListener('mouseup', event => {
     event.stopPropagation()
-    setTimeout(() => { const context = selectionContext(root); if (!context) { selectionTools.classList.add('hidden'); return }; selectionTools.classList.remove('hidden'); selectionTools.style.left = `${event.clientX}px`; selectionTools.style.top = `${event.clientY + 8}px` }, 0)
+    setTimeout(() => { const context = selectionContext(root); if (!context || !readerFeatureEnabled('quickActions')) { selectionTools.classList.add('hidden'); return }; selectionTools.classList.remove('hidden'); selectionTools.style.left = `${event.clientX}px`; selectionTools.style.top = `${event.clientY + 8}px` }, 0)
   })
   selectionTools.addEventListener('mousedown', event => event.preventDefault())
   selectionTools.addEventListener('click', event => {
     const action = event.target.closest('[data-action]')?.dataset.action; const context = selectionContext(root); if (!action || !context) return
     const key = `section_${context.unitIndex}`
-    if (action === 'memo') {
+    if (!readerFeatureEnabled('quickActions')) return
+    if (action === 'translate' || action === 'explain') {
+      options.onQuickAction?.(action, context.anchor.exact, context.unitIndex)
+    } else if (action === 'memo') {
       const content = window.prompt(labels.memoPrompt)
       if (content?.trim()) {
         const all = loadMemos(); all[key] ||= []
@@ -180,5 +189,5 @@ export async function mountArticleViewer(options) {
   const observer = new IntersectionObserver(entries => { const visible = entries.filter(entry => entry.isIntersecting).sort((a,b) => b.intersectionRatio-a.intersectionRatio)[0]; if (visible) { currentUnit = Number(visible.target.dataset.unitIndex); onCurrentUnit(currentUnit) } }, { root: container, threshold: [.25,.5,.75] })
   root.querySelectorAll('.article-unit').forEach(unit => observer.observe(unit))
   const timer = setInterval(async () => { for (const pane of root.querySelectorAll('.article-translation')) { const data = await getTranslation(Number(pane.dataset.unitIndex)); const content = pane.querySelector('.trans-page-content') || pane; if (data?.translation && content.textContent !== data.translation) content.textContent = data.translation } }, 3000)
-  return { root, destroy() { clearInterval(timer); observer.disconnect(); selectionTools.remove(); referencePreview.remove() } }
+  return { root, destroy() { unsubscribePreferences(); clearInterval(timer); observer.disconnect(); selectionTools.remove(); referencePreview.remove() } }
 }

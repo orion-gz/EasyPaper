@@ -23,6 +23,8 @@ export function installTaskCenter({ shell, mount, navigate, toast }) {
   let tasks = []; let loading = false; let timer; let generation = 0
   const pending = new Map()
   function render() {
+    panel.setAttribute('aria-label', t('viewer:comfort.taskProgress'))
+    refresh.textContent = t('viewer:comfort.taskRefresh')
     const focusedAction = document.activeElement?.dataset.taskAction
     const label = `${t('viewer:comfort.taskProgress')} (${tasks.filter(task => activeStatuses.has(task.status)).length})`
     toggle.innerHTML = icon('listChecks', 18); toggle.title = label; toggle.setAttribute('aria-label', label)
@@ -84,5 +86,6 @@ export function installTaskCenter({ shell, mount, navigate, toast }) {
   }
   // Clear previous-account results whenever the authenticated shell is hidden.
   new MutationObserver(() => { if (shell.hidden) { generation++; tasks = []; panel.hidden = true; render() } else void poll() }).observe(shell, { attributes: true, attributeFilter: ['hidden'] })
+  document.addEventListener('easypaper:locale-changed', render)
   onReaderPreferences(sync); render(); sync()
 }

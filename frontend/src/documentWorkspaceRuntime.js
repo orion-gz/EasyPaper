@@ -279,6 +279,7 @@ export function installDocumentRuntime(adapter) {
   syncViewport()
   const focusReading = installFocusReading({
     floating, panels: () => ({ panel: !sidebar.classList.contains('hidden'), outline: !outline.classList.contains('hidden') }),
+    translationCollapsed: adapter.translationCollapsed, setTranslationCollapsed: adapter.setTranslationCollapsed,
     restorePanels: adapter.setPanels, changed: () => { updateLayout(); publishSnapshot() },
   })
   let lastTitle = adapter.state.title
@@ -370,6 +371,7 @@ export function installDocumentRuntime(adapter) {
       $('chat-quote-img').classList.toggle('hidden', !draft.quotedImage)
       $('chat-quote-area').classList.toggle('hidden', !quote && !draft.quotedImage)
     },
+    activateChat() { setPanel('chat'); adapter.setPanels({ panel: true, outline: false }) },
     syncScale: scale => adapter.uiScale(scale),
     async syncAppearance(light, locale) {
       document.body.classList.toggle('light-theme', light)

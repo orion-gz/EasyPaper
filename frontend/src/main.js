@@ -13205,12 +13205,12 @@ function createSelectionMenu() {
     hideSelectionMenu()
   })
 
-  for (const [label, prompt] of [
-    [t('viewer:comfort.translate'), () => t('viewer:comfort.translatePrompt', { language: getModeSetting('targetLang', state.currentDocumentMode) })],
-    [t('viewer:comfort.explain'), () => t('viewer:comfort.explainPrompt')],
+  for (const [key, label, prompt] of [
+    ['viewer:comfort.translate', t('viewer:comfort.translate'), () => t('viewer:comfort.translatePrompt', { language: getTranslationOptions().targetLang })],
+    ['viewer:comfort.explain', t('viewer:comfort.explain'), () => t('viewer:comfort.explainPrompt')],
   ]) {
     const button = document.createElement('button')
-    button.type = 'button'; button.className = 'menu-btn'; button.textContent = label
+    button.type = 'button'; button.className = 'menu-btn'; button.dataset.i18n = key; button.textContent = label
     button.addEventListener('click', () => {
       if (state.chatActiveStream) return
       const draft = chatInput.value
@@ -16518,6 +16518,8 @@ function askAIAssistant(text, { sourcePage = null, charStart = null, charEnd = n
   }
   if (quoteArea) quoteArea.classList.remove('hidden');
 
+  window.__easypaperDocument?.activateChat()
+
   // 사이드바 활성화
   if (chatSidebar.classList.contains('hidden')) {
     toggleChatSidebar();
@@ -16549,6 +16551,8 @@ function askAIAssistantImage(base64Img, pageNum) {
     quoteImgEl.classList.remove('hidden');
   }
   if (quoteArea) quoteArea.classList.remove('hidden');
+
+  window.__easypaperDocument?.activateChat()
 
   // 사이드바 활성화
   if (chatSidebar.classList.contains('hidden')) {
@@ -19356,7 +19360,7 @@ async function renderArticleDocument(doc) {
   const manifest = await getArticleAPI(doc.id)
   state.currentContentKind = 'html_article'
   state.articleViewer = await mountArticleViewer({
-    container: viewerScrollContainer, doc, manifest,
+    container: viewerScrollContainer, doc, manifest, readerFeatureEnabled, onReaderPreferences,
     sanitize: html => DOMPurify.sanitize(html, { ADD_ATTR: ['data-block-id', 'data-original-url'] }),
     createTranslationPanel: page => createTransBlock(page),
     getTranslation: page => getPageTranslation(doc.id, page, getTranslationOptions(doc.document_mode || 'research')).catch(() => null),
@@ -19371,6 +19375,14 @@ async function renderArticleDocument(doc) {
       underline: t('library:article.underline'), memo: t('library:article.memo'), memoPrompt: t('library:article.memoPrompt'), capture: t('library:article.capture'),
     },
     onCurrentUnit: index => { state.currentPage = index; pageInput.value = index; easyEnglishController?.schedule() },
+    onQuickAction: (action, text, page) => {
+      if (state.chatActiveStream) return
+      const draft = chatInput.value
+      askAIAssistant(text, { sourcePage: page })
+      const prompt = action === 'translate' ? t('viewer:comfort.translatePrompt', { language: getTranslationOptions().targetLang }) : t('viewer:comfort.explainPrompt')
+      chatInput.value = draft ? `${draft}\n${prompt}` : prompt
+      if (!draft) sendChatMessage()
+    },
     onCapture: (dataUrl, index) => askAIAssistantImage(dataUrl, index),
     onOutline: items => {
       outlineContent?.replaceChildren()

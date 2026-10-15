@@ -12,7 +12,8 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
   const status = document.createElement('p'); status.setAttribute('role', 'status')
   dialog.append(input, status, list); document.body.append(dialog); mount?.append(button)
   let previous; let items = []; let selected = 0; let controller; let revision = 0; let timer
-  function close() { revision++; controller?.abort(); clearTimeout(timer); dialog.close(); previous?.focus?.({ preventScroll: true }) }
+  function resetResults() { items = []; selected = 0; list.replaceChildren(); input.removeAttribute('aria-activedescendant') }
+  function close() { resetResults(); revision++; controller?.abort(); clearTimeout(timer); dialog.close(); previous?.focus?.({ preventScroll: true }) }
   function commands() {
     const reader = runtime()
     return [
@@ -64,7 +65,7 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
   }
   function open() {
     if (shell.hidden || !readerFeatureEnabled('commandSearch')) return
-    previous = document.activeElement; input.value = ''; dialog.showModal(); input.focus(); void search()
+    resetResults(); previous = document.activeElement; input.value = ''; dialog.showModal(); input.focus(); void search()
   }
   const handleShortcut = event => {
     if (event.isComposing || event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'k' || !readerFeatureEnabled('commandSearch') || shell.hidden) return
@@ -75,6 +76,7 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
   input.addEventListener('input', () => { items = []; list.replaceChildren(); input.removeAttribute('aria-activedescendant'); status.textContent = t('viewer:comfort.searchLoading'); revision++; controller?.abort(); clearTimeout(timer); timer = setTimeout(search, 200) })
   input.addEventListener('keydown', event => {
     if (event.isComposing) return
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); if (items.length) select((selected + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length) }
     if (event.key === 'Enter') { event.preventDefault(); execute(selected) }
   })

@@ -309,7 +309,7 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     let currentPageTop = Infinity
     for (const page of Object.keys(visiblePageHeights)) {
       const pageNum = Number(page)
-      const element = container.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+      const element = container.querySelector(`.page-pair[data-page="${pageNum}"]`) || container.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
       if (!element) continue
       const rect = element.getBoundingClientRect()
       if (rect.bottom <= viewportTop || rect.top >= currentPageTop) continue
@@ -330,7 +330,7 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
 
   wrappers.forEach(w => {
     pageObserver.observe(w)
-    pageVisibilityObserver.observe(w)
+    pageVisibilityObserver.observe(w.closest('.page-pair') || w)
   })
 }
 
