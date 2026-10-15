@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.3 - 2026-10-15
+
+### 한국어 (1.4.2 → 1.4.3)
+
+- PDF 뷰어의 휠·핀치 확대/축소에 애니메이션 미리보기를 적용하고 제스처 종료 후 렌더링하도록 개선
+- 휠 이벤트 단위별 확대/축소 동작을 일관되게 처리하고 제스처 시작 시 현재 렌더링 배율을 반영
+- Antigravity 모델 목록에 Gemini 4 Argon Medium·High를 추가
+
+### English (1.4.2 → 1.4.3)
+
+- Smoothed PDF viewer wheel and pinch zoom with animated previews and deferred rendering after the gesture ends.
+- Improved zoom consistency across wheel event units and preserved the current rendered scale when starting a zoom gesture.
+- Added Gemini 4 Argon Medium and High to the Antigravity model list.
+
 ## 1.4.2 - 2026-10-14
 
 ### 한국어 (1.4.1 → 1.4.2)
