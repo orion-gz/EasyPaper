@@ -604,11 +604,6 @@ function initializeSettingsInformationArchitecture() {
   }
   moveSettingsGroup('clear-cache-btn', dataSystemBody)
 
-  for (const id of ['system-update-section', 'tauri-update-section']) {
-    const section = $(id)
-    if (section && dataSystemBody) dataSystemBody.appendChild(section)
-  }
-
   const rowControlIds = [
     'setting-ui-locale', 'setting-ui-scale', 'setting-source-lang', 'setting-accent-swatches',
     'setting-target-lang', 'setting-trans-style', 'setting-translation-mode', 'setting-easy-english-mode',
