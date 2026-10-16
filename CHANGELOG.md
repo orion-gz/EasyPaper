@@ -2,6 +2,22 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.5 - 2026-10-16
+
+### 한국어 (1.4.4 → 1.4.5)
+
+- PDF 핀치 확대/축소 중 캔버스를 유지하고 확대/축소 렌더링을 개선하여 깜빡임과 빈 페이지 표시를 완화
+- 페이지 요소 생성과 페이지 크기 조회를 제한된 묶음으로 처리하고 이전 문서 초기화를 취소하여 긴 문서를 열 때 뷰어 멈춤을 완화
+- 확대/축소 시 PDF 페이지 크기를 재사용하고 화면 밖 페이지의 렌더링 캐시를 해제하여 반복 작업과 메모리 사용을 줄임
+- Easy English 탭 갱신과 강조 표시 탐색의 반복 작업을 줄이고 긴 문서의 읽기 위치 탐색을 개선
+
+### English (1.4.4 → 1.4.5)
+
+- Preserved the PDF canvas through pinch zoom and improved zoom rendering to reduce flicker and blank pages.
+- Reduced viewer stalls when opening long documents by creating page elements and loading page dimensions in bounded batches, while cancelling superseded document initialization.
+- Cached PDF page dimensions across zoom changes and released off-screen PDF rendering caches to reduce repeated work and memory use.
+- Reduced repeated Easy English tab updates and highlight scans, and improved reading-position lookup for long documents.
+
 ## 1.4.4 - 2026-10-16
 
 ### 한국어 (1.4.3 → 1.4.4)
