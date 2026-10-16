@@ -102,5 +102,11 @@
   "figurePreview.move": "이동 (드래그 또는 방향키)",
   "figurePreview.collapse": "접기",
   "figurePreview.expand": "펼치기",
-  "figurePreview.close": "닫기"
+  "figurePreview.close": "닫기",
+  "comfort.settings": "읽기 편의 기능 — 즉시 적용",
+  "comfort.quickActions": "선택 영역 퀵 메뉴",
+  "comfort.translate": "번역",
+  "comfort.explain": "쉽게 설명",
+  "comfort.translatePrompt": "인용한 문장을 {{language}}로 번역해 주세요. 의미와 표기를 보존해 주세요.",
+  "comfort.explainPrompt": "문서 맥락을 바탕으로 인용한 문장을 쉽게 설명해 주세요."
 }

@@ -102,5 +102,11 @@
   "figurePreview.move": "Move (drag or arrow keys)",
   "figurePreview.collapse": "Collapse",
   "figurePreview.expand": "Expand",
-  "figurePreview.close": "Close"
+  "figurePreview.close": "Close",
+  "comfort.settings": "Reading convenience — applies immediately",
+  "comfort.quickActions": "Selection quick actions",
+  "comfort.translate": "Translate",
+  "comfort.explain": "Explain simply",
+  "comfort.translatePrompt": "Translate the quoted passage into {{language}}. Preserve its meaning and notation.",
+  "comfort.explainPrompt": "Explain the quoted passage simply in the context of this document."
 }
