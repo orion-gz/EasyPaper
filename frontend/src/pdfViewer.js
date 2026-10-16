@@ -131,10 +131,10 @@ export async function renderFigureCrop(pageNum, imgPercent) {
  * @param {Object}      callbacks
  *   onPageVisible(pageNum)  - 페이지가 뷰포트에 들어올 때마다 호출
  */
-export async function renderScrollView(container, zoom, { onPageVisible } = {}) {
+export async function renderScrollView(container, zoom, { onPageVisible, preserveCanvas = false } = {}) {
   lastScrollView = { container, zoom, onPageVisible }
   if (!pdfDoc || suspended) return
-  disposeScrollView()
+  disposeScrollView(preserveCanvas)
   currentScale = zoom
   renderedTextLayers.clear()
   renderGeneration++
@@ -152,7 +152,7 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
   let lastNotifiedPage = null
   const isCurrent = () => myGeneration === renderGeneration
 
-  function release(job) {
+  function release(job, preserveCanvas = false) {
     job.cancelled = true
     job.controller.abort()
     job.renderTask?.cancel()
@@ -165,8 +165,11 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     const inner = job.wrapper.querySelector('.pdf-page-inner')
     if (inner) {
       window.onTextLayerReleased?.(inner.querySelector('.textLayer'), job.pageNum)
-      inner.querySelectorAll('canvas').forEach(canvas => { canvas.width = 0; canvas.height = 0 })
-      inner.replaceChildren()
+      const retained = preserveCanvas ? inner.querySelector('canvas[data-rendered]') : null
+      inner.querySelectorAll('canvas').forEach(canvas => {
+        if (canvas !== retained) { canvas.width = 0; canvas.height = 0 }
+      })
+      inner.replaceChildren(...(retained ? [retained] : []))
     }
     jobs.delete(job.pageNum)
   }
@@ -211,12 +214,20 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     }, 0)
   }
 
-  disposeScrollView = () => {
+  disposeScrollView = (preserveCanvas = false) => {
     pageObserver?.disconnect()
     pageVisibilityObserver?.disconnect()
     clearTimeout(pumpTimer)
     queue.clear()
-    for (const job of jobs.values()) release(job)
+    for (const job of jobs.values()) release(job, preserveCanvas)
+    // Also release retained pages that have not entered the new render queue.
+    if (!preserveCanvas) {
+      container.querySelectorAll('.pdf-page-inner canvas').forEach(canvas => {
+        canvas.width = 0
+        canvas.height = 0
+        canvas.remove()
+      })
+    }
   }
 
   // Reserve each page's real dimensions before restoring a saved position.
@@ -280,7 +291,12 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     const { width, height } = viewports[index]
     wrapper.style.minHeight = `${height}px`
     const inner = wrapper.querySelector('.pdf-page-inner')
-    inner.replaceChildren()
+    const retained = preserveCanvas ? inner.querySelector('canvas[data-rendered]') : null
+    inner.replaceChildren(...(retained ? [retained] : []))
+    if (retained) {
+      retained.style.width = `${width}px`
+      retained.style.height = `${height}px`
+    }
     inner.style.boxSizing = 'content-box'
     inner.style.width = `${width}px`
     inner.style.height = `${height}px`
@@ -302,6 +318,14 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
       } else {
         nearby.delete(pageNum)
         queue.delete(pageNum)
+        // A retained bitmap may not have a job in this generation yet.
+        if (!jobs.has(pageNum)) {
+          entry.target.querySelectorAll('.pdf-page-inner canvas').forEach(canvas => {
+            canvas.width = 0
+            canvas.height = 0
+            canvas.remove()
+          })
+        }
       }
     })
     trimPages()
@@ -361,8 +385,7 @@ async function _renderPage(wrapper, pageNum, generation, job) {
   const stale = () => generation !== renderGeneration || job.cancelled
   if (stale()) return
   const inner = wrapper.querySelector('.pdf-page-inner')
-  inner.innerHTML = ''
-
+  // Paint offscreen; the previous bitmap remains visible until replacement.
   try {
     const textUrl = pdfTextUrl
     const page = await pdfDoc.getPage(pageNum)
@@ -389,8 +412,6 @@ async function _renderPage(wrapper, pageNum, generation, job) {
     textLayerDiv.style.setProperty('--scale-factor', viewport.scale)
     textLayerDiv.style.setProperty('--user-unit', viewport.userUnit)
 
-    inner.appendChild(canvas)
-    inner.appendChild(textLayerDiv)
     inner.style.width = `${viewport.width}px`
     inner.style.height = `${viewport.height}px`
     wrapper.style.minHeight = ''
@@ -404,7 +425,11 @@ async function _renderPage(wrapper, pageNum, generation, job) {
     // 캔버스 렌더링 (먼저 실행)
     job.renderTask = page.render({ canvasContext: ctx, viewport })
     await job.renderTask.promise
-    if (stale()) return
+    if (stale()) { canvas.width = 0; canvas.height = 0; return }
+    canvas.dataset.rendered = 'true'
+    window.onTextLayerReleased?.(inner.querySelector('.textLayer'), pageNum)
+    inner.querySelectorAll('canvas').forEach(previous => { previous.width = 0; previous.height = 0 })
+    inner.replaceChildren(canvas, textLayerDiv)
 
     // 텍스트 레이어 렌더링
     try {
@@ -471,7 +496,9 @@ async function _renderPage(wrapper, pageNum, generation, job) {
 
   } catch (e) {
     if (stale()) return
-    inner.innerHTML = `<div class="page-render-error">페이지 ${pageNum} 오류</div>`
+    if (!inner.querySelector('canvas[data-rendered]')) {
+      inner.innerHTML = `<div class="page-render-error">페이지 ${pageNum} 오류</div>`
+    }
     console.error(`Render p.${pageNum}:`, e)
   }
 }
@@ -497,7 +524,7 @@ export function scrollToPage(container, pageNum, { instant = false } = {}) {
 /** 줌 변경 후 전체 재렌더링 */
 export async function reRenderAll(container, newZoom, callbacks) {
   currentScale = newZoom
-  await renderScrollView(container, newZoom, callbacks)
+  await renderScrollView(container, newZoom, { ...callbacks, preserveCanvas: true })
 }
 
 export function setScale(s) { currentScale = s }
