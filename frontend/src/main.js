@@ -1612,6 +1612,7 @@ function scheduleVisiblePageTranslation(pageNum) {
 }
 
 // ── 스크롤 뷰어 초기화 ────────────────────────────
+let scrollViewerGeneration = 0
 async function initScrollViewer() {
   easyEnglishController?.reset()
   viewerScrollContainer.innerHTML = ''
@@ -1657,11 +1658,24 @@ async function initScrollViewer() {
     })
   }
 
-  for (let i = 1; i <= state.totalPages; i++) {
-    viewerScrollContainer.appendChild(createPagePair(i))
+  // Build off-document in bounded batches so textbook-sized files do not
+  // monopolize the main thread. A superseding open must not append stale pages.
+  const sessionId = state.sessionId
+  const generation = ++scrollViewerGeneration
+  const totalPages = state.totalPages
+  for (let start = 1; start <= totalPages; start += 16) {
+    if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
+    const fragment = document.createDocumentFragment()
+    for (let i = start; i < Math.min(start + 16, totalPages + 1); i++) {
+      fragment.appendChild(createPagePair(i))
+    }
+    viewerScrollContainer.appendChild(fragment)
+    if (start + 16 <= totalPages) await new Promise(resolve => setTimeout(resolve, 0))
   }
+  if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
 
   await renderScrollView(viewerScrollContainer, state.zoom, { onPageVisible: handleReaderPageVisible })
+  if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
 
   // 백그라운드 잡 폴링 시작
   startJobPolling(state.sessionId)
@@ -1866,7 +1880,7 @@ function createTransBlock(pageNum) {
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
     buttons[next].click(); buttons[next].focus()
   })
-  queueMicrotask(() => easyEnglish().attach(pageNum))
+  queueMicrotask(() => easyEnglish().attach(pageNum, block))
   return block
 }
 

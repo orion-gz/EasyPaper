@@ -33,6 +33,7 @@ function textRanges(root, sentences) {
 
 export function createEasyEnglishController(adapter) {
   let identity = '', epoch = 0, timer, automatic = false
+  let highlightedSentence = null
   const entries = new Map(), requests = new Set(), generations = new Set()
   const overlay = document.createElement('div')
   overlay.className = 'easy-english-overlay'
@@ -44,8 +45,9 @@ export function createEasyEnglishController(adapter) {
   const panel = page => document.getElementById(`easy-english-content-${page}`)
   const visible = page => panel(page) && !panel(page).classList.contains('hidden')
   function clearHighlight() {
-    overlay.replaceChildren()
-    adapter.root.querySelectorAll('.easy-sentence-highlight').forEach(node => node.classList.remove('easy-sentence-highlight'))
+    if (overlay.hasChildNodes()) overlay.replaceChildren()
+    highlightedSentence?.classList.remove('easy-sentence-highlight')
+    highlightedSentence = null
   }
   function reset() {
     epoch++
@@ -59,11 +61,18 @@ export function createEasyEnglishController(adapter) {
     clearHighlight()
     adapter.root.querySelectorAll('.easy-english-content').forEach(host => render(Number(host.id.replace('easy-english-content-', ''))))
   }
-  function sync() {
+  function sync(scope) {
     const current = context()
     const next = `${current.sessionId}:${current.revision}:${current.language}`
-    if (identity !== next) { reset(); identity = next }
-    adapter.root.querySelectorAll('[data-tab="easy-english"]').forEach(button => {
+    const changed = identity !== next
+    if (changed) { reset(); identity = next }
+    // Attaching hundreds of pages must not rewrite every existing tab each time.
+    // Global refresh is needed only when the document/language identity changes.
+    const buttons = [
+      ...(changed ? adapter.root.querySelectorAll('[data-tab="easy-english"]') : []),
+      ...(scope?.querySelectorAll('[data-tab="easy-english"]') || []),
+    ]
+    buttons.forEach(button => {
       button.disabled = current.language !== 'en'
       button.title = current.language === 'en' ? '' : t('viewer:easyEnglish.englishOnly')
       if (button.disabled && button.classList.contains('active')) button.closest('.trans-tabs').querySelector('[data-tab="translation"]')?.click()
@@ -171,6 +180,7 @@ export function createEasyEnglishController(adapter) {
     const host = panel(page)
     const target = host?.querySelector(`[data-easy-index="${index}"]`)
     if (!target || !visible(page)) return
+    highlightedSentence = target
     target.classList.add('easy-sentence-highlight')
     const boxes = rects(page, index)
     const bounds = visibleSourceBounds(sourceRoot(page))
@@ -240,5 +250,5 @@ export function createEasyEnglishController(adapter) {
     if (event.key === 'easypaper_easy_english_model_revision') { reset(); schedule() }
     else if (event.key?.includes('easy_english_mode')) schedule()
   })
-  return { open, schedule, reset, clearHighlight, attach: page => { sync(); render(page); queueMicrotask(schedule) } }
+  return { open, schedule, reset, clearHighlight, attach: (page, scope) => { sync(scope); render(page); queueMicrotask(schedule) } }
 }
