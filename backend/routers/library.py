@@ -218,6 +218,16 @@ async def empty_library_trash(
     return {"message": "휴지통이 비워졌습니다."}
 
 
+@router.get("/library/command-search")
+async def command_search(
+    q: str = Query(default="", max_length=200),
+    document_mode: Literal["research", "general"] = "research",
+    current_user: str = Depends(get_current_user),
+):
+    from services.workspace_search import search_workspace
+    return {"results": await asyncio.to_thread(search_workspace, current_user, q, document_mode)}
+
+
 @router.get("/library/search")
 async def search_library(q: str = "", document_mode: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """파일명/제목·카테고리와 번역된 본문 텍스트를 가로질러 검색합니다.

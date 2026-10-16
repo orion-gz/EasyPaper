@@ -1019,7 +1019,7 @@ export function installPdfParserAPI(parserId, onProgress, onSuccess, onError) {
 }
 
 export async function getDocumentTasksAPI(docId) {
-  const res = await fetch(`${API_BASE}/tasks?doc_id=${encodeURIComponent(docId)}`)
+  const res = await fetch(`${API_BASE}/tasks${docId ? `?doc_id=${encodeURIComponent(docId)}` : ''}`)
   if (!res.ok) throw await apiError(res)
   return res.json()
 }
@@ -1220,4 +1220,11 @@ export async function generateEasyEnglishAPI(sessionId, page, regenerate, signal
     await reader.cancel().catch(() => {})
     reader.releaseLock()
   }
+}
+
+export async function searchWorkspaceAPI(query, mode, signal) {
+  const params = new URLSearchParams({ q: query, document_mode: mode })
+  const response = await fetch(`${API_BASE}/library/command-search?${params}`, { signal })
+  if (!response.ok) throw await apiError(response)
+  return response.json()
 }
