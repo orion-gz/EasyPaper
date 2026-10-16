@@ -39,3 +39,16 @@ def test_search_endpoint_enforces_scope_and_query_limit(test_client, isolated_di
     assert response.status_code == 200
     assert {item['doc_id'] for item in response.json()['results']} == {'own'}
     assert test_client.get('/api/library/command-search', params={'q': 'x' * 201}).status_code == 422
+
+
+def test_search_caps_each_result_kind_and_preserves_unicode(isolated_dirs):
+    db = isolated_dirs['db']
+    for index in range(25):
+        doc_id = f'paper-{index:02}'
+        db.db_save_document(doc_id, 'testuser', 'Match.pdf', '/x.pdf', 1, {})
+        db.db_put_memos(doc_id, {'page_1': [{'id': 'memo', 'content': 'Straße match'}]})
+    assert len(search_workspace('testuser', '', 'research')) == 20
+    results = search_workspace('testuser', 'match', 'research')
+    assert len([item for item in results if item['kind'] == 'document']) == 20
+    assert len([item for item in results if item['kind'] == 'memo']) == 20
+    assert len([item for item in search_workspace('testuser', 'STRASSE', 'research') if item['kind'] == 'memo']) == 20

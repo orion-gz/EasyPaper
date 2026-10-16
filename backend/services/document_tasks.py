@@ -365,19 +365,32 @@ def list_user_tasks(username: str) -> list[dict]:
     """Recent tasks for owned, non-deleted documents; active work comes first."""
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT t.id, d.filename FROM document_tasks t
+            """SELECT t.id, t.doc_id, t.kind, t.status, t.cancel_requested,
+                      t.updated_at, d.filename FROM document_tasks t
                JOIN documents d ON d.id = t.doc_id
                WHERE d.username = ? AND d.is_deleted = 0
                ORDER BY CASE WHEN t.status IN ('queued', 'running', 'retry_wait')
                              THEN 0 ELSE 1 END, t.updated_at DESC LIMIT 100""",
             (username,),
         ).fetchall()
-    result = []
-    for row in rows:
-        task = get_task(row["id"])
-        if task:
-            result.append({key: task[key] for key in (
-                "id", "doc_id", "kind", "status", "cancel_requested", "total_pages",
-                "completed_pages", "failed_pages", "current_page", "updated_at",
-            )} | {"filename": row["filename"]})
-    return result
+        if not rows:
+            return []
+        tasks = {row["id"]: dict(row) | {
+            "cancel_requested": bool(row["cancel_requested"]),
+            "total_pages": 0, "completed_pages": [], "failed_pages": [], "current_page": None,
+        } for row in rows}
+        placeholders = ",".join("?" for _ in tasks)
+        pages = conn.execute(
+            f"SELECT task_id, page_num, status FROM document_task_pages WHERE task_id IN ({placeholders}) ORDER BY page_num",
+            tuple(tasks),
+        )
+        for page in pages:
+            task = tasks[page["task_id"]]
+            task["total_pages"] += 1
+            if page["status"] == "succeeded":
+                task["completed_pages"].append(page["page_num"])
+            elif page["status"] == "failed":
+                task["failed_pages"].append(page["page_num"])
+            elif page["status"] == "running" and task["current_page"] is None:
+                task["current_page"] = page["page_num"]
+    return list(tasks.values())

@@ -322,3 +322,25 @@ def test_task_center_endpoint_requires_owned_documents(test_client, isolated_dir
     response = test_client.get('/api/tasks')
     assert response.status_code == 200
     assert [task['id'] for task in response.json()['tasks']] == [own['id']]
+
+
+def test_task_center_uses_two_queries_and_excludes_page_payloads(isolated_dirs, monkeypatch):
+    from contextlib import contextmanager
+    from services import document_tasks
+    for index in range(4):
+        document_tasks.create_task(_doc(isolated_dirs, f'bulk-{index}'), 'translate', {}, [1, 2, 3])
+    original = document_tasks.get_db
+    statements = []
+
+    @contextmanager
+    def traced_db():
+        with original() as conn:
+            conn.set_trace_callback(statements.append)
+            yield conn
+            conn.set_trace_callback(None)
+
+    monkeypatch.setattr(document_tasks, 'get_db', traced_db)
+    tasks = document_tasks.list_user_tasks('testuser')
+    assert len(tasks) == 4
+    assert all(task['total_pages'] == 3 and 'pages' not in task for task in tasks)
+    assert len([sql for sql in statements if sql.lstrip().upper().startswith('SELECT')]) == 2
