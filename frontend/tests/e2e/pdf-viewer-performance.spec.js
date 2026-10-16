@@ -262,6 +262,14 @@ test('wheel zoom batches input and eases toward the final scale', async ({ page 
   await page.evaluate(() => { location.hash = '#viewer?id=wheel-zoom' })
   const wrapper = activeReader(page).locator('.pdf-page-wrapper[data-page="1"]')
   await expect(wrapper.locator('.textLayer')).toContainText('Performance page 1')
+  await wrapper.evaluate(node => {
+    window.zoomBlankFrames = 0
+    window.zoomObserver = new MutationObserver(() => {
+      const canvas = node.querySelector('canvas')
+      if (!canvas || !canvas.width || canvas.dataset.rendered !== 'true') window.zoomBlankFrames++
+    })
+    window.zoomObserver.observe(node, { childList: true, subtree: true })
+  })
   const initialWidth = await wrapper.evaluate(node => node.getBoundingClientRect().width)
   const preview = await wrapper.evaluate(async node => {
     const scroll = node.closest('#viewer-scroll-container')
@@ -293,4 +301,8 @@ test('wheel zoom batches input and eases toward the final scale', async ({ page 
   await expect.poll(() => wrapper.evaluate(node => node.getBoundingClientRect().width)).toBeCloseTo(initialWidth, 0)
   await expect(wrapper).toHaveCSS('transform', 'none')
   await expect(wrapper.locator('.textLayer')).toContainText('Performance page 1')
+  expect(await wrapper.evaluate(() => {
+    window.zoomObserver.disconnect()
+    return window.zoomBlankFrames
+  })).toBe(0)
 })

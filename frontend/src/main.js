@@ -2432,8 +2432,8 @@ async function setZoom(newZoom) {
     const delta = (restoredAnchor.getBoundingClientRect().top - viewerScrollContainer.getBoundingClientRect().top) / scale
     viewerScrollContainer.scrollTo({ top: viewerScrollContainer.scrollTop + delta + restoredAnchor.offsetHeight * anchorOffset, behavior: 'instant' })
   }
-  // 재렌더링이 끝나 새 배율의 캔버스로 이미 교체된 뒤에 transform을 지워야
-  // "확대된 미리보기 → 원래 크기로 순간 복귀 → 새 크기로 점프"하는 깜빡임이 없다.
+  // 페이지 크기와 유지한 캔버스의 CSS 크기가 새 배율에 맞춰진 뒤
+  // 미리보기 transform을 지운다. 새 비트맵은 렌더링 완료 후 교체된다.
   clearZoomPreviewTransform()
   focusModeController?.scheduleRender()
 }
@@ -2471,7 +2471,9 @@ function requestZoomFromGesture(newZoom) {
     zoomPreviewFrame = requestAnimationFrame(animateZoomPreview)
   }
   clearTimeout(zoomGestureTimer)
-  zoomGestureTimer = setTimeout(() => setZoom(state.zoom), 250)
+  if (pinchStartDist === null) {
+    zoomGestureTimer = setTimeout(() => setZoom(state.zoom), 250)
+  }
 }
 
 // 트랙패드 핀치: 브라우저가 Ctrl+wheel 이벤트로 합성해서 보낸다(맥/윈도우 공통).
@@ -2496,6 +2498,7 @@ function getTouchDistance(touches) {
 }
 viewerScrollContainer.addEventListener('touchstart', (e) => {
   if (e.touches.length === 2) {
+    clearTimeout(zoomGestureTimer)
     pinchStartDist = getTouchDistance(e.touches)
     pinchStartZoom = state.zoom
   }
@@ -2507,12 +2510,15 @@ viewerScrollContainer.addEventListener('touchmove', (e) => {
     requestZoomFromGesture(pinchStartZoom * scale)
   }
 }, { passive: false })
-viewerScrollContainer.addEventListener('touchend', (e) => {
-  if (e.touches.length < 2) {
+function finishTouchZoom(e) {
+  if (e.touches.length < 2 && pinchStartDist !== null) {
     pinchStartDist = null
     pinchStartZoom = null
+    if (displayedGestureZoom !== null) setZoom(state.zoom)
   }
-})
+}
+viewerScrollContainer.addEventListener('touchend', finishTouchZoom)
+viewerScrollContainer.addEventListener('touchcancel', finishTouchZoom)
 
 // ── 내보내기 ──────────────────────────────────────
 // 캐시에 로드되지 않은 번역 완료 페이지가 있다면 내보내기 전 비동기로 채워 넣는다
