@@ -2,6 +2,28 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.4 - 2026-10-16
+
+### 한국어 (1.4.3 → 1.4.4)
+
+- 문서별 읽기 설정 복원과 참조·그림·인용 페이지로 이동한 뒤 이전 읽기 위치로 돌아가는 기능을 추가
+- PDF·기사 문서에서 선택한 텍스트를 번역·설명하는 빠른 작업과 키보드 선택 지원을 추가
+- 원문만·번역만·나란히 보기를 지원하는 집중 읽기 모드를 추가하고 종료 시 기존 패널 배치를 복원
+- 문서·메모·질문을 찾는 작업 공간 통합 검색과 Ctrl/Cmd+K로 여는 명령 팔레트를 추가
+- 문서 처리 진행 상황 확인·문서 열기·실패한 작업 재시도를 지원하는 작업 진행 센터를 추가
+- 새 읽기 기능별 설정을 추가하고 읽기 화면 상호작용·검색 취소·검색 및 작업 조회 비용 제한을 개선
+- 인용 미리보기가 클릭 모드 설정을 따르도록 수정하고 업데이트를 정보 및 시스템 설정으로 이동하며 설정 화면 테마 미리보기 정렬을 수정
+
+### English (1.4.3 → 1.4.4)
+
+- Added per-document reading preference restoration and a return action after jumping to references, figures, or cited pages.
+- Added configurable quick actions for translating and explaining selected text in PDF and article documents, with keyboard selection support.
+- Added focus reading with original-only, translation-only, and side-by-side views, restoring the previous panel layout when leaving focus mode.
+- Added workspace search for documents, memos, and questions, plus a command palette accessible with Ctrl/Cmd+K.
+- Added a configurable task progress center for viewing document processing progress, opening documents, and retrying failed tasks.
+- Added individual settings for the new reading features and improved reader interactions, search cancellation, and search/task query limits.
+- Fixed citation previews to respect click mode, moved updates to About & System settings, and kept the theme preview aligned in Settings.
+
 ## 1.4.3 - 2026-10-15
 
 ### 한국어 (1.4.2 → 1.4.3)
