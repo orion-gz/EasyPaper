@@ -5404,5 +5404,140 @@
   },
   "viewer:comfort.explainPrompt": {
     "description": "Explain the quoted passage simply in the context of this document."
+  },
+  "viewer:comfort.restoreReading": {
+    "description": "Restore reading state"
+  },
+  "viewer:comfort.resumed": {
+    "description": "Resumed on page {{page}}"
+  },
+  "viewer:comfort.startOver": {
+    "description": "Read from the beginning"
+  },
+  "viewer:comfort.referenceReturn": {
+    "description": "Return after following references"
+  },
+  "viewer:comfort.returnPage": {
+    "description": "Back to reading · page {{page}}"
+  },
+  "viewer:comfort.focusReading": {
+    "description": "Focus reading"
+  },
+  "viewer:comfort.readingView": {
+    "description": "Reading view"
+  },
+  "viewer:comfort.both": {
+    "description": "Original + translation"
+  },
+  "viewer:comfort.original": {
+    "description": "Original"
+  },
+  "viewer:comfort.translation": {
+    "description": "Translation"
+  },
+  "viewer:comfort.taskProgress": {
+    "description": "Task progress"
+  },
+  "viewer:comfort.tasksEmpty": {
+    "description": "No recent tasks"
+  },
+  "viewer:comfort.taskCancel": {
+    "description": "Cancel"
+  },
+  "viewer:comfort.taskRetry": {
+    "description": "Retry incomplete work"
+  },
+  "viewer:comfort.taskRead": {
+    "description": "Read completed pages"
+  },
+  "viewer:comfort.taskRefresh": {
+    "description": "Refresh tasks"
+  },
+  "viewer:comfort.taskFailedLoad": {
+    "description": "Could not load tasks. Refresh to retry."
+  },
+  "viewer:comfort.taskCount": {
+    "description": "{{done}} / {{total}} pages complete"
+  },
+  "viewer:comfort.queued": {
+    "description": "Queued"
+  },
+  "viewer:comfort.running": {
+    "description": "Running"
+  },
+  "viewer:comfort.retryWait": {
+    "description": "Waiting to retry"
+  },
+  "viewer:comfort.succeeded": {
+    "description": "Complete"
+  },
+  "viewer:comfort.partialFailed": {
+    "description": "Partially failed"
+  },
+  "viewer:comfort.failed": {
+    "description": "Failed"
+  },
+  "viewer:comfort.cancelled": {
+    "description": "Cancelled"
+  },
+  "viewer:comfort.cancelling": {
+    "description": "Cancelling"
+  },
+  "viewer:comfort.parse": {
+    "description": "Document analysis"
+  },
+  "viewer:comfort.keywords": {
+    "description": "Keywords"
+  },
+  "viewer:comfort.summary": {
+    "description": "Summary"
+  },
+  "viewer:comfort.primer": {
+    "description": "Reading briefing"
+  },
+  "viewer:comfort.classification": {
+    "description": "Document classification"
+  },
+  "viewer:comfort.commandSearch": {
+    "description": "Search and commands"
+  },
+  "viewer:comfort.searchHint": {
+    "description": "Search documents, notes, questions — > for commands"
+  },
+  "viewer:comfort.searchEmpty": {
+    "description": "No matching results"
+  },
+  "viewer:comfort.searchLoading": {
+    "description": "Searching…"
+  },
+  "viewer:comfort.searchError": {
+    "description": "Search failed. Type again to retry."
+  },
+  "viewer:comfort.documentResult": {
+    "description": "Document"
+  },
+  "viewer:comfort.memoResult": {
+    "description": "Memo"
+  },
+  "viewer:comfort.questionResult": {
+    "description": "Question"
+  },
+  "viewer:comfort.commandResult": {
+    "description": "Command"
+  },
+  "viewer:comfort.readerRequired": {
+    "description": "Open a document first"
+  },
+  "viewer:comfort.featureDisabled": {
+    "description": "Disabled in settings"
+  },
+  "viewer:comfort.findCommand": {
+    "description": "Find in document"
+  },
+  "viewer:comfort.translationCommand": {
+    "description": "Toggle translation"
+  },
+  "viewer:comfort.settingsCommand": {
+    "description": "Open settings"
   }
 }

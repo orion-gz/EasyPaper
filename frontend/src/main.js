@@ -11243,7 +11243,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
 
     // 책갈피: 설정에서 끄지 않았고 마지막으로 읽던 위치가 저장되어 있으면 그 페이지로,
     // 아니면 1페이지로
-    const savedLastPage = state.disableBookmark ? null : doc.metadata?.last_page
+    const savedLastPage = state.disableBookmark || !readerFeatureEnabled('restoreReading') ? null : doc.metadata?.last_page
     const restorePage = (Number.isInteger(savedLastPage) && savedLastPage >= 1 && savedLastPage <= doc.total_pages)
       ? savedLastPage
       : 1
@@ -13205,12 +13205,12 @@ function createSelectionMenu() {
     hideSelectionMenu()
   })
 
-  for (const [label, prompt] of [
-    [t('viewer:comfort.translate'), () => t('viewer:comfort.translatePrompt', { language: getModeSetting('targetLang', state.currentDocumentMode) })],
-    [t('viewer:comfort.explain'), () => t('viewer:comfort.explainPrompt')],
+  for (const [key, label, prompt] of [
+    ['viewer:comfort.translate', t('viewer:comfort.translate'), () => t('viewer:comfort.translatePrompt', { language: getTranslationOptions().targetLang })],
+    ['viewer:comfort.explain', t('viewer:comfort.explain'), () => t('viewer:comfort.explainPrompt')],
   ]) {
     const button = document.createElement('button')
-    button.type = 'button'; button.className = 'menu-btn'; button.textContent = label
+    button.type = 'button'; button.className = 'menu-btn'; button.dataset.i18n = key; button.textContent = label
     button.addEventListener('click', () => {
       if (state.chatActiveStream) return
       const draft = chatInput.value
@@ -14846,6 +14846,7 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
           showFigurePreviewTooltip(targets, box, { focus: true })
         } else {
           hideFigurePreviewTooltip()
+          window.__easypaperDocument?.rememberReference()
           scrollToPage(viewerScrollContainer, targets[0].page)
         }
       })
@@ -14928,6 +14929,7 @@ function getOrCreateFigurePreviewTooltip() {
     const target = el.previewTargets[parseInt(itemEl.dataset.idx, 10)]
     if (!target) return
     if (!pinnedFigurePreviews.has(el)) hideFigurePreviewTooltip()
+    window.__easypaperDocument?.rememberReference()
     scrollToPage(viewerScrollContainer, target.page)
   })
 
@@ -16271,6 +16273,7 @@ function initChatListeners() {
     if (!citation) return
     const page = Number(citation.dataset.pageCitation)
     if (Number.isInteger(page) && page >= 1 && page <= state.totalPages) {
+      window.__easypaperDocument?.rememberReference()
       const quote = citation.dataset.evidenceQuote
       const occurrence = Number(citation.dataset.evidenceOccurrence || 1)
       if (quote) locateTermInPdf(page, quote, occurrence)
@@ -16515,6 +16518,8 @@ function askAIAssistant(text, { sourcePage = null, charStart = null, charEnd = n
   }
   if (quoteArea) quoteArea.classList.remove('hidden');
 
+  window.__easypaperDocument?.activateChat()
+
   // 사이드바 활성화
   if (chatSidebar.classList.contains('hidden')) {
     toggleChatSidebar();
@@ -16546,6 +16551,8 @@ function askAIAssistantImage(base64Img, pageNum) {
     quoteImgEl.classList.remove('hidden');
   }
   if (quoteArea) quoteArea.classList.remove('hidden');
+
+  window.__easypaperDocument?.activateChat()
 
   // 사이드바 활성화
   if (chatSidebar.classList.contains('hidden')) {
@@ -18822,6 +18829,7 @@ function findViewerAnnotationElement(target) {
 
 async function navigateToViewerAnnotation(target) {
   if (!target || target.page > state.totalPages) return
+  window.__easypaperDocument?.rememberReference()
   activeViewerAnnotationTarget = target
   scrollToPage(viewerScrollContainer, target.page, { instant: true })
   if (target.quote) {
@@ -19352,7 +19360,7 @@ async function renderArticleDocument(doc) {
   const manifest = await getArticleAPI(doc.id)
   state.currentContentKind = 'html_article'
   state.articleViewer = await mountArticleViewer({
-    container: viewerScrollContainer, doc, manifest,
+    container: viewerScrollContainer, doc, manifest, readerFeatureEnabled, onReaderPreferences,
     sanitize: html => DOMPurify.sanitize(html, { ADD_ATTR: ['data-block-id', 'data-original-url'] }),
     createTranslationPanel: page => createTransBlock(page),
     getTranslation: page => getPageTranslation(doc.id, page, getTranslationOptions(doc.document_mode || 'research')).catch(() => null),
@@ -19367,6 +19375,14 @@ async function renderArticleDocument(doc) {
       underline: t('library:article.underline'), memo: t('library:article.memo'), memoPrompt: t('library:article.memoPrompt'), capture: t('library:article.capture'),
     },
     onCurrentUnit: index => { state.currentPage = index; pageInput.value = index; easyEnglishController?.schedule() },
+    onQuickAction: (action, text, page) => {
+      if (state.chatActiveStream) return
+      const draft = chatInput.value
+      askAIAssistant(text, { sourcePage: page })
+      const prompt = action === 'translate' ? t('viewer:comfort.translatePrompt', { language: getTranslationOptions().targetLang }) : t('viewer:comfort.explainPrompt')
+      chatInput.value = draft ? `${draft}\n${prompt}` : prompt
+      if (!draft) sendChatMessage()
+    },
     onCapture: (dataUrl, index) => askAIAssistantImage(dataUrl, index),
     onOutline: items => {
       outlineContent?.replaceChildren()
@@ -19391,6 +19407,10 @@ function installReaderWorkspaceRuntime() {
     pageText: (page, signal) => Boolean(viewerScrollContainer.querySelector('.article-unit'))
       ? Promise.resolve(viewerScrollContainer.querySelector(`.article-unit[data-unit-index="${page}"] .article-original`)?.textContent || '')
       : getPDFPageText(page, signal),
+    translationCollapsed: () => isTransPaneCollapsed,
+    setTranslationCollapsed: value => {
+      if (isTransPaneCollapsed !== value) viewerScrollContainer.querySelector('.trans-collapse-btn')?.click()
+    },
     goToPage: page => {
       const unit = viewerScrollContainer.querySelector(`.article-unit[data-unit-index="${page}"]`)
       if (unit) unit.scrollIntoView({ block: 'start', behavior: 'instant' })

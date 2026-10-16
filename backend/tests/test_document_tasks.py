@@ -299,3 +299,48 @@ async def test_recovered_parse_finalization_preserves_existing_results(isolated_
             "SELECT COUNT(*) AS count FROM document_mode_metrics WHERE event = 'upload'"
         ).fetchone()["count"]
     assert metric_count == 1
+
+
+def test_task_center_only_lists_owned_live_documents(isolated_dirs):
+    from services.document_tasks import create_task, list_user_tasks
+    own = create_task(_doc(isolated_dirs, 'own'), 'translate', {}, [1, 2])
+    create_task(_doc(isolated_dirs, 'other', 'another-user'), 'translate', {}, [1])
+    create_task(_doc(isolated_dirs, 'trash'), 'summary', {}, [1])
+    with isolated_dirs['db'].get_db() as conn:
+        conn.execute("UPDATE documents SET is_deleted=1 WHERE id='trash'")
+        conn.commit()
+    tasks = list_user_tasks('testuser')
+    assert [task['id'] for task in tasks] == [own['id']]
+    assert tasks[0]['total_pages'] == 2
+    assert 'options' not in tasks[0]
+
+
+def test_task_center_endpoint_requires_owned_documents(test_client, isolated_dirs):
+    from services.document_tasks import create_task
+    own = create_task(_doc(isolated_dirs, 'own-api'), 'translate', {}, [1])
+    create_task(_doc(isolated_dirs, 'other-api', 'another-user'), 'translate', {}, [1])
+    response = test_client.get('/api/tasks')
+    assert response.status_code == 200
+    assert [task['id'] for task in response.json()['tasks']] == [own['id']]
+
+
+def test_task_center_uses_two_queries_and_excludes_page_payloads(isolated_dirs, monkeypatch):
+    from contextlib import contextmanager
+    from services import document_tasks
+    for index in range(4):
+        document_tasks.create_task(_doc(isolated_dirs, f'bulk-{index}'), 'translate', {}, [1, 2, 3])
+    original = document_tasks.get_db
+    statements = []
+
+    @contextmanager
+    def traced_db():
+        with original() as conn:
+            conn.set_trace_callback(statements.append)
+            yield conn
+            conn.set_trace_callback(None)
+
+    monkeypatch.setattr(document_tasks, 'get_db', traced_db)
+    tasks = document_tasks.list_user_tasks('testuser')
+    assert len(tasks) == 4
+    assert all(task['total_pages'] == 3 and 'pages' not in task for task in tasks)
+    assert len([sql for sql in statements if sql.lstrip().upper().startswith('SELECT')]) == 2

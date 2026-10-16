@@ -1,3 +1,6 @@
+import { installFocusReading } from './focusReading.js'
+import { createReadingTrail } from './readingTrail.js'
+import { readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { applyTheme, THEME_TOKEN_NAMES } from './themes/themeEngine.js'
 import { installReaderTools } from './documentReaderTools.js'
 import { sanitizeReading } from './workspaceTabsStore.js'
@@ -35,7 +38,32 @@ export function installDocumentRuntime(adapter) {
   let suspendedSnapshot = null
   let snapshotTimer
   let readerTools
+  const trail = createReadingTrail()
+  let returning = false
+  const returnButton = document.createElement('button')
+  returnButton.type = 'button'; returnButton.id = 'reader-return'; returnButton.hidden = true
+  const syncReturn = () => {
+    returnButton.hidden = !readerFeatureEnabled('referenceReturn') || !trail.last
+    if (trail.last) returnButton.textContent = t('viewer:comfort.returnPage', { page: trail.last.page })
+  }
+  const stopReturnPreferences = onReaderPreferences(() => {
+    if (!readerFeatureEnabled('referenceReturn')) trail.clear()
+    syncReturn()
+  })
+  returnButton.addEventListener('click', async () => {
+    if (returning || !readerFeatureEnabled('referenceReturn')) return
+    const previous = trail.pop()
+    if (!previous) return
+    returning = true; returnButton.disabled = true
+    try { await runtime.restore(previous, { force: true }) }
+    finally { returning = false; returnButton.disabled = false; syncReturn(); scroll.focus({ preventScroll: true }) }
+  })
   let refreshing = false
+  const resumeNotice = document.createElement('button')
+  resumeNotice.type = 'button'; resumeNotice.id = 'reader-resume-notice'; resumeNotice.hidden = true
+  let resumeTimer
+  resumeNotice.addEventListener('click', () => { adapter.goToPage(1); resumeNotice.hidden = true })
+  onReaderPreferences(() => { if (!readerFeatureEnabled('restoreReading')) resumeNotice.hidden = true })
   const initialDefaultZoom = localStorage.getItem('easypaper_default_zoom') || '1.5'
 
   const tabs = document.createElement('div')
@@ -174,7 +202,7 @@ export function installDocumentRuntime(adapter) {
       else await host.getElementById('workspace-tab-panel').requestFullscreen()
     } catch { adapter.toast(t('navigation:tabs.fullscreenUnavailable'), 'warning') }
   })
-  floating.append(fullscreen)
+  floating.append(fullscreen, resumeNotice, returnButton)
   readerTools = installReaderTools(adapter, { scroll, toolbar: $('viewer-topbar').querySelector('.topbar-right'), floating, changed: publishSnapshot })
   const refreshButton = document.createElement('button')
   refreshButton.type = 'button'
@@ -197,7 +225,7 @@ export function installDocumentRuntime(adapter) {
     const pair = [...scroll.querySelectorAll('.page-pair, .article-unit')].find(item => item.getBoundingClientRect().bottom > viewportTop)
     const page = pair ? Number(pair.dataset.page ?? pair.dataset.unitIndex) || adapter.state.currentPage : adapter.state.currentPage
     const offset = pair ? Math.max(0, Math.min(1, (viewportTop - pair.getBoundingClientRect().top) / pair.getBoundingClientRect().height)) : 0
-    return sanitizeReading({ page, offset, fitWidth: readerTools?.fit() ?? false, zoom: adapter.state.zoom, panel, panelOpen: !sidebar.classList.contains('hidden'), navigation, panelWidth: parseFloat(sidebar.style.width) || 360 })
+    return sanitizeReading({ page, offset, translationCollapsed: adapter.translationCollapsed?.(), fitWidth: readerTools?.fit() ?? false, zoom: adapter.state.zoom, panel, panelOpen: !sidebar.classList.contains('hidden'), navigation, panelWidth: parseFloat(sidebar.style.width) || 360 })
   }
   function publishSnapshot() {
     if (restoring || refreshing || !window.__easypaperDocument?.ready || !active) return
@@ -249,6 +277,11 @@ export function installDocumentRuntime(adapter) {
   }
   window.addEventListener('resize', syncViewport)
   syncViewport()
+  const focusReading = installFocusReading({
+    floating, panels: () => ({ panel: !sidebar.classList.contains('hidden'), outline: !outline.classList.contains('hidden') }),
+    translationCollapsed: adapter.translationCollapsed, setTranslationCollapsed: adapter.setTranslationCollapsed,
+    restorePanels: adapter.setPanels, changed: () => { updateLayout(); publishSnapshot() },
+  })
   let lastTitle = adapter.state.title
   const statusTimer = setInterval(() => {
     if (adapter.state.title !== lastTitle) { lastTitle = adapter.state.title; notifyWorkspace('title', lastTitle) }
@@ -266,10 +299,16 @@ export function installDocumentRuntime(adapter) {
   errors.observe($('chat-messages'), { childList: true, subtree: true })
   const runtime = {
     ready: true,
+    toggleFocusReading: () => focusReading.toggle(),
+    toggleTranslation: () => adapter.setTranslationCollapsed?.(!adapter.translationCollapsed?.()),
     attention: active => adapter.attention?.(active),
     finish: () => adapter.finish?.(),
     find: () => readerTools.openFind(),
     snapshot,
+    rememberReference() {
+      if (returning || !active || restoring || !readerFeatureEnabled('referenceReturn')) return
+      trail.remember(snapshot()); syncReturn()
+    },
     title: () => adapter.state.title || adapter.state.filename,
     busy: () => Boolean(adapter.state.easyEnglishGenerating || adapter.state.chatActiveStream || adapter.state.translatingPages?.size || ['queued', 'running', 'retry_wait'].includes(adapter.state.translationTaskStatus)),
     async flush() {
@@ -332,6 +371,7 @@ export function installDocumentRuntime(adapter) {
       $('chat-quote-img').classList.toggle('hidden', !draft.quotedImage)
       $('chat-quote-area').classList.toggle('hidden', !quote && !draft.quotedImage)
     },
+    activateChat() { setPanel('chat'); adapter.setPanels({ panel: true, outline: false }) },
     syncScale: scale => adapter.uiScale(scale),
     async syncAppearance(light, locale) {
       document.body.classList.toggle('light-theme', light)
@@ -347,6 +387,7 @@ export function installDocumentRuntime(adapter) {
       if (active === next) return
       if (!next) suspendedSnapshot = snapshot()
       active = next
+      focusReading.setActive(next)
       if (!next) readerTools.setActive(false)
       document.body.dataset.workspaceInactive = String(!next)
       if (next) {
@@ -364,29 +405,42 @@ export function installDocumentRuntime(adapter) {
         adapter.suspend()
       }
     },
-    async restore(saved) {
+    async restore(saved, { force = false } = {}) {
+      if (!force && !readerFeatureEnabled('restoreReading')) saved = null
       restoring = true
       try {
         if (saved) {
           const value = sanitizeReading(saved)
+          adapter.setTranslationCollapsed?.(value.translationCollapsed)
           readerTools.restore(value.fitWidth)
           if (Math.abs(adapter.state.zoom - value.zoom) > 0.001) await adapter.zoom(value.zoom)
           setPanel(value.panel)
           setNavigation(value.navigation)
           desiredOpen = { panel: value.panelOpen, outline: false }
           sidebar.style.width = `${value.panelWidth}px`
-          adapter.goToPage(Math.min(value.page, adapter.state.totalPages))
+          adapter.setPanels(desiredOpen)
+          updateLayout()
+          value.page = Math.min(value.page, adapter.state.totalPages)
+          await readerTools.fitNow()
+          adapter.goToPage(value.page)
           const pair = scroll.querySelector(`.page-pair[data-page="${value.page}"], .article-unit[data-unit-index="${value.page}"]`)
           if (pair) scroll.scrollTop += pair.offsetHeight * value.offset
+          const explicitPage = new URLSearchParams(location.hash.split('?')[1]).has('page')
+          if (!force && !explicitPage && (value.page > 1 || value.offset > 0)) {
+            resumeNotice.textContent = `${t('viewer:comfort.resumed', { page: value.page })} · ${t('viewer:comfort.startOver')}`
+            resumeNotice.hidden = false
+            clearTimeout(resumeTimer); resumeTimer = setTimeout(() => { resumeNotice.hidden = true }, 8000)
+          }
         } else {
           readerTools.restore(true)
           setPanel('chat'); setNavigation('outline')
+          if (!readerFeatureEnabled('restoreReading')) adapter.goToPage(1)
         }
         if (window.parent.innerWidth < 1100 && desiredOpen.panel) desiredOpen.outline = false
         adapter.setPanels(desiredOpen)
       } finally {
         updateLayout()
-        await readerTools.fitNow()
+        if (!saved) await readerTools.fitNow()
         restoring = false
         viewer.classList.remove('document-workspace-loading')
       }
@@ -395,11 +449,20 @@ export function installDocumentRuntime(adapter) {
       const params = new URLSearchParams(hash.split('?')[1])
       if (params.get('chat') === '1') { setPanel('chat'); adapter.setPanels({ panel: true, outline: false }) }
       if (params.has('page')) await adapter.navigateHash(hash)
+      if (params.has('question')) {
+        setPanel('chat'); adapter.setPanels({ panel: true, outline: false })
+        const index = Number(params.get('question'))
+        if (Number.isInteger(index) && index >= 0) {
+          const question = $('chat-messages').querySelectorAll('.chat-message.user')[index]
+          question?.scrollIntoView({ block: 'center', behavior: 'instant' })
+          if (question) { question.tabIndex = -1; question.focus({ preventScroll: true }) }
+        }
+      }
     },
   }
   window.__easypaperDocument = runtime
   window.addEventListener('pagehide', () => {
-    readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); window.removeEventListener('storage', refreshStorage)
+    focusReading.destroy(); stopReturnPreferences(); readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); window.removeEventListener('storage', refreshStorage)
     clearInterval(statusTimer); clearTimeout(snapshotTimer); window.removeEventListener('resize', syncViewport)
     panelResize.disconnect(); panelObserver.disconnect(); errors.disconnect(); thumbnailObserver?.disconnect()
   }, { once: true })

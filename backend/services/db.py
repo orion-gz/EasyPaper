@@ -941,7 +941,7 @@ def _escape_like(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def db_search_documents(username: str, query: str, only_trash: bool = False, document_mode: Optional[str] = None) -> list:
+def db_search_documents(username: str, query: str, only_trash: bool = False, document_mode: Optional[str] = None, limit: Optional[int] = None) -> list:
     """Search metadata, translations, and indexed original page paragraphs."""
     is_deleted_val = 1 if only_trash else 0
     like_query = f"%{_escape_like(query)}%"
@@ -983,9 +983,9 @@ def db_search_documents(username: str, query: str, only_trash: bool = False, doc
                  OR t.translation LIKE ? ESCAPE '\\'
                  {original_clause}
               )
-            ORDER BY d.created_at DESC
+            ORDER BY d.created_at DESC LIMIT ?
             """,
-            params,
+            [*params, max(0, int(limit)) if limit is not None else -1],
         )
         docs = []
         for row in cursor.fetchall():

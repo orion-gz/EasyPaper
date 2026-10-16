@@ -1,12 +1,16 @@
+import './styles/reader-comfort.css'
 import { t } from './i18n.js'
 
 export const READER_FEATURES = {
+  commandSearch: () => t('viewer:comfort.commandSearch'),
+  taskProgress: () => t('viewer:comfort.taskProgress'),
+  focusReading: () => t('viewer:comfort.focusReading'),
+  referenceReturn: () => t('viewer:comfort.referenceReturn'),
+  restoreReading: () => t('viewer:comfort.restoreReading'),
   quickActions: () => t('viewer:comfort.quickActions'),
 }
-export const readerPreferenceKey = name => `easypaper_reader_${name}`
-export function readerFeatureEnabled(name, storage = localStorage) {
-  try { return storage.getItem(readerPreferenceKey(name)) !== 'false' } catch { return true }
-}
+import { readerPreferenceKey, readerFeatureEnabled } from './readerPreferenceStore.js'
+export { readerFeatureEnabled } from './readerPreferenceStore.js'
 export function setReaderFeature(name, enabled, storage = localStorage) {
   storage.setItem(readerPreferenceKey(name), String(Boolean(enabled)))
   window.dispatchEvent(new CustomEvent('easypaper:reader-preferences'))
@@ -49,5 +53,8 @@ export function installReaderPreferences() {
   const sync = () => controls.forEach(update => update())
   onReaderPreferences(sync)
   document.addEventListener('easypaper:locale-changed', sync)
-  sync(); form.prepend(group)
+  sync()
+  const themeSettings = form.querySelector('.theme-settings-group')
+  if (themeSettings) themeSettings.after(group)
+  else form.prepend(group)
 }
