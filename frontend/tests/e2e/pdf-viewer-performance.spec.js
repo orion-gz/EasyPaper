@@ -26,9 +26,16 @@ function multipagePdf(count, contentForPage) {
 }
 
 test('long PDF loads lazily, bounds canvases and restores evicted pages', async ({ page }) => {
-  const doc = { id: 'performance', filename: 'Long.pdf', total_pages: 24, metadata: { title: 'Long PDF' }, translated_pages: [1] }
+  test.setTimeout(60000)
+  await page.addInitScript(() => {
+    window.easyEnglishTabWrites = 0
+    new MutationObserver(records => {
+      window.easyEnglishTabWrites += records.filter(record => record.target.matches('[data-tab="easy-english"]')).length
+    }).observe(document, { subtree: true, attributes: true, attributeFilter: ['disabled', 'title'] })
+  })
+  const doc = { id: 'performance', filename: 'Long.pdf', total_pages: 500, metadata: { title: 'Long PDF' }, translated_pages: [1] }
   await mockBaseRoutes(page, { documents: [doc] })
-  await page.route('**/api/library/performance/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(24) }))
+  await page.route('**/api/library/performance/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(500) }))
   await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
   await page.route('**/api/library/performance/translation/1**', route => route.fulfill({ json: { translation: 'Cached page one.', sentences: [] } }))
   const errors = []
@@ -43,16 +50,28 @@ test('long PDF loads lazily, bounds canvases and restores evicted pages', async 
   })
   const wrapper = number => activeReader(page).locator(`.pdf-page-wrapper[data-page="${number}"]`)
   const text = number => wrapper(number).locator('.textLayer')
-  await expect(text(1)).toContainText('Performance page 1')
+  await expect(text(1)).toContainText('Performance page 1', { timeout: 20000 })
   await expect(activeReader(page).locator('.floating-memo[data-id="retained-memo"]')).toBeVisible()
-  await expect(activeReader(page).locator('.pdf-page-wrapper')).toHaveCount(24)
+  await expect(activeReader(page).locator('.pdf-page-wrapper')).toHaveCount(500)
+  expect(await evaluateReader(page, () => window.easyEnglishTabWrites)).toBeLessThan(5000)
   expect(await activeReader(page).locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(3)
   const originalHeight = await wrapper(1).evaluate(node => node.getBoundingClientRect().height)
 
-  for (const number of [4, 7, 10, 13, 16, 19, 22, 24]) {
+  for (const number of [4, 70, 150, 250, 350, 450, 499, 500]) {
     await wrapper(number).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
     await expect(text(number)).toContainText(`Performance page ${number}`)
   }
+  const anchorReads = await evaluateReader(page, () => {
+    const original = Element.prototype.getBoundingClientRect
+    let reads = 0
+    Element.prototype.getBoundingClientRect = function () {
+      if (this.matches('.page-pair')) reads++
+      return original.call(this)
+    }
+    try { window.__easypaperDocument.snapshot(); return reads }
+    finally { Element.prototype.getBoundingClientRect = original }
+  })
+  expect(anchorReads).toBeLessThanOrEqual(12)
   await expect(wrapper(1).locator('canvas')).toHaveCount(0)
   await expect(activeReader(page).locator('.floating-memo[data-id="retained-memo"]')).toHaveCount(0)
   expect(await activeReader(page).locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(8)

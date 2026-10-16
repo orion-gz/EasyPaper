@@ -15,6 +15,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 let pdfjsLib = null
 let pdfDoc = null
 let widestPageWidth = 0
+let pageDimensions = new Map()
 let pdfLoadingTask = null
 let pdfTextUrl = null
 const renderedTextLayers = new Map()
@@ -73,6 +74,7 @@ export async function loadPDF(url) {
   renderGeneration++
   pdfDoc = nextPdfDoc
   widestPageWidth = 0
+  pageDimensions = new Map()
   const match = String(url).match(/\/api\/(?:pdf-file\/([^/?]+)|library\/([^/?]+)\/pdf)(?:\?|$)/)
   pdfTextUrl = match ? `/api/pdf-text/${match[1] || match[2]}` : null
   figureCropCache.clear()
@@ -155,6 +157,9 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
     job.controller.abort()
     job.renderTask?.cancel()
     job.textLayer?.cancel()
+    // Release PDF.js operator/image caches as well as the DOM canvas.
+    // cleanup() defers while a render is active; retry when cancellation settles.
+    job.page?.cleanup()
     renderedTextLayers.delete(job.pageNum)
     // Keep the measured footprint so evicting a page cannot move the scrollbar.
     const inner = job.wrapper.querySelector('.pdf-page-inner')
@@ -197,6 +202,7 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
         _renderPage(wrapper, pageNum, myGeneration, job).finally(() => {
           active--
           job.done = true
+          if (job.cancelled) job.page?.cleanup()
           if (!isCurrent()) return
           trimPages()
           if (queue.size) scheduleRender()
@@ -218,10 +224,27 @@ export async function renderScrollView(container, zoom, { onPageVisible } = {}) 
   const renderingDoc = pdfDoc
   let viewports
   try {
-    viewports = await Promise.all(Array.from({ length: numPages }, async (_, index) => {
-      const page = await renderingDoc.getPage(index + 1)
-      return page.getViewport({ scale: zoom })
-    }))
+    // Keep exact geometry (including mixed page sizes) for saved positions, but
+    // do not flood the worker with hundreds of requests or repeat them on zoom.
+    const dimensions = pageDimensions
+    viewports = []
+    for (let start = 1; start <= numPages; start += 16) {
+      if (!isCurrent()) return
+      let requested = false
+      const batch = await Promise.all(Array.from({ length: Math.min(16, numPages - start + 1) }, async (_, index) => {
+        const pageNum = start + index
+        if (!dimensions.has(pageNum)) {
+          requested = true
+          const page = await renderingDoc.getPage(pageNum)
+          const { width, height } = page.getViewport({ scale: 1 })
+          dimensions.set(pageNum, { width, height })
+        }
+        const { width, height } = dimensions.get(pageNum)
+        return { width: width * zoom, height: height * zoom }
+      }))
+      viewports.push(...batch)
+      if (requested && start + 16 <= numPages) await new Promise(resolve => setTimeout(resolve, 0))
+    }
   } catch (error) {
     if (!isCurrent()) return
     throw error
@@ -344,6 +367,7 @@ async function _renderPage(wrapper, pageNum, generation, job) {
     const textUrl = pdfTextUrl
     const page = await pdfDoc.getPage(pageNum)
     if (stale()) return
+    job.page = page
     const viewport = page.getViewport({ scale: currentScale })
     const dpr = window.devicePixelRatio || 1
 
