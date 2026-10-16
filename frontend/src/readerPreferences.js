@@ -52,5 +52,8 @@ export function installReaderPreferences() {
   const sync = () => controls.forEach(update => update())
   onReaderPreferences(sync)
   document.addEventListener('easypaper:locale-changed', sync)
-  sync(); form.prepend(group)
+  sync()
+  const themeSettings = form.querySelector('.theme-settings-group')
+  if (themeSettings) themeSettings.after(group)
+  else form.prepend(group)
 }
