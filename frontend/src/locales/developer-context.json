@@ -5539,5 +5539,65 @@
   },
   "viewer:comfort.settingsCommand": {
     "description": "Open settings"
+  },
+  "viewer:referenceAnalysis.checking": {
+    "description": "Reference overlay reading-priority analysis: Checking saved analysis…"
+  },
+  "viewer:referenceAnalysis.loading": {
+    "description": "Reference overlay reading-priority analysis: Analyzing citation context…"
+  },
+  "viewer:referenceAnalysis.error": {
+    "description": "Reference overlay reading-priority analysis: Could not load the analysis. Please retry."
+  },
+  "viewer:referenceAnalysis.analyze": {
+    "description": "Reference overlay reading-priority analysis: Analyze reading priority"
+  },
+  "viewer:referenceAnalysis.regenerate": {
+    "description": "Reference overlay reading-priority analysis: Analyze again"
+  },
+  "viewer:referenceAnalysis.retry": {
+    "description": "Reference overlay reading-priority analysis: Retry"
+  },
+  "viewer:referenceAnalysis.insufficient": {
+    "description": "Reference overlay reading-priority analysis: Insufficient evidence"
+  },
+  "viewer:referenceAnalysis.score": {
+    "description": "Reference overlay reading-priority analysis: Reading priority {{score}}/100"
+  },
+  "viewer:referenceAnalysis.components": {
+    "description": "Reference overlay reading-priority analysis: Method/reproduction {{method}}/40 · Core understanding {{understanding}}/40 · Background {{background}}/20"
+  },
+  "viewer:referenceAnalysis.reason": {
+    "description": "Reference overlay reading-priority analysis: Citation reason"
+  },
+  "viewer:referenceAnalysis.page": {
+    "description": "Reference overlay reading-priority analysis: View evidence on page {{page}}"
+  },
+  "viewer:referenceAnalysis.disclaimer": {
+    "description": "Reference overlay reading-priority analysis: AI estimate based on citation context in the current document, not an assessment of the cited paper’s quality."
+  },
+  "viewer:referenceAnalysis.roleBackground": {
+    "description": "Reference overlay reading-priority analysis: Background"
+  },
+  "viewer:referenceAnalysis.roleMethod": {
+    "description": "Reference overlay reading-priority analysis: Method foundation"
+  },
+  "viewer:referenceAnalysis.roleComparison": {
+    "description": "Reference overlay reading-priority analysis: Comparison"
+  },
+  "viewer:referenceAnalysis.roleSupport": {
+    "description": "Reference overlay reading-priority analysis: Supporting evidence"
+  },
+  "viewer:referenceAnalysis.roleCritique": {
+    "description": "Reference overlay reading-priority analysis: Limitations/critique"
+  },
+  "viewer:referenceAnalysis.roleDataTool": {
+    "description": "Reference overlay reading-priority analysis: Data/tools"
+  },
+  "settings:referenceAutoAnalysis": {
+    "description": "Reference overlay reading-priority analysis: Automatically analyze references"
+  },
+  "settings:referenceAutoAnalysisDescription": {
+    "description": "Reference overlay reading-priority analysis: Analyze reading priority and citation reasons when a preview opens · Uses AI tokens"
   }
 }

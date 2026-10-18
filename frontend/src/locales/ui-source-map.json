@@ -1,4 +1,6 @@
 {
+  "참고문헌 자동 분석": "settings:referenceAutoAnalysis",
+  "오버레이를 열면 읽기 우선순위와 인용 이유 분석 · AI 사용량 발생": "settings:referenceAutoAnalysisDescription",
   "Figure/Table/수식 참조 미리보기": "settings:figurePreviewEnabled",
   "참조 미리보기 표시 방식": "settings:figureOverlayTrigger",
   "호버": "settings:figureOverlayHover",

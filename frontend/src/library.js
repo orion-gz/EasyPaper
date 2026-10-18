@@ -475,3 +475,19 @@ export async function regeneratePrimer(docId, targetLang = '한국어') {
   if (!res.ok) throw new Error('브리핑 재생성 요청 실패')
   return res.json()
 }
+
+export async function fetchReferenceAnalysis({ docId, targetLang }, refKey) {
+  const query = new URLSearchParams({ target_lang: targetLang })
+  const response = await fetch(`${API_BASE}/library/${docId}/references/${encodeURIComponent(refKey)}/analysis?${query}`)
+  if (!response.ok) throw new Error('Reference analysis lookup failed')
+  return response.json()
+}
+
+export async function analyzeReference({ docId, targetLang }, refKey, force = false) {
+  const response = await fetch(`${API_BASE}/library/${docId}/references/${encodeURIComponent(refKey)}/analysis`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_lang: targetLang, force }),
+  })
+  if (!response.ok) throw new Error('Reference analysis failed')
+  return response.json()
+}

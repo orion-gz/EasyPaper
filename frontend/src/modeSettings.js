@@ -15,6 +15,7 @@ const MODE_DEFAULTS = {
     disableCitationOverlay: false,
     disableFigureOverlay: false,
     figureOverlayTrigger: 'hover',
+    referenceAutoAnalysis: false,
     disablePrimer: false,
     disableSuggestedQuestions: false,
     focusModeEnabled: false,
@@ -39,6 +40,7 @@ const MODE_DEFAULTS = {
     disableCitationOverlay: true,
     disableFigureOverlay: false,
     figureOverlayTrigger: 'hover',
+    referenceAutoAnalysis: false,
     disablePrimer: true,
     disableSuggestedQuestions: false,
     focusModeEnabled: false,
@@ -72,7 +74,7 @@ const SHARED_LEGACY_PREFERENCES = new Set(['theme', 'accentColor', 'targetLang']
 const BOOLEAN_SETTINGS = new Set([
   'ignoreMath', 'ignoreTable', 'ignoreRefs', 'disableInsights',
   'disableCitationOverlay', 'disableFigureOverlay', 'disablePrimer', 'disableSuggestedQuestions',
-  'focusModeEnabled', 'focusHideOverlays',
+  'focusModeEnabled', 'focusHideOverlays', 'referenceAutoAnalysis',
 ])
 const NUMBER_SETTINGS = {
   focusBlurStrength: { min: 0, max: 16, step: 1 },
