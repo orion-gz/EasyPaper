@@ -2744,13 +2744,12 @@ if (viewerClearCacheBtn) {
     }
     const currentDocTitle = $('doc-title')?.textContent || documentUiCopy('현재 논문', state.currentDocumentMode)
     const ok = await showCustomConfirm(
-      `"${currentDocTitle}"의 PDF 추출 및 번역 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하며, 기존 번역본도 초기화됩니다.)`,
+      `"${currentDocTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하며, 기존 번역본은 유지됩니다.)`,
       { title: '캐시 삭제', confirmText: '캐시 삭제', danger: true }
     )
     if (!ok) return
     try {
       const sessionId = state.sessionId
-      await clearTranslationCacheAPI(sessionId)
       await clearSingleDocCacheAPI(sessionId)
       showToast(t('viewer:cacheClearedReload'), 'success')
       setTimeout(() => window.location.reload(), 500)

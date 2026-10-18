@@ -117,3 +117,30 @@ test('poll response received after reset cannot restore old translations', async
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(context.state.translatedPages.size, 0)
 })
+
+
+test('PDF extraction cache deletion preserves translations', async () => {
+  let onClick
+  const calls = []
+  const context = vm.createContext({
+    $: id => id === 'viewer-clear-cache-btn'
+      ? { addEventListener: (event, handler) => { onClick = handler } }
+      : { textContent: 'Paper' },
+    toolbarKebabMenu: null,
+    state: { sessionId: 'doc', translationCache: { 1: 'saved translation' } },
+    documentUiCopy: text => text,
+    showCustomConfirm: async message => {
+      assert.match(message, /기존 번역본은 유지됩니다/)
+      return true
+    },
+    clearTranslationCacheAPI: async () => { calls.push('translation') },
+    clearSingleDocCacheAPI: async id => { calls.push(id) },
+    showToast: () => {}, t: key => key,
+    setTimeout: callback => callback(),
+    window: { location: { reload: () => { calls.push('reload') } } },
+  })
+  vm.runInContext(section('const viewerClearCacheBtn =', 'function showTranslationScopeDialog()'), context)
+  await onClick()
+  assert.deepEqual(calls, ['doc', 'reload'])
+  assert.equal(context.state.translationCache[1], 'saved translation')
+})

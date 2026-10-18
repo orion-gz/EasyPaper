@@ -52,9 +52,8 @@ def test_clear_document_cache_endpoint_not_found(test_client, isolated_dirs):
     assert res.status_code == 404
 
 
-def test_clear_cache_sequence_clears_all_without_reparsing(test_client, isolated_dirs, tmp_path, monkeypatch):
-    """활성 세션과 번역본이 있는 상태에서 번역 캐시와 PDF 추출 캐시를 순서대로
-    삭제할 때, PDF 파싱 함수가 호출되지 않고 두 캐시와 세션이 모두 삭제되는지 검증한다."""
+def test_clear_extraction_cache_preserves_translations_without_reparsing(test_client, isolated_dirs, tmp_path, monkeypatch):
+    """PDF 추출 캐시 삭제 시 재파싱 없이 번역 캐시와 저장된 번역본을 유지한다."""
     import json
     from services.cache import (
         save_translation_cache,
@@ -82,6 +81,11 @@ def test_clear_cache_sequence_clears_all_without_reparsing(test_client, isolated
     save_translation_cache(doc_id, 1, json.dumps({"translation": "번역 1", "sentences": []}))
     lib_save_translation(doc_id, 1, json.dumps({"translation": "번역 1", "sentences": []}))
 
+    cached_translation = get_cached_translation(doc_id, 1)
+    saved_translation = lib_get_translation(doc_id, 1)
+    assert cached_translation is not None
+    assert saved_translation is not None
+
     # 3. 메모리 활성 세션 등록
     sessions[doc_id] = {
         "pdf_path": str(pdf_path),
@@ -101,10 +105,7 @@ def test_clear_cache_sequence_clears_all_without_reparsing(test_client, isolated
     monkeypatch.setattr(pdf_parser, "extract_pages", fail_if_parse_called)
     monkeypatch.setattr(upload_module, "extract_pages", fail_if_parse_called)
 
-    # 5. 뷰어의 수정된 호출 순서대로 실행: 번역 캐시 삭제 -> PDF 추출 캐시 삭제
-    res_trans = test_client.post(f"/api/translate/{doc_id}/clear-cache")
-    assert res_trans.status_code == 200
-
+    # 5. PDF 추출 캐시만 삭제
     res_doc = test_client.post(f"/api/library/{doc_id}/clear-cache")
     assert res_doc.status_code == 200
 
@@ -115,9 +116,9 @@ def test_clear_cache_sequence_clears_all_without_reparsing(test_client, isolated
     assert get_cached_pages(doc_id, str(pdf_path)) is None
     assert get_cached_images(doc_id, str(pdf_path)) is None
 
-    # 8. 검증: 번역 캐시 및 라이브러리 번역본 삭제 확인
-    assert get_cached_translation(doc_id, 1) is None
-    assert lib_get_translation(doc_id, 1) is None
+    # 8. 검증: 번역 캐시 및 라이브러리 번역본 보존 확인
+    assert get_cached_translation(doc_id, 1) == cached_translation
+    assert lib_get_translation(doc_id, 1) == saved_translation
 
     # 9. 검증: 메모리 세션 제거 확인
     assert doc_id not in sessions
