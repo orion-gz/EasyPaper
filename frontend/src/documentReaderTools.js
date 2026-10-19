@@ -53,7 +53,7 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
     const selection = window.getSelection()
     const focusOverlay = document.querySelector('.focus-mode-layer:not(.hidden)')
     if (focusOverlay && fit) deferredFit = true
-    return Boolean(focusOverlay) || pointerDown || scroll.querySelector('.floating-memo-textarea') || document.activeElement?.closest('.floating-memo') || (selection && !selection.isCollapsed && scroll.contains(selection.anchorNode))
+    return Boolean(focusOverlay) || scroll.classList.contains('crop-mode') || pointerDown || scroll.querySelector('.floating-memo-textarea') || document.activeElement?.closest('.floating-memo') || (selection && !selection.isCollapsed && scroll.contains(selection.anchorNode))
   }
   function applyFit() {
     if (fitting) return fitting

@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright'
 import { test, expect } from '@playwright/test'
 import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp } from './helpers.js'
 
@@ -140,7 +141,7 @@ test('failed image encoding releases capture mode and allows retry', async ({ pa
   await expect(activeReader(page).locator('.capture-overlay')).toHaveCount(1)
 })
 
-test('document tabs isolate captures and pending images', async ({ page }) => {
+test('document switches clear captures and discard pending images', async ({ page }) => {
   await openPDF(page)
   const replacement = { id: 'capture-next', filename: 'Next.pdf', total_pages: 2, metadata: { title: 'Next PDF' }, translated_pages: [] }
   await page.route('**/api/library/capture-next', route => route.fulfill({ json: replacement }))
@@ -159,9 +160,130 @@ test('document tabs isolate captures and pending images', async ({ page }) => {
   const oldFrame = await (await page.locator('.workspace-document-frame:not([hidden])').elementHandle()).contentFrame()
   await evaluateReader(page, () => { location.hash = '#viewer?id=capture-next' })
   await expect(activeReader(page).locator('.pdf-page-wrapper[data-page="1"] .textLayer')).toContainText('Next document')
+  await expect(oldFrame.locator('.capture-overlay')).toHaveCount(0)
+  await expect(oldFrame.locator('#pin-capture-btn')).toHaveAttribute('aria-busy', 'false')
   await oldFrame.evaluate(async () => {
     window.finishCapture()
     await new Promise(resolve => setTimeout(resolve, 50))
   })
   await expect(activeReader(page).locator('.capture-overlay')).toHaveCount(0)
+  await expect(oldFrame.locator('.capture-overlay')).toHaveCount(0)
+})
+
+for (const scale of [0.8, 1.25]) test(`capture bounds and pointer deltas respect UI scale ${scale}`, async ({ page }) => {
+  await page.addInitScript(scale => localStorage.setItem('easypaper_ui_scale', String(scale)), scale)
+  await openPDF(page)
+  await selectArea(page)
+  const panel = activeReader(page).locator('.capture-overlay')
+  await expect(panel).toBeVisible()
+  const inBounds = () => panel.evaluate(el => {
+    const r = el.getBoundingClientRect()
+    return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight
+  })
+  await expect.poll(inBounds).toBe(true)
+  await panel.evaluate(el => { el.style.left = '80px'; el.style.top = '80px' })
+  const drag = await panel.locator('.capture-overlay-drag').boundingBox()
+  const before = await panel.boundingBox()
+  await page.mouse.move(drag.x + 20, drag.y + 15)
+  await page.mouse.down()
+  await page.mouse.move(drag.x + 120, drag.y + 15, { steps: 5 })
+  await page.mouse.up()
+  expect(Math.abs((await panel.boundingBox()).x - before.x - 100)).toBeLessThan(2)
+  const resize = await panel.locator('.capture-overlay-resize').boundingBox()
+  const width = (await panel.boundingBox()).width
+  await page.mouse.move(resize.x + 10, resize.y + 10)
+  await page.mouse.down()
+  await page.mouse.move(resize.x + 60, resize.y + 10, { steps: 5 })
+  await page.mouse.up()
+  expect(Math.abs((await panel.boundingBox()).width - width - 50)).toBeLessThan(2)
+  const nextScale = scale === 0.8 ? 1.25 : 0.8
+  await page.evaluate(scale => {
+    const setting = document.getElementById('setting-ui-scale')
+    setting.value = String(scale)
+    setting.dispatchEvent(new Event('change', { bubbles: true }))
+  }, nextScale)
+  await expect.poll(() => evaluateReader(page, () => Number(document.documentElement.style.zoom))).toBe(nextScale)
+  await expect.poll(inBounds).toBe(true)
+  await page.setViewportSize({ width: 650, height: 500 })
+  await expect.poll(inBounds).toBe(true)
+})
+
+for (const light of [false, true]) test(`capture controls and scrolling are accessible in ${light ? 'light' : 'dark'} theme`, async ({ page }, testInfo) => {
+  await openPDF(page)
+  await selectArea(page)
+  const panel = activeReader(page).locator('.capture-overlay')
+  await expect(panel).toBeVisible()
+  if (await activeReader(page).locator('body').evaluate(el => el.classList.contains('light-theme')) !== light) {
+    await page.locator('#sidebar-theme-toggle-btn').click()
+  }
+  await expect.poll(() => activeReader(page).locator('body').evaluate(el => el.classList.contains('light-theme'))).toBe(light)
+  const results = await new AxeBuilder({ page })
+    .include(['.workspace-document-frame:not([hidden])', '.capture-overlay'])
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze()
+  expect(results.violations).toEqual([])
+  await page.screenshot({ path: testInfo.outputPath('capture-theme.png') })
+  const content = panel.locator('.capture-overlay-content')
+  await content.focus()
+  await expect(content).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect.poll(() => content.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
+  // The panel uses a defined theme token, not a hardcoded dark fallback.
+  expect(await panel.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(await panel.evaluate(el => {
+    const probe = document.createElement('div'); probe.style.background = 'var(--bg-panel)'; el.append(probe)
+    const color = getComputedStyle(probe).backgroundColor; probe.remove(); return color
+  }))
+})
+
+test('bottom toolbar supports keyboard-only selection, resizing and cancellation', async ({ page }) => {
+  await openPDF(page)
+  const button = activeReader(page).locator('#floating-scroll-nav #pin-capture-btn')
+  await button.focus()
+  await page.keyboard.press('Enter')
+  const selection = activeReader(page).locator('.pdf-crop-overlay')
+  await expect(selection).toBeFocused()
+  const original = await selection.evaluate(el => ({ left: parseFloat(el.style.left), width: parseFloat(el.style.width) }))
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('Shift+ArrowRight')
+  expect(await selection.evaluate(el => parseFloat(el.style.left))).toBeGreaterThan(original.left)
+  expect(await selection.evaluate(el => parseFloat(el.style.width))).toBeGreaterThan(original.width)
+  await page.keyboard.press('Enter')
+  await expect(activeReader(page).locator('.capture-overlay')).toHaveCount(1)
+  await expect(selection).toHaveCount(0)
+  await button.focus()
+  await page.keyboard.press('Space')
+  await expect(selection).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(selection).toHaveCount(0)
+  await expect(button).toBeFocused()
+  await expect(button).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('capture exposes busy state and raises the selected panel', async ({ page }) => {
+  await openPDF(page)
+  await evaluateReader(page, () => {
+    const original = HTMLCanvasElement.prototype.toBlob
+    HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
+      HTMLCanvasElement.prototype.toBlob = original
+      original.call(this, blob => { window.finishCapture = () => callback(blob) }, ...args)
+    }
+  })
+  await selectArea(page)
+  await expect.poll(() => evaluateReader(page, () => typeof window.finishCapture)).toBe('function')
+  const button = activeReader(page).locator('#pin-capture-btn')
+  await expect(button).toBeDisabled()
+  await expect(button).toHaveAttribute('aria-busy', 'true')
+  await expect(activeReader(page).locator('#capture-status')).not.toBeEmpty()
+  await evaluateReader(page, () => window.finishCapture())
+  await expect(button).toBeEnabled()
+  await expect(button).toHaveAttribute('aria-busy', 'false')
+  await expect(activeReader(page).locator('.capture-overlay')).toHaveCount(1)
+  await selectArea(page)
+  const panels = activeReader(page).locator('.capture-overlay')
+  await expect(panels).toHaveCount(2)
+  await panels.first().locator('.capture-overlay-drag').focus()
+  expect(await panels.first().evaluate(el => Number(getComputedStyle(el).zIndex)))
+    .toBeGreaterThan(await panels.last().evaluate(el => Number(getComputedStyle(el).zIndex)))
+  await panels.last().locator('.capture-overlay-drag').focus()
+  expect(await panels.last().evaluate(el => Number(getComputedStyle(el).zIndex)))
+    .toBeGreaterThan(await panels.first().evaluate(el => Number(getComputedStyle(el).zIndex)))
 })

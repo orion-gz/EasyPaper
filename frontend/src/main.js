@@ -18589,9 +18589,74 @@ const captureOverlays = createCaptureOverlayManager({
 })
 function clearPinnedCaptures() {
   captureGeneration++
-  capturePending = false
+  setCapturePending(false)
   captureOverlays.clear()
   toggleCropMode(false)
+}
+function setCapturePending(pending) {
+  capturePending = pending
+  pinCaptureBtn.disabled = pending
+  pinCaptureBtn.setAttribute('aria-busy', String(pending))
+  $('capture-status').textContent = pending ? t('viewer:capture.loading') : ''
+}
+async function pinSelectedRegion(pageNum, region) {
+  const generation = captureGeneration
+  const sessionId = state.sessionId
+  toggleCropMode(false)
+  setCapturePending(true)
+  try {
+    const blob = await renderPinnedCapture(pageNum, region)
+    if (generation !== captureGeneration || sessionId !== state.sessionId) return
+    if (!captureOverlays.add(blob, pageNum)) showToast(t('viewer:capture.limit'), 'info')
+  } catch (error) {
+    if (generation === captureGeneration) showToast(t('viewer:capture.error'), 'error')
+  } finally {
+    if (generation === captureGeneration) setCapturePending(false)
+  }
+}
+let keyboardCrop = null
+function startKeyboardCrop() {
+  const page = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${state.currentPage}"] .pdf-page-inner`)
+  if (!page) { toggleCropMode(false); return }
+  cropPageEl = page
+  cropOverlay = document.createElement('div')
+  cropOverlay.className = 'pdf-crop-overlay'
+  cropOverlay.tabIndex = 0
+  cropOverlay.setAttribute('role', 'group')
+  cropOverlay.setAttribute('aria-label', t('viewer:capture.selection'))
+  cropOverlay.setAttribute('aria-describedby', 'capture-selection-help')
+  page.appendChild(cropOverlay)
+  keyboardCrop = { left: 0.1, top: 0.1, width: 0.4, height: 0.2 }
+  showToast(t('viewer:capture.keyboardHelp'), 'info')
+  const update = () => {
+    for (const [key, value] of Object.entries(keyboardCrop)) cropOverlay.style[key] = `${value * 100}%`
+    $('capture-status').textContent = t('viewer:capture.selectionPosition', Object.fromEntries(Object.entries(keyboardCrop).map(([key, value]) => [key, Math.round(value * 100)])))
+    cropOverlay.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })
+  }
+  cropOverlay.addEventListener('keydown', event => {
+    if (!keyboardCrop) return
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      event.stopPropagation()
+      void pinSelectedRegion(Number(page.closest('.pdf-page-wrapper').dataset.page), { ...keyboardCrop })
+      return
+    }
+    const dx = event.key === 'ArrowRight' ? 0.01 : event.key === 'ArrowLeft' ? -0.01 : 0
+    const dy = event.key === 'ArrowDown' ? 0.01 : event.key === 'ArrowUp' ? -0.01 : 0
+    if (!dx && !dy) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.shiftKey) {
+      keyboardCrop.width = Math.max(0.02, Math.min(1 - keyboardCrop.left, keyboardCrop.width + dx))
+      keyboardCrop.height = Math.max(0.02, Math.min(1 - keyboardCrop.top, keyboardCrop.height + dy))
+    } else {
+      keyboardCrop.left = Math.max(0, Math.min(1 - keyboardCrop.width, keyboardCrop.left + dx))
+      keyboardCrop.top = Math.max(0, Math.min(1 - keyboardCrop.height, keyboardCrop.top + dy))
+    }
+    update()
+  })
+  update()
+  cropOverlay.focus({ preventScroll: true })
 }
 let isCropping = false
 let cropStart = { x: 0, y: 0 }
@@ -18618,6 +18683,7 @@ function initCropTool() {
 
     e.preventDefault()
     e.stopImmediatePropagation()
+    if (keyboardCrop) { keyboardCrop = null; cropOverlay?.remove(); cropOverlay = null }
 
     isCropping = true
     cropPageEl = pageInner
@@ -18630,11 +18696,6 @@ function initCropTool() {
     if (!cropOverlay) {
       cropOverlay = document.createElement('div')
       cropOverlay.className = 'pdf-crop-overlay'
-      cropOverlay.style.position = 'absolute'
-      cropOverlay.style.border = '2px dashed var(--accent-mid, #8b5cf6)'
-      cropOverlay.style.background = 'rgba(139, 92, 246, 0.15)'
-      cropOverlay.style.pointerEvents = 'none'
-      cropOverlay.style.zIndex = '10'
       pageInner.appendChild(cropOverlay)
     }
 
@@ -18690,22 +18751,10 @@ function initCropTool() {
     const pageNum = wrapper ? parseInt(wrapper.dataset.page) : 1
 
     if (cropPurpose === 'pin') {
-      const generation = captureGeneration
-      const sessionId = state.sessionId
-      toggleCropMode(false)
-      capturePending = true
-      try {
-        const blob = await renderPinnedCapture(pageNum, {
-          left: left / rect.width, top: top / rect.height,
-          width: width / rect.width, height: height / rect.height,
-        })
-        if (generation !== captureGeneration || sessionId !== state.sessionId) return
-        if (!captureOverlays.add(blob, pageNum)) showToast(t('viewer:capture.limit'), 'info')
-      } catch (error) {
-        if (generation === captureGeneration) showToast(t('viewer:capture.error'), 'error')
-      } finally {
-        if (generation === captureGeneration) capturePending = false
-      }
+      await pinSelectedRegion(pageNum, {
+        left: left / rect.width, top: top / rect.height,
+        width: width / rect.width, height: height / rect.height,
+      })
       return
     }
 
@@ -18766,6 +18815,8 @@ function toggleCropMode(forceState, purpose = cropPurpose) {
     pinCaptureBtn?.classList.remove('active')
     pinCaptureBtn?.setAttribute('aria-pressed', 'false')
     isCropping = false
+    keyboardCrop = null
+    $('capture-status').textContent = ''
     cropPageEl = null
     cropOverlay = null
     document.querySelectorAll('.pdf-crop-overlay').forEach(el => el.remove())
@@ -18783,7 +18834,7 @@ if (captureAreaBtn) {
   })
 }
 
-pinCaptureBtn?.addEventListener('click', () => {
+pinCaptureBtn?.addEventListener('click', event => {
   if (!state.sessionId || !viewerScrollContainer.querySelector('.pdf-page-inner')) {
     showToast(t('viewer:capture.pdfRequired'), 'info')
     return
@@ -18791,6 +18842,7 @@ pinCaptureBtn?.addEventListener('click', () => {
   if (capturePending) { showToast(t('viewer:capture.loading'), 'info'); return }
   if (captureOverlays.full) { showToast(t('viewer:capture.limit'), 'info'); return }
   toggleCropMode(!(state.isCropMode && cropPurpose === 'pin'), 'pin')
+  if (state.isCropMode && event.detail === 0) startKeyboardCrop()
 })
 window.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || !state.isCropMode) return
@@ -19578,7 +19630,7 @@ function installReaderWorkspaceRuntime() {
         void syncAnnotationsNow(state.sessionId, { keepalive: true, refresh: false })
       }
     },
-    suspend: () => { pauseReadingHeartbeat(); easyEnglishController?.clearHighlight(); focusModeController?.clear(); suspendPDFRendering(); globalAnalyticsTracker.sendHeartbeat() },
+    suspend: () => { clearPinnedCaptures(); pauseReadingHeartbeat(); easyEnglishController?.clearHighlight(); focusModeController?.clear(); suspendPDFRendering(); globalAnalyticsTracker.sendHeartbeat() },
     resume: async () => {
       readingTimeActivityTracker.reset('reading')
       tickReadingHeartbeat()

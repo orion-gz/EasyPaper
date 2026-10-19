@@ -5641,5 +5641,17 @@
   },
   "viewer:capture.resize": {
     "description": "Accessible label for the capture panel resize handle."
+  },
+  "viewer:capture.content": {
+    "description": "Capture accessibility: Captured content from page {{page}}. Use arrow keys to scroll."
+  },
+  "viewer:capture.keyboardHelp": {
+    "description": "Capture accessibility: Drag on the PDF to select an area. When opened with the keyboard, use arrow keys to move, Shift + arrows to resize, Enter to capture, and Esc to cancel."
+  },
+  "viewer:capture.selection": {
+    "description": "Capture accessibility: Capture selection"
+  },
+  "viewer:capture.selectionPosition": {
+    "description": "Capture accessibility: Selection: left {{left}}%, top {{top}}%, width {{width}}%, height {{height}}%."
   }
 }

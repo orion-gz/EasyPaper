@@ -185,5 +185,9 @@
   "capture.questionSelect": "Drag to select an area to ask about.",
   "capture.pdfRequired": "Open a PDF document to pin a capture.",
   "capture.loading": "Creating capture…",
-  "capture.resize": "Resize capture (arrow keys supported)"
+  "capture.resize": "Resize capture (arrow keys supported)",
+  "capture.content": "Captured content from page {{page}}. Use arrow keys to scroll.",
+  "capture.keyboardHelp": "Drag on the PDF to select an area. When opened with the keyboard, use arrow keys to move, Shift + arrows to resize, Enter to capture, and Esc to cancel.",
+  "capture.selection": "Capture selection",
+  "capture.selectionPosition": "Selection: left {{left}}%, top {{top}}%, width {{width}}%, height {{height}}%."
 }

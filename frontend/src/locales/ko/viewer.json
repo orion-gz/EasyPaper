@@ -185,5 +185,9 @@
   "capture.questionSelect": "마우스로 드래그하여 질문할 영역을 선택하세요.",
   "capture.pdfRequired": "PDF 문서를 열어 원문을 캡처해주세요.",
   "capture.loading": "캡처를 생성하는 중입니다…",
-  "capture.resize": "캡처 크기 조절 (방향키 지원)"
+  "capture.resize": "캡처 크기 조절 (방향키 지원)",
+  "capture.content": "{{page}}페이지 캡처 내용. 방향키로 스크롤할 수 있습니다.",
+  "capture.keyboardHelp": "PDF에서 영역을 드래그하세요. 키보드로 실행하면 방향키로 이동, Shift + 방향키로 크기 조절, Enter로 캡처, Esc로 취소할 수 있습니다.",
+  "capture.selection": "캡처 선택 영역",
+  "capture.selectionPosition": "선택 영역: 왼쪽 {{left}}%, 위 {{top}}%, 너비 {{width}}%, 높이 {{height}}%."
 }
