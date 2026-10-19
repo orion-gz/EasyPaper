@@ -1,3 +1,5 @@
+import { createReferenceAnalysisController, renderReferenceAnalysis } from './referenceAnalysis.js'
+import { fetchReferenceAnalysis, analyzeReference } from './library.js'
 import { installReaderPreferences, readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { initializeDataTransfer } from './dataTransfer.js'
 import { isMinimalUi, setMinimalUi, MINIMAL_UI_KEY } from './minimalUi.js'
@@ -716,6 +718,7 @@ const settingDisableBookmark = $('setting-disable-bookmark')
 const settingDisableInsights = $('setting-disable-insights')
 const settingDisableCitationOverlay = $('setting-disable-citation-overlay')
 const settingDisableFigureOverlay = $('setting-disable-figure-overlay')
+const settingReferenceAutoAnalysis = $('setting-reference-auto-analysis')
 const settingFigureOverlayTrigger = $('setting-figure-overlay-trigger')
 const settingDisablePrimer = $('setting-disable-primer')
 const settingDisableSuggestedQuestions = $('setting-disable-suggested-questions')
@@ -1162,6 +1165,7 @@ function syncModeSettings(documentMode) {
   settingDisableInsights.checked = !getModeSetting('disableInsights', settingsTranslationModeContext)
   settingDisableCitationOverlay.checked = !getModeSetting('disableCitationOverlay', settingsTranslationModeContext)
   settingDisableFigureOverlay.checked = !getModeSetting('disableFigureOverlay', settingsTranslationModeContext)
+  settingReferenceAutoAnalysis.checked = getModeSetting('referenceAutoAnalysis', settingsTranslationModeContext)
   settingFigureOverlayTrigger.value = getModeSetting('figureOverlayTrigger', settingsTranslationModeContext)
   settingFigureOverlayTrigger.disabled = !settingDisableFigureOverlay.checked
   settingDisablePrimer.checked = !getModeSetting('disablePrimer', settingsTranslationModeContext)
@@ -4983,6 +4987,11 @@ settingDisableFigureOverlay.addEventListener('change', () => {
   }
 })
 
+settingReferenceAutoAnalysis.addEventListener('change', () => {
+  setModeSetting('referenceAutoAnalysis', settingsTranslationModeContext, settingReferenceAutoAnalysis.checked)
+  hideCitationTooltip()
+})
+
 settingFigureOverlayTrigger.addEventListener('change', () => {
   const trigger = settingFigureOverlayTrigger.value
   setModeSetting('figureOverlayTrigger', settingsTranslationModeContext, trigger)
@@ -4997,6 +5006,7 @@ settingFigureOverlayTrigger.addEventListener('change', () => {
 window.addEventListener('storage', event => {
   if (!state.sessionId) return
   const mode = normalizeSettingsMode(state.currentDocumentMode)
+  if (event.key === `easypaper_reference_auto_analysis_${mode}`) hideCitationTooltip()
   if (event.key === `easypaper_figure_overlay_trigger_${mode}`) {
     state.figureOverlayTrigger = getModeSetting('figureOverlayTrigger', mode)
     hideFigurePreviewTooltip()
@@ -15295,6 +15305,7 @@ function getOrCreateCitationTooltip() {
   el.setAttribute('aria-label', t('viewer:a11y.citationTrigger', { references: '' }))
   el.innerHTML = `
     <div class="citation-tooltip-text"></div>
+    <div class="citation-tooltip-analysis"></div>
     <div class="citation-tooltip-result hidden"></div>
     <div class="citation-tooltip-scholar-results hidden"></div>
     <div class="citation-tooltip-actions">
@@ -15381,6 +15392,21 @@ function buildCitationTooltipHtml(refKeys, refMap) {
     .join('\n')
 }
 
+const referenceAnalysisController = createReferenceAnalysisController({
+  fetchResult: fetchReferenceAnalysis,
+  analyze: analyzeReference,
+  onChange: items => {
+    const container = citationTooltipEl?.querySelector('.citation-tooltip-analysis')
+    if (!container) return
+    renderReferenceAnalysis(container, items, {
+      t,
+      run: key => referenceAnalysisController.run(key),
+      goToPage: page => { hideCitationTooltip(); scrollToPage(viewerScrollContainer, page) },
+      reposition: positionCitationTooltip,
+    })
+  },
+})
+
 function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = {}) {
   // 텍스트 드래그 선택 중에 마우스가 마커 박스 위를 스쳐 지나가도(mouseenter)
   // 미리보기가 뜨지 않도록 막는다 - 다른 호버 오버레이들과 동일한 가드.
@@ -15412,11 +15438,17 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
   scholarBtn.innerHTML = `${icon('externalLink', 12, 'style="vertical-align:-2px;margin-right:4px"')}${scholarLabel}`
 
   tooltip.classList.remove('hidden')
+  tooltip.querySelector('.citation-tooltip-analysis').replaceChildren()
+  referenceAnalysisController.open(
+    { docId, targetLang: getTranslationOptions().targetLang },
+    citationTooltipReferences, getModeSetting('referenceAutoAnalysis', state.currentDocumentMode),
+  )
   positionCitationTooltip()
   if (focus) window.requestAnimationFrame(() => tooltip.querySelector('button:not([disabled]), a[href]')?.focus())
 }
 
 function hideCitationTooltip() {
+  referenceAnalysisController.close()
   citationTooltipPinned = false
   if (citationTooltipHideTimer) { clearTimeout(citationTooltipHideTimer); citationTooltipHideTimer = null }
   if (citationTooltipEl) citationTooltipEl.classList.add('hidden')

@@ -219,5 +219,7 @@
   "figurePreviewEnabled": "Figure/Table/Equation reference previews",
   "figureOverlayTrigger": "Show reference previews on",
   "figureOverlayHover": "Hover",
-  "figureOverlayClick": "Click"
+  "figureOverlayClick": "Click",
+  "referenceAutoAnalysis": "Automatically analyze references",
+  "referenceAutoAnalysisDescription": "Analyze reading priority and citation reasons when a preview opens · Uses AI tokens"
 }

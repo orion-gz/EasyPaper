@@ -1143,6 +1143,49 @@ async def resolve_library_reference(doc_id: str, ref_num: str, current_user: str
     return result
 
 
+class ReferenceAnalysisRequest(BaseModel):
+    target_lang: str = "ko"
+    force: bool = False
+
+    @field_validator("target_lang")
+    @classmethod
+    def validate_language(cls, value):
+        from services.languages import normalize_document_language
+        return normalize_document_language(value)
+
+
+@router.get("/library/{doc_id}/references/{ref_key}/analysis")
+async def get_reference_analysis(doc_id: str, ref_key: str, target_lang: str = "ko",
+                                 current_user: str = Depends(get_current_user)):
+    require_owned_document(doc_id, current_user)
+    from services.languages import normalize_document_language
+    from services.reference_analysis import cache_suffix
+    from services.library import get_page_insight
+    try:
+        target_lang = normalize_document_language(target_lang)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    cached = get_page_insight(doc_id, 0, "reference_analysis", suffix=cache_suffix(ref_key, target_lang))
+    return json.loads(cached) if cached else {"status": "not_analyzed"}
+
+
+@router.post("/library/{doc_id}/references/{ref_key}/analysis")
+async def post_reference_analysis(doc_id: str, ref_key: str, body: ReferenceAnalysisRequest,
+                                  current_user: str = Depends(get_current_user)):
+    doc = require_owned_document(doc_id, current_user)
+    from services.reference_analysis import request_analysis
+    try:
+        return await request_analysis(doc, ref_key, body.target_lang, body.force)
+    except HTTPException:
+        raise
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(504, "Reference analysis timed out") from exc
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("Reference analysis failed for %s", doc_id)
+        raise HTTPException(502, "Reference analysis failed; retry later") from exc
+
+
 @router.get("/library/{doc_id}/annotations")
 async def get_library_annotations(doc_id: str, current_user: str = Depends(get_current_user)):
     """서버 기준 하이라이트/주석 snapshot을 반환합니다."""

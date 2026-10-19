@@ -219,5 +219,7 @@
   "figurePreviewEnabled": "Figure/Table/수식 참조 미리보기",
   "figureOverlayTrigger": "참조 미리보기 표시 방식",
   "figureOverlayHover": "호버",
-  "figureOverlayClick": "클릭"
+  "figureOverlayClick": "클릭",
+  "referenceAutoAnalysis": "참고문헌 자동 분석",
+  "referenceAutoAnalysisDescription": "오버레이를 열면 읽기 우선순위와 인용 이유 분석 · AI 사용량 발생"
 }
