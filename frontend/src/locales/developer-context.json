@@ -5599,5 +5599,47 @@
   },
   "settings:referenceAutoAnalysisDescription": {
     "description": "Reference overlay reading-priority analysis: Analyze reading priority and citation reasons when a preview opens · Uses AI tokens"
+  },
+  "viewer:capture.button": {
+    "description": "Pinned PDF capture: Pin a capture"
+  },
+  "viewer:capture.title": {
+    "description": "Pinned PDF capture: Capture · p.{{page}}"
+  },
+  "viewer:capture.move": {
+    "description": "Pinned PDF capture: Move capture (arrow keys supported)"
+  },
+  "viewer:capture.source": {
+    "description": "Pinned PDF capture: Go to source page {{page}}"
+  },
+  "viewer:capture.collapse": {
+    "description": "Pinned PDF capture: Collapse capture"
+  },
+  "viewer:capture.expand": {
+    "description": "Pinned PDF capture: Expand capture"
+  },
+  "viewer:capture.close": {
+    "description": "Pinned PDF capture: Close capture"
+  },
+  "viewer:capture.limit": {
+    "description": "Pinned PDF capture: You can pin up to 5 captures. Close one to add another."
+  },
+  "viewer:capture.error": {
+    "description": "Pinned PDF capture: Could not capture this area. Please retry."
+  },
+  "viewer:capture.select": {
+    "description": "Pinned PDF capture: Drag across the original PDF to pin an area. Press Esc to cancel."
+  },
+  "viewer:capture.questionSelect": {
+    "description": "Pinned PDF capture: Drag to select an area to ask about."
+  },
+  "viewer:capture.pdfRequired": {
+    "description": "Pinned PDF capture: Open a PDF document to pin a capture."
+  },
+  "viewer:capture.loading": {
+    "description": "Pinned PDF capture: Creating capture…"
+  },
+  "viewer:capture.resize": {
+    "description": "Accessible label for the capture panel resize handle."
   }
 }

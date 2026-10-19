@@ -171,5 +171,19 @@
   "referenceAnalysis.roleComparison": "비교 대상",
   "referenceAnalysis.roleSupport": "근거 제공",
   "referenceAnalysis.roleCritique": "한계/비판",
-  "referenceAnalysis.roleDataTool": "데이터/도구"
+  "referenceAnalysis.roleDataTool": "데이터/도구",
+  "capture.button": "원문 캡처 고정",
+  "capture.title": "캡처 · {{page}}페이지",
+  "capture.move": "캡처 이동 (방향키 지원)",
+  "capture.source": "원본 {{page}}페이지로 이동",
+  "capture.collapse": "캡처 접기",
+  "capture.expand": "캡처 펼치기",
+  "capture.close": "캡처 닫기",
+  "capture.limit": "캡처는 최대 5개까지 고정할 수 있습니다. 기존 캡처를 닫고 다시 시도하세요.",
+  "capture.error": "영역을 캡처하지 못했습니다. 다시 시도해주세요.",
+  "capture.select": "원문 PDF에서 고정할 영역을 드래그하세요. Esc로 취소할 수 있습니다.",
+  "capture.questionSelect": "마우스로 드래그하여 질문할 영역을 선택하세요.",
+  "capture.pdfRequired": "PDF 문서를 열어 원문을 캡처해주세요.",
+  "capture.loading": "캡처를 생성하는 중입니다…",
+  "capture.resize": "캡처 크기 조절 (방향키 지원)"
 }

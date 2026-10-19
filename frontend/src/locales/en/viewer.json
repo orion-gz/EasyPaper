@@ -171,5 +171,19 @@
   "referenceAnalysis.roleComparison": "Comparison",
   "referenceAnalysis.roleSupport": "Supporting evidence",
   "referenceAnalysis.roleCritique": "Limitations/critique",
-  "referenceAnalysis.roleDataTool": "Data/tools"
+  "referenceAnalysis.roleDataTool": "Data/tools",
+  "capture.button": "Pin a capture",
+  "capture.title": "Capture · p.{{page}}",
+  "capture.move": "Move capture (arrow keys supported)",
+  "capture.source": "Go to source page {{page}}",
+  "capture.collapse": "Collapse capture",
+  "capture.expand": "Expand capture",
+  "capture.close": "Close capture",
+  "capture.limit": "You can pin up to 5 captures. Close one to add another.",
+  "capture.error": "Could not capture this area. Please retry.",
+  "capture.select": "Drag across the original PDF to pin an area. Press Esc to cancel.",
+  "capture.questionSelect": "Drag to select an area to ask about.",
+  "capture.pdfRequired": "Open a PDF document to pin a capture.",
+  "capture.loading": "Creating capture…",
+  "capture.resize": "Resize capture (arrow keys supported)"
 }

@@ -1,3 +1,6 @@
+import { createCaptureOverlayManager } from './captureOverlay.js'
+import { renderPinnedCapture } from './pdfViewer.js'
+import './styles/capture-overlay.css'
 import { createReferenceAnalysisController, renderReferenceAnalysis } from './referenceAnalysis.js'
 import { fetchReferenceAnalysis, analyzeReference } from './library.js'
 import { installReaderPreferences, readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
@@ -921,6 +924,7 @@ const translationScopeBtn = $('translation-scope-btn')
 const retranslateBtn    = $('retranslate-btn')
 const translateDocumentBtn = $('translate-document-btn')
 const captureAreaBtn    = $('capture-area-btn')
+const pinCaptureBtn = $('pin-capture-btn')
 const cancelTransBtn    = $('cancel-trans-btn')
 const resumeTransBtn    = $('resume-trans-btn')
 // (viewer/chat pickers are now ProviderModelPicker instances – see below)
@@ -1258,6 +1262,7 @@ function showCompareScreen() {
 }
 
 function resetState() {
+  clearPinnedCaptures()
   clearFigurePreviews()
   focusModeController?.clear()
   state.articleViewer?.destroy?.()
@@ -11138,6 +11143,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
     if (state.chatActiveStream) { state.chatActiveStream(); state.chatActiveStream = null }
 
     clearFigurePreviews()
+    clearPinnedCaptures()
     const previousDocId = state.sessionId
     if (previousDocId && previousDocId !== doc.id && hasPendingAnnotationSync(previousDocId)) {
       syncAnnotationsNow(previousDocId, { keepalive: true, refresh: false })
@@ -18573,22 +18579,45 @@ if (viewerScrollContainer) {
 }
 
 // ── 영역 캡처 모드 (Manual Crop Tool) ──────────────────
+let cropPurpose = 'question'
+let captureGeneration = 0
+let capturePending = false
+const captureOverlays = createCaptureOverlayManager({
+  host: viewerScreen, t,
+  goToPage: page => scrollToPage(viewerScrollContainer, page),
+  restoreFocus: () => pinCaptureBtn?.focus(),
+})
+function clearPinnedCaptures() {
+  captureGeneration++
+  capturePending = false
+  captureOverlays.clear()
+  toggleCropMode(false)
+}
 let isCropping = false
 let cropStart = { x: 0, y: 0 }
 let cropOverlay = null
 let cropPageEl = null
+
+let suppressCropClick = false
+window.addEventListener('mousedown', () => { suppressCropClick = false }, true)
+window.addEventListener('click', event => {
+  if (!suppressCropClick && !(state.isCropMode && event.target.closest('.pdf-page-inner'))) return
+  suppressCropClick = false
+  event.preventDefault()
+  event.stopImmediatePropagation()
+}, true)
 
 function initCropTool() {
   const container = viewerScrollContainer
   if (!container) return
 
   container.addEventListener('mousedown', (e) => {
-    if (!state.isCropMode) return
+    if (!state.isCropMode || e.button !== 0) return
     const pageInner = e.target.closest('.pdf-page-inner')
     if (!pageInner) return
 
     e.preventDefault()
-    e.stopPropagation()
+    e.stopImmediatePropagation()
 
     isCropping = true
     cropPageEl = pageInner
@@ -18609,14 +18638,15 @@ function initCropTool() {
       pageInner.appendChild(cropOverlay)
     }
 
-    cropOverlay.style.left = `${cropStart.x}px`
-    cropOverlay.style.top = `${cropStart.y}px`
+    const local = pageCoordinates(pageInner).rectToLocal({ left: e.clientX, top: e.clientY, width: 0, height: 0 })
+    cropOverlay.style.left = `${local.left}px`
+    cropOverlay.style.top = `${local.top}px`
     cropOverlay.style.width = '0px'
     cropOverlay.style.height = '0px'
     cropOverlay.style.display = 'block'
-  })
+  }, true)
 
-  container.addEventListener('mousemove', (e) => {
+  document.addEventListener('mousemove', (e) => {
     if (!state.isCropMode || !isCropping || !cropPageEl || !cropOverlay) return
 
     const rect = cropPageEl.getBoundingClientRect()
@@ -18628,15 +18658,17 @@ function initCropTool() {
     const width = Math.abs(cropStart.x - currentX)
     const height = Math.abs(cropStart.y - currentY)
 
-    cropOverlay.style.left = `${left}px`
-    cropOverlay.style.top = `${top}px`
-    cropOverlay.style.width = `${width}px`
-    cropOverlay.style.height = `${height}px`
+    const local = pageCoordinates(cropPageEl).rectToLocal({ left: rect.left + left, top: rect.top + top, width, height })
+    cropOverlay.style.left = `${local.left}px`
+    cropOverlay.style.top = `${local.top}px`
+    cropOverlay.style.width = `${local.width}px`
+    cropOverlay.style.height = `${local.height}px`
   })
 
-  container.addEventListener('mouseup', (e) => {
+  document.addEventListener('mouseup', async (e) => {
     if (!state.isCropMode || !isCropping || !cropPageEl || !cropOverlay) return
     isCropping = false
+    suppressCropClick = true
 
     const rect = cropPageEl.getBoundingClientRect()
     const currentX = Math.max(0, Math.min(rect.width, e.clientX - rect.left))
@@ -18656,6 +18688,26 @@ function initCropTool() {
 
     const wrapper = cropPageEl.closest('.pdf-page-wrapper')
     const pageNum = wrapper ? parseInt(wrapper.dataset.page) : 1
+
+    if (cropPurpose === 'pin') {
+      const generation = captureGeneration
+      const sessionId = state.sessionId
+      toggleCropMode(false)
+      capturePending = true
+      try {
+        const blob = await renderPinnedCapture(pageNum, {
+          left: left / rect.width, top: top / rect.height,
+          width: width / rect.width, height: height / rect.height,
+        })
+        if (generation !== captureGeneration || sessionId !== state.sessionId) return
+        if (!captureOverlays.add(blob, pageNum)) showToast(t('viewer:capture.limit'), 'info')
+      } catch (error) {
+        if (generation === captureGeneration) showToast(t('viewer:capture.error'), 'error')
+      } finally {
+        if (generation === captureGeneration) capturePending = false
+      }
+      return
+    }
 
     const canvas = cropPageEl.querySelector('canvas')
     if (canvas) {
@@ -18685,24 +18737,37 @@ function initCropTool() {
         askAIAssistantImage(base64Img, pageNum)
       } catch (err) {
         console.error("Manual crop failed:", err)
-        showToast("캡처에 실패했습니다.", "error")
+        toggleCropMode(false)
+        showToast(t('viewer:capture.error'), 'error')
       }
     }
 
+    if (!canvas) {
+      toggleCropMode(false)
+      showToast(t('viewer:capture.error'), 'error')
+    }
     cropPageEl = null
   })
 }
 
-function toggleCropMode(forceState) {
+function toggleCropMode(forceState, purpose = cropPurpose) {
+  cropPurpose = purpose
   state.isCropMode = forceState !== undefined ? forceState : !state.isCropMode
 
   if (state.isCropMode) {
     viewerScrollContainer.classList.add('crop-mode')
-    if (captureAreaBtn) captureAreaBtn.classList.add('active')
-    showToast("마우스로 드래그하여 질문할 영역을 선택하세요.", "success")
+    captureAreaBtn?.classList.toggle('active', cropPurpose === 'question')
+    pinCaptureBtn?.classList.toggle('active', cropPurpose === 'pin')
+    pinCaptureBtn?.setAttribute('aria-pressed', String(cropPurpose === 'pin'))
+    showToast(cropPurpose === 'pin' ? t('viewer:capture.select') : t('viewer:capture.questionSelect'), 'info')
   } else {
     viewerScrollContainer.classList.remove('crop-mode')
-    if (captureAreaBtn) captureAreaBtn.classList.remove('active')
+    captureAreaBtn?.classList.remove('active')
+    pinCaptureBtn?.classList.remove('active')
+    pinCaptureBtn?.setAttribute('aria-pressed', 'false')
+    isCropping = false
+    cropPageEl = null
+    cropOverlay = null
     document.querySelectorAll('.pdf-crop-overlay').forEach(el => el.remove())
   }
 }
@@ -18714,9 +18779,28 @@ if (captureAreaBtn) {
       showToast(documentUiCopy("논문을 먼저 업로드하거나 선택해주세요.", state.currentDocumentMode), "error")
       return
     }
-    toggleCropMode()
+    toggleCropMode(!(state.isCropMode && cropPurpose === 'question'), 'question')
   })
 }
+
+pinCaptureBtn?.addEventListener('click', () => {
+  if (!state.sessionId || !viewerScrollContainer.querySelector('.pdf-page-inner')) {
+    showToast(t('viewer:capture.pdfRequired'), 'info')
+    return
+  }
+  if (capturePending) { showToast(t('viewer:capture.loading'), 'info'); return }
+  if (captureOverlays.full) { showToast(t('viewer:capture.limit'), 'info'); return }
+  toggleCropMode(!(state.isCropMode && cropPurpose === 'pin'), 'pin')
+})
+window.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !state.isCropMode) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  const button = cropPurpose === 'pin' ? pinCaptureBtn : captureAreaBtn
+  toggleCropMode(false)
+  button?.focus()
+}, true)
+window.addEventListener('blur', () => { if (state.isCropMode) toggleCropMode(false) })
 
 // 캡처 툴 초기화 실행
 initCropTool()
