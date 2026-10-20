@@ -69,3 +69,17 @@ test('automatic setting analyzes on open and cached result does not generate aga
   await page.waitForTimeout(600)
   expect(requests.filter(method => method === 'POST')).toHaveLength(1)
 })
+
+for (const light of [false, true]) {
+  test(`analysis typography follows the citation overlay in ${light ? 'light' : 'dark'} mode`, async ({ page }) => {
+    const { card, reader } = await openReference(page, { cached: true })
+    await expect(card).toContainText('85/100')
+    await page.evaluate(light => document.body.classList.toggle('light-theme', light), light)
+    const reference = reader.locator('.citation-tooltip-text')
+    await expect(card).toHaveCSS('font-size', await reference.evaluate(el => getComputedStyle(el).fontSize))
+    await expect(card).toHaveCSS('color', await reference.evaluate(el => getComputedStyle(el).color))
+    await expect(card.locator('blockquote')).toHaveCSS('white-space', 'pre-wrap')
+    const fonts = await card.evaluate(el => [getComputedStyle(el).fontFamily, getComputedStyle(el.querySelector('button')).fontFamily])
+    expect(fonts[0]).toBe(fonts[1])
+  })
+}

@@ -148,3 +148,23 @@ test('cancelled import can select the same ZIP again through the import button',
   await expect(page.locator('#user-data-reload')).toBeVisible()
   expect(imports).toBe(1)
 })
+
+test('data transfer uses settings typography and keeps recovery actions hidden', async ({ page }) => {
+  await mockBaseRoutes(page)
+  await openTransfer(page)
+  for (const light of [false, true]) {
+    await page.evaluate(light => document.body.classList.toggle('light-theme', light), light)
+    const description = page.locator('[data-i18n="settings:dataTransfer.description"]')
+    await expect(description).toHaveCSS('font-size', '12.5px')
+    const color = await description.evaluate(el => getComputedStyle(el).getPropertyValue('--text-secondary').trim())
+    expect(await description.evaluate(el => getComputedStyle(el).color)).toBe(await description.evaluate((el, color) => {
+      const probe = document.createElement('span'); probe.style.color = color; el.append(probe)
+      const result = getComputedStyle(probe).color; probe.remove(); return result
+    }, color))
+    await expect(page.locator('#user-data-system-settings')).toHaveCSS('width', '16px')
+    await expect(page.locator('#user-data-retry')).toBeHidden()
+    await expect(page.locator('#user-data-reload')).toBeHidden()
+    const fonts = await page.locator('#user-data-export').evaluate(el => [getComputedStyle(el).fontFamily, getComputedStyle(document.body).fontFamily])
+    expect(fonts[0]).toBe(fonts[1])
+  }
+})
