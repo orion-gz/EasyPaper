@@ -77,7 +77,7 @@ export function createReferenceAnalysisController({ fetchResult, analyze, onChan
   } }
 }
 
-export function renderReferenceAnalysis(container, items, { t, run, goToPage, reposition }) {
+export function renderReferenceAnalysis(container, items, { t, run, reposition }) {
   // Keep existing cards and action buttons so async updates do not steal keyboard focus.
   for (const item of items) {
     let card = [...container.children].find(node => node.dataset.refKey === item.key)
@@ -120,24 +120,7 @@ export function renderReferenceAnalysis(container, items, { t, run, goToPage, re
       const result = item.result
       add(result.score == null ? t('viewer:referenceAnalysis.insufficient')
         : t('viewer:referenceAnalysis.score', { score: result.score }), 'strong')
-      if (result.score != null) add(t('viewer:referenceAnalysis.components', {
-        method: result.method_score, understanding: result.understanding_score, background: result.background_score,
-      }))
-      if (result.score_reason) add(result.score_reason)
-      const roleLabels = {
-        background: t('viewer:referenceAnalysis.roleBackground'), method: t('viewer:referenceAnalysis.roleMethod'),
-        comparison: t('viewer:referenceAnalysis.roleComparison'), support: t('viewer:referenceAnalysis.roleSupport'),
-        critique: t('viewer:referenceAnalysis.roleCritique'), data_tool: t('viewer:referenceAnalysis.roleDataTool'),
-      }
-      if (result.roles?.length) add(result.roles.map(role => roleLabels[role] || role).join(' · '))
-      if (result.citation_reason) add(t('viewer:referenceAnalysis.reason') + ': ' + result.citation_reason)
-      for (const evidence of result.evidence || []) {
-        const page = add(t('viewer:referenceAnalysis.page', { page: evidence.page_num }), 'button')
-        page.type = 'button'
-        page.className = 'citation-tooltip-action-btn'
-        page.addEventListener('click', () => goToPage(evidence.page_num))
-        add(evidence.quote, 'blockquote')
-      }
+      if (result.citation_reason) add(result.citation_reason)
       add(t('viewer:referenceAnalysis.disclaimer'), 'small')
     }
   }

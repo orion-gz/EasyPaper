@@ -1144,6 +1144,7 @@ async def resolve_library_reference(doc_id: str, ref_num: str, current_user: str
 
 
 class ReferenceAnalysisRequest(BaseModel):
+    page_num: int | None = Field(default=None, ge=1)
     target_lang: str = "ko"
     force: bool = False
 
@@ -1156,6 +1157,7 @@ class ReferenceAnalysisRequest(BaseModel):
 
 @router.get("/library/{doc_id}/references/{ref_key}/analysis")
 async def get_reference_analysis(doc_id: str, ref_key: str, target_lang: str = "ko",
+                                 page_num: int | None = Query(default=None, ge=1),
                                  current_user: str = Depends(get_current_user)):
     require_owned_document(doc_id, current_user)
     from services.languages import normalize_document_language
@@ -1165,7 +1167,7 @@ async def get_reference_analysis(doc_id: str, ref_key: str, target_lang: str = "
         target_lang = normalize_document_language(target_lang)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    cached = get_page_insight(doc_id, 0, "reference_analysis", suffix=cache_suffix(ref_key, target_lang))
+    cached = get_page_insight(doc_id, 0, "reference_analysis", suffix=cache_suffix(ref_key, target_lang, page_num))
     return json.loads(cached) if cached else {"status": "not_analyzed"}
 
 
@@ -1175,7 +1177,7 @@ async def post_reference_analysis(doc_id: str, ref_key: str, body: ReferenceAnal
     doc = require_owned_document(doc_id, current_user)
     from services.reference_analysis import request_analysis
     try:
-        return await request_analysis(doc, ref_key, body.target_lang, body.force)
+        return await request_analysis(doc, ref_key, body.target_lang, body.force, body.page_num)
     except HTTPException:
         raise
     except asyncio.TimeoutError as exc:

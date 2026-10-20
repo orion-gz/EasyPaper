@@ -266,11 +266,12 @@ def test_duplicate_excerpt_retains_grouped_citation_warning():
     assert contexts[0]['grouped'] is True
 
 
-def test_v1_analysis_cache_is_not_reused_after_context_fix(test_client, isolated_dirs):
+@pytest.mark.parametrize('version', [1, 2])
+def test_old_analysis_cache_is_not_reused(test_client, isolated_dirs, version):
     import hashlib
     from services.reference_analysis import get_chat_model, get_chat_provider
     create_doc(isolated_dirs)
-    identity = [1, '1', 'ko', get_chat_provider(), get_chat_model()]
+    identity = [version, '1', 'ko', get_chat_provider(), get_chat_model()]
     old_suffix = hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
     isolated_dirs['db'].db_save_page_insight('doc-1', 0, 'reference_analysis',
         '{"status":"complete","score":99}', suffix=old_suffix)
@@ -319,3 +320,58 @@ def test_transport_errors_are_not_retried_as_validation_failures():
         with pytest.raises(RuntimeError, match='provider unavailable'):
             asyncio.run(generate_analysis('A reference', [], 'Current paper', {}, 'en', ref_key='1'))
     assert len(calls) == 1
+
+
+def test_requested_page_survives_sampling_and_duplicate_excerpts():
+    pages = [{'page_num': i, 'text': 'Background\nExample [1].'} for i in range(1, 20)]
+    contexts = collect_contexts(pages, '1', requested_page=18)
+    assert contexts[0]['page_num'] == 18
+    assert len(contexts) == 12
+    assert any(item['page_num'] != 18 for item in contexts)
+
+
+def test_page_scoped_cache_and_no_local_evidence(test_client, isolated_dirs):
+    create_doc(isolated_dirs)
+    pages = [{'page_num': 1, 'text': 'We use [1].'},
+             {'page_num': 2, 'text': 'We compare [1].'},
+             {'page_num': 3, 'text': 'References\n[1] Someone. A paper. 2020.'}]
+    result = validate_result(json.dumps(output()), collect_contexts(pages, '1'))
+    url = '/api/library/doc-1/references/1/analysis'
+    with patch('services.library.get_pdf_path', return_value='/fake.pdf'), \
+         patch('services.cache.get_cached_pages', return_value=pages), \
+         patch('services.reference_analysis.generate_analysis', new=AsyncMock(return_value=result)) as generate:
+        assert test_client.post(url, json={'page_num': 1}).status_code == 200
+        assert generate.call_args.kwargs['page_num'] == 1
+        assert {item['page_num'] for item in generate.call_args.args[1]} == {1, 2}
+        assert test_client.get(url + '?page_num=1').json()['score'] == 75
+        assert test_client.get(url + '?page_num=2').json()['status'] == 'not_analyzed'
+        assert test_client.get(url).json()['status'] == 'not_analyzed'
+        assert test_client.post(url, json={'page_num': 3}).json()['status'] == 'insufficient_evidence'
+        assert generate.await_count == 1
+    assert test_client.get(url + '?page_num=0').status_code == 422
+    assert test_client.post(url, json={'page_num': 0}).status_code == 422
+
+
+@pytest.mark.parametrize('bad', [
+    {'citation_reason': 'One. Two. Three. Four.'},
+    {'evidence_ids': [1]},
+])
+def test_page_scoped_generation_repairs_length_and_other_page_evidence(bad):
+    from services.reference_analysis import generate_analysis
+    contexts = [{'id': 0, 'page_num': 1, 'quote': 'We use [1].'},
+                {'id': 1, 'page_num': 2, 'quote': 'We compare [1].'}]
+    calls = []
+    async def stream(prompt, history):
+        calls.append((prompt, history))
+        value = output(citation_reason='The method is adopted here. It defines this procedure.')
+        if len(calls) == 1:
+            value.update(bad)
+        yield json.dumps(value)
+    with patch('services.llm_client.stream_chat', side_effect=stream):
+        result = asyncio.run(generate_analysis('Reference', contexts, 'Title', {}, 'en', ref_key='1', page_num=1))
+    assert len(calls) == 2
+    assert [item['page_num'] for item in result['evidence']] == [1]
+    payload = json.loads(calls[0][1][0]['content'])
+    assert payload['requested_page'] == 1
+    assert payload['contexts'] == contexts
+    assert 'MUST NOT appear in citation_reason' in calls[0][0]

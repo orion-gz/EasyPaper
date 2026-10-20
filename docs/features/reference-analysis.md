@@ -1,8 +1,9 @@
 # Reference reading-priority analysis
 
 Open a citation preview and select **Analyze reading priority**. The card shows a
-0–100 reading-priority score, its rationale, citation roles and reasons, and source
-excerpts with page navigation. This estimates usefulness for understanding the
+0–100 reading-priority score and a concise 2–3 sentence explanation of why the
+reference is cited on the requested page. Other pages inform the analysis internally
+but their content, score rationale, roles, and source excerpts are not displayed. This estimates usefulness for understanding the
 current document; it does not rate the cited paper's quality.
 
 The score sums method/reproduction dependency (0–40), core-argument understanding
@@ -22,13 +23,13 @@ No cited-paper abstract or full text is fetched. Contexts exclude the bibliograp
 retain appendix citations, deduplicate text, and sample at most 12 excerpts (up to
 600 characters on either side of each marker). Recognized headings assign contexts
 to introduction/background, methods/training, results/experiments, discussion/conclusion,
-or appendix. Sampling reserves a slot for each represented section, then distributes
+or appendix. Sampling prioritizes the requested page, then reserves slots for represented sections and distributes
 remaining slots across sections and positions. Unrecognized sections use a distributed
 fallback. Returned evidence includes the detected `section`.
 
 Bibliography boundaries use the reference-list parser's header validation, including
 first entries on the same line as the header. A normal sentence starting with
-"References to ..." remains body text. Analysis version 2 invalidates older cached
+"References to ..." remains body text. Analysis version 3 invalidates older cached
 results so incorrect scores and missing-evidence results are recomputed on demand.
 
 The model receives an explicit citation-key-to-reference mapping. The scoring rubric
@@ -49,9 +50,9 @@ Extraction limitations and model judgment can affect the estimate.
 
 ## API and persistence
 
-- `GET /api/library/{doc_id}/references/{ref_key}/analysis?target_lang=ko`
+- `GET /api/library/{doc_id}/references/{ref_key}/analysis?target_lang=ko&page_num=1`
   returns saved analysis or `{"status":"not_analyzed"}` without generating it.
-- `POST` to the same path accepts `{"target_lang":"ko","force":false}`.
+- `POST` to the same path accepts `{"target_lang":"ko","force":false,"page_num":1}`.
   It reuses cached analysis unless forced, and coalesces concurrent requests.
 - Results contain `status`, nullable `score`, `method_score`,
   `understanding_score`, `background_score`, `score_reason`, `citation_reason`,
@@ -62,7 +63,7 @@ Extraction limitations and model judgment can affect the estimate.
   validation failure, and 504 on timeout. Invalid languages return 422.
 
 The existing `page_insights` store holds results under `reference_analysis`.
-Document content revision, reference key, output language, provider/model and
+Document content revision, reference key, requested page, output language, provider/model and
 analysis version isolate cache entries. Failed regeneration preserves a previous
 valid result. No database migration or new provider credentials are required.
 
