@@ -58,23 +58,47 @@
 #reader-task-list button { padding: 6px 10px; margin: 3px; color: var(--text-primary); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; }
 #reader-task-list progress { display: block; width: 100%; }
 #reader-command-search[hidden] { display: none !important; }
-#reader-command-dialog { width: min(620px, calc(100vw - 32px)); max-height: 75vh; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-panel); }
-#reader-command-dialog::backdrop { background: #0006; }
-#reader-command-dialog input { box-sizing: border-box; width: 100%; padding: 12px; background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; }
-#reader-command-dialog input {
-  font-family: inherit;
-  font-size: 13.5px;
-  font-weight: 400;
-  line-height: 1.5;
+#reader-command-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(75vh, 640px);
+  max-height: min(75dvh, 640px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  color: var(--text-primary);
+  box-shadow: 0 24px 80px #0004, 0 4px 16px #0002;
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
 }
-#reader-command-dialog input::placeholder { color: var(--text-muted); opacity: 1; }
-#reader-command-dialog > [role="status"] { margin: 10px 0; }
-#reader-command-dialog > [role="status"]:empty,
-#reader-command-results p:empty { display: none; }
-#reader-command-results { overflow: auto; max-height: 55vh; }
-#reader-command-results [role="option"] { padding: 10px; cursor: pointer; border-radius: 6px; overflow-wrap: anywhere; }
+#reader-command-dialog[open] { display: flex; flex-direction: column; }
+#reader-command-dialog::backdrop { background: #0003; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.reader-command-bar { display: flex; align-items: center; gap: 14px; padding: 20px 24px; flex-shrink: 0; }
+.reader-command-icon { display: flex; color: var(--text-secondary); flex-shrink: 0; }
+#reader-command-dialog input { box-sizing: border-box; width: 100%; min-width: 0; padding: 0; background: transparent; color: var(--text-primary); border: 0; border-radius: 0; font: inherit; font-size: 22px; line-height: 1.5; outline: none; box-shadow: none; }
+#reader-command-dialog input::placeholder { color: var(--text-secondary); }
+.reader-command-bar:focus-within { box-shadow: inset 0 -2px var(--accent-mid); }
+.reader-command-bar kbd { padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); font: inherit; font-size: 11px; }
+#reader-command-dialog > [role="status"] { padding: 14px 24px; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 13px; flex-shrink: 0; }
+#reader-command-dialog > [role="status"]:empty { display: none; }
+#reader-command-results { overflow: auto; min-height: 0; padding: 8px; border-top: 1px solid var(--border); overscroll-behavior: contain; }
+#reader-command-results:empty { display: none; }
+#reader-command-results [role="option"] { padding: 12px 16px; cursor: pointer; border-radius: 10px; overflow-wrap: anywhere; }
+#reader-command-results strong { font-size: 14px; font-weight: 600; line-height: 1.5; }
+#reader-command-results [role="option"]:hover { background: var(--bg-hover); }
 #reader-command-results [aria-selected="true"] { background: var(--bg-hover); outline: 2px solid var(--accent-mid); outline-offset: -2px; }
 #reader-command-results [aria-disabled="true"] { opacity: .55; cursor: default; }
 #reader-command-results p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary); }
+#reader-command-results p:empty { display: none; }
+@media (max-width: 480px) {
+  .reader-command-bar { gap: 10px; padding: 16px; }
+  #reader-command-dialog input { font-size: 18px; }
+  .reader-command-bar kbd { display: none; }
+}
 
 #reader-command-search { flex: 0 0 32px; width: 32px; height: 32px; }

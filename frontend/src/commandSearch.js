@@ -10,7 +10,11 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
   input.setAttribute('role', 'combobox'); input.setAttribute('aria-expanded', 'true'); input.setAttribute('aria-controls', 'reader-command-results'); input.setAttribute('aria-autocomplete', 'list')
   const list = document.createElement('div'); list.id = 'reader-command-results'; list.setAttribute('role', 'listbox')
   const status = document.createElement('p'); status.setAttribute('role', 'status')
-  dialog.append(input, status, list); document.body.append(dialog); mount?.append(button)
+  const searchBar = document.createElement('div'); searchBar.className = 'reader-command-bar'
+  const searchIcon = document.createElement('span'); searchIcon.className = 'reader-command-icon'; searchIcon.setAttribute('aria-hidden', 'true'); searchIcon.innerHTML = icon('search', 24)
+  const escapeHint = document.createElement('kbd'); escapeHint.textContent = 'esc'; escapeHint.setAttribute('aria-hidden', 'true')
+  searchBar.append(searchIcon, input, escapeHint)
+  dialog.append(searchBar, status, list); document.body.append(dialog); mount?.append(button)
   let previous; let items = []; let selected = 0; let controller; let revision = 0; let timer
   function resetResults() { items = []; selected = 0; list.replaceChildren(); input.removeAttribute('aria-activedescendant') }
   function close() { resetResults(); revision++; controller?.abort(); clearTimeout(timer); dialog.close(); previous?.focus?.({ preventScroll: true }) }
