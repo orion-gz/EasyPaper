@@ -13,8 +13,10 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
   const searchBar = document.createElement('div'); searchBar.className = 'reader-command-bar'
   const searchIcon = document.createElement('span'); searchIcon.className = 'reader-command-icon'; searchIcon.setAttribute('aria-hidden', 'true'); searchIcon.innerHTML = icon('search', 24)
   const escapeHint = document.createElement('kbd'); escapeHint.textContent = 'esc'; escapeHint.setAttribute('aria-hidden', 'true')
+  const help = document.createElement('p'); help.id = 'reader-command-help'
+  input.setAttribute('aria-describedby', help.id)
   searchBar.append(searchIcon, input, escapeHint)
-  dialog.append(searchBar, status, list); document.body.append(dialog); mount?.append(button)
+  dialog.append(searchBar, help, status, list); document.body.append(dialog); mount?.append(button)
   let previous; let items = []; let selected = 0; let controller; let revision = 0; let timer
   function resetResults() { items = []; selected = 0; list.replaceChildren(); input.removeAttribute('aria-activedescendant') }
   function close() { resetResults(); revision++; controller?.abort(); clearTimeout(timer); dialog.close(); previous?.focus?.({ preventScroll: true }) }
@@ -88,6 +90,7 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
   dialog.addEventListener('click', event => { if (event.target === dialog) { const r = dialog.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) close() } })
   const sync = () => {
     button.hidden = !readerFeatureEnabled('commandSearch'); button.innerHTML = icon('search', 18); button.title = t('viewer:comfort.commandSearch'); button.setAttribute('aria-label', button.title)
+    help.textContent = t('viewer:comfort.commandHint')
     input.placeholder = t('viewer:comfort.searchHint'); input.setAttribute('aria-label', input.placeholder); dialog.setAttribute('aria-label', button.title)
     if (button.hidden && dialog.open) close()
   }

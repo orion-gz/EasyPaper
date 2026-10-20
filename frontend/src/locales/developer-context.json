@@ -5502,7 +5502,10 @@
     "description": "Search and commands"
   },
   "viewer:comfort.searchHint": {
-    "description": "Search documents, notes, questions — > for commands"
+    "description": "Placeholder for searching documents, notes, or questions"
+  },
+  "viewer:comfort.commandHint": {
+    "description": "Helper below the search input explaining the > prefix with a settings example; referenced by aria-describedby"
   },
   "viewer:comfort.searchEmpty": {
     "description": "No matching results"

@@ -50,8 +50,7 @@
 }
 #reader-task-list button:not(:disabled):hover { background: var(--bg-hover); }
 #reader-task-list button:disabled { opacity: .55; cursor: default; }
-#reader-task-list button:focus-visible,
-#reader-command-dialog input:focus-visible {
+#reader-task-list button:focus-visible {
   outline: 2px solid var(--control-accent);
   outline-offset: 2px;
 }
@@ -80,9 +79,11 @@
 #reader-command-dialog::backdrop { background: #0003; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
 .reader-command-bar { display: flex; align-items: center; gap: 14px; padding: 20px 24px; flex-shrink: 0; }
 .reader-command-icon { display: flex; color: var(--text-secondary); flex-shrink: 0; }
-#reader-command-dialog input { box-sizing: border-box; width: 100%; min-width: 0; padding: 0; background: transparent; color: var(--text-primary); border: 0; border-radius: 0; font: inherit; font-size: 22px; line-height: 1.5; outline: none; box-shadow: none; }
+#reader-command-dialog input { box-sizing: border-box; width: 100%; min-width: 0; padding: 0; background: transparent; color: var(--text-primary); border: 0; border-radius: 0; font: inherit; font-size: 16px; line-height: 1.5; outline: none; box-shadow: none; }
 #reader-command-dialog input::placeholder { color: var(--text-secondary); }
-.reader-command-bar:focus-within { box-shadow: inset 0 -2px var(--accent-mid); }
+#reader-command-dialog input:focus,
+#reader-command-dialog input:focus-visible { outline: none !important; box-shadow: none; }
+#reader-command-help { padding: 0 24px 14px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; flex-shrink: 0; }
 .reader-command-bar kbd { padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); font: inherit; font-size: 11px; }
 #reader-command-dialog > [role="status"] { padding: 14px 24px; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 13px; flex-shrink: 0; }
 #reader-command-dialog > [role="status"]:empty { display: none; }
@@ -97,7 +98,7 @@
 #reader-command-results p:empty { display: none; }
 @media (max-width: 480px) {
   .reader-command-bar { gap: 10px; padding: 16px; }
-  #reader-command-dialog input { font-size: 18px; }
+  #reader-command-help { padding: 0 16px 12px; }
   .reader-command-bar kbd { display: none; }
 }
 
