@@ -211,3 +211,20 @@ test('inline rename is accessible and restores keyboard opening after cancel, no
   await opener.press('Enter')
   await expect(page.frameLocator('iframe[data-document-id="minimal-a"]').locator('#document-find')).toBeVisible({ timeout: 20000 })
 })
+
+test('library spacing stays compact with full-width search and no empty filter row', async ({ page }) => {
+  await setup(page)
+  for (const width of [1280, 600, 390]) {
+    await page.setViewportSize({ width, height: 800 })
+    await expect(page.locator('#library-filter-row')).toBeHidden()
+    const search = await page.locator('#library-search-box').boundingBox()
+    const grid = await page.locator('#library-grid').boundingBox()
+    expect(Math.abs(search.width - grid.width)).toBeLessThan(2)
+    expect(grid.y - search.y - search.height).toBeGreaterThanOrEqual(12)
+    expect(grid.y - search.y - search.height).toBeLessThanOrEqual(20)
+    const card = await page.locator('.minimal-doc-card').boundingBox()
+    expect(card.x).toBeGreaterThanOrEqual(0)
+    expect(card.x + card.width).toBeLessThanOrEqual(width)
+    await page.screenshot({ path: `/tmp/easypaper-spacing-${width}.png` })
+  }
+})

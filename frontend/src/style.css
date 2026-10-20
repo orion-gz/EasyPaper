@@ -8231,6 +8231,9 @@ body.light-theme .chat-drawer {
 .figure-preview-tooltip.collapsed .figure-preview-tooltip-resize-handle { display: none; }
 
 .reference-analysis-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   font-family: var(--font-body);
   font-size: 12.5px;
   line-height: 1.55;
@@ -8240,6 +8243,9 @@ body.light-theme .chat-drawer {
   padding-top: 10px;
   overflow-wrap: anywhere;
 }
+.reference-analysis-body:empty { display: none; }
+.reference-analysis-body > :first-child { margin-top: 0; }
+.reference-analysis-body > :last-child { margin-bottom: 0; }
 .reference-analysis-card > strong,
 .reference-analysis-body > strong { color: var(--text-primary); font-weight: 600; }
 .reference-analysis-body p { margin: 6px 0; }

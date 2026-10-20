@@ -5,6 +5,7 @@ body.minimal-ui #library-status-tabs,
 body.minimal-ui .library-category-filter-group,
 body.minimal-ui #library-category-filter-toggle,
 body.minimal-ui #library-view-toggle,
+body.minimal-ui #library-filter-row,
 body.minimal-ui #lib-compare-toggle-btn,
 body.minimal-ui #lib-select-toolbar { display: none !important; }
 body.minimal-ui #tab-workspace .workspace-mode-switch-compact { display: grid; flex-shrink: 0; }
@@ -55,15 +56,15 @@ body.minimal-ui #page-library.active {
   margin-inline: auto;
 }
 /* Inline margins belong to the full UI; the minimal grid owns tool spacing. */
-body.minimal-ui #library-search-box { order: 3; min-width: 0; margin-bottom: 0 !important; }
-body.minimal-ui #library-filter-row { order: 4; margin-bottom: 0 !important; }
+body.minimal-ui #library-search-box { order: 3; grid-column: 1 / -1; min-width: 0; margin-bottom: 0 !important; }
+body.minimal-ui #lib-empty-trash-btn { position: static; order: 7; grid-column: 1 / -1; justify-self: end; }
 body.minimal-ui #library-search-status { order: 5; grid-column: 1 / -1; margin-bottom: 0 !important; }
 body.minimal-ui #library-grid {
   order: 6;
   grid-column: 1 / -1;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: 12px;
-  padding: 4px 0 80px;
+  padding: 4px 0 24px;
 }
 body.minimal-ui .library-folder-card {
   display: grid;

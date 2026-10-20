@@ -27,7 +27,7 @@
 /* ── 통계 카드 그리드 ── */
 .dash-stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -93,11 +93,11 @@
    카드 내부 요소는 flex-1 및 margin-top: auto를 사용하여 빈 공간을 자연스럽게 분할한다. */
 .dash-row-recent {
   grid-template-columns: 1.2fr 1fr 0.95fr;
-  min-height: 380px;
+  min-height: 280px;
 }
 .dash-row-bottom {
   grid-template-columns: 1.3fr 1fr 1fr;
-  min-height: 340px;
+  min-height: 260px;
 }
 
 .dash-root.is-general .dash-row-3,
@@ -109,6 +109,9 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+@media (max-width: 1400px) {
+  .dash-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 1180px) {
   .dash-row-3, .dash-row-recent, .dash-row-bottom { grid-template-columns: 1fr 1fr; min-height: auto; }
 }
@@ -117,7 +120,7 @@
   .dash-root.is-general .dash-row-3,
   .dash-root.is-general .dash-row-recent,
   .dash-root.is-general .dash-row-bottom { grid-template-columns: minmax(0, 1fr); }
-  .dash-stat-grid { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); }
+  .dash-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .dash-card {
