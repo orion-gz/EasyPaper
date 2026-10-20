@@ -124,6 +124,36 @@ export async function renderFigureCrop(pageNum, imgPercent) {
   }
 }
 
+// A bounded, uncached snapshot: arbitrary user regions must not fill the figure cache.
+export async function renderPinnedCapture(pageNum, region) {
+  const source = pdfDoc
+  if (!source) throw new Error('No PDF loaded')
+  const page = await source.getPage(pageNum)
+  const base = page.getViewport({ scale: 1 })
+  const scale = Math.min(2.5, 4096 / base.width, 4096 / base.height,
+    Math.sqrt(8_000_000 / (base.width * base.height)))
+  const viewport = page.getViewport({ scale })
+  const canvas = document.createElement('canvas')
+  const crop = document.createElement('canvas')
+  try {
+    canvas.width = Math.ceil(viewport.width)
+    canvas.height = Math.ceil(viewport.height)
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    if (source !== pdfDoc) throw new Error('Document changed')
+    crop.width = Math.max(1, Math.round(region.width * canvas.width))
+    crop.height = Math.max(1, Math.round(region.height * canvas.height))
+    crop.getContext('2d').drawImage(canvas,
+      region.left * canvas.width, region.top * canvas.height,
+      region.width * canvas.width, region.height * canvas.height,
+      0, 0, crop.width, crop.height)
+    return await new Promise((resolve, reject) => crop.toBlob(blob =>
+      blob ? resolve(blob) : reject(new Error('Capture encoding failed')), 'image/png'))
+  } finally {
+    canvas.width = canvas.height = 0
+    crop.width = crop.height = 0
+  }
+}
+
 /**
  * 연속 스크롤 뷰어 초기화
  * @param {HTMLElement} container  - 스크롤 컨테이너 (#pdf-scroll-container)

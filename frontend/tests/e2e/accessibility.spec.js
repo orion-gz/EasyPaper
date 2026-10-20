@@ -68,6 +68,20 @@ test("뷰어 툴바를 Tab만으로 논리적인 순서로 이동하고 포커�
   expect(focusStyle.width).not.toBe("0px")
 })
 
+test("하단 캡처 버튼은 페이지 이동 버튼 앞에서 키보드로 접근한다", async ({ page }) => {
+  await openViewer(page)
+  const button = activeReader(page).locator('#floating-scroll-nav #pin-capture-btn')
+  await button.focus()
+  await page.keyboard.press('Tab')
+  await expect(activeReader(page).locator('#scroll-page-up-btn')).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(button).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(activeReader(page).locator('.pdf-crop-overlay')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(button).toBeFocused()
+})
+
 test("열린 채팅 패널과 메뉴도 WCAG 2.2 AA 자동 검사를 통과한다", async ({ page }) => {
   await openViewer(page)
 
