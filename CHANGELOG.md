@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.6 - 2026-10-20
+
+### 한국어 (1.4.5 → 1.4.6)
+
+- 참고문헌 미리보기에서 현재 문서를 이해하는 데 도움이 되는 읽기 우선순위를 분석하는 기능을 추가. 근거가 되는 인용 문맥, 인용 역할, 이유, 원문 페이지 이동을 제공하며 설정에서 자동 분석을 선택할 수 있음
+- PDF의 선택 영역을 최대 5개까지 화면에 고정하는 기능을 추가. 캡처를 이동·크기 조절·접기·닫기하고 원본 페이지로 이동할 수 있으며 키보드로 영역을 선택할 수 있음
+- PDF 추출 캐시를 삭제할 때 기존 번역본이 함께 삭제되지 않도록 수정
+
+### English (1.4.5 → 1.4.6)
+
+- Added reading-priority analysis in reference previews to help decide which cited works are useful for understanding the current document. It shows citation context, roles, reasons, and source-page links; automatic analysis is optional in Settings.
+- Added up to five pinned captures of selected PDF regions. Captures can be moved, resized, collapsed, closed, and linked back to their source pages; keyboard selection is supported.
+- Fixed PDF extraction-cache clearing so existing translations are preserved.
+
 ## 1.4.5 - 2026-10-16
 
 ### 한국어 (1.4.4 → 1.4.5)
