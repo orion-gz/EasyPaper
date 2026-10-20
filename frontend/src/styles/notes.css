@@ -545,3 +545,10 @@
   padding: 4px;
 }
 .notes-primer-section:empty { display: none; }
+
+@media (max-width: 640px) {
+  .notes-layout { gap: 12px; }
+  .notes-paper-header { flex-wrap: wrap; gap: 12px; padding: 16px; }
+  .notes-paper-header-actions { flex-wrap: wrap; }
+  .notes-tabs { flex-wrap: wrap; padding: 8px 12px 0; }
+}

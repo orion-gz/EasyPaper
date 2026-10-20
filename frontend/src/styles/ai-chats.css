@@ -457,7 +457,12 @@
 
 /* ── 반응형 ── */
 @media (max-width: 860px) {
+  .aic-search-box { width: 100%; min-width: 0; }
   .aic-search-box input { width: 100%; }
+  .aic-tabs { flex-wrap: wrap; }
+  .aic-controls-right { flex-wrap: wrap; }
+  .aic-table { min-width: 0; }
+  .aic-card-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
   .aic-controls { flex-direction: column; align-items: stretch; }
   .aic-controls-right { justify-content: space-between; }
   .aic-table thead { display: none; }

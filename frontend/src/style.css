@@ -8194,11 +8194,17 @@ body.light-theme .chat-drawer {
 .figure-preview-tooltip.collapsed .figure-preview-tooltip-resize-handle { display: none; }
 
 .reference-analysis-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   border-top: 1px solid var(--border-color, #8884);
   margin-top: 10px;
   padding-top: 10px;
   overflow-wrap: anywhere;
 }
+.reference-analysis-body:empty { display: none; }
+.reference-analysis-body > :first-child { margin-top: 0; }
+.reference-analysis-body > :last-child { margin-bottom: 0; }
 .reference-analysis-body p { margin: 6px 0; }
 .reference-analysis-body blockquote {
   margin: 6px 0;
