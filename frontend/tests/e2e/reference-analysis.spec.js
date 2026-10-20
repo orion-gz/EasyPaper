@@ -4,8 +4,9 @@ import { activeReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_CITATION } from './he
 const result = {
   status: 'complete', score: 85, method_score: 35, understanding_score: 35, background_score: 15,
   score_reason: 'The method is needed to understand the experiment.',
-  citation_reason: 'The authors adopt this architecture.', roles: ['method'],
-  evidence: [{ page_num: 1, quote: 'We use this method [1].' }],
+  citation_reason: 'The authors adopt this architecture. It provides the method used here.', roles: ['method'],
+  evidence: [{ page_num: 1, quote: 'We use this method [1].' },
+    { page_num: 9, quote: 'Other page content must stay hidden.' }],
 }
 
 async function openReference(page, { automatic = false, cached = false, fail = false } = {}) {
@@ -16,6 +17,8 @@ async function openReference(page, { automatic = false, cached = false, fail = f
   const requests = []
   await page.route('**/api/library/doc-C/references/1/analysis*', route => {
     requests.push(route.request().method())
+    if (route.request().method() === 'GET') expect(new URL(route.request().url()).searchParams.get('page_num')).toBe('1')
+    else expect(route.request().postDataJSON().page_num).toBe(1)
     if (route.request().method() === 'GET') return route.fulfill({ json: cached ? result : { status: 'not_analyzed' } })
     if (fail) { fail = false; return route.fulfill({ status: 502, json: { detail: 'Temporary failure' } }) }
     cached = true
@@ -36,7 +39,7 @@ async function openReference(page, { automatic = false, cached = false, fail = f
   return { requests, card, marker, reader }
 }
 
-test('manual analysis renders score, source and reason, survives retry and reuses saved result', async ({ page }) => {
+test('manual analysis renders only score and concise reason, survives retry and reuses saved result', async ({ page }) => {
   const { requests, card, reader, marker } = await openReference(page, { fail: true })
   const analyze = card.locator(':scope > button')
   await expect(analyze).toBeEnabled()
@@ -46,7 +49,9 @@ test('manual analysis renders score, source and reason, survives retry and reuse
   await analyze.click()
   await expect(card).toContainText('85/100')
   await expect(card).toContainText(result.citation_reason)
-  await expect(card.locator('blockquote')).toHaveText(result.evidence[0].quote)
+  await expect(card.locator('blockquote')).toHaveCount(0)
+  await expect(card).not.toContainText(result.score_reason)
+  await expect(card).not.toContainText(result.evidence[1].quote)
   await analyze.focus()
   await expect(analyze).toBeFocused()
   await page.keyboard.press('Escape')
@@ -54,8 +59,7 @@ test('manual analysis renders score, source and reason, survives retry and reuse
   await marker.click()
   await expect(card).toContainText('85/100')
   expect(requests.filter(method => method === 'POST')).toHaveLength(2)
-  await card.locator('.reference-analysis-body button').click()
-  await expect(reader.locator('.citation-tooltip')).toBeHidden()
+  await expect(card.locator('.reference-analysis-body button')).toHaveCount(0)
 })
 
 test('automatic setting analyzes on open and cached result does not generate again', async ({ page }) => {

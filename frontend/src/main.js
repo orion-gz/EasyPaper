@@ -15407,7 +15407,6 @@ const referenceAnalysisController = createReferenceAnalysisController({
     renderReferenceAnalysis(container, items, {
       t,
       run: key => referenceAnalysisController.run(key),
-      goToPage: page => { hideCitationTooltip(); scrollToPage(viewerScrollContainer, page) },
       reposition: positionCitationTooltip,
     })
   },
@@ -15446,7 +15445,8 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
   tooltip.classList.remove('hidden')
   tooltip.querySelector('.citation-tooltip-analysis').replaceChildren()
   referenceAnalysisController.open(
-    { docId, targetLang: getTranslationOptions().targetLang },
+    { docId, targetLang: getTranslationOptions().targetLang,
+      pageNum: Number(boxEl.closest('.pdf-page-wrapper').dataset.page) },
     citationTooltipReferences, getModeSetting('referenceAutoAnalysis', state.currentDocumentMode),
   )
   positionCitationTooltip()

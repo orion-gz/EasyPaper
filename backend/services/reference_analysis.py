@@ -11,7 +11,7 @@ from typing import Literal
 from config import get_chat_model, get_chat_provider
 from services.reference_parser import _match_section_header_prefix, _APPENDIX_HEADER_RE
 
-VERSION = 2
+VERSION = 3
 ROLES = Literal['background', 'method', 'comparison', 'support', 'critique', 'data_tool']
 _inflight = {}
 _KEY = r'(?:\d{1,3}|[A-Za-z]{1,6}\+?\d{2,4}[a-z]?)'
@@ -123,7 +123,7 @@ def _sample_contexts(found, limit):
     return [found[i] for i in sorted(selected)]
 
 
-def collect_contexts(pages, ref_key, limit=12):
+def collect_contexts(pages, ref_key, limit=12, requested_page=None):
     """Collect bounded, verbatim contexts with section-balanced sampling."""
     found, seen = [], {}
     for page_num, section, bibliography, text in _document_regions(pages):
@@ -137,14 +137,19 @@ def collect_contexts(pages, ref_key, limit=12):
             right = text.find('\n\n', end)
             right = min(right if right >= 0 else len(text), end + 600)
             quote = text[left:right].strip()
-            identity = (section, re.sub(r'\s+', ' ', quote))
+            identity = (page_num, section, re.sub(r'\s+', ' ', quote))
             if identity in seen:
                 seen[identity]['grouped'] |= len(keys) > 1
                 continue
             item = {'page_num': page_num, 'section': section, 'quote': quote, 'grouped': len(keys) > 1}
             seen[identity] = item
             found.append(item)
-    return [dict(item, id=index) for index, item in enumerate(_sample_contexts(found, limit))]
+    selected = _sample_contexts(found, limit)
+    if requested_page is not None:
+        local = [item for item in found if item['page_num'] == requested_page]
+        selected = local[:limit] + _sample_contexts(
+            [item for item in found if item['page_num'] != requested_page], max(0, limit - len(local)))
+    return [dict(item, id=index) for index, item in enumerate(selected)]
 
 
 def ambiguous_author_year(pages, ref_key):
@@ -173,8 +178,8 @@ class AnalysisOutput(BaseModel):
     method_score: StrictInt = Field(ge=0, le=40)
     understanding_score: StrictInt = Field(ge=0, le=40)
     background_score: StrictInt = Field(ge=0, le=20)
-    score_reason: str = Field(min_length=1, max_length=2000)
-    citation_reason: str = Field(min_length=1, max_length=3000)
+    score_reason: str = Field(min_length=1, max_length=400)
+    citation_reason: str = Field(min_length=1, max_length=600)
     roles: list[ROLES] = Field(max_length=6)
     evidence_ids: list[StrictInt] = Field(max_length=12)
 
@@ -204,12 +209,12 @@ def validate_result(raw, contexts):
     return data
 
 
-def cache_suffix(ref_key, target_lang):
-    identity = [VERSION, ref_key, target_lang, get_chat_provider(), get_chat_model()]
+def cache_suffix(ref_key, target_lang, page_num=None):
+    identity = [VERSION, ref_key, target_lang, page_num, get_chat_provider(), get_chat_model()]
     return hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
 
 
-async def generate_analysis(reference, contexts, title, sections, target_lang, *, ref_key):
+async def generate_analysis(reference, contexts, title, sections, target_lang, *, ref_key, page_num=None):
     from services.llm_client import stream_chat
     from services.languages import language_name
     instruction = f'''Assess reading priority ONLY for understanding the CURRENT document.
@@ -253,11 +258,19 @@ Evidence IDs must refer only to supplied contexts. For grouped citations explici
 uncertainty about individual attribution; do not invent a specific contribution.
 Use insufficient_evidence with zero component scores when no supported assessment is possible.
 The score measures reading priority, not paper quality. Sections are background only;
-all claims about the citation must be grounded in the supplied contexts.'''
+all claims about the citation must be grounded in the supplied contexts.
+Keep score_reason to one short sentence. Write citation_reason as ONE concise paragraph
+of 2-3 short sentences (at most 600 characters), explaining only why the reference is
+cited on requested_page. Do not include headings, lists, quotations, page numbers,
+other pages' citation reasons, or a general summary of the reference. Other pages and
+sections may inform the scores internally but MUST NOT appear in citation_reason.
+When requested_page is supplied, select evidence_ids only from that page. If that page
+has no citation evidence, use insufficient_evidence; never substitute another page.
+For grouped citations, include the attribution uncertainty within the same 2-3 sentences.'''
     # Keep the exact target and its evidence last, after optional document overview.
     payload = json.dumps({'title': title, 'sections': sections,
                           'target_reference': {'key': ref_key, 'text': reference},
-                          'contexts': contexts}, ensure_ascii=False)
+                          'contexts': contexts, 'requested_page': page_num}, ensure_ascii=False)
     # Calls stay stateless relative to reader chat; allow one bounded format/rubric repair.
     history = [{'role': 'user', 'content': payload}]
     for attempt in range(2):
@@ -266,7 +279,14 @@ all claims about the citation must be grounded in the supplied contexts.'''
             chunks.append(token)
         raw = ''.join(chunks)
         try:
-            return validate_result(raw, contexts)
+            result = validate_result(raw, contexts)
+            if page_num is not None:
+                sentences = re.split(r'(?<=[.!?])\s+|(?<=[。！？])', result['citation_reason'])
+                if not 2 <= len([sentence for sentence in sentences if sentence.strip()]) <= 3:
+                    raise ValueError('citation_reason must contain 2-3 short sentences')
+            if page_num is not None and any(item['page_num'] != page_num for item in result['evidence']):
+                raise ValueError('Evidence must come only from requested_page')
+            return result
         except ValueError as exc:
             if attempt:
                 raise
@@ -287,7 +307,7 @@ all claims about the citation must be grounded in the supplied contexts.'''
 
 
 
-async def analyze_document(doc, ref_key, target_lang, suffix):
+async def analyze_document(doc, ref_key, target_lang, suffix, page_num=None):
     from services.cache import get_cached_pages, save_pages_cache
     from services.pdf_parser import extract_pages
     from services.reference_parser import extract_reference_list
@@ -309,11 +329,11 @@ async def analyze_document(doc, ref_key, target_lang, suffix):
     references = extract_reference_list(pages)
     if ref_key not in references:
         raise HTTPException(404, 'Reference not found')
-    contexts = [] if ambiguous_author_year(pages, ref_key) else collect_contexts(pages, ref_key)
-    if contexts:
+    contexts = [] if ambiguous_author_year(pages, ref_key) else collect_contexts(pages, ref_key, requested_page=page_num)
+    if contexts and (page_num is None or any(item['page_num'] == page_num for item in contexts)):
         result = await asyncio.wait_for(generate_analysis(references[ref_key], contexts,
             (doc.get('metadata') or {}).get('title') or doc.get('filename', ''),
-            detect_sections(pages), target_lang, ref_key=ref_key), timeout=480)
+            detect_sections(pages), target_lang, ref_key=ref_key, page_num=page_num), timeout=480)
     else:
         result = {'status': 'insufficient_evidence', 'score': None, 'method_score': None,
                   'understanding_score': None, 'background_score': None, 'score_reason': '',
@@ -327,16 +347,16 @@ async def analyze_document(doc, ref_key, target_lang, suffix):
     return result
 
 
-async def request_analysis(doc, ref_key, target_lang, force=False):
+async def request_analysis(doc, ref_key, target_lang, force=False, page_num=None):
     from services.library import get_page_insight
-    suffix = cache_suffix(ref_key, target_lang)
+    suffix = cache_suffix(ref_key, target_lang, page_num)
     key = (doc['id'], doc.get('content_revision', 1), suffix)
     task = _inflight.get(key)
     if task is None:
         cached = get_page_insight(doc['id'], 0, 'reference_analysis', suffix=suffix)
         if cached is not None and not force:
             return json.loads(cached)
-        task = asyncio.create_task(analyze_document(doc, ref_key, target_lang, suffix))
+        task = asyncio.create_task(analyze_document(doc, ref_key, target_lang, suffix, page_num))
         _inflight[key] = task
         def completed(done):
             _inflight.pop(key, None)

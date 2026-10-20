@@ -476,17 +476,18 @@ export async function regeneratePrimer(docId, targetLang = '한국어') {
   return res.json()
 }
 
-export async function fetchReferenceAnalysis({ docId, targetLang }, refKey) {
+export async function fetchReferenceAnalysis({ docId, targetLang, pageNum }, refKey) {
   const query = new URLSearchParams({ target_lang: targetLang })
+  if (pageNum != null) query.set('page_num', pageNum)
   const response = await fetch(`${API_BASE}/library/${docId}/references/${encodeURIComponent(refKey)}/analysis?${query}`)
   if (!response.ok) throw new Error('Reference analysis lookup failed')
   return response.json()
 }
 
-export async function analyzeReference({ docId, targetLang }, refKey, force = false) {
+export async function analyzeReference({ docId, targetLang, pageNum }, refKey, force = false) {
   const response = await fetch(`${API_BASE}/library/${docId}/references/${encodeURIComponent(refKey)}/analysis`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target_lang: targetLang, force }),
+    body: JSON.stringify({ target_lang: targetLang, force, page_num: pageNum }),
   })
   if (!response.ok) throw new Error('Reference analysis failed')
   return response.json()
