@@ -302,6 +302,28 @@ export function installDocumentRuntime(adapter) {
   errors.observe($('chat-messages'), { childList: true, subtree: true })
   const runtime = {
     ready: true,
+    commandState: () => ({ page: snapshot().page, totalPages: adapter.state.totalPages, zoom: adapter.state.zoom, chatBusy: Boolean(adapter.state.chatActiveStream) }),
+    captureCommandContext() {
+      const selection = window.getSelection()
+      return { documentId: adapter.state.sessionId, text: selection && scroll.contains(selection.anchorNode) ? selection.toString().trim() : '', page: snapshot().page }
+    },
+    async executeCommand(name, argument, context) {
+      const page = snapshot().page
+      if (['page', 'next-page', 'previous-page'].includes(name)) {
+        const target = name === 'page' ? Number(argument) : page + (name === 'next-page' ? 1 : -1)
+        if (!Number.isInteger(target) || target < 1 || target > adapter.state.totalPages) throw new Error(t('viewer:commands.pageRange', { total: adapter.state.totalPages }))
+        adapter.goToPage(target); adapter.state.currentPage = target; return
+      }
+      if (['zoom', 'zoom-in', 'zoom-out'].includes(name)) {
+        const zoom = name === 'zoom' ? parseFloat(argument) / 100 : adapter.state.zoom + (name === 'zoom-in' ? 0.2 : -0.2)
+        readerTools.restore(false)
+        await adapter.zoom(Math.max(0.5, Math.min(3, zoom))); publishSnapshot(); return
+      }
+      if (name === 'fit-width') { if (adapter.state.currentContentKind === 'html_article') await adapter.zoom(1); readerTools.restore(true); await readerTools.fitNow(); publishSnapshot(); return }
+      if (name === 'outline') { setNavigation('outline'); adapter.setPanels({ panel: false, outline: true }); return }
+      if (['ask', 'new-chat', 'summarize'].includes(name)) runtime.activateChat()
+      return adapter.commandActions(name, { argument, page, context })
+    },
     toggleFocusReading: () => focusReading.toggle(),
     toggleTranslation: () => adapter.setTranslationCollapsed?.(!adapter.translationCollapsed?.()),
     attention: active => adapter.attention?.(active),

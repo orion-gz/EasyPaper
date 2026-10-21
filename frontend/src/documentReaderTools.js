@@ -80,7 +80,7 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
   }
   function scheduleFit() { clearTimeout(fitTimer); fitTimer = setTimeout(applyFit, 100) }
   function manualZoom(event) {
-    if (event.type === 'click' && !event.target.closest('#zoom-in-btn, #zoom-out-btn')) return
+    if (event.type === 'click' && !event.target.closest('#zoom-in-btn, #zoom-out-btn, .article-toolbar [data-zoom]')) return
     if (event.type === 'change' && event.target.id !== 'setting-default-zoom') return
     if (event.type === 'wheel' && !event.ctrlKey) return
     if (event.type === 'touchstart' && event.touches.length < 2) return

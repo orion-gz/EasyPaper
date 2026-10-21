@@ -94,7 +94,7 @@ function restoreResources(root, annotations, memos, renderMarkdown, onDeleteMemo
 }
 
 export async function mountArticleViewer(options) {
-  const { readerFeatureEnabled = () => true, onReaderPreferences = () => () => {}, container, doc, manifest, sanitize, getTranslation, translationOptions, loadAnnotations, saveAnnotations, loadMemos, saveMemos, renderMarkdown, labels, onCurrentUnit, onOutline, onCapture } = options
+  const { readerFeatureEnabled = () => true, onReaderPreferences = () => () => {}, container, doc, manifest, sanitize, getTranslation, translationOptions, loadAnnotations, saveAnnotations, loadMemos, saveMemos, renderMarkdown, labels, onCurrentUnit, onOutline, onCapture, onZoom = () => {} } = options
   const root = document.createElement('article'); root.className = 'article-viewer'; root.style.setProperty('--article-zoom', '1')
   const toolbar = document.createElement('div'); toolbar.className = 'article-toolbar'
   toolbar.innerHTML = `<div class="article-tabs" role="tablist"><button type="button" class="active" data-tab="snapshot">${labels.snapshot}</button><button type="button" data-tab="original">${labels.original}</button></div><label class="article-search"><span>${labels.search}</span><input type="search" autocomplete="off"></label><button type="button" data-zoom="out" aria-label="${labels.zoomOut}">−</button><button type="button" data-zoom="in" aria-label="${labels.zoomIn}">+</button><button type="button" data-capture>${labels.capture}</button><a class="btn btn-secondary" target="_blank" rel="noopener noreferrer">${labels.openOriginal}</a>`
@@ -174,7 +174,7 @@ export async function mountArticleViewer(options) {
     const tab = event.target.closest('[data-tab]')?.dataset.tab
     if (tab) { toolbar.querySelectorAll('[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === tab)); snapshot.classList.toggle('hidden', tab !== 'snapshot'); original.classList.toggle('hidden', tab !== 'original') }
     const direction = event.target.closest('[data-zoom]')?.dataset.zoom
-    if (direction) { zoom = Math.min(1.8, Math.max(.7, zoom + (direction === 'in' ? .1 : -.1))); root.style.setProperty('--article-zoom', String(zoom)) }
+    if (direction) { zoom = Math.min(1.8, Math.max(.7, zoom + (direction === 'in' ? .1 : -.1))); root.style.setProperty('--article-zoom', String(zoom)); onZoom(zoom) }
     if (event.target.closest('[data-capture]')) {
       const unit = root.querySelector(`.article-unit[data-unit-index="${currentUnit}"]`) || root.querySelector('.article-unit')
       if (unit) import('html2canvas').then(({ default: html2canvas }) => html2canvas(unit, { backgroundColor: '#ffffff', useCORS: true, scale: Math.min(2, window.devicePixelRatio || 1) })).then(canvas => onCapture(canvas.toDataURL('image/png'), currentUnit)).catch(() => {})
@@ -189,5 +189,17 @@ export async function mountArticleViewer(options) {
   const observer = new IntersectionObserver(entries => { const visible = entries.filter(entry => entry.isIntersecting).sort((a,b) => b.intersectionRatio-a.intersectionRatio)[0]; if (visible) { currentUnit = Number(visible.target.dataset.unitIndex); onCurrentUnit(currentUnit) } }, { root: container, threshold: [.25,.5,.75] })
   root.querySelectorAll('.article-unit').forEach(unit => observer.observe(unit))
   const timer = setInterval(async () => { for (const pane of root.querySelectorAll('.article-translation')) { const data = await getTranslation(Number(pane.dataset.unitIndex)); const content = pane.querySelector('.trans-page-content') || pane; if (data?.translation && content.textContent !== data.translation) content.textContent = data.translation } }, 3000)
-  return { root, destroy() { unsubscribePreferences(); clearInterval(timer); observer.disconnect(); selectionTools.remove(); referencePreview.remove() } }
+  return { root,
+    setZoom(value) { zoom = value; root.style.setProperty('--article-zoom', String(zoom)); onZoom(zoom) },
+    addPageMemo(page, content) {
+      const block = root.querySelector(`.article-unit[data-unit-index="${page}"] [data-block-id]`)
+      if (!block) return false
+      const key = `section_${page}`
+      const all = loadMemos()
+      const memo = { id: crypto.randomUUID(), content, anchor: { block_id: block.dataset.blockId, exact: '', prefix: '', suffix: '' }, createdAt: new Date().toISOString() }
+      ;(all[key] ||= []).push(memo)
+      saveMemos(all); appendMemoCard(block, key, memo, renderMarkdown, deleteMemo)
+      return true
+    },
+    destroy() { unsubscribePreferences(); clearInterval(timer); observer.disconnect(); selectionTools.remove(); referencePreview.remove() } }
 }

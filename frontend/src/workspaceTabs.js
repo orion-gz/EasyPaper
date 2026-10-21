@@ -64,7 +64,20 @@ export function createWorkspaceTabs(adapter) {
   const commandSearch = installCommandSearch({
     shell, mount: topnav.querySelector('.workspace-topnav-actions'), mode: adapter.mode,
     runtime: () => frames.get(visibleId)?.frame.contentWindow?.__easypaperDocument,
-    navigate: hash => { location.hash = hash },
+    navigate: hash => { location.hash = hash }, toast: adapter.toast,
+    actions: {
+      upload: adapter.uploadFile, importUrl: adapter.importUrl, theme: adapter.theme,
+      sidebar: adapter.toggleSidebar,
+      fullscreen: () => document.fullscreenElement ? document.exitFullscreen() : shell.requestFullscreen(),
+      canClose: () => Boolean(store?.active) && !(isMinimalUi() && store.activeTabId === 'page:library'),
+      closeTab: () => enqueue(() => closeTab(store.activeTabId)),
+      canReopen: () => Boolean(store?.canReopen),
+      reopenTab: () => enqueue(async () => {
+        await leaveCurrent()
+        const tab = store.reopenTab()
+        if (tab) { visibleId = null; await activate(tab.id, { push: true }) }
+      }),
+    },
   })
   function syncScale() {
     const scale = Number(document.documentElement.style.zoom) || 1
@@ -350,14 +363,14 @@ export function createWorkspaceTabs(adapter) {
     render()
     if (!dragId) tablist.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }
-  async function closeTab(id) {
+  async function closeTab(id, { remember = true } = {}) {
     if (isMinimalUi() && id === 'page:library') return
     const active = store.activeTabId === id
     const record = frames.get(id)
     const runtime = record?.frame.contentWindow?.__easypaperDocument
     if (active) await leaveCurrent()
     if (runtime?.ready) flushFrame(record, runtime, true)
-    store.closeTab(id)
+    store.closeTab(id, { remember })
     if (record) {
       record.closed = true
       record.frame.hidden = true
@@ -523,8 +536,8 @@ export function createWorkspaceTabs(adapter) {
     }
     if (type === 'unavailable') enqueue(async () => {
       adapter.toast(t('navigation:tabs.unavailable'), 'warning')
-      if (record.store === store) await closeTab(id)
-      else { record.store.closeTab(id); record.frame.remove(); record.ownerFrames.delete(id) }
+      if (record.store === store) await closeTab(id, { remember: false })
+      else { record.store.closeTab(id, { remember: false }); record.frame.remove(); record.ownerFrames.delete(id) }
     })
   })
   const api = {
