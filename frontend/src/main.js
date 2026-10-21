@@ -4610,14 +4610,14 @@ async function changeProviderAndModel(type, newProvider, newModel) {
 }
 
 // ── EasyPaper 설정 모달 이벤트 ──────────────────────────
-globalSettingsBtn.addEventListener('click', async () => {
+async function openSettingsCategory(category = 'tab-general') {
   await loadFeatureNamespaces('settings')
   syncUiScaleControl(settingUiScale)
   syncSelectValue(settingDefaultZoom, localStorage.getItem('easypaper_default_zoom') || '1.5')
   openOverlayModal(settingsModal)
 
-  // 1. 기본 진입 카테고리는 일반
-  activateSettingsCategory('tab-general')
+  // 1. 요청된 설정 카테고리로 진입 (기본값: 일반)
+  activateSettingsCategory(category)
 
   // 2. 일반 설정값 로드
   syncModeSettings(workspaceModeController.getMode())
@@ -4646,6 +4646,15 @@ globalSettingsBtn.addEventListener('click', async () => {
       console.warn('로그인 생략 설정 로드 실패:', err)
     }
   }
+}
+
+globalSettingsBtn.addEventListener('click', event => {
+  const requested = event.detail?.category
+  const category = [...tabBtns].some(button => button.dataset.tab === requested) ? requested : 'tab-general'
+  void openSettingsCategory(category)
+})
+document.addEventListener('easypaper:open-settings', event => {
+  globalSettingsBtn.dispatchEvent(new CustomEvent('click', { detail: event.detail }))
 })
 
 closeSettingsBtn.addEventListener('click', () => {

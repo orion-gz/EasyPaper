@@ -1,6 +1,7 @@
 import { icon } from './icons.js'
 import { searchWorkspaceAPI } from './api.js'
-import { t } from './i18n.js'
+import { isMinimalUi } from './minimalUi.js'
+import { t, loadFeatureNamespaces } from './i18n.js'
 import { readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 
 export function installCommandSearch({ shell, mount, mode, runtime, navigate }) {
@@ -22,11 +23,29 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
   function close() { resetResults(); revision++; controller?.abort(); clearTimeout(timer); dialog.close(); previous?.focus?.({ preventScroll: true }) }
   function commands() {
     const reader = runtime()
+    const openSettings = category => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category } }))
+    const settings = [
+      ['general', t('settings:categoryGeneral'), 'language appearance theme'],
+      ['translation', t('settings:categoryTranslation'), 'translate language'],
+      ['viewer', t('settings:categoryViewer'), 'reader zoom'],
+      ['shortcuts', t('settings:categoryShortcuts'), 'keyboard hotkeys'],
+      ['automation', t('settings:categoryAutomation'), 'generation'],
+      ['model', t('settings:categoryModel'), 'models ai provider'],
+      ['account', t('settings:categoryAccount'), 'password security'],
+      ['data-system', t('settings:categoryDataSystem'), 'export import backup cache'],
+      ['info', t('settings:categoryInfo'), 'about update version'],
+    ].map(([id, text, keywords]) => ({ id, text, keywords, global: true, run: () => openSettings(`tab-${id}`) }))
+    const pages = ['dashboard', 'library', 'history', 'chats', 'notes']
+      .filter(page => !isMinimalUi() || page === 'library')
+      .map(page => ({ id: page, text: t(`navigation:${page}`), global: true, run: () => document.querySelector(`.sidebar-nav-item[data-page="${page}"]`)?.click() }))
     return [
-      { text: t('viewer:comfort.focusReading'), feature: 'focusReading', run: () => reader.toggleFocusReading() },
-      { text: t('viewer:comfort.translationCommand'), run: () => reader.toggleTranslation() },
-      { text: t('viewer:comfort.findCommand'), run: () => reader.find() },
-      { text: t('viewer:comfort.settingsCommand'), global: true, run: () => document.getElementById('sidebar-settings-btn')?.click() },
+      { id: 'focus', text: t('viewer:comfort.focusReading'), feature: 'focusReading', run: () => reader.toggleFocusReading() },
+      { id: 'translate', text: t('viewer:comfort.translationCommand'), run: () => reader.toggleTranslation() },
+      { id: 'find', text: t('viewer:comfort.findCommand'), run: () => reader.find() },
+      { id: 'settings', text: t('viewer:comfort.settingsCommand'), global: true, run: () => openSettings('tab-general') },
+      { id: 'theme', text: t('navigation:theme'), keywords: 'dark light', global: true, run: () => document.getElementById('sidebar-theme-toggle-btn')?.click() },
+      { id: 'logout', text: t('navigation:logout'), keywords: 'sign out', global: true, run: () => document.getElementById('sidebar-logout-btn')?.click() },
+      ...settings, ...pages,
     ].map(command => ({ ...command, kind: 'command', disabled: !command.global && !reader ? t('viewer:comfort.readerRequired') : command.feature && !readerFeatureEnabled(command.feature) ? t('viewer:comfort.featureDisabled') : '' }))
   }
   function select(index) {
@@ -53,7 +72,7 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
       const option = document.createElement('div'); option.id = `reader-command-${index}`; option.setAttribute('role', 'option')
       option.setAttribute('aria-disabled', String(Boolean(item.disabled)))
       const title = document.createElement('strong'); title.textContent = `${labels[item.kind]} · ${item.title || item.text}`
-      const detail = document.createElement('p'); detail.textContent = item.disabled || (item.title ? item.text : '')
+      const detail = document.createElement('p'); detail.textContent = item.kind === 'command' ? `/${item.id}${item.disabled ? ` · ${item.disabled}` : ''}` : item.text
       option.append(title, detail); option.addEventListener('click', () => execute(index)); list.append(option)
     })
     status.textContent = items.length ? '' : t('viewer:comfort.searchEmpty'); select(0)
@@ -61,10 +80,12 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
   async function search() {
     const token = ++revision; controller?.abort(); controller = new AbortController()
     const query = input.value.trim()
-    const available = commands().filter(item => item.text.toLocaleLowerCase().includes(query.replace(/^>/, '').trim().toLocaleLowerCase()))
-    if (query.startsWith('>')) { render(available); return }
     status.textContent = t('viewer:comfort.searchLoading')
     try {
+      await loadFeatureNamespaces('settings')
+      if (token !== revision || !dialog.open) return
+      const available = commands().filter(item => `${item.id} ${item.text} ${item.keywords || ''}`.toLocaleLowerCase().includes(query.replace(/^\//, '').trim().toLocaleLowerCase()))
+      if (query.startsWith('/')) { render(available); return }
       const result = await searchWorkspaceAPI(query, mode(), controller.signal)
       if (token === revision && dialog.open) render([...(result.results || []), ...(!query ? available : [])])
     } catch (error) { if (token === revision && error.name !== 'AbortError') { render([]); status.textContent = t('viewer:comfort.searchError') } }

@@ -52,7 +52,7 @@ test('command palette works from iframe and focus restores panels', async ({ pag
   await page.keyboard.press('Control+k')
   const input = page.locator('#reader-command-dialog input')
   await expect(input).toBeFocused()
-  await input.fill('> 집중')
+  await input.fill('/ 집중')
   await expect(page.locator('#reader-command-results [role="option"]')).toHaveCount(1)
   await input.press('Enter')
   await expect(reader(page).locator('#chat-sidebar')).toBeVisible()
@@ -135,4 +135,59 @@ test('closed readers restore zoom and translation visibility; disabling starts f
   await page.locator('.workspace-tab[data-tab-id="document:comfort"] .workspace-tab-close').click()
   await open(page)
   await expect.poll(() => reader(page).locator('body').evaluate(() => window.__easypaperDocument.snapshot().fitWidth)).toBe(true)
+})
+
+async function command(page, query) {
+  await page.keyboard.press('Control+k')
+  const input = page.locator('#reader-command-dialog input')
+  await input.fill(query)
+  return input
+}
+
+test('slash commands open settings categories and accept Korean labels', async ({ page }) => {
+  await setup(page)
+  let searches = 0
+  page.on('request', request => { if (request.url().includes('/command-search?')) searches++ })
+  const input = await command(page, '/model')
+  await expect(page.locator('#reader-command-results [role="option"]')).toHaveCount(1)
+  const before = searches
+  await input.fill('/모델')
+  await expect(page.locator('#reader-command-results [role="option"]')).toHaveCount(1)
+  expect(searches).toBe(before)
+  await input.press('Enter')
+  await expect(page.locator('#tab-model')).toBeVisible()
+  await expect(page.locator('#settings-nav-model')).toHaveAttribute('aria-selected', 'true')
+  await page.locator('#close-settings-btn').click()
+  await command(page, '/shortcuts')
+  await page.locator('#reader-command-results [role="option"]').click()
+  await expect(page.locator('#tab-shortcuts')).toBeVisible()
+})
+
+test('theme and logout commands reuse existing actions', async ({ page }) => {
+  await setup(page)
+  const wasLight = await page.locator('body').evaluate(el => el.classList.contains('light-theme'))
+  await command(page, '/theme')
+  await page.locator('#reader-command-results [role="option"]').filter({ hasText: '/theme' }).click()
+  await expect.poll(() => page.locator('body').evaluate(el => el.classList.contains('light-theme'))).toBe(!wasLight)
+  let loggedOut = false
+  await page.route('**/api/auth/logout', route => { loggedOut = true; return route.fulfill({ json: { success: true } }) })
+  await command(page, '/logout')
+  await page.locator('#reader-command-results [role="option"]').click()
+  await expect(page.locator('.custom-confirm-modal')).toBeVisible()
+  expect(loggedOut).toBe(false)
+  await page.locator('.custom-confirm-modal .cancel-btn').click()
+  expect(loggedOut).toBe(false)
+})
+
+test('slash lists commands, disables reader actions, and navigates pages', async ({ page }) => {
+  await setup(page)
+  const input = await command(page, '/')
+  await expect(page.locator('#reader-command-results')).toContainText('/model')
+  const focus = page.locator('#reader-command-results [role="option"]').filter({ hasText: '/focus' })
+  await expect(focus).toHaveAttribute('aria-disabled', 'true')
+  await input.fill('/notes')
+  await expect(page.locator('#reader-command-results [role="option"]')).toHaveCount(1)
+  await input.press('ArrowDown')
+  await input.press('Enter')
+  await expect(page.locator('.workspace-tab[data-tab-id="page:notes"]')).toHaveClass(/active/)
 })
