@@ -142,7 +142,7 @@
   "comfort.classification": "문서 분류",
   "comfort.commandSearch": "통합 검색·명령창",
   "comfort.searchHint": "문서·메모·질문을 검색하세요",
-  "comfort.commandHint": "앱 기능 찾기: > 뒤에 기능 이름을 입력하세요 (예: >설정)",
+  "comfort.commandHint": "앱 기능 찾기: / 뒤에 기능 이름을 입력하세요 (예: /설정)",
   "comfort.searchEmpty": "일치하는 결과가 없습니다",
   "comfort.searchLoading": "검색 중…",
   "comfort.searchError": "검색에 실패했습니다. 다시 입력해 재시도하세요.",
