@@ -95,7 +95,7 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
     resetResults(); previous = document.activeElement; input.value = ''; dialog.showModal(); input.focus(); void search()
   }
   const handleShortcut = event => {
-    if (event.isComposing || event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'k' || !readerFeatureEnabled('commandSearch') || shell.hidden) return
+    if (event.isComposing || event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || (event.code !== 'KeyK' && event.key.toLowerCase() !== 'k') || !readerFeatureEnabled('commandSearch') || shell.hidden) return
     event.preventDefault(); event.stopPropagation(); if (dialog.open) close(); else open()
   }
   button.addEventListener('click', open)
@@ -110,9 +110,9 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate }) 
   dialog.addEventListener('cancel', event => { event.preventDefault(); close() })
   dialog.addEventListener('click', event => { if (event.target === dialog) { const r = dialog.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) close() } })
   const sync = () => {
-    button.hidden = !readerFeatureEnabled('commandSearch'); button.innerHTML = icon('search', 18); button.title = t('viewer:comfort.commandSearch'); button.setAttribute('aria-label', button.title)
+    button.hidden = !readerFeatureEnabled('commandSearch'); button.innerHTML = icon('search', 18); button.title = `${t('viewer:comfort.commandSearch')} (Ctrl/Cmd+K)`; button.setAttribute('aria-label', t('viewer:comfort.commandSearch')); button.setAttribute('aria-keyshortcuts', 'Control+K Meta+K')
     help.textContent = t('viewer:comfort.commandHint')
-    input.placeholder = t('viewer:comfort.searchHint'); input.setAttribute('aria-label', input.placeholder); dialog.setAttribute('aria-label', button.title)
+    input.placeholder = t('viewer:comfort.searchHint'); input.setAttribute('aria-label', input.placeholder); dialog.setAttribute('aria-label', t('viewer:comfort.commandSearch'))
     if (button.hidden && dialog.open) close()
   }
   new MutationObserver(() => { if (shell.hidden && dialog.open) close() }).observe(shell, { attributes: true, attributeFilter: ['hidden'] })

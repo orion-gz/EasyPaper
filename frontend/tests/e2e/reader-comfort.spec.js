@@ -191,3 +191,23 @@ test('slash lists commands, disables reader actions, and navigates pages', async
   await input.press('Enter')
   await expect(page.locator('.workspace-tab[data-tab-id="page:notes"]')).toHaveClass(/active/)
 })
+
+
+test('command search exposes its shortcut and supports Korean keyboard keys', async ({ page }) => {
+  await setup(page)
+  const button = page.locator('#reader-command-search')
+  const dialog = page.locator('#reader-command-dialog')
+  await expect(button).toHaveAttribute('title', /Ctrl\/Cmd\+K/)
+  await expect(button).toHaveAttribute('aria-keyshortcuts', 'Control+K Meta+K')
+  for (const modifier of ['ctrlKey', 'metaKey']) {
+    await page.evaluate(modifier => document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ㅏ', code: 'KeyK', [modifier]: true, bubbles: true, cancelable: true,
+    })), modifier)
+    await expect(dialog).toBeVisible()
+    await expect(dialog.locator('input')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(dialog).not.toBeVisible()
+  }
+  await page.keyboard.press('Control+Shift+k')
+  await expect(dialog).not.toBeVisible()
+})
