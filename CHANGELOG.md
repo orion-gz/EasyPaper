@@ -2,6 +2,22 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.7 - 2026-10-21
+
+### 한국어 (1.4.6 → 1.4.7)
+
+- Spotlight 스타일 검색의 `/` 명령을 확장하여 설정 카테고리·작업 공간 페이지 이동, 테마 전환, 로그아웃, 읽기 작업을 지원. 명령 ID·번역된 이름·키워드로 검색할 수 있으며 미니멀 UI에서는 사용 가능한 페이지만 표시
+- 검색창을 화면 중앙에 배치하고 검색·명령 안내 문구를 명확히 하며 검색 입력창의 포커스 테두리를 제거
+- 검색 결과와 작업 목록을 포함한 작업 공간 화면의 글꼴·테마 토큰·간격을 일관되게 정리
+- 참고문헌 읽기 우선순위 미리보기를 점수와 현재 페이지의 간결한 인용 이유로 정리. 요청 페이지별로 분석·캐시를 구분하고 해당 페이지의 인용 근거만 사용하도록 수정
+
+### English (1.4.6 → 1.4.7)
+
+- Expanded Spotlight-style search with `/` commands for settings categories, workspace pages, theme switching, logout, and reader actions. Find commands by ID, localized label, or keywords; minimal UI only lists available pages.
+- Centered the search dialog, clarified search and command hints, and removed the search input focus border.
+- Unified UI typography, theme tokens, and spacing across workspace views, including search results and the task list.
+- Simplified reference reading-priority previews to a score and a concise citation reason for the current page. Analysis and cached results are scoped to the requested page, with citation evidence restricted to that page.
+
 ## 1.4.6 - 2026-10-20
 
 ### 한국어 (1.4.5 → 1.4.6)
