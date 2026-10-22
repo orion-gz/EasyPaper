@@ -12,6 +12,7 @@ import { createThemeEditor } from './themes/themeEditor.js'
 import { documentUiCopy } from './documentUiCopy.js'
 import { createEasyEnglishController } from './easyEnglish.js'
 import { createReadingClock, createReadingOutbox, isReadingWindowActive } from './readingHeartbeat.js'
+import { createReaderCommandActions } from './readerCommandActions.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
 import { initializeDesktopWindow } from './desktopWindow.js'
 import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './documentWorkspaceRuntime.js'
@@ -2417,6 +2418,11 @@ function clearZoomPreviewTransform() {
 }
 
 async function setZoom(newZoom) {
+  if (state.currentContentKind === 'html_article' && state.articleViewer) {
+    state.zoom = Math.max(0.5, Math.min(3, newZoom))
+    state.articleViewer.setZoom(state.zoom)
+    return
+  }
   cancelZoomGesture()
   const anchorPage = state.currentPage
   const anchor = viewerScrollContainer.querySelector(`.page-pair[data-page="${anchorPage}"]`)
@@ -3235,6 +3241,9 @@ async function checkAuthentication() {
         locale: getLocale,
         invalidateReadData: invalidateLibraryGetCache,
         toast: showToast, upload: openDocumentSourceModal, authExpired: showLogin,
+        uploadFile: () => fileInput.click(),
+        importUrl: () => $('document-source-web').click(),
+        theme: scheme => { if (!scheme || document.body.classList.contains('light-theme') !== (scheme === 'light')) toggleTheme() },
         hideChatDrawer: () => { chatDrawerEl?.classList.remove('open'); chatDrawerOverlayEl?.classList.remove('open'); chatDrawerEl?.setAttribute('aria-hidden', 'true') },
         flushPage: async () => {
           if (state.currentWorkspacePage === 'library') {
@@ -19555,6 +19564,7 @@ async function renderArticleDocument(doc) {
   state.articleViewer?.destroy?.()
   const manifest = await getArticleAPI(doc.id)
   state.currentContentKind = 'html_article'
+  state.zoom = 1
   state.articleViewer = await mountArticleViewer({
     container: viewerScrollContainer, doc, manifest, readerFeatureEnabled, onReaderPreferences,
     sanitize: html => DOMPurify.sanitize(html, { ADD_ATTR: ['data-block-id', 'data-original-url'] }),
@@ -19570,6 +19580,7 @@ async function renderArticleDocument(doc) {
       translationPending: t('library:article.translationPending'), highlight: t('library:article.highlight'),
       underline: t('library:article.underline'), memo: t('library:article.memo'), memoPrompt: t('library:article.memoPrompt'), capture: t('library:article.capture'),
     },
+    onZoom: zoom => { state.zoom = zoom },
     onCurrentUnit: index => { state.currentPage = index; pageInput.value = index; easyEnglishController?.schedule() },
     onQuickAction: (action, text, page) => {
       if (state.chatActiveStream) return
@@ -19594,12 +19605,19 @@ async function renderArticleDocument(doc) {
 
 // A reader owns its state, DOM, worker, streams and annotation queue.
 function installReaderWorkspaceRuntime() {
+  const commandActions = createReaderCommandActions({
+    state, toast: showToast, loadMemos, saveMemos, renderPageMemos,
+    revealMemos: () => { if (allMemosHidden) memosHideAllBtn.click() },
+    ask: askAIAssistant, resetChat: resetChatUI, sendChat: sendChatMessage,
+    confirm: message => showCustomConfirm(message),
+    promptMemo: () => showCustomTextDialog({ title: t('viewer:commands.memo'), label: t('viewer:commands.memoPrompt') }),
+  })
   installDocumentRuntime({
-    state, toast: showToast,
+    state, toast: showToast, commandActions,
     memos: () => loadMemos(state.sessionId),
     annotations: () => loadAnnotations(state.sessionId),
     thumbnail: renderPDFThumbnail,
-    pageWidth: () => getPDFPageWidth(state.currentPage),
+    pageWidth: () => state.currentContentKind === 'html_article' ? null : getPDFPageWidth(state.currentPage),
     pageText: (page, signal) => Boolean(viewerScrollContainer.querySelector('.article-unit'))
       ? Promise.resolve(viewerScrollContainer.querySelector(`.article-unit[data-unit-index="${page}"] .article-original`)?.textContent || '')
       : getPDFPageText(page, signal),

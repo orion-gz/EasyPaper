@@ -23,6 +23,7 @@ export function sanitizeReading(value = {}) {
 export function createTabsStore({ storage, key, mode = 'research', minimal = false, onStorageError = () => {} }) {
   let tabs = []
   let readings = {}
+  const closedTabs = []
   let activeTabId = null
   const listeners = new Set()
   function save() {
@@ -75,6 +76,7 @@ export function createTabsStore({ storage, key, mode = 'research', minimal = fal
     openTab(kind, target, title = target) {
       if (!allowed(kind, target) || (minimal && !isMinimalTabAllowed({ kind, target }))) throw new Error('Unsupported workspace tab')
       const id = tabKey(kind, target)
+      for (let i = closedTabs.length - 1; i >= 0; i--) if (closedTabs[i].id === id) closedTabs.splice(i, 1)
       let tab = tabs.find(item => item.id === id)
       if (!tab) {
         tab = { id, kind, target, title, ...(kind === 'document' && readerFeatureEnabled('restoreReading', storage) && readings[target] ? { reading: readings[target] } : {}) }
@@ -93,11 +95,24 @@ export function createTabsStore({ storage, key, mode = 'research', minimal = fal
       notify()
       return tab
     },
-    closeTab(id) {
+    get canReopen() { return closedTabs.some(tab => !minimal || isMinimalTabAllowed(tab)) },
+    reopenTab() {
+      const index = closedTabs.findLastIndex(tab => !minimal || isMinimalTabAllowed(tab))
+      if (index < 0) return null
+      const [closed] = closedTabs.splice(index, 1)
+      const tab = api.openTab(closed.kind, closed.target, closed.title)
+      api.update(tab.id, { route: closed.route, ...(closed.reading ? { reading: closed.reading } : {}) })
+      return tab
+    },
+    closeTab(id, { remember = true } = {}) {
       if (minimal && id === 'page:library') return api.active
       const index = tabs.findIndex(tab => tab.id === id)
       if (index < 0) return api.active
       const visibleIndex = api.visibleTabs.findIndex(tab => tab.id === id)
+      if (remember) {
+        closedTabs.push(structuredClone(tabs[index]))
+        if (closedTabs.length > 20) closedTabs.shift()
+      }
       tabs.splice(index, 1)
       if (activeTabId === id) activeTabId = (api.visibleTabs[visibleIndex] || api.visibleTabs[visibleIndex - 1])?.id || null
       if (!tabs.length) return api.openTab('page', minimal ? 'library' : 'dashboard')

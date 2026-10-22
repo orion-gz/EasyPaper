@@ -5656,5 +5656,125 @@
   },
   "viewer:capture.selectionPosition": {
     "description": "Capture accessibility: Selection: left {{left}}%, top {{top}}%, width {{width}}%, height {{height}}%."
+  },
+  "viewer:commands.open": {
+    "description": "Spotlight command: Open a document"
+  },
+  "viewer:commands.recent": {
+    "description": "Spotlight command: Recently read documents"
+  },
+  "viewer:commands.help": {
+    "description": "Spotlight command: Show all commands"
+  },
+  "viewer:commands.upload": {
+    "description": "Spotlight command: Upload a PDF"
+  },
+  "viewer:commands.importUrl": {
+    "description": "Spotlight command: Import a document from URL"
+  },
+  "viewer:commands.tasks": {
+    "description": "Spotlight command: Show running tasks"
+  },
+  "viewer:commands.sidebar": {
+    "description": "Spotlight command: Toggle sidebar"
+  },
+  "viewer:commands.closeTab": {
+    "description": "Spotlight command: Close current tab"
+  },
+  "viewer:commands.reopenTab": {
+    "description": "Spotlight command: Reopen last closed tab"
+  },
+  "viewer:commands.nextPage": {
+    "description": "Spotlight command: Next page"
+  },
+  "viewer:commands.previousPage": {
+    "description": "Spotlight command: Previous page"
+  },
+  "viewer:commands.page": {
+    "description": "Spotlight command: Go to page"
+  },
+  "viewer:commands.zoom": {
+    "description": "Spotlight command: Set zoom percentage"
+  },
+  "viewer:commands.zoomIn": {
+    "description": "Spotlight command: Zoom in"
+  },
+  "viewer:commands.zoomOut": {
+    "description": "Spotlight command: Zoom out"
+  },
+  "viewer:commands.bookmark": {
+    "description": "Spotlight command: Toggle page bookmark"
+  },
+  "viewer:commands.memo": {
+    "description": "Spotlight command: Add a page memo"
+  },
+  "viewer:commands.ask": {
+    "description": "Spotlight command: Ask AI about this document"
+  },
+  "viewer:commands.newChat": {
+    "description": "Spotlight command: Start a fresh conversation"
+  },
+  "viewer:commands.summarize": {
+    "description": "Spotlight command: Summarize selection or document"
+  },
+  "viewer:commands.copyCitation": {
+    "description": "Spotlight command: Copy document citation"
+  },
+  "viewer:commands.minimalUnavailable": {
+    "description": "Spotlight command: Unavailable in minimal mode"
+  },
+  "viewer:commands.cannotClose": {
+    "description": "Spotlight command: This tab must stay open"
+  },
+  "viewer:commands.noClosedTab": {
+    "description": "Spotlight command: No closed tabs to reopen"
+  },
+  "viewer:commands.firstPage": {
+    "description": "Spotlight command: Already on the first page"
+  },
+  "viewer:commands.lastPage": {
+    "description": "Spotlight command: Already on the last page"
+  },
+  "viewer:commands.zoomLimit": {
+    "description": "Spotlight command: Zoom limit reached"
+  },
+  "viewer:commands.chatBusy": {
+    "description": "Spotlight command: Wait for the AI response to finish"
+  },
+  "viewer:commands.running": {
+    "description": "Spotlight command: Command is running"
+  },
+  "viewer:commands.failed": {
+    "description": "Spotlight command: Could not run this command"
+  },
+  "viewer:commands.usage": {
+    "description": "Spotlight command: Usage: {{usage}}"
+  },
+  "viewer:commands.pageRange": {
+    "description": "Spotlight command: Enter a page from 1 to {{total}}"
+  },
+  "viewer:commands.bookmarkAdded": {
+    "description": "Spotlight command: Bookmarked page {{page}}"
+  },
+  "viewer:commands.bookmarkRemoved": {
+    "description": "Spotlight command: Removed bookmark for page {{page}}"
+  },
+  "viewer:commands.citationCopied": {
+    "description": "Spotlight command: Citation copied"
+  },
+  "viewer:commands.pageLoading": {
+    "description": "Spotlight command: Wait for the page to load"
+  },
+  "viewer:commands.memoPrompt": {
+    "description": "Spotlight command: Memo content"
+  },
+  "viewer:commands.replaceDraft": {
+    "description": "Spotlight command: Replace your unsent message?"
+  },
+  "viewer:commands.summarySelectionPrompt": {
+    "description": "Spotlight command: Summarize the selected passage in concise key points."
+  },
+  "viewer:commands.summaryDocumentPrompt": {
+    "description": "Spotlight command: Summarize this document, including its main ideas, conclusions, and limitations."
   }
 }
