@@ -27,8 +27,8 @@ export function onReaderPreferences(callback) {
   }
 }
 export function installReaderPreferences() {
-  const form = document.getElementById('general-settings-form')
-  if (!form) return
+  const container = document.querySelector('[data-settings-category-body="viewer"]')
+  if (!container) return
   const group = document.createElement('fieldset')
   group.className = 'reader-preferences form-group'
   const legend = document.createElement('legend')
@@ -54,7 +54,5 @@ export function installReaderPreferences() {
   onReaderPreferences(sync)
   document.addEventListener('easypaper:locale-changed', sync)
   sync()
-  const themeSettings = form.querySelector('.theme-settings-group')
-  if (themeSettings) themeSettings.after(group)
-  else form.prepend(group)
+  container.append(group)
 }

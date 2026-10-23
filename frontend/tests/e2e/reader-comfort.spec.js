@@ -17,7 +17,7 @@ async function open(page) {
 }
 async function settings(page) {
   await page.locator('#sidebar-settings-btn').click()
-  await page.locator('#settings-nav-general').click()
+  await page.locator('#settings-nav-viewer').click()
 }
 
 test('all six controls persist independently and apply to open readers', async ({ page }) => {
