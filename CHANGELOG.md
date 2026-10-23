@@ -2,6 +2,24 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.8 - 2026-10-23
+
+### 한국어 (1.4.7 → 1.4.8)
+
+- Spotlight에서 라이브러리 문서 검색·열기, 최근 읽은 문서 조회, PDF 업로드, URL 가져오기, 진행 중인 작업 조회 명령을 추가
+- 사이드바·전체 화면 전환, 탭 닫기·다시 열기, 밝은 테마·어두운 테마 지정 명령을 추가
+- 페이지 이동, 확대율·너비 맞춤, 목차, 북마크, 페이지 메모, 문서 인용 복사를 지원하는 읽기 명령을 추가
+- 질문 작성, 새 대화 시작, 선택한 텍스트 또는 현재 문서 요약을 지원하는 AI 명령을 추가하고 인수 검증·실행 가능 여부 확인을 적용
+- 비라틴 문자 키보드 배열에서도 Ctrl/Cmd+K로 검색창을 열고 닫도록 개선하고 설정의 단축키 안내와 접근성 레이블을 추가
+
+### English (1.4.7 → 1.4.8)
+
+- Added Spotlight commands to search and open library documents, list recently read documents, upload PDFs, import URLs, and view running tasks.
+- Added commands for sidebar and fullscreen controls, closing and reopening tabs, and selecting light or dark themes.
+- Added reader commands for page navigation, zoom and fit width, outline, bookmarks, page memos, and copying document citations.
+- Added AI commands to prepare a question, start a fresh conversation, and summarize selected text or the current document, with argument validation and availability checks.
+- Improved Ctrl/Cmd+K to toggle search, including with non-Latin keyboard layouts, and added shortcut guidance in Settings and accessibility labels.
+
 ## 1.4.7 - 2026-10-21
 
 ### 한국어 (1.4.6 → 1.4.7)
