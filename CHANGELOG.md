@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.10 - 2026-10-25
+
+### 한국어 (1.4.9 → 1.4.10)
+
+- 문서 또는 작업 공간 탭 전환 시 현재 문서의 읽기 세션을 종료하고, 해당 문서로 돌아오면 새 세션을 시작하도록 수정
+- 빠르게 탭을 돌아올 때 이전 세션의 종료 저장을 기다리도록 하여 서로 다른 방문 기록이 하나의 세션으로 합쳐지는 문제를 방지
+- 같은 문서 안에서 이동할 때는 읽기 세션이 유지되도록 수정
+
+### English (1.4.9 → 1.4.10)
+
+- Fixed reading-session tracking when switching document or workspace tabs: leaving a document ends the current visit, and returning starts a new session.
+- Made rapid tab returns wait for the previous session to finish saving, preventing separate visits from being merged.
+- Kept the reading session active when navigating within the same document.
+
 ## 1.4.9 - 2026-10-25
 
 ### 한국어 (1.4.8 → 1.4.9)
