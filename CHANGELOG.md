@@ -2,6 +2,22 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.4.9 - 2026-10-25
+
+### 한국어 (1.4.8 → 1.4.9)
+
+- 데스크톱 앱에 소스 배포 전용 ANTLR 의존성을 wheel로 포함하고 호환되는 MinerU 2.x 파이프라인을 사용하여 MinerU 설치 오류를 수정. 설정 새로고침 후에도 설치 결과와 오류 로그를 유지
+- PDF 추출 캐시 초기화 후 선택한 파서를 텍스트와 그림·표·수식 영역에 적용하도록 수정. 앱 재시작 후에도 Marker·MinerU의 관리 환경에서 이미지 영역을 추출하도록 개선
+- 읽기 설정을 뷰어 설정 카테고리로 이동
+- 선택한 텍스트의 툴팁 작업 이름이 한 줄로 표시되도록 수정
+
+### English (1.4.8 → 1.4.9)
+
+- Fixed MinerU installation in packaged desktop apps by bundling the source-only ANTLR dependency as a wheel and using the compatible MinerU 2.x pipeline. Installation results and error logs remain visible after settings refreshes.
+- Fixed PDF extraction-cache resets to apply the selected parser to text and figure, table, and equation regions. Marker and MinerU image extraction uses their managed environments, including after restarting the app.
+- Moved reading preferences into the Viewer settings category.
+- Kept selected-text tooltip action labels on one line.
+
 ## 1.4.8 - 2026-10-23
 
 ### 한국어 (1.4.7 → 1.4.8)
