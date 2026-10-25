@@ -4019,6 +4019,7 @@ async function maybeHandlePdfEngineRestart(res) {
 
 const settingPdfParserPicker = new PdfParserPicker($('setting-pdf-parser-picker'), {
   onChange: async (selectedId) => {
+    clearParserInlineProgress()
     updateParserCardInfo(selectedId)
     const parser = pdfParsersData.find(p => p.id === selectedId) || PARSER_FALLBACK_META[selectedId]
     // 설치된 파서만 즉시 엔진 변경 저장. 미설치 파서는 카드의 [패키지 설치] 버튼을 눌러야 함.
@@ -4421,8 +4422,7 @@ function updateParserCardInfo(engineId) {
   const parser = pdfParsersData.find(p => p.id === engineId) || PARSER_FALLBACK_META[engineId] || PARSER_FALLBACK_META.pymupdf
   if (!parser) return
 
-  // 파서 변경 시 인라인 설치 로그 초기화
-  clearParserInlineProgress()
+  // 설정 새로고침으로 설치 결과/로그를 지우지 않는다. 파서 선택 시 초기화한다.
 
   if (cardName) cardName.textContent = `${parser.name} ${parser.installed ? '(설치됨)' : `(${parser.size_info})`}`
   if (cardDesc) cardDesc.textContent = parser.description
@@ -4527,12 +4527,12 @@ function openPdfParserInstallModal(parser) {
       const restarting = await maybeHandlePdfEngineRestart(res)
       if (!restarting) await refreshSystemSettings()
     },
-    async (err) => {
-      const errMsg = `<span style="color: var(--danger, #ef4444); font-weight:600;">✕ 설치 중 오류 발생: ${err.message}</span>`
+    (err) => {
+      const errMsg = `<span style="color: var(--danger, #ef4444); font-weight:600;">✕ 설치 중 오류 발생: ${escapeHtml(err.message)}</span>`
       if (statusText) statusText.innerHTML = errMsg
       if (inlineStatusText) inlineStatusText.innerHTML = errMsg
       if (doneBtn) doneBtn.classList.remove('hidden')
-      await refreshSystemSettings()
+      showToast(`[${parser.name}] 설치 실패: ${err.message}`, 'error')
     }
   )
 }

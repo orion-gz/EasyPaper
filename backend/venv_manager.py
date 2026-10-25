@@ -21,7 +21,8 @@ MINERU_VENV = os.path.join(_BACKEND_DIR, ".venv-mineru")
 PARSER_PACKAGES = {
     "pdfplumber": ("pdfplumber", "pdfplumber"),
     "marker": ("marker-pdf", "marker"),
-    "mineru": ("mineru[pipeline]", "mineru"),
+    # The parser worker uses the 2.x pipeline API; later majors remove it.
+    "mineru": ("mineru[pipeline]>=2,<3", "mineru"),
 }
 
 _PACKAGED_INSTALL_ARG = "--easypaper-install-pdf-parser"
@@ -108,11 +109,27 @@ def run_packaged_parser_installer(argv: list[str] | None = None) -> int:
         _register_windows_frozen_distlib_finder()
         from pip._internal.cli.main import main as pip_main
 
+        # Frozen executables cannot run pip's Python build subprocesses. The
+        # pipeline's source-only ANTLR dependency is built with real Python at
+        # app build time; all remaining dependencies must provide wheels.
+        wheel_options = []
+        if engine == "mineru":
+            wheel_dir = os.path.join(_BACKEND_DIR, "parser-wheels")
+            wheel_options = ["--only-binary=:all:"]
+            if os.path.isdir(wheel_dir):
+                wheel_options += ["--find-links", wheel_dir]
+            print(
+                "MinerU 의존성을 wheel로 설치합니다. 호환 패키지가 없으면 "
+                "설치 로그의 패키지 이름과 오류를 확인해 주세요.",
+                flush=True,
+            )
+
         result = pip_main([
             "install",
             "--disable-pip-version-check",
             "--no-input",
             "--target", staging_dir,
+            *wheel_options,
             package[0],
         ])
         if result != 0:

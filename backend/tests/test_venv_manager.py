@@ -126,24 +126,25 @@ def test_windows_frozen_installer_registers_distlib_resource_finder(monkeypatch)
         resources._finder_registry.pop(loader_type, None)
 
 
+@pytest.mark.parametrize("engine, module", [("marker", "marker"), ("mineru", "mineru")])
 def test_packaged_installer_keeps_existing_package_when_upgrade_fails(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, engine, module
 ):
     import pip._internal.cli.main as pip_cli
 
     monkeypatch.setenv("EASYPAPER_CONFIG_DIR", str(tmp_path))
-    existing = tmp_path / "pdf-parser-packages" / "marker" / "marker"
+    existing = tmp_path / "pdf-parser-packages" / engine / module
     existing.mkdir(parents=True)
 
     monkeypatch.setattr(pip_cli, "main", lambda _args: 1)
 
     result = venv_manager.run_packaged_parser_installer(
-        ["--easypaper-install-pdf-parser", "marker"]
+        ["--easypaper-install-pdf-parser", engine]
     )
 
     assert result == 1
     assert existing.is_dir()
-    assert not list((tmp_path / "pdf-parser-packages").glob(".marker-install-*"))
+    assert not list((tmp_path / "pdf-parser-packages").glob(f".{engine}-install-*"))
 
 
 def test_packaged_parser_activation_and_restart_decision(tmp_path, monkeypatch):
@@ -238,3 +239,35 @@ def test_packaged_installer_configures_windows_streams_as_utf8(monkeypatch):
     assert result == 2
     assert stdout.config == {"encoding": "utf-8", "errors": "replace"}
     assert stderr.config == {"encoding": "utf-8", "errors": "replace"}
+
+
+@pytest.mark.parametrize("has_wheelhouse", [True, False])
+def test_packaged_mineru_never_launches_source_builds(tmp_path, monkeypatch, has_wheelhouse):
+    import pip._internal.cli.main as pip_cli
+    from packaging.requirements import Requirement
+
+    monkeypatch.setenv("EASYPAPER_CONFIG_DIR", str(tmp_path / "app-data"))
+    monkeypatch.setattr(venv_manager, "_BACKEND_DIR", str(tmp_path / "bundle"))
+    wheelhouse = tmp_path / "bundle" / "parser-wheels"
+    if has_wheelhouse:
+        wheelhouse.mkdir(parents=True)
+
+    def fake_pip_main(args):
+        assert "--only-binary=:all:" in args
+        if has_wheelhouse:
+            assert args[args.index("--find-links") + 1] == str(wheelhouse)
+        else:
+            assert "--find-links" not in args
+        requirement = Requirement(args[-1])
+        assert requirement.name == "mineru"
+        assert requirement.extras == {"pipeline"}
+        assert "2.7.6" in requirement.specifier
+        assert "3.0.0" not in requirement.specifier
+        os.makedirs(os.path.join(args[args.index("--target") + 1], "mineru"))
+        return 0
+
+    monkeypatch.setattr(pip_cli, "main", fake_pip_main)
+    assert venv_manager.run_packaged_parser_installer(
+        ["--easypaper-install-pdf-parser", "mineru"]
+    ) == 0
+    assert venv_manager.is_parser_installed("mineru")
