@@ -9,6 +9,8 @@
 # 기존 backend/config.py 패턴과 상성이 나쁘다.
 
 import os
+import subprocess
+import sys
 from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
@@ -20,11 +22,21 @@ pip_datas, pip_binaries, pip_hiddenimports = collect_all("pip")
 BACKEND_DIR = os.path.join(os.path.dirname(os.path.abspath(SPEC)), "..")
 BACKEND_DIR = os.path.abspath(BACKEND_DIR)
 
+# OmegaConf 2.3 (MinerU pipeline) requires ANTLR 4.9.*, distributed only as
+# source. Build its pure-Python wheel here, while a real interpreter exists,
+# rather than asking the frozen sidecar to execute Python build hooks.
+parser_wheel_dir = os.path.join(BACKEND_DIR, "packaging", "build", "parser-wheels")
+subprocess.run([
+    sys.executable, "-m", "pip", "wheel", "--no-deps",
+    "--wheel-dir", parser_wheel_dir, "antlr4-python3-runtime==4.9.3",
+], check=True)
+
 a = Analysis(
     [os.path.join(BACKEND_DIR, "main.py")],
     pathex=[BACKEND_DIR],
     binaries=pip_binaries,
     datas=pip_datas + [
+        (parser_wheel_dir, "parser-wheels"),
         # DEFAULT_PROMPT_TEMPLATE 폴백이 config.py에 있어 필수는 아니지만,
         # 사용자가 커스터마이징하기 전 기본 템플릿 파일을 그대로 들고 있으면
         # 첫 실행 UX가 서버/Docker 배포와 동일해진다.
