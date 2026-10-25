@@ -12697,8 +12697,10 @@ function renderPageMemos(pageNum) {
       const origin = pageWrapper.getBoundingClientRect()
       memo.x = (rect.left - origin.left) / origin.width * 100
       memo.y = (rect.top - origin.top) / origin.height * 100
+      const focused = memoEl.contains(document.activeElement) ? document.activeElement : null
       delete memo.alignment
       pageWrapper.append(memoEl)
+      if (focused) focused.focus({ preventScroll: true })
       memoEl.style.left = `${memo.x}%`
       memoEl.style.top = `${memo.y}%`
       pageWrapper._scheduleMemoAlignment?.()
@@ -12843,8 +12845,8 @@ function renderPageMemos(pageNum) {
       if (event.key === 'ArrowRight') memo.x += dxPct
       if (event.key === 'ArrowUp') memo.y -= dyPct
       if (event.key === 'ArrowDown') memo.y += dyPct
-      memo.x = Math.min(Math.max(-150, memo.x), 250)
-      memo.y = Math.min(Math.max(-150, memo.y), 250)
+      // Margin layouts can legitimately extend beyond the PDF's dimensions.
+      // Preserve those coordinates when returning to free movement.
       memoEl.style.left = `${memo.x}%`
       memoEl.style.top = `${memo.y}%`
       updateMemoConnectorLine(pageWrapper, memo)
@@ -12869,9 +12871,8 @@ function renderPageMemos(pageNum) {
         const dxPct = (dx / pageWrapper.offsetWidth) * 100
         const dyPct = (dy / pageWrapper.offsetHeight) * 100
 
-        // Clamp to a wide bounds so it can float outside page wrapper boundaries anywhere on screen
-        const newX = Math.min(Math.max(-150, startX + dxPct), 250)
-        const newY = Math.min(Math.max(-150, startY + dyPct), 250)
+        const newX = startX + dxPct
+        const newY = startY + dyPct
 
         memo.x = newX
         memo.y = newY
