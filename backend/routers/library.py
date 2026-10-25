@@ -63,23 +63,36 @@ class ReparsePreviewRequest(BaseModel):
 
 
 
-async def _load_diagnostic_images(doc_id: str, doc: dict, pdf_path: str) -> list[dict]:
+async def _load_document_images(doc_id: str, doc: dict, pdf_path: str) -> list[dict]:
     from services.cache import get_cached_images, save_images_cache
     images = get_cached_images(
         doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"),
     )
     if images is not None:
         return images
-    try:
-        import asyncio
+    import asyncio
+    engine = doc.get("parser_engine") or "pymupdf"
+    if engine in {"marker", "mineru"}:
+        # Desktop parsers live in managed environments. Direct imports can
+        # silently fall back to PyMuPDF after a restart.
+        from services.reparse import parse_document_isolated
+        payload = await asyncio.to_thread(
+            parse_document_isolated, pdf_path, engine,
+            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")),
+        )
+        images = payload.get("images") or []
+    else:
         from services.pdf_parser import extract_pdf_images
-        images = await asyncio.to_thread(
-            extract_pdf_images, pdf_path, doc.get("parser_engine") or "pymupdf",
-        )
-        save_images_cache(
-            doc_id, pdf_path, images, doc.get("parser_engine"), doc.get("parser_version"),
-        )
-        return images
+        images = await asyncio.to_thread(extract_pdf_images, pdf_path, engine)
+    save_images_cache(
+        doc_id, pdf_path, images, doc.get("parser_engine"), doc.get("parser_version"),
+    )
+    return images
+
+
+async def _load_diagnostic_images(doc_id: str, doc: dict, pdf_path: str) -> list[dict]:
+    try:
+        return await _load_document_images(doc_id, doc, pdf_path)
     except Exception:
         return []
 
@@ -982,8 +995,19 @@ async def delete_library_document_permanently(doc_id: str, current_user: str = D
 @router.post("/library/{doc_id}/clear-cache")
 async def clear_library_document_cache(doc_id: str, current_user: str = Depends(get_current_user)):
     """특정 문서의 PDF 텍스트 및 이미지 추출 디스크 캐시를 삭제합니다."""
-    require_owned_document(doc_id, current_user)
+    doc = require_owned_document(doc_id, current_user)
+    from services.db import get_db
+    from services.pdf_diagnostics import parser_identity
     from services.cache import clear_document_cache
+    # Text and figure/table/equation regions share the document parser identity.
+    if doc.get("content_kind", "pdf") == "pdf":
+        engine, version = parser_identity()
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE documents SET parser_engine = ?, parser_version = ? WHERE id = ?",
+                (engine, version, doc_id),
+            )
+            conn.commit()
     cleared_files, freed_bytes = clear_document_cache(doc_id)
     from services.pdf_parser import clear_parser_memory_cache
     clear_parser_memory_cache()
@@ -1008,23 +1032,13 @@ async def get_library_document_images(doc_id: str, current_user: str = Depends(g
     CPU-bound(PyMuPDF, GIL 점유)라 캐시 미스 시 asyncio 이벤트 루프를 그대로
     블로킹하면 그동안 다른 요청(라이브러리 목록 등)이 전부 멈추므로,
     별도 스레드로 넘긴다."""
-    import asyncio
-    from services.cache import get_cached_images, save_images_cache
-
     doc = require_owned_document(doc_id, current_user)
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
 
-    images = get_cached_images(doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"))
-    if images is not None:
-        return {"images": images}
-
     try:
-        from services.pdf_parser import extract_pdf_images
-        images = await asyncio.to_thread(extract_pdf_images, pdf_path, doc.get("parser_engine"))
-        save_images_cache(doc_id, pdf_path, images, doc.get("parser_engine"), doc.get("parser_version"))
-        return {"images": images}
+        return {"images": await _load_document_images(doc_id, doc, pdf_path)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"이미지 좌표 추출 실패: {str(e)}")
 
