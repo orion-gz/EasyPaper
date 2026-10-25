@@ -1,3 +1,4 @@
+import { installMemoAlignment, releaseMemoAlignment } from './memoAlignment.js'
 import { createCaptureOverlayManager } from './captureOverlay.js'
 import { renderPinnedCapture } from './pdfViewer.js'
 import './styles/capture-overlay.css'
@@ -2431,14 +2432,16 @@ async function setZoom(newZoom) {
   lastCommittedZoom = newZoom
   if (!state.sessionId) { clearZoomPreviewTransform(); return }
   focusModeController?.scheduleRender()
+  const memoFocus = document.activeElement?.closest('.floating-memo') ? document.activeElement : null
   const detachedMemoCards = new Map()
   viewerScrollContainer.querySelectorAll('.page-pair').forEach(pair => {
     const pageNum = Number(pair.dataset.page)
     const wrapper = pair.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
-    const cards = [...(wrapper?.querySelectorAll(':scope > .floating-memo') || [])]
+    const cards = [...(wrapper?.querySelectorAll('.floating-memo') || [])]
     if (!cards.length) return
     zoomPreservedMemoPages.set(pageNum, state.sessionId)
     detachedMemoCards.set(pageNum, cards)
+    releaseMemoAlignment(wrapper)
     cards.forEach(card => card.remove())
   })
   try {
@@ -2450,11 +2453,13 @@ async function setZoom(newZoom) {
       const wrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
       if (!wrapper) continue
       cards.forEach(card => wrapper.appendChild(card))
+      installMemoAlignment(wrapper, loadMemos(state.sessionId)[`page_${pageNum}`] || [], () => state.pdfPageSentences?.[pageNum] || [], updateMemoConnectorLine)
       for (const memo of loadMemos(state.sessionId)[`page_${pageNum}`] || []) {
         updateMemoConnectorLine(wrapper, memo)
       }
     }
   }
+  if (memoFocus?.isConnected) memoFocus.focus({ preventScroll: true })
   const restoredAnchor = viewerScrollContainer.querySelector(`.page-pair[data-page="${anchorPage}"]`)
   if (restoredAnchor && Number.isFinite(anchorOffset)) {
     const scale = viewerScrollContainer.getBoundingClientRect().width / viewerScrollContainer.offsetWidth || 1
@@ -12067,9 +12072,15 @@ function updateMemoConnectorLine(pageWrapper, memo) {
     return
   }
 
-  const memoLeft = (memo.x / 100) * pageWrapper.offsetWidth
-  const memoTop = (memo.y / 100) * pageWrapper.offsetHeight
   const memoEl = pageWrapper.querySelector(`.floating-memo[data-id="${memo.id}"]`)
+  const cardRect = memoEl?.getBoundingClientRect()
+  const wrapperRect = pageWrapper.getBoundingClientRect()
+  const displayScale = wrapperRect.width / Math.max(1, pageWrapper.offsetWidth) || 1
+  const memoLeft = cardRect ? (cardRect.left - wrapperRect.left) / displayScale : (memo.x / 100) * pageWrapper.offsetWidth
+  const memoTop = cardRect ? (cardRect.top - wrapperRect.top) / displayScale : (memo.y / 100) * pageWrapper.offsetHeight
+  const lane = memoEl?.closest('.memo-margin-scroll')
+  const laneRect = lane?.getBoundingClientRect()
+  path.style.display = !memoEl || (laneRect && (cardRect.bottom <= laneRect.top || cardRect.top >= laneRect.bottom)) ? 'none' : ''
   const memoWidth = memoEl ? memoEl.offsetWidth : (memo.width || 260)
   const memoHeight = memoEl ? memoEl.offsetHeight : 160
 
@@ -12102,6 +12113,7 @@ function renderPageMemos(pageNum) {
   const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
   if (!pageWrapper) return
 
+  releaseMemoAlignment(pageWrapper)
   pageWrapper.querySelectorAll('.floating-memo').forEach(el => {
     el._memoResizeObserver?.disconnect()
     if (el._memoResizeSaveTimer) clearTimeout(el._memoResizeSaveTimer)
@@ -12239,6 +12251,7 @@ function renderPageMemos(pageNum) {
       || (memo.autoSize !== false && !Number.isFinite(memo.height))
     const memoEl = document.createElement('div')
     memoEl.className = `floating-memo color-${memo.color || 'default'}${memo.collapsed ? ' collapsed' : ''}${memoAutoSize ? ' auto-size' : ''}`
+    memoEl._memoData = memo
     memoEl.setAttribute('data-id', memo.id)
     memoEl.style.left = `${memo.x}%`
     memoEl.style.top = `${memo.y}%`
@@ -12529,7 +12542,7 @@ function renderPageMemos(pageNum) {
           setTimeout(() => {
             const exists = memoEl.parentNode !== null
             const currentTextarea = memoEl.querySelector('.floating-memo-textarea')
-            if (exists && isEditing && currentTextarea === textarea) {
+            if (exists && isEditing && currentTextarea === textarea && document.activeElement !== textarea) {
               isEditing = false
               updateCardContent()
               updateMemoConnectorLine(pageWrapper, memo)
@@ -12650,6 +12663,7 @@ function renderPageMemos(pageNum) {
           <button type="button" class="color-dot red ${memo.color === 'red' ? 'selected' : ''}" data-color="red" title="${t('viewer:a11y.red')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.red') })}" aria-pressed="${String(memo.color === 'red')}"></button>
         </div>
         <div class="floating-memo-toggles">
+          ${['left', 'right'].map(side => `<button type="button" class="floating-memo-action-btn" data-memo-align="${side}" title="${(side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right'))}" aria-label="${(side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right'))}" aria-pressed="${memo.alignment === side}">${side === 'left' ? '⇤' : '⇥'}</button>`).join('')}
           <button type="button" class="floating-memo-action-btn auto-size-btn${memoAutoSize ? ' active' : ''}" aria-pressed="${String(memoAutoSize)}">
             ${icon(memoAutoSize ? 'shrink' : 'expand', 12)}
           </button>
@@ -12669,6 +12683,26 @@ function renderPageMemos(pageNum) {
     updateAutoSizeButton()
     updateCardContent()
 
+    memoEl.querySelectorAll('[data-memo-align]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation()
+        memo.alignment = button.dataset.memoAlign
+        persistMemoChange()
+        pageWrapper._scheduleMemoAlignment?.()
+      })
+    })
+    function detachAlignment() {
+      if (!['left', 'right'].includes(memo.alignment)) return
+      const rect = memoEl.getBoundingClientRect()
+      const origin = pageWrapper.getBoundingClientRect()
+      memo.x = (rect.left - origin.left) / origin.width * 100
+      memo.y = (rect.top - origin.top) / origin.height * 100
+      delete memo.alignment
+      pageWrapper.append(memoEl)
+      memoEl.style.left = `${memo.x}%`
+      memoEl.style.top = `${memo.y}%`
+      pageWrapper._scheduleMemoAlignment?.()
+    }
     const autoSizeBtn = memoEl.querySelector('.auto-size-btn')
     memoEl.querySelectorAll('button').forEach(button => {
       button.addEventListener('mousedown', (event) => event.stopPropagation())
@@ -12799,7 +12833,9 @@ function renderPageMemos(pageNum) {
     const header = memoEl.querySelector('.floating-memo-header')
     header.addEventListener('keydown', (event) => {
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      if (event.target !== header) return
       event.preventDefault(); event.stopPropagation()
+      detachAlignment()
       const step = event.shiftKey ? 20 : 4
       const dxPct = step / Math.max(1, pageWrapper.offsetWidth) * 100
       const dyPct = step / Math.max(1, pageWrapper.offsetHeight) * 100
@@ -12820,6 +12856,7 @@ function renderPageMemos(pageNum) {
     header.addEventListener('mousedown', (e) => {
       if (e.target.closest('button, input, textarea, a')) return
       e.preventDefault(); e.stopPropagation()
+      detachAlignment()
       const startMouseX = e.clientX
       const startMouseY = e.clientY
       const startX = memo.x
@@ -12862,6 +12899,7 @@ function renderPageMemos(pageNum) {
       updateMemoConnectorLine(pageWrapper, memo)
     }, 50)
   })
+  installMemoAlignment(pageWrapper, pageMemos, () => state.pdfPageSentences?.[pageNum] || [], updateMemoConnectorLine)
 }
 
 function createMemoFromQuotedAnswer(context, answer, button) {
@@ -14021,7 +14059,7 @@ function schedulePdfGeometryRefresh() {
   pdfGeometryRefreshTimer = setTimeout(() => {
     geometryPreservedMemoPages.clear()
     viewerScrollContainer?.querySelectorAll('.pdf-page-wrapper').forEach(wrapper => {
-      if (!wrapper.querySelector(':scope > .floating-memo')) return
+      if (!wrapper.querySelector('.floating-memo')) return
       const pageNum = Number(wrapper.dataset.page)
       if (Number.isFinite(pageNum)) geometryPreservedMemoPages.add(pageNum)
     })
@@ -14053,7 +14091,9 @@ window.onTextLayerReleased = (textLayerDiv, pageNum) => {
   delete state.virtualTextMaps?.[pageNum]
   delete state.pdfPageSentences?.[pageNum]
   if (zoomPreservedMemoPages.get(pageNum) === state.sessionId) return
-  textLayerDiv.closest('.pdf-page-wrapper')?.querySelectorAll(':scope > .floating-memo').forEach(memo => {
+  const memoWrapper = textLayerDiv.closest('.pdf-page-wrapper')
+  if (memoWrapper) releaseMemoAlignment(memoWrapper, { preserveSpace: true })
+  textLayerDiv.closest('.pdf-page-wrapper')?.querySelectorAll('.floating-memo').forEach(memo => {
     memo._memoResizeObserver?.disconnect()
     clearTimeout(memo._memoResizeSaveTimer)
     memo.remove()
@@ -14089,6 +14129,7 @@ window.onTextLayerRendered = (textLayerDiv, pageNum) => {
   if (zoomPreservedMemoPages.get(pageNum) === state.sessionId || geometryPreservedMemoPages.delete(pageNum)) {
     zoomPreservedMemoPages.delete(pageNum)
     const wrapper = textLayerDiv.closest('.pdf-page-wrapper')
+    wrapper?._scheduleMemoAlignment?.()
     for (const memo of loadMemos(state.sessionId)[`page_${pageNum}`] || []) {
       updateMemoConnectorLine(wrapper, memo)
     }

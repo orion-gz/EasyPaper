@@ -31,7 +31,7 @@ test('기존 ID 없는 항목을 fingerprint로 서버 항목과 매칭한다', 
 test('로컬 변경은 즉시 저장되고 오프라인 큐에 유지된 뒤 재전송된다', async () => {
   const storage = new MemoryStorage()
   const saved = recordLocalResourceChange('memos', 'doc', {
-    page_1: [{ content: 'offline memo', x: 10, y: 20 }],
+    page_1: [{ content: 'offline memo', x: 10, y: 20, alignment: 'right' }],
   }, storage)
   assert.ok(saved.page_1[0].id)
   assert.equal(JSON.parse(storage.getItem('easypaper_memos_doc')).page_1[0].content, 'offline memo')
@@ -58,6 +58,8 @@ test('로컬 변경은 즉시 저장되고 오프라인 큐에 유지된 뒤 재
   }
   await syncResource('memos', 'doc', { storage, config: onlineConfig })
   assert.equal(sent[0].operation, 'upsert')
+  assert.equal(sent[0].item.alignment, 'right')
+  assert.equal(JSON.parse(storage.getItem('easypaper_memos_doc')).page_1[0].alignment, 'right')
   assert.equal(hasPendingAnnotationSync('doc', storage), false)
 })
 

@@ -221,5 +221,13 @@
   "commands.memoPrompt": "Memo content",
   "commands.replaceDraft": "Replace your unsent message?",
   "commands.summarySelectionPrompt": "Summarize the selected passage in concise key points.",
-  "commands.summaryDocumentPrompt": "Summarize this document, including its main ideas, conclusions, and limitations."
+  "commands.summaryDocumentPrompt": "Summarize this document, including its main ideas, conclusions, and limitations.",
+  "memoAlignment.left": "Align in left margin",
+  "memoAlignment.right": "Align in right margin",
+  "memoAlignment.memoRightPosition": "Right memo position (parallel view)",
+  "memoAlignment.outside": "Outside translation",
+  "memoAlignment.between": "Between original and translation",
+  "memoAlignment.memoOverflow": "When memos exceed page height",
+  "memoAlignment.expand": "Extend space below page",
+  "memoAlignment.scroll": "Scroll inside memo margins"
 }

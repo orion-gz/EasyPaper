@@ -5776,5 +5776,29 @@
   },
   "viewer:commands.summaryDocumentPrompt": {
     "description": "Spotlight command: Summarize this document, including its main ideas, conclusions, and limitations."
+  },
+  "viewer:memoAlignment.left": {
+    "description": "Align in left margin — PDF memo margin alignment control."
+  },
+  "viewer:memoAlignment.right": {
+    "description": "Align in right margin — PDF memo margin alignment control."
+  },
+  "viewer:memoAlignment.memoRightPosition": {
+    "description": "Right memo position (parallel view) — PDF memo margin alignment control."
+  },
+  "viewer:memoAlignment.outside": {
+    "description": "Outside translation — PDF memo margin alignment control."
+  },
+  "viewer:memoAlignment.between": {
+    "description": "Between original and translation — PDF memo margin alignment control."
+  },
+  "viewer:memoAlignment.memoOverflow": {
+    "description": "When memos exceed page height — PDF memo margin alignment control."
+  },
+  "viewer:memoAlignment.expand": {
+    "description": "Extend space below page — PDF memo margin alignment control."
+  },
+  "viewer:memoAlignment.scroll": {
+    "description": "Scroll inside memo margins — PDF memo margin alignment control."
   }
 }
