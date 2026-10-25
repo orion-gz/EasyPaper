@@ -51,6 +51,7 @@ export class ReadingAnalyticsTracker {
     this.activeTimer = null
     this.isTracking = false
     this.sessionGeneration = 0
+    this.pendingEndSession = null
 
     this.setupNetworkListeners()
   }
@@ -73,6 +74,12 @@ export class ReadingAnalyticsTracker {
     this.currentPage = 1
     this.startedAt = new Date().toISOString()
     this.isTracking = true
+
+    // A rapid tab return must not merge into a session whose end is still saving.
+    if (this.pendingEndSession) {
+      await this.pendingEndSession
+      if (generation !== this.sessionGeneration) return
+    }
 
     try {
       const res = await fetch(`${this.apiBase}/library/${paperId}/reading-session/start`, {
@@ -137,9 +144,11 @@ export class ReadingAnalyticsTracker {
       clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
     }
-    const pending = this.isTracking && this.sessionId && this.paperId ? this.sendEndSession() : Promise.resolve()
+    if (this.isTracking && this.sessionId && this.paperId) {
+      this.pendingEndSession = this.sendEndSession()
+    }
     this.isTracking = false
-    return pending
+    return this.pendingEndSession || Promise.resolve()
   }
 
   setCurrentPage(pageNumber) {
