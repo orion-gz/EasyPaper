@@ -548,3 +548,71 @@ async def test_reparse_cleanup_failure_does_not_mask_committed_apply(
     assert result["content_revision"] == 2
     assert isolated_dirs["db"].db_get_document(doc_id)["content_revision"] == 2
     assert sessions[doc_id]["pages"] == pages
+
+
+@pytest.mark.parametrize("engine", ["marker", "mineru"])
+def test_cache_reset_adopts_settings_for_text_and_all_regions(
+    test_client, isolated_dirs, monkeypatch, engine,
+):
+    import config
+    from routers.upload import ensure_session, sessions
+    from services import reparse
+    from services.cache import save_pages_cache, save_images_cache
+
+    doc_id = "reset-engine-" + engine
+    pdf_path = _make_document(isolated_dirs, doc_id)
+    save_pages_cache(doc_id, str(pdf_path), [{"page_num": 1, "text": "old"}])
+    save_images_cache(doc_id, str(pdf_path), [{"page": 1, "label": "old"}])
+    monkeypatch.setattr(config, "PDF_PARSER_ENGINE", engine)
+    calls = []
+    regions = [
+        {"page": 1, "label": label, "left": 10, "top": 10, "width": 20, "height": 20}
+        for label in ("Figure 1", "Table 1", "Equation 1")
+    ]
+
+    def parse(path, selected, **kwargs):
+        calls.append(selected)
+        return {
+            "parser_engine": selected,
+            "parser_version": isolated_dirs["db"].db_get_document(doc_id)["parser_version"],
+            "pages": [{"page_num": 1, "text": "New parser text", "blocks": [], "parser_engine": selected}],
+            "images": regions,
+        }
+
+    monkeypatch.setattr(reparse, "parse_document_isolated", parse)
+    sessions[doc_id] = {"username": "testuser", "pages": []}
+    try:
+        assert test_client.post(f"/api/library/{doc_id}/clear-cache").status_code == 200
+        assert doc_id not in sessions
+        assert isolated_dirs["db"].db_get_document(doc_id)["parser_engine"] == engine
+        assert ensure_session(doc_id)
+        assert sessions[doc_id]["pages"][0]["parser_engine"] == engine
+        response = test_client.get(f"/api/library/{doc_id}/images")
+        assert response.status_code == 200
+        assert response.json()["images"] == regions
+        assert calls == [engine]
+
+        # Images may be requested before text/session restoration.
+        assert test_client.post(f"/api/library/{doc_id}/clear-cache").status_code == 200
+        response = test_client.get(f"/api/library/{doc_id}/images")
+        assert response.status_code == 200
+        assert response.json()["images"] == regions
+        assert calls == [engine, engine]
+    finally:
+        sessions.pop(doc_id, None)
+
+
+def test_cache_reset_preserves_web_parser(test_client, isolated_dirs, monkeypatch):
+    import config
+
+    doc_id = "web-reset"
+    _make_document(isolated_dirs, doc_id)
+    with isolated_dirs["db"].get_db() as conn:
+        conn.execute(
+            "UPDATE documents SET content_kind = 'html_article', parser_engine = 'readability' WHERE id = ?",
+            (doc_id,),
+        )
+        conn.commit()
+    monkeypatch.setattr(config, "PDF_PARSER_ENGINE", "marker")
+    assert test_client.post(f"/api/library/{doc_id}/clear-cache").status_code == 200
+    assert isolated_dirs["db"].db_get_document(doc_id)["parser_engine"] == "readability"
