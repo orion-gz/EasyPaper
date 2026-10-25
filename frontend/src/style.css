@@ -2381,6 +2381,7 @@ body.light-theme .pdf-annotation-underline {
 /* ── 텍스트 선택 팝업 메뉴 리파인 ── */
 .selection-menu {
   position: absolute;
+  width: max-content;
   display: flex;
   align-items: center;
   background: var(--bg-panel);
@@ -2422,10 +2423,15 @@ body.light-theme .pdf-annotation-underline {
   color: var(--text-primary);
 }
 
+.selection-menu .menu-btn.text-action-btn,
 .selection-menu .menu-btn.ask-ai-btn {
   width: auto;
+  flex-shrink: 0;
   white-space: nowrap;
   padding: 0 8px;
+}
+
+.selection-menu .menu-btn.ask-ai-btn {
   color: var(--accent-mid) !important;
   font-family: var(--font-body);
 }

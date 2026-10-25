@@ -13263,7 +13263,7 @@ function createSelectionMenu() {
     ['viewer:comfort.explain', t('viewer:comfort.explain'), () => t('viewer:comfort.explainPrompt')],
   ]) {
     const button = document.createElement('button')
-    button.type = 'button'; button.className = 'menu-btn'; button.dataset.i18n = key; button.textContent = label
+    button.type = 'button'; button.className = 'menu-btn text-action-btn'; button.dataset.i18n = key; button.textContent = label
     button.addEventListener('click', () => {
       if (state.chatActiveStream) return
       const draft = chatInput.value
