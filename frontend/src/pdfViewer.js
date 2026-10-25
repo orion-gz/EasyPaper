@@ -344,7 +344,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
       const pageNum = parseInt(entry.target.dataset.page)
       if (entry.isIntersecting) {
         nearby.add(pageNum)
-        if (!jobs.has(pageNum)) queue.set(pageNum, entry.target)
+        if (!jobs.has(pageNum)) queue.set(pageNum, entry.target.matches('.pdf-page-wrapper') ? entry.target : entry.target.querySelector('.pdf-page-wrapper'))
       } else {
         nearby.delete(pageNum)
         queue.delete(pageNum)
@@ -406,7 +406,9 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   })
 
   wrappers.forEach(w => {
-    pageObserver.observe(w)
+    // Margin memos may extend below or beside the PDF itself. Keep the page
+    // alive while any part of its reading row is in the render window.
+    pageObserver.observe(w.closest('.page-pair') || w)
     pageVisibilityObserver.observe(w.closest('.page-pair') || w)
   })
 }

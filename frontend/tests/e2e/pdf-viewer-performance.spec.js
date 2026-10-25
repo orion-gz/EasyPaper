@@ -325,3 +325,38 @@ test('wheel zoom batches input and eases toward the final scale', async ({ page 
     return window.zoomBlankFrames
   })).toBe(0)
 })
+
+test('expanded memo margins stay rendered while reading and retain their footprint after eviction', async ({ page }) => {
+  test.setTimeout(60000)
+  const doc = { id: 'margin-pages', filename: 'Margins.pdf', total_pages: 16, metadata: {}, translated_pages: [] }
+  await mockBaseRoutes(page, { documents: [doc] })
+  await page.route('**/api/library/margin-pages/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(16) }))
+  await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
+  await gotoApp(page)
+  await page.evaluate(() => {
+    localStorage.setItem('easypaper_hydrated_margin-pages', '1')
+    localStorage.setItem('easypaper_memos_margin-pages', JSON.stringify({ page_1: Array.from({ length: 12 }, (_, index) => ({
+      id: `margin-${index}`, pageNum: 1, sentenceIdx: 0, charStart: index, content: `Memo ${index}`,
+      x: 10, y: 10, alignment: 'left', autoSize: false, width: 260, height: 400,
+    })) }))
+    location.hash = '#viewer?id=margin-pages'
+  })
+  const reader = activeReader(page)
+  const first = reader.locator('.page-pair[data-page="1"]')
+  await expect(first.locator('.memo-margin-left .floating-memo')).toHaveCount(12)
+  const height = await first.evaluate(el => el.offsetHeight)
+  expect(height).toBeGreaterThan(4800)
+  await first.locator('[data-id="margin-11"]').evaluate(el => el.scrollIntoView({ block: 'center', behavior: 'instant' }))
+  await expect(first.locator('.textLayer')).toContainText('Performance page 1')
+  await expect(first.locator('[data-id="margin-11"]')).toBeVisible()
+  for (const number of [3, 5, 7, 9, 11, 13, 16]) {
+    const wrapper = reader.locator(`.pdf-page-wrapper[data-page="${number}"]`)
+    await wrapper.evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'instant' }))
+    await expect(wrapper.locator('.textLayer')).toContainText(`Performance page ${number}`)
+  }
+  await expect(first.locator('canvas')).toHaveCount(0)
+  expect(await first.evaluate(el => el.offsetHeight)).toBe(height)
+  await first.evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'instant' }))
+  await expect(first.locator('.memo-margin-left .floating-memo')).toHaveCount(12)
+  await expect.poll(() => first.evaluate(el => el.offsetHeight)).toBe(height)
+})

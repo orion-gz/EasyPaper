@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
 
-async function openViewerWithMemo(page, memoOverrides = {}) {
+async function openViewerWithMemo(page, memoOverrides = {}, extraMemos = []) {
   const doc = {
     id: 'doc-memo',
     filename: 'Memo.pdf',
@@ -26,7 +26,7 @@ async function openViewerWithMemo(page, memoOverrides = {}) {
   })
 
   await gotoApp(page)
-  await page.evaluate((overrides) => {
+  await page.evaluate(({ overrides, extraMemos }) => {
     localStorage.setItem('easypaper_hydrated_doc-memo', '1')
     localStorage.setItem('easypaper_memos_doc-memo', JSON.stringify({
       page_1: [{
@@ -38,10 +38,10 @@ async function openViewerWithMemo(page, memoOverrides = {}) {
         x: 10,
         y: 10,
         ...overrides,
-      }],
+      }, ...extraMemos],
     }))
     location.hash = '#viewer?id=doc-memo'
-  }, memoOverrides)
+  }, { overrides: memoOverrides, extraMemos })
 
   // Wait for the asynchronous parallel fit before measuring or editing cards.
   await expect.poll(() => activeReader(page).locator('#viewer-scroll-container').evaluate(el => {
@@ -412,4 +412,130 @@ test('코드블록, 콜아웃, 중첩 목록과 표를 메모에서 렌더링한
   await expect(rendered.locator('ul ul')).toContainText('하위 항목')
   await expect(rendered.locator('ol ol')).toContainText('하위 단계')
   await expect(rendered.locator('table')).toContainText('정답')
+})
+
+for (const rightPosition of ['outside', 'between']) {
+  for (const overflow of ['expand', 'scroll']) {
+    test(`memo margin alignment: ${rightPosition}, ${overflow}`, async ({ page }) => {
+      await openViewerWithMemo(page, { charStart: 90, autoSize: false, width: 260, height: 400 }, [
+        { id: 'earlier', pageNum: 1, sentenceIdx: 0, charStart: 10, content: 'Earlier', x: 20, y: 25, autoSize: false, width: 280, height: 400 },
+        { id: 'free', pageNum: 1, sentenceIdx: 0, charStart: 50, content: 'Free', x: 45, y: 60 },
+      ])
+      await evaluateReader(page, ({ rightPosition, overflow }) => {
+        localStorage.setItem('easypaper_reader_memoRightPosition', rightPosition)
+        localStorage.setItem('easypaper_reader_memoOverflow', overflow)
+        window.dispatchEvent(new CustomEvent('easypaper:reader-preferences'))
+      }, { rightPosition, overflow })
+      const reader = activeReader(page)
+      const late = reader.locator('.floating-memo[data-id="memo-regression"]')
+      const early = reader.locator('.floating-memo[data-id="earlier"]')
+      await late.locator('[data-memo-align="right"]').click()
+      await early.locator('[data-memo-align="right"]').click()
+      await expect.poll(() => evaluateReader(page, () => {
+        const lane = document.querySelector('.memo-margin-right')
+        const cards = [...lane.querySelectorAll('.floating-memo')].sort((a, b) => a.offsetTop - b.offsetTop)
+        return cards.map(card => card.dataset.id)
+      })).toEqual(['earlier', 'memo-regression'])
+      const geometry = await evaluateReader(page, () => {
+        const lane = document.querySelector('.memo-margin-right')
+        const early = lane.querySelector('[data-id="earlier"]')
+        const late = lane.querySelector('[data-id="memo-regression"]')
+        const pair = lane.closest('.page-pair')
+        const pdf = pair.querySelector('.pdf-page-wrapper').getBoundingClientRect()
+        const trans = pair.querySelector('.trans-page-block').getBoundingClientRect()
+        return {
+          gap: late.offsetTop - early.offsetTop - early.offsetHeight,
+          laneLeft: lane.getBoundingClientRect().left,
+          laneRight: lane.getBoundingClientRect().right,
+          pdfRight: pdf.right,
+          transLeft: trans.left,
+          transRight: trans.right,
+          laneHeight: lane.clientHeight,
+          contentHeight: lane.scrollHeight,
+          pairBottom: pair.getBoundingClientRect().bottom,
+          lateBottom: late.getBoundingClientRect().bottom,
+          freeParent: document.querySelector('[data-id="free"]').parentElement.className,
+        }
+      })
+      expect(geometry.gap).toBeGreaterThanOrEqual(12)
+      expect(geometry.freeParent).toContain('pdf-page-wrapper')
+      if (rightPosition === 'outside') expect(geometry.laneLeft).toBeGreaterThanOrEqual(geometry.transRight)
+      else {
+        expect(geometry.laneLeft).toBeGreaterThanOrEqual(geometry.pdfRight)
+        expect(geometry.laneRight).toBeLessThanOrEqual(geometry.transLeft)
+      }
+      if (overflow === 'expand') expect(geometry.pairBottom).toBeGreaterThan(geometry.lateBottom)
+      else expect(geometry.contentHeight).toBeGreaterThan(geometry.laneHeight)
+      await early.locator('[data-memo-align="left"]').click()
+      await expect(reader.locator('.memo-margin-left [data-id="earlier"]')).toHaveCount(1)
+      await early.locator('.floating-memo-header').focus()
+      await page.keyboard.press('ArrowRight')
+      await expect.poll(() => early.evaluate(el => el.parentElement.className)).toContain('pdf-page-wrapper')
+      await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('easypaper_memos_doc-memo')).page_1.find(m => m.id === 'earlier').alignment || 'free')).toBe('free')
+    })
+  }
+}
+
+test('aligned memo layout follows collapse, resize, settings, zoom and reopen', async ({ page }) => {
+  await openViewerWithMemo(page, { charStart: 90, alignment: 'left', autoSize: false, width: 260, height: 250 }, [
+    { id: 'earlier', pageNum: 1, sentenceIdx: 0, charStart: 10, content: 'Earlier', x: 20, y: 25, alignment: 'left', autoSize: false, width: 280, height: 300 },
+  ])
+  const reader = activeReader(page)
+  const early = reader.locator('.floating-memo[data-id="earlier"]')
+  const late = reader.locator('.floating-memo[data-id="memo-regression"]')
+  const gap = () => evaluateReader(page, () => {
+    const a = document.querySelector('.floating-memo[data-id="earlier"]')
+    const b = document.querySelector('.floating-memo[data-id="memo-regression"]')
+    return b.offsetTop - a.offsetTop - a.offsetHeight
+  })
+  await expect.poll(gap).toBe(12)
+  await early.locator('.collapse-btn').click()
+  await expect.poll(gap).toBe(12)
+  await early.locator('.collapse-btn').click()
+  await early.evaluate(el => { el.style.height = '450px' })
+  await expect.poll(gap).toBe(12)
+  await early.locator('.floating-memo-body').click()
+  const editor = early.locator('textarea')
+  await editor.fill('Preserved draft')
+  await early.evaluate(el => { el.dataset.identity = 'preserved' })
+  await evaluateReader(page, () => {
+    localStorage.setItem('easypaper_reader_memoOverflow', 'scroll')
+    window.dispatchEvent(new CustomEvent('easypaper:reader-preferences'))
+  })
+  await expect(editor).toHaveValue('Preserved draft')
+  // Trigger zoom without intentionally moving keyboard focus out of the editor.
+  await reader.locator('#zoom-in-btn').evaluate(button => button.click())
+  await expect(early).toHaveAttribute('data-identity', 'preserved')
+  await expect(editor).toHaveValue('Preserved draft')
+  await expect.poll(gap).toBe(12)
+  await late.locator('[data-memo-align="right"]').click()
+  await expect(reader.locator('.memo-margin-right [data-id="memo-regression"]')).toHaveCount(1)
+  await page.reload()
+  await expect(activeReader(page).locator('.memo-margin-right [data-id="memo-regression"]')).toBeVisible()
+  await expect(activeReader(page).locator('.memo-margin-left [data-id="earlier"]')).toHaveCount(1)
+})
+
+test('aligned memo deletion and undo restore order, with reachable margins on narrow screens', async ({ page }) => {
+  await openViewerWithMemo(page, { charStart: 90, alignment: 'left' }, [
+    { id: 'earlier', pageNum: 1, sentenceIdx: 0, charStart: 10, content: 'Earlier', x: 20, y: 25, alignment: 'left' },
+  ])
+  const reader = activeReader(page)
+  const early = reader.locator('.floating-memo[data-id="earlier"]')
+  await early.locator('.delete-btn').click()
+  await reader.locator('.custom-confirm-modal .confirm-btn').click()
+  await expect(early).toHaveCount(0)
+  await expect.poll(() => reader.locator('.floating-memo[data-id="memo-regression"]').evaluate(el => el.offsetTop)).toBe(0)
+  await reader.locator('#viewer-scroll-container').click({ position: { x: 5, y: 5 } })
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(reader.locator('.memo-margin-left [data-id="earlier"]')).toHaveCount(1)
+  await early.locator('.hide-btn').click()
+  await expect(early).toHaveCount(0)
+  await expect.poll(() => reader.locator('.floating-memo[data-id="memo-regression"]').evaluate(el => el.offsetTop)).toBe(0)
+  await page.setViewportSize({ width: 650, height: 800 })
+  await expect.poll(() => evaluateReader(page, () => {
+    const scroll = document.querySelector('#viewer-scroll-container')
+    scroll.scrollLeft = 0
+    const lane = document.querySelector('.memo-margin-left')
+    return lane.getBoundingClientRect().left >= scroll.getBoundingClientRect().left
+  })).toBe(true)
 })

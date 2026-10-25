@@ -221,5 +221,13 @@
   "commands.memoPrompt": "메모 내용",
   "commands.replaceDraft": "작성 중인 질문을 바꿀까요?",
   "commands.summarySelectionPrompt": "선택한 내용을 핵심 위주로 간결하게 요약해주세요.",
-  "commands.summaryDocumentPrompt": "이 문서의 핵심 내용, 결론과 한계를 요약해주세요."
+  "commands.summaryDocumentPrompt": "이 문서의 핵심 내용, 결론과 한계를 요약해주세요.",
+  "memoAlignment.left": "왼쪽 여백에 정렬",
+  "memoAlignment.right": "오른쪽 여백에 정렬",
+  "memoAlignment.memoRightPosition": "오른쪽 메모 위치 (병렬 보기)",
+  "memoAlignment.outside": "번역문 오른쪽 바깥",
+  "memoAlignment.between": "원문과 번역문 사이",
+  "memoAlignment.memoOverflow": "메모가 페이지 높이를 넘을 때",
+  "memoAlignment.expand": "페이지 아래 공간 확장",
+  "memoAlignment.scroll": "메모 영역 내부 스크롤"
 }

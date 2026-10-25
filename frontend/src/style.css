@@ -8268,3 +8268,13 @@ body.light-theme .chat-drawer {
   line-height: 1.5;
   color: var(--text-muted);
 }
+
+/* Memo margin lanes preserve the PDF's own coordinate system. */
+.page-pair.has-aligned-memos { max-width: none; flex-shrink: 0; align-self: flex-start; }
+.page-pair.has-aligned-memos > .pdf-page-wrapper { align-self: flex-start; }
+.memo-margin-lane { position: absolute; top: 0; overflow: visible; z-index: 10000; }
+.memo-margin-lane[hidden] { display: none; }
+.memo-margin-scroll { overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.floating-memo-action-btn[aria-pressed="true"][data-memo-align] { background: var(--bg-hover); color: var(--accent); }
+.floating-memo-header { flex-wrap: wrap; }
+.reader-preferences > label:has(select) { display: flex; justify-content: space-between; gap: 16px; margin-top: 12px; }

@@ -9,7 +9,7 @@ export const READER_FEATURES = {
   restoreReading: () => t('viewer:comfort.restoreReading'),
   quickActions: () => t('viewer:comfort.quickActions'),
 }
-import { readerPreferenceKey, readerFeatureEnabled } from './readerPreferenceStore.js'
+import { readerPreferenceKey, readerFeatureEnabled, getMemoLayoutPreferences } from './readerPreferenceStore.js'
 export { readerFeatureEnabled } from './readerPreferenceStore.js'
 export function setReaderFeature(name, enabled, storage = localStorage) {
   storage.setItem(readerPreferenceKey(name), String(Boolean(enabled)))
@@ -49,6 +49,39 @@ export function installReaderPreferences() {
       try { setReaderFeature(name, input.checked) } catch { input.checked = readerFeatureEnabled(name) }
     })
     controls.push(() => { input.checked = readerFeatureEnabled(name); text.textContent = label() })
+  }
+  for (const [name, field, values] of [
+    ['memoRightPosition', 'rightPosition', ['outside', 'between']],
+    ['memoOverflow', 'overflow', ['expand', 'scroll']],
+  ]) {
+    const row = document.createElement('label')
+    const text = document.createElement('span')
+    const select = document.createElement('select')
+    select.id = `setting-reader-${name}`
+    row.htmlFor = select.id
+    for (const value of values) { const option = document.createElement('option'); option.value = value; select.append(option) }
+    row.append(text, select); group.append(row)
+    const labels = {
+      memoRightPosition: () => t('viewer:memoAlignment.memoRightPosition'),
+      memoOverflow: () => t('viewer:memoAlignment.memoOverflow'),
+      outside: () => t('viewer:memoAlignment.outside'),
+      between: () => t('viewer:memoAlignment.between'),
+      expand: () => t('viewer:memoAlignment.expand'),
+      scroll: () => t('viewer:memoAlignment.scroll'),
+    }
+    const update = () => {
+      text.textContent = labels[name]()
+      select.value = getMemoLayoutPreferences()[field]
+      for (const option of select.options) option.textContent = labels[option.value]()
+      select._customSelectPicker?.refresh()
+    }
+    select.addEventListener('change', () => {
+      try {
+        localStorage.setItem(readerPreferenceKey(name), select.value)
+        window.dispatchEvent(new CustomEvent('easypaper:reader-preferences'))
+      } catch { update() }
+    })
+    controls.push(update)
   }
   const sync = () => controls.forEach(update => update())
   onReaderPreferences(sync)
