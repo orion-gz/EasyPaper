@@ -50,6 +50,7 @@ test('tab navigation saves short visits and updates History without closing the 
   await expect.poll(() => state.stats.some(seconds => seconds >= 2)).toBe(true)
   expect(state.metadata.some(item => item.last_read_at && item.last_page === 1)).toBe(true)
   await expect(page.locator('iframe[data-document-id="read-a"]')).toHaveCount(1)
+  await expect.poll(() => state.sessions.filter(item => item.type === 'end' && item.paperId === 'read-a').length).toBe(1)
   const recorded = state.seconds
   await page.clock.runFor(25000)
   expect(state.seconds).toBe(recorded)
@@ -63,6 +64,7 @@ test('returning through the tab bar records time without clicking the PDF', asyn
   const before = state.seconds
   await tab(page, 'document:read-a').click()
   await expect(reader(page).locator('body')).toHaveAttribute('data-workspace-inactive', 'false')
+  await expect.poll(() => state.sessions.filter(item => item.type === 'start').length).toBe(2)
   expect(await reader(page).locator('body').evaluate(() => document.hasFocus())).toBe(false)
   await page.clock.runFor(2500)
   await tab(page, 'page:history').click()
@@ -100,6 +102,7 @@ test('document switching isolates time and closing an inactive tab does not coun
   await page.clock.runFor(2500)
   await open(page, 'read-b')
   await expect.poll(() => state.requests.filter(item => item.id === 'read-a').length).toBeGreaterThan(0)
+  await expect.poll(() => state.sessions.filter(item => item.type === 'end' && item.paperId === 'read-a').length).toBe(1)
   const sumA = () => state.requests.filter(item => item.id === 'read-a').reduce((sum, item) => sum + item.seconds, 0)
   const savedA = sumA()
   const metadataA = state.metadata.filter(item => item.id === 'read-a').length

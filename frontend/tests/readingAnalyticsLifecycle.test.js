@@ -35,3 +35,28 @@ test('out-of-order starts keep the newer document session', async t => {
   assert.equal(timers.mock.callCount(), 2)
   await tracker.stopSession()
 })
+
+test('returning to a document waits for its previous session to end', async t => {
+  let releaseEnd
+  let starts = 0
+  t.mock.method(globalThis, 'fetch', url => {
+    if (url.endsWith('/end')) return new Promise(resolve => { releaseEnd = resolve })
+    if (url.endsWith('/start')) starts += 1
+    return Promise.resolve({ ok: true, json: async () => ({ sessionId: `session-${starts}`, version: 0 }) })
+  })
+  t.mock.method(globalThis, 'setInterval', () => 1)
+  t.mock.method(globalThis, 'clearInterval', () => {})
+  const tracker = new ReadingAnalyticsTracker()
+  await tracker.startSession('a')
+  const end = tracker.stopSession()
+  const returning = tracker.startSession('a')
+  assert.equal(starts, 1)
+  releaseEnd({ ok: true })
+  await end
+  await returning
+  assert.equal(starts, 2)
+  assert.equal(tracker.sessionId, 'session-2')
+  const finalEnd = tracker.stopSession()
+  releaseEnd({ ok: true })
+  await finalEnd
+})

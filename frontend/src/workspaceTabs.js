@@ -130,7 +130,8 @@ export function createWorkspaceTabs(adapter) {
     if (record) {
       const runtime = record.frame.contentWindow?.__easypaperDocument
       if (runtime?.ready) {
-        flushFrame(record, runtime)
+        // Leaving a document tab ends this visit; returning starts a new session.
+        flushFrame(record, runtime, true)
         store.update(visibleId, { reading: runtime.snapshot(), title: runtime.title() })
         await runtime.setActive(false)
       }
@@ -599,7 +600,8 @@ export function createWorkspaceTabs(adapter) {
     },
     openDocument(doc, push = true, route) {
       return enqueue(async () => {
-        await leaveCurrent()
+        // Re-routing the active document does not end its reading session.
+        if (visibleId !== tabKey('document', doc.id)) await leaveCurrent()
         const tab = store.openTab('document', doc.id, doc.metadata?.title || doc.filename || doc.id)
         if (route) store.update(tab.id, { route })
         visibleId = null
