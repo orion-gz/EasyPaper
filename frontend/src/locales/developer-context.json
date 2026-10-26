@@ -5821,5 +5821,32 @@
   },
   "viewer:memoAlignment.overflowHelp": {
     "description": "Choose how to show notes that extend beyond the page. — Memo alignment toolbar or placement settings UI."
+  },
+  "viewer:memoFormat.label": {
+    "description": "Floating memo footer: label. Word count uses whitespace-separated rendered text; excludes Markdown syntax."
+  },
+  "viewer:memoFormat.bold": {
+    "description": "Floating memo footer: bold. Word count uses whitespace-separated rendered text; excludes Markdown syntax."
+  },
+  "viewer:memoFormat.italic": {
+    "description": "Floating memo footer: italic. Word count uses whitespace-separated rendered text; excludes Markdown syntax."
+  },
+  "viewer:memoFormat.heading": {
+    "description": "Floating memo footer: heading. Word count uses whitespace-separated rendered text; excludes Markdown syntax."
+  },
+  "viewer:memoFormat.list": {
+    "description": "Floating memo footer: list. Word count uses whitespace-separated rendered text; excludes Markdown syntax."
+  },
+  "viewer:memoFormat.quote": {
+    "description": "Floating memo footer: quote. Word count uses whitespace-separated rendered text; excludes Markdown syntax."
+  },
+  "viewer:memoFormat.code": {
+    "description": "Floating memo footer: code. Word count uses whitespace-separated rendered text; excludes Markdown syntax."
+  },
+  "viewer:memoFormat.link": {
+    "description": "Floating memo footer: link. Word count uses whitespace-separated rendered text; excludes Markdown syntax."
+  },
+  "viewer:memoFormat.words": {
+    "description": "Floating memo footer: words. Word count uses whitespace-separated rendered text; excludes Markdown syntax."
   }
 }
