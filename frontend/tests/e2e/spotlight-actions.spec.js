@@ -190,6 +190,8 @@ test('AI commands preserve drafts, summarize selected text and start a new conte
   await reader(page).locator('#chat-input').fill('')
   await reader(page).locator('.textLayer span').first().evaluate(el => { const range = document.createRange(); range.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range) })
   await run(page, '/summarize')
+  const replaceDraft = reader(page).locator('.custom-confirm-modal .confirm-btn')
+  if (await replaceDraft.isVisible()) await replaceDraft.click()
   await expect.poll(() => requests.length).toBe(1)
   expect(requests[0].selected_text).toContain('Research evidence')
   await expect(reader(page).locator('#chat-input')).toBeEnabled()

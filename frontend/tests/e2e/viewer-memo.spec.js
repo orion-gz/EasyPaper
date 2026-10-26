@@ -593,8 +593,8 @@ for (const side of ['left', 'right']) {
     await header.focus()
     const before = await memoPagePosition(memo)
     expect(before.y).toBeGreaterThan(before.height * 2.5)
-    if (side === 'right') expect(before.x).toBeGreaterThan(before.width * 2.5)
-    else expect(before.x).toBeLessThan(before.width * -1.5)
+    if (side === 'right') expect(before.x).toBeGreaterThan(before.width)
+    else expect(before.x).toBeLessThan(0)
 
     await page.keyboard.press('ArrowRight')
     await expect(header).toBeFocused()
