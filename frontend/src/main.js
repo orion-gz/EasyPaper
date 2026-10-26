@@ -12658,16 +12658,18 @@ function renderPageMemos(pageNum) {
           <div class="floating-memo-title" title="${sentenceText}">
             <span>${icon('edit3', 12, 'style="vertical-align:-2px;margin-right:2px"')}${shortTitle}</span>
           </div>
-          <div class="floating-memo-actions"></div>
-        </div>
-        <div class="floating-memo-toolbar">
-          <div class="floating-memo-alignment" role="group" aria-label="${t('viewer:memoAlignment.label')}">
-            ${['left', 'right'].map(side => `<button type="button" class="floating-memo-align-btn" data-memo-align="${side}" title="${side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right')}" aria-label="${side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right')}" aria-pressed="${memo.alignment === side}">${icon('panelLeft', 13, 'aria-hidden="true"')}<span>${side === 'left' ? t('viewer:memoAlignment.leftShort') : t('viewer:memoAlignment.rightShort')}</span></button>`).join('')}
-          </div>
-          <div class="floating-memo-toggles">
-            <button type="button" class="floating-memo-action-btn collapse-btn" title="${memo.collapsed ? '메모 펼치기' : '메모 접기'}">
-              ${icon(memo.collapsed ? 'chevronDown' : 'chevronUp', 12)}
-            </button>
+          <div class="floating-memo-controls">
+            <div class="floating-memo-actions"></div>
+            <div class="floating-memo-toolbar">
+              <div class="floating-memo-alignment" role="group" aria-label="${t('viewer:memoAlignment.label')}">
+                ${['left', 'right'].map(side => `<button type="button" class="floating-memo-align-btn" data-memo-align="${side}" title="${side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right')}" aria-label="${side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right')}" aria-pressed="${memo.alignment === side}">${icon('panelLeft', 13, 'aria-hidden="true"')}<span>${side === 'left' ? t('viewer:memoAlignment.leftShort') : t('viewer:memoAlignment.rightShort')}</span></button>`).join('')}
+              </div>
+              <div class="floating-memo-toggles">
+                <button type="button" class="floating-memo-action-btn collapse-btn" title="${memo.collapsed ? '메모 펼치기' : '메모 접기'}">
+                  ${icon(memo.collapsed ? 'chevronDown' : 'chevronUp', 12)}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
