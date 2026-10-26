@@ -50,17 +50,35 @@ export function installReaderPreferences() {
     })
     controls.push(() => { input.checked = readerFeatureEnabled(name); text.textContent = label() })
   }
+  const memoGroup = document.createElement('fieldset')
+  memoGroup.className = 'memo-layout-preferences form-group'
+  const memoLegend = document.createElement('legend')
+  const memoHelp = document.createElement('p')
+  memoHelp.className = 'memo-layout-help'
+  memoGroup.append(memoLegend, memoHelp)
+  controls.push(() => {
+    memoLegend.textContent = t('viewer:memoAlignment.settingsTitle')
+    memoHelp.textContent = t('viewer:memoAlignment.settingsHelp')
+  })
   for (const [name, field, values] of [
     ['memoRightPosition', 'rightPosition', ['outside', 'between']],
     ['memoOverflow', 'overflow', ['expand', 'scroll']],
   ]) {
-    const row = document.createElement('label')
-    const text = document.createElement('span')
+    const row = document.createElement('div')
+    row.className = 'memo-layout-setting'
+    const copy = document.createElement('div')
+    copy.className = 'memo-layout-setting-copy'
+    const text = document.createElement('label')
+    const description = document.createElement('p')
     const select = document.createElement('select')
+    select.className = 'form-select'
     select.id = `setting-reader-${name}`
-    row.htmlFor = select.id
+    text.htmlFor = select.id
+    description.id = `${select.id}-help`
+    select.setAttribute('aria-describedby', description.id)
     for (const value of values) { const option = document.createElement('option'); option.value = value; select.append(option) }
-    row.append(text, select); group.append(row)
+    copy.append(text, description)
+    row.append(copy, select); memoGroup.append(row)
     const labels = {
       memoRightPosition: () => t('viewer:memoAlignment.memoRightPosition'),
       memoOverflow: () => t('viewer:memoAlignment.memoOverflow'),
@@ -71,6 +89,7 @@ export function installReaderPreferences() {
     }
     const update = () => {
       text.textContent = labels[name]()
+      description.textContent = field === 'rightPosition' ? t('viewer:memoAlignment.positionHelp') : t('viewer:memoAlignment.overflowHelp')
       select.value = getMemoLayoutPreferences()[field]
       for (const option of select.options) option.textContent = labels[option.value]()
       select._customSelectPicker?.refresh()
@@ -87,5 +106,5 @@ export function installReaderPreferences() {
   onReaderPreferences(sync)
   document.addEventListener('easypaper:locale-changed', sync)
   sync()
-  container.append(group)
+  container.append(group, memoGroup)
 }

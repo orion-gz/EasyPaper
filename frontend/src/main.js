@@ -225,6 +225,7 @@ class CustomSelectPicker {
     this.button = document.createElement('button')
     this.button.type = 'button'
     this.button.className = 'provider-picker-btn' + (this.container.classList.contains('picker-full-wrap') ? ' picker-full' : '')
+    if (select.hasAttribute('aria-describedby')) this.button.setAttribute('aria-describedby', select.getAttribute('aria-describedby'))
     this.button.setAttribute('aria-haspopup', 'listbox')
     this.button.setAttribute('aria-expanded', 'false')
     const pickerId = select.id || 'custom-select-' + CustomSelectPicker.nextId++
@@ -12652,29 +12653,35 @@ function renderPageMemos(pageNum) {
 
     memoEl.innerHTML = `
       <div class="floating-memo-header" tabindex="0" role="group" aria-label="${t('viewer:a11y.memoMove')}">
-        <div class="floating-memo-title" title="${sentenceText}">
-          <span>${icon('edit3', 12, 'style="vertical-align:-2px;margin-right:2px"')}${shortTitle}</span>
+        <div class="floating-memo-heading">
+          <div class="floating-memo-title" title="${sentenceText}">
+            <span>${icon('edit3', 12, 'style="vertical-align:-2px;margin-right:2px"')}${shortTitle}</span>
+          </div>
+          <div class="floating-memo-color-picker">
+            <button type="button" class="color-dot default ${!memo.color || memo.color === 'default' ? 'selected' : ''}" data-color="default" title="${t('viewer:a11y.defaultColor')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.defaultColor') })}" aria-pressed="${String(!memo.color || memo.color === 'default')}"></button>
+            <button type="button" class="color-dot yellow ${memo.color === 'yellow' ? 'selected' : ''}" data-color="yellow" title="${t('viewer:a11y.yellow')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.yellow') })}" aria-pressed="${String(memo.color === 'yellow')}"></button>
+            <button type="button" class="color-dot green ${memo.color === 'green' ? 'selected' : ''}" data-color="green" title="${t('viewer:a11y.green')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.green') })}" aria-pressed="${String(memo.color === 'green')}"></button>
+            <button type="button" class="color-dot blue ${memo.color === 'blue' ? 'selected' : ''}" data-color="blue" title="${t('viewer:a11y.blue')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.blue') })}" aria-pressed="${String(memo.color === 'blue')}"></button>
+            <button type="button" class="color-dot red ${memo.color === 'red' ? 'selected' : ''}" data-color="red" title="${t('viewer:a11y.red')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.red') })}" aria-pressed="${String(memo.color === 'red')}"></button>
+          </div>
+          <div class="floating-memo-actions"></div>
         </div>
-        <div class="floating-memo-color-picker">
-          <button type="button" class="color-dot default ${!memo.color || memo.color === 'default' ? 'selected' : ''}" data-color="default" title="${t('viewer:a11y.defaultColor')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.defaultColor') })}" aria-pressed="${String(!memo.color || memo.color === 'default')}"></button>
-          <button type="button" class="color-dot yellow ${memo.color === 'yellow' ? 'selected' : ''}" data-color="yellow" title="${t('viewer:a11y.yellow')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.yellow') })}" aria-pressed="${String(memo.color === 'yellow')}"></button>
-          <button type="button" class="color-dot green ${memo.color === 'green' ? 'selected' : ''}" data-color="green" title="${t('viewer:a11y.green')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.green') })}" aria-pressed="${String(memo.color === 'green')}"></button>
-          <button type="button" class="color-dot blue ${memo.color === 'blue' ? 'selected' : ''}" data-color="blue" title="${t('viewer:a11y.blue')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.blue') })}" aria-pressed="${String(memo.color === 'blue')}"></button>
-          <button type="button" class="color-dot red ${memo.color === 'red' ? 'selected' : ''}" data-color="red" title="${t('viewer:a11y.red')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.red') })}" aria-pressed="${String(memo.color === 'red')}"></button>
+        <div class="floating-memo-toolbar">
+          <div class="floating-memo-alignment" role="group" aria-label="${t('viewer:memoAlignment.label')}">
+            ${['left', 'right'].map(side => `<button type="button" class="floating-memo-align-btn" data-memo-align="${side}" title="${side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right')}" aria-label="${side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right')}" aria-pressed="${memo.alignment === side}">${icon('panelLeft', 13, 'aria-hidden="true"')}<span>${side === 'left' ? t('viewer:memoAlignment.leftShort') : t('viewer:memoAlignment.rightShort')}</span></button>`).join('')}
+          </div>
+          <div class="floating-memo-toggles">
+            <button type="button" class="floating-memo-action-btn auto-size-btn${memoAutoSize ? ' active' : ''}" aria-pressed="${String(memoAutoSize)}">
+              ${icon(memoAutoSize ? 'shrink' : 'expand', 12)}
+            </button>
+            <button type="button" class="floating-memo-action-btn collapse-btn" title="${memo.collapsed ? '메모 펼치기' : '메모 접기'}">
+              ${icon(memo.collapsed ? 'chevronDown' : 'chevronUp', 12)}
+            </button>
+            <button type="button" class="floating-memo-action-btn hide-btn" title="메모 숨기기 (하이라이트만 표시)">
+              ${icon('eyeOff', 12)}
+            </button>
+          </div>
         </div>
-        <div class="floating-memo-toggles">
-          ${['left', 'right'].map(side => `<button type="button" class="floating-memo-action-btn" data-memo-align="${side}" title="${(side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right'))}" aria-label="${(side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right'))}" aria-pressed="${memo.alignment === side}">${side === 'left' ? '⇤' : '⇥'}</button>`).join('')}
-          <button type="button" class="floating-memo-action-btn auto-size-btn${memoAutoSize ? ' active' : ''}" aria-pressed="${String(memoAutoSize)}">
-            ${icon(memoAutoSize ? 'shrink' : 'expand', 12)}
-          </button>
-          <button type="button" class="floating-memo-action-btn collapse-btn" title="${memo.collapsed ? '메모 펼치기' : '메모 접기'}">
-            ${icon(memo.collapsed ? 'chevronDown' : 'chevronUp', 12)}
-          </button>
-          <button type="button" class="floating-memo-action-btn hide-btn" title="메모 숨기기 (하이라이트만 표시)">
-            ${icon('eyeOff', 12)}
-          </button>
-        </div>
-        <div class="floating-memo-actions"></div>
       </div>
       <div class="floating-memo-body"></div>
       <button type="button" class="floating-memo-resize-handle" aria-label="${t('viewer:a11y.memoResize')}" title="${t('viewer:a11y.memoResize')}"></button>

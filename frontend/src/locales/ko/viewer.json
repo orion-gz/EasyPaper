@@ -229,5 +229,12 @@
   "memoAlignment.between": "원문과 번역문 사이",
   "memoAlignment.memoOverflow": "메모가 페이지 높이를 넘을 때",
   "memoAlignment.expand": "페이지 아래 공간 확장",
-  "memoAlignment.scroll": "메모 영역 내부 스크롤"
+  "memoAlignment.scroll": "메모 영역 내부 스크롤",
+  "memoAlignment.label": "메모 정렬",
+  "memoAlignment.leftShort": "왼쪽",
+  "memoAlignment.rightShort": "오른쪽",
+  "memoAlignment.settingsTitle": "메모 배치",
+  "memoAlignment.settingsHelp": "메모의 왼쪽·오른쪽 정렬 버튼에 적용되는 설정입니다.",
+  "memoAlignment.positionHelp": "원문과 번역문을 나란히 볼 때의 위치를 선택합니다.",
+  "memoAlignment.overflowHelp": "메모가 페이지보다 길어질 때의 표시 방식을 선택합니다."
 }

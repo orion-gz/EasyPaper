@@ -5302,9 +5302,10 @@ body.light-theme .floating-memo {
 
 .floating-memo-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  padding: 8px;
   background: rgba(255, 255, 255, 0.04);
   border-bottom: 1px solid var(--border);
   cursor: grab;
@@ -5324,7 +5325,7 @@ body.light-theme .floating-memo-header {
   display: flex;
   align-items: center;
   gap: 4px;
-  max-width: 110px;
+  flex: 1;
   flex-shrink: 1;
   min-width: 0;
 }
@@ -5687,11 +5688,13 @@ body.light-theme .custom-confirm-modal {
   align-items: center;
   gap: 5px;
   margin-left: auto;
-  margin-right: 8px;
-  opacity: 0.4;
+  margin-right: 0;
+  flex-shrink: 0;
+  opacity: 0.65;
   transition: opacity 0.2s ease;
 }
-.floating-memo:hover .floating-memo-color-picker {
+.floating-memo:hover .floating-memo-color-picker,
+.floating-memo:focus-within .floating-memo-color-picker {
   opacity: 1;
 }
 
@@ -5699,7 +5702,7 @@ body.light-theme .custom-confirm-modal {
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-right: 4px;
+  flex-shrink: 0;
 }
 
 /* 접기 상태: 헤더(제목 탭)만 남기고 본문은 숨긴다.
@@ -8275,6 +8278,19 @@ body.light-theme .chat-drawer {
 .memo-margin-lane { position: absolute; top: 0; overflow: visible; z-index: 10000; }
 .memo-margin-lane[hidden] { display: none; }
 .memo-margin-scroll { overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
-.floating-memo-action-btn[aria-pressed="true"][data-memo-align] { background: var(--bg-hover); color: var(--accent); }
-.floating-memo-header { flex-wrap: wrap; }
-.reader-preferences > label:has(select) { display: flex; justify-content: space-between; gap: 16px; margin-top: 12px; }
+
+.floating-memo-heading,
+.floating-memo-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.floating-memo-heading { min-height: 22px; }
+.floating-memo-heading .floating-memo-actions { gap: 2px; flex-shrink: 0; }
+.floating-memo-header .floating-memo-action-btn { width: 24px; height: 24px; padding: 4px; border-radius: 5px; flex-shrink: 0; }
+.floating-memo-toolbar { flex-wrap: wrap; gap: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.floating-memo-toolbar .floating-memo-toggles { margin-left: auto; }
+.floating-memo-alignment { display: inline-flex; flex-shrink: 0; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-base); }
+.floating-memo-align-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 26px; padding: 4px 5px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; transition: background-color .15s, color .15s, border-color .15s; }
+.floating-memo-align-btn svg { flex-shrink: 0; }
+.floating-memo-align-btn[data-memo-align="right"] svg { transform: scaleX(-1); }
+.floating-memo-align-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.floating-memo-align-btn[aria-pressed="true"] { color: var(--control-accent-text); border-color: color-mix(in srgb, var(--control-accent) 45%, transparent); background: color-mix(in srgb, var(--control-accent) 16%, var(--bg-panel)); box-shadow: 0 1px 2px #0001; }
+.floating-memo-header:focus-visible,
+.floating-memo-header button:focus-visible { outline: 2px solid var(--control-accent); outline-offset: 2px; }
