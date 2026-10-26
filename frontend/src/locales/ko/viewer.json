@@ -236,5 +236,14 @@
   "memoAlignment.settingsTitle": "메모 배치",
   "memoAlignment.settingsHelp": "메모의 왼쪽·오른쪽 정렬 버튼에 적용되는 설정입니다.",
   "memoAlignment.positionHelp": "원문과 번역문을 나란히 볼 때의 위치를 선택합니다.",
-  "memoAlignment.overflowHelp": "메모가 페이지보다 길어질 때의 표시 방식을 선택합니다."
+  "memoAlignment.overflowHelp": "메모가 페이지보다 길어질 때의 표시 방식을 선택합니다.",
+  "memoFormat.label": "서식",
+  "memoFormat.bold": "굵게",
+  "memoFormat.italic": "기울임",
+  "memoFormat.heading": "제목",
+  "memoFormat.list": "목록",
+  "memoFormat.quote": "인용",
+  "memoFormat.code": "코드",
+  "memoFormat.link": "링크",
+  "memoFormat.words": "{{count}}단어"
 }

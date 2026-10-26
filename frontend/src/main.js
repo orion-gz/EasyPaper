@@ -12488,9 +12488,29 @@ function renderPageMemos(pageNum) {
       requestAnimationFrame(() => updateMemoConnectorLine(pageWrapper, memo))
     }
 
+    const memoFormatLabels = {
+      bold: t('viewer:memoFormat.bold'),
+      italic: t('viewer:memoFormat.italic'),
+      heading: t('viewer:memoFormat.heading'),
+      list: t('viewer:memoFormat.list'),
+      quote: t('viewer:memoFormat.quote'),
+      code: t('viewer:memoFormat.code'),
+      link: t('viewer:memoFormat.link'),
+    }
+
+    function updateMemoWordCount() {
+      const plain = document.createElement('div')
+      plain.innerHTML = sanitizeMarkedHtml(marked.parse(prepareMemoMarkdown(memo.content || '')))
+      plain.querySelectorAll('br').forEach(el => el.replaceWith(' '))
+      plain.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, pre, blockquote, td, th').forEach(el => el.append(' '))
+      const count = (plain.textContent.match(/[^\s]+/gu) || []).filter(word => /[\p{L}\p{N}]/u.test(word)).length
+      memoEl.querySelector('.floating-memo-word-count').textContent = t('viewer:memoFormat.words', { count })
+    }
+
     function updateCardContent() {
       const body = memoEl.querySelector('.floating-memo-body')
       const actions = memoEl.querySelector('.floating-memo-actions')
+      updateMemoWordCount()
 
       if (isEditing) {
         const editor = document.createElement('textarea')
@@ -12510,6 +12530,7 @@ function renderPageMemos(pageNum) {
 
         textarea.addEventListener('input', () => {
           memo.content = textarea.value
+          updateMemoWordCount()
           resizeTextareaToContent(textarea)
           persistMemoChange()
           requestAnimationFrame(() => updateMemoConnectorLine(pageWrapper, memo))
@@ -12543,7 +12564,7 @@ function renderPageMemos(pageNum) {
           setTimeout(() => {
             const exists = memoEl.parentNode !== null
             const currentTextarea = memoEl.querySelector('.floating-memo-textarea')
-            if (exists && isEditing && currentTextarea === textarea && document.activeElement !== textarea) {
+            if (exists && isEditing && currentTextarea === textarea && document.activeElement !== textarea && !document.activeElement?.closest('.floating-memo-format-bar')) {
               isEditing = false
               updateCardContent()
               updateMemoConnectorLine(pageWrapper, memo)
@@ -12684,6 +12705,12 @@ function renderPageMemos(pageNum) {
         </div>
       </div>
       <div class="floating-memo-body"></div>
+      <div class="floating-memo-footer">
+        <div class="floating-memo-format-bar" role="group" aria-label="${t('viewer:memoFormat.label')}">
+          ${[['bold', '<b>B</b>'], ['italic', '<i>I</i>'], ['heading', 'H'], ['list', '≡'], ['quote', '❝'], ['code', '&lt;/&gt;'], ['link', '↗']].map(([name, label]) => `<button type="button" data-memo-format="${name}" title="${memoFormatLabels[name]}" aria-label="${memoFormatLabels[name]}">${label}</button>`).join('')}
+        </div>
+        <span class="floating-memo-word-count"></span>
+      </div>
       <button type="button" class="floating-memo-resize-handle" aria-label="${t('viewer:a11y.memoResize')}" title="${t('viewer:a11y.memoResize')}"></button>
     `
 
@@ -12744,6 +12771,32 @@ function renderPageMemos(pageNum) {
       allMemosObj[`page_${pageNum}`] = pageMemos
       saveMemos(state.sessionId, allMemosObj)
       renderPageMemos(pageNum)
+    })
+
+    const formatBar = memoEl.querySelector('.floating-memo-format-bar')
+    formatBar.addEventListener('mousedown', event => event.preventDefault())
+    formatBar.addEventListener('focusout', event => {
+      if (!formatBar.contains(event.relatedTarget)) {
+        memoEl.querySelector('.floating-memo-textarea')?.dispatchEvent(new Event('blur'))
+      }
+    })
+    formatBar.addEventListener('click', event => {
+      const button = event.target.closest('[data-memo-format]')
+      if (!button) return
+      event.stopPropagation()
+      if (!isEditing) {
+        memoEditStartContent = memo.content
+        isEditing = true
+        updateCardContent()
+      }
+      const textarea = memoEl.querySelector('.floating-memo-textarea')
+      textarea.focus()
+      const format = button.dataset.memoFormat
+      const inline = { bold: ['**', '**'], italic: ['*', '*'], code: ['`', '`'], link: ['[', '](url)'] }
+      if (inline[format]) toggleMemoInlineFormat(textarea, ...inline[format], memoFormatLabels[format])
+      else if (format === 'heading') toggleMemoLinePrefix(textarea, () => '## ', /^(\s*)#{1,6}\s+/)
+      else if (format === 'list') toggleMemoLinePrefix(textarea, () => '- ', /^(\s*)[-+*]\s+/)
+      else if (format === 'quote') toggleMemoLinePrefix(textarea, () => '> ', /^(\s*)>\s+/)
     })
 
     const body = memoEl.querySelector('.floating-memo-body')

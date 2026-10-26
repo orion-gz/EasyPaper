@@ -236,5 +236,14 @@
   "memoAlignment.settingsTitle": "Memo placement",
   "memoAlignment.settingsHelp": "Choose how notes are placed when you use their margin alignment buttons.",
   "memoAlignment.positionHelp": "Choose where right-aligned notes appear beside the original and translation.",
-  "memoAlignment.overflowHelp": "Choose how to show notes that extend beyond the page."
+  "memoAlignment.overflowHelp": "Choose how to show notes that extend beyond the page.",
+  "memoFormat.label": "Formatting",
+  "memoFormat.bold": "Bold",
+  "memoFormat.italic": "Italic",
+  "memoFormat.heading": "Heading",
+  "memoFormat.list": "List",
+  "memoFormat.quote": "Quote",
+  "memoFormat.code": "Code",
+  "memoFormat.link": "Link",
+  "memoFormat.words": "{{count}} words"
 }
