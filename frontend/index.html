@@ -941,9 +941,8 @@
             <label class="toggle-switch" for="setting-minimal-ui">
               <input type="checkbox" id="setting-minimal-ui" />
               <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
-              <span data-i18n="settings:minimalUi">Minimal UI</span>
+              <span class="toggle-switch-label"><span data-i18n="settings:minimalUi">Minimal UI</span><small data-i18n="settings:minimalUiDescription">Show only the library and document tabs. All reader tools remain available.</small></span>
             </label>
-            <small data-i18n="settings:minimalUiDescription">Show only the library and document tabs. All reader tools remain available.</small>
           </div>
           <div class="form-group">
             <label for="setting-ui-locale" data-i18n="settings:uiLanguage">화면 언어</label>
@@ -1334,7 +1333,7 @@
             <div class="form-group">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
                 <span>별도 모델 설정</span>
-                <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;"><input type="checkbox" id="setting-trans-same-as-default" /> 기본 AI 모델과 동일하게 사용</label>
+                <label class="toggle-switch settings-inheritance-switch"><input type="checkbox" id="setting-trans-same-as-default" /><span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span><span class="toggle-switch-label">기본 AI 모델과 동일하게 사용</span></label>
               </div>
               <div id="setting-trans-provider"></div>
             </div>
@@ -1346,9 +1345,7 @@
             <div class="form-group">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
                 <span>별도 모델 설정</span>
-                <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;">
-                  <input type="checkbox" id="setting-analysis-same-as-default" /> 기본 AI 모델과 동일하게 사용
-                </label>
+                <label class="toggle-switch settings-inheritance-switch"><input type="checkbox" id="setting-analysis-same-as-default" /><span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span><span class="toggle-switch-label">기본 AI 모델과 동일하게 사용</span></label>
               </div>
               <div id="setting-analysis-provider"></div>
             </div>
@@ -1360,9 +1357,7 @@
             <div class="form-group">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
                 <span>별도 모델 설정</span>
-                <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;">
-                  <input type="checkbox" id="setting-chat-same-as-default" /> 기본 AI 모델과 동일하게 사용
-                </label>
+                <label class="toggle-switch settings-inheritance-switch"><input type="checkbox" id="setting-chat-same-as-default" /><span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span><span class="toggle-switch-label">기본 AI 모델과 동일하게 사용</span></label>
               </div>
               <div id="setting-chat-provider"></div>
             </div>
@@ -1374,9 +1369,7 @@
             <div class="form-group">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--text-secondary);">
                 <span>별도 모델 설정</span>
-                <label class="checkbox-label" style="font-weight: 400; font-size: 12.5px;">
-                  <input type="checkbox" id="setting-library-same-as-default" /> 기본 AI 모델과 동일하게 사용
-                </label>
+                <label class="toggle-switch settings-inheritance-switch"><input type="checkbox" id="setting-library-same-as-default" /><span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span><span class="toggle-switch-label">기본 AI 모델과 동일하게 사용</span></label>
               </div>
               <div id="setting-library-provider"></div>
             </div>
@@ -1490,9 +1483,10 @@
               여기에는 논문 열람뿐 아니라 시스템 업데이트(서버 재시작)와 Ollama/CLI 원격 설치처럼 서버에 소프트웨어를 설치·재시작시킬 수 있는 관리 기능도 포함됩니다.
               다른 사람이 접근할 수 없는 개인 PC/로컬 환경에서만 켜세요.
             </div>
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer;">
-              <input type="checkbox" id="setting-skip-login-checkbox" style="width: 16px; height: 16px; cursor: pointer;" />
-              로그인 화면 없이 바로 사용하기
+            <label class="toggle-switch">
+              <input type="checkbox" id="setting-skip-login-checkbox" />
+              <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+              <span class="toggle-switch-label">로그인 화면 없이 바로 사용하기</span>
             </label>
           </div>
         </form>
