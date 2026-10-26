@@ -1,5 +1,5 @@
-.reader-preferences { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
-.reader-preferences legend { padding: 0 6px; font-size: 13px; }
+.reader-preferences, .memo-layout-preferences { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
+.reader-preferences legend, .memo-layout-preferences legend { padding: 0 6px; font-size: 13px; }
 .reader-focus-host #tab-workspace > #app-sidebar { display: none !important; }
 .reader-focus.document-workspace-runtime #viewer-topbar { visibility: hidden; }
 .reader-focus.document-workspace-runtime .panels { top: 10px; }
@@ -103,3 +103,19 @@
 }
 
 #reader-command-search { flex: 0 0 32px; width: 32px; height: 32px; }
+
+.memo-layout-preferences { gap: 0; }
+.memo-layout-preferences legend { color: var(--text-primary); font-weight: 600; }
+.memo-layout-help { margin: 0 0 16px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+.memo-layout-setting { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .9fr); gap: 20px; align-items: center; padding: 16px 0; border-top: 1px solid var(--border); }
+.memo-layout-setting:last-child { padding-bottom: 0; }
+.memo-layout-setting-copy { min-width: 0; }
+.memo-layout-setting-copy label { display: block; margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 500; line-height: 1.5; }
+.memo-layout-setting-copy p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.memo-layout-setting .custom-select-picker { min-width: 0; }
+.memo-layout-setting .provider-picker-btn { min-height: 38px; font-size: 12px; }
+.memo-layout-setting .provider-picker-btn .picker-label { white-space: normal; line-height: 1.5; }
+.memo-layout-setting .provider-picker-panel { min-width: 100%; }
+@media (max-width: 640px) {
+  .memo-layout-setting { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+}

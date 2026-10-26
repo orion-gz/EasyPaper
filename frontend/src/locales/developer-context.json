@@ -5800,5 +5800,26 @@
   },
   "viewer:memoAlignment.scroll": {
     "description": "Scroll inside memo margins — PDF memo margin alignment control."
+  },
+  "viewer:memoAlignment.label": {
+    "description": "Memo alignment — Memo alignment toolbar or placement settings UI."
+  },
+  "viewer:memoAlignment.leftShort": {
+    "description": "Left — Memo alignment toolbar or placement settings UI."
+  },
+  "viewer:memoAlignment.rightShort": {
+    "description": "Right — Memo alignment toolbar or placement settings UI."
+  },
+  "viewer:memoAlignment.settingsTitle": {
+    "description": "Memo placement — Memo alignment toolbar or placement settings UI."
+  },
+  "viewer:memoAlignment.settingsHelp": {
+    "description": "Choose how notes are placed when you use their margin alignment buttons. — Memo alignment toolbar or placement settings UI."
+  },
+  "viewer:memoAlignment.positionHelp": {
+    "description": "Choose where right-aligned notes appear beside the original and translation. — Memo alignment toolbar or placement settings UI."
+  },
+  "viewer:memoAlignment.overflowHelp": {
+    "description": "Choose how to show notes that extend beyond the page. — Memo alignment toolbar or placement settings UI."
   }
 }

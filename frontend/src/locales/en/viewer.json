@@ -229,5 +229,12 @@
   "memoAlignment.between": "Between original and translation",
   "memoAlignment.memoOverflow": "When memos exceed page height",
   "memoAlignment.expand": "Extend space below page",
-  "memoAlignment.scroll": "Scroll inside memo margins"
+  "memoAlignment.scroll": "Scroll inside memo margins",
+  "memoAlignment.label": "Memo alignment",
+  "memoAlignment.leftShort": "Left",
+  "memoAlignment.rightShort": "Right",
+  "memoAlignment.settingsTitle": "Memo placement",
+  "memoAlignment.settingsHelp": "Choose how notes are placed when you use their margin alignment buttons.",
+  "memoAlignment.positionHelp": "Choose where right-aligned notes appear beside the original and translation.",
+  "memoAlignment.overflowHelp": "Choose how to show notes that extend beyond the page."
 }

@@ -532,10 +532,12 @@ test('aligned memo deletion and undo restore order, with reachable margins on na
   await expect(early).toHaveCount(0)
   await expect.poll(() => reader.locator('.floating-memo[data-id="memo-regression"]').evaluate(el => el.offsetTop)).toBe(0)
   await page.setViewportSize({ width: 650, height: 800 })
+  const leftLane = reader.locator('.memo-margin-left')
+  await expect(leftLane).toBeVisible()
   await expect.poll(() => evaluateReader(page, () => {
     const scroll = document.querySelector('#viewer-scroll-container')
     scroll.scrollLeft = 0
     const lane = document.querySelector('.memo-margin-left')
-    return lane.getBoundingClientRect().left >= scroll.getBoundingClientRect().left
+    return Boolean(lane && lane.getBoundingClientRect().left >= scroll.getBoundingClientRect().left)
   })).toBe(true)
 })
