@@ -43,7 +43,7 @@ export function installReaderPreferences() {
     input.type = 'checkbox'; input.id = `setting-reader-${name}`
     const track = document.createElement('span'); track.className = 'toggle-switch-track'
     const thumb = document.createElement('span'); thumb.className = 'toggle-switch-thumb'; track.append(thumb)
-    const text = document.createElement('span'); text.textContent = label()
+    const text = document.createElement('span'); text.className = 'toggle-switch-label'; text.textContent = label()
     row.append(input, track, text); group.append(row)
     input.addEventListener('change', () => {
       try { setReaderFeature(name, input.checked) } catch { input.checked = readerFeatureEnabled(name) }

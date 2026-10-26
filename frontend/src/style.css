@@ -7825,11 +7825,10 @@ body.light-theme .chat-drawer {
 
 .settings-row {
   display: grid;
-  grid-template-columns: minmax(168px, 210px) minmax(240px, 360px);
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 280px);
   align-items: center;
-  column-gap: 20px;
-  row-gap: 8px;
+  column-gap: 24px;
+  row-gap: 4px;
 }
 
 .settings-row > * {
@@ -7837,36 +7836,147 @@ body.light-theme .chat-drawer {
   grid-column: 2;
 }
 
-.settings-row > :first-child {
+.settings-row > :first-child:not(.custom-select-picker) {
   grid-column: 1;
-  grid-row: 1 / span 4;
+  grid-row: 1;
+  align-self: end;
+}
+
+.settings-row > small {
+  grid-column: 1;
+  margin: 0;
   align-self: start;
-  padding-top: 10px;
+  line-height: 1.5;
+}
+
+.settings-row > p {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
+.settings-row > input,
+.settings-row > select,
+.settings-row > .custom-select-picker {
+  grid-row: 1 / span 2;
+  align-self: center;
 }
 
 .settings-row .form-select,
 .settings-row > input,
 .settings-row > textarea {
   width: 100%;
-  max-width: 380px;
-  justify-self: end;
+  max-width: none;
+  box-sizing: border-box;
 }
 
-.settings-row .toggle-switch-group,
-.settings-row .accent-swatch-group,
-.settings-row .accent-picker-row {
+.settings-parser-row > #pdf-parser-info-card {
+  grid-column: 1 / -1;
+  grid-row: auto;
+}
+
+/* The text and control columns share one alignment across settings categories. */
+.settings-dialog .toggle-switch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  gap: 4px 20px;
   width: 100%;
-  max-width: 380px;
+  min-height: 38px;
+  align-items: center;
+  box-sizing: border-box;
+}
+.settings-dialog .toggle-switch > .toggle-switch-track {
+  grid-column: 2;
+  grid-row: 1;
   justify-self: end;
 }
-
-.settings-row .toggle-switch {
-  justify-content: space-between;
+.settings-dialog .toggle-switch > .toggle-switch-label,
+.settings-dialog .toggle-switch > span:not(.toggle-switch-track) {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  color: var(--text-primary);
+  font-weight: 500;
 }
-
-.settings-row .toggle-switch-label {
-  flex: 1;
-  order: -1;
+.settings-dialog .toggle-switch > .toggle-switch-label small {
+  margin-top: 4px;
+  line-height: 1.5;
+}
+.settings-dialog .settings-inheritance-switch {
+  width: min(100%, 280px);
+}
+.settings-dialog .toggle-switch-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 280px);
+  gap: 0 24px;
+  width: 100%;
+  padding: 0;
+}
+.settings-dialog .toggle-switch-group > .toggle-switch,
+.settings-dialog .toggle-switch-group > .settings-subsection-label,
+.settings-dialog .toggle-switch-group > .focus-settings {
+  grid-column: 1 / -1;
+}
+.settings-dialog .toggle-switch-group > .toggle-switch,
+.settings-dialog .reader-preferences > .toggle-switch {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.settings-dialog .settings-switch-section > label:first-child {
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+.settings-dialog .toggle-switch-group > label[for] {
+  grid-column: 1;
+  align-self: center;
+  padding: 10px 0;
+  color: var(--text-primary);
+}
+.settings-dialog .toggle-switch-group > select,
+.settings-dialog .toggle-switch-group > .custom-select-picker {
+  grid-column: 2;
+  width: 100%;
+  min-width: 0;
+  align-self: center;
+}
+.settings-dialog .focus-mode-controls {
+  padding-left: 16px;
+  margin-left: 1px;
+  border-left: 2px solid var(--border-strong);
+}
+.settings-dialog .focus-mode-controls .toggle-switch {
+  padding: 8px 0;
+}
+.settings-dialog .focus-range {
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 280px) 46px;
+}
+.settings-dialog .form-group > .toggle-switch + small {
+  display: block;
+  margin: 2px 60px 0 0;
+  line-height: 1.5;
+}
+.settings-dialog .reader-preferences,
+.settings-dialog .memo-layout-preferences {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 14px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+.settings-dialog .reader-preferences legend,
+.settings-dialog .memo-layout-preferences legend {
+  padding: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.settings-dialog .memo-layout-setting {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 280px);
+  gap: 24px;
+}
+.settings-dialog .memo-layout-setting .custom-select-picker {
+  width: 100%;
 }
 
 .settings-action-card,
@@ -8065,6 +8175,34 @@ body.light-theme .chat-drawer {
     width: 100%;
     max-width: none;
     padding-top: 0;
+  }
+
+  .settings-row > input,
+  .settings-row > select,
+  .settings-row > .custom-select-picker,
+  .settings-row > p,
+  .settings-parser-row > #pdf-parser-info-card {
+    grid-row: auto;
+  }
+
+  .settings-row > small { grid-row: 2; }
+  .settings-row:has(> small) > input,
+  .settings-row:has(> small) > select,
+  .settings-row:has(> small) > .custom-select-picker { grid-row: 3; }
+
+  .settings-dialog .toggle-switch-group,
+  .settings-dialog .memo-layout-setting {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .settings-dialog .toggle-switch-group > label[for],
+  .settings-dialog .toggle-switch-group > select,
+  .settings-dialog .toggle-switch-group > .custom-select-picker {
+    grid-column: 1;
+  }
+  .settings-dialog .toggle-switch-group > label[for] { padding-bottom: 0; }
+  .settings-dialog .focus-range {
+    grid-template-columns: minmax(0, 1fr) minmax(100px, 2fr) 46px;
   }
 
   .settings-row .form-select,

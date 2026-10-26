@@ -616,17 +616,20 @@ function initializeSettingsInformationArchitecture() {
   moveSettingsGroup('clear-cache-btn', dataSystemBody)
 
   const rowControlIds = [
-    'setting-ui-locale', 'setting-ui-scale', 'setting-source-lang', 'setting-accent-swatches',
+    'setting-ui-locale', 'setting-ui-scale', 'setting-source-lang',
     'setting-target-lang', 'setting-trans-style', 'setting-translation-mode', 'setting-easy-english-mode',
-    'setting-ignore-math', 'setting-default-zoom', 'setting-toolbar-position',
-    'setting-disable-hover-tooltip', 'setting-auto-generate-keywords',
+    'setting-default-zoom', 'setting-toolbar-position',
     'setting-ollama-host', 'setting-openai-key', 'setting-gemini-key',
     'setting-claude-key', 'setting-openalex-mailto', 'change-current-password',
     'change-new-username', 'change-new-password', 'change-new-password-confirm',
+    'setting-default-ai-provider',
   ]
   for (const id of rowControlIds) $(id)?.closest('.form-group')?.classList.add('settings-row')
-  for (const id of ['setting-accent-swatches', 'setting-ignore-math', 'setting-disable-hover-tooltip', 'setting-auto-generate-keywords']) {
-    $(id)?.closest('.form-group')?.classList.add('settings-row-stacked')
+  $('setting-pdf-parser-picker')?.closest('.form-group')?.classList.add('settings-row', 'settings-parser-row')
+  for (const group of document.querySelectorAll('#settings-modal .form-group')) {
+    if (Array.from(group.children).some(child => child.classList.contains('toggle-switch-group'))) {
+      group.classList.add('settings-switch-section')
+    }
   }
 
   $('clear-cache-btn')?.closest('.form-group')?.classList.add('settings-action-card', 'settings-action-card-danger')
@@ -4145,7 +4148,7 @@ function updateSettingsUIVisibility() {
   // 1. Ollama 주소 (로컬 AI 사용 시) 표시 여부
   const hostGroup = $('setting-ollama-host-group')
   if (hostGroup) {
-    hostGroup.style.display = providers.has('ollama') ? 'block' : 'none'
+    hostGroup.style.display = providers.has('ollama') ? 'grid' : 'none'
   }
 
   // 2. Ollama 모델 다운로드 섹션 표시 여부 (설치 여부에 따라 refreshOllamaInstallUI에서 최종 결정)
@@ -4166,7 +4169,7 @@ function updateSettingsUIVisibility() {
 
   if (openaiGroup) {
     if (providers.has('openai')) {
-      openaiGroup.style.display = 'block'
+      openaiGroup.style.display = 'grid'
       showSection = true
     } else {
       openaiGroup.style.display = 'none'
@@ -4175,7 +4178,7 @@ function updateSettingsUIVisibility() {
 
   if (geminiGroup) {
     if (providers.has('gemini')) {
-      geminiGroup.style.display = 'block'
+      geminiGroup.style.display = 'grid'
       showSection = true
     } else {
       geminiGroup.style.display = 'none'
@@ -4184,7 +4187,7 @@ function updateSettingsUIVisibility() {
 
   if (claudeGroup) {
     if (providers.has('claude')) {
-      claudeGroup.style.display = 'block'
+      claudeGroup.style.display = 'grid'
       showSection = true
     } else {
       claudeGroup.style.display = 'none'
