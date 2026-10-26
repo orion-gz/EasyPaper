@@ -91,4 +91,5 @@ body.minimal-ui.desktop-windows #tab-workspace .workspace-topnav { padding-right
   body.minimal-ui #page-library.active { gap: 12px; }
   body.minimal-ui #library-search-box { grid-column: 1 / -1; }
   body.minimal-ui #library-filter-row { grid-column: 1 / -1; }
+  body.minimal-ui #library-grid { margin-top: 8px; }
 }
