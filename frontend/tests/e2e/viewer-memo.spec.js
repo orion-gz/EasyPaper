@@ -570,3 +570,79 @@ test('aligned memo deletion and undo restore order, with reachable margins on na
     return Boolean(lane && lane.getBoundingClientRect().left >= scroll.getBoundingClientRect().left)
   })).toBe(true)
 })
+
+function alignedMoveMemo(id, charStart, alignment) {
+  return { id, pageNum: 1, sentenceIdx: 0, charStart, content: id, alignment, x: 10, y: 10, autoSize: false, width: 520, height: 400 }
+}
+
+async function memoPagePosition(memo) {
+  return memo.evaluate(el => {
+    const wrapper = el.closest('.pdf-page-wrapper')
+    const card = el.getBoundingClientRect()
+    const origin = wrapper.getBoundingClientRect()
+    return { x: card.left - origin.left, y: card.top - origin.top, width: origin.width, height: origin.height }
+  })
+}
+
+for (const side of ['left', 'right']) {
+  test(`정렬 해제 후 좌표와 연속 키보드 이동 포커스를 유지한다 (${side})`, async ({ page }) => {
+    await openViewerWithMemo(page, alignedMoveMemo('memo-regression', 999, side),
+      Array.from({ length: 6 }, (_, i) => alignedMoveMemo(`before-${i}`, i, side)))
+    const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
+    const header = memo.locator('.floating-memo-header')
+    await header.focus()
+    const before = await memoPagePosition(memo)
+    expect(before.y).toBeGreaterThan(before.height * 2.5)
+    if (side === 'right') expect(before.x).toBeGreaterThan(before.width * 2.5)
+    else expect(before.x).toBeLessThan(before.width * -1.5)
+
+    await page.keyboard.press('ArrowRight')
+    await expect(header).toBeFocused()
+    await expect.poll(() => memo.evaluate(el => el.parentElement.className)).toContain('pdf-page-wrapper')
+    let position = await memoPagePosition(memo)
+    expect(position.x).toBeCloseTo(before.x + 4, 0)
+    expect(position.y).toBeCloseTo(before.y, 0)
+
+    // Use the keyboard directly: locator.press() would hide a lost-focus bug by refocusing.
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Shift+ArrowLeft')
+    await expect(header).toBeFocused()
+    position = await memoPagePosition(memo)
+    expect(position.x).toBeCloseTo(before.x - 12, 0)
+    expect(position.y).toBeCloseTo(before.y + 4, 0)
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('easypaper_memos_doc-memo')).page_1.find(item => item.id === 'memo-regression'))
+    expect(saved.alignment).toBeUndefined()
+    expect(saved.x * position.width / 100).toBeCloseTo(position.x, 0)
+    expect(saved.y * position.height / 100).toBeCloseTo(position.y, 0)
+
+    await page.reload()
+    await expect(activeReader(page).locator('.floating-memo[data-id="memo-regression"]')).toBeVisible()
+    // Reopening may restore a different zoom; persisted coordinates are page percentages.
+    await expect.poll(async () => {
+      const restored = await memoPagePosition(activeReader(page).locator('.floating-memo[data-id="memo-regression"]'))
+      return Math.abs(restored.x / restored.width * 100 - saved.x) + Math.abs(restored.y / restored.height * 100 - saved.y)
+    }).toBeLessThan(0.05)
+  })
+}
+
+test('긴 정렬 목록에서 마우스 이동을 시작해도 현재 좌표를 유지한다', async ({ page }) => {
+  await openViewerWithMemo(page, alignedMoveMemo('memo-regression', 999, 'right'),
+    Array.from({ length: 6 }, (_, i) => alignedMoveMemo(`before-${i}`, i, 'right')))
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
+  const header = memo.locator('.floating-memo-header')
+  await header.scrollIntoViewIfNeeded()
+  const before = await memoPagePosition(memo)
+  const box = await header.boundingBox()
+  await page.mouse.move(box.x + 8, box.y + 8)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 20, box.y + 18, { steps: 3 })
+  await page.mouse.up()
+  const after = await memoPagePosition(memo)
+  expect(after.x).toBeCloseTo(before.x + 12, 0)
+  expect(after.y).toBeCloseTo(before.y + 10, 0)
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('easypaper_memos_doc-memo')).page_1.find(item => item.id === 'memo-regression'))
+  expect(saved.alignment).toBeUndefined()
+  expect(saved.x * after.width / 100).toBeCloseTo(after.x, 0)
+  expect(saved.y * after.height / 100).toBeCloseTo(after.y, 0)
+})
