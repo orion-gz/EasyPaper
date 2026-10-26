@@ -136,3 +136,26 @@ for (const locale of ['ko', 'en']) {
     await expect(memo.locator('.floating-memo-footer')).toBeHidden()
   })
 }
+
+for (const position of ['outside', 'between']) {
+  test(`memo alignment preserves fitted paper size (${position})`, async ({ page }) => {
+    await openViewerWithMemo(page, { autoSize: false, width: 320, height: 240 })
+    const reader = activeReader(page)
+    const paperWidth = () => reader.locator('.pdf-page-wrapper').first().evaluate(el => el.offsetWidth)
+    await reader.locator('#document-fit-width').click()
+    await page.waitForTimeout(400)
+    const originalWidth = await paperWidth()
+    await reader.locator('body').evaluate((_, position) => {
+      localStorage.setItem('easypaper_reader_memoRightPosition', position)
+      window.dispatchEvent(new Event('easypaper:reader-preferences'))
+    }, position)
+    const memo = reader.locator('.floating-memo[data-id="memo-regression"]')
+    for (const side of ['left', 'right']) {
+      await memo.locator(`[data-memo-align="${side}"]`).click()
+      await expect(reader.locator('.page-pair').first()).toHaveClass(/has-aligned-memos/)
+      await reader.locator('#document-fit-width').click()
+      await page.waitForTimeout(400)
+      expect(await paperWidth()).toBeCloseTo(originalWidth, 0)
+    }
+  })
+}
