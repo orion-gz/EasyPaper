@@ -678,15 +678,17 @@ body.toolbar-hidden .panels {
 
 /* ── 개별 페이지 쌍 (원문 + 번역 한쌍의 카드) ── */
 .page-pair {
+  --page-pair-padding: 28px;
+  --page-pair-gap: 40px;
   display: flex;
   flex-direction: row;
   justify-content: center;
   align-items: stretch;
-  gap: 40px;
+  gap: var(--page-pair-gap);
   width: fit-content;
   max-width: 98%;
   margin: 0 auto;
-  padding: 28px;
+  padding: var(--page-pair-padding);
   border-radius: var(--radius-xl);
   background: var(--bg-page-pair);
   border: 1px solid var(--border);

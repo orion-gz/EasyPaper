@@ -70,7 +70,15 @@ export function installReaderTools(adapter, { scroll, toolbar, floating, changed
         const translation = pair?.querySelector('.trans-page-block')
         const parallel = translation && getComputedStyle(translation).display !== 'none' && pairStyle.flexDirection !== 'column'
         const horizontal = style => style ? ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0) : 0
-        const available = scroll.clientWidth - horizontal(scrollStyle) - horizontal(pairStyle) - 6 - (parallel ? parseFloat(pairStyle?.gap) || 18 : 0)
+        // Fit the document at its normal size. Aligned memo lanes add scrollable
+        // space around it, rather than taking width away from the paper.
+        const aligned = pair?.classList.contains('has-aligned-memos')
+        const pairHorizontal = aligned
+          ? horizontal(pairStyle) - parseFloat(pairStyle.paddingLeft) - parseFloat(pairStyle.paddingRight)
+            + 2 * (parseFloat(pairStyle.getPropertyValue('--page-pair-padding')) || 28)
+          : horizontal(pairStyle)
+        const gap = aligned ? parseFloat(pairStyle.getPropertyValue('--page-pair-gap')) || 40 : parseFloat(pairStyle?.columnGap) || 18
+        const available = scroll.clientWidth - horizontal(scrollStyle) - pairHorizontal - 6 - (parallel ? gap : 0)
         const zoom = Math.max(0.5, Math.min(3, available / (width * (parallel ? 2 : 1))))
         if (Math.abs(adapter.state.zoom - zoom) > 0.015) await adapter.zoom(zoom)
       } catch (error) { console.warn('Document fit failed:', error) }
