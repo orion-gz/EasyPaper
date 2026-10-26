@@ -12621,33 +12621,10 @@ function renderPageMemos(pageNum) {
         }
 
         actions.innerHTML = `
-          <button class="floating-memo-action-btn edit-btn" title="편집">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/><path d="m15 5 3 3"/></svg>
-          </button>
           <button class="floating-memo-action-btn delete delete-btn" title="삭제">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
           </button>
         `
-
-        actions.querySelector('.edit-btn').addEventListener('click', (e) => {
-          e.stopPropagation()
-          if (memo.collapsed) {
-            memo.collapsed = false
-            memoEl.classList.remove('collapsed')
-            const collapseBtnEl = memoEl.querySelector('.collapse-btn')
-            if (collapseBtnEl) {
-              collapseBtnEl.innerHTML = icon('chevronUp', 12)
-              collapseBtnEl.title = '메모 접기'
-            }
-            const allMemosObj = loadMemos(state.sessionId)
-            allMemosObj[`page_${pageNum}`] = pageMemos
-            saveMemos(state.sessionId, allMemosObj)
-          }
-          memoEditStartContent = memo.content
-          isEditing = true
-          updateCardContent()
-        })
-
 
         actions.querySelector('.delete-btn').addEventListener('click', async (e) => {
           e.stopPropagation()
@@ -12678,13 +12655,6 @@ function renderPageMemos(pageNum) {
           <div class="floating-memo-title" title="${sentenceText}">
             <span>${icon('edit3', 12, 'style="vertical-align:-2px;margin-right:2px"')}${shortTitle}</span>
           </div>
-          <div class="floating-memo-color-picker">
-            <button type="button" class="color-dot default ${!memo.color || memo.color === 'default' ? 'selected' : ''}" data-color="default" title="${t('viewer:a11y.defaultColor')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.defaultColor') })}" aria-pressed="${String(!memo.color || memo.color === 'default')}"></button>
-            <button type="button" class="color-dot yellow ${memo.color === 'yellow' ? 'selected' : ''}" data-color="yellow" title="${t('viewer:a11y.yellow')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.yellow') })}" aria-pressed="${String(memo.color === 'yellow')}"></button>
-            <button type="button" class="color-dot green ${memo.color === 'green' ? 'selected' : ''}" data-color="green" title="${t('viewer:a11y.green')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.green') })}" aria-pressed="${String(memo.color === 'green')}"></button>
-            <button type="button" class="color-dot blue ${memo.color === 'blue' ? 'selected' : ''}" data-color="blue" title="${t('viewer:a11y.blue')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.blue') })}" aria-pressed="${String(memo.color === 'blue')}"></button>
-            <button type="button" class="color-dot red ${memo.color === 'red' ? 'selected' : ''}" data-color="red" title="${t('viewer:a11y.red')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.red') })}" aria-pressed="${String(memo.color === 'red')}"></button>
-          </div>
           <div class="floating-memo-actions"></div>
         </div>
         <div class="floating-memo-toolbar">
@@ -12692,14 +12662,8 @@ function renderPageMemos(pageNum) {
             ${['left', 'right'].map(side => `<button type="button" class="floating-memo-align-btn" data-memo-align="${side}" title="${side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right')}" aria-label="${side === 'left' ? t('viewer:memoAlignment.left') : t('viewer:memoAlignment.right')}" aria-pressed="${memo.alignment === side}">${icon('panelLeft', 13, 'aria-hidden="true"')}<span>${side === 'left' ? t('viewer:memoAlignment.leftShort') : t('viewer:memoAlignment.rightShort')}</span></button>`).join('')}
           </div>
           <div class="floating-memo-toggles">
-            <button type="button" class="floating-memo-action-btn auto-size-btn${memoAutoSize ? ' active' : ''}" aria-pressed="${String(memoAutoSize)}">
-              ${icon(memoAutoSize ? 'shrink' : 'expand', 12)}
-            </button>
             <button type="button" class="floating-memo-action-btn collapse-btn" title="${memo.collapsed ? '메모 펼치기' : '메모 접기'}">
               ${icon(memo.collapsed ? 'chevronDown' : 'chevronUp', 12)}
-            </button>
-            <button type="button" class="floating-memo-action-btn hide-btn" title="메모 숨기기 (하이라이트만 표시)">
-              ${icon('eyeOff', 12)}
             </button>
           </div>
         </div>
@@ -12708,6 +12672,19 @@ function renderPageMemos(pageNum) {
       <div class="floating-memo-footer">
         <div class="floating-memo-format-bar" role="group" aria-label="${t('viewer:memoFormat.label')}">
           ${[['bold', '<b>B</b>'], ['italic', '<i>I</i>'], ['heading', 'H'], ['list', '≡'], ['quote', '❝'], ['code', '&lt;/&gt;'], ['link', '↗']].map(([name, label]) => `<button type="button" data-memo-format="${name}" title="${memoFormatLabels[name]}" aria-label="${memoFormatLabels[name]}">${label}</button>`).join('')}
+          <div class="floating-memo-color-picker">
+            <button type="button" class="color-dot default ${!memo.color || memo.color === 'default' ? 'selected' : ''}" data-color="default" title="${t('viewer:a11y.defaultColor')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.defaultColor') })}" aria-pressed="${String(!memo.color || memo.color === 'default')}"></button>
+            <button type="button" class="color-dot yellow ${memo.color === 'yellow' ? 'selected' : ''}" data-color="yellow" title="${t('viewer:a11y.yellow')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.yellow') })}" aria-pressed="${String(memo.color === 'yellow')}"></button>
+            <button type="button" class="color-dot green ${memo.color === 'green' ? 'selected' : ''}" data-color="green" title="${t('viewer:a11y.green')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.green') })}" aria-pressed="${String(memo.color === 'green')}"></button>
+            <button type="button" class="color-dot blue ${memo.color === 'blue' ? 'selected' : ''}" data-color="blue" title="${t('viewer:a11y.blue')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.blue') })}" aria-pressed="${String(memo.color === 'blue')}"></button>
+            <button type="button" class="color-dot red ${memo.color === 'red' ? 'selected' : ''}" data-color="red" title="${t('viewer:a11y.red')}" aria-label="${t('viewer:a11y.color', { color: t('viewer:a11y.red') })}" aria-pressed="${String(memo.color === 'red')}"></button>
+          </div>
+          <button type="button" class="floating-memo-action-btn auto-size-btn${memoAutoSize ? ' active' : ''}" aria-pressed="${String(memoAutoSize)}">
+            ${icon(memoAutoSize ? 'shrink' : 'expand', 12)}
+          </button>
+          <button type="button" class="floating-memo-action-btn hide-btn" title="메모 숨기기 (하이라이트만 표시)">
+            ${icon('eyeOff', 12)}
+          </button>
         </div>
         <span class="floating-memo-word-count"></span>
       </div>
@@ -12739,7 +12716,10 @@ function renderPageMemos(pageNum) {
     }
     const autoSizeBtn = memoEl.querySelector('.auto-size-btn')
     memoEl.querySelectorAll('button').forEach(button => {
-      button.addEventListener('mousedown', (event) => event.stopPropagation())
+      button.addEventListener('mousedown', (event) => {
+        event.stopPropagation()
+        if (button.closest('.floating-memo-format-bar')) event.preventDefault()
+      })
     })
     autoSizeBtn.addEventListener('click', (e) => {
       e.stopPropagation()

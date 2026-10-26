@@ -52,6 +52,35 @@ async function openViewerWithMemo(page, memoOverrides = {}, extraMemos = []) {
   await expect(activeReader(page).locator('#trans-content-1 .trans-text')).toContainText('Cached translation')
 }
 
+test('메모 도구를 서식 바에 표시하고 본문 클릭으로 편집한다', async ({ page }) => {
+  await openViewerWithMemo(page)
+  const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
+  const header = memo.locator('.floating-memo-header')
+  const formatBar = memo.locator('.floating-memo-format-bar')
+  await expect(memo.locator('.edit-btn')).toHaveCount(0)
+  await expect(header.locator('.color-dot, .auto-size-btn, .hide-btn')).toHaveCount(0)
+  await expect(header.locator('.collapse-btn')).toBeVisible()
+  await expect(header.locator('.delete-btn')).toBeVisible()
+  await expect(formatBar.locator('.color-dot')).toHaveCount(5)
+  await expect(formatBar.locator('.auto-size-btn')).toBeVisible()
+  await expect(formatBar.locator('.hide-btn')).toBeVisible()
+  await formatBar.locator('.color-dot.yellow').click()
+  await expect(memo).toHaveClass(/color-yellow/)
+  await memo.locator('.floating-memo-body').click()
+  const textarea = memo.locator('.floating-memo-textarea')
+  await expect(textarea).toBeFocused()
+  await textarea.fill('클릭으로 수정한 메모')
+  await formatBar.locator('.auto-size-btn').click()
+  await expect(textarea).toBeFocused()
+  await expect(textarea).toHaveValue('클릭으로 수정한 메모')
+  await header.locator('.collapse-btn').click()
+  await expect(formatBar).toBeHidden()
+  await expect(header.locator('.delete-btn')).toBeVisible()
+  await header.locator('.collapse-btn').click()
+  await formatBar.locator('.hide-btn').click()
+  await expect(memo).toHaveCount(0)
+})
+
 test('스크롤 가시성 갱신 시 이미 렌더링된 메모 DOM을 유지한다', async ({ page }) => {
   await openViewerWithMemo(page)
 
@@ -94,7 +123,7 @@ test('뷰어 메모 입력창에 포커스 테두리를 표시하지 않는다',
   await openViewerWithMemo(page)
 
   const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
-  await memo.locator('.edit-btn').click()
+  await memo.locator('.floating-memo-body').click()
 
   const textarea = memo.locator('.floating-memo-textarea')
   await expect(textarea).toBeFocused()
@@ -119,7 +148,7 @@ test('메모 편집 중 목차가 메모를 덮고 포커스를 빼앗지 않는
   await openViewerWithMemo(page)
 
   const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
-  await memo.locator('.edit-btn').click()
+  await memo.locator('.floating-memo-body').click()
   const textarea = memo.locator('.floating-memo-textarea')
   await expect(textarea).toBeFocused()
 
@@ -157,7 +186,7 @@ test('메모 편집 중 원격 snapshot은 입력 DOM 교체를 편집 종료까
   }))
 
   const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
-  await memo.locator('.edit-btn').click()
+  await memo.locator('.floating-memo-body').click()
   const textarea = memo.locator('.floating-memo-textarea')
   await expect(textarea).toBeFocused()
   await evaluateReader(page, () => window.dispatchEvent(new Event('online')))
@@ -201,7 +230,7 @@ test('자동 크기 모드에서 입력 내용에 맞춰 높이를 늘리고 줄
 
   const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
   await expect(memo).toHaveClass(/auto-size/)
-  await memo.locator('.edit-btn').click()
+  await memo.locator('.floating-memo-body').click()
   const textarea = memo.locator('.floating-memo-textarea')
   const initialBox = await memo.boundingBox()
   const initialHeight = initialBox.height
@@ -220,7 +249,7 @@ test('자동 크기 모드에서 입력 내용에 맞춰 높이를 늘리고 줄
 test('메모 Markdown 서식과 줄 단축키를 토글한다', async ({ page }) => {
   await openViewerWithMemo(page)
   const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
-  await memo.locator('.edit-btn').click()
+  await memo.locator('.floating-memo-body').click()
   const textarea = memo.locator('.floating-memo-textarea')
 
   await textarea.fill('서식')
@@ -287,7 +316,7 @@ test('메모 Markdown 서식과 줄 단축키를 토글한다', async ({ page })
 test('메모 서식 단축키를 서로 다른 선택 영역에 독립적으로 적용한다', async ({ page }) => {
   await openViewerWithMemo(page)
   const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
-  await memo.locator('.edit-btn').click()
+  await memo.locator('.floating-memo-body').click()
   const textarea = memo.locator('.floating-memo-textarea')
 
   for (const { shortcut, prefix, suffix } of [
@@ -332,7 +361,7 @@ test('메모 편집 중 Control/Cmd+Z는 브라우저 기본 실행 취소를 �
   expect(nativeValue).not.toBe('실행 취소 전 추가')
   await reference.evaluate(el => el.remove())
   const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
-  await memo.locator('.edit-btn').click()
+  await memo.locator('.floating-memo-body').click()
   const textarea = memo.locator('.floating-memo-textarea')
 
   await textarea.fill('실행 취소 전')
@@ -346,7 +375,7 @@ test('메모 편집 중 Control/Cmd+Z는 브라우저 기본 실행 취소를 �
 test('메모 목록 자동 편집과 완료 및 취소를 지원한다', async ({ page }) => {
   await openViewerWithMemo(page)
   const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
-  await memo.locator('.edit-btn').click()
+  await memo.locator('.floating-memo-body').click()
   const textarea = memo.locator('.floating-memo-textarea')
 
   await textarea.fill('- 첫 항목')
@@ -378,7 +407,7 @@ test('메모 목록 자동 편집과 완료 및 취소를 지원한다', async (
   await textarea.press('ControlOrMeta+Enter')
   await expect(memo.locator('.floating-memo-render a')).toHaveAttribute('href', 'https://openai.com')
 
-  await memo.locator('.edit-btn').click()
+  await memo.locator('.floating-memo-body').click()
   await textarea.fill('취소할 변경')
   await textarea.press('Escape')
   await expect(memo.locator('.floating-memo-render')).toContainText('OpenAI')
