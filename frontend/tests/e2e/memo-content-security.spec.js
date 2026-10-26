@@ -16,7 +16,7 @@ test('memo editing preserves HTML as text under production CSP',async({page})=>{
   })
   const memo=activeReader(page).locator('.floating-memo[data-id="audit"]')
   await expect(memo).toBeVisible()
-  await memo.locator('.edit-btn').click()
+  await memo.locator('.floating-memo-body').click()
   await expect(memo.locator('textarea')).toHaveValue('</textarea><img src="/audit-missing-image" onerror="window.__auditExecuted=true"><textarea>')
   await expect(memo.locator('img')).toHaveCount(0)
   expect(await evaluateReader(page,()=>window.__auditExecuted)).toBeUndefined()
