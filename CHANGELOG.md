@@ -2,6 +2,24 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.5.0 - 2026-10-26
+
+### 한국어 (1.4.10 → 1.5.0)
+
+- 개별 메모를 원문 페이지의 왼쪽 또는 오른쪽 여백에 정렬하는 기능을 추가. 메모를 문서 위치 순서대로 배치하고 원문과 연결선을 유지
+- 병렬 보기에서 오른쪽 메모를 원문과 번역문 사이 또는 번역문 바깥에 배치하고, 메모가 페이지 높이를 넘을 때 아래 공간 확장 또는 메모 영역 스크롤을 선택하는 설정을 추가
+- 메모에 굵게·기울임·제목·목록·인용·코드·링크 서식 도구와 단어 수 표시를 추가하고 조작 버튼을 서식 표시줄에 정리
+- 정렬 해제 시 메모 위치와 편집 포커스를 유지하고, 정렬된 메모가 있어도 원문 페이지 크기를 유지하도록 수정
+- 메모 조작 버튼의 색상을 메모 색상에 맞추고 설정 화면 컨트롤의 정렬을 개선
+
+### English (1.4.10 → 1.5.0)
+
+- Added left and right margin alignment for individual memos, ordered by their document anchors with connectors to the source text.
+- Added settings to place right-aligned memos between the original and translation or outside the translation in parallel view, and to extend the page or scroll the memo margin when notes exceed page height.
+- Added a memo formatting bar with bold, italic, heading, list, quote, code, and link actions plus a word count; moved memo controls into the bar.
+- Preserved memo position and editing focus when detaching from a margin, and kept the original page size when memos are aligned.
+- Matched memo control colors to their notes and improved control alignment in Settings.
+
 ## 1.4.10 - 2026-10-25
 
 ### 한국어 (1.4.9 → 1.4.10)
