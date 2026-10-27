@@ -2758,7 +2758,9 @@ body.light-theme .pdf-annotation-underline {
 
 .tab-btn.active {
   color: var(--text-primary);
-  border-bottom-color: var(--accent-mid);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
   font-weight: 600;
 }
 
@@ -8151,7 +8153,7 @@ body.light-theme .chat-drawer {
   }
 
   .settings-nav .tab-btn.active {
-    border-bottom-color: var(--control-accent);
+    box-shadow: var(--shadow-md);
   }
 
   .settings-category-header {
@@ -8428,13 +8430,13 @@ body.light-theme .chat-drawer {
 .floating-memo-toolbar { gap: 2px; }
 .floating-memo-toolbar .floating-memo-toggles { margin-left: auto; }
 .floating-memo-alignment { display: inline-flex; flex-shrink: 0; gap: 2px; padding: 0; border: 0; background: transparent; }
-.floating-memo-align-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; width: 24px; height: 24px; padding: 4px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; transition: background-color .15s, color .15s, border-color .15s; }
+.floating-memo-align-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; width: 24px; height: 24px; padding: 4px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; transition: background-color .15s, color .15s, border-color .15s, box-shadow .15s; }
 .floating-memo-align-btn span { display: none; }
 .floating-memo-align-btn svg { flex-shrink: 0; }
 .floating-memo-align-btn[data-memo-align="right"] svg,
 .floating-memo-align-btn[data-page-memo-align="right"] svg { transform: scaleX(-1); }
 .floating-memo-align-btn:hover:not(:disabled) { background: transparent; color: var(--text-primary); border-color: currentColor; }
-.floating-memo-align-btn[aria-pressed="true"] { color: var(--text-primary); border-color: currentColor; background: transparent; box-shadow: inset 0 -2px currentColor; }
+.floating-memo-align-btn[aria-pressed="true"] { color: var(--text-primary); border-color: currentColor; background: var(--bg-elevated); box-shadow: var(--shadow-md); }
 .floating-memo-header:focus-visible,
 .floating-memo-header button:focus-visible { outline: 2px solid var(--control-accent); outline-offset: 2px; }
 

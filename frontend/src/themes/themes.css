@@ -188,7 +188,7 @@ body[data-theme-id] :is(#pdf-parser-inline-log, #pdf-parser-install-log) { backg
 .theme-sample-chat { display: flex; flex-direction: column; padding: 1.2cqw; border-left: 1px solid var(--chat-border); font-size: 1.35cqw; }
 .theme-sample-chat-tabs { display: flex; gap: 1cqw; border-bottom: 1px solid var(--chat-border); margin-bottom: 2cqw; white-space: nowrap; }
 .theme-sample-chat-tabs span { padding-bottom: 1cqw; }
-.theme-sample-chat-tabs .selected { border-bottom: 2px solid var(--accent-mid); }
+.theme-sample-chat-tabs .selected { background: var(--bg-elevated); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); }
 .theme-sample-chat-user { background: var(--chat-selected); padding: 1cqw; border-radius: 1cqw; }
 .theme-sample-composer { margin-top: auto; border: 1px solid var(--chat-border); border-radius: 1cqw; padding: 1cqw; }
 .theme-sample-page-controls { position: absolute; bottom: 2cqw; left: 16%; padding: .8cqw 2cqw; border: 1px solid var(--viewer-border); border-radius: 2cqw; background: var(--viewer-bg); font-size: 1.5cqw; box-shadow: 0 2px 8px #0002; }
