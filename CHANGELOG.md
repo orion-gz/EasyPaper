@@ -2,6 +2,22 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.5.1 - 2026-10-27
+
+### 한국어 (1.5.0 → 1.5.1)
+
+- 페이지의 모든 메모를 한 번에 왼쪽 또는 오른쪽 여백에 정렬하는 버튼을 추가. 메모가 없는 페이지에서는 버튼을 비활성화
+- ChatGPT 로그인 및 OpenAI API 모델 목록에 GPT-6.1 Terra를 추가하고, ChatGPT 로그인에서는 추론 수준을 선택할 수 있도록 지원
+- 활성 탭과 메모 정렬 버튼의 밑줄 표시를 부드러운 그림자 스타일로 변경하고 정렬 방향 아이콘을 수정
+- 배포 검사에서 프런트엔드 E2E 테스트를 분할 실행하고 PR의 Tauri 검사를 병렬화하여 CI 안정성과 실행 시간을 개선
+
+### English (1.5.0 → 1.5.1)
+
+- Added buttons to align all memos on a page to the left or right margin at once; the buttons are disabled when the page has no memos.
+- Added GPT-6.1 Terra to ChatGPT sign-in and OpenAI API model lists, with reasoning-level choices for ChatGPT sign-in.
+- Replaced active tab and memo alignment underlines with soft shadows and corrected the alignment direction icons.
+- Sharded frontend E2E deployment checks and ran Tauri pull-request checks in parallel to improve CI reliability and speed.
+
 ## 1.5.0 - 2026-10-26
 
 ### 한국어 (1.4.10 → 1.5.0)
