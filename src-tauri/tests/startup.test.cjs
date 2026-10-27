@@ -9,6 +9,7 @@ function setup(invoke) {
   let poll, deadline;
   vm.runInNewContext(script, {
     window: { __TAURI_INTERNALS__: { invoke } },
+    navigator: { userAgent: 'Linux' },
     document: { getElementById: id => elements[id] },
     setInterval: fn => { poll = fn; return 1; },
     setTimeout: fn => { deadline = fn; return 2; },
