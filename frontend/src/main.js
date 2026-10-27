@@ -3490,6 +3490,13 @@ const PROVIDER_CONFIG = [
     // ChatGPT sign-in availability verified 2026-10-14:
     // https://learn.chatgpt.com/docs/models (GPT-5.5 retired 2026-10-14)
     models: [
+      // GPT-6.1 Terra
+      { value: 'gpt-6.1-terra|low',    label: 'Terra · Low',    group: 'GPT-6.1 Terra' },
+      { value: 'gpt-6.1-terra|medium', label: 'Terra · Medium', group: 'GPT-6.1 Terra' },
+      { value: 'gpt-6.1-terra|high',   label: 'Terra · High',   group: 'GPT-6.1 Terra' },
+      { value: 'gpt-6.1-terra|xhigh',  label: 'Terra · xHigh',  group: 'GPT-6.1 Terra' },
+      { value: 'gpt-6.1-terra|max',    label: 'Terra · Max',    group: 'GPT-6.1 Terra' },
+      { value: 'gpt-6.1-terra|ultra',  label: 'Terra · Ultra',  group: 'GPT-6.1 Terra' },
       // GPT-6.1 Sol
       { value: 'gpt-6.1-sol|low',    label: 'Sol · Low',    group: 'GPT-6.1 Sol' },
       { value: 'gpt-6.1-sol|medium', label: 'Sol · Medium', group: 'GPT-6.1 Sol' },
@@ -3560,6 +3567,7 @@ const PROVIDER_CONFIG = [
     // https://developers.openai.com/api/docs/deprecations
     // Excludes deprecated o3, GPT-4o and GPT-4o Mini aliases.
     models: [
+      { value: 'gpt-6.1-terra', label: 'GPT-6.1 Terra' },
       { value: 'gpt-6.1-sol', label: 'GPT-6.1 Sol' },
       { value: 'gpt-6-astra', label: 'GPT-6 Astra' },
       { value: 'gpt-6-sol', label: 'GPT-6 Sol' },

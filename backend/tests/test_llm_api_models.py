@@ -10,6 +10,7 @@ from services import llm_client
 @pytest.mark.parametrize(
     ("provider", "model", "supports_temperature"),
     [
+        ("openai", "gpt-6.1-terra", False),
         ("openai", "gpt-6.1-sol", False),
         ("openai", "gpt-6-astra", False),
         ("openai", "gpt-6-sol", False),
