@@ -163,7 +163,7 @@ def uninstall_packaged_parser(engine: str) -> None:
     shutil.rmtree(target_dir)
 
 
-def _activate_packaged_parser(engine: str) -> None:
+def _activate_packaged_parser(engine: str, *, worker: bool = False) -> None:
     """선택 엔진의 격리된 site-packages를 이번 sidecar에만 활성화한다."""
     global _active_engine
     _active_engine = "pymupdf"
@@ -177,7 +177,16 @@ def _activate_packaged_parser(engine: str) -> None:
     # available through the appended site-packages directory.
     # pip --target wheels need a module search path, not startup .pth hooks.
     # Executing optional native imports here can crash or hang the whole server.
-    if package_dir not in sys.path:
+    if worker:
+        # The worker never starts the server. Its native/Python dependency pairs
+        # must come from the selected engine, not the frozen server bundle.
+        # PYTHONPATH alone is ignored by the frozen interpreter.
+        for candidate in PARSER_PACKAGES:
+            other = parser_packages_dir(candidate)
+            while other in sys.path:
+                sys.path.remove(other)
+        sys.path.insert(0, package_dir)
+    elif package_dir not in sys.path:
         sys.path.append(package_dir)
     _active_engine = engine
 

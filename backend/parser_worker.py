@@ -18,7 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     from venv_manager import is_packaged_desktop, _activate_packaged_parser
     if is_packaged_desktop():
-        _activate_packaged_parser(args.engine)
+        _activate_packaged_parser(args.engine, worker=True)
     from services.pdf_diagnostics import diagnose_pages, parser_version, pdf_fingerprint
     from services.pdf_parser import extract_pages, extract_pdf_images
 

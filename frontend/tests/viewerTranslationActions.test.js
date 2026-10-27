@@ -135,12 +135,21 @@ test('PDF extraction cache deletion preserves translations', async () => {
     },
     clearTranslationCacheAPI: async () => { calls.push('translation') },
     clearSingleDocCacheAPI: async id => { calls.push(id) },
+    loadMemos: () => ({ page_1: [
+      { id: 'left', alignment: 'left', collapsed: true },
+      { id: 'right', alignment: 'right', collapsed: true },
+      { id: 'free', collapsed: true },
+    ] }),
+    saveMemos: (_id, memos) => {
+      calls.push('save-memos')
+      assert.deepEqual(memos.page_1.map(memo => memo.collapsed), [false, false, true])
+    },
     showToast: () => {}, t: key => key,
     setTimeout: callback => callback(),
     window: { location: { reload: () => { calls.push('reload') } } },
   })
   vm.runInContext(section('const viewerClearCacheBtn =', 'function showTranslationScopeDialog()'), context)
   await onClick()
-  assert.deepEqual(calls, ['doc', 'reload'])
+  assert.deepEqual(calls, ['doc', 'save-memos', 'reload'])
   assert.equal(context.state.translationCache[1], 'saved translation')
 })

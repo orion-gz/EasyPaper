@@ -30,3 +30,33 @@ def test_server_entry_dispatches_real_parser_without_starting_http(tmp_path):
     assert payload['parser_engine'] == 'pymupdf'
     assert 'Packaged worker' in payload['pages'][0]['text']
     assert 'Uvicorn running' not in result.stderr.decode()
+
+
+def test_packaged_workers_use_selected_dependencies_after_switching(tmp_path):
+    """Fresh workers must not mix server or previously selected engine packages."""
+    bundle = tmp_path / 'bundle'
+    bundle.mkdir()
+    (bundle / 'parser_dependency.py').write_text("SOURCE = 'bundle'\n")
+    for engine in ('marker', 'mineru'):
+        package = tmp_path / 'pdf-parser-packages' / engine
+        (package / engine).mkdir(parents=True)
+        (package / 'parser_dependency.py').write_text(f"SOURCE = '{engine}'\n")
+    backend = Path(__file__).resolve().parents[1]
+    script = '''
+import sys
+import venv_manager
+sys.path.insert(0, sys.argv[1])
+# Simulate startup with the previously selected engine in the search path.
+venv_manager._activate_packaged_parser(sys.argv[2])
+venv_manager._activate_packaged_parser(sys.argv[3], worker=True)
+import parser_dependency
+assert parser_dependency.SOURCE == sys.argv[3]
+assert venv_manager.parser_packages_dir(sys.argv[2]) not in sys.path
+'''
+    for previous, selected in (('marker', 'mineru'), ('mineru', 'marker')):
+        result = subprocess.run(
+            [sys.executable, '-c', script, str(bundle), previous, selected],
+            cwd=backend, env={**os.environ, 'EASYPAPER_CONFIG_DIR': str(tmp_path)},
+            capture_output=True, text=True, timeout=15,
+        )
+        assert result.returncode == 0, result.stderr

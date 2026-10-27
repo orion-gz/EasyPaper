@@ -468,9 +468,17 @@ async function _renderPage(wrapper, pageNum, generation, job) {
       let textContent
       let recovery
       if (textUrl) {
-        const response = await fetch(`${textUrl}/${pageNum}`, { signal: job.controller.signal })
-        if (!response.ok) throw new Error(`PDF text recovery: HTTP ${response.status}`)
-        recovery = await response.json()
+        try {
+          const response = await fetch(`${textUrl}/${pageNum}`, { signal: job.controller.signal })
+          if (!response.ok) throw new Error(`PDF text recovery: HTTP ${response.status}`)
+          recovery = await response.json()
+        } catch (error) {
+          if (stale()) return
+          // Parser failures must not remove native PDF selection, hover or the
+          // memo lanes created by onTextLayerRendered.
+          console.warn(`PDF text recovery p.${pageNum}; using native text:`, error)
+          textLayerDiv.dataset.recoveryError = 'parser_unavailable'
+        }
         if (stale()) return
       }
       textLayerDiv.dataset.sourceRevision = recovery?.layout?.layout_revision || recovery?.layout?.source_revision || ''
