@@ -67,7 +67,7 @@ for (const locale of ['ko', 'en']) {
     await expect(alignment).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
     await right.click()
     await expect(right).toHaveAttribute('aria-pressed', 'true')
-    await expect(right).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect.poll(() => right.evaluate(button => getComputedStyle(button).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
     await expect(alignment.locator('[data-memo-align="left"]')).toHaveAttribute('aria-pressed', 'false')
     await page.keyboard.press('Tab')
     await right.focus()
