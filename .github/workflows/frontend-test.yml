@@ -11,14 +11,18 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/frontend-test.yml"
-  push:
-    branches: [main]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/frontend-test.yml"
+      - ".github/workflows/deploy.yml"
+  # main pushes are already checked through Deploy to Server's workflow_call.
+  # Keep full Chromium + macOS validation available without deploying.
+  workflow_dispatch: {}
 
 permissions:
   contents: read
+
+# Cancel superseded PR runs, but let deployment callers finish their checks.
+concurrency:
+  group: frontend-test-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   unit-and-build:
@@ -44,19 +48,52 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
+          if-no-files-found: error
+
+  chromium-e2e:
+    needs: unit-and-build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+
       - name: Install Playwright browser
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests
         working-directory: frontend
-        run: npm run test:e2e
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/4 --workers=2
 
       - name: Upload E2E failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             frontend/playwright-report
             frontend/test-results
