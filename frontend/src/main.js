@@ -1584,7 +1584,8 @@ function createPagePair(pageNum) {
     const button = document.createElement('button')
     button.type = 'button'
     button.dataset.pageMemoAlign = side
-    button.textContent = side === 'left' ? t('viewer:memoAlignment.leftShort') : t('viewer:memoAlignment.rightShort')
+    button.className = 'floating-memo-align-btn'
+    button.innerHTML = icon('panelLeft', 13, 'aria-hidden="true"')
     button.title = side === 'left' ? t('viewer:memoAlignment.pageLeft') : t('viewer:memoAlignment.pageRight')
     button.setAttribute('aria-label', button.title)
     button.disabled = !(loadMemos(state.sessionId)[`page_${pageNum}`]?.length)
