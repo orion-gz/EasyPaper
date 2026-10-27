@@ -163,3 +163,33 @@ for (const position of ['outside', 'between']) {
     }
   })
 }
+
+for (const side of ['left', 'right']) {
+  test(`cache deletion restores expanded ${side} memo lane when parsing fails`, async ({ page }) => {
+    test.setTimeout(60000)
+    await openViewerWithMemo(page, { alignment: side })
+    const reader = activeReader(page)
+    const memo = reader.locator('.floating-memo[data-id="memo-regression"]')
+    await memo.locator('.collapse-btn').click()
+    await expect(memo).toHaveClass(/collapsed/)
+    await page.route('**/api/library/doc-memo/clear-cache', route => route.fulfill({ json: { cleared_files: 1 } }))
+    await page.route('**/api/pdf-text/doc-memo/1', route => route.fulfill({ status: 500, json: { detail: 'Parser unavailable' } }))
+    await reader.locator('#viewer-clear-cache-btn').evaluate(button => button.click())
+    await reader.locator('.custom-confirm-btn.confirm-btn').click()
+    await expect(memo).not.toHaveClass(/collapsed/, { timeout: 15000 })
+    await expect(reader.locator(`.memo-margin-${side} .floating-memo`)).toBeVisible()
+    const text = reader.locator('.textLayer[data-recovery-error="parser_unavailable"] span').first()
+    await expect(text).toBeVisible()
+    await text.scrollIntoViewIfNeeded()
+    await expect.poll(async () => {
+      await text.hover({ position: { x: 5, y: 5 } })
+      return reader.locator('.sentence-hover-box, .sentence-equation-box').count()
+    }).toBeGreaterThan(0)
+    const bounds = await text.boundingBox()
+    await page.mouse.move(bounds.x + 1, bounds.y + bounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + bounds.width - 1, bounds.y + bounds.height / 2, { steps: 10 })
+    await page.mouse.up()
+    expect(await text.evaluate(() => getSelection().toString())).not.toBe('')
+  })
+}

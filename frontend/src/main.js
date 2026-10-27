@@ -2803,6 +2803,14 @@ if (viewerClearCacheBtn) {
     try {
       const sessionId = state.sessionId
       await clearSingleDocCacheAPI(sessionId)
+      // Keep both aligned memo lanes open when the viewer remounts.
+      const memos = loadMemos(sessionId)
+      for (const pageMemos of Object.values(memos)) {
+        for (const memo of pageMemos) {
+          if (memo.alignment === 'left' || memo.alignment === 'right') memo.collapsed = false
+        }
+      }
+      saveMemos(sessionId, memos)
       showToast(t('viewer:cacheClearedReload'), 'success')
       setTimeout(() => window.location.reload(), 500)
     } catch (err) {
