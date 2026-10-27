@@ -560,7 +560,7 @@ body.light-theme .lib-detail-panel {
   transition: color 0.15s ease;
 }
 .lib-detail-tab:hover { color: var(--text-primary); }
-.lib-detail-tab.active { color: var(--control-accent-text); border-bottom-color: var(--control-accent); }
+.lib-detail-tab.active { color: var(--control-accent-text); background: var(--bg-elevated); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); }
 .lib-detail-tab-count {
   font-size: 10.5px;
   font-weight: 700;
