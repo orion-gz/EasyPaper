@@ -646,3 +646,36 @@ test('긴 정렬 목록에서 마우스 이동을 시작해도 현재 좌표를 
   expect(saved.x * after.width / 100).toBeCloseTo(after.x, 0)
   expect(saved.y * after.height / 100).toBeCloseTo(after.y, 0)
 })
+
+test('페이지 메모 전체 정렬은 숨김 상태와 다른 페이지를 보존하고 저장한다', async ({ page }) => {
+  await openViewerWithMemo(page, {}, [
+    { id: 'memo-second', pageNum: 1, sentenceIdx: 1, content: 'Second', x: 20, y: 20 },
+    { id: 'memo-hidden', pageNum: 1, sentenceIdx: 2, content: 'Hidden', hidden: true, x: 30, y: 30 },
+  ])
+  await evaluateReader(page, () => {
+    const key = 'easypaper_memos_doc-memo'
+    const memos = JSON.parse(localStorage.getItem(key))
+    memos.page_2 = [{ id: 'other-page', pageNum: 2, alignment: 'left', content: 'Unchanged' }]
+    localStorage.setItem(key, JSON.stringify(memos))
+  })
+  const reader = activeReader(page)
+  const toolbar = reader.locator('.page-pair[data-page="1"] .page-memo-toolbar')
+  const toolbarBox = await toolbar.boundingBox()
+  const paperBox = await reader.locator('.pdf-page-wrapper[data-page="1"]').boundingBox()
+  expect(toolbarBox.y + toolbarBox.height).toBeLessThanOrEqual(paperBox.y)
+  for (const side of ['left', 'right']) {
+    await toolbar.locator(`[data-page-memo-align="${side}"]`).click()
+    await expect(reader.locator(`.memo-margin-${side} .floating-memo`)).toHaveCount(2)
+    await expect(reader.locator('.floating-memo[data-id="memo-hidden"]')).toHaveCount(0)
+    const saved = await evaluateReader(page, () => JSON.parse(localStorage.getItem('easypaper_memos_doc-memo')))
+    expect(saved.page_1.every(memo => memo.alignment === side)).toBe(true)
+    expect(saved.page_1.find(memo => memo.id === 'memo-hidden').hidden).toBe(true)
+    expect(saved.page_2[0].alignment).toBe('left')
+  }
+  // Editing afterward must not restore the pre-bulk alignment from stale card data.
+  const memo = reader.locator('.floating-memo[data-id="memo-regression"]')
+  await memo.locator('.floating-memo-body').click()
+  await memo.locator('textarea').fill('Edited after alignment')
+  const saved = await evaluateReader(page, () => JSON.parse(localStorage.getItem('easypaper_memos_doc-memo')))
+  expect(saved.page_1.every(memo => memo.alignment === 'right')).toBe(true)
+})

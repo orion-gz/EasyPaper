@@ -245,5 +245,8 @@
   "memoFormat.quote": "인용",
   "memoFormat.code": "코드",
   "memoFormat.link": "링크",
-  "memoFormat.words": "{{count}}단어"
+  "memoFormat.words": "{{count}}단어",
+  "memoAlignment.pageAll": "페이지 메모 전체",
+  "memoAlignment.pageLeft": "이 페이지 메모 전체를 왼쪽 여백에 정렬",
+  "memoAlignment.pageRight": "이 페이지 메모 전체를 오른쪽 여백에 정렬"
 }

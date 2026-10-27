@@ -1573,6 +1573,34 @@ function createPagePair(pageNum) {
   const transBlock = createTransBlock(pageNum)
   transBlock.style.height = `${initialHeight}px`
 
+  const memoToolbar = document.createElement('div')
+  memoToolbar.className = 'page-memo-toolbar'
+  memoToolbar.setAttribute('role', 'group')
+  memoToolbar.setAttribute('aria-label', t('viewer:memoAlignment.pageAll'))
+  const memoLabel = document.createElement('span')
+  memoLabel.textContent = t('viewer:memoAlignment.pageAll')
+  memoToolbar.append(memoLabel)
+  for (const side of ['left', 'right']) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.dataset.pageMemoAlign = side
+    button.className = 'floating-memo-align-btn'
+    button.innerHTML = icon('panelLeft', 13, 'aria-hidden="true"')
+    button.title = side === 'left' ? t('viewer:memoAlignment.pageLeft') : t('viewer:memoAlignment.pageRight')
+    button.setAttribute('aria-label', button.title)
+    button.disabled = !(loadMemos(state.sessionId)[`page_${pageNum}`]?.length)
+    button.addEventListener('click', event => {
+      event.stopPropagation()
+      const allMemos = loadMemos(state.sessionId)
+      const pageMemos = allMemos[`page_${pageNum}`] || []
+      if (!pageMemos.length) return
+      for (const memo of pageMemos) memo.alignment = side
+      saveMemos(state.sessionId, allMemos)
+      renderPageMemos(pageNum)
+    })
+    memoToolbar.append(button)
+  }
+  pair.appendChild(memoToolbar)
   pair.appendChild(pdfWrapper)
   pair.appendChild(transBlock)
   return pair
@@ -12117,6 +12145,10 @@ function renderPageMemos(pageNum) {
   const pageWrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
   if (!pageWrapper) return
 
+  const hasMemos = Boolean(loadMemos(state.sessionId)[`page_${pageNum}`]?.length)
+  pageWrapper.closest('.page-pair')?.querySelectorAll('[data-page-memo-align]').forEach(button => {
+    button.disabled = !hasMemos
+  })
   releaseMemoAlignment(pageWrapper)
   pageWrapper.querySelectorAll('.floating-memo').forEach(el => {
     el._memoResizeObserver?.disconnect()

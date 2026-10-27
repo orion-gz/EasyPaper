@@ -5848,5 +5848,14 @@
   },
   "viewer:memoFormat.words": {
     "description": "Floating memo footer: words. Word count uses whitespace-separated rendered text; excludes Markdown syntax."
+  },
+  "viewer:memoAlignment.pageAll": {
+    "description": "Page header bulk memo alignment control. Applies only to memos on that page, including hidden memos without revealing them."
+  },
+  "viewer:memoAlignment.pageLeft": {
+    "description": "Page header bulk memo alignment control. Applies only to memos on that page, including hidden memos without revealing them."
+  },
+  "viewer:memoAlignment.pageRight": {
+    "description": "Page header bulk memo alignment control. Applies only to memos on that page, including hidden memos without revealing them."
   }
 }

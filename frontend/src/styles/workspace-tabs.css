@@ -41,7 +41,7 @@
 .document-workspace-runtime #viewer-screen:has(#outline-sidebar:not(.hidden)) .panels { left: 230px; }
 .document-workspace-runtime #chat-sidebar { width: 360px; min-width: 300px; max-width: 480px; border-left: 1px solid var(--border); background: var(--bg-surface); }
 .document-workspace-runtime .viewer-scroll-container { min-width: 0; background: var(--bg-primary); }
-.document-workspace-runtime .page-pair { --page-pair-gap: 18px; --page-pair-padding: 12px; gap: var(--page-pair-gap); padding: 10px var(--page-pair-padding); }
+.document-workspace-runtime .page-pair { --page-pair-gap: 18px; --page-pair-padding: 12px; gap: var(--page-pair-gap); padding: 64px var(--page-pair-padding) 10px; }
 .document-panel-tabs, .document-outline-tabs { display: flex; align-items: stretch; gap: 8px; flex-shrink: 0; }
 .document-panel-tabs { padding: 0 12px; min-height: 48px; border-bottom: 1px solid var(--border); }
 .document-panel-tabs button, .document-outline-tabs button { border: 0; background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; padding: 10px 6px; white-space: nowrap; }

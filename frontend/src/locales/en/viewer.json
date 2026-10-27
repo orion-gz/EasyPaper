@@ -245,5 +245,8 @@
   "memoFormat.quote": "Quote",
   "memoFormat.code": "Code",
   "memoFormat.link": "Link",
-  "memoFormat.words": "{{count}} words"
+  "memoFormat.words": "{{count}} words",
+  "memoAlignment.pageAll": "All page memos",
+  "memoAlignment.pageLeft": "Align all memos on this page in the left margin",
+  "memoAlignment.pageRight": "Align all memos on this page in the right margin"
 }
