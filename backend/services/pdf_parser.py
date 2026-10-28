@@ -2121,7 +2121,7 @@ def _has_caption_between(y0: float, y1: float, captions: List[Dict[str, Any]]) -
     return False
 
 
-def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str, Any]]:
+def extract_pdf_images(pdf_path: str, engine: Optional[str] = None, *, strict: bool = False) -> List[Dict[str, Any]]:
     """
     PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 테이블(Table)의 영역 정보를 추출합니다.
     선택된 파서 엔진(pymupdf, pdfplumber, marker, mineru)에 맞춰 유연하게 영역 정보를 수집합니다.
@@ -2151,6 +2151,8 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
             return images_data
         except Exception as e:
             import logging
+            if strict:
+                raise RuntimeError(f"Marker 레이아웃 추출 실패: {e}") from e
             logging.warning(f"Marker 레이아웃 추출 실패 ({e}). PyMuPDF 휴리스틱으로 폴백합니다.")
             engine = "pymupdf"
     elif engine == "mineru":
@@ -2164,6 +2166,8 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
             return images_data
         except Exception as e:
             import logging
+            if strict:
+                raise RuntimeError(f"MinerU 레이아웃 추출 실패: {e}") from e
             logging.warning(f"MinerU 레이아웃 추출 실패 ({e}). PyMuPDF 휴리스틱으로 폴백합니다.")
             engine = "pymupdf"
 

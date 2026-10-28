@@ -28,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
         actual = ", ".join(sorted(actual_engines)) or "no output"
         raise RuntimeError(f"{args.engine} parser unavailable; worker returned {actual}")
 
-    images = extract_pdf_images(args.pdf, engine=args.engine)
+    images = extract_pdf_images(args.pdf, engine=args.engine, strict=True)
     version = parser_version(args.engine)
     payload = {
         "pdf_fingerprint": pdf_fingerprint(args.pdf),

@@ -263,3 +263,33 @@ def test_marker_missing_coordinates_preserves_model_order_and_all_text():
         FakeMarkerBlock('Text', html='<p>Second</p>', bbox=[42, 60, 205, 140]),
     ])
     assert _marker_page_text(page) == 'First\n\nSecond'
+
+
+def test_strict_mineru_regions_do_not_silently_fall_back(monkeypatch):
+    import pytest
+    from services import pdf_parser
+
+    def fail(_path):
+        raise ImportError("missing parser dependency")
+
+    monkeypatch.setattr(pdf_parser, "_run_mineru", fail)
+    with pytest.raises(RuntimeError, match="missing parser dependency"):
+        pdf_parser.extract_pdf_images("unused.pdf", engine="mineru", strict=True)
+
+
+def test_strict_marker_regions_do_not_silently_fall_back(monkeypatch):
+    import sys
+    import types
+    import pytest
+    from services import pdf_parser
+
+    renderer = types.ModuleType("marker.renderers.json")
+    renderer.JSONRenderer = object
+    monkeypatch.setitem(sys.modules, "marker.renderers.json", renderer)
+
+    def fail(_path):
+        raise ImportError("missing parser dependency")
+
+    monkeypatch.setattr(pdf_parser, "_build_marker_document", fail)
+    with pytest.raises(RuntimeError, match="missing parser dependency"):
+        pdf_parser.extract_pdf_images("unused.pdf", engine="marker", strict=True)
