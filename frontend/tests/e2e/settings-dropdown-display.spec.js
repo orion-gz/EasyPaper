@@ -17,6 +17,7 @@ test('모든 설정 dropdown이 저장값 복원과 모드 전환 후 실제 선
     languageSettings: { ui_locale: 'en', default_source_language: 'ja', target_language: 'fr' },
   })
   await page.addInitScript(() => {
+    localStorage.setItem('easypaper_figure_overlay_trigger_research', 'click')
     localStorage.setItem('easypaper_ui_scale', '0.8')
     localStorage.setItem('easypaper_default_zoom', '2.0')
     localStorage.setItem('easypaper_toolbar_position', 'right')
@@ -58,4 +59,30 @@ test('모든 설정 dropdown이 저장값 복원과 모드 전환 후 실제 선
   await expect(page.locator('#setting-trans-style')).toHaveValue('natural')
   await expect(page.locator('#setting-translation-mode')).toHaveValue('scroll')
   await expectSettingsLabels(page)
+})
+
+
+test('reference preview picker restores each mode selection on reopen', async ({ page }) => {
+  await mockBaseRoutes(page)
+  await page.addInitScript(() => {
+    localStorage.setItem('easypaper_figure_overlay_trigger_research', 'click')
+    localStorage.setItem('easypaper_figure_overlay_trigger_general', 'hover')
+  })
+  await gotoApp(page)
+  const select = page.locator('#setting-figure-overlay-trigger')
+  const picker = page.locator('#setting-figure-overlay-trigger').locator('..')
+  for (const mode of ['research', 'general', 'research']) {
+    await page.locator(`#workspace-mode-switch [data-workspace-mode="${mode}"]`).click()
+    for (let reopen = 0; reopen < 2; reopen++) {
+      await page.locator('#sidebar-settings-btn').click()
+      await page.locator('#settings-nav-viewer').click()
+      await expect(select).toHaveValue(mode === 'research' ? 'click' : 'hover')
+      const label = await select.locator('option:checked').textContent()
+      await expect(picker.locator('.picker-label')).toHaveText(label)
+      await picker.locator('.provider-picker-btn').click()
+      await expect(picker.locator('[aria-selected="true"]')).toHaveText(label)
+      await picker.locator('[aria-selected="true"]').click()
+      await page.locator('#close-settings-btn').click()
+    }
+  }
 })
