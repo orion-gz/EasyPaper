@@ -16,4 +16,6 @@ cd "$BACKEND_DIR"
   --workpath "$SCRIPT_DIR/build" \
   --noconfirm
 
+"$SCRIPT_DIR/dist/easypaper-backend/easypaper-backend" --easypaper-check-parser-stdlib
+
 echo "Built: $SCRIPT_DIR/dist/easypaper-backend/"

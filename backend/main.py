@@ -1,5 +1,9 @@
 import sys
 
+if len(sys.argv) > 1 and sys.argv[1] == "--easypaper-check-parser-stdlib":
+    from parser_stdlib_check import main as check_parser_stdlib
+    raise SystemExit(check_parser_stdlib())
+
 # A packaged executable cannot interpret a .py filename as a Python command.
 # Dispatch the worker before importing or starting the HTTP server.
 if len(sys.argv) > 1 and sys.argv[1] == "--easypaper-parser-worker":
