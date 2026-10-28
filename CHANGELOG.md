@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.5.3 - 2026-10-28
+
+### 한국어 (1.5.2 → 1.5.3)
+
+- 문서 업로드와 라이브러리 재처리에서 같은 PDF 파서 작업이 중복 실행되지 않도록 수정
+- 패키지 앱의 Marker·MinerU 파서에 필요한 XML 모듈과 Marker의 `cmath` 모듈을 포함하여 실행 시 모듈 누락 오류를 수정
+- 설정의 참고문헌 미리보기 선택 메뉴 정렬과 선택값 표시를 수정하고, 참고문헌 미리보기의 작업 버튼 간격을 조정
+
+### English (1.5.2 → 1.5.3)
+
+- Prevented duplicate PDF parser runs during document upload and library reprocessing.
+- Bundled required XML modules for packaged Marker and MinerU parsers and `cmath` for Marker to fix missing-module errors at runtime.
+- Fixed alignment and selected-value display in the reference preview settings picker, and adjusted spacing between reference preview action buttons.
+
 ## 1.5.2 - 2026-10-28
 
 ### 한국어 (1.5.1 → 1.5.2)
