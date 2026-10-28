@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.5.2 - 2026-10-28
+
+### 한국어 (1.5.1 → 1.5.2)
+
+- PDF 추출 캐시 초기화 후 선택한 파서가 실패해도 PDF 기본 텍스트 선택·호버 기능과 좌우 메모 영역이 유지되도록 수정
+- 캐시 초기화 후 뷰어를 다시 열 때 정렬된 메모가 접힌 상태로 남지 않도록 수정
+- 패키지 앱의 Marker·MinerU 작업자가 선택한 파서의 의존성만 우선 사용하도록 수정하여 파서 전환 시 의존성 혼합을 방지
+
+### English (1.5.1 → 1.5.2)
+
+- Preserved native PDF text selection, hover actions, and left/right memo lanes when the selected parser fails after clearing the extraction cache.
+- Restored expanded aligned memos when reopening the viewer after clearing its cache.
+- Made packaged Marker and MinerU workers prioritize only the selected parser's dependencies, preventing dependency mixing when switching parsers.
+
 ## 1.5.1 - 2026-10-27
 
 ### 한국어 (1.5.0 → 1.5.1)
