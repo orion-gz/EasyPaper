@@ -69,22 +69,17 @@ def _restore_session(session_id: str) -> bool:
                 parser_engine = "readability"
                 parser_version = str(doc.get("content_schema_version") or 1)
             elif parser_engine in {"marker", "mineru"}:
-                from services.reparse import parse_document_isolated
-                payload = parse_document_isolated(pdf_path, parser_engine,
-                                                  normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
+                from services.reparse import load_document_parse
+                payload = load_document_parse(session_id, doc, pdf_path)
                 pages = payload["pages"]
                 parser_version = payload["parser_version"]
-                from services.cache import save_images_cache
-                save_images_cache(
-                    session_id, pdf_path, payload.get("images") or [],
-                    parser_engine, parser_version,
-                )
             else:
                 pages = extract_pages(pdf_path, engine=parser_engine,
                                       normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
                 from services.pdf_diagnostics import parser_version as resolve_parser_version
                 parser_version = resolve_parser_version(parser_engine)
-            save_pages_cache(session_id, pdf_path, pages, parser_engine, parser_version)
+            if parser_engine not in {"marker", "mineru"}:
+                save_pages_cache(session_id, pdf_path, pages, parser_engine, parser_version)
         if reparsed or doc.get("detected_source_language", "und") == "und":
             from services.languages import detect_document_language
             detection = detect_document_language(pages)

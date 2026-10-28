@@ -75,12 +75,11 @@ async def _load_document_images(doc_id: str, doc: dict, pdf_path: str) -> list[d
     if engine in {"marker", "mineru"}:
         # Desktop parsers live in managed environments. Direct imports can
         # silently fall back to PyMuPDF after a restart.
-        from services.reparse import parse_document_isolated
+        from services.reparse import load_document_parse
         payload = await asyncio.to_thread(
-            parse_document_isolated, pdf_path, engine,
-            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")),
+            load_document_parse, doc_id, doc, pdf_path,
         )
-        images = payload.get("images") or []
+        return payload.get("images") or []
     else:
         from services.pdf_parser import extract_pdf_images
         images = await asyncio.to_thread(extract_pdf_images, pdf_path, engine)

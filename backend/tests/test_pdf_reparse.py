@@ -598,6 +598,8 @@ def test_cache_reset_adopts_settings_for_text_and_all_regions(
         assert response.status_code == 200
         assert response.json()["images"] == regions
         assert calls == [engine, engine]
+        assert ensure_session(doc_id)
+        assert calls == [engine, engine]
     finally:
         sessions.pop(doc_id, None)
 
@@ -616,3 +618,65 @@ def test_cache_reset_preserves_web_parser(test_client, isolated_dirs, monkeypatc
     monkeypatch.setattr(config, "PDF_PARSER_ENGINE", "marker")
     assert test_client.post(f"/api/library/{doc_id}/clear-cache").status_code == 200
     assert isolated_dirs["db"].db_get_document(doc_id)["parser_engine"] == "readability"
+
+
+@pytest.mark.parametrize("engine", ["marker", "mineru"])
+def test_concurrent_document_parse_shares_worker_and_retries_after_clear(
+    isolated_dirs, monkeypatch, engine,
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from services import reparse
+    from services.cache import clear_document_cache
+
+    doc_id = "concurrent-" + engine
+    path = _make_document(isolated_dirs, doc_id)
+    doc = isolated_dirs["db"].db_get_document(doc_id)
+    doc.update(parser_engine=engine, parser_version="test")
+    calls = []
+    payload = {"pages": [{"page_num": 1, "text": "shared",
+                          "blocks": [{"text": "shared", "bbox": [100, 100, 500, 200], "type": 0}]}],
+               "images": [], "parser_engine": engine, "parser_version": "test"}
+
+    def parse(*args, **kwargs):
+        calls.append(engine)
+        return payload
+
+    monkeypatch.setattr(reparse, "parse_document_isolated", parse)
+    ready = Barrier(3)
+
+    def request():
+        ready.wait(timeout=5)
+        return reparse.load_document_parse(doc_id, doc, str(path))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        requests = [pool.submit(request) for _ in range(2)]
+        ready.wait(timeout=5)
+        for request in requests:
+            assert request.result(timeout=5)["pages"] == payload["pages"]
+    assert calls == [engine]
+    clear_document_cache(doc_id)
+    reparse.load_document_parse(doc_id, doc, str(path))
+    assert calls == [engine, engine]
+
+
+def test_failed_shared_parse_can_be_retried(isolated_dirs, monkeypatch):
+    from services import reparse
+
+    doc_id = "retry-shared"
+    path = _make_document(isolated_dirs, doc_id)
+    doc = isolated_dirs["db"].db_get_document(doc_id)
+    doc.update(parser_engine="marker", parser_version="test")
+    calls = []
+
+    def parse(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("worker failed")
+        return {"pages": [], "images": [], "parser_version": "test"}
+
+    monkeypatch.setattr(reparse, "parse_document_isolated", parse)
+    with pytest.raises(RuntimeError, match="worker failed"):
+        reparse.load_document_parse(doc_id, doc, str(path))
+    assert reparse.load_document_parse(doc_id, doc, str(path))["images"] == []
+    assert len(calls) == 2
