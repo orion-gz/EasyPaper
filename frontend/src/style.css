@@ -6573,6 +6573,9 @@ body.light-theme .citation-tooltip {
   flex-direction: column;
   gap: 6px;
 }
+.citation-tooltip-analysis:not(:empty) {
+  margin-bottom: 6px;
+}
 .citation-tooltip-action-btn {
   display: flex;
   align-items: center;
