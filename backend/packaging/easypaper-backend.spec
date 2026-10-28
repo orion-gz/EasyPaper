@@ -11,7 +11,7 @@
 import os
 import subprocess
 import sys
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 block_cipher = None
 
@@ -52,8 +52,11 @@ a = Analysis(
         # "<sidecar 실행파일 디렉토리>/_internal/frontend/dist"로 알려준다.
         (os.path.join(BACKEND_DIR, "..", "frontend", "dist"), "frontend/dist"),
     ],
-    hiddenimports=pip_hiddenimports + [
+    # Marker/MinerU are installed after the sidecar is frozen, so Analysis
+    # cannot see their stdlib imports (XML for MinerU, cmath for Marker).
+    hiddenimports=pip_hiddenimports + collect_submodules("xml") + [
         "parser_worker",
+        "cmath",
         # uvicorn은 프로토콜/루프 구현체를 동적으로 임포트하므로 PyInstaller의
         # 정적 분석이 놓치기 쉽다. main.py가 uvicorn.run(app, ...)으로 앱
         # 객체를 직접 넘기도록 바뀌어(문자열 임포트 아님) 최소 요구치는 줄었지만,
