@@ -37,6 +37,7 @@ for (const width of [1280, 500]) {
       tracks.map(track => track.getBoundingClientRect().right))
     expect(viewerSwitches.length).toBeGreaterThan(10)
     for (const edge of viewerSwitches) expect(Math.abs(edge - await zoomEdge())).toBeLessThan(3)
+    await assertAligned(() => pickerEdge('setting-figure-overlay-trigger'), zoomEdge)
     await assertAligned(() => pickerEdge('setting-reader-memoRightPosition'), zoomEdge)
     await assertAligned(() => pickerEdge('setting-reader-memoOverflow'), zoomEdge)
     await expect(page.locator('#tab-viewer')).toBeVisible()

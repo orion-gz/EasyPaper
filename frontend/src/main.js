@@ -1176,7 +1176,7 @@ function syncModeSettings(documentMode) {
   settingDisableCitationOverlay.checked = !getModeSetting('disableCitationOverlay', settingsTranslationModeContext)
   settingDisableFigureOverlay.checked = !getModeSetting('disableFigureOverlay', settingsTranslationModeContext)
   settingReferenceAutoAnalysis.checked = getModeSetting('referenceAutoAnalysis', settingsTranslationModeContext)
-  settingFigureOverlayTrigger.value = getModeSetting('figureOverlayTrigger', settingsTranslationModeContext)
+  syncSelectValue(settingFigureOverlayTrigger, getModeSetting('figureOverlayTrigger', settingsTranslationModeContext))
   settingFigureOverlayTrigger.disabled = !settingDisableFigureOverlay.checked
   settingDisablePrimer.checked = !getModeSetting('disablePrimer', settingsTranslationModeContext)
   settingDisableSuggestedQuestions.checked = !getModeSetting('disableSuggestedQuestions', settingsTranslationModeContext)
