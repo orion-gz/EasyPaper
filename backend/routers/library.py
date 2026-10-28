@@ -1040,6 +1040,8 @@ async def get_library_document_images(doc_id: str, current_user: str = Depends(g
     try:
         return {"images": await _load_document_images(doc_id, doc, pdf_path)}
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Image region extraction failed for %s", doc_id)
         raise HTTPException(status_code=500, detail=f"이미지 좌표 추출 실패: {str(e)}")
 
 
