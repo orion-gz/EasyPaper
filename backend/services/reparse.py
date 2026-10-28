@@ -5,6 +5,8 @@ import asyncio
 import json
 import os
 import sys
+import threading
+import weakref
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -107,6 +109,44 @@ def _worker_command(engine: str, pdf_path: str, output_path: str) -> tuple[list[
     ]
     return command, env
 
+
+
+# Hold a strong reference throughout each request; unused locks disappear.
+_document_parse_locks = weakref.WeakValueDictionary()
+_document_parse_locks_guard = threading.Lock()
+
+
+def load_document_parse(doc_id: str, doc: dict, pdf_path: str) -> dict:
+    """Share one extraction and both disk caches between text and region requests."""
+    from services.cache import (
+        get_cached_pages, get_cached_images, save_pages_cache, save_images_cache,
+    )
+
+    with _document_parse_locks_guard:
+        lock = _document_parse_locks.get(doc_id)
+        if lock is None:
+            lock = threading.Lock()
+            _document_parse_locks[doc_id] = lock
+    with lock:
+        engine = doc.get("parser_engine") or "pymupdf"
+        version = doc.get("parser_version")
+        revision = int(doc.get("content_revision") or 1)
+        pages = get_cached_pages(doc_id, pdf_path, engine, version, revision)
+        images = get_cached_images(doc_id, pdf_path, engine, version, revision)
+        if pages is not None and images is not None:
+            return {"pages": pages, "images": images,
+                    "parser_engine": engine, "parser_version": version}
+        payload = parse_document_isolated(
+            pdf_path, engine,
+            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")),
+        )
+        # Persist both products before releasing the lock, including when the
+        # first caller only needs regions. Waiting callers recheck these caches.
+        save_pages_cache(doc_id, pdf_path, payload["pages"], engine, version,
+                         content_revision=revision, strict=True)
+        save_images_cache(doc_id, pdf_path, payload.get("images") or [], engine, version,
+                          content_revision=revision, strict=True)
+        return payload
 
 
 def parse_document_isolated(pdf_path: str, engine: str, *, normalize_layout: bool = True) -> dict:
