@@ -42,7 +42,8 @@ AST scan; broad stdlib collection avoids relying on that scan as an allowlist.
 
 Both build scripts run the freshly built sidecar with
 `--easypaper-check-parser-stdlib`. It imports 21 representative modules before
-server startup and fails the build if any import fails. The list covers reported
+server startup, then runs a spawn-based process pool and creates/unlinks shared
+memory to exercise the resource tracker. Any failure fails the build. The list covers reported
 failures plus serialization, XML, multiprocessing, diagnostics and compression.
 
 Validated locally: collector/worker tests and an actual Linux PyInstaller onedir
@@ -50,3 +51,16 @@ executable built with the same collector; all 21 smoke imports passed without
 PYTHONPATH/PYTHONHOME. Native Windows/macOS builds and actual Marker/MinerU model
 inference still require platform validation. Third-party wheel compatibility,
 model downloads and GPU/native runtime dependencies are outside this fix.
+
+## Frozen multiprocessing entry point
+
+Marker 2.0.0 uses pdftext with four workers by default; pdftext 0.7.1 uses
+ProcessPoolExecutor. MinerU 2.7.6 uses ProcessPoolExecutor in pdf_image_tools.
+Frozen children re-enter the sidecar executable, including resource-tracker
+children. main.py must call multiprocessing.freeze_support() before parser
+argument dispatch, config imports, or server startup. Without this dispatch,
+children start the HTTP server and fail to bind its already occupied port.
+
+The Linux frozen spawn/shared-memory smoke check passed with the same entry
+preamble and stdlib collector. This verifies child dispatch, not full model
+inference or native Windows/macOS runtime compatibility.

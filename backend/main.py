@@ -1,8 +1,15 @@
 import sys
 
+# Frozen multiprocessing children re-enter this executable with spawn/resource
+# tracker arguments. Dispatch them before parser flags, config or HTTP startup.
+if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
+
 if len(sys.argv) > 1 and sys.argv[1] == "--easypaper-check-parser-stdlib":
-    from parser_stdlib_check import main as check_parser_stdlib
-    raise SystemExit(check_parser_stdlib())
+    import runpy
+    runpy.run_module("parser_stdlib_check", run_name="__main__", alter_sys=True)
+    raise SystemExit(0)
 
 # A packaged executable cannot interpret a .py filename as a Python command.
 # Dispatch the worker before importing or starting the HTTP server.

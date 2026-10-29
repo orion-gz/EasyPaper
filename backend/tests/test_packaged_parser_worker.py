@@ -60,3 +60,26 @@ assert venv_manager.parser_packages_dir(sys.argv[2]) not in sys.path
             capture_output=True, text=True, timeout=15,
         )
         assert result.returncode == 0, result.stderr
+
+
+def test_multiprocessing_dispatch_precedes_server_and_parser_imports(tmp_path):
+    backend = Path(__file__).resolve().parents[1]
+    script = """
+import multiprocessing
+import runpy
+import sys
+
+def dispatch():
+    assert 'config' not in sys.modules
+    assert 'parser_worker' not in sys.modules
+    print('multiprocessing dispatched')
+    raise SystemExit(0)
+
+multiprocessing.freeze_support = dispatch
+sys.argv = [sys.argv[1], '--multiprocessing-fork']
+runpy.run_path(sys.argv[0], run_name='__main__')
+"""
+    result = subprocess.run([sys.executable, '-c', script, str(backend / 'main.py')],
+                            cwd=backend, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert 'multiprocessing dispatched' in result.stdout
