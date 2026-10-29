@@ -6,6 +6,9 @@ const pdf = fs.readFileSync(new URL('./fixtures/sentence-bounds.pdf', import.met
 for (const mode of ['exact', 'missing', 'prefix']) {
   test(`sentence hover and translation highlight stay bounded: ${mode}`, async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 1200 })
+    await page.route(/^https:\/\//, route => route.fulfill({
+      contentType: route.request().url().includes('.js') && !route.request().url().includes('.css') ? 'text/javascript' : 'text/css', body: '',
+    }))
     const first = mode === 'exact' ? 'First sentence.' : mode === 'missing' ? 'Missing OCR sentence.' : 'First sentence with OCR content that differs.'
     const sources = mode === 'exact' ? [first, 'Second sentence.', 'Last sentence.'] : [first, 'Last sentence.']
     await mockBaseRoutes(page, { documents: [{ id: 'bounds', filename: 'bounds.pdf', total_pages: 1, metadata: { title: 'Bounds' }, translated_pages: [1] }] })
@@ -16,7 +19,7 @@ for (const mode of ['exact', 'missing', 'prefix']) {
     } }))
     await gotoApp(page)
     await page.evaluate(() => { location.hash = '#viewer?id=bounds' })
-    await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible()
+    await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible({ timeout: 15_000 })
     const translation = activeReader(page).locator('.trans-sentence[data-sentence-idx="0"]').first()
     await expect(translation).toBeVisible()
     await translation.hover()
