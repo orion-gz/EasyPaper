@@ -17955,14 +17955,14 @@ function splitIntoSentences(fullText) {
     if (!paraText.trim()) continue;
 
     // 문단 내부에서 구두점을 기준으로 2차 문장 분할
-    const candRegex = /([。！？]+[」』”’）】》〉]*)([ \t\n\r]*)|([.!?]+)([ \t\n\r]+)/g;
+    const candRegex = /([。！？.!?]+[」』”’）】》〉"')\]]*)(\s*)/g;
     let lastSentenceIndex = 0;
     let sMatch;
 
     while ((sMatch = candRegex.exec(paraText)) !== null) {
       const puncIndex = sMatch.index;
-      const punc = sMatch[1] || sMatch[3];
-      const whitespace = sMatch[1] ? sMatch[2] : sMatch[4];
+      const punc = sMatch[1];
+      const whitespace = sMatch[2];
       const nextIndex = puncIndex + punc.length + whitespace.length;
 
       if (nextIndex >= paraText.length) {
@@ -17982,12 +17982,6 @@ function splitIntoSentences(fullText) {
       const nextChar = paraText[nextIndex];
       const isPeriod = punc.includes('.');
 
-      // 다음 글자가 소문자/특수문자이면 문장 구분 안 함 (단, 숫자는 1988년, 1세 등 문장의 시작이 될 수 있으므로 제외)
-      const isLowerOrDigitOrSpecial = /^[a-z\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
-      if (isPeriod && isLowerOrDigitOrSpecial) {
-        continue;
-      }
-
       // 섹션 번호 형식 ("1.", "2.1.") 등은 단일 문장으로 분할하지 않음
       if (isPeriod) {
         const leftText = paraText.substring(lastSentenceIndex, puncIndex).trim();
@@ -17995,16 +17989,21 @@ function splitIntoSentences(fullText) {
           continue;
         }
 
+        if (/\b(?:e\.g|i\.e)$/i.test(leftText)) continue;
+
         // 약어 매칭
         const words = leftText.split(/[\s,()\[\]{}.]+/);
         const lastWord = words.length > 0 ? words[words.length - 1].toLowerCase().replace(/[^a-z]/g, '') : '';
-        const isAbbreviation = abbreviations.has(lastWord) || (lastWord.length === 1 && /^[a-z]$/i.test(lastWord));
+        const isAbbreviation = (abbreviations.has(lastWord) && !(['etc', 'al'].includes(lastWord) && /^[A-Z]/.test(nextChar))) || (lastWord.length === 1 && /^[a-z]$/i.test(lastWord) && /^[A-Z]/.test(nextChar));
         if (isAbbreviation) continue;
 
         // 소수점 패턴 (\d.\d)
         const charBeforePunc = paraText[puncIndex - 1];
-        if (charBeforePunc && /\d/.test(charBeforePunc) && /^\d/.test(nextChar)) continue;
+        if (!whitespace && charBeforePunc && /\d/.test(charBeforePunc) && /^\d/.test(nextChar)) continue;
       }
+
+      // Preserve internal dotted abbreviations and domains.
+      if (isPeriod && !whitespace && /^[a-z]/.test(nextChar) && /[A-Za-z]$/.test(paraText.slice(0, puncIndex))) continue;
 
       const sentenceText = paraText.substring(lastSentenceIndex, puncIndex + punc.length);
       if (sentenceText.trim()) {

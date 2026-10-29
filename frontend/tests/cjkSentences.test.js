@@ -8,6 +8,18 @@ const code = source.slice(source.indexOf('function splitIntoSentences('), source
 const split = vm.runInNewContext(`${code}; splitIntoSentences`)
 
 for (const [text, expected] of [
+  ["First sentence. lowercase follows.", ["First sentence.", "lowercase follows."]],
+  ["Done. (Next sentence.) Last.", ["Done.", "(Next sentence.)", "Last."]],
+  ["He said \"Done.\" Next.", ["He said \"Done.\"", "Next."]],
+  ["첫 문장입니다.다음 문장입니다.", ["첫 문장입니다.", "다음 문장입니다."]],
+  ["Done.Next sentence.", ["Done.", "Next sentence."]],
+  ["Count is 3. 2024 was next.", ["Count is 3.", "2024 was next."]],
+  ["Use e.g. apples and pears. Next.", ["Use e.g. apples and pears.", "Next."]],
+  ["See Fig. 2 and Eq. 3. Next.", ["See Fig. 2 and Eq. 3.", "Next."]],
+  ["Use apples etc. Next.", ["Use apples etc.", "Next."]],
+  ["See example.com for version 3.14. Next.", ["See example.com for version 3.14.", "Next."]],
+  ["1. Introduction\nFirst sentence. Second.", ["1. Introduction\nFirst sentence.", "Second."]],
+
   ['最初です。次です。最後です。', ['最初です。', '次です。', '最後です。']],
   ['本当！？はい。', ['本当！？', 'はい。']],
   ['「最初です。」次です。', ['「最初です。」', '次です。']],
