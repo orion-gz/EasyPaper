@@ -2,6 +2,18 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.5.4 - 2026-10-29
+
+### 한국어 (1.5.3 → 1.5.4)
+
+- 설치 후 추가되는 Marker·MinerU 의존성이 사용하는 Python 표준 라이브러리를 플랫폼별 데스크톱 앱에 포함하여 `pickletools` 등 모듈 누락으로 파싱과 그림·표·수식 오버레이 추출이 실패하는 문제를 수정
+- 데스크톱 앱 빌드 후 완성된 백엔드 실행 파일에서 주요 표준 모듈 21개의 import를 확인하도록 검사 추가
+
+### English (1.5.3 → 1.5.4)
+
+- Bundled platform-specific Python standard-library modules required by post-install Marker and MinerU dependencies, addressing missing-module failures such as `pickletools` during parsing and figure, table, and equation overlay extraction.
+- Added a build check that imports 21 representative standard-library modules from the finished desktop backend executable.
+
 ## 1.5.3 - 2026-10-28
 
 ### 한국어 (1.5.2 → 1.5.3)
