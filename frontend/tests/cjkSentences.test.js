@@ -1,11 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import vm from 'node:vm'
-
-const source = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-const code = source.slice(source.indexOf('function splitIntoSentences('), source.indexOf('// ── 오버레이 기반 문장 호버/클릭 이벤트 시스템'))
-const split = vm.runInNewContext(`${code}; splitIntoSentences`)
+import { splitIntoSentences as split } from '../src/sentenceBoundaries.js'
 
 for (const [text, expected] of [
   ["First sentence. lowercase follows.", ["First sentence.", "lowercase follows."]],

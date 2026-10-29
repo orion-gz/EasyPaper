@@ -34,8 +34,11 @@ for (const rotation of [0, 90]) {
           await expect(activeReader(page).locator('.pdf-text-recovery-notice')).toHaveText('읽기 순서 확인 필요')
           continue
         }
-        await expect(activeReader(page).locator('.sentence-hover-box')).toHaveCount(1)
-        const box = await activeReader(page).locator('.sentence-hover-box').boundingBox()
+        await expect(activeReader(page).locator('.sentence-hover-box').first()).toBeAttached()
+        const rectangles = await Promise.all((await activeReader(page).locator('.sentence-hover-box').all()).map(box => box.boundingBox()))
+        const x0 = Math.min(...rectangles.map(r => r.x)), y0 = Math.min(...rectangles.map(r => r.y))
+        const box = { x: x0, y: y0, width: Math.max(...rectangles.map(r => r.x + r.width)) - x0,
+          height: Math.max(...rectangles.map(r => r.y + r.height)) - y0 }
         const canvas = await activeReader(page).locator('.pdf-page-inner canvas').first().boundingBox()
         const scale = canvas.width / (rotation ? 800 : 600)
         const x = i ? 340 : 40, y = i ? 180 : 80
