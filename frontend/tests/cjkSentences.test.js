@@ -1,13 +1,20 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import vm from 'node:vm'
-
-const source = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-const code = source.slice(source.indexOf('function splitIntoSentences('), source.indexOf('// ── 오버레이 기반 문장 호버/클릭 이벤트 시스템'))
-const split = vm.runInNewContext(`${code}; splitIntoSentences`)
+import { splitIntoSentences as split } from '../src/sentenceBoundaries.js'
 
 for (const [text, expected] of [
+  ["First sentence. lowercase follows.", ["First sentence.", "lowercase follows."]],
+  ["Done. (Next sentence.) Last.", ["Done.", "(Next sentence.)", "Last."]],
+  ["He said \"Done.\" Next.", ["He said \"Done.\"", "Next."]],
+  ["첫 문장입니다.다음 문장입니다.", ["첫 문장입니다.", "다음 문장입니다."]],
+  ["Done.Next sentence.", ["Done.", "Next sentence."]],
+  ["Count is 3. 2024 was next.", ["Count is 3.", "2024 was next."]],
+  ["Use e.g. apples and pears. Next.", ["Use e.g. apples and pears.", "Next."]],
+  ["See Fig. 2 and Eq. 3. Next.", ["See Fig. 2 and Eq. 3.", "Next."]],
+  ["Use apples etc. Next.", ["Use apples etc.", "Next."]],
+  ["See example.com for version 3.14. Next.", ["See example.com for version 3.14.", "Next."]],
+  ["1. Introduction\nFirst sentence. Second.", ["1. Introduction\nFirst sentence.", "Second."]],
+
   ['最初です。次です。最後です。', ['最初です。', '次です。', '最後です。']],
   ['本当！？はい。', ['本当！？', 'はい。']],
   ['「最初です。」次です。', ['「最初です。」', '次です。']],

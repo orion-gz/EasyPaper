@@ -63,7 +63,7 @@ def split_into_chunks(text: str, max_chars: int = MAX_CHUNK_CHARS) -> List[str]:
 def _split_by_sentences(text: str, max_chars: int) -> List[str]:
     """문장 단위로 텍스트를 분할합니다."""
     # 마침표/물음표/느낌표 뒤 공백으로 분리 (약어 방지: 소문자.소문자 패턴은 분리하지 않음)
-    sentences = re.split(r'(?<=[.!?])(?=\s+[A-Z])', text)
+    sentences = split_into_sentences(text)
     chunks: List[str] = []
     current: List[str] = []
     current_len = 0
@@ -114,13 +114,13 @@ def split_into_sentences(text: str) -> List[str]:
     sentence_ranges = []
     for para in paras:
         last_index = 0
-        cand_regex = re.compile(r'([。！？]+[」』”’）】》〉]*)([ \t\n\r]*)|([.!?]+)([ \t\n\r]+)')
+        cand_regex = re.compile(r'([。！？.!?]+[」』”’）】》〉"\')\]]*)(\s*)')
         matches = list(cand_regex.finditer(para))
         
         for match in matches:
             punc_index = match.start()
-            punc = match.group(1) or match.group(3)
-            whitespace = (match.group(2) if match.group(1) else match.group(4))
+            punc = match.group(1)
+            whitespace = match.group(2)
             next_index = punc_index + len(punc) + len(whitespace)
             
             if next_index >= len(para):
@@ -133,28 +133,30 @@ def split_into_sentences(text: str) -> List[str]:
             next_char = para[next_index]
             is_period = '.' in punc
             
-            # 다음 글자가 소문자/특수문자이면 구분 안 함 (단, 숫자는 1988년, 1세 등 문장의 시작이 될 수 있으므로 제외)
-            is_lower_or_digit_or_special = bool(re.match(r'^[a-z\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]', next_char))
-            if is_period and is_lower_or_digit_or_special:
-                continue
-                
             # 섹션 번호 형식 ("1.", "2.1.") 등은 단일 문장으로 분할하지 않음
             if is_period:
                 left_text = para[last_index:punc_index].strip()
                 if re.match(r'^\d+(\.\d+)*$', left_text):
                     continue
                     
+                if re.search(r'\b(?:e\.g|i\.e)$', left_text, re.I):
+                    continue
+
                 # 약어 매칭
                 words = re.split(r'[\s,()\[\]{}.]+', left_text)
                 last_word = re.sub(r'[^a-z]', '', words[-1].lower()) if words else ''
-                if last_word in abbreviations or (len(last_word) == 1 and last_word.isalpha()):
+                if (last_word in abbreviations and not (last_word in {'etc', 'al'} and next_char.isupper())) or (len(last_word) == 1 and last_word.isalpha() and next_char.isupper()):
                     continue
                     
                 # 소수점 패턴 (\d.\d)
                 char_before_punc = para[punc_index - 1] if punc_index > 0 else ''
-                if char_before_punc.isdigit() and next_char.isdigit():
+                if not whitespace and char_before_punc.isdigit() and next_char.isdigit():
                     continue
                     
+            # Internal dotted abbreviations and domains are not sentence endings.
+            if is_period and not whitespace and re.match(r'[a-z]', next_char) and re.search(r'[A-Za-z]$', para[:punc_index]):
+                continue
+
             sentence_text = para[last_index:punc_index + len(punc)]
             if sentence_text.strip():
                 sentence_ranges.append(sentence_text.strip())
@@ -177,13 +179,10 @@ def align_paragraph(src_sents: List[str], tgt_sents: List[str]) -> List[dict]:
     if N == M:
         return [{"src": s, "trans": t} for s, t in zip(src_sents, tgt_sents)]
         
-    # 원문 문장이 더 많으면 원문을 병합
+    # Keep every source sentence selectable even when a translation merges them.
     if N > M:
-        groups = [[] for _ in range(M)]
-        for i, s in enumerate(src_sents):
-            idx = min(M - 1, int(i * M / N))
-            groups[idx].append(s)
-        return [{"src": " ".join(g), "trans": t} for g, t in zip(groups, tgt_sents)]
+        return [{"src": source, "trans": tgt_sents[min(M - 1, i * M // N)]}
+                for i, source in enumerate(src_sents)]
     else:
         # 번역문 문장이 더 많으면 번역문을 병합
         groups = [[] for _ in range(N)]

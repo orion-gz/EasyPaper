@@ -1,3 +1,4 @@
+import { mergePdfHighlightRects } from './pdfSentenceGeometry.js'
 import { placeFocusPreview, previewBelongsToSentence } from './focusPreview.js'
 
 export const FOCUS_DEFAULTS = Object.freeze({ enabled: false, blurStrength: 6, dimOpacity: 20, scale: 104, hideOverlays: false })
@@ -17,23 +18,15 @@ export function normalizeFocusSettings(value = {}) {
   }
 }
 
-export function mergeClientRects(rects, gap = 3) {
-  const values = Array.from(rects || [], rect => ({ left: rect.left, top: rect.top, right: rect.right ?? rect.left + rect.width, bottom: rect.bottom ?? rect.top + rect.height }))
-    .filter(rect => [rect.left, rect.top, rect.right, rect.bottom].every(Number.isFinite)).sort((a, b) => a.top - b.top || a.left - b.left)
-  const rows = []
-  for (const rect of values) {
-    const last = rows.at(-1)
-    // Sorting by top can put the right-hand pane first when baselines differ
-    // by a fraction of a pixel. Check both horizontal edges before merging.
-    if (last && Math.abs(last.top - rect.top) <= gap && rect.left <= last.right + gap && rect.right >= last.left - gap) {
-      last.left = Math.min(last.left, rect.left); last.top = Math.min(last.top, rect.top)
-      last.right = Math.max(last.right, rect.right); last.bottom = Math.max(last.bottom, rect.bottom)
-    } else rows.push({ ...rect })
-  }
-  return rows.map(rect => ({ ...rect, width: rect.right - rect.left, height: rect.bottom - rect.top }))
+export function mergeClientRects(rects) {
+  return mergePdfHighlightRects(Array.from(rects || [], rect => ({
+    left: rect.left, top: rect.top,
+    width: (rect.right ?? rect.left + rect.width) - rect.left,
+    height: (rect.bottom ?? rect.top + rect.height) - rect.top,
+  }))).map(rect => ({ ...rect, right: rect.left + rect.width, bottom: rect.top + rect.height }))
 }
 
-export function createFocusMask(rects, width, height, padding = 4) {
+export function createFocusMask(rects, width, height, padding = 0) {
   const holes = mergeClientRects(rects).map(rect => `<rect x="${Math.max(0, rect.left - padding)}" y="${Math.max(0, rect.top - padding)}" width="${rect.width + padding * 2}" height="${rect.height + padding * 2}" rx="5" fill="black"/>`).join('')
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><mask id="holes" maskUnits="userSpaceOnUse"><rect width="100%" height="100%" fill="white"/>${holes}</mask></defs><rect width="100%" height="100%" fill="white" mask="url(#holes)"/></svg>`
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
@@ -45,7 +38,7 @@ export function focusCssVariables(settings) {
 }
 
 // Keep the sentence openings independent of CSS image-mask support.
-export function createFocusBackdropRects(rects, width, height, padding = 4) {
+export function createFocusBackdropRects(rects, width, height, padding = 0) {
   const holes = mergeClientRects(rects).map(rect => ({
     left: Math.max(0, rect.left - padding), right: Math.min(width, rect.right + padding),
     top: Math.max(0, rect.top - padding), bottom: Math.min(height, rect.bottom + padding),
@@ -125,7 +118,7 @@ function svgElement(name, attributes = {}) {
 
 // Paint tint once. Tiled translucent HTML rectangles can overlap by a device
 // pixel when fractional coordinates are rounded independently under CSS zoom.
-export function createFocusTint(rects, width, height, padding = 4) {
+export function createFocusTint(rects, width, height, padding = 0) {
   const svg = svgElement('svg', { width, height, viewBox: `0 0 ${width} ${height}`, 'aria-hidden': 'true' })
   svg.classList.add('focus-mode-backdrop')
   const id = `focus-tint-mask-${++filterId}`
@@ -150,8 +143,8 @@ export function createSentenceFilter(id, rects, bounds, strength, zoom = 1) {
   const filter = svgElement('filter', { id, filterUnits: 'userSpaceOnUse', primitiveUnits: 'userSpaceOnUse', x: -padding, y: -padding, width: bounds.width / zoom + padding * 2, height: bounds.height / zoom + padding * 2, 'color-interpolation-filters': 'sRGB' })
   filter.append(svgElement('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: strength / zoom, result: 'blurred' }))
   rects.forEach((rect, index) => filter.append(svgElement('feFlood', {
-    x: (rect.left - bounds.left - 4) / zoom, y: (rect.top - bounds.top - 4) / zoom,
-    width: (rect.width + 8) / zoom, height: (rect.height + 8) / zoom,
+    x: (rect.left - bounds.left) / zoom, y: (rect.top - bounds.top) / zoom,
+    width: rect.width / zoom, height: rect.height / zoom,
     'flood-color': 'white', result: `hole${index}`,
   })))
   const holes = svgElement('feMerge', { result: 'holes' })
@@ -611,7 +604,7 @@ export class FocusModeController {
       })),
       ...groups.flatMap(element => element.focusRects),
     ]
-    this.layer.replaceChildren(...erasures, createFocusTint(displayedRects, window.innerWidth, window.innerHeight, groups.length ? 0 : 4), ...groups)
+    this.layer.replaceChildren(...erasures, createFocusTint(displayedRects, window.innerWidth, window.innerHeight, 0), ...groups)
     this.scheduleRender()
   }
   destroy() {
