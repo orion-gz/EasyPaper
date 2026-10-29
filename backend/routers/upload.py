@@ -119,7 +119,10 @@ def _restore_session(session_id: str) -> bool:
             "source_url": doc.get("source_url"),
         })
         return True
-    except Exception:
+    except Exception as exc:
+        logging.exception("Document session restoration failed: %s", session_id)
+        if doc.get("parser_engine") in {"marker", "mineru"}:
+            raise HTTPException(status_code=503, detail=f"{doc['parser_engine']} 파서 실행 실패. 설치 상태를 확인한 후 다시 시도해 주세요: {exc}") from exc
         return False
 
 
@@ -282,7 +285,9 @@ async def upload_pdf(
     # 생성되지 않은 시점에 서버가 종료되어도 이 정보만으로 실제 파싱과
     # 라이브러리 최종화를 다시 수행할 수 있다.
     from services.document_tasks import create_task
+    from config import get_pdf_parser_engine
     parse_options = {
+        "parser_engine": get_pdf_parser_engine(),
         "filename": file.filename,
         "file_size_mb": file_size_mb,
         "username": current_user,

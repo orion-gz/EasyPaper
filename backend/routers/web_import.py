@@ -90,6 +90,8 @@ async def import_url(body: UrlImportRequest, current_user: str = Depends(get_cur
             if not filename.lower().endswith(".pdf"):
                 filename += ".pdf"
             options = body.model_dump(exclude={"url", "upload_id"}) | {"filename": filename, "username": current_user, "source_lang": source_lang, "target_lang": target_lang, "file_size_mb": downloaded_size / 1048576}
+            from config import get_pdf_parser_engine
+            options["parser_engine"] = get_pdf_parser_engine()
             task = create_task(doc_id, "parse", options, status="queued")
             parsed = await execute_parse_task(task["id"], sessions, page_extractor=extract_pages, metadata_reader=get_pdf_metadata, translation_starter=start_job, keyword_starter=start_keyword_job, summary_starter=start_summary_job, upload_root=UPLOAD_DIR)
             from services.db import get_db

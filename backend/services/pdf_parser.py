@@ -108,11 +108,11 @@ def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:
                 "blocks": _marker_layout_blocks(page_json),
                 "parser_engine": "marker"
             })
-        return pages if pages else _extract_pages_pymupdf(pdf_path)
+        if not pages:
+            raise RuntimeError("Marker returned no pages")
+        return pages
     except Exception as e:
-        import logging
-        logging.warning(f"Marker 파서 실행 실패 ({e}). PyMuPDF 파서로 폴백합니다.")
-        return _extract_pages_pymupdf(pdf_path)
+        raise RuntimeError(f"Marker 파서 실행 실패: {e}") from e
 
 
 class _TextToken:
@@ -380,12 +380,10 @@ def _extract_pages_mineru(pdf_path: str) -> List[Dict[str, Any]]:
 
         pages = _build_mineru_pages(content_list, total_pages, pdf_path=pdf_path)
         if not pages:
-            return _extract_pages_pymupdf(pdf_path)
+            raise RuntimeError("MinerU returned no pages")
         return pages
     except Exception as e:
-        import logging
-        logging.warning(f"MinerU 파서 실행 실패 ({e}). PyMuPDF 파서로 폴백합니다.")
-        return _extract_pages_pymupdf(pdf_path)
+        raise RuntimeError(f"MinerU 파서 실행 실패: {e}") from e
 
 
 def _extract_page(page: fitz.Page, page_num: int, recovery_context=None) -> Dict[str, Any]:
@@ -2138,7 +2136,7 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
     # marker/mineru는 자체 레이아웃 모델이 이미 figure/table/equation 영역과
     # (그룹인 경우) 캡션까지 감지해준다 - pymupdf 휴리스틱을 돌릴 필요가 없고,
     # 오히려 marker/mineru가 인식한 실제 텍스트 순서/구조와 무관한 별개의 좌표계라
-    # 섞어 쓰면 안 된다. 실패 시에만 pymupdf 휴리스틱으로 폴백한다.
+    # 섞어 쓰면 안 된다. 실패하면 호출자에게 오류를 전달한다.
     if engine == "marker":
         try:
             from marker.renderers.json import JSONRenderer
@@ -2150,9 +2148,7 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
                     images_data.append({"page": idx + 1, **region})
             return images_data
         except Exception as e:
-            import logging
-            logging.warning(f"Marker 레이아웃 추출 실패 ({e}). PyMuPDF 휴리스틱으로 폴백합니다.")
-            engine = "pymupdf"
+            raise RuntimeError(f"Marker 레이아웃 추출 실패: {e}") from e
     elif engine == "mineru":
         try:
             content_list = _run_mineru(pdf_path)
@@ -2163,9 +2159,7 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
                     images_data.append({"page": page_idx + 1, **region})
             return images_data
         except Exception as e:
-            import logging
-            logging.warning(f"MinerU 레이아웃 추출 실패 ({e}). PyMuPDF 휴리스틱으로 폴백합니다.")
-            engine = "pymupdf"
+            raise RuntimeError(f"MinerU 레이아웃 추출 실패: {e}") from e
 
     doc = fitz.open(pdf_path)
     try:

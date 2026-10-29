@@ -2796,7 +2796,7 @@ if (viewerClearCacheBtn) {
     }
     const currentDocTitle = $('doc-title')?.textContent || documentUiCopy('현재 논문', state.currentDocumentMode)
     const ok = await showCustomConfirm(
-      `"${currentDocTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하며, 기존 번역본은 유지됩니다.)`,
+      `"${currentDocTitle}"의 PDF 추출 캐시를 삭제할까요?\n현재 선택한 파서로 다시 파싱합니다. 엔진이 변경되면 기존 번역·분석 결과도 다시 생성해야 합니다.`,
       { title: '캐시 삭제', confirmText: '캐시 삭제', danger: true }
     )
     if (!ok) return
@@ -4091,6 +4091,11 @@ const settingPdfParserPicker = new PdfParserPicker($('setting-pdf-parser-picker'
         }
       }
       const res = await autoSaveSystemSettings({ silent: needsRestartWarning })
+      if (!res) {
+        settingPdfParserPicker.setParsersData(pdfParsersData, currentSavedPdfEngine)
+        updateParserCardInfo(currentSavedPdfEngine)
+        return
+      }
       currentSavedPdfEngine = selectedId
       const restarting = await maybeHandlePdfEngineRestart(res)
       if (!restarting) showToast(`PDF 파서 엔진이 [${parser.name}]로 설정되었습니다.`, 'success')
@@ -4576,6 +4581,10 @@ function openPdfParserInstallModal(parser) {
       if (inlineStatusText) inlineStatusText.innerHTML = succMsg
       if (doneBtn) doneBtn.classList.remove('hidden')
       const res = await autoSaveSystemSettings({ silent: true })
+      if (!res) {
+        await refreshSystemSettings()
+        return
+      }
       currentSavedPdfEngine = parser.id
       const restarting = await maybeHandlePdfEngineRestart(res)
       if (!restarting) await refreshSystemSettings()
@@ -5852,7 +5861,7 @@ clearCacheBtn.addEventListener('click', async () => {
 // 다음 열람 시 자동으로 다시 채워지므로 데이터 손실 없음)
 if (clearPagesCacheBtn) {
   clearPagesCacheBtn.addEventListener('click', async () => {
-    const ok = await showCustomConfirm('서버에 저장된 PDF 텍스트 추출 캐시를 모두 삭제하시겠습니까?\n(문서를 다시 열면 그때 자동으로 다시 생성되므로 안전합니다.)', { title: '서버 캐시 비우기', confirmText: '삭제', danger: true })
+    const ok = await showCustomConfirm('서버에 저장된 PDF 텍스트 추출 캐시를 모두 삭제하시겠습니까?\n현재 선택한 파서를 모든 PDF에 적용합니다. 엔진이 변경된 문서는 기존 번역·분석 결과도 다시 생성해야 합니다.', { title: '서버 캐시 비우기', confirmText: '삭제', danger: true })
     if (!ok) return
     try {
       const result = await clearPagesCacheAPI()
@@ -6470,7 +6479,7 @@ function initSelectToolbarEvents() {
     if (selectedDocIds.size === 0) return
     const ids = Array.from(selectedDocIds)
     const count = ids.length
-    const ok = await showCustomConfirm(`선택한 ${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+    const ok = await showCustomConfirm(`선택한 ${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 PDF 추출 캐시를 삭제할까요?\n현재 선택한 파서로 다시 파싱합니다. 엔진이 변경되면 기존 번역·분석 결과도 다시 생성해야 합니다.`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
     if (!ok) return
     try {
       const succeeded = await runLibraryBatch(ids, clearSingleDocCacheAPI)
@@ -7755,7 +7764,7 @@ async function deleteDocFromContextMenu(doc) {
 
 async function clearDocCacheFromContextMenu(doc) {
   const displayTitle = doc.metadata?.title || doc.filename
-  const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+  const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n현재 선택한 파서로 다시 파싱합니다. 엔진이 변경되면 기존 번역·분석 결과도 다시 생성해야 합니다.`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
   if (!ok) return
   await clearSingleDocCacheAPI(doc.id)
   showToast('PDF 추출 캐시가 삭제되었습니다.', 'success')
@@ -9458,7 +9467,7 @@ function wireDocItemEvents(container, doc, displayTitle) {
       e.stopPropagation()
       kebabMenu?.classList.add('hidden')
       const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
-      const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+      const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n현재 선택한 파서로 다시 파싱합니다. 엔진이 변경되면 기존 번역·분석 결과도 다시 생성해야 합니다.`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
       if (!ok) return
       try {
         await clearSingleDocCacheAPI(doc.id)
@@ -10112,7 +10121,7 @@ function ensureLibraryDetailPanel() {
     const doc = libraryDetailDoc
     const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
     moreMenu?.classList.add('hidden')
-    const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+    const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n현재 선택한 파서로 다시 파싱합니다. 엔진이 변경되면 기존 번역·분석 결과도 다시 생성해야 합니다.`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
     if (!ok) return
     try {
       await clearSingleDocCacheAPI(doc.id)

@@ -169,7 +169,7 @@ async def test_orphaned_parse_task_rebuilds_document_after_restart(isolated_dirs
     monkeypatch.setattr(pdf_parser, "get_pdf_metadata", lambda _path: {"title": "Recovered"})
     monkeypatch.setattr(
         pdf_parser, "extract_pages",
-        lambda _path: [{"page_num": 1, "text": "A recoverable English document."}],
+        lambda _path, *, engine: [{"page_num": 1, "text": "A recoverable English document.", "parser_engine": engine}],
     )
     monkeypatch.setattr(pdf_parser, "extract_pdf_images", lambda *_args: [])
     task = create_task(doc_id, "parse", {

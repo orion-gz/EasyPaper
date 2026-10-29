@@ -308,8 +308,6 @@ For grouped citations, include the attribution uncertainty within the same 2-3 s
 
 
 async def analyze_document(doc, ref_key, target_lang, suffix, page_num=None):
-    from services.cache import get_cached_pages, save_pages_cache
-    from services.pdf_parser import extract_pages
     from services.reference_parser import extract_reference_list
     from services.section_parser import detect_sections
     from services.library import get_pdf_path, get_document
@@ -321,11 +319,8 @@ async def analyze_document(doc, ref_key, target_lang, suffix, page_num=None):
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path:
         raise HTTPException(404, 'PDF not found')
-    pages = get_cached_pages(doc_id, pdf_path, doc.get('parser_engine'), doc.get('parser_version'))
-    if pages is None:
-        pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get('parser_engine'),
-                                        normalize_layout=bool((doc.get('metadata') or {}).get('layout_rule_version')))
-        save_pages_cache(doc_id, pdf_path, pages, doc.get('parser_engine'), doc.get('parser_version'))
+    from services.reparse import load_document_pages
+    pages = await asyncio.to_thread(load_document_pages, doc_id, doc, pdf_path)
     references = extract_reference_list(pages)
     if ref_key not in references:
         raise HTTPException(404, 'Reference not found')

@@ -88,12 +88,17 @@ def _worker_command(engine: str, pdf_path: str, output_path: str) -> tuple[list[
     import venv_manager
 
     env = dict(os.environ)
+    env["PYTHONNOUSERSITE"] = "1"
     python_executable = sys.executable
     if not venv_manager.is_packaged_desktop():
         target_venv = venv_manager.required_venv_for_engine(engine)
         if venv_manager.is_venv_available(target_venv):
             python_executable = venv_manager.venv_python(target_venv)
+        elif engine in {"marker", "mineru"}:
+            raise RuntimeError(f"{engine} parser unavailable: install its managed environment first")
     elif engine != "pymupdf":
+        if engine in {"marker", "mineru"} and not venv_manager.is_parser_installed(engine):
+            raise RuntimeError(f"{engine} parser unavailable: install its managed packages first")
         package_dir = venv_manager.parser_packages_dir(engine)
         existing = env.get("PYTHONPATH")
         env["PYTHONPATH"] = package_dir if not existing else os.pathsep.join((package_dir, existing))
@@ -116,20 +121,72 @@ _document_parse_locks = weakref.WeakValueDictionary()
 _document_parse_locks_guard = threading.Lock()
 
 
+def document_parse_lock(doc_id: str):
+    with _document_parse_locks_guard:
+        lock = _document_parse_locks.get(doc_id)
+        if lock is None:
+            lock = threading.Lock()
+            _document_parse_locks[doc_id] = lock
+        return lock
+
+
+async def reset_document_parser_cache(doc_id: str, engine: str, version: str, sessions: dict) -> tuple[int, int]:
+    """Adopt the selected engine; retain derived results only for the same engine."""
+    from services.document_workers import quiesce_document
+    from services.cache import clear_document_cache, clear_derived_session_cache
+    from services.pdf_parser import clear_parser_memory_cache
+
+    def reset():
+        with document_parse_lock(doc_id):
+            with get_db() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                row = conn.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
+                if not row:
+                    return (0, 0)
+                changed = row["content_kind"] == "pdf" and (row["parser_engine"] or "pymupdf") != engine
+                if changed:
+                    metadata = _decode_json(row["metadata"]) or {}
+                    for key in ("bibliography", "references", "reference_list"):
+                        metadata.pop(key, None)
+                    conn.execute(
+                        """UPDATE documents SET parser_engine = ?, parser_version = ?,
+                           content_revision = content_revision + 1, metadata = ?,
+                           detected_source_language = 'und', source_language_confidence = NULL
+                           WHERE id = ?""",
+                        (engine, version, json.dumps(metadata, ensure_ascii=False), doc_id),
+                    )
+                    conn.execute("DELETE FROM document_chunks_fts WHERE doc_id = ?", (doc_id,))
+                conn.commit()
+            result = clear_document_cache(doc_id)
+            if changed:
+                clear_derived_session_cache(doc_id)
+                from services.easy_english import cache_path
+                import shutil
+                shutil.rmtree(cache_path(doc_id, "unused").parent, ignore_errors=True)
+            clear_parser_memory_cache()
+            return result
+
+    async with quiesce_document(doc_id):
+        result = await asyncio.to_thread(reset)
+        sessions.pop(doc_id, None)
+        return result
+
+
 def load_document_parse(doc_id: str, doc: dict, pdf_path: str) -> dict:
     """Share one extraction and both disk caches between text and region requests."""
     from services.cache import (
         get_cached_pages, get_cached_images, save_pages_cache, save_images_cache,
     )
 
-    with _document_parse_locks_guard:
-        lock = _document_parse_locks.get(doc_id)
-        if lock is None:
-            lock = threading.Lock()
-            _document_parse_locks[doc_id] = lock
+    lock = document_parse_lock(doc_id)
     with lock:
+        from services.db import db_get_document
+        current = db_get_document(doc_id)
+        if current and int(current.get("content_revision") or 1) != int(doc.get("content_revision") or 1):
+            raise RuntimeError("content_revision_conflict: reopen the document")
         engine = doc.get("parser_engine") or "pymupdf"
-        version = doc.get("parser_version")
+        version = (current.get("parser_version") if current and current.get("parser_engine") == engine
+                   else doc.get("parser_version"))
         revision = int(doc.get("content_revision") or 1)
         pages = get_cached_pages(doc_id, pdf_path, engine, version, revision)
         images = get_cached_images(doc_id, pdf_path, engine, version, revision)
@@ -140,6 +197,15 @@ def load_document_parse(doc_id: str, doc: dict, pdf_path: str) -> dict:
             pdf_path, engine,
             normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")),
         )
+        actual_version = payload["parser_version"]
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE documents SET parser_version = ? WHERE id = ? AND parser_engine = ? AND content_revision = ?",
+                (actual_version, doc_id, engine, revision),
+            )
+            conn.commit()
+        version = actual_version
+        doc["parser_version"] = actual_version
         # Persist both products before releasing the lock, including when the
         # first caller only needs regions. Waiting callers recheck these caches.
         save_pages_cache(doc_id, pdf_path, payload["pages"], engine, version,
@@ -147,6 +213,43 @@ def load_document_parse(doc_id: str, doc: dict, pdf_path: str) -> dict:
         save_images_cache(doc_id, pdf_path, payload.get("images") or [], engine, version,
                           content_revision=revision, strict=True)
         return payload
+
+
+def load_document_pages(doc_id: str, doc: dict, pdf_path: str) -> list[dict]:
+    """Use the same managed engine for every consumer, including background jobs."""
+    if doc.get("parser_engine") in {"marker", "mineru"}:
+        return load_document_parse(doc_id, doc, pdf_path)["pages"]
+    from services.cache import get_cached_pages, save_pages_cache
+    engine = doc.get("parser_engine") or "pymupdf"
+    version = doc.get("parser_version")
+    revision = int(doc.get("content_revision") or 1)
+    pages = get_cached_pages(doc_id, pdf_path, engine, version, revision)
+    if pages is None:
+        if doc.get("content_kind") == "html_article":
+            from services.web_import import pages_from_manifest
+            pages = pages_from_manifest(pdf_path)
+        else:
+            from services.pdf_parser import extract_pages
+            pages = extract_pages(pdf_path, engine,
+                                  normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
+        save_pages_cache(doc_id, pdf_path, pages, engine, version, revision, strict=True)
+    return pages
+
+
+def validate_parser_runtime(engine: str) -> dict:
+    """Validate imports, model initialization and extraction in the managed worker."""
+    import tempfile
+    import fitz
+    with tempfile.TemporaryDirectory(prefix="easypaper-parser-check-") as directory:
+        path = os.path.join(directory, "check.pdf")
+        with fitz.open() as document:
+            page = document.new_page()
+            page.insert_text((72, 72), "EasyPaper parser validation. This document must be readable.")
+            document.save(path)
+        payload = parse_document_isolated(path, engine)
+    if not any(str(page.get("text") or "").strip() for page in payload["pages"]):
+        raise RuntimeError(f"{engine} parser validation returned no text")
+    return payload
 
 
 def parse_document_isolated(pdf_path: str, engine: str, *, normalize_layout: bool = True) -> dict:
@@ -174,7 +277,13 @@ def parse_document_isolated(pdf_path: str, engine: str, *, normalize_layout: boo
             raise RuntimeError(message or "isolated parser failed")
         with open(output_path, "r", encoding="utf-8") as handle:
             payload = json.load(handle)
-    if payload.get("parser_engine") != engine or not isinstance(payload.get("pages"), list):
+    if (
+        payload.get("parser_engine") != engine
+        or not isinstance(payload.get("pages"), list) or not payload["pages"]
+        or any(page.get("parser_engine") != engine for page in payload["pages"])
+        or not isinstance(payload.get("images"), list)
+        or not payload.get("parser_version")
+    ):
         raise RuntimeError("isolated parser returned invalid output")
     return payload
 
@@ -192,9 +301,9 @@ async def _run_preview(task_id: str, pdf_path: str) -> None:
         conn.commit()
 
     output_path = preview["staging_path"]
-    command, env = _worker_command(preview["candidate_engine"], pdf_path, output_path)
     process = None
     try:
+        command, env = _worker_command(preview["candidate_engine"], pdf_path, output_path)
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
