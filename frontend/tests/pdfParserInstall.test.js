@@ -52,3 +52,52 @@ test('refreshing the parser card preserves existing installation diagnostics', (
   vm.runInContext(cardCode, context)
   context.updateParserCardInfo('mineru')
 })
+
+
+test('failed engine validation restores the saved selection without a success notification', async () => {
+  const updates = []
+  let onChange
+  const context = vm.createContext({
+    $: () => null,
+    PdfParserPicker: class {
+      constructor(_element, options) { onChange = options.onChange }
+      setParsersData(_parsers, selected) { updates.push(selected) }
+    },
+    clearParserInlineProgress() {},
+    updateParserCardInfo(selected) { updates.push(selected) },
+    pdfParsersData: [{ id: 'marker', name: 'Marker', installed: true }],
+    PARSER_FALLBACK_META: {}, currentSavedPdfEngine: 'pymupdf', isTauriDesktop: false,
+    autoSaveSystemSettings: async () => null,
+    maybeHandlePdfEngineRestart() { assert.fail('failed settings must not restart') },
+    showToast() { assert.fail('failed settings must not report success') },
+  })
+  const start = source.indexOf('const settingPdfParserPicker =')
+  vm.runInContext(source.slice(start, source.indexOf('const modelSettingChildren =', start)), context)
+  await onChange('marker')
+  assert.equal(context.currentSavedPdfEngine, 'pymupdf')
+  assert.deepEqual(updates, ['marker', 'pymupdf', 'pymupdf'])
+})
+
+
+test('installation does not activate an engine when saving its settings fails', async () => {
+  const elements = new Map()
+  let complete
+  let refreshed = false
+  const context = vm.createContext({
+    $: id => {
+      if (!elements.has(id)) elements.set(id, element())
+      return elements.get(id)
+    },
+    openOverlayModal() {},
+    installPdfParserAPI(_id, _onProgress, onSuccess) { complete = onSuccess },
+    autoSaveSystemSettings: async () => null,
+    refreshSystemSettings: async () => { refreshed = true },
+    currentSavedPdfEngine: 'pymupdf',
+    maybeHandlePdfEngineRestart() { assert.fail('failed settings must not restart') },
+  })
+  vm.runInContext(modalCode, context)
+  context.openPdfParserInstallModal({ id: 'marker', name: 'Marker' })
+  await complete('installed')
+  assert.equal(context.currentSavedPdfEngine, 'pymupdf')
+  assert.equal(refreshed, true)
+})

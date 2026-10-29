@@ -994,24 +994,12 @@ async def delete_library_document_permanently(doc_id: str, current_user: str = D
 @router.post("/library/{doc_id}/clear-cache")
 async def clear_library_document_cache(doc_id: str, current_user: str = Depends(get_current_user)):
     """특정 문서의 PDF 텍스트 및 이미지 추출 디스크 캐시를 삭제합니다."""
-    doc = require_owned_document(doc_id, current_user)
-    from services.db import get_db
+    require_owned_document(doc_id, current_user)
     from services.pdf_diagnostics import parser_identity
-    from services.cache import clear_document_cache
-    # Text and figure/table/equation regions share the document parser identity.
-    if doc.get("content_kind", "pdf") == "pdf":
-        engine, version = parser_identity()
-        with get_db() as conn:
-            conn.execute(
-                "UPDATE documents SET parser_engine = ?, parser_version = ? WHERE id = ?",
-                (engine, version, doc_id),
-            )
-            conn.commit()
-    cleared_files, freed_bytes = clear_document_cache(doc_id)
-    from services.pdf_parser import clear_parser_memory_cache
-    clear_parser_memory_cache()
+    from services.reparse import reset_document_parser_cache
     from routers.upload import sessions
-    sessions.pop(doc_id, None)
+    engine, version = parser_identity()
+    cleared_files, freed_bytes = await reset_document_parser_cache(doc_id, engine, version, sessions)
     return {
         "message": "PDF 추출 캐시가 삭제되었습니다.",
         "cleared_files": cleared_files,
@@ -1095,20 +1083,17 @@ async def get_library_references(doc_id: str, current_user: str = Depends(get_cu
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
 
     import asyncio
-    from services.cache import get_cached_pages, save_pages_cache
-    from services.pdf_parser import extract_pages
     from services.reference_parser import extract_reference_list
     try:
         # ensure_session()/get_cached_pages()와 같은 디스크 캐시를 공유한다 -
         # 그렇지 않으면 세션이 아직 복원되지 않은 상태(서버 재시작 직후 첫
         # 열람)에서 텍스트를 한 번 더 처음부터 추출하게 된다.
-        pages = get_cached_pages(doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"))
-        if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"),
-                                            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
-            save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
+        from services.reparse import load_document_pages
+        pages = await asyncio.to_thread(load_document_pages, doc_id, doc, pdf_path)
         references = extract_reference_list(pages)
-    except Exception:
+    except Exception as exc:
+        if doc.get("parser_engine") in {"marker", "mineru"}:
+            raise HTTPException(status_code=503, detail=f"{doc['parser_engine']} 파서 실행 실패: {exc}") from exc
         references = {}
 
     save_page_insight(doc_id, 0, "reference_list", json.dumps(references, ensure_ascii=False))
@@ -1302,19 +1287,14 @@ async def reclassify_paper_tags(
     """Explicitly replace current tags using the latest classifier schema."""
     doc = require_owned_document(doc_id, current_user)
     from services.library import get_pdf_path
-    from services.cache import get_cached_pages, save_pages_cache
-    from services.pdf_parser import extract_pages
     from services.paper_tags import classify_and_store_paper_tags
     import asyncio
 
     pdf_path = get_pdf_path(doc_id)
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
-    pages = get_cached_pages(doc_id, pdf_path, doc.get("parser_engine"), doc.get("parser_version"))
-    if pages is None:
-        pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"),
-                                            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
-        save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
+    from services.reparse import load_document_pages
+    pages = await asyncio.to_thread(load_document_pages, doc_id, doc, pdf_path)
     title = (doc.get("metadata") or {}).get("title") or doc.get("filename") or ""
     paper_tags = await classify_and_store_paper_tags(doc_id, pages, title, force=True)
     if not paper_tags:
