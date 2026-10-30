@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.5.5 - 2026-10-30
+
+### 한국어 (1.5.4 → 1.5.5)
+
+- 패키지 앱에서 Marker·MinerU의 자식 프로세스가 올바르게 시작되도록 수정
+- 선택한 고급 PDF 파서를 관리형 작업자로 실행하고, 실패 시 다른 파서로 조용히 대체하지 않도록 수정. 파서 변경 후 이전 번역이 재사용되지 않도록 콘텐츠 버전을 갱신하고, 설치된 파서를 활성화하기 전에 모델 실행을 검증
+- PDF 텍스트 선택과 문장 강조 표시가 문장 경계를 벗어나지 않도록 수정
+
+### English (1.5.4 → 1.5.5)
+
+- Fixed child-process startup for Marker and MinerU in the packaged app.
+- Ran selected advanced PDF parsers through managed workers and prevented silent fallback to a different parser. Content revisions now change with the parser so stale translations are not reused, and installed parsers are activated only after model execution is validated.
+- Kept PDF text selection and sentence highlights within sentence boundaries.
+
 ## 1.5.4 - 2026-10-29
 
 ### 한국어 (1.5.3 → 1.5.4)
