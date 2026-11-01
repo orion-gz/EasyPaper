@@ -44,7 +44,7 @@ async function loadPDFJS() {
   return pdfjsLib
 }
 
-export async function loadPDF(url) {
+export async function loadPDF(url, onProgress) {
   await loadPDFJS()
   const myGeneration = ++loadGeneration
   // WebKit은 파괴된 worker의 진행 중인 렌더를 즉시 reject할 수 있다.
@@ -54,6 +54,9 @@ export async function loadPDF(url) {
   disposeScrollView()
   const previousLoadingTask = pdfLoadingTask
   const loadingTask = pdfjsLib.getDocument({ url, ...pdfResources })
+  loadingTask.onProgress = progress => {
+    if (myGeneration === loadGeneration) onProgress?.(progress)
+  }
   pdfLoadingTask = loadingTask
 
   if (previousLoadingTask && previousLoadingTask !== loadingTask) {

@@ -11345,12 +11345,16 @@ async function openFromLibrary(doc, shouldPushState = true) {
       state.currentPage = 1
       showViewer()
       hideOutlineSidebar()
+      notifyWorkspace('load-progress', { stage: 'rendering', percent: 70 })
       await renderArticleDocument(doc)
       await restoreArticleChatHistory(await chatHistoryPromise, doc)
       return
     }
 
-    const loadedPages = await loadPDF(`/api/library/${doc.id}/pdf`)
+    notifyWorkspace('load-progress', { stage: 'loading', percent: 25 })
+    const loadedPages = await loadPDF(`/api/library/${doc.id}/pdf`, ({ loaded, total }) => {
+      if (isCurrentOpen() && total > 0) notifyWorkspace('load-progress', { stage: 'loading', percent: 25 + Math.min(1, loaded / total) * 40 })
+    })
     if (!isCurrentOpen() || loadedPages === null) return
     docTitle.textContent  = displayTitle
     docTitle.title        = doc.filename
@@ -11371,6 +11375,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
 
     // PDF가 로드된 뒤에만 가능한 두 작업(페이지 렌더링, 목차 조회)은 서로 무관하므로
     // 병렬로 실행한다 - 이전에는 순차 실행이라 두 작업 시간이 그대로 더해졌었다.
+    notifyWorkspace('load-progress', { stage: 'rendering', percent: 70 })
     await Promise.all([
       (async () => {
         await initScrollViewer()
@@ -19108,6 +19113,7 @@ async function handleRouting() {
           return
         }
         console.log("[Router] Routing to viewer for document:", docId)
+        notifyWorkspace('load-progress', { stage: 'metadata', percent: 10 })
         const doc = await fetchLibraryDoc(docId)
         if (doc) {
           await openFromLibrary(doc, false)
@@ -19147,7 +19153,8 @@ async function handleRouting() {
           return
         }
         try {
-          const doc = await fetchLibraryDoc(docId)
+          notifyWorkspace('load-progress', { stage: 'metadata', percent: 10 })
+        const doc = await fetchLibraryDoc(docId)
           if (doc) {
             if (viewerScreen.classList.contains('active') || !libraryScreen.classList.contains('active')) {
               await showLibraryScreen(false, 'chats')
