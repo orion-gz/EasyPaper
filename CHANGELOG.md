@@ -2,6 +2,18 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.5.6 - 2026-11-01
+
+### 한국어 (1.5.5 → 1.5.6)
+
+- 문서를 열 때 준비·문서 정보 확인·PDF 로딩·페이지 렌더링·읽기 위치 복원 단계를 진행률과 함께 표시. PDF 다운로드 진행 상황도 반영하고 문서가 준비되거나 로딩에 실패하면 표시를 종료
+- PDF 이미지 영역 추출에 실패했을 때 원인을 서버 로그에 기록하여 문제 진단을 개선
+
+### English (1.5.5 → 1.5.6)
+
+- Show staged progress while opening a document, from viewer preparation and metadata lookup through PDF loading, page rendering, and reading-position restoration. Reflect PDF download progress and dismiss the indicator when the document is ready or loading fails.
+- Log PDF image-region extraction failures on the server to help diagnose errors.
+
 ## 1.5.5 - 2026-10-30
 
 ### 한국어 (1.5.4 → 1.5.5)
