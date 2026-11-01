@@ -53,7 +53,14 @@ export function createWorkspaceTabs(adapter) {
   function renderLoading(record) {
     const progress = record.progress || { stage: 'preparing', percent: 0 }
     filename.textContent = record.frame.title
-    loadingText.textContent = t(`navigation:loadProgress.${progress.stage}`)
+    const labels = {
+      preparing: t('navigation:loadProgress.preparing'),
+      metadata: t('navigation:loadProgress.metadata'),
+      loading: t('navigation:loadProgress.loading'),
+      rendering: t('navigation:loadProgress.rendering'),
+      restoring: t('navigation:loadProgress.restoring'),
+    }
+    loadingText.textContent = labels[progress.stage]
     percentage.textContent = `${progress.percent}%`
     bar.value = progress.percent
   }
