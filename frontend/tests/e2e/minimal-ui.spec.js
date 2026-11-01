@@ -214,17 +214,24 @@ test('inline rename is accessible and restores keyboard opening after cancel, no
 
 test('library spacing stays compact with full-width search and no empty filter row', async ({ page }) => {
   await setup(page)
+  // A hidden filter row also matches before the library has initialized.
+  // Wait for its real content, then measure all boxes in one layout frame;
+  // separate boundingBox calls can straddle the initial library render.
+  await expect(page.locator('.minimal-doc-card')).toHaveCount(1)
   for (const width of [1280, 600, 390]) {
     await page.setViewportSize({ width, height: 800 })
     await expect(page.locator('#library-filter-row')).toBeHidden()
-    const search = await page.locator('#library-search-box').boundingBox()
-    const grid = await page.locator('#library-grid').boundingBox()
-    expect(Math.abs(search.width - grid.width)).toBeLessThan(2)
-    expect(grid.y - search.y - search.height).toBeGreaterThanOrEqual(12)
-    expect(grid.y - search.y - search.height).toBeLessThanOrEqual(20)
-    const card = await page.locator('.minimal-doc-card').boundingBox()
-    expect(card.x).toBeGreaterThanOrEqual(0)
-    expect(card.x + card.width).toBeLessThanOrEqual(width)
+    await expect(async () => {
+      const { search, grid, card } = await page.evaluate(() => {
+        const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON()
+        return { search: rect('#library-search-box'), grid: rect('#library-grid'), card: rect('.minimal-doc-card') }
+      })
+      expect(Math.abs(search.width - grid.width)).toBeLessThan(2)
+      expect(grid.y - search.y - search.height).toBeGreaterThanOrEqual(12)
+      expect(grid.y - search.y - search.height).toBeLessThanOrEqual(20)
+      expect(card.x).toBeGreaterThanOrEqual(0)
+      expect(card.x + card.width).toBeLessThanOrEqual(width)
+    }).toPass({ timeout: 5000 })
     await page.screenshot({ path: `/tmp/easypaper-spacing-${width}.png` })
   }
 })
