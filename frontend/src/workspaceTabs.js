@@ -28,6 +28,17 @@ export function createWorkspaceTabs(adapter) {
   outlet.id = 'workspace-tab-panel'
   outlet.setAttribute('role', 'tabpanel')
   outlet.tabIndex = -1
+  const loading = document.createElement('div')
+  loading.className = 'workspace-document-loading'
+  loading.setAttribute('role', 'status')
+  loading.hidden = true
+  const spinner = document.createElement('span')
+  spinner.className = 'workspace-document-spinner'
+  spinner.setAttribute('aria-hidden', 'true')
+  const loadingText = document.createElement('span')
+  loadingText.textContent = t('navigation:tabs.loading')
+  loading.append(spinner, loadingText)
+  outlet.append(loading)
   $('workspace-page-title').hidden = true
   const controls = document.createElement('div')
   controls.className = 'workspace-tab-controls'
@@ -323,6 +334,7 @@ export function createWorkspaceTabs(adapter) {
     else if (route) store.update(id, { route })
     const token = ++generation
     visibleId = id
+    loading.hidden = true
     library.classList.remove('active')
     compare.classList.remove('active')
     adapter.hideChatDrawer()
@@ -331,6 +343,7 @@ export function createWorkspaceTabs(adapter) {
       const record = makeFrame(tab)
       record.closed = false
       record.frame.hidden = false
+      loading.hidden = Boolean(record.loaded || record.loadFailed)
       const runtime = record.frame.contentWindow?.__easypaperDocument
       if (runtime?.ready) {
         // PDF resumption belongs to this document, not the navigation queue.
@@ -498,7 +511,9 @@ export function createWorkspaceTabs(adapter) {
           record.store.update(id, { reading: context.reading })
           record.frame.contentWindow.location.reload()
         } catch (error) {
-          delete record.refreshContext
+          record.loaded = true
+        if (record.store === store && id === visibleId) loading.hidden = true
+        delete record.refreshContext
           runtime.cancelRefresh()
           throw error
         }
@@ -517,6 +532,8 @@ export function createWorkspaceTabs(adapter) {
       runtime.restore(refreshContext?.reading || tab?.reading).then(async () => {
         if (refreshContext) runtime.restoreDraft(refreshContext.draft)
         else await runtime.navigate(tab?.route || '')
+        record.loaded = true
+        if (record.store === store && id === visibleId) loading.hidden = true
         delete record.refreshContext
         await runtime.setActive(record.store === store && id === visibleId && !document.hidden)
         await runtime.syncAppearance?.(document.body.classList.contains('light-theme'), adapter.locale())
@@ -528,6 +545,10 @@ export function createWorkspaceTabs(adapter) {
     }
     if (type === 'snapshot') record.store.update(id, { reading: payload })
     if (type === 'status') {
+      if (payload.error) {
+        record.loadFailed = true
+        if (record.store === store && id === visibleId) loading.hidden = true
+      }
       const finished = record.busy && !payload.busy
       record.busy = payload.busy
       const unviewed = record.store !== store || id !== visibleId
