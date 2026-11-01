@@ -205,7 +205,7 @@ def _remap_insight_references(kind, content, document_ids):
     return json.dumps(value, ensure_ascii=False)
 
 
-def import_archive(username, source):
+def import_archive(username, source, *, preserve_user_settings=False):
     """Validate and stage before writing. On failure roll back DB and new files."""
     published = []
     try:
@@ -333,6 +333,8 @@ def import_archive(username, source):
                     if table in ('document_tasks', 'document_task_pages') and row.get('status') in ('queued', 'running', 'retry_wait'):
                         row['status'] = 'cancelled'
                     if table in ('user_workspace_settings', 'user_language_settings', 'user_reading_profiles'):
+                        if preserve_user_settings:
+                            continue
                         conn.execute(f'DELETE FROM "{table}" WHERE username=?', (username,))
                     if table == 'reading_time_receipts':
                         row['request_id'] = maps['receipts'][row['request_id']]

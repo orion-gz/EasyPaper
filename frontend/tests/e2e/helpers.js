@@ -22,6 +22,15 @@ export async function mockBaseRoutes(page, {
   workspaceSettings = {},
   languageSettings = { ui_locale: 'ko', default_source_language: 'auto', target_language: 'ko' },
 } = {}) {
+  // Desktop window tests use a native bridge stub; the connection bootstrap
+  // still needs the local-only control endpoint before any API requests.
+  await page.route('**/desktop/connection', route => {
+    const origin = new URL(route.request().url()).origin
+    return route.fulfill({ json: {
+      enabled: false, server_url: '', onboarded: true, remote: false,
+      destination: origin + '/', local_url: origin + '/', error: null,
+    } })
+  })
   await page.route('**/api/**', async route => {
     const url = route.request().url()
 

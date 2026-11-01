@@ -67,6 +67,8 @@ async def lifespan(_app: FastAPI):
 
     init_db()
     init_usage_table()
+    if desktop_connections:
+        await desktop_connections.start()
     async def recover_library():
         try:
             await upload.restore_sessions_from_library()
@@ -79,6 +81,8 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        if desktop_connections:
+            await desktop_connections.close()
         recovery.cancel()
         with suppress(asyncio.CancelledError):
             await recovery
@@ -91,6 +95,16 @@ app = FastAPI(
     lifespan=lifespan,
 
 )
+
+# Only the packaged desktop sidecar exposes local connection controls. Remote
+# API traffic uses a separate loopback origin, preserving local browser data.
+desktop_connections = None
+if os.getenv('EASYPAPER_DESKTOP') == '1':
+    from config import _get_config_dir
+    from services.desktop_connection import install_desktop_connections
+    desktop_connections = install_desktop_connections(
+        app, os.path.join(_get_config_dir(), 'desktop-connection.json'), APP_PORT,
+    )
 
 @app.exception_handler(HTTPException)
 async def localized_http_exception_handler(request: Request, exc: HTTPException):
