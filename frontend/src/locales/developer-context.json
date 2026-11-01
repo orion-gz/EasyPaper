@@ -5857,5 +5857,26 @@
   },
   "viewer:memoAlignment.pageRight": {
     "description": "Page header bulk memo alignment control. Applies only to memos on that page, including hidden memos without revealing them."
+  },
+  "navigation:loadProgress.title": {
+    "description": "Document viewer opening progress: Preparing your document"
+  },
+  "navigation:loadProgress.hint": {
+    "description": "Document viewer opening progress: Stage-based progress · Timing depends on document size and processing"
+  },
+  "navigation:loadProgress.preparing": {
+    "description": "Document viewer opening progress: Preparing viewer"
+  },
+  "navigation:loadProgress.metadata": {
+    "description": "Document viewer opening progress: Checking document information"
+  },
+  "navigation:loadProgress.loading": {
+    "description": "Document viewer opening progress: Loading and decoding PDF"
+  },
+  "navigation:loadProgress.rendering": {
+    "description": "Document viewer opening progress: Rendering pages"
+  },
+  "navigation:loadProgress.restoring": {
+    "description": "Document viewer opening progress: Restoring reading position and layout"
   }
 }
