@@ -102,6 +102,7 @@ test('download shows progress, blocks mode changes, and enables local use on com
   await expect(page.locator('#page-dashboard.active')).toBeVisible()
   await page.locator('.desktop-connection-badge').click()
   const dialog = page.getByRole('dialog')
+  await dialog.locator('.desktop-copy-option summary').click()
   await dialog.locator('[data-download]').click()
   await expect(dialog.locator('[data-status]')).toContainText('1.0 MiB')
   await expect(dialog.locator('[data-apply]')).toBeDisabled()
@@ -182,6 +183,11 @@ for (const action of ['merge', 'replace_local', 'replace_remote']) {
     await expect(dialog.locator('[data-preview]')).toBeHidden()
     expect(started).toBe(0)
     await dialog.locator('[data-sync]').click()
+    if (action.startsWith('replace_')) {
+      await expect(dialog.locator('[data-confirm-sync]')).toBeDisabled()
+      await expect(dialog.locator('[data-acknowledge]')).toBeFocused()
+      await dialog.locator('[data-acknowledge]').check()
+    }
     await expect(dialog.locator('[data-confirm-sync]')).toBeEnabled()
     await page.screenshot({ path: `/tmp/easypaper-sync-${action}.png` })
     await dialog.locator('[data-confirm-sync]').click()
@@ -190,6 +196,7 @@ for (const action of ['merge', 'replace_local', 'replace_remote']) {
     job = { kind: 'sync', status: 'completed', documents: 7 }
     await expect(dialog.locator('[data-status]')).toContainText('양방향 동기화를 완료')
     await expect(dialog.locator('[data-action]')).toHaveValue('merge')
+    await expect(dialog.locator('[data-policy] .provider-picker-btn')).toContainText('병합')
     await expect(dialog.locator('[data-reload]')).toBeVisible()
     expect(started).toBe(1)
   })
@@ -198,12 +205,15 @@ for (const action of ['merge', 'replace_local', 'replace_remote']) {
 test('sync conflicts stop automatic progress and preserve an explicit choice', async ({ page }) => {
   await desktop(page, { onboarded: true, enabled: true, server_url: 'https://papers.example.com', sync: { action: 'merge', automatic: true } })
   await page.route('**/desktop/download', route => route.fulfill({ json: {
-    kind: 'sync', status: 'conflict', conflicts: [{ table: 'memos', key: 'paper' }],
+    kind: 'sync', status: 'conflict', conflicts: [{ table: 'memos', key: 'paper', document: '<script>Paper A</script>' }],
   } }))
   await page.goto(remoteOrigin + '/index.html')
   await page.locator('.desktop-connection-badge').click()
   await expect(page.getByRole('dialog').locator('[data-status]')).toContainText('양쪽 변경이 충돌')
   await expect(page.getByRole('dialog').locator('[data-action]')).toBeEnabled()
+  await expect(page.getByRole('dialog').locator('[data-automatic]')).not.toBeChecked()
+  await expect(page.getByRole('dialog').locator('[data-conflicts]')).toContainText('메모·주석 · <script>Paper A</script>')
+  await expect(page.getByRole('dialog').locator('[data-conflicts] script')).toHaveCount(0)
 })
 
 test('cancelling a preview does not enable newly selected automatic sync', async ({ page }) => {
@@ -241,3 +251,36 @@ test('automatic merge runs on an idle remote workspace without a destructive pol
   await page.clock.fastForward(5 * 60 * 1000)
   await expect.poll(() => started).toBe(1)
 })
+
+for (const theme of ['dark', 'light']) {
+  test(`connection preview is accessible and fits narrow windows in ${theme} mode`, async ({ page }) => {
+    const { default: AxeBuilder } = await import('@axe-core/playwright')
+    await desktop(page, { onboarded: true, enabled: true, server_url: 'https://papers.example.com' })
+    await page.route('**/desktop/sync/preview', route => route.fulfill({ json: {
+      plan_id: 'layout', action: 'replace_remote', local_documents: 1234, remote_documents: 5678,
+    } }))
+    await page.setViewportSize({ width: 390, height: 720 })
+    await page.goto(remoteOrigin + '/index.html')
+    await expect(page.locator('#page-dashboard.active')).toBeVisible()
+    if (theme === 'light') await page.locator('#sidebar-theme-toggle-btn').click()
+    await expect(page.locator('body')).toHaveClass(theme === 'light' ? /light-theme/ : /^(?!.*light-theme).*$/)
+    await page.locator('.desktop-connection-badge').click()
+    const dialog = page.getByRole('dialog')
+    await dialog.locator('[data-action]').selectOption('replace_remote')
+    await dialog.locator('[data-sync]').click()
+    await expect(dialog.locator('[data-acknowledge]')).toBeFocused()
+    await expect(dialog.locator('[data-direction]')).toHaveText('→')
+    await expect(dialog.locator('[data-confirm-sync]')).toBeDisabled()
+    await expect(dialog.locator('[data-close]')).toBeDisabled()
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeVisible()
+    const result = await new AxeBuilder({ page }).include('.desktop-connection-dialog').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()
+    expect(result.violations).toEqual([])
+    expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+    await page.screenshot({ path: `/tmp/easypaper-connection-${theme}-narrow.png` })
+    await dialog.locator('[data-cancel-sync]').click()
+    await expect(dialog.locator('[data-sync]')).toBeFocused()
+    await dialog.locator('[data-close]').click()
+    await expect(page.locator('.desktop-connection-badge')).toBeFocused()
+  })
+}

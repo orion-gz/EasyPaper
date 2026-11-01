@@ -273,6 +273,21 @@ def merge_snapshots(base, local, remote):
         if name.split('/')[1] not in docs | comparisons:
             conflicts.append({'table': 'files', 'key': name})
     if conflicts:
+        # Give the client useful, account-scoped context without returning note
+        # contents, paths on disk, or credentials in error responses.
+        names = {row['id']: row['filename'] for snapshot in (base, remote, local)
+                 for row in snapshot['tables']['documents']}
+        for conflict in conflicts[:50]:
+            table, key = conflict['table'], conflict['key']
+            document = key.split('/')[1] if table == 'files' else key
+            if table != 'files':
+                for snapshot in (local, remote, base):
+                    row = index_rows(table, snapshot['tables'][table]).get(key)
+                    if row:
+                        document = row.get('doc_id') or row.get('paper_id') or (row.get('id') if table == 'documents' else None)
+                        break
+            if document in names:
+                conflict['document'] = names[document]
         raise SyncConflict(conflicts)
     return result
 

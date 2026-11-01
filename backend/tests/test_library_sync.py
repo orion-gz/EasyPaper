@@ -197,3 +197,68 @@ def test_request_cannot_replace_a_different_server_account(dataset, tmp_path):
     with pytest.raises(transfer.InvalidArchive, match='account changed'):
         sync.exchange('alice', tmp_path / 'request.zip', tmp_path / 'responses')
     assert len(dataset['db'].db_list_documents('alice', include_deleted=True)) == 2
+
+
+def test_conflict_reports_document_name_without_note_contents(dataset, tmp_path):
+    base = snapshot('alice', tmp_path / 'base.zip')
+    local, remote = copy.deepcopy(base), copy.deepcopy(base)
+    local['tables']['memos'][0]['data'] = '{"private":"local note"}'
+    remote['tables']['memos'][0]['data'] = '{"private":"server note"}'
+    with pytest.raises(sync.SyncConflict) as error:
+        sync.merge_snapshots(base, local, remote)
+    assert error.value.conflicts == [{'table': 'memos', 'key': sync.record_key('memos', local['tables']['memos'][0]),
+                                      'document': 'paper-a.pdf'}]
+    assert 'private' not in str(error.value.conflicts)
+
+
+def test_three_clients_reconcile_independent_changes(dataset, tmp_path):
+    def roundtrip(username, number):
+        request = tmp_path / f'{username}-{number}.zip'
+        local = snapshot(username, request)
+        previous = sync.peer_state(username, sync.account_id('alice'))
+        local['sync'].update(request_id=f'{username}-{number}', policy='merge',
+                             baseline=previous['revision'] if previous else '')
+        outgoing = tmp_path / f'{username}-{number}-out.zip'
+        sync.write_snapshot(local, [request], outgoing)
+        response = sync.exchange('alice', outgoing, tmp_path / 'responses')
+        received = sync.read_snapshot(response)
+        apply(username, received, [response], tmp_path / f'{username}-{number}-received.zip', sync.account_id('alice'))
+
+    roundtrip('bob', 1)
+    roundtrip('charlie', 1)
+    with dataset['db'].get_db() as conn:
+        conn.execute("UPDATE documents SET filename='bob-edit.pdf' WHERE id='private-b'")
+        conn.execute("UPDATE documents SET filename='charlie-edit.pdf' WHERE username='charlie' AND filename='paper-a.pdf'")
+    roundtrip('bob', 2)
+    roundtrip('charlie', 2)
+    roundtrip('bob', 3)
+    fingerprints = {sync.fingerprint(snapshot(user, tmp_path / f'{user}-final.zip')) for user in ('alice', 'bob', 'charlie')}
+    assert len(fingerprints) == 1
+    for user in ('alice', 'bob', 'charlie'):
+        assert len(dataset['db'].db_list_documents(user, include_deleted=True)) == 3
+
+
+def test_streamed_original_survives_sync_and_corruption_is_rejected(dataset, tmp_path):
+    import hashlib
+    import os
+    import zipfile
+    original = dataset['library_dir'] / 'paper-a' / 'document.pdf'
+    # Incompressible content exercises multiple read/write chunks, not a tiny
+    # fixture that ZIP reduces to a few bytes.
+    original.write_bytes(b'%PDF-' + os.urandom(16 * 1024 * 1024))
+    original_hash = hashlib.sha256(original.read_bytes()).hexdigest()
+    source = tmp_path / 'source.zip'
+    desired = snapshot('alice', source)
+    assert source.stat().st_size > 16 * 1024 * 1024
+    result = apply('bob', desired, [source], tmp_path / 'received.zip', sync.account_id('alice'))
+    shared = next(r['id'] for r in desired['tables']['documents'] if r['filename'] == 'paper-a.pdf')
+    restored = dataset['library_dir'] / result['id_map'][shared] / 'document.pdf'
+    assert hashlib.sha256(restored.read_bytes()).hexdigest() == original_hash
+    corrupt = tmp_path / 'corrupt.zip'
+    with zipfile.ZipFile(source) as old, zipfile.ZipFile(corrupt, 'w') as new:
+        for name in old.namelist():
+            new.writestr(name, b'damaged' if name.endswith('/document.pdf') else old.read(name))
+    before = sync.raw_fingerprint('bob')
+    with pytest.raises(transfer.InvalidArchive, match='checksum'):
+        sync.read_snapshot(corrupt)
+    assert sync.raw_fingerprint('bob') == before
