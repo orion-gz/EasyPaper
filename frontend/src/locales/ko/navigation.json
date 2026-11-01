@@ -59,5 +59,12 @@
   "window.minimize": "창 최소화",
   "window.maximize": "창 최대화",
   "window.restore": "창 복원",
-  "window.close": "창 닫기"
+  "window.close": "창 닫기",
+  "loadProgress.title": "문서를 준비하고 있습니다",
+  "loadProgress.hint": "단계 기준 진행률 · 문서 크기와 처리 상태에 따라 시간이 걸릴 수 있습니다",
+  "loadProgress.preparing": "뷰어 준비 중",
+  "loadProgress.metadata": "문서 정보 확인 중",
+  "loadProgress.loading": "PDF 로딩 및 구조 해석 중",
+  "loadProgress.rendering": "페이지 렌더링 중",
+  "loadProgress.restoring": "읽기 위치 및 화면 복원 중"
 }

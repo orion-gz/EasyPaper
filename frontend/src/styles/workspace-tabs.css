@@ -165,3 +165,17 @@ body.sidebar-collapsed #tab-workspace .workspace-mode-switch-compact { display: 
 .workspace-tab.drop-before::before, .workspace-tab.drop-after::before { content: ''; position: absolute; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: var(--control-accent, #4e6aff); z-index: 2; pointer-events: none; }
 .workspace-tab.drop-before::before { left: 0; }
 .workspace-tab.drop-after::before { right: 0; }
+
+.workspace-document-loading { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: var(--bg-surface); color: var(--text-primary); pointer-events: none; }
+.workspace-document-loading[hidden] { display: none; }
+ .workspace-loading-card { width: min(420px, calc(100% - 48px)); padding: 28px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-primary); box-shadow: 0 12px 40px rgba(0,0,0,.06); }
+.workspace-loading-card strong { font-size: 16px; font-weight: 600; }
+.workspace-loading-filename { margin: 8px 0 28px; color: var(--text-secondary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-loading-info { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; margin-bottom: 10px; }
+.workspace-loading-info > :last-child { color: var(--control-accent, #4e6aff); font-variant-numeric: tabular-nums; font-weight: 600; }
+.workspace-loading-card progress { display: block; width: 100%; height: 6px; border: 0; border-radius: 6px; overflow: hidden; appearance: none; background: var(--border); }
+.workspace-loading-card progress::-webkit-progress-bar { background: var(--border); border-radius: 6px; }
+.workspace-loading-card progress::-webkit-progress-value { background: var(--control-accent, #4e6aff); border-radius: 6px; transition: width .25s ease; }
+.workspace-loading-card progress::-moz-progress-bar { background: var(--control-accent, #4e6aff); border-radius: 6px; }
+.workspace-loading-card small { display: block; margin-top: 16px; color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
+@media (prefers-reduced-motion: reduce) { .workspace-loading-card progress::-webkit-progress-value { transition: none; } }

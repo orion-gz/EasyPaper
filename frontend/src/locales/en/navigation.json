@@ -59,5 +59,12 @@
   "window.minimize": "Minimize window",
   "window.maximize": "Maximize window",
   "window.restore": "Restore window",
-  "window.close": "Close window"
+  "window.close": "Close window",
+  "loadProgress.title": "Preparing your document",
+  "loadProgress.hint": "Stage-based progress · Timing depends on document size and processing",
+  "loadProgress.preparing": "Preparing viewer",
+  "loadProgress.metadata": "Checking document information",
+  "loadProgress.loading": "Loading and decoding PDF",
+  "loadProgress.rendering": "Rendering pages",
+  "loadProgress.restoring": "Restoring reading position and layout"
 }

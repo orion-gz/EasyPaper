@@ -28,6 +28,43 @@ export function createWorkspaceTabs(adapter) {
   outlet.id = 'workspace-tab-panel'
   outlet.setAttribute('role', 'tabpanel')
   outlet.tabIndex = -1
+  const loading = document.createElement('div')
+  loading.className = 'workspace-document-loading'
+  loading.setAttribute('role', 'status')
+  loading.hidden = true
+  const card = document.createElement('div')
+  card.className = 'workspace-loading-card'
+  const heading = document.createElement('strong')
+  heading.textContent = t('navigation:loadProgress.title')
+  const filename = document.createElement('div')
+  filename.className = 'workspace-loading-filename'
+  const info = document.createElement('div')
+  info.className = 'workspace-loading-info'
+  const loadingText = document.createElement('span')
+  const percentage = document.createElement('span')
+  const bar = document.createElement('progress')
+  bar.max = 100
+  bar.setAttribute('aria-label', t('navigation:loadProgress.title'))
+  const hint = document.createElement('small')
+  hint.textContent = t('navigation:loadProgress.hint')
+  info.append(loadingText, percentage)
+  card.append(heading, filename, info, bar, hint)
+  loading.append(card)
+  function renderLoading(record) {
+    const progress = record.progress || { stage: 'preparing', percent: 0 }
+    filename.textContent = record.frame.title
+    const labels = {
+      preparing: t('navigation:loadProgress.preparing'),
+      metadata: t('navigation:loadProgress.metadata'),
+      loading: t('navigation:loadProgress.loading'),
+      rendering: t('navigation:loadProgress.rendering'),
+      restoring: t('navigation:loadProgress.restoring'),
+    }
+    loadingText.textContent = labels[progress.stage]
+    percentage.textContent = `${progress.percent}%`
+    bar.value = progress.percent
+  }
+  outlet.append(loading)
   $('workspace-page-title').hidden = true
   const controls = document.createElement('div')
   controls.className = 'workspace-tab-controls'
@@ -323,6 +360,7 @@ export function createWorkspaceTabs(adapter) {
     else if (route) store.update(id, { route })
     const token = ++generation
     visibleId = id
+    loading.hidden = true
     library.classList.remove('active')
     compare.classList.remove('active')
     adapter.hideChatDrawer()
@@ -331,6 +369,8 @@ export function createWorkspaceTabs(adapter) {
       const record = makeFrame(tab)
       record.closed = false
       record.frame.hidden = false
+      renderLoading(record)
+      loading.hidden = Boolean(record.loaded || record.loadFailed)
       const runtime = record.frame.contentWindow?.__easypaperDocument
       if (runtime?.ready) {
         // PDF resumption belongs to this document, not the navigation queue.
@@ -498,7 +538,9 @@ export function createWorkspaceTabs(adapter) {
           record.store.update(id, { reading: context.reading })
           record.frame.contentWindow.location.reload()
         } catch (error) {
-          delete record.refreshContext
+          record.loaded = true
+        if (record.store === store && id === visibleId) loading.hidden = true
+        delete record.refreshContext
           runtime.cancelRefresh()
           throw error
         }
@@ -509,7 +551,16 @@ export function createWorkspaceTabs(adapter) {
       record.frame.title = String(payload || '')
       record.store.update(id, { title: record.frame.title })
     }
+    if (type === 'load-progress') {
+      const stages = ['preparing', 'metadata', 'loading', 'rendering', 'restoring']
+      if (stages.includes(payload?.stage) && Number.isFinite(payload.percent)) {
+        record.progress = { stage: payload.stage, percent: Math.max(record.progress?.percent || 0, Math.min(99, Math.round(payload.percent))) }
+        if (record.store === store && id === visibleId) renderLoading(record)
+      }
+    }
     if (type === 'ready') {
+      record.progress = { stage: 'restoring', percent: 95 }
+      if (record.store === store && id === visibleId) renderLoading(record)
       const runtime = record.frame.contentWindow.__easypaperDocument
       runtime.syncScale(Number(document.documentElement.style.zoom) || 1)
       const tab = record.store.visibleTabs.find(tab => tab.id === id)
@@ -517,6 +568,8 @@ export function createWorkspaceTabs(adapter) {
       runtime.restore(refreshContext?.reading || tab?.reading).then(async () => {
         if (refreshContext) runtime.restoreDraft(refreshContext.draft)
         else await runtime.navigate(tab?.route || '')
+        record.loaded = true
+        if (record.store === store && id === visibleId) loading.hidden = true
         delete record.refreshContext
         await runtime.setActive(record.store === store && id === visibleId && !document.hidden)
         await runtime.syncAppearance?.(document.body.classList.contains('light-theme'), adapter.locale())
@@ -528,6 +581,10 @@ export function createWorkspaceTabs(adapter) {
     }
     if (type === 'snapshot') record.store.update(id, { reading: payload })
     if (type === 'status') {
+      if (payload.error) {
+        record.loadFailed = true
+        if (record.store === store && id === visibleId) loading.hidden = true
+      }
       const finished = record.busy && !payload.busy
       record.busy = payload.busy
       const unviewed = record.store !== store || id !== visibleId
