@@ -77,11 +77,13 @@ def _snapshot(conn, username):
     return tables
 
 
-def export_archive(username, browser_data, destination):
+def export_archive(username, browser_data, destination, *, sync_export=None):
     with closing(db.get_db()) as conn:
         conn.execute('BEGIN')
         tables = _snapshot(conn, username)
         conn.rollback()
+    if sync_export:
+        sync_export.prepare(tables)
     docs = {r['id'] for r in tables['documents']}
     sessions = docs | {r['id'] for r in tables['compare_sessions']}
     files = {}
@@ -89,6 +91,10 @@ def export_archive(username, browser_data, destination):
     with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
         def add(path, name):
             nonlocal expanded_bytes
+            if sync_export:
+                if not sync_export.include_file(name):
+                    return
+                name = sync_export.file_name(name)
             expanded_bytes += path.stat().st_size
             if expanded_bytes > MAX_EXPANDED_BYTES or len(files) >= MAX_FILES - 1:
                 raise InvalidArchive('Backup exceeds supported size or file count limits.')
@@ -121,6 +127,8 @@ def export_archive(username, browser_data, destination):
                 required = f"library/{row['id']}/article/article.json"
             else:
                 required = f"library/{row['id']}/document.pdf"
+            if sync_export:
+                required = sync_export.file_name(required)
             if required not in files:
                 raise InvalidArchive(f"Missing original file for {row['filename']}.")
             # Do not disclose source machine paths.
@@ -131,6 +139,8 @@ def export_archive(username, browser_data, destination):
                     'exported_at': datetime.now(timezone.utc).isoformat(),
                     'tables': tables, 'browser_data': filter_browser_data(browser_data, sessions, username, {r['id'] for r in tables['reading_sessions']}),
                     'system_settings': system_settings(), 'files': files}
+        if sync_export:
+            manifest = sync_export.transform(manifest)
         payload = json.dumps(manifest, ensure_ascii=False).encode('utf-8')
         if len(payload) > MAX_MANIFEST_BYTES or expanded_bytes + len(payload) > MAX_EXPANDED_BYTES:
             raise InvalidArchive('Backup manifest exceeds supported size limits.')
@@ -205,7 +215,7 @@ def _remap_insight_references(kind, content, document_ids):
     return json.dumps(value, ensure_ascii=False)
 
 
-def import_archive(username, source, *, preserve_user_settings=False):
+def import_archive(username, source, *, preserve_user_settings=False, sync_context=None):
     """Validate and stage before writing. On failure roll back DB and new files."""
     published = []
     try:
@@ -225,7 +235,7 @@ def import_archive(username, source, *, preserve_user_settings=False):
                     old = row['id']
                     if not isinstance(old, str) or not SAFE_ID.fullmatch(old) or old in mapping:
                         raise InvalidArchive('Invalid or duplicate identifier.')
-                    mapping[old] = uuid.uuid4().hex
+                    mapping[old] = sync_context.local_id(table, old) if sync_context else uuid.uuid4().hex
                 maps[table] = mapping
             docs = maps['documents']
             document_count = len(docs)
@@ -236,7 +246,7 @@ def import_archive(username, source, *, preserve_user_settings=False):
                 if not isinstance(old, str) or not SAFE_ID.fullmatch(old):
                     raise InvalidArchive('Invalid historical document identifier.')
                 if old not in docs:
-                    docs[old] = uuid.uuid4().hex
+                    docs[old] = sync_context.local_id('documents', old) if sync_context else uuid.uuid4().hex
                 return docs[old]
 
             compare = {}
@@ -248,6 +258,8 @@ def import_archive(username, source, *, preserve_user_settings=False):
                     raise InvalidArchive('Invalid comparison identifier.')
                 ids = [map_document_id(doc_id) for doc_id in old_ids]
                 compare[row['id']] = 'cmp_' + hashlib.sha256(':'.join(sorted(ids)).encode()).hexdigest()[:20]
+                if sync_context:
+                    sync_context.record('compare_sessions', row['id'], compare[row['id']])
                 row['doc_ids'] = json.dumps(ids)
             maps['compare_sessions'] = compare
             file_sessions.update(compare)
@@ -288,6 +300,8 @@ def import_archive(username, source, *, preserve_user_settings=False):
                 if f"library/{row['id']}/{filename}" not in manifest['files']:
                     raise InvalidArchive('Backup is missing an original document.')
             conn.execute('BEGIN IMMEDIATE')
+            if sync_context:
+                sync_context.begin(conn, maps, staged)
             # Concepts are shared; reuse by normalized name, never replace others' rows.
             maps['concepts'] = {}
             for row in tables['concepts']:
@@ -295,7 +309,8 @@ def import_archive(username, source, *, preserve_user_settings=False):
                 existing = conn.execute('SELECT id FROM concepts WHERE normalized_name=?', (row['normalized_name'],)).fetchone()
                 maps['concepts'][old] = existing['id'] if existing else _insert(conn, 'concepts', {k: v for k, v in row.items() if k != 'id'})
             maps['chats'] = {}
-            maps['receipts'] = {row['request_id']: uuid.uuid4().hex for row in tables['reading_time_receipts']}
+            maps['receipts'] = {row['request_id']: (sync_context.local_id('receipts', row['request_id']) if sync_context else uuid.uuid4().hex)
+                                for row in tables['reading_time_receipts']}
             order = ('documents', 'compare_sessions', 'folders', 'chats', 'document_tasks', 'reading_sessions',
                      *[t for t in TABLES if t not in ('documents', 'compare_sessions', 'folders', 'chats', 'document_tasks', 'reading_sessions', 'concepts')])
             for table in order:
@@ -343,8 +358,12 @@ def import_archive(username, source, *, preserve_user_settings=False):
                         if conn.execute('SELECT 1 FROM concept_edges WHERE concept_id_a=? AND concept_id_b=?', (row['concept_id_a'], row['concept_id_b'])).fetchone():
                             continue
                     inserted = _insert(conn, table, row)
+                    if sync_context and old_id is not None:
+                        sync_context.record(table, old_id, row.get('id', inserted))
                     if table == 'chats':
                         maps['chats'][old_id] = inserted
+            if sync_context:
+                sync_context.move_old_files()
             for path, target, label, new in staged:
                 root = target if label == 'cache' else Path(library.LIBRARY_DIR if label == 'library' else library.UPLOAD_DIR) / new
                 if root not in published:
@@ -354,7 +373,11 @@ def import_archive(username, source, *, preserve_user_settings=False):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with path.open('rb') as src, target.open('xb') as dst:
                     shutil.copyfileobj(src, dst)
+            if sync_context:
+                sync_context.checkpoint(conn, maps)
             conn.commit()
+            if sync_context:
+                sync_context.finish()
             return {'documents': document_count, 'id_map': {**sessions, **maps['folders'], **maps['reading_sessions'], **maps['receipts']},
                     'browser_data': manifest.get('browser_data', {}),
                     'system_settings': {k: v for k, v in manifest.get('system_settings', {}).items() if k in SYSTEM_KEYS and isinstance(v, str)}}
@@ -364,6 +387,8 @@ def import_archive(username, source, *, preserve_user_settings=False):
                 shutil.rmtree(path)
             else:
                 path.unlink(missing_ok=True)
+        if sync_context:
+            sync_context.rollback()
         if isinstance(exc, (KeyError, TypeError, ValueError, sqlite3.IntegrityError, zipfile.BadZipFile, RuntimeError, NotImplementedError)):
             raise InvalidArchive('Invalid or incompatible backup: ' + str(exc)) from exc
         raise

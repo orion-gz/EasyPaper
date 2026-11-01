@@ -24,6 +24,10 @@
 .desktop-connection-dialog [data-apply] { background: #385cba; color: white; }
 .desktop-connection-dialog [data-status] { min-height: 1.6em; overflow-wrap: anywhere; }
 .desktop-connection-dialog [data-transfer] { border-top: 1px solid var(--border, #454552); margin-top: 20px; }
+.desktop-connection-dialog select { width: 100%; margin: 8px 0; padding: 10px; border-radius: 6px; background: var(--bg-base, #181820); color: inherit; border: 1px solid var(--border, #454552); }
+.desktop-connection-dialog [data-policy] label { display: flex; align-items: center; gap: 8px; }
+.desktop-connection-dialog [data-preview] { padding: 14px; margin: 12px 0; border: 1px solid var(--border, #454552); border-radius: 8px; }
+.desktop-connection-dialog [data-preview-warning] { font-weight: 600; }
 .desktop-connection-badge { position: fixed; bottom: 10px; right: 16px; z-index: 1100; font: 12px system-ui, sans-serif; box-shadow: 0 3px 12px #0003; }
 .desktop-connection-section { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
 .desktop-connection-section p { margin-top: 8px; font-size: 13px; color: var(--text-secondary); }

@@ -67,6 +67,8 @@ async def lifespan(_app: FastAPI):
 
     init_db()
     init_usage_table()
+    from services.sync_transaction import recover_transactions
+    await asyncio.to_thread(recover_transactions)
     if desktop_connections:
         await desktop_connections.start()
     async def recover_library():
@@ -122,6 +124,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+from services.sync_gate import SyncGateMiddleware
+app.add_middleware(SyncGateMiddleware)
 
 # 라우터 등록
 app.include_router(data_transfer.router, prefix="/api", tags=["User data"])
