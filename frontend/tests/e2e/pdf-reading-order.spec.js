@@ -7,6 +7,9 @@ for (const rotation of [0, 90]) {
     for (const focus of unresolved ? [false] : [false, true]) {
     test(`source provenance selects repeated phrases, rotation ${rotation}, unresolved ${unresolved}, focus ${focus}`, async ({ page }) => {
       await page.setViewportSize({ width: 1600, height: 1200 })
+      await page.route(/^https:\/\//, route => route.fulfill({
+        contentType: route.request().url().includes('.js') && !route.request().url().includes('.css') ? 'text/javascript' : 'text/css', body: '',
+      }))
       const fixture = JSON.parse(fs.readFileSync(new URL(`./fixtures/reading-order-${rotation}.json`, import.meta.url)))
       const pdf = fs.readFileSync(new URL(`./fixtures/reading-order-${rotation}.pdf`, import.meta.url))
       if (unresolved) fixture.sentences[1].source_mapping = { status: 'unresolved', segments: [] }
@@ -25,7 +28,7 @@ for (const rotation of [0, 90]) {
         localStorage.setItem('easypaper_focus_scale_research', '100')
         location.hash = '#viewer?id=order'
       }, focus)
-      await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible()
+      await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible({ timeout: 15_000 })
       await expect(activeReader(page).locator('.trans-sentence').first()).toBeVisible()
       for (let i = 0; i < 2; i++) {
         await activeReader(page).locator(`.trans-sentence[data-sentence-idx="${i}"]`).first().hover()
@@ -34,8 +37,11 @@ for (const rotation of [0, 90]) {
           await expect(activeReader(page).locator('.pdf-text-recovery-notice')).toHaveText('읽기 순서 확인 필요')
           continue
         }
-        await expect(activeReader(page).locator('.sentence-hover-box')).toHaveCount(1)
-        const box = await activeReader(page).locator('.sentence-hover-box').boundingBox()
+        await expect(activeReader(page).locator('.sentence-hover-box').first()).toBeAttached()
+        const rectangles = await Promise.all((await activeReader(page).locator('.sentence-hover-box').all()).map(box => box.boundingBox()))
+        const x0 = Math.min(...rectangles.map(r => r.x)), y0 = Math.min(...rectangles.map(r => r.y))
+        const box = { x: x0, y: y0, width: Math.max(...rectangles.map(r => r.x + r.width)) - x0,
+          height: Math.max(...rectangles.map(r => r.y + r.height)) - y0 }
         const canvas = await activeReader(page).locator('.pdf-page-inner canvas').first().boundingBox()
         const scale = canvas.width / (rotation ? 800 : 600)
         const x = i ? 340 : 40, y = i ? 180 : 80

@@ -274,7 +274,7 @@ def test_strict_mineru_regions_do_not_silently_fall_back(monkeypatch):
 
     monkeypatch.setattr(pdf_parser, "_run_mineru", fail)
     with pytest.raises(RuntimeError, match="missing parser dependency"):
-        pdf_parser.extract_pdf_images("unused.pdf", engine="mineru", strict=True)
+        pdf_parser.extract_pdf_images("unused.pdf", engine="mineru")
 
 
 def test_strict_marker_regions_do_not_silently_fall_back(monkeypatch):
@@ -292,4 +292,4 @@ def test_strict_marker_regions_do_not_silently_fall_back(monkeypatch):
 
     monkeypatch.setattr(pdf_parser, "_build_marker_document", fail)
     with pytest.raises(RuntimeError, match="missing parser dependency"):
-        pdf_parser.extract_pdf_images("unused.pdf", engine="marker", strict=True)
+        pdf_parser.extract_pdf_images("unused.pdf", engine="marker")

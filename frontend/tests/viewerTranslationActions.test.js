@@ -130,7 +130,8 @@ test('PDF extraction cache deletion preserves translations', async () => {
     state: { sessionId: 'doc', translationCache: { 1: 'saved translation' } },
     documentUiCopy: text => text,
     showCustomConfirm: async message => {
-      assert.match(message, /기존 번역본은 유지됩니다/)
+      assert.match(message, /현재 선택한 파서로 다시 파싱/)
+      assert.match(message, /엔진이 변경되면 기존 번역·분석 결과도 다시 생성/)
       return true
     },
     clearTranslationCacheAPI: async () => { calls.push('translation') },

@@ -17,4 +17,7 @@ cd /d "%BACKEND_DIR%"
 
 if errorlevel 1 exit /b %errorlevel%
 
+"%SCRIPT_DIR%dist\easypaper-backend\easypaper-backend.exe" --easypaper-check-parser-stdlib
+if errorlevel 1 exit /b %errorlevel%
+
 echo Built: %SCRIPT_DIR%dist\easypaper-backend\

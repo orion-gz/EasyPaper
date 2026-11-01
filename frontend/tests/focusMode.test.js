@@ -28,9 +28,10 @@ test('Focus 설정은 손상값과 범위를 정규화한다', () => {
   assert.equal(normalizeFocusSettings({ hideOverlays: true }).hideOverlays, true)
 })
 
-test('여러 DOM 조각을 같은 행 단위로 병합한다', () => {
+test('DOM 조각 사이 공백과 기준선 차이를 보존한다', () => {
   assert.deepEqual(mergeClientRects([{ left: 10, top: 10, width: 20, height: 10 }, { left: 31, top: 11, width: 9, height: 9 }, { left: 10, top: 30, width: 15, height: 10 }]), [
-    { left: 10, top: 10, right: 40, bottom: 20, width: 30, height: 10 },
+    { left: 10, top: 10, right: 30, bottom: 20, width: 20, height: 10 },
+    { left: 31, top: 11, right: 40, bottom: 20, width: 9, height: 9 },
     { left: 10, top: 30, right: 25, bottom: 40, width: 15, height: 10 },
   ])
 })
@@ -46,9 +47,10 @@ test('높이가 비슷해도 떨어진 원문과 번역 패널 사이를 병합�
   }
 })
 
-test('오른쪽 조각이 먼저 정렬되어도 실제로 인접한 조각은 병합한다', () => {
+test('오른쪽 조각이 먼저 정렬되어도 사이의 영역을 칠하지 않는다', () => {
   assert.deepEqual(mergeClientRects([{ left: 130, top: 100, width: 20, height: 20 }, { left: 100, top: 101, width: 28, height: 20 }]), [
-    { left: 100, top: 100, right: 150, bottom: 121, width: 50, height: 21 },
+    { left: 130, top: 100, right: 150, bottom: 120, width: 20, height: 20 },
+    { left: 100, top: 101, right: 128, bottom: 121, width: 28, height: 20 },
   ])
 })
 

@@ -63,15 +63,31 @@ async def execute_parse_task(
         metadata_reader = metadata_reader or get_pdf_metadata
         page_extractor = page_extractor or extract_pages
 
+    from config import get_pdf_parser_engine
+    selected_engine = options.get("parser_engine") or get_pdf_parser_engine()
+    from services.pdf_parser import extract_pages
+    if page_extractor is extract_pages:
+        from functools import partial
+        page_extractor = partial(extract_pages, engine=selected_engine)
+    parser_payload = None
+
     update_task(
         task_id, status="running", last_error_code=None,
         next_retry_at=None, increment_attempt=True,
     )
     try:
-        metadata, pages = await asyncio.gather(
-            asyncio.to_thread(metadata_reader, pdf_path),
-            asyncio.to_thread(page_extractor, pdf_path),
-        )
+        if selected_engine in {"marker", "mineru"}:
+            from services.reparse import parse_document_isolated
+            metadata, parser_payload = await asyncio.gather(
+                asyncio.to_thread(metadata_reader, pdf_path),
+                asyncio.to_thread(parse_document_isolated, pdf_path, selected_engine),
+            )
+            pages = parser_payload["pages"]
+        else:
+            metadata, pages = await asyncio.gather(
+                asyncio.to_thread(metadata_reader, pdf_path),
+                asyncio.to_thread(page_extractor, pdf_path),
+            )
         if pages and pages[0].get("layout"):
             metadata["layout_rule_version"] = pages[0]["layout"]["rule_version"]
 
@@ -81,7 +97,7 @@ async def execute_parse_task(
         update_task(task_id, status="cancelled", cancel_requested=True)
         raise
     except Exception:
-        update_task(task_id, status="failed", last_error_code="invalid_pdf")
+        update_task(task_id, status="failed", last_error_code="parser_failed" if selected_engine in {"marker", "mineru"} else "invalid_pdf")
         raise
 
     from services.languages import detect_document_language
@@ -93,7 +109,7 @@ async def execute_parse_task(
     source_supported = bool(detection["supported"]) if source_lang == "auto" else True
     active_parser_engine = (pages[0].get("parser_engine") or "pymupdf") if pages else "pymupdf"
     from services.pdf_diagnostics import diagnose_pages, parser_version
-    active_parser_version = parser_version(active_parser_engine)
+    active_parser_version = parser_payload["parser_version"] if parser_payload else parser_version(active_parser_engine)
     classification_status = "pending" if options.get("classification_method", "ai") == "ai" else "confirmed"
 
     try:
@@ -131,15 +147,20 @@ async def execute_parse_task(
         )
         detected_images = []
         try:
-            from services.pdf_parser import extract_pdf_images
-            detected_images = await asyncio.to_thread(
-                extract_pdf_images, persistent_pdf_path, active_parser_engine,
-            )
+            if parser_payload is not None:
+                detected_images = parser_payload["images"]
+            else:
+                from services.pdf_parser import extract_pdf_images
+                detected_images = await asyncio.to_thread(
+                    extract_pdf_images, persistent_pdf_path, active_parser_engine,
+                )
             save_images_cache(
                 doc_id, persistent_pdf_path, detected_images,
                 active_parser_engine, active_parser_version, strict=True,
             )
         except Exception:
+            if parser_payload is not None:
+                raise
             detected_images = []
 
         initial_report = diagnose_pages(

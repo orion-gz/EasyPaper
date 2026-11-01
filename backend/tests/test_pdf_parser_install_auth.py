@@ -35,10 +35,19 @@ def test_pdf_parser_package_management_rejects_unauthenticated_requests(
 
 
 
-def test_packaged_desktop_install_uses_sidecar_pip_mode(test_client, monkeypatch):
+@pytest.mark.parametrize("runtime_failure", [False, True])
+def test_packaged_desktop_install_uses_sidecar_pip_mode(test_client, monkeypatch, runtime_failure):
     import asyncio
     import routers.auth as auth_router
 
+    from services import reparse
+    checks = []
+    def validate(engine):
+        checks.append(engine)
+        if runtime_failure:
+            raise RuntimeError("model initialization failed")
+        return {}
+    monkeypatch.setattr(reparse, "validate_parser_runtime", validate)
     commands = []
 
     class FakeStdout:
@@ -88,13 +97,19 @@ def test_packaged_desktop_install_uses_sidecar_pip_mode(test_client, monkeypatch
         "marker",
     ]]
     assert "-m venv" not in response.text
-    assert '"status": "success"' in response.text
+    assert checks == ["marker"]
+    assert ('"status": "success"' in response.text) is not runtime_failure
+    if runtime_failure:
+        assert '"status": "error"' in response.text
+        assert "model initialization failed" in response.text
 
 
 def test_packaged_desktop_engine_change_requests_app_relaunch(
     test_client, monkeypatch
 ):
     import routers.auth as auth_router
+    from services import reparse
+    monkeypatch.setattr(reparse, "validate_parser_runtime", lambda _engine: {})
 
     monkeypatch.setattr(
         auth_router.venv_manager, "restart_required_for_engine", lambda _engine: True

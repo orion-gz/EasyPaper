@@ -2,8 +2,9 @@ import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
 import { activeReader, evaluateReader, mockBaseRoutes, gotoApp } from './helpers.js'
 
-const moduleSource = fs.readFileSync(new URL('../../src/focusPreview.js', import.meta.url), 'utf8') + '\n'
-  + fs.readFileSync(new URL('../../src/focusMode.js', import.meta.url), 'utf8').replace(/^import .*from '\.\/focusPreview.js'\n/, '')
+const moduleSource = fs.readFileSync(new URL('../../src/pdfSentenceGeometry.js', import.meta.url), 'utf8') + '\n'
+  + fs.readFileSync(new URL('../../src/focusPreview.js', import.meta.url), 'utf8') + '\n'
+  + fs.readFileSync(new URL('../../src/focusMode.js', import.meta.url), 'utf8').replace(/^import .*from '\.\/(?:focusPreview|pdfSentenceGeometry).js'\n/gm, '')
 const css = fs.readFileSync(new URL('../../src/style.css', import.meta.url), 'utf8')
 
 async function setup(page, scale = 1) {
@@ -227,7 +228,7 @@ test('pinned focus ignores hover, follows geometry changes and releases with Esc
     document.querySelector('.sentence').style.left = '250px'
   })
   expect(await page.evaluate(() => window.controller.current.sentenceIdx)).toBe(0)
-  await expect(page.locator('.focus-tint-hole').first()).toHaveAttribute('x', '246')
+  await expect(page.locator('.focus-tint-hole').first()).toHaveAttribute('x', '250')
   await page.keyboard.press('ArrowRight')
   expect(await page.evaluate(() => window.controller.current.sentenceIdx)).toBe(1)
   await page.keyboard.press('Escape')
@@ -734,7 +735,7 @@ for (const previewClass of ['figure-preview-tooltip', 'citation-tooltip']) {
     await page.waitForTimeout(250)
     await expect(page.locator('.focus-mode-layer')).toBeVisible()
     await preview.evaluate(e => { e.style.height = '180px' })
-    await expect(page.locator('.focus-tint-hole').last()).toHaveAttribute('height', '188')
+    await expect(page.locator('.focus-tint-hole').last()).toHaveAttribute('height', '180')
     await page.mouse.move(900, 600)
     await expect(page.locator('.focus-mode-layer')).toHaveCount(0)
     await expect(preview).toHaveCSS('filter', 'opacity(0.9)')

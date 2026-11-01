@@ -16,58 +16,67 @@ export function normalizePdfText(text, { includeMathSymbols = false } = {}) {
   return { clean, starts, ends }
 }
 
-// OCR emits glyph-sized spans with varying ascenders and baselines. Merge by
-// vertical overlap, in visual order (also RTL), without bridging column gutters.
+// Merge only when the union is itself a rectangle. Filling a gap (or the
+// corners between different baselines) paints pixels belonging to other text.
 export function mergePdfHighlightRects(rects) {
-  const lines = []
-  for (const r of rects.filter(r => r.width > 0 && r.height > 0).sort((a, b) => a.top - b.top || a.left - b.left)) {
-    const line = lines.find(line => {
-      const overlap = Math.min(line.bottom, r.top + r.height) - Math.max(line.top, r.top)
-      return overlap >= Math.min(line.height, r.height) * 0.55
-        && Math.abs(line.center - (r.top + r.height / 2)) <= Math.max(line.height, r.height) * 0.5
-    })
-    if (line) line.rects.push(r)
-    else lines.push({ top: r.top, bottom: r.top + r.height, height: r.height, center: r.top + r.height / 2, rects: [r] })
-  }
-  return lines.flatMap(line => {
-    const boxes = []
-    for (const r of line.rects.sort((a, b) => a.left - b.left)) {
-      const last = boxes.at(-1)
-      if (last && r.left - (last.left + last.width) <= Math.max(last.height, r.height) * 1.25) {
-        const right = Math.max(last.left + last.width, r.left + r.width)
-        const bottom = Math.max(last.top + last.height, r.top + r.height)
-        last.top = Math.min(last.top, r.top)
-        last.width = right - last.left
-        last.height = bottom - last.top
-      } else boxes.push({ left: r.left, top: r.top, width: r.width, height: r.height })
+  const result = []
+  for (const rect of rects) {
+    if (![rect.left, rect.top, rect.width, rect.height].every(Number.isFinite)
+        || rect.width <= 0 || rect.height <= 0) continue
+    let r = { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+    for (let i = 0; i < result.length;) {
+      const other = result[i]
+      const right = r.left + r.width, bottom = r.top + r.height
+      const otherRight = other.left + other.width, otherBottom = other.top + other.height
+      const contains = (r.left <= other.left && r.top <= other.top && right >= otherRight && bottom >= otherBottom)
+        || (other.left <= r.left && other.top <= r.top && otherRight >= right && otherBottom >= bottom)
+      const sameRow = r.top === other.top && bottom === otherBottom && r.left <= otherRight && other.left <= right
+      const sameColumn = r.left === other.left && right === otherRight && r.top <= otherBottom && other.top <= bottom
+      if (!contains && !sameRow && !sameColumn) { i++; continue }
+      const left = Math.min(r.left, other.left), top = Math.min(r.top, other.top)
+      r = { left, top, width: Math.max(right, otherRight) - left, height: Math.max(bottom, otherBottom) - top }
+      result.splice(i, 1)
+      i = 0
     }
-    return boxes
-  })
+    result.push(r)
+  }
+  return result.sort((a, b) => a.top - b.top || a.left - b.left)
+}
+
+export function sentenceCharParts(range) {
+  const parts = range.charParts ?? [{ start: range.charStart, end: range.charEnd }]
+  const result = []
+  for (const part of parts.filter(p => Number.isInteger(p.start) && Number.isInteger(p.end)
+    && p.start >= 0 && p.end > p.start).sort((a, b) => a.start - b.start)) {
+    const last = result.at(-1)
+    if (last && part.start <= last.end) last.end = Math.max(last.end, part.end)
+    else result.push({ start: part.start, end: part.end })
+  }
+  return result
+}
+
+export function contiguousSentenceBounds(range, fullText) {
+  const parts = sentenceCharParts(range)
+  if (!parts.length || parts.at(-1).end > fullText.length) return null
+  if (parts.some((part, index) => index && fullText.slice(parts[index - 1].end, part.start).trim())) return null
+  return { start: parts[0].start, end: parts.at(-1).end }
 }
 
 export function mappedSentenceRange(ranges, sentenceIdx) {
   const parts = ranges.filter(r => (r.originalSentenceIdx ?? r.sentenceIdx) === sentenceIdx)
   if (!parts.length) return null
-  return { ...parts[0], sentenceIdx, isEquation: false,
-    charStart: Math.min(...parts.map(r => r.charStart)),
-    charEnd: Math.max(...parts.map(r => r.charEnd)) }
+  const charParts = sentenceCharParts({ charParts: parts.flatMap(sentenceCharParts) })
+  return { ...parts[0], sentenceIdx, isEquation: false, charParts,
+    charStart: charParts[0]?.start ?? -1, charEnd: charParts.at(-1)?.end ?? -1 }
 }
 
 // PyMuPDF uses the unrotated visible-page top left; PDF.js uses PDF bottom left.
 export function projectSourceRects(mapping, viewport) {
   if (mapping?.status !== 'exact' || mapping.coordinate_space !== 'unrotated-top-left') return []
   const { pageX, pageY, pageHeight } = viewport.rawDims
-  const sourceBoxes = (mapping.segments || []).flatMap(segment => {
-    const vertical = segment.writing_direction?.startsWith('vertical')
-    const boxes = (segment.rects || []).filter(box => Array.isArray(box) && box.length === 4
-      && box.every(Number.isFinite) && box[2] > box[0] && box[3] > box[1])
-      .map(box => vertical
-        ? { left: box[1], top: box[0], width: box[3] - box[1], height: box[2] - box[0] }
-        : { left: box[0], top: box[1], width: box[2] - box[0], height: box[3] - box[1] })
-    return mergePdfHighlightRects(boxes).map(box => vertical
-      ? [box.top, box.left, box.top + box.height, box.left + box.width]
-      : [box.left, box.top, box.left + box.width, box.top + box.height])
-  })
+  // Keep original glyph boxes for both hit testing and drawing. In particular,
+  // never use display line boxes to decide which PDF.js characters belong here.
+  const sourceBoxes = (mapping.segments || []).flatMap(segment => segment.rects || [])
   return sourceBoxes.flatMap(box => {
     if (!Array.isArray(box) || box.length !== 4 || !box.every(Number.isFinite)
         || box[2] <= box[0] || box[3] <= box[1]) return []

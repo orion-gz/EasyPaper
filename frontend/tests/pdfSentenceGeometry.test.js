@@ -42,10 +42,10 @@ test('glyph-spaced kana and punctuation map without clipping', () => {
   assert.equal(full.slice(second.start, second.end), '次 の 文 。')
 })
 
-test('OCR baseline variation, gaps and RTL order merge into one line box', () => {
+test('OCR baseline variation and RTL gaps retain only evidenced pixels', () => {
   const rects = [{ left: 40, top: 12, width: 10, height: 12 },
     { left: 10, top: 10, width: 10, height: 16 }, { left: 25, top: 13, width: 10, height: 11 }]
-  assert.deepEqual(mergePdfHighlightRects(rects), [{ left: 10, top: 10, width: 40, height: 16 }])
+  assert.deepEqual(mergePdfHighlightRects(rects), [rects[1], rects[0], rects[2]])
 })
 
 test('separate lines and column gutters stay separate', () => {

@@ -1,3 +1,4 @@
+import { splitIntoSentences } from './sentenceBoundaries.js';
 import { normalizePdfText } from './pdfSentenceGeometry.js';
 
 /**
@@ -51,136 +52,29 @@ const LATEX_SYMBOL_MAP = {
   'pm': '±', 'mp': '∓'
 };
 
-const VALID_CHAR_REGEX = /[\p{L}\p{M}\p{N}\u2200-\u22ff\u2190-\u21ff\u00d7\u00f7\u00b1\u00b7]/u;
-
-/**
- * 빈 구간(gap) 내에서 앞뒤 문장부호/공백을 제외한 실질적인 문자 범위를 계산합니다.
- * 문장부호나 공백만으로 이루어진 구간은 null을 반환합니다.
- */
-function extractSubstantiveGap(gap, fullText) {
-  let start = gap.start;
-  let end = gap.end;
-
-  // 앞쪽 문장부호 및 공백 스킵
-  while (start < end && !VALID_CHAR_REGEX.test(fullText[start])) {
-    start++;
-  }
-  // 뒤쪽 공백 스킵
-  while (end > start && /\s/.test(fullText[end - 1])) {
-    end--;
-  }
-
-  if (start >= end || !VALID_CHAR_REGEX.test(fullText.substring(start, end))) {
-    return null;
-  }
-
-  return {
-    start,
-    end,
-    rawStart: gap.start,
-    rawEnd: gap.end,
-    text: fullText.substring(start, end),
-    len: end - start,
-  };
-}
-
-/**
- * 단어 단위 토큰 집합을 추출합니다 (길이 2 이상의 알파벳/숫자/유니코드 문자).
- */
-function extractSubstantiveWords(str) {
-  if (!str) return [];
-  return str.toLowerCase().match(/[\p{L}\p{M}\p{N}]{2,}/gu) || [];
-}
-
-/**
- * 매칭 실패 문장 그룹에 가장 적절한 빈 구간을 평가하여 선택합니다.
- *
- * 1. 문장부호/공백만 있는 구간은 보간 후보에서 제외
- * 2. 실패 문장의 전체 길이 및 주변 문장 위치와의 상대적 거리 고려
- * 3. 공통 단어(어휘) 유사도 검사
- * 4. 후보가 여러 개이거나 근거가 부족하면 null 반환 (관련 없는 구간에 억지 매핑 방지)
- */
-function selectBestTargetGap(freeGaps, fullText, failedSentences, prevMatch, nextMatch, totalSentencesCount, winStart, winEnd) {
-  const candidates = [];
-  for (const g of freeGaps) {
-    const sub = extractSubstantiveGap(g, fullText);
-    if (sub) {
-      candidates.push(sub);
+// A whole sentence must support an approximate match. A shared opening or
+// similar length alone is never evidence for selecting the remaining page.
+function sentenceSimilarity(source, candidate) {
+  const a = normalizePdfText(source).clean, b = normalizePdfText(candidate).clean;
+  if (!a || !b) return 0;
+  const aw = new Set(source.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) || []);
+  const bw = new Set(candidate.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) || []);
+  const common = [...aw].filter(word => bw.has(word)).length;
+  const words = common >= 3 ? common / Math.max(aw.size, bw.size) : 0;
+  // Bounded edit distance tolerates small OCR errors, including CJK text.
+  const limit = Math.floor(Math.max(a.length, b.length) * 0.15);
+  if (Math.min(a.length, b.length) < 8 || Math.abs(a.length - b.length) > limit) return words;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = new Array(b.length + 1).fill(limit + 1);
+    row[0] = i;
+    for (let j = Math.max(1, i - limit); j <= Math.min(b.length, i + limit); j++) {
+      row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
     }
+    prev = row;
   }
-
-  if (candidates.length === 0) {
-    return null;
-  }
-
-  const failedTexts = failedSentences.map(s => s.text || '').join(' ');
-  let totalLen = 0;
-  for (const s of failedSentences) {
-    totalLen += Math.max(1, (s.text || '').length);
-  }
-
-  const failedWords = new Set(extractSubstantiveWords(failedTexts));
-
-  // 각 후보 구간에 대해 점수 산출
-  const scored = candidates.map(cand => {
-    // A. 길이 적합도 (0 ~ 1)
-    const lenRatio = Math.min(cand.len, totalLen) / Math.max(cand.len, totalLen);
-
-    // B. 상대적 위치 적합도 (0 ~ 1)
-    const prevIdx = prevMatch ? prevMatch.origIndex : -1;
-    const nextIdx = nextMatch ? nextMatch.origIndex : totalSentencesCount;
-    const sentFraction = (failedSentences[0].origIndex - prevIdx) / Math.max(1, nextIdx - prevIdx);
-
-    const winSpan = Math.max(1, winEnd - winStart);
-    const gapPosFraction = (cand.start - winStart) / winSpan;
-    const posDiff = Math.abs(gapPosFraction - sentFraction);
-    const posScore = Math.max(0, 1 - posDiff);
-
-    // C. 공통 단어 유사도 (0 ~ 1)
-    const candWords = extractSubstantiveWords(cand.text);
-    let overlapCount = 0;
-    for (const w of candWords) {
-      if (failedWords.has(w)) overlapCount++;
-    }
-    const simScore = failedWords.size > 0 ? overlapCount / Math.max(failedWords.size, candWords.length || 1) : 0;
-
-    const compositeScore = (lenRatio * 0.45) + (posScore * 0.30) + (simScore * 0.25);
-
-    return {
-      cand,
-      lenRatio,
-      posScore,
-      simScore,
-      compositeScore,
-      overlapCount,
-    };
-  });
-
-  scored.sort((a, b) => b.compositeScore - a.compositeScore);
-  const best = scored[0];
-
-  // 단일 후보인 경우: 길이가 너무 비상식적으로 작고 공통 단어도 없으면 매핑하지 않음
-  if (candidates.length === 1) {
-    if (best.cand.len < Math.min(10, totalLen * 0.2) && best.overlapCount === 0) {
-      return null;
-    }
-    return best.cand;
-  }
-
-  // 복수 후보인 경우:
-  // 근거가 부족한 경우(최고점이 너무 낮거나, 1·2위 간 변별력이 없고 어휘 힌트도 없는 경우) 억지 매핑 제외
-  if (best.compositeScore < 0.25 && best.overlapCount === 0) {
-    return null;
-  }
-
-  const second = scored[1];
-  if (best.overlapCount === 0 && second.overlapCount === 0) {
-    if (Math.abs(best.compositeScore - second.compositeScore) < 0.10) {
-      return null;
-    }
-  }
-
-  return best.cand;
+  const edits = prev[b.length];
+  return Math.max(words, edits <= limit ? 1 - edits / Math.max(a.length, b.length) : 0);
 }
 
 /**
@@ -246,27 +140,13 @@ export function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
 
     // 1. 순차 검색 시도 (가장 최선)
     let idx = cleanText.indexOf(cleanSent, searchStart);
-    let priority = MATCH_PRIORITY.EXACT;
+    const priority = MATCH_PRIORITY.EXACT;
 
-    // 2. 접두어 기반 검색 시도 (사소한 문자 오차 해결) - searchStart 이후에서만 찾는다.
-    if (idx === -1) {
-      const prefix = cleanSent.substring(0, Math.min(15, cleanSent.length));
-      idx = cleanText.indexOf(prefix, searchStart);
-      if (idx !== -1) {
-        priority = MATCH_PRIORITY.PREFIX;
-      }
-    }
-
-    // 3. 비순차 블록(본문 끝단으로 재배치된 표/그림 캡션 등) 무충돌 전역 검색
+    // 2. 비순차 블록(본문 끝단으로 재배치된 표/그림 캡션 등) 무충돌 전역 검색
     let isOutOfOrder = false;
-    if (idx === -1 && cleanSent.length >= 15) {
+    if (idx === -1) {
       let candIdx = cleanText.indexOf(cleanSent);
-      let candPriority = MATCH_PRIORITY.EXACT;
-      if (candIdx === -1 && cleanSent.length >= 25) {
-        candIdx = cleanText.indexOf(cleanSent.substring(0, 25));
-        candPriority = MATCH_PRIORITY.PREFIX;
-      }
-      if (candIdx !== -1) {
+      while (candIdx !== -1) {
         const candRawStart = cleanToRaw[candIdx] ?? 0;
         const candLastIdx = Math.min(cleanText.length, candIdx + cleanSent.length) - 1;
         const candRawEnd = (cleanToRawEnd[candLastIdx] !== undefined) ? cleanToRawEnd[candLastIdx] : fullText.length;
@@ -274,20 +154,26 @@ export function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
         const overlaps = sentenceRanges.some(r => r.end > r.start && Math.max(candRawStart, r.start) < Math.min(candRawEnd, r.end));
         if (!overlaps) {
           idx = candIdx;
-          priority = candPriority;
           isOutOfOrder = true;
+          break;
         }
+        candIdx = cleanText.indexOf(cleanSent, candIdx + 1);
       }
     }
 
     if (idx !== -1) {
       const cleanStart = idx;
       const cleanEnd = Math.min(cleanText.length, idx + cleanSent.length);
-      const rawStart = cleanToRaw[cleanStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
+      let rawStart = cleanToRaw[cleanStart] ?? (cleanToRaw[cleanToRaw.length - 1] ?? 0);
       const lastCleanIdx = cleanEnd - 1;
       let rawEnd = (cleanToRawEnd[lastCleanIdx] !== undefined)
         ? cleanToRawEnd[lastCleanIdx]
         : (cleanToRaw[cleanToRaw.length - 1] ?? fullText.length);
+
+      const prefix = sText.match(/^[^\p{L}\p{M}\p{N}\s]+/u)?.[0];
+      if (prefix && fullText.slice(Math.max(0, rawStart - prefix.length), rawStart) === prefix) {
+        rawStart -= prefix.length;
+      }
 
       // Preserve sentence-final punctuation and OCR-inserted spacing from main.
       const suffix = sText.match(/[^\p{L}\p{M}\p{N}\s]+\s*$/u)?.[0]?.trim();
@@ -325,143 +211,40 @@ export function alignSentencesToText(fullText, sentencesList, pageNum = '?') {
     }
   }
 
-  // 4. 매칭 실패 문장 보간(Gap Partitioning):
-  // 이미 매칭된 범위(occupied intervals)를 침범하지 않는 유효한 빈 영역만을 보간 영역으로 사용
-  const matchedIntervals = sentenceRanges
-    .filter(r => r.end > r.start && r.priority >= MATCH_PRIORITY.PREFIX)
-    .map(r => ({ start: r.start, end: r.end }))
-    .sort((a, b) => a.start - b.start || a.end - b.end);
-
-  const GAP_SAFETY_MULTIPLIER = 2.5;
-  let walkIdx = 0;
-  while (walkIdx < sentenceRanges.length) {
-    if (sentenceRanges[walkIdx].start === sentenceRanges[walkIdx].end) {
-      let k_start = walkIdx;
-      let k_end = walkIdx;
-      while (k_end + 1 < sentenceRanges.length && sentenceRanges[k_end + 1].start === sentenceRanges[k_end + 1].end) {
-        k_end++;
-      }
-
-      // 논리적 이전/다음 매칭 문장 탐색
-      let prevMatch = null;
-      for (let i = k_start - 1; i >= 0; i--) {
-        if (sentenceRanges[i].end > sentenceRanges[i].start) {
-          prevMatch = sentenceRanges[i];
-          break;
-        }
-      }
-
-      let nextMatch = null;
-      for (let i = k_end + 1; i < sentenceRanges.length; i++) {
-        if (sentenceRanges[i].end > sentenceRanges[i].start) {
-          nextMatch = sentenceRanges[i];
-          break;
-        }
-      }
-
-      // 후보 텍스트 윈도우 계산
-      let winStart = 0;
-      let winEnd = fullText.length;
-      if (prevMatch && nextMatch && prevMatch.end < nextMatch.start) {
-        winStart = prevMatch.end;
-        winEnd = nextMatch.start;
-      } else if (prevMatch) {
-        winStart = prevMatch.end;
-        winEnd = fullText.length;
-      } else if (nextMatch) {
-        winStart = 0;
-        winEnd = nextMatch.start;
-      }
-
-      // 후보 윈도우 내에서 이미 매칭된 영역을 제외한 빈 공간(free sub-gaps) 수집
-      const freeGaps = [];
-      let cursor = winStart;
-      for (const occ of matchedIntervals) {
-        if (occ.end <= cursor) continue;
-        if (occ.start >= winEnd) break;
-        if (occ.start > cursor) {
-          freeGaps.push({ start: cursor, end: Math.min(occ.start, winEnd) });
-        }
-        cursor = Math.max(cursor, occ.end);
-      }
-      if (cursor < winEnd) {
-        freeGaps.push({ start: cursor, end: winEnd });
-      }
-
-      // 문장부호/공백 구간 제외, 길이 및 위치 등을 종합 고려한 최적 구간 선택
-      const failedGroup = sentenceRanges.slice(k_start, k_end + 1);
-      const targetGap = selectBestTargetGap(
-        freeGaps,
-        fullText,
-        failedGroup,
-        prevMatch,
-        nextMatch,
-        sentenceRanges.length,
-        winStart,
-        winEnd
-      );
-
-      if (targetGap) {
-        const gapSize = targetGap.end - targetGap.start;
-        const lens = [];
-        let totalLen = 0;
-        for (let i = k_start; i <= k_end; i++) {
-          const len = Math.max(1, (sentenceRanges[i].text || '').length);
-          lens.push(len);
-          totalLen += len;
-        }
-        const usedGap = Math.min(gapSize, totalLen * GAP_SAFETY_MULTIPLIER);
-        let curPos = targetGap.start;
-        for (let idx = 0; idx < lens.length; idx++) {
-          const i = k_start + idx;
-          const share = (idx === lens.length - 1 && lens.length > 1 && usedGap === gapSize)
-            ? targetGap.end - curPos
-            : Math.round((lens[idx] / totalLen) * usedGap);
-          sentenceRanges[i].start = curPos;
-          sentenceRanges[i].end = Math.min(targetGap.end, curPos + share);
-          sentenceRanges[i].priority = MATCH_PRIORITY.GAP;
-          sentenceRanges[i].text = fullText.substring(sentenceRanges[i].start, sentenceRanges[i].end);
-          curPos = sentenceRanges[i].end;
-        }
-      }
-
-      walkIdx = k_end + 1;
-    } else {
-      walkIdx++;
+  // Reject normalization matches that cross a sentence boundary absent from
+  // the source, and duplicate/overlapping matches. Do not split the difference:
+  // that would turn the remainder of a neighbour into a new sentence.
+  const occupied = [];
+  for (const range of sentenceRanges) {
+    if (range.end <= range.start) continue;
+    const sourceCount = splitIntoSentences(sentencesList[range.origIndex] || '').length;
+    if (splitIntoSentences(range.text).length > sourceCount
+        || occupied.some(other => range.start < other.end && range.end > other.start)) {
+      range.end = range.start;
+      range.priority = MATCH_PRIORITY.NONE;
+      continue;
     }
+    occupied.push(range);
   }
 
-  // 5. 원문 위치 기준 충돌 보정 (정확 일치 우선 보존)
-  // 배열 순서가 아닌 원문 위치(start) 기준으로 정렬한 뒤 실제 교집합(overlaps)을 검사
-  const activeRanges = sentenceRanges
-    .filter(r => r.end > r.start)
-    .sort((a, b) => a.start - b.start || a.end - b.end);
-
-  for (let i = 1; i < activeRanges.length; i++) {
-    const prev = activeRanges[i - 1];
-    const cur = activeRanges[i];
-
-    // 실제 교집합 충돌 검사
-    if (Math.max(prev.start, cur.start) < Math.min(prev.end, cur.end)) {
-      if (prev.priority > cur.priority) {
-        // prev가 우선순위가 높으면 prev 보존, cur 시작점을 뒤로 조정
-        cur.start = Math.max(cur.start, prev.end);
-        if (cur.start > cur.end) cur.end = cur.start;
-        cur.text = fullText.substring(cur.start, cur.end);
-      } else if (cur.priority > prev.priority) {
-        // cur가 우선순위가 높으면 cur 보존, prev 끝점을 앞으로 조정
-        prev.end = Math.min(prev.end, cur.start);
-        if (prev.end < prev.start) prev.start = prev.end;
-        prev.text = fullText.substring(prev.start, prev.end);
-      } else {
-        // 동일 우선순위인 경우 교집합 구간의 중간점에서 공평하게 분할
-        const mid = Math.floor((cur.start + prev.end) / 2);
-        prev.end = Math.max(prev.start, mid);
-        cur.start = Math.min(cur.end, mid);
-        prev.text = fullText.substring(prev.start, prev.end);
-        cur.text = fullText.substring(cur.start, cur.end);
-      }
-    }
+  // Approximate matches use complete PDF sentences only, never a character
+  // budget or a proportion of the gap between two successfully matched texts.
+  const candidates = splitIntoSentences(fullText).map(range => {
+    const leading = range.text.length - range.text.trimStart().length;
+    return { start: range.start + leading, end: range.end, text: range.text.trimStart() };
+  });
+  for (const range of sentenceRanges) {
+    if (range.end > range.start) continue;
+    const source = sentencesList[range.origIndex] || '';
+    if (splitIntoSentences(source).length !== 1) continue;
+    const ranked = candidates
+      .filter(candidate => !occupied.some(other => candidate.start < other.end && candidate.end > other.start))
+      .map(candidate => ({ candidate, score: sentenceSimilarity(source, candidate.text) }))
+      .filter(match => match.score >= 0.55)
+      .sort((a, b) => b.score - a.score);
+    if (!ranked.length || (ranked[1] && ranked[0].score - ranked[1].score < 0.1)) continue;
+    Object.assign(range, ranked[0].candidate, { priority: MATCH_PRIORITY.GAP });
+    occupied.push(range);
   }
 
   // 반환 배열은 번역 문장과의 1:1 대응을 위해 원래 sentencesList의 인덱스 순서 유지

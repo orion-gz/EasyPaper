@@ -11,12 +11,14 @@ def _create_doc(isolated_dirs, doc_id="doc-1", username="testuser"):
     db.db_save_document(doc_id, username, "paper.pdf", "/x/paper.pdf", 3, {"title": "Test Paper"})
 
 
-def test_get_references_parses_and_caches(test_client, isolated_dirs):
+def test_get_references_parses_and_caches(test_client, isolated_dirs, tmp_path):
     _create_doc(isolated_dirs)
 
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"PDF fingerprint fixture")
     fake_pages = [{"page_num": 1, "text": "References\n\n[1] Someone. A Paper. 2020."}]
     with patch("services.pdf_parser.extract_pages", return_value=fake_pages), \
-         patch("routers.library.get_pdf_path", return_value="/fake/path.pdf"):
+         patch("routers.library.get_pdf_path", return_value=str(pdf_path)):
         res = test_client.get("/api/library/doc-1/references")
 
     assert res.status_code == 200

@@ -142,6 +142,8 @@ def get_cached_pages(doc_id: str, pdf_path: str, engine: str | None = None,
         ):
             return None
         pages = data.get("pages")
+        if pages and any(page.get("parser_engine", expected_engine) != expected_engine for page in pages):
+            return None
         if pages and data.get("parser_engine") == "mineru":
             try:
                 from services.pdf_parser import sanitize_mineru_pages
@@ -166,6 +168,8 @@ def save_pages_cache(doc_id: str, pdf_path: str, pages: list, engine: str | None
             (str(page.get("parser_engine")) for page in pages if page.get("parser_engine")), None
         )
         actual_engine, actual_version = parser_identity(actual_engine)
+        if any(page.get("parser_engine", actual_engine) != actual_engine for page in pages):
+            raise ValueError("parser_engine_mismatch")
         if version is not None:
             actual_version = version
         atomic_write_text(_pages_cache_path(doc_id, revision), json.dumps({
@@ -200,7 +204,7 @@ def clear_all_pages_cache() -> "tuple[int, int]":
 
 _IMAGES_CACHE_SUFFIX = "_images_extract.json"
 # Invalidate labels extracted before chapter-qualified figure numbers were supported.
-_IMAGES_LABEL_VERSION = 2
+_IMAGES_LABEL_VERSION = 3
 
 
 def _images_cache_path(doc_id: str, content_revision: int = 1) -> str:

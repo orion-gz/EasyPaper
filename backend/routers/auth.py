@@ -337,6 +337,14 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
     # 바꿀 때 필요한 venv가 지금 떠 있는 것과 다르면, 저장 직후 서버를
     # 재시작해서(시스템 업데이트 때와 동일한 인프라 재사용) 올바른 venv로
     # 다시 올라오게 한다.
+    if pdf_parser_engine in {"marker", "mineru"} and pdf_parser_engine != get_pdf_parser_engine():
+        from services.reparse import validate_parser_runtime
+        import asyncio
+        try:
+            await asyncio.to_thread(validate_parser_runtime, pdf_parser_engine)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"{pdf_parser_engine} 실행 검증 실패: {exc}") from exc
+
     restart_needed = venv_manager.restart_required_for_engine(pdf_parser_engine)
 
     openai_api_key = "" if data.delete_openai_api_key else (data.openai_api_key.strip() or get_openai_api_key())
@@ -550,6 +558,9 @@ async def install_pdf_parser_stream(
             if proc.returncode == 0 and (
                 not packaged_desktop or venv_manager.is_parser_installed(parser_id)
             ):
+                yield f"data: {json.dumps({'status': 'progress', 'line': '샘플 PDF로 모델 로딩과 파싱을 검증합니다. 최초 실행은 모델 다운로드로 오래 걸릴 수 있습니다.'})}\n\n"
+                from services.reparse import validate_parser_runtime
+                await asyncio.to_thread(validate_parser_runtime, parser_id)
                 yield f"data: {json.dumps({'status': 'success', 'message': f'{pkg_name} 설치가 정상적으로 완료되었습니다.'})}\n\n"
             elif proc.returncode == 0:
                 yield f"data: {json.dumps({'status': 'error', 'message': '설치 프로세스는 완료됐지만 패키지 검증에 실패했습니다.'})}\n\n"
@@ -637,21 +648,27 @@ async def uninstall_pdf_parser(
 
 @router.post("/settings/clear-pages-cache")
 async def clear_pages_cache(current_user: str = Depends(get_current_user)):
-    """모든 문서의 PDF 텍스트/이미지 추출 결과 디스크 캐시(extract_pages(),
-    extract_pdf_images() 결과)를 삭제합니다. 이 캐시는 서버/앱 재시작 후
-    문서를 다시 열 때 PDF를 매번 재파싱하지 않도록 저장해두는 것으로,
-    지워도 다음 열람 시 자동으로 다시 채워지므로 데이터 손실은 없습니다."""
-    from services.cache import clear_all_pages_cache, clear_all_images_cache
-    pages_count, pages_bytes = clear_all_pages_cache()
-    images_count, images_bytes = clear_all_images_cache()
-    from services.pdf_parser import clear_parser_memory_cache
-    clear_parser_memory_cache()
+    """Clear extraction caches and adopt the selected engine with revision invalidation."""
+    from services.reparse import reset_document_parser_cache
+    from services.db import get_db
     from routers.upload import sessions
+    from services.pdf_diagnostics import parser_identity
+    engine, version = parser_identity()
+    with get_db() as conn:
+        doc_ids = [row["id"] for row in conn.execute("SELECT id FROM documents")]
+    count = size = 0
+    for doc_id in doc_ids:
+        cleared, freed = await reset_document_parser_cache(doc_id, engine, version, sessions)
+        count += cleared
+        size += freed
+    # Also remove orphaned extraction caches, which have no document row.
+    from services.cache import clear_all_pages_cache, clear_all_images_cache
+    for cleared, freed in (clear_all_pages_cache(), clear_all_images_cache()):
+        count += cleared
+        size += freed
     sessions.clear()
-    return {
-        "cleared_files": pages_count + images_count,
-        "freed_bytes": pages_bytes + images_bytes,
-    }
+    return {"cleared_files": count, "freed_bytes": size}
+
 
 
 @router.get("/settings/ollama-status")

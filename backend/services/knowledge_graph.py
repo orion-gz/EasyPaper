@@ -257,13 +257,8 @@ async def _backfill_one(doc_id: str) -> None:
         if not pdf_path:
             return  # PDF가 없으면 이번엔 스킵 - 다음 조회 때 다시 시도된다
 
-        from services.cache import get_cached_pages, save_pages_cache
-        from services.pdf_parser import extract_pages
-        pages = get_cached_pages(doc_id, pdf_path)
-        if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"),
-                                            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
-            save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
+        from services.reparse import load_document_pages
+        pages = await asyncio.to_thread(load_document_pages, doc_id, doc, pdf_path)
 
         doc_title = doc.get("metadata", {}).get("title") or doc.get("filename")
         await sync_document_for_graph(doc_id, pages, doc_title)
@@ -276,18 +271,13 @@ async def _backfill_one(doc_id: str) -> None:
 async def _backfill_paper_tags(doc_id: str) -> None:
     try:
         from services.library import get_document, get_pdf_path
-        from services.cache import get_cached_pages, save_pages_cache
-        from services.pdf_parser import extract_pages
         from services.paper_tags import classify_and_store_paper_tags
         doc = get_document(doc_id)
         pdf_path = get_pdf_path(doc_id)
         if not doc or not pdf_path:
             return
-        pages = get_cached_pages(doc_id, pdf_path)
-        if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"),
-                                            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
-            save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
+        from services.reparse import load_document_pages
+        pages = await asyncio.to_thread(load_document_pages, doc_id, doc, pdf_path)
         title = (doc.get("metadata") or {}).get("title") or doc.get("filename") or ""
         await classify_and_store_paper_tags(doc_id, pages, title, force=False)
     except Exception as e:
@@ -903,17 +893,12 @@ async def _get_paper_text_for_scoring(doc_id: str) -> str:
     막지 않는다."""
     try:
         from services.library import get_document, get_pdf_path
-        from services.cache import get_cached_pages, save_pages_cache
-        from services.pdf_parser import extract_pages
         doc = get_document(doc_id)
         pdf_path = get_pdf_path(doc_id)
         if not doc or not pdf_path:
             return ""
-        pages = get_cached_pages(doc_id, pdf_path)
-        if pages is None:
-            pages = await asyncio.to_thread(extract_pages, pdf_path, doc.get("parser_engine"),
-                                            normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
-            save_pages_cache(doc_id, pdf_path, pages, doc.get("parser_engine"), doc.get("parser_version"))
+        from services.reparse import load_document_pages
+        pages = await asyncio.to_thread(load_document_pages, doc_id, doc, pdf_path)
         return "\n".join(p.get("text", "") for p in pages[:2])
     except Exception:
         return ""

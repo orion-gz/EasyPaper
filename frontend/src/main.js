@@ -1,3 +1,4 @@
+import { splitIntoSentences } from './sentenceBoundaries.js'
 import { installMemoAlignment, releaseMemoAlignment } from './memoAlignment.js'
 import { createCaptureOverlayManager } from './captureOverlay.js'
 import { renderPinnedCapture } from './pdfViewer.js'
@@ -23,7 +24,7 @@ import './style.css'
 import { mountChatQuestionNav } from './chatQuestionNav.js'
 import { applyDesktopUpdate } from './desktopUpdate.js'
 import { pageCoordinates } from './pdfCoordinates.js'
-import { mergePdfHighlightRects, mappedSentenceRange } from './pdfSentenceGeometry.js'
+import { mergePdfHighlightRects, mappedSentenceRange, sentenceCharParts, contiguousSentenceBounds } from './pdfSentenceGeometry.js'
 import './styles/shell.css'
 import './styles/library-page.css'
 import './styles/research-graph.css'
@@ -2796,7 +2797,7 @@ if (viewerClearCacheBtn) {
     }
     const currentDocTitle = $('doc-title')?.textContent || documentUiCopy('현재 논문', state.currentDocumentMode)
     const ok = await showCustomConfirm(
-      `"${currentDocTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하며, 기존 번역본은 유지됩니다.)`,
+      `"${currentDocTitle}"의 PDF 추출 캐시를 삭제할까요?\n현재 선택한 파서로 다시 파싱합니다. 엔진이 변경되면 기존 번역·분석 결과도 다시 생성해야 합니다.`,
       { title: '캐시 삭제', confirmText: '캐시 삭제', danger: true }
     )
     if (!ok) return
@@ -4091,6 +4092,11 @@ const settingPdfParserPicker = new PdfParserPicker($('setting-pdf-parser-picker'
         }
       }
       const res = await autoSaveSystemSettings({ silent: needsRestartWarning })
+      if (!res) {
+        settingPdfParserPicker.setParsersData(pdfParsersData, currentSavedPdfEngine)
+        updateParserCardInfo(currentSavedPdfEngine)
+        return
+      }
       currentSavedPdfEngine = selectedId
       const restarting = await maybeHandlePdfEngineRestart(res)
       if (!restarting) showToast(`PDF 파서 엔진이 [${parser.name}]로 설정되었습니다.`, 'success')
@@ -4576,6 +4582,10 @@ function openPdfParserInstallModal(parser) {
       if (inlineStatusText) inlineStatusText.innerHTML = succMsg
       if (doneBtn) doneBtn.classList.remove('hidden')
       const res = await autoSaveSystemSettings({ silent: true })
+      if (!res) {
+        await refreshSystemSettings()
+        return
+      }
       currentSavedPdfEngine = parser.id
       const restarting = await maybeHandlePdfEngineRestart(res)
       if (!restarting) await refreshSystemSettings()
@@ -5852,7 +5862,7 @@ clearCacheBtn.addEventListener('click', async () => {
 // 다음 열람 시 자동으로 다시 채워지므로 데이터 손실 없음)
 if (clearPagesCacheBtn) {
   clearPagesCacheBtn.addEventListener('click', async () => {
-    const ok = await showCustomConfirm('서버에 저장된 PDF 텍스트 추출 캐시를 모두 삭제하시겠습니까?\n(문서를 다시 열면 그때 자동으로 다시 생성되므로 안전합니다.)', { title: '서버 캐시 비우기', confirmText: '삭제', danger: true })
+    const ok = await showCustomConfirm('서버에 저장된 PDF 텍스트 추출 캐시를 모두 삭제하시겠습니까?\n현재 선택한 파서를 모든 PDF에 적용합니다. 엔진이 변경된 문서는 기존 번역·분석 결과도 다시 생성해야 합니다.', { title: '서버 캐시 비우기', confirmText: '삭제', danger: true })
     if (!ok) return
     try {
       const result = await clearPagesCacheAPI()
@@ -6470,7 +6480,7 @@ function initSelectToolbarEvents() {
     if (selectedDocIds.size === 0) return
     const ids = Array.from(selectedDocIds)
     const count = ids.length
-    const ok = await showCustomConfirm(`선택한 ${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+    const ok = await showCustomConfirm(`선택한 ${count}개 ${documentUiCopy('논문', workspaceModeController.getMode())}의 PDF 추출 캐시를 삭제할까요?\n현재 선택한 파서로 다시 파싱합니다. 엔진이 변경되면 기존 번역·분석 결과도 다시 생성해야 합니다.`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
     if (!ok) return
     try {
       const succeeded = await runLibraryBatch(ids, clearSingleDocCacheAPI)
@@ -7755,7 +7765,7 @@ async function deleteDocFromContextMenu(doc) {
 
 async function clearDocCacheFromContextMenu(doc) {
   const displayTitle = doc.metadata?.title || doc.filename
-  const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+  const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n현재 선택한 파서로 다시 파싱합니다. 엔진이 변경되면 기존 번역·분석 결과도 다시 생성해야 합니다.`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
   if (!ok) return
   await clearSingleDocCacheAPI(doc.id)
   showToast('PDF 추출 캐시가 삭제되었습니다.', 'success')
@@ -9458,7 +9468,7 @@ function wireDocItemEvents(container, doc, displayTitle) {
       e.stopPropagation()
       kebabMenu?.classList.add('hidden')
       const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
-      const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+      const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n현재 선택한 파서로 다시 파싱합니다. 엔진이 변경되면 기존 번역·분석 결과도 다시 생성해야 합니다.`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
       if (!ok) return
       try {
         await clearSingleDocCacheAPI(doc.id)
@@ -10112,7 +10122,7 @@ function ensureLibraryDetailPanel() {
     const doc = libraryDetailDoc
     const displayTitle = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
     moreMenu?.classList.add('hidden')
-    const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n(다음 열람 시 PDF를 다시 파싱하게 됩니다.)`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
+    const ok = await showCustomConfirm(`"${displayTitle}"의 PDF 추출 캐시를 삭제할까요?\n현재 선택한 파서로 다시 파싱합니다. 엔진이 변경되면 기존 번역·분석 결과도 다시 생성해야 합니다.`, { title: 'PDF 캐시 삭제', confirmText: '캐시 삭제' })
     if (!ok) return
     try {
       await clearSingleDocCacheAPI(doc.id)
@@ -17416,28 +17426,30 @@ function getSentenceRects(sentenceRange, vtm, containerEl) {
   const coordinates = pageCoordinates(containerEl.closest('.pdf-page-inner') || containerEl);
   const mergedRects = [];
 
-  for (const nr of nodeRanges) {
-    const overlapStart = Math.max(nr.start, sentenceRange.charStart);
-    const overlapEnd   = Math.min(nr.end,   sentenceRange.charEnd);
-    if (overlapStart >= overlapEnd) continue;
+  for (const part of sentenceCharParts(sentenceRange)) {
+    for (const nr of nodeRanges) {
+      const overlapStart = Math.max(nr.start, part.start);
+      const overlapEnd   = Math.min(nr.end, part.end);
+      if (overlapStart >= overlapEnd) continue;
 
-    const nodeOffsetStart = overlapStart - nr.start;
-    const nodeOffsetEnd   = overlapEnd   - nr.start;
+      const nodeOffsetStart = overlapStart - nr.start;
+      const nodeOffsetEnd   = overlapEnd   - nr.start;
 
-    try {
-      const range = document.createRange();
-      range.setStart(nr.node, nodeOffsetStart);
-      range.setEnd(nr.node, nodeOffsetEnd);
-      const rects = Array.from(range.getClientRects());
+      try {
+        const range = document.createRange();
+        range.setStart(nr.node, nodeOffsetStart);
+        range.setEnd(nr.node, nodeOffsetEnd);
+        const rects = Array.from(range.getClientRects());
 
-      for (const rect of rects) {
-        if (rect.width < 1 || rect.height < 1) continue;
-        const r = coordinates.rectToLocal(rect);
-        mergedRects.push(r);
-      }
-    } catch (e) { /* 범위 생성 실패 시 무시 */ }
+        for (const rect of rects) {
+          if (rect.width < 1 || rect.height < 1) continue;
+          const r = coordinates.rectToLocal(rect);
+          mergedRects.push(r);
+        }
+      } catch (e) { /* 범위 생성 실패 시 무시 */ }
+    }
+
   }
-
   return mergePdfHighlightRects(mergedRects);
 }
 
@@ -17914,124 +17926,6 @@ function segmentTransElements(container, pageNum) {
   }
 }
 
-// ── 공통 문장 분리 유틸리티 ────────────────────────────────
-/**
- * 주어진 텍스트를 단락과 문장 단위로 분리합니다.
- * \n\n(단락 경계)는 강제 문장 경계로 판정합니다.
- */
-function splitIntoSentences(fullText) {
-  const sentenceRanges = [];
-
-  // 먼저 문단 단위(\n\n)로 1차 분할 수행
-  const paraRegex = /\n{2,}/g;
-  let lastParaIndex = 0;
-  let match;
-  const paras = [];
-
-  while ((match = paraRegex.exec(fullText)) !== null) {
-    paras.push({
-      text: fullText.substring(lastParaIndex, match.index),
-      start: lastParaIndex,
-      end: match.index
-    });
-    lastParaIndex = paraRegex.lastIndex;
-  }
-  paras.push({
-    text: fullText.substring(lastParaIndex),
-    start: lastParaIndex,
-    end: fullText.length
-  });
-
-  const abbreviations = new Set([
-    'al', 'fig', 'figs', 'eq', 'eqs', 'ref', 'refs', 'tab', 'tabs',
-    'eg', 'ie', 'vol', 'no', 'vs', 'dr', 'prof', 'approx', 'etc', 'cf',
-    'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
-    'sec', 'sect', 'app', 'chap', 'ch', 'pp', 'p', 'est', 'ave', 'st', 'dept'
-  ]);
-
-  for (const para of paras) {
-    const paraText = para.text;
-    const paraStart = para.start;
-    if (!paraText.trim()) continue;
-
-    // 문단 내부에서 구두점을 기준으로 2차 문장 분할
-    const candRegex = /([。！？]+[」』”’）】》〉]*)([ \t\n\r]*)|([.!?]+)([ \t\n\r]+)/g;
-    let lastSentenceIndex = 0;
-    let sMatch;
-
-    while ((sMatch = candRegex.exec(paraText)) !== null) {
-      const puncIndex = sMatch.index;
-      const punc = sMatch[1] || sMatch[3];
-      const whitespace = sMatch[1] ? sMatch[2] : sMatch[4];
-      const nextIndex = puncIndex + punc.length + whitespace.length;
-
-      if (nextIndex >= paraText.length) {
-        // 문단 끝 부분
-        const sentenceText = paraText.substring(lastSentenceIndex, puncIndex + punc.length);
-        if (sentenceText.trim()) {
-          sentenceRanges.push({
-            text: sentenceText,
-            start: paraStart + lastSentenceIndex,
-            end: paraStart + puncIndex + punc.length
-          });
-        }
-        lastSentenceIndex = nextIndex;
-        continue;
-      }
-
-      const nextChar = paraText[nextIndex];
-      const isPeriod = punc.includes('.');
-
-      // 다음 글자가 소문자/특수문자이면 문장 구분 안 함 (단, 숫자는 1988년, 1세 등 문장의 시작이 될 수 있으므로 제외)
-      const isLowerOrDigitOrSpecial = /^[a-z\-_\'\(\[\{"\u00e0-\u00f6\u00f8-\u00fe]/.test(nextChar);
-      if (isPeriod && isLowerOrDigitOrSpecial) {
-        continue;
-      }
-
-      // 섹션 번호 형식 ("1.", "2.1.") 등은 단일 문장으로 분할하지 않음
-      if (isPeriod) {
-        const leftText = paraText.substring(lastSentenceIndex, puncIndex).trim();
-        if (/^\d+(\.\d+)*$/.test(leftText)) {
-          continue;
-        }
-
-        // 약어 매칭
-        const words = leftText.split(/[\s,()\[\]{}.]+/);
-        const lastWord = words.length > 0 ? words[words.length - 1].toLowerCase().replace(/[^a-z]/g, '') : '';
-        const isAbbreviation = abbreviations.has(lastWord) || (lastWord.length === 1 && /^[a-z]$/i.test(lastWord));
-        if (isAbbreviation) continue;
-
-        // 소수점 패턴 (\d.\d)
-        const charBeforePunc = paraText[puncIndex - 1];
-        if (charBeforePunc && /\d/.test(charBeforePunc) && /^\d/.test(nextChar)) continue;
-      }
-
-      const sentenceText = paraText.substring(lastSentenceIndex, puncIndex + punc.length);
-      if (sentenceText.trim()) {
-        sentenceRanges.push({
-          text: sentenceText,
-          start: paraStart + lastSentenceIndex,
-          end: paraStart + puncIndex + punc.length
-        });
-      }
-      lastSentenceIndex = nextIndex;
-    }
-
-    if (lastSentenceIndex < paraText.length) {
-      const remaining = paraText.substring(lastSentenceIndex);
-      if (remaining.trim()) {
-        sentenceRanges.push({
-          text: remaining,
-          start: paraStart + lastSentenceIndex,
-          end: paraStart + paraText.length
-        });
-      }
-    }
-  }
-
-  return sentenceRanges;
-}
-
 // ── 오버레이 기반 문장 호버/클릭 이벤트 시스템 ──────────────────────────────
 // 설계: pdf-sentence DOM 클래스 조작 대신, 좌표 기반 hit-test로 문장 감지 후
 //       .pdf-highlight-overlay 에 하이라이트 상자를 드로잉합니다.
@@ -18070,7 +17964,9 @@ function annotateHoveredSentence(type) {
   const vtm = state.virtualTextMaps?.[pageNum]
   const textLayer = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"] .textLayer`)
   if (!sentence || !vtm || !textLayer) return
-  const range = createDomRangeFromVtmRange(vtm, sentence.charStart, sentence.charEnd)
+  const bounds = contiguousSentenceBounds(sentence, vtm.fullText)
+  if (!bounds) return
+  const range = createDomRangeFromVtmRange(vtm, bounds.start, bounds.end)
   if (!range || range.collapsed) return
   if (type === 'memo') {
     const sentenceIdx = sentence.sentenceIdx >= 10000 ? (sentence.originalSentenceIdx ?? sentence.sentenceIdx) : sentence.sentenceIdx
@@ -18372,7 +18268,7 @@ function focusPairRects(ref) {
   let sentenceRange = mappedSentenceRange(sentenceRanges, ref.sentenceIdx)
     || sentenceRanges.find(range => range.sentenceIdx === ref.sentenceIdx)
   const part = ref.partIdx !== undefined ? legacyFocusParts(ref.pageNum, ref.sentenceIdx)[ref.partIdx] : null
-  if (part) sentenceRange = { ...sentenceRange, charStart: part.charStart, charEnd: part.charEnd }
+  if (part) sentenceRange = { ...sentenceRange, charStart: part.charStart, charEnd: part.charEnd, charParts: [{ start: part.charStart, end: part.charEnd }] }
   const vtm = state.virtualTextMaps?.[ref.pageNum]
   if (sentenceRange?.sourceMapping) {
     const canvas = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${ref.pageNum}"] canvas`)
@@ -18386,10 +18282,12 @@ function focusPairRects(ref) {
       })))
     }
   } else if (sentenceRange && vtm) {
-    for (const nr of vtm.nodeRanges) {
-      const start = Math.max(nr.start, sentenceRange.charStart), end = Math.min(nr.end, sentenceRange.charEnd)
-      if (start >= end) continue
-      try { const range = document.createRange(); range.setStart(nr.node, start - nr.start); range.setEnd(nr.node, end - nr.start); sourceRects.push(...range.getClientRects()) } catch (_) {}
+    for (const part of sentenceCharParts(sentenceRange)) {
+      for (const nr of vtm.nodeRanges) {
+        const start = Math.max(nr.start, part.start), end = Math.min(nr.end, part.end)
+        if (start >= end) continue
+        try { const range = document.createRange(); range.setStart(nr.node, start - nr.start); range.setEnd(nr.node, end - nr.start); sourceRects.push(...range.getClientRects()) } catch (_) {}
+      }
     }
   }
   const idx = ref.sentenceIdx >= 10000 ? (sentenceRange?.originalSentenceIdx ?? ref.sentenceIdx) : ref.sentenceIdx
@@ -18443,12 +18341,9 @@ function startDwellSelection(pageNum, sentenceRange) {
 
     const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
     if (!vtm) return
-    if (sentenceRange.sourceMapping) {
-      const parts = sentenceRange.charParts || []
-      if (!parts.length || parts.some((part, index) => index > 0
-        && vtm.fullText.slice(parts[index - 1].end, part.start).trim())) return
-    }
-    const range = createDomRangeFromVtmRange(vtm, sentenceRange.charStart, sentenceRange.charEnd)
+    const bounds = contiguousSentenceBounds(sentenceRange, vtm.fullText)
+    if (!bounds) return
+    const range = createDomRangeFromVtmRange(vtm, bounds.start, bounds.end)
     if (!range) return
 
     state.hoverSelectedPageNum = pageNum
