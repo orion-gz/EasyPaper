@@ -41,14 +41,40 @@ Use `docker-compose.lab.yml` for the application container, or
 loopback for an HTTPS reverse proxy. The Docker data directory must be writable
 by `LAB_APP_UID:LAB_APP_GID`; the runner socket group must match that GID.
 
-Start from `deploy/lab/runner.example.json`. The supplied Claude Code 2.1.311 and
+Start from `deploy/lab/runner.example.json`. One-time pinned CLI runtime builds:
+
+```sh
+sh deploy/lab/build-cli-runtime.sh docker claude_code easypaper-cli:claude-2.1.311
+sh deploy/lab/build-cli-runtime.sh docker codex easypaper-cli:codex-0.165.0
+# Docker-free alternative, on a Debian host with debootstrap installed:
+sudo sh deploy/lab/build-cli-runtime.sh systemd claude_code /srv/easypaper/claude-rootfs
+sudo sh deploy/lab/build-cli-runtime.sh systemd codex /srv/easypaper/codex-rootfs
+```
+
+For systemd, select `runtime: "systemd"` and set each provider's `rootfs` to its
+prepared path. The build script refuses to overwrite an existing rootfs and runs
+only when explicitly invoked by the operator. It requires network package access.
+These build recipes are supplied for reproducibility; images/rootfs still need
+real-host validation before onboarding members.
+
+ The supplied Claude Code 2.1.311 and
 Codex 0.165.0 command arrays were checked against locally installed `--help`
-output; their named images must still be built/provisioned by the operator.
+output; their named images must be built once by the operator using the recipes above.
 Antigravity 1.4.12 exposes no authentication subcommand in `--help`, so its
 login/status/logout require an operator-provided wrapper or terminal onboarding.
 Do not advertise that profile as ready until that adapter has been verified.
- Operators provision an account entry
-for each immutable ID returned by `/api/lab/users`:
+The example now enables automatic personal home provisioning. Reserve its UID
+range (20000–29999) exclusively for this runner; do not allocate those UIDs in
+another service. On first CLI status/login/inference, the runner allocates a
+persistent UID and private home using a transactional registry. Existing OS UIDs
+and manually configured UIDs are skipped. The root directory is runner-owned
+mode 0700, homes are member-owned mode 0700, and the registry is mode 0600.
+Back up this directory and registry together; never regenerate the registry while
+retaining homes. Provider images/rootfs still require one-time operator setup.
+Accounts are retained after deactivation so credentials are not silently deleted.
+
+For deployments that disable automatic provisioning, operators can instead
+provision an account entry for each immutable ID returned by `/api/lab/users`:
 
 ```json
 {
@@ -93,8 +119,7 @@ Provide DNS and CA certificates inside that filesystem. No Docker is needed.
 `deploy/lab/easypaper-lab-runner.service` is a template; adjust installation paths
 and the socket-access group to the application service user.
 
-The login button starts an isolated login process; use Connection status to read
-its instructions. Output is kept only in runner memory and is limited to 8 KiB.
+The login button starts an isolated login process; the UI polls Connection status and displays its instructions automatically. Select Connection status to resume polling after leaving the tab. Output is kept only in runner memory and is limited to 8 KiB.
 Login and inference processes time out after ten minutes. If the provider needs
 an interactive terminal or a browser callback unavailable on the server, the
 operator must log in inside the same isolated home/runtime. Local Tauri CLI
@@ -117,9 +142,13 @@ Downloaded local copies remain on the desktop after account deactivation.
 
 Ollama chat history is supplied by EasyPaper; `keep_alive` is not a document
 session. vLLM requests use a private cache salt scoped to owner and document
-revision where available, and conservatively to the prompt otherwise. The vLLM
-server must support `cache_salt`; unsupported servers must not silently ignore
-it. This is a cache-reuse boundary, not physical GPU memory isolation.
+revision where available, and conservatively to the prompt otherwise. Before vLLM inference, EasyPaper checks that the server OpenAPI chat request
+schema declares `cache_salt`; unsupported or inaccessible schemas fail closed.
+Successful contract checks are cached for 60 seconds. Proxies must expose the
+server-root `/openapi.json` (and the server must honestly implement its schema).
+The explicit administrator connection test also performs a one-token inference
+for Ollama/vLLM; this may load a model and consumes inference capacity. A schema
+check cannot prove GPU cache behavior: validate that on the actual server. This is a cache-reuse boundary, not physical GPU memory isolation.
 
 The initial scheduler permits one inference per member and two common Ollama or
 eight common vLLM requests at a time. These limits are configurable in Lab Mode. Benchmark before increasing them; limit changes govern newly admitted requests.
@@ -144,3 +173,29 @@ is the final authentication check.
 Browser-only account state is archived in IndexedDB on account switches and is
 not included in another account’s localStorage export. Durable work restores its
 document owner on restart; disabled accounts’ pending work is cancelled.
+
+## Acceptance checks on the lab host
+
+Use two member accounts and two documents. Verify these before calling the
+installation production-ready:
+
+1. Build both CLI runtimes; first member login must create its private home
+   without editing the runner account map. Login/status/logout must reflect the
+   actual provider. Antigravity `terminal_required` is never reported as connected.
+2. Run the Lab inference connection check for each intended engine/model. An old
+   vLLM server without a declared `cache_salt` must reject inference before prompts
+   are sent. Confirm cache behavior with the chosen vLLM server's metrics/logs.
+3. In browser and actual Tauri builds, switch between both accounts, edit separate
+   documents, synchronize and resume transfers. Neither account may read the
+   other's library or archived browser state. Revocation must block new work.
+4. Start concurrent inference, disable one account, and check process/container
+   cleanup and the other account's continued access. Restart the application and
+   runner and verify personal login persistence and cancellation of disabled work.
+5. Exercise both Docker and systemd installations with the intended GPU models.
+   Keep one app worker and one runner worker; benchmark configured concurrency.
+
+Personal CLI requests deliberately reconstruct supplied document context for each
+invocation. Provider-native conversation resumption is not enabled: Codex runs
+with `--ephemeral`, and Claude uses a fresh print request. This avoids retaining
+hidden cross-document conversation state; native session IDs are not portable
+between web, desktop and server. App document history remains the source of truth.

@@ -160,3 +160,21 @@ async def test_vllm_health_uses_lab_endpoint_without_openai_key(environment, mon
         assert (await lab.inference_health())['model_available'] is True
     finally:
         identity.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_terminal_login_is_not_reported_as_authenticated(environment, monkeypatch):
+    client, master = environment
+    client.put('/api/lab/settings', json={'enabled': True, 'password': 'master-secret'})
+    client.put('/api/me/model-settings', json={'provider': 'antigravity', 'model': 'test'})
+    async def operation(*args):
+        return {'status': 'terminal_required'}
+    monkeypatch.setattr('services.lab_runner.operation', operation)
+    token = identity.set(master)
+    try:
+        health = await lab.inference_health()
+        assert health['status'] == 'error'
+        assert not health['model_available']
+        assert health['authentication'] == 'terminal_required'
+    finally:
+        identity.reset(token)

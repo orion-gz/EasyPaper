@@ -430,6 +430,8 @@ async def stream_openai(messages: list, model: str, temperature: float = 0.5) ->
     }
     
     if local_vllm:
+        from services.lab_inference import require_cache_salt
+        await require_cache_salt(selected)
         # Include prompt identity as well as user scope. This conservatively
         # avoids cross-document reuse even when no document ID was supplied.
         import hashlib

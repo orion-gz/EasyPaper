@@ -210,6 +210,10 @@ async def check_inference(username: str = Depends(require_admin_user)):
             response.raise_for_status()
             data = response.json()
         models = [item['id'] for item in data.get('data', [])] if value['engine'] == 'vllm' else [item['name'] for item in data.get('models', [])]
-        return {'connected': True, 'models': models, 'default_available': value['model'] in models}
-    except (httpx.HTTPError, ValueError, KeyError):
-        raise HTTPException(502, 'Could not query the configured inference server.')
+        if value['model'] not in models:
+            raise HTTPException(502, 'The default model is not installed on the inference server.')
+        from services.lab_inference import probe
+        verified = await probe(value)
+        return {'connected': True, 'models': models, 'default_available': True, **verified}
+    except (httpx.HTTPError, ValueError, KeyError, RuntimeError):
+        raise HTTPException(502, 'Inference verification failed. Check the model, server logs and vLLM cache_salt/OpenAPI support.')
