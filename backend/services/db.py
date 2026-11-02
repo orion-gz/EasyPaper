@@ -807,6 +807,11 @@ def update_user_credentials(old_username: str, new_username: str, new_password_h
                         f"UPDATE {table} SET username = ? WHERE username = ?",
                         (new_username, old_username),
                     )
+                # Keep synchronization identity and checkpoints across account
+                # renames; a new identity would duplicate previously synced data.
+                for table in ('library_sync_ids', 'library_sync_accounts', 'library_sync_peers'):
+                    if cursor.execute('SELECT 1 FROM sqlite_master WHERE type="table" AND name=?', (table,)).fetchone():
+                        cursor.execute(f'UPDATE {table} SET username=? WHERE username=?', (new_username, old_username))
             conn.commit()
             return True
     except Exception:

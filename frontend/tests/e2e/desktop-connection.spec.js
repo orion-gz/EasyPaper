@@ -133,3 +133,111 @@ test('web deployments skip desktop controls', async ({ page }) => {
   await expect(page.locator('.desktop-connection-badge')).toHaveCount(0)
   expect(controls).toEqual([])
 })
+
+test('sync defaults to defer and offers explicit local or server replacement', async ({ page }) => {
+  await desktop(page, { onboarded: true, enabled: true, server_url: 'https://papers.example.com' })
+  await page.goto(remoteOrigin + '/index.html')
+  await page.locator('.desktop-connection-badge').click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.locator('[data-action]')).toHaveValue('defer')
+  await expect(dialog.locator('[data-sync]')).toBeDisabled()
+  await expect(dialog.locator('[data-automatic]')).toBeDisabled()
+  await expect(dialog.locator('[data-action] option')).toHaveCount(4)
+  await dialog.locator('[data-action]').selectOption('merge')
+  await expect(dialog.locator('[data-sync]')).toBeEnabled()
+  await expect(dialog.locator('[data-automatic]')).toBeEnabled()
+  await dialog.locator('[data-automatic]').check()
+  await dialog.locator('[data-action]').selectOption('replace_remote')
+  await expect(dialog.locator('[data-automatic]')).not.toBeChecked()
+  await expect(dialog.locator('[data-automatic]')).toBeDisabled()
+})
+
+for (const action of ['merge', 'replace_local', 'replace_remote']) {
+  test(`${action} previews counts and only starts after confirmation`, async ({ page }) => {
+    await desktop(page, { onboarded: true, enabled: true, server_url: 'https://papers.example.com' })
+    let started = 0
+    let job = { status: 'idle' }
+    await page.route('**/desktop/sync/preview', route => route.fulfill({ json: {
+      plan_id: 'plan-123', action: route.request().postDataJSON().action,
+      local_documents: 2, remote_documents: 5,
+    } }))
+    await page.route('**/desktop/sync', route => {
+      expect(route.request().postDataJSON()).toMatchObject({ plan_id: 'plan-123', confirmed: true })
+      started++
+      job = { kind: 'sync', status: 'uploading', bytes: 0 }
+      return route.fulfill({ status: 202, json: job })
+    })
+    await page.route('**/desktop/download', route => route.fulfill({ json: job }))
+    await page.goto(remoteOrigin + '/index.html')
+    await expect(page.locator('#page-dashboard.active')).toBeVisible()
+    await page.locator('.desktop-connection-badge').click()
+    const dialog = page.getByRole('dialog')
+    await dialog.locator('[data-action]').selectOption(action)
+    await dialog.locator('[data-sync]').click()
+    await expect(dialog.locator('[data-preview-summary]')).toContainText('문서 2개')
+    await expect(dialog.locator('[data-preview-summary]')).toContainText('문서 5개')
+    expect(started).toBe(0)
+    await expect(dialog.locator('[data-action]')).toBeDisabled()
+    await dialog.locator('[data-cancel-sync]').click()
+    await expect(dialog.locator('[data-preview]')).toBeHidden()
+    expect(started).toBe(0)
+    await dialog.locator('[data-sync]').click()
+    await expect(dialog.locator('[data-confirm-sync]')).toBeEnabled()
+    await page.screenshot({ path: `/tmp/easypaper-sync-${action}.png` })
+    await dialog.locator('[data-confirm-sync]').click()
+    await expect(dialog.locator('[data-status]')).toContainText('서버로 보내는 중')
+    await expect(dialog.locator('[data-action]')).toBeDisabled()
+    job = { kind: 'sync', status: 'completed', documents: 7 }
+    await expect(dialog.locator('[data-status]')).toContainText('양방향 동기화를 완료')
+    await expect(dialog.locator('[data-action]')).toHaveValue('merge')
+    await expect(dialog.locator('[data-reload]')).toBeVisible()
+    expect(started).toBe(1)
+  })
+}
+
+test('sync conflicts stop automatic progress and preserve an explicit choice', async ({ page }) => {
+  await desktop(page, { onboarded: true, enabled: true, server_url: 'https://papers.example.com', sync: { action: 'merge', automatic: true } })
+  await page.route('**/desktop/download', route => route.fulfill({ json: {
+    kind: 'sync', status: 'conflict', conflicts: [{ table: 'memos', key: 'paper' }],
+  } }))
+  await page.goto(remoteOrigin + '/index.html')
+  await page.locator('.desktop-connection-badge').click()
+  await expect(page.getByRole('dialog').locator('[data-status]')).toContainText('양쪽 변경이 충돌')
+  await expect(page.getByRole('dialog').locator('[data-action]')).toBeEnabled()
+})
+
+test('cancelling a preview does not enable newly selected automatic sync', async ({ page }) => {
+  const { state } = await desktop(page, { onboarded: true, enabled: true, server_url: 'https://papers.example.com' })
+  await page.route('**/desktop/sync/preview', route => route.fulfill({ json: {
+    plan_id: 'preview', action: 'merge', local_documents: 2, remote_documents: 5,
+  } }))
+  await page.goto(remoteOrigin + '/index.html')
+  await expect(page.locator('#page-dashboard.active')).toBeVisible()
+  await page.locator('.desktop-connection-badge').click()
+  const dialog = page.getByRole('dialog')
+  await dialog.locator('[data-action]').selectOption('merge')
+  await dialog.locator('[data-automatic]').check()
+  await dialog.locator('[data-sync]').click()
+  await dialog.locator('[data-cancel-sync]').click()
+  expect(state.sync.automatic).toBe(false)
+})
+
+test('automatic merge runs on an idle remote workspace without a destructive policy', async ({ page }) => {
+  await desktop(page, { onboarded: true, enabled: true, server_url: 'https://papers.example.com', sync: { action: 'merge', automatic: true } })
+  let started = 0
+  await page.route('**/desktop/sync/preview', route => {
+    expect(route.request().postDataJSON().action).toBe('merge')
+    return route.fulfill({ json: { plan_id: 'auto', action: 'merge', local_documents: 1, remote_documents: 1 } })
+  })
+  await page.route('**/desktop/sync', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ plan_id: 'auto', confirmed: true, automatic: true })
+    started++
+    return route.fulfill({ status: 202, json: { kind: 'sync', status: 'uploading' } })
+  })
+  await page.route('**/desktop/download', route => route.fulfill({ json: { kind: 'sync', status: 'completed', documents: 1 } }))
+  await page.clock.install()
+  await page.goto(remoteOrigin + '/index.html')
+  await expect(page.locator('#page-dashboard.active')).toBeVisible()
+  await page.clock.fastForward(5 * 60 * 1000)
+  await expect.poll(() => started).toBe(1)
+})

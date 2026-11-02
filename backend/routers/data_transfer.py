@@ -15,6 +15,45 @@ router = APIRouter()
 MAX_BROWSER_BYTES = 20 * 1024**2
 
 
+@router.get('/user-data/sync/info')
+async def sync_info(current_user: str = Depends(get_current_user)):
+    from services import library_sync
+    from services.sync_gate import gate
+    async with gate.exclusive(current_user):
+        with tempfile.TemporaryDirectory(prefix='easypaper-sync-info-') as temp:
+            manifest = await run_in_threadpool(library_sync.export_snapshot, current_user, Path(temp) / 'snapshot.zip')
+    return {'protocol': library_sync.PROTOCOL, 'account': manifest['sync']['account'],
+            'revision': library_sync.fingerprint(manifest), 'documents': len(manifest['tables']['documents'])}
+
+
+@router.post('/user-data/sync/exchange')
+async def sync_exchange(request: Request, current_user: str = Depends(get_current_user)):
+    from services import library_sync
+    from services.sync_gate import gate
+    if request.headers.get('x-easypaper-sync') != '1':
+        raise HTTPException(403, 'A synchronization client header is required.')
+    origin = request.headers.get('origin')
+    if (origin and origin != str(request.base_url).rstrip('/')) or request.headers.get('sec-fetch-site') == 'cross-site':
+        raise HTTPException(403, 'Cross-origin synchronization requests are not allowed.')
+    with tempfile.TemporaryFile() as source:
+        size = 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > data_transfer.MAX_ARCHIVE_BYTES:
+                raise HTTPException(413, 'Synchronization archive exceeds 4 GiB.')
+            await run_in_threadpool(source.write, chunk)
+        source.seek(0)
+        try:
+            async with gate.exclusive(current_user):
+                response = await run_in_threadpool(library_sync.exchange, current_user, source,
+                                                  library_sync.storage_root() / 'responses')
+        except library_sync.SyncConflict as exc:
+            raise HTTPException(409, {'message': str(exc), 'conflicts': exc.conflicts}) from exc
+        except data_transfer.InvalidArchive as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return FileResponse(response, media_type='application/zip', headers={'Cache-Control': 'no-store'})
+
+
 @router.post('/user-data/export')
 async def export_user_data(request: Request, current_user: str = Depends(get_current_user)):
     body = bytearray()

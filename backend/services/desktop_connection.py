@@ -150,13 +150,14 @@ class DesktopConnections:
         self.app = app
         self.config_path = Path(config_path)
         self.local_port = local_port
-        self.config = {'enabled': False, 'server_url': '', 'onboarded': False, 'ports': {}}
+        self.config = {'enabled': False, 'server_url': '', 'onboarded': False, 'ports': {}, 'sync_options': {}}
         self.config_error = None
         try:
             saved = json.loads(self.config_path.read_text())
             if (not isinstance(saved, dict) or not isinstance(saved.get('ports', {}), dict)
                     or not isinstance(saved.get('enabled', False), bool)
-                    or not isinstance(saved.get('onboarded', False), bool)):
+                    or not isinstance(saved.get('onboarded', False), bool)
+                    or not isinstance(saved.get('sync_options', {}), dict)):
                 raise ValueError('Invalid connection settings')
             if saved.get('server_url'):
                 saved['server_url'] = normalize_server_url(saved['server_url'])
@@ -166,6 +167,11 @@ class DesktopConnections:
             if (any(not isinstance(port, int) or not 1024 <= port <= 65535 for port in ports.values())
                     or len(set(ports.values())) != len(ports)):
                 raise ValueError('Invalid or overlapping server origins')
+            from services.desktop_sync import POLICIES
+            if any(not isinstance(options, dict) or options.get('action') not in POLICIES
+                   or not isinstance(options.get('automatic', False), bool)
+                   for options in saved.get('sync_options', {}).values()):
+                raise ValueError('Invalid synchronization preferences')
             self.config.update({key: saved[key] for key in self.config if key in saved})
         except FileNotFoundError:
             pass
@@ -181,6 +187,8 @@ class DesktopConnections:
         self.router.add_api_route('/connection', self.update, methods=['PUT'])
         self.router.add_api_route('/download', self.download, methods=['POST'])
         self.router.add_api_route('/download', self.download_status, methods=['GET'])
+        from services.desktop_sync import DesktopSync
+        self.sync = DesktopSync(self)
 
     def save(self):
         atomic_write_text(str(self.config_path), json.dumps(self.config, indent=2))
@@ -272,6 +280,7 @@ class DesktopConnections:
                 'onboarded': self.config['onboarded'], 'error': self.config_error,
                 'remote': bool(request.scope.get('desktop_remote_target')),
                 'current_server': request.scope.get('desktop_remote_target', ''),
+                'sync': self.sync.options(self.config['server_url']),
                 'destination': f'http://127.0.0.1:{port}/',
                 'local_url': f'http://127.0.0.1:{self.local_port}/'}
 
@@ -290,6 +299,12 @@ class DesktopConnections:
             body = json.loads(raw)
             if not isinstance(body, dict) or not isinstance(body.get('enabled'), bool):
                 raise ValueError()
+            if 'sync' in body:
+                from services.desktop_sync import POLICIES
+                options = body['sync']
+                if (not isinstance(options, dict) or options.get('action') not in POLICIES
+                        or not isinstance(options.get('automatic', False), bool)):
+                    raise ValueError()
         except (ValueError, TypeError):
             raise HTTPException(400, 'Invalid connection settings.')
         async with self.lock:
@@ -302,8 +317,12 @@ class DesktopConnections:
                 if parsed.hostname in ('127.0.0.1', 'localhost', '::1') and (parsed.port or 80) in own_ports:
                     raise HTTPException(400, 'Choose an EasyPaper server, not this desktop application.')
                 await self.ensure_gateway(target)
-            previous = dict(self.config)
+            import copy
+            previous = copy.deepcopy(self.config)
             self.config.update(enabled=body['enabled'], server_url=target, onboarded=True)
+            if 'sync' in body:
+                self.config['sync_options'][target] = {'action': body['sync']['action'],
+                    'automatic': body['sync'].get('automatic', False) and body['sync']['action'] == 'merge'}
             try:
                 self.save()
             except OSError:

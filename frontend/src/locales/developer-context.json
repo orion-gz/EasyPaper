@@ -5944,5 +5944,74 @@
   },
   "desktop:localSettings": {
     "description": "Desktop local/remote connection interface: Manage local / remote mode and download server data."
+  },
+  "desktop:dataAction": {
+    "description": "Two-way desktop library synchronization: Existing data on both sides"
+  },
+  "desktop:defer": {
+    "description": "Two-way desktop library synchronization: Defer — keep both libraries separate"
+  },
+  "desktop:merge": {
+    "description": "Two-way desktop library synchronization: Merge — synchronize both directions"
+  },
+  "desktop:replaceLocal": {
+    "description": "Two-way desktop library synchronization: Delete local data — use the server library"
+  },
+  "desktop:replaceRemote": {
+    "description": "Two-way desktop library synchronization: Delete server data — use the local library"
+  },
+  "desktop:actionHelp": {
+    "description": "Two-way desktop library synchronization: Saving this choice does not delete data. After signing in, preview and confirm the synchronization. Account credentials and AI settings stay on each device."
+  },
+  "desktop:automatic": {
+    "description": "Two-way desktop library synchronization: Automatically merge every 5 minutes while the app is open and all document tabs are closed"
+  },
+  "desktop:syncHelp": {
+    "description": "Two-way desktop library synchronization: Sync saved documents, originals, translations, notes and reading records in both directions without adding duplicate copies. Concurrent edits stop for your decision. Both the app and server must support synchronization."
+  },
+  "desktop:syncNow": {
+    "description": "Two-way desktop library synchronization: Preview synchronization"
+  },
+  "desktop:cancelSync": {
+    "description": "Two-way desktop library synchronization: Cancel"
+  },
+  "desktop:confirmSync": {
+    "description": "Two-way desktop library synchronization: Confirm and synchronize"
+  },
+  "desktop:previewCounts": {
+    "description": "Two-way desktop library synchronization: Local library: {{local}} documents · Server library: {{remote}} documents"
+  },
+  "desktop:confirmReplaceLocal": {
+    "description": "Two-way desktop library synchronization: Delete the existing local library and replace it with the server library, including notes and history. The server library is kept. This requires your confirmation."
+  },
+  "desktop:confirmReplaceRemote": {
+    "description": "Two-way desktop library synchronization: Delete the existing server library and replace it with this computer’s library, including notes and history. This affects the signed-in server account. This requires your confirmation."
+  },
+  "desktop:confirmMerge": {
+    "description": "Two-way desktop library synchronization: Combine both libraries. After the first synchronization, edits and deletions are reflected in both directions. Conflicting changes will not be overwritten automatically."
+  },
+  "desktop:syncPreparing": {
+    "description": "Two-way desktop library synchronization: Preparing the library comparison…"
+  },
+  "desktop:syncUploading": {
+    "description": "Two-way desktop library synchronization: Sending local changes to the server… Keep EasyPaper open."
+  },
+  "desktop:syncCompleted": {
+    "description": "Two-way desktop library synchronization: Two-way synchronization completed. Local library: {{count}} documents. Reload to see the latest data."
+  },
+  "desktop:syncConflict": {
+    "description": "Two-way desktop library synchronization: Changes conflict. Automatic overwriting has stopped. Review both libraries, then retry or explicitly select which side should replace the other."
+  },
+  "desktop:syncCancelled": {
+    "description": "Two-way desktop library synchronization: Synchronization was not started. Both libraries are unchanged."
+  },
+  "desktop:syncResume": {
+    "description": "Two-way desktop library synchronization: An interrupted operation is waiting. Confirm to resume the same transfer without duplicates."
+  },
+  "desktop:saveAddressFirst": {
+    "description": "Two-way desktop library synchronization: Save and open the new server address before synchronizing."
+  },
+  "desktop:reload": {
+    "description": "Two-way desktop library synchronization: Reload library"
   }
 }
