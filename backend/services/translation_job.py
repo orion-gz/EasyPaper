@@ -187,16 +187,21 @@ def resume_incomplete_jobs(sessions: dict) -> None:
     서버 시작 시 미완료 잡을 재개합니다.
     upload.py 의 restore_sessions_from_library() 이후 호출됩니다.
     """
+    from services.lab_context import recovery_owner
     for session_id, session in sessions.items():
-        job = _load_job(session_id)
-        if job and job.get("status") == "running":
-            pages = session.get("pages", [])
-            if pages:
-                active = _running_tasks.get(session_id)
-                if active is not None and not active.done():
-                    continue
-                task = asyncio.create_task(_run_job(session_id, pages, job))
-                _running_tasks[session_id] = task
+        with recovery_owner(session_id) as permitted:
+            if not permitted:
+                cancel_job(session_id)
+                continue
+            job = _load_job(session_id)
+            if job and job.get("status") == "running":
+                pages = session.get("pages", [])
+                if pages:
+                    active = _running_tasks.get(session_id)
+                    if active is not None and not active.done():
+                        continue
+                    task = asyncio.create_task(_run_job(session_id, pages, job))
+                    _running_tasks[session_id] = task
 
 
 # ─────────────────────────────────────────────────────────

@@ -316,49 +316,54 @@ def legacy_translation_view(task: dict) -> dict:
 
 def recover_document_tasks(sessions: dict) -> None:
     """Requeue incomplete durable work after sessions have been restored."""
+    from services.lab_context import recovery_owner
     for task in recoverable_tasks():
-        if task["kind"] == "parse":
-            from services.parse_job import resume_parse_task
-            resume_parse_task(task["id"], sessions)
-            continue
-        session = sessions.get(task["doc_id"])
-        if not session:
-            continue
-        if task["kind"] == "translate":
-            continue
-        if task["kind"] == "classification":
-            from services.document_classification import start_classification_task
-            options = task["options"]
-            start_classification_task(
-                task["doc_id"], options.get("title") or session.get("filename", ""),
-                session["pages"], durable_task_id=task["id"],
-            )
-            continue
-        if task["kind"] in {"keywords", "summary"}:
-            from services.insight_job import start_keyword_job, start_summary_job
-            starter = start_keyword_job if task["kind"] == "keywords" else start_summary_job
-            options = task["options"]
-            starter(
-                task["doc_id"], session["pages"], options.get("target_lang", "ko"),
-                session.get("metadata", {}).get("title") or session.get("filename", ""),
-                session.get("document_mode", "research"), session.get("document_type", "research_paper"),
-                options.get("source_lang", "auto"), durable_task_id=task["id"],
-            )
-        elif task["kind"] == "primer":
-            from routers.primer import _ensure_generation_started
-            options = task["options"]
-            _ensure_generation_started(
-                task["doc_id"], options.get("target_lang", "ko"), options.get("source_lang", "auto"),
-                session, session.get("username", "admin"), durable_task_id=task["id"],
-            )
-        elif task["kind"] in {"chapter_summary", "full_summary"}:
-            from services.chapter_summaries import recover_summary_task
-            from services.db import db_get_document
-            document = db_get_document(task["doc_id"])
-            if document:
-                recover_summary_task(
-                    task, document, session["pages"], session.get("pdf_path", document.get("pdf_path", "")),
+        with recovery_owner(task['doc_id'], task['options'].get('username') if task['kind'] == 'parse' else None) as permitted:
+            if not permitted:
+                request_cancel(task['id'])
+                continue
+            if task["kind"] == "parse":
+                from services.parse_job import resume_parse_task
+                resume_parse_task(task["id"], sessions)
+                continue
+            session = sessions.get(task["doc_id"])
+            if not session:
+                continue
+            if task["kind"] == "translate":
+                continue
+            if task["kind"] == "classification":
+                from services.document_classification import start_classification_task
+                options = task["options"]
+                start_classification_task(
+                    task["doc_id"], options.get("title") or session.get("filename", ""),
+                    session["pages"], durable_task_id=task["id"],
                 )
+                continue
+            if task["kind"] in {"keywords", "summary"}:
+                from services.insight_job import start_keyword_job, start_summary_job
+                starter = start_keyword_job if task["kind"] == "keywords" else start_summary_job
+                options = task["options"]
+                starter(
+                    task["doc_id"], session["pages"], options.get("target_lang", "ko"),
+                    session.get("metadata", {}).get("title") or session.get("filename", ""),
+                    session.get("document_mode", "research"), session.get("document_type", "research_paper"),
+                    options.get("source_lang", "auto"), durable_task_id=task["id"],
+                )
+            elif task["kind"] == "primer":
+                from routers.primer import _ensure_generation_started
+                options = task["options"]
+                _ensure_generation_started(
+                    task["doc_id"], options.get("target_lang", "ko"), options.get("source_lang", "auto"),
+                    session, session.get("username", "admin"), durable_task_id=task["id"],
+                )
+            elif task["kind"] in {"chapter_summary", "full_summary"}:
+                from services.chapter_summaries import recover_summary_task
+                from services.db import db_get_document
+                document = db_get_document(task["doc_id"])
+                if document:
+                    recover_summary_task(
+                        task, document, session["pages"], session.get("pdf_path", document.get("pdf_path", "")),
+                    )
 
 
 def list_user_tasks(username: str) -> list[dict]:

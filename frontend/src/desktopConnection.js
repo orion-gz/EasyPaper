@@ -265,7 +265,7 @@ async function prepareSync(automatic = false) {
       enabled: true, server_url: connection.server_url,
       sync: { action, automatic: action === 'merge' && (automatic || connection.sync?.automatic === true) },
     }) })
-    syncPreview = await connectionRequest('sync/preview', { method: 'POST', body: JSON.stringify({ action }) })
+    syncPreview = await connectionRequest('sync/preview', { method: 'POST', body: JSON.stringify({ action, automatic }) })
     if (automatic && syncPreview.action !== 'merge') {
       syncPreview = null
       setBusy(false)

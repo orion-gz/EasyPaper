@@ -108,13 +108,15 @@ async def login(request: Request, response: Response, data: LoginRequest):
 
     user = get_user(data.username)
 
-    if not user or not verify_password(user["password_hash"], data.password):
+    if not user or not verify_password(user["password_hash"], data.password, allow_legacy=data.username == get_app_username()):
         record_failed_login(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="아이디 또는 비밀번호가 올바르지 않습니다."
         )
 
+    from services.lab import require_access
+    require_access(data.username)
     reset_login_attempts(request)
 
     # "로그인 상태 유지"를 체크하면 훨씬 긴 만료 기간의 세션 쿠키를 발급해,
@@ -146,7 +148,9 @@ async def logout(response: Response):
 
 @router.get("/auth/check")
 async def check_auth(username: str = Depends(get_current_user)):
-    return {"status": "authenticated", "username": username}
+    from services.lab import account
+    profile = account(username) or {}
+    return {"status": "authenticated", "username": username, "account_id": profile.get("id"), "must_change_password": bool(profile.get("must_change_password"))}
 
 @router.post("/auth/change-credentials")
 async def change_credentials(
@@ -165,7 +169,7 @@ async def change_credentials(
     current_password_hash = user["password_hash"]
     
     # 현재 비밀번호 검증
-    if not verify_password(current_password_hash, data.current_password):
+    if not verify_password(current_password_hash, data.current_password, allow_legacy=current_user == get_app_username()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="현재 비밀번호가 일치하지 않습니다."
@@ -187,13 +191,19 @@ async def change_credentials(
         )
 
     # 새 비밀번호가 현재 비밀번호와 동일한지 확인
-    if verify_password(current_password_hash, new_password):
+    if verify_password(current_password_hash, new_password, allow_legacy=False):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="새 비밀번호는 현재 비밀번호와 다르게 설정해야 합니다."
         )
 
         
+    from services import lab
+    from services.db import get_db
+    from contextlib import closing
+    profile = lab.account(current_user)
+    if profile and (lab.settings()['enabled'] or profile['role'] == 'member') and new_username != current_user:
+        raise HTTPException(400, 'Lab account usernames cannot be renamed.')
     # 새로운 해시 생성 및 DB + .env 업데이트
     new_hash = hash_password(new_password)
     if not update_user_credentials(current_user, new_username, new_hash):
@@ -201,7 +211,11 @@ async def change_credentials(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="이미 존재하는 아이디입니다."
         )
-    update_credentials_in_env(new_username, new_hash)
+    if current_user == get_app_username():
+        update_credentials_in_env(new_username, new_hash)
+    if profile:
+        with closing(get_db()) as conn, conn:
+            conn.execute('UPDATE lab_accounts SET username=?, must_change_password=0, session_version=session_version+1 WHERE username=?', (new_username, current_user))
 
     # DB 소유권과 함께 현재 프로세스의 열린 문서 세션도 새 계정명으로 이동한다.
     if new_username != current_user:
@@ -231,19 +245,22 @@ class SkipLoginRequest(BaseModel):
 
 
 @router.get("/settings/skip-login")
-async def get_skip_login_endpoint(current_user: str = Depends(get_current_user)):
+async def get_skip_login_endpoint(current_user: str = Depends(require_admin_user)):
     """로그인 화면을 건너뛰는 설정이 켜져 있는지 반환합니다."""
     return {"enabled": get_skip_login()}
 
 
 @router.post("/settings/skip-login")
-async def set_skip_login_endpoint(data: SkipLoginRequest, current_user: str = Depends(get_current_user)):
+async def set_skip_login_endpoint(data: SkipLoginRequest, current_user: str = Depends(require_admin_user)):
     """로그인 화면을 건너뛰고 항상 관리자로 자동 인증할지 여부를 저장합니다.
 
     이 서버에 네트워크로 접근 가능한 모든 사람이 인증 없이 전체 기능을 쓸
     수 있게 되므로, 반드시 이미 로그인된 상태(current_user 의존성)에서만
     바꿀 수 있게 한다.
     """
+    from services.lab import settings
+    if data.enabled and settings()['enabled']:
+        raise HTTPException(409, 'Login is required in Lab Mode.')
     set_skip_login(data.enabled)
     return {"enabled": data.enabled}
 
@@ -277,6 +294,22 @@ def _masked_key_status(value: str) -> dict:
 
 @router.get("/settings/system")
 async def get_system_settings(current_user: str = Depends(get_current_user)):
+    from services import lab
+    if lab.settings()['enabled']:
+        try:
+            selected = lab.selection()
+        except RuntimeError:
+            selected = lab.configuration()
+            selected['provider'] = selected['engine']
+        provider = 'openai' if selected['provider'] == 'vllm' else selected['provider']
+        return {
+            'ollama_host': '', 'available_models': selected['models'],
+            **{f'{name}_provider': provider for name in ('trans', 'chat', 'default_ai', 'analysis', 'library')},
+            **{f'{name}_model': selected['model'] for name in ('trans', 'chat', 'default_ai', 'analysis', 'library')},
+            'api_keys': {}, 'openalex_mailto': '',
+            'translation_prompt_template': get_translation_prompt_template(),
+            'pdf_parser_engine': get_pdf_parser_engine(), 'read_only': True,
+        }
     health = await check_ollama_health()
     available_models = health.get("available_models", [])
     
@@ -304,7 +337,7 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
     }
 
 @router.post("/settings/system")
-async def save_system_settings(data: SystemSettingsRequest, current_user: str = Depends(get_current_user)):
+async def save_system_settings(data: SystemSettingsRequest, current_user: str = Depends(require_admin_user)):
     trans_provider = data.trans_provider.strip().lower()
     chat_provider = data.chat_provider.strip().lower()
     default_ai_provider = data.default_ai_provider.strip().lower()
@@ -429,7 +462,7 @@ def _is_pdf_parser_installed(engine: str) -> bool:
 
 
 @router.get("/settings/pdf-parsers")
-async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
+async def get_pdf_parsers_info(current_user: str = Depends(require_admin_user)):
     current_engine = get_pdf_parser_engine()
     parsers = [
         {
@@ -482,7 +515,7 @@ async def get_pdf_parsers_info(current_user: str = Depends(get_current_user)):
 @router.get("/settings/install-pdf-parser")
 async def install_pdf_parser_stream(
     parser_id: str,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(require_admin_user),
 ):
     import asyncio
 
@@ -582,7 +615,7 @@ async def install_pdf_parser_stream(
 @router.post("/settings/uninstall-pdf-parser")
 async def uninstall_pdf_parser(
     request: Request,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(require_admin_user),
 ):
     import subprocess
     import config as cfg
@@ -647,7 +680,7 @@ async def uninstall_pdf_parser(
 
 
 @router.post("/settings/clear-pages-cache")
-async def clear_pages_cache(current_user: str = Depends(get_current_user)):
+async def clear_pages_cache(current_user: str = Depends(require_admin_user)):
     """Clear extraction caches and adopt the selected engine with revision invalidation."""
     from services.reparse import reset_document_parser_cache
     from services.db import get_db
@@ -672,7 +705,7 @@ async def clear_pages_cache(current_user: str = Depends(get_current_user)):
 
 
 @router.get("/settings/ollama-status")
-async def ollama_status(current_user: str = Depends(get_current_user)):
+async def ollama_status(current_user: str = Depends(require_admin_user)):
     """Ollama CLI가 이 서버에 설치되어 있는지, 설정된 호스트가 로컬인지 확인합니다."""
     installed = bool(find_ollama_binary())
     return {
@@ -682,7 +715,7 @@ async def ollama_status(current_user: str = Depends(get_current_user)):
 
 
 @router.post("/settings/install-ollama")
-async def install_ollama_stream(current_user: str = Depends(get_current_user)):
+async def install_ollama_stream(current_user: str = Depends(require_admin_user)):
     """이 서버의 운영체제에 맞는 방법으로 Ollama를 설치하고 진행 상황을 스트리밍합니다.
     Linux는 공식 설치 스크립트, macOS는 Homebrew(있는 경우), Windows는 공식 설치
     프로그램을 내려받아 무인 설치합니다. 원격 호스트를 가리키고 있거나 이미 설치된
@@ -803,7 +836,7 @@ def _make_native_cli_install_endpoint(
     설치 스크립트가 자체적으로 셸 rc 파일(.zprofile/.bashrc 등)이나
     Windows 사용자 PATH에 설치 위치를 등록한다.
     """
-    async def stream(current_user: str = Depends(get_current_user)):
+    async def stream(current_user: str = Depends(require_admin_user)):
         import asyncio
         import os
         import platform
@@ -943,7 +976,7 @@ router.add_api_route(
 
 
 @router.get("/settings/pull-model")
-async def pull_model_stream(model_name: str, current_user: str = Depends(get_current_user)):
+async def pull_model_stream(model_name: str, current_user: str = Depends(require_admin_user)):
     """Ollama 서버에 새로운 모델 다운로드를 요청하고 진행 상황을 스트리밍합니다."""
     model_name = model_name.strip()
     if not model_name:
@@ -986,7 +1019,7 @@ class DeleteModelRequest(BaseModel):
 
 
 @router.delete("/settings/delete-model")
-async def delete_model(data: DeleteModelRequest, current_user: str = Depends(get_current_user)):
+async def delete_model(data: DeleteModelRequest, current_user: str = Depends(require_admin_user)):
     """Ollama 서버에서 설치된 모델을 삭제합니다."""
     model_name = data.model_name.strip()
     if not model_name:
@@ -1165,7 +1198,7 @@ class UpdateCheckConfigRequest(BaseModel):
 
 
 @router.get("/settings/update-check-config")
-async def get_update_check_config_endpoint(current_user: str = Depends(get_current_user)):
+async def get_update_check_config_endpoint(current_user: str = Depends(require_admin_user)):
     """자동 업데이트 확인 주기 설정과 마지막 확인 시각을 반환합니다."""
     from services.update_checker import get_update_check_config
     return get_update_check_config()
@@ -1174,7 +1207,7 @@ async def get_update_check_config_endpoint(current_user: str = Depends(get_curre
 @router.post("/settings/update-check-config")
 async def set_update_check_config_endpoint(
     data: UpdateCheckConfigRequest,
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(require_admin_user)
 ):
     """자동 업데이트 확인 주기를 저장합니다 (daily/weekly/never)."""
     from services.update_checker import set_update_check_interval
@@ -1185,21 +1218,21 @@ async def set_update_check_config_endpoint(
 
 
 @router.get("/settings/update-check")
-async def check_for_update_endpoint(current_user: str = Depends(get_current_user)):
+async def check_for_update_endpoint(current_user: str = Depends(require_admin_user)):
     """원격 저장소를 확인해 새 버전이 있는지, 있다면 변경 로그를 반환합니다."""
     from services.update_checker import check_for_update
     return await check_for_update()
 
 
 @router.get("/settings/post-update-notice")
-async def post_update_notice_endpoint(current_user: str = Depends(get_current_user)):
+async def post_update_notice_endpoint(current_user: str = Depends(require_admin_user)):
     """직전 재시작으로 버전이 바뀌었다면(방금 업데이트 완료) 1회에 한해 안내 정보를 반환합니다."""
     from services.update_checker import get_post_update_notice
     return await get_post_update_notice()
 
 
 @router.get("/settings/changelog")
-async def get_full_changelog(current_user: str = Depends(get_current_user)):
+async def get_full_changelog(current_user: str = Depends(require_admin_user)):
     """현재 버전과 저장소 커밋에서 자동 생성한 변경 이력을 반환합니다.
 
     Git 메타데이터가 없는 PyInstaller 배포본에서는 빌드에 포함된

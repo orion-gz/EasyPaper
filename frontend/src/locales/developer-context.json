@@ -6082,5 +6082,80 @@
   },
   "desktop:transferProgress": {
     "description": "Desktop connection and synchronization interface: Data transfer in progress"
+  },
+  "settings:labDescription": {
+    "description": "Lab Mode settings: Manage the connected lab server. Tauri remote mode uses this server without requiring synchronization."
+  },
+  "settings:labOn": {
+    "description": "Lab Mode settings: Enabled"
+  },
+  "settings:labOff": {
+    "description": "Lab Mode settings: Disabled"
+  },
+  "settings:labEnable": {
+    "description": "Lab Mode settings: Enable"
+  },
+  "settings:labDisable": {
+    "description": "Lab Mode settings: Disable"
+  },
+  "settings:labReset": {
+    "description": "Lab Mode settings: Reset password"
+  },
+  "settings:labTemporaryPassword": {
+    "description": "Lab Mode settings: Temporary password (shown once)"
+  },
+  "settings:labPassword": {
+    "description": "Lab Mode settings: Current password"
+  },
+  "settings:labSave": {
+    "description": "Lab Mode settings: Save"
+  },
+  "settings:labMembers": {
+    "description": "Lab Mode settings: Members"
+  },
+  "settings:labUsername": {
+    "description": "Lab Mode settings: Username"
+  },
+  "settings:labCreate": {
+    "description": "Lab Mode settings: Create member"
+  },
+  "settings:labFailed": {
+    "description": "Lab Mode settings: Request failed."
+  },
+  "settings:labEngine": {
+    "description": "Lab Mode settings: Inference engine"
+  },
+  "settings:labUrl": {
+    "description": "Lab Mode settings: Server URL (vLLM: include /v1)"
+  },
+  "settings:labModels": {
+    "description": "Lab Mode settings: Allowed models (one per line)"
+  },
+  "settings:labDefaultModel": {
+    "description": "Lab Mode settings: Model"
+  },
+  "settings:labApiKey": {
+    "description": "Lab Mode settings: API key (blank keeps existing)"
+  },
+  "settings:labProvider": {
+    "description": "Lab Mode settings: Personal provider"
+  },
+  "settings:labCliStatus": {
+    "description": "Lab Mode settings: Connection status"
+  },
+  "settings:labCliLogin": {
+    "description": "Lab Mode settings: Connect personal CLI"
+  },
+  "settings:labCliLogout": {
+    "description": "Lab Mode settings: Disconnect personal CLI"
+  },
+  "settings:labCheckInference": {
+    "description": "Test the saved lab inference server connection."
+  },
+  "settings:labTotalLimit": {
+    "description": "Maximum concurrent lab inference requests."
+  },
+  "settings:labUserLimit": {
+    "description": "Maximum concurrent inference requests per account."
   }
 }

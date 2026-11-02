@@ -1,0 +1,24 @@
+# Standalone Lab deployment: docker compose -f docker-compose.lab.yml up -d
+# Provision LAB_DATA_DIR ownership and runner socket group before starting.
+services:
+  easypaper:
+    build: .
+    image: easypaper:lab
+    user: "${LAB_APP_UID:-1000}:${LAB_APP_GID:-1000}"
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      HOME: /data/home
+      EASYPAPER_CONFIG_DIR: /data
+      EASYPAPER_LAB_RUNNER_SOCKET: /run/easypaper-lab/runner.sock
+      OLLAMA_HOST: http://host.docker.internal:11434
+    volumes:
+      - ${LAB_DATA_DIR:-./lab-data}:/data
+      - /run/easypaper-lab:/run/easypaper-lab
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped

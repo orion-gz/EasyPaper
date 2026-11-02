@@ -930,9 +930,54 @@
           <button class="tab-btn" id="settings-nav-account" data-tab="tab-account" data-i18n="settings:categoryAccount" role="tab" aria-controls="tab-account" aria-selected="false" tabindex="-1">Account &amp; Security</button>
           <button class="tab-btn" id="settings-nav-data-system" data-tab="tab-data-system" data-i18n="settings:categoryDataSystem" role="tab" aria-controls="tab-data-system" aria-selected="false" tabindex="-1">Data</button>
           <button class="tab-btn" id="settings-nav-info" data-tab="tab-info" data-i18n="settings:categoryInfo" role="tab" aria-controls="tab-info" aria-selected="false" tabindex="-1">About &amp; System</button>
+          <button class="tab-btn" id="settings-nav-lab" data-tab="tab-lab" role="tab" aria-controls="tab-lab" aria-selected="false" tabindex="-1">Lab Mode</button>
         </nav>
 
         <main class="settings-content">
+      <div id="tab-lab" class="tab-pane" role="tabpanel" aria-labelledby="settings-nav-lab">
+        <h3>Lab Mode</h3>
+        <p data-i18n="settings:labDescription">Manage the connected lab server. Remote Tauri clients use this server without requiring synchronization.</p>
+        <p id="lab-status" role="status" aria-live="polite"></p>
+        <div id="lab-admin" hidden>
+          <form id="lab-mode-form" class="modal-form">
+            <label><input id="lab-enabled" type="checkbox"> <span data-i18n="settings:labEnable">Enable</span></label>
+            <label for="lab-password" data-i18n="settings:labPassword">Current password</label>
+            <input id="lab-password" type="password" autocomplete="current-password" required>
+            <button type="submit" data-i18n="settings:labSave">Save</button>
+          </form>
+          <button type="button" id="lab-check-inference" data-i18n="settings:labCheckInference">Test inference connection</button>
+          <form id="lab-inference-form" class="modal-form">
+            <label for="lab-engine" data-i18n="settings:labEngine">Inference engine</label>
+            <select id="lab-engine"><option value="ollama">Ollama</option><option value="vllm">vLLM</option></select>
+            <label for="lab-url" data-i18n="settings:labUrl">Server URL (vLLM: include /v1)</label><input id="lab-url" type="url" required>
+            <label for="lab-models" data-i18n="settings:labModels">Allowed models (one per line)</label><textarea id="lab-models" required></textarea>
+            <label for="lab-default-model" data-i18n="settings:labDefaultModel">Default model</label><input id="lab-default-model" required>
+            <label for="lab-total-limit" data-i18n="settings:labTotalLimit">Server concurrent requests</label><input id="lab-total-limit" type="number" min="1" max="64" value="2" required>
+            <label for="lab-user-limit" data-i18n="settings:labUserLimit">Requests per user</label><input id="lab-user-limit" type="number" min="1" max="16" value="1" required>
+            <label for="lab-api-key" data-i18n="settings:labApiKey">API key (blank keeps existing)</label><input id="lab-api-key" type="password" autocomplete="off">
+            <button type="submit" data-i18n="settings:labSave">Save</button>
+          </form>
+          <h4 data-i18n="settings:labMembers">Members</h4>
+          <div id="lab-members"></div>
+          <form id="lab-member-form" class="modal-form">
+            <label for="lab-username" data-i18n="settings:labUsername">Username</label>
+            <input id="lab-username" autocomplete="off" pattern="[a-zA-Z0-9_.-]+" maxlength="80" required>
+            <button type="submit" data-i18n="settings:labCreate">Create member</button>
+          </form>
+        </div>
+        <form id="lab-personal-form" class="modal-form">
+          <label for="lab-personal-provider" data-i18n="settings:labProvider">Personal provider</label>
+          <select id="lab-personal-provider"><option value="ollama">Ollama</option><option value="vllm">vLLM</option><option value="claude_code">Claude Code</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option></select>
+          <label for="lab-personal-model" data-i18n="settings:labDefaultModel">Model</label><input id="lab-personal-model" required>
+          <button type="submit" data-i18n="settings:labSave">Save</button>
+        </form>
+        <div id="lab-cli-actions">
+          <button type="button" id="lab-cli-status" data-i18n="settings:labCliStatus">Connection status</button>
+          <button type="button" id="lab-cli-login" data-i18n="settings:labCliLogin">Connect personal CLI</button>
+          <button type="button" id="lab-cli-logout" data-i18n="settings:labCliLogout">Disconnect personal CLI</button>
+          <pre id="lab-cli-output" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+        </div>
+      </div>
       
       <!-- 일반 설정 탭 -->
       <div id="tab-general" class="tab-pane active">

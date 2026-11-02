@@ -1,0 +1,75 @@
+{
+  "runtime": "docker",
+  "memory": "4g",
+  "accounts": {},
+  "providers": {
+    "claude_code": {
+      "image": "easypaper-cli:claude-2.1.311",
+      "run": [
+        "claude",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "",
+        "--output-format",
+        "text",
+        "--model",
+        "{model}",
+        "--print",
+        "-"
+      ],
+      "login": [
+        "claude",
+        "auth",
+        "login"
+      ],
+      "status": [
+        "claude",
+        "auth",
+        "status"
+      ],
+      "logout": [
+        "claude",
+        "auth",
+        "logout"
+      ]
+    },
+    "codex": {
+      "image": "easypaper-cli:codex-0.165.0",
+      "run": [
+        "codex",
+        "exec",
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--ignore-user-config",
+        "--sandbox",
+        "read-only",
+        "--model",
+        "{model}",
+        "-"
+      ],
+      "login": [
+        "codex",
+        "login",
+        "--device-auth"
+      ],
+      "status": [
+        "codex",
+        "login",
+        "status"
+      ],
+      "logout": [
+        "codex",
+        "logout"
+      ]
+    },
+    "antigravity": {
+      "image": "easypaper-cli:agy-1.4.12",
+      "run": [
+        "python3",
+        "/opt/easypaper/agy_adapter.py",
+        "{model}"
+      ]
+    }
+  }
+}

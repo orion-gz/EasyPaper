@@ -752,6 +752,9 @@ def init_db():
     db_migrate_reading_analytics_v3()
     db_backfill_document_titles()
 
+    from services.lab import migrate
+    migrate()
+
 
 # ── 사용자 (Users) ───────────────────────────────────────────────────────────
 

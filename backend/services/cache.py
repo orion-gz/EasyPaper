@@ -6,6 +6,11 @@ from services.atomic_io import atomic_write_text
 
 
 def _cache_path(session_id: str, page_num: int, suffix: str = "") -> str:
+    from services import lab, db
+    if lab.settings()['enabled']:
+        document = db.db_get_document(session_id)
+        if document:
+            suffix += f"_revision{document.get('content_revision', 1)}"
     suffix_part = f"_{suffix}" if suffix else ""
     return os.path.join(CACHE_DIR, f"{session_id}_page_{page_num}{suffix_part}.json")
 
