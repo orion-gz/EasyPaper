@@ -233,6 +233,9 @@ async def translate_page(
 
 @router.get("/health")
 async def health_check():
+    from services import lab
+    if lab.settings()['enabled']:
+        return await lab.inference_health()
     """AI 제공자 및 상태를 확인합니다."""
     from config import get_trans_provider, get_openai_api_key, get_gemini_api_key, get_claude_api_key, get_agy_path
     provider = get_trans_provider()
@@ -274,6 +277,19 @@ async def health_check():
 
 @router.get("/availability")
 async def get_providers_availability():
+    from services import lab
+    if lab.settings()['enabled']:
+        import asyncio
+        from services.lab_runner import operation
+        from services.lab_context import identity
+        async def available(provider):
+            try:
+                state = await operation(identity.get(), provider, 'status')
+                return state.get('status') in ('connected', 'terminal_required')
+            except Exception:
+                return False
+        names = ('antigravity', 'claude_code', 'codex')
+        return dict(zip(names, await asyncio.gather(*(available(name) for name in names))))
     """각 제공자(CLI)가 로컬에 설치되어 사용 가능한지 여부를 확인합니다."""
     import os
     import shutil

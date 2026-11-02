@@ -70,6 +70,9 @@ def get_project_root() -> str:
     return PROJECT_ROOT
 
 def get_ollama_host() -> str:
+    from services.lab import settings, configuration
+    if settings()['enabled']:
+        return configuration()['url']
     return OLLAMA_HOST
 
 def is_ollama_host_local() -> bool:
@@ -149,33 +152,73 @@ def find_ollama_binary():
     return None
 
 def get_trans_provider() -> str:
+    from services.lab import selection
+    lab = selection()
+    if lab:
+        return ('openai' if lab['provider'] == 'vllm' else lab['provider'])
     return TRANS_PROVIDER
 
 def get_trans_model() -> str:
+    from services.lab import selection
+    lab = selection()
+    if lab:
+        return lab['model']
     return TRANS_MODEL
 
 def get_chat_provider() -> str:
+    from services.lab import selection
+    lab = selection()
+    if lab:
+        return ('openai' if lab['provider'] == 'vllm' else lab['provider'])
     return CHAT_PROVIDER
 
 def get_chat_model() -> str:
+    from services.lab import selection
+    lab = selection()
+    if lab:
+        return lab['model']
     return CHAT_MODEL
 
 def get_default_ai_provider() -> str:
+    from services.lab import selection
+    lab = selection()
+    if lab:
+        return ('openai' if lab['provider'] == 'vllm' else lab['provider'])
     return DEFAULT_AI_PROVIDER or get_trans_provider()
 
 def get_default_ai_model() -> str:
+    from services.lab import selection
+    lab = selection()
+    if lab:
+        return lab['model']
     return DEFAULT_AI_MODEL or get_trans_model()
 
 def get_analysis_provider() -> str:
+    from services.lab import selection
+    lab = selection()
+    if lab:
+        return ('openai' if lab['provider'] == 'vllm' else lab['provider'])
     return ANALYSIS_PROVIDER or get_chat_provider()
 
 def get_analysis_model() -> str:
+    from services.lab import selection
+    lab = selection()
+    if lab:
+        return lab['model']
     return ANALYSIS_MODEL or get_chat_model()
 
 def get_library_provider() -> str:
+    from services.lab import selection
+    lab = selection()
+    if lab:
+        return ('openai' if lab['provider'] == 'vllm' else lab['provider'])
     return LIBRARY_PROVIDER or get_analysis_provider()
 
 def get_library_model() -> str:
+    from services.lab import selection
+    lab = selection()
+    if lab:
+        return lab['model']
     return LIBRARY_MODEL or get_analysis_model()
 
 def get_openai_api_key() -> str:

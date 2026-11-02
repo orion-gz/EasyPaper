@@ -1,0 +1,17 @@
+[Unit]
+Description=EasyPaper isolated personal CLI runner
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=LAB_RUNNER_CONFIG=/etc/easypaper/lab-runner.json
+WorkingDirectory=/opt/easypaper/deploy/lab
+ExecStart=/opt/easypaper/venv/bin/uvicorn runner:app --uds /run/easypaper-lab/runner.sock --no-access-log
+RuntimeDirectory=easypaper-lab
+RuntimeDirectoryMode=0750
+Group=easypaper
+UMask=0007
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

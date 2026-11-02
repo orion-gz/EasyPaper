@@ -58,8 +58,18 @@ class DesktopSync:
         router.add_api_route('/sync', self.start, methods=['POST'])
 
     def directory(self, target, username):
-        root = self.manager.config_path.parent / 'library-sync-client' / sync.digest([target, sync.account_id(username)])
+        base = self.manager.config_path.parent / 'library-sync-client' / sync.digest([target, sync.account_id(username)])
+        remote_account = self.options(target).get('account')
+        root = base / sync.digest(remote_account) if remote_account else base
         root.mkdir(parents=True, exist_ok=True)
+        legacy = base / 'plan.json'
+        if remote_account and legacy.exists():
+            pending = json.loads(legacy.read_text())
+            if pending.get('remote_account') == remote_account and not (root / 'plan.json').exists():
+                for name in ('request.zip', 'response.zip', 'response.tmp', 'current.zip', 'local.zip', 'merged.zip', 'plan.json'):
+                    source = base / name
+                    if source.exists():
+                        source.replace(root / name)
         return root
 
     def options(self, target):
@@ -88,13 +98,26 @@ class DesktopSync:
             target, username = manager.config['server_url'], get_app_username()
             root = self.directory(target, username)
             headers = upstream_headers(request, target)
+            headers['x-easypaper-sync-binding'] = '1'
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False) as client:
                     response = await client.get(target + '/api/user-data/sync/info', headers=headers)
                     await checked(response)
                     remote = response.json()
+                options = manager.config.setdefault('sync_options', {}).setdefault(target, {})
+                bound_account = options.get('account')
+                if bound_account != remote.get('account'):
+                    options['automatic'] = False
+                    manager.save()
+                    if body.get('automatic') or bound_account:
+                        options['account'] = remote.get('account')
+                        manager.save()
+                        raise ValueError('Remote account changed. Automatic synchronization stopped; confirm a new preview.')
+                    options['account'] = remote.get('account')
+                    manager.save()
                 if remote.get('protocol') != sync.PROTOCOL:
                     raise ValueError('The server synchronization protocol is not compatible.')
+                root = self.directory(target, username)
                 pending_file = root / 'plan.json'
                 if pending_file.exists():
                     pending = json.loads(pending_file.read_text())
@@ -162,7 +185,13 @@ class DesktopSync:
         headers = {key: value for key, value in headers.items() if key in ('cookie', 'accept-encoding')}
         headers['content-type'] = 'application/zip'
         headers['x-easypaper-sync'] = '1'
+        headers['x-easypaper-sync-binding'] = '1'
         try:
+            async with httpx.AsyncClient(timeout=30, follow_redirects=False, trust_env=False) as client:
+                identity = await client.get(target + '/api/user-data/sync/info', headers=headers)
+                await checked(identity)
+                if identity.json().get('account') != plan['remote_account']:
+                    raise ValueError('Remote account changed. Preview synchronization again.')
             if not (root / 'response.zip').exists():
                 if action == 'replace_local' and sync.raw_fingerprint(username) != plan['expected_raw']:
                     raise sync.SyncConflict([{'table': 'confirmation', 'key': 'local data changed since preview'}])

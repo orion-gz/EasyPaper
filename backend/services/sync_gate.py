@@ -9,14 +9,22 @@ from starlette.responses import JSONResponse
 
 class SyncGate:
     def __init__(self):
-        self.active = 0
-        self.busy = False
+        self.requests = {}
+        self.commits = set()
+
+    @property
+    def active(self):
+        return sum(self.requests.values())
+
+    @property
+    def busy(self):
+        return bool(self.commits)
 
     @asynccontextmanager
     async def exclusive(self, username):
-        if self.busy or self.active:
+        if self.busy or self.requests.get(username, 0) or self.requests.get(None, 0):
             raise HTTPException(409, 'Library requests are still running. Retry after current work finishes.')
-        self.busy = True
+        self.commits.add(username)
         guarded = set()
         try:
             from services.db import db_list_documents, get_db
@@ -41,7 +49,7 @@ class SyncGate:
         finally:
             if guarded:
                 _mutating.difference_update(guarded)
-            self.busy = False
+            self.commits.discard(username)
 
 
 gate = SyncGate()
@@ -56,10 +64,21 @@ class SyncGateMiddleware:
         protected = scope['type'] == 'http' and path.startswith('/api/') and not path.startswith('/api/user-data/sync/')
         if not protected:
             return await self.app(scope, receive, send)
-        if gate.busy:
+        from starlette.requests import Request
+        from services.auth import verify_session_token
+        from config import get_skip_login, get_app_username
+        from services.lab import settings
+        request = Request(scope)
+        token = request.cookies.get('session_token', '')
+        username = token.rsplit(':', 2)[0] if token and verify_session_token(token) else None
+        if username is None and get_skip_login() and not settings()['enabled']:
+            username = get_app_username()
+        if username in gate.commits or (username is None and gate.busy):
             return await JSONResponse({'detail': 'Library synchronization is in progress.'}, status_code=423)(scope, receive, send)
-        gate.active += 1
+        gate.requests[username] = gate.requests.get(username, 0) + 1
         try:
             await self.app(scope, receive, send)
         finally:
-            gate.active -= 1
+            gate.requests[username] -= 1
+            if not gate.requests[username]:
+                gate.requests.pop(username, None)

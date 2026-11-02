@@ -1,3 +1,5 @@
+import { activateAccountStorage } from './accountStorage.js'
+import { initializeLabMode } from './labMode.js'
 import { splitIntoSentences } from './sentenceBoundaries.js'
 import { installMemoAlignment, releaseMemoAlignment } from './memoAlignment.js'
 import { createCaptureOverlayManager } from './captureOverlay.js'
@@ -561,10 +563,13 @@ async function maybeShowOnboarding() {
 }
 
 // 탭 버튼 및 컨텐츠 영역
+initializeLabMode()
+
 const tabBtns           = document.querySelectorAll('.tab-btn')
 const tabPanes          = document.querySelectorAll('.tab-pane')
 
 const settingsCategoryMeta = {
+  'tab-lab': [() => 'Lab Mode', () => t('settings:labDescription')],
   'tab-general': [() => t('settings:categoryGeneral'), () => t('settings:categoryGeneralDescription')],
   'tab-translation': [() => t('settings:categoryTranslation'), () => t('settings:categoryTranslationDescription')],
   'tab-viewer': [() => t('settings:categoryViewer'), () => t('settings:categoryViewerDescription')],
@@ -3251,7 +3256,22 @@ if (divider) {
 async function checkAuthentication() {
   const auth = await checkAuthAPI()
   if (auth && auth.status === 'authenticated') {
+    if (!isDocumentRuntime && await activateAccountStorage(auth.account_id)) {
+      location.reload()
+      return
+    }
     state.username = auth.username
+    if (auth.must_change_password) {
+      await loadFeatureNamespaces('settings')
+      loginScreen.classList.remove('active')
+      globalSettingsBtn.classList.remove('hidden')
+      openOverlayModal(settingsModal)
+      document.getElementById('settings-nav-account').click()
+      changeNewUsername.value = auth.username
+      changeNewUsername.readOnly = true
+      changeCurrentPassword.focus()
+      return
+    }
     // Delivery belongs to the shell, not to a disposable document iframe.
     if (!isDocumentRuntime) {
       window.__easypaperReadingOutboxes ||= new Map()
@@ -5906,6 +5926,7 @@ changeCredentialsForm.addEventListener('submit', async (e) => {
     }
     state.username = newUsername
     closeOverlayModal(settingsModal)
+    await checkAuthentication()
   } catch (err) {
     showToast(err.message, 'error')
   }

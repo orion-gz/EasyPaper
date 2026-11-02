@@ -253,6 +253,10 @@ Document-type analysis rules: {policy.assistant_rules}
 Answer from the supplied context first. Cite supporting pages as [p.N] or [pp.N-M]. If the context does not support an answer, say so explicitly before offering clearly labelled general knowledge. Do not fabricate page citations. Reply in the language used by the user's question unless the user requests another language."""
 
 
+from services.lab import result_namespace
+
+
+@result_namespace
 def translation_cache_suffix(document_mode: str, document_type: str, target_lang: str, style: str, ignore_math: bool, ignore_table: bool, ignore_refs: bool, source_lang: str = "auto") -> str:
     policy = get_policy(document_mode, document_type)
     source_part = f"src{source_lang}_" if source_lang != "auto" else ""
@@ -262,6 +266,7 @@ def translation_cache_suffix(document_mode: str, document_type: str, target_lang
     )
 
 
+@result_namespace
 def legacy_translation_cache_suffix(target_lang: str, style: str, ignore_math: bool, ignore_table: bool, ignore_refs: bool) -> str:
     """문서 모드 도입 전 연구 번역 캐시 키. 기존 연구 문서에만 제한적으로 사용한다."""
     return f"{target_lang}_{style}_math{int(ignore_math)}_table{int(ignore_table)}_refs{int(ignore_refs)}"
@@ -291,6 +296,7 @@ def translation_cache_candidates(document_mode: str, document_type: str, target_
     return tuple(dict.fromkeys(candidates))
 
 
+@result_namespace
 def insight_cache_suffix(document_mode: str, document_type: str, target_lang: str, source_lang: str = "auto") -> str:
     policy = get_policy(document_mode, document_type)
     source_part = f"_src{source_lang}" if source_lang != "auto" else ""

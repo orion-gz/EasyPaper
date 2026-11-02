@@ -59,9 +59,13 @@ def test_client(isolated_dirs, monkeypatch):
     우회한 TestClient를 반환한다 (실제 로그인 플로우 없이 라우터 로직만 검증)."""
     from fastapi.testclient import TestClient
     from main import app
-    from services.auth import get_current_user
+    from services.auth import get_current_user, require_admin_user
 
     app.dependency_overrides[get_current_user] = lambda: "testuser"
+    # The fixture exercises legacy system-management routes without performing
+    # authentication. Model the master role explicitly now that Lab Mode has RBAC.
+    app.dependency_overrides[require_admin_user] = lambda: "testuser"
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(require_admin_user, None)

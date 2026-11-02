@@ -144,8 +144,10 @@ class SyncTransaction:
         try:
             from routers.upload import sessions
             from services.document_workers import _deleted
+            from services.cache import clear_session_cache
             for document in self.old_documents:
                 sessions.pop(document, None)
+                clear_session_cache(document)
             for document in self.new_documents:
                 _deleted.discard((db.DB_PATH, document))
         except Exception:

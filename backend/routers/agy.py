@@ -3,9 +3,10 @@ Antigravity 사용량 조회 및 agy 모델 목록 API
 """
 
 import asyncio
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from services.auth import require_admin_user
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin_user)])
 
 
 @router.get("/agy/usage")

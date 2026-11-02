@@ -1,3 +1,4 @@
+from services.lab_tasks import scoped as lab_scoped
 import asyncio
 import functools
 import httpx
@@ -208,6 +209,7 @@ def build_translation_prompt(
 
 
 
+@lab_scoped
 async def stream_translation(
     text: str,
     target_lang: str = "ko",
@@ -403,8 +405,16 @@ def _raise_provider_transport_error(provider: str, exc: Exception) -> None:
     raise exc
 
 
+@lab_scoped
 async def stream_openai(messages: list, model: str, temperature: float = 0.5) -> AsyncGenerator[str, None]:
-    api_key = get_openai_api_key()
+    from services import lab
+    from services.lab_context import identity
+    selected = lab.selection()
+    local_vllm = selected and selected['provider'] == 'vllm'
+    api_key = selected.get('api_key') if local_vllm else get_openai_api_key()
+    endpoint = selected['url'].rstrip('/') + '/chat/completions' if local_vllm else 'https://api.openai.com/v1/chat/completions'
+    if local_vllm and not api_key:
+        api_key = 'local'
     if not api_key:
         raise RuntimeError("OpenAI API Key가 설정되지 않았습니다. 설정에서 입력해 주세요.")
         
@@ -419,6 +429,15 @@ async def stream_openai(messages: list, model: str, temperature: float = 0.5) ->
         "temperature": temperature
     }
     
+    if local_vllm:
+        # Include prompt identity as well as user scope. This conservatively
+        # avoids cross-document reuse even when no document ID was supplied.
+        import hashlib
+        scope = hashlib.sha256(json.dumps(messages, sort_keys=True).encode()).hexdigest()
+        from services.lab_tasks import cache_scope
+        document_scope = cache_scope.get() or (scope, 1)
+        payload['cache_salt'] = lab.cache_salt(identity.get(), *document_scope)
+
     # GPT-6 reasoning models reject sampling parameters at their default effort.
     # https://developers.openai.com/api/docs/guides/latest-model
     if model.startswith(("gpt-6-", "gpt-6.")):
@@ -428,7 +447,7 @@ async def stream_openai(messages: list, model: str, temperature: float = 0.5) ->
         async with httpx.AsyncClient(timeout=360.0) as client:
             async with client.stream(
                 "POST",
-                "https://api.openai.com/v1/chat/completions",
+                endpoint,
                 headers=headers,
                 json=payload
             ) as response:
@@ -679,6 +698,7 @@ def _messages_with_trailing_image(messages: list, page_image_b64: str, image_blo
     }]
 
 
+@lab_scoped
 async def stream_chat(
     system_prompt: str,
     history_messages: list,
@@ -882,6 +902,7 @@ async def stream_chat(
 
 
 
+@lab_scoped
 async def stream_page_insight(
     kind: str,
     text: str,
@@ -1364,7 +1385,15 @@ def _may_be_claude_code_control_output(text: str) -> bool:
     return any(prefix.startswith(stripped) or stripped.startswith(prefix) for prefix in _CLAUDE_CODE_CONTROL_PREFIXES)
 
 
+@lab_scoped
 async def stream_claude_code(prompt: str, model: str = None, session_id: str = None, is_chat: bool = False, usage_label: str = None, effort_override: str = None) -> AsyncGenerator[str, None]:
+    from services.lab import settings as lab_settings
+    if lab_settings()['enabled']:
+        from services.lab_runner import stream
+        async for token in stream('claude_code', prompt, model, session_id):
+            yield token
+        return
+
     import asyncio
     import os
     import codecs
@@ -1594,7 +1623,15 @@ def _get_codex_session_lock(session_id: str) -> asyncio.Lock:
     return _codex_session_locks[session_id]
 
 
+@lab_scoped
 async def stream_codex(prompt: str, model: str = None, session_id: str = None, is_chat: bool = False, usage_label: str = None, effort_override: str = None, image_path: str = None) -> AsyncGenerator[str, None]:
+    from services.lab import settings as lab_settings
+    if lab_settings()['enabled']:
+        from services.lab_runner import stream
+        async for token in stream('codex', prompt, model, session_id):
+            yield token
+        return
+
     """Codex CLI(`codex exec`)로 번역/채팅/인사이트를 생성합니다.
 
     codex exec --json은 claude/antigravity와 달리 토큰 단위 스트리밍을 제공하지
@@ -1871,6 +1908,9 @@ def save_provider_session_meta(session_id: str, provider: str, conversation_id: 
         logger.error(f"save_provider_session_meta 실패: {e}")
 
 def _chat_context_already_sent(session_id: str, provider: str) -> bool:
+    from services.lab import settings
+    if settings()['enabled']:
+        return False
     """이 문서(session_id)의 현재 provider 네이티브 세션에 이미 채팅 풀 컨텍스트
     (논문 원문+답변 가이드라인)를 보낸 적이 있는지 확인한다."""
     meta = get_provider_session_meta(session_id, provider)
@@ -1974,6 +2014,7 @@ def _serialize_antigravity_session(func):
 
 
 @_serialize_antigravity_session
+@lab_scoped
 async def stream_antigravity(
     prompt: str,
     model: str = None,
@@ -1982,6 +2023,13 @@ async def stream_antigravity(
     usage_label: str = None,
     effort_override: str = None
 ) -> AsyncGenerator[str, None]:
+    from services.lab import settings as lab_settings
+    if lab_settings()['enabled']:
+        from services.lab_runner import stream
+        async for token in stream('antigravity', prompt, model, session_id):
+            yield token
+        return
+
     import asyncio
     import os
     import re

@@ -8,13 +8,13 @@ from config import (
     SECRET_KEY,
 )
 
-def verify_password(stored_password_hash: str, provided_password: str) -> bool:
+def verify_password(stored_password_hash: str, provided_password: str, *, allow_legacy: bool = True) -> bool:
     # 1. 만약 평문 비밀번호(APP_PASSWORD)가 설정되어 있다면 즉시 비교
     # (== 대신 compare_digest로 비교 - 문자열 조기 종료 비교는 앞글자부터
     # 하나씩 맞춰가는 타이밍 공격에 이론상 노출된다. 비ASCII 비밀번호도
     # 지원하도록 bytes로 인코딩해 비교한다.)
     app_pwd = get_app_password()
-    if app_pwd and hmac.compare_digest(provided_password.encode('utf-8'), app_pwd.encode('utf-8')):
+    if allow_legacy and app_pwd and hmac.compare_digest(provided_password.encode('utf-8'), app_pwd.encode('utf-8')):
         return True
 
     # 2. 해시 기반 검증 수행 (하위 호환 및 보안 권장 사양)
@@ -100,9 +100,11 @@ def create_session_token(username: str, ttl_seconds: int = SESSION_TTL_DEFAULT_S
 
 def _session_signature(payload: str) -> str:
     """Bind sessions to the current credential hash as well as the install key."""
+    from services.lab import signature_key
+    user_key = signature_key(payload.rsplit(":", 1)[0])
     credential_key = hmac.new(
         SECRET_KEY.encode("utf-8"),
-        get_app_password_hash().encode("utf-8"),
+        (user_key or get_app_password_hash()).encode("utf-8"),
         hashlib.sha256,
     ).digest()
     return hmac.new(credential_key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
@@ -124,7 +126,8 @@ def verify_session_token(token: str) -> bool:
         return False
 
 async def get_current_user(request: Request) -> str:
-    if get_skip_login():
+    from services import lab
+    if get_skip_login() and not lab.settings()["enabled"]:
         return get_app_username()
 
     token = request.cookies.get("session_token")
@@ -133,7 +136,16 @@ async def get_current_user(request: Request) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="로그인이 필요합니다.",
         )
-    return token.rsplit(':', 2)[0]
+    username = token.rsplit(':', 2)[0]
+    user = lab.require_access(username)
+    from services.lab_context import identity
+    identity.set(username)
+    from services.lab_tasks import register_request
+    register_request(username)
+    if user and user['must_change_password'] and getattr(request, 'url', None):
+        if request.url.path not in ('/api/auth/check', '/api/auth/me', '/api/auth/change-credentials', '/api/auth/logout'):
+            raise HTTPException(403, 'Change your temporary password first.')
+    return username
 
 
 async def require_admin_user(current_user: str = Depends(get_current_user)) -> str:

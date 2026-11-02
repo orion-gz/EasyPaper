@@ -26,6 +26,7 @@ def test_pdf_parser_package_management_rejects_unauthenticated_requests(
     import services.auth as auth_service
 
     app.dependency_overrides.pop(auth_service.get_current_user, None)
+    app.dependency_overrides.pop(auth_service.require_admin_user, None)
     monkeypatch.setattr(auth_service, "get_skip_login", lambda: False)
 
     response = getattr(test_client, method)(path, **kwargs)

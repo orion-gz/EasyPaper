@@ -15,11 +15,20 @@ router = APIRouter()
 MAX_BROWSER_BYTES = 20 * 1024**2
 
 
+def require_sync_binding(request):
+    from services.lab import settings
+    if settings()['enabled'] and request.headers.get('x-easypaper-sync-binding') != '1':
+        raise HTTPException(426, 'Update the Tauri app to use account-bound Lab Mode synchronization.')
+
+
 @router.get('/user-data/sync/info')
-async def sync_info(current_user: str = Depends(get_current_user)):
+async def sync_info(request: Request, current_user: str = Depends(get_current_user)):
+    require_sync_binding(request)
     from services import library_sync
     from services.sync_gate import gate
     async with gate.exclusive(current_user):
+        from services.lab import require_access
+        require_access(current_user)
         with tempfile.TemporaryDirectory(prefix='easypaper-sync-info-') as temp:
             manifest = await run_in_threadpool(library_sync.export_snapshot, current_user, Path(temp) / 'snapshot.zip')
     return {'protocol': library_sync.PROTOCOL, 'account': manifest['sync']['account'],
@@ -28,6 +37,7 @@ async def sync_info(current_user: str = Depends(get_current_user)):
 
 @router.post('/user-data/sync/exchange')
 async def sync_exchange(request: Request, current_user: str = Depends(get_current_user)):
+    require_sync_binding(request)
     from services import library_sync
     from services.sync_gate import gate
     if request.headers.get('x-easypaper-sync') != '1':
@@ -45,6 +55,8 @@ async def sync_exchange(request: Request, current_user: str = Depends(get_curren
         source.seek(0)
         try:
             async with gate.exclusive(current_user):
+                from services.lab import require_access
+                require_access(current_user)
                 response = await run_in_threadpool(library_sync.exchange, current_user, source,
                                                   library_sync.storage_root() / 'responses')
         except library_sync.SyncConflict as exc:

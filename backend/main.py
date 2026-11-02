@@ -126,9 +126,13 @@ app.add_middleware(
 )
 from services.sync_gate import SyncGateMiddleware
 app.add_middleware(SyncGateMiddleware)
+from services.lab_security import LabSecurityMiddleware
+app.add_middleware(LabSecurityMiddleware)
 
 # 라우터 등록
 app.include_router(data_transfer.router, prefix="/api", tags=["User data"])
+from routers import lab as lab_router
+app.include_router(lab_router.router, prefix="/api", tags=["Lab"])
 app.include_router(auth_router.router, prefix="/api", tags=["Auth"])
 app.include_router(upload.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Upload"])
 app.include_router(web_import.router, prefix="/api", dependencies=[Depends(get_current_user)], tags=["Web import"])
