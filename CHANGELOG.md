@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.6.0 - 2026-11-02
+
+### 한국어 (1.5.6 → 1.6.0)
+
+- 데스크톱 앱에서 로컬 사용과 원격 EasyPaper 서버 연결을 전환하고, 서버별 로그인 세션과 로컬 데이터를 분리
+- 로컬·원격 라이브러리의 양방향 동기화 추가. 최초 병합 또는 한쪽 라이브러리 대체를 미리 확인하고, 충돌 시 자동 병합을 중단하며 실패한 동기화를 재개
+- 웹과 원격 연결된 데스크톱 앱이 공유 서버의 계정·문서·AI 서비스를 사용하는 Lab Mode 추가. 관리자 모델 설정, 멤버 계정, 개인 CLI 실행 격리 및 배포 구성을 제공
+
+### English (1.5.6 → 1.6.0)
+
+- Added a choice between local use and a remote EasyPaper server in the desktop app, with separate server sign-in sessions and preserved local data.
+- Added two-way local and remote library sync. Preview an initial merge or replacement, stop automatic merging on conflicts, and resume interrupted syncs.
+- Added shared Lab Mode for the web app and remotely connected desktop app, with server accounts, documents, and AI services. It includes administrator model settings, member accounts, isolated personal CLI execution, and deployment configuration.
+
 ## 1.5.6 - 2026-11-01
 
 ### 한국어 (1.5.5 → 1.5.6)
