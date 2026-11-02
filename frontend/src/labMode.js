@@ -1,3 +1,4 @@
+import { syncSelectValue } from './uiScale.js'
 import { t } from './i18n.js'
 
 async function api(path, method = 'GET', body) {
@@ -25,10 +26,10 @@ export function initializeLabMode() {
     document.getElementById('lab-enabled').checked = profile.lab_mode
     const common = await api('/lab/inference')
     const personal = await api('/me/model-settings')
-    document.getElementById('lab-personal-provider').value = personal.provider || common.engine
+    syncSelectValue(document.getElementById('lab-personal-provider'), personal.provider || common.engine)
     document.getElementById('lab-personal-model').value = personal.model || common.model
     if (profile.role !== 'master') return
-    document.getElementById('lab-engine').value = common.engine
+    syncSelectValue(document.getElementById('lab-engine'), common.engine)
     document.getElementById('lab-url').value = common.url
     document.getElementById('lab-models').value = common.models.join('\n')
     document.getElementById('lab-default-model').value = common.model

@@ -53,6 +53,8 @@ def account(username):
 
 def require_access(username):
     user = account(username)
+    if not user and settings()['enabled']:
+        raise HTTPException(403, 'Unknown lab account.')
     if user and (not user['active'] or (user['role'] != 'master' and not settings()['enabled'])):
         raise HTTPException(403, 'This lab account is not available.')
     return user
