@@ -7,6 +7,7 @@ import { createReferenceAnalysisController, renderReferenceAnalysis } from './re
 import { fetchReferenceAnalysis, analyzeReference } from './library.js'
 import { installReaderPreferences, readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { initializeDataTransfer } from './dataTransfer.js'
+import { isRemoteDesktop, setBeforeServerDownload } from './desktopConnection.js'
 import { isMinimalUi, setMinimalUi, MINIMAL_UI_KEY } from './minimalUi.js'
 import './styles/minimal-ui.css'
 import { applyTheme, selectedTheme, loadThemes, saveThemes, THEME_STORAGE_KEY } from './themes/themeEngine.js'
@@ -541,6 +542,7 @@ const settingSkipLoginCheckbox = $('setting-skip-login-checkbox')
 let onboardingController = null
 
 async function maybeShowOnboarding() {
+  if (isRemoteDesktop()) return
   if (Number(localStorage.getItem(ONBOARDING_VERSION_KEY) || 0) >= CURRENT_ONBOARDING_VERSION) return
   if (!onboardingController) {
     const { createOnboarding } = await import('./onboarding.js')
@@ -19725,14 +19727,16 @@ function showDocumentLoadError(error) {
   viewerScreen.classList.add('active')
 }
 
+const flushBeforeDataTransfer = async () => {
+  await flushReadingHeartbeat()
+  await globalAnalyticsTracker.sendHeartbeat()
+  await globalAnalyticsTracker.syncOfflineQueue()
+  if (state.sessionId) await syncAnnotationsNow(state.sessionId)
+}
+setBeforeServerDownload(flushBeforeDataTransfer)
 initializeDataTransfer({ confirmImport: message => showCustomConfirm(message, {
   title: t('settings:dataTransfer.title'),
   confirmText: t('settings:dataTransfer.import'),
   cancelText: t('common:legacy.ui.0701'),
   danger: false,
-}), beforeExport: async () => {
-  await flushReadingHeartbeat()
-  await globalAnalyticsTracker.sendHeartbeat()
-  await globalAnalyticsTracker.syncOfflineQueue()
-  if (state.sessionId) await syncAnnotationsNow(state.sessionId)
-} })
+}), beforeExport: flushBeforeDataTransfer })

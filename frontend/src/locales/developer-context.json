@@ -5878,5 +5878,71 @@
   },
   "navigation:loadProgress.restoring": {
     "description": "Document viewer opening progress: Restoring reading position and layout"
+  },
+  "desktop:title": {
+    "description": "Desktop local/remote connection interface: Where would you like to use EasyPaper?"
+  },
+  "desktop:settingsTitle": {
+    "description": "Desktop local/remote connection interface: Server connection"
+  },
+  "desktop:local": {
+    "description": "Desktop local/remote connection interface: Use on this computer"
+  },
+  "desktop:remote": {
+    "description": "Desktop local/remote connection interface: Connect to a remote server"
+  },
+  "desktop:preserved": {
+    "description": "Desktop local/remote connection interface: Your existing local library stays on this computer. Remote mode uses the server's library; turning it off returns to your local data."
+  },
+  "desktop:url": {
+    "description": "Desktop local/remote connection interface: EasyPaper server address"
+  },
+  "desktop:urlHelp": {
+    "description": "Desktop local/remote connection interface: Enter the address you use to open EasyPaper in your browser. Sign in with your server account after connecting."
+  },
+  "desktop:apply": {
+    "description": "Desktop local/remote connection interface: Save and open"
+  },
+  "desktop:close": {
+    "description": "Desktop local/remote connection interface: Close"
+  },
+  "desktop:connecting": {
+    "description": "Desktop local/remote connection interface: Saving connection…"
+  },
+  "desktop:failed": {
+    "description": "Desktop local/remote connection interface: Could not connect. Check the server address and try again."
+  },
+  "desktop:download": {
+    "description": "Desktop local/remote connection interface: Download server data to this computer"
+  },
+  "desktop:downloadHelp": {
+    "description": "Desktop local/remote connection interface: Copies your server documents, originals, translations, notes and reading data into your local library. Local documents and settings are preserved. Each download adds a new copy; this is not automatic synchronization."
+  },
+  "desktop:confirmDownload": {
+    "description": "Desktop local/remote connection interface: Download your server library as new local copies? Repeating this action creates additional copies. Keep EasyPaper open until it finishes."
+  },
+  "desktop:downloading": {
+    "description": "Desktop local/remote connection interface: Downloading server backup: {{size}} MiB… Keep EasyPaper open."
+  },
+  "desktop:importing": {
+    "description": "Desktop local/remote connection interface: Adding documents to the local library… Keep EasyPaper open."
+  },
+  "desktop:completed": {
+    "description": "Desktop local/remote connection interface: Added {{count}} documents to your local library. Turn off the remote connection to use them locally."
+  },
+  "desktop:badgeLocal": {
+    "description": "Desktop local/remote connection interface: Connection: local"
+  },
+  "desktop:badgeRemote": {
+    "description": "Desktop local/remote connection interface: Connection: remote"
+  },
+  "desktop:retry": {
+    "description": "Desktop local/remote connection interface: Retry"
+  },
+  "desktop:connectionError": {
+    "description": "Desktop local/remote connection interface: Could not load connection settings. Retry before opening your library."
+  },
+  "desktop:localSettings": {
+    "description": "Desktop local/remote connection interface: Manage local / remote mode and download server data."
   }
 }

@@ -43,7 +43,14 @@ export async function loadFeatureNamespaces(feature) {
   translateDocument()
 }
 
-export async function initI18n() {
+let initialization = null
+
+export function initI18n() {
+  initialization ||= initializeI18n()
+  return initialization
+}
+
+async function initializeI18n() {
   const stored = localStorage.getItem('easypaper_ui_locale')
   currentLocale = normalizeLocale(stored || browserLocale())
   await i18next.init({
