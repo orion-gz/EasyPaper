@@ -57,6 +57,9 @@ def test_system_update_runs_git_pull_in_actual_project_root(test_client):
 
 
 def test_system_update_rejects_non_admin_user(test_client, monkeypatch):
+    from main import app
+    from services.auth import require_admin_user
+    app.dependency_overrides.pop(require_admin_user, None)
     monkeypatch.setattr("services.auth.get_app_username", lambda: "admin")
     with patch("asyncio.create_subprocess_exec", new=AsyncMock()) as subprocess_mock:
         res = test_client.post("/api/settings/update")
