@@ -32,9 +32,13 @@
 
 설정 저장만으로 삭제나 동기화를 시작하지 않는다. 서버 로그인 후 **동기화 내용 확인**을 눌러 양쪽 문서 수와 적용 방향을 확인하고 **확인하고 동기화**를 누른다. 확인 화면에서 취소하면 데이터를 변경하지 않는다. 삭제 확인 뒤 데이터가 바뀌었다면 오래된 확인 내용으로 덮어쓰지 않고 새 확인을 요구한다. 다른 계정의 데이터, 계정 비밀번호, API 키, AI 설정과 사용자 환경설정은 삭제·동기화 대상이 아니다.
 
+삭제 작업은 빨간 확인 패널에 대체 방향을 표시한다. 문서·메모·기록 삭제 확인 체크박스를 선택해야 **선택한 라이브러리 삭제 후 대체** 버튼이 활성화된다. 별도 복사본 다운로드는 접을 수 있는 보조 항목으로 분리한다. 좁은 창에서도 가로 스크롤 없이 사용할 수 있으며, 확인·취소 시 키보드 포커스가 해당 작업으로 이동한다.
+
 동기화된 문서는 공통 식별자로 추적하므로 재동기화할 때 복사본을 추가하지 않는다. 기존에 서로 독립적으로 업로드하거나 단방향 다운로드한 사본은 별도 문서로 취급한다. 파일 이름이나 PDF 내용이 같다는 이유만으로 두 문서의 메모·기록을 임의로 합치지 않는다. 파싱·번역 캐시는 각 기기에서 재생성한다.
 
 같은 레코드를 양쪽에서 수정했거나 한쪽 삭제와 다른 쪽 수정이 충돌하면 자동 적용을 중단한다. 원본을 확인하고 변경을 정리한 뒤 재시도하거나, 명시적으로 어느 쪽 라이브러리로 대체할지 선택한다. 동기화 중 통신이 끊기면 같은 요청과 응답을 보관해 중복 없이 재시도한다. 서버 적용 후 로컬 적용에 실패할 수도 있으므로 양쪽을 하나의 분산 트랜잭션으로 취급하지 않는다. 이 경우 보관된 응답으로 로컬 적용을 재개한다.
+
+충돌 패널에는 데이터 종류와 확인 가능한 문서명을 표시한다. 메모 본문이나 기기 파일 경로는 오류 응답에 포함하지 않는다. 충돌 중지 시 자동 병합 체크 표시도 꺼지며, 문제를 정리한 뒤 다시 선택할 수 있다. 라이브러리 전체 대체는 충돌하지 않은 데이터에도 적용되므로 패널에서 이를 안내한다.
 
 **자동 병합**은 앱이 열려 있고 원격 모드이며 모든 문서 탭이 닫힌 상태에서 5분마다 실행한다. 삭제 선택에는 자동 실행을 허용하지 않으며, 성공한 삭제 작업의 이후 정책은 병합으로 바뀐다. 충돌 시 자동 병합을 끈다. 문서 처리나 API 요청이 진행 중이면 해당 주기를 건너뛰고 다음에 시도한다. 앱을 닫았거나 오프라인인 동안에는 실행하지 않는다.
 
@@ -53,7 +57,7 @@
 
 ```sh
 python -m pytest backend/tests/test_desktop_connection.py backend/tests/test_user_data_transfer.py backend/tests/test_startup_recovery.py backend/tests/test_content_security_policy.py -q
-python -m pytest backend/tests/test_library_sync.py backend/tests/test_desktop_sync.py -q
+python -m pytest backend/tests/test_library_sync.py backend/tests/test_desktop_sync.py backend/tests/test_desktop_sync_network.py -q
 cd frontend
 npm ci
 npm run build
@@ -61,3 +65,7 @@ npm run test:unit
 npx playwright test tests/e2e/desktop-connection.spec.js tests/e2e/desktop-window.spec.js tests/e2e/auth-and-library.spec.js tests/e2e/data-transfer.spec.js
 npx playwright test --config playwright.webkit.config.js tests/e2e/desktop-connection.spec.js
 ```
+
+추가 회귀 검증에는 실제 loopback HTTP 서버와 서명된 세션 쿠키를 통한 전송, 서버 반영 후 로컬 저장 실패와 데스크톱 관리자 재시작 후 재개, 세 클라이언트의 변경 수렴, 16 MiB 비압축성 원본 보존 및 체크섬 오류 거부, 오래된 삭제 확인 거부, 동시 API 요청과 동기화의 상호 배제를 포함한다. 화면 검증은 Chromium·WebKit의 라이트/다크 모드, 390px 창 너비, 자동 접근성 검사와 키보드 포커스를 포함한다.
+
+이 검증은 OS별 Tauri 설치 패키지 실행, 실제 HTTPS 역방향 프록시 배포, 수 GiB 라이브러리의 성능 측정을 대신하지 않는다. 네트워크 회귀 테스트는 별도 HTTP 서버와 로컬 관리자를 사용하지만 저장소 fixture는 같은 테스트 프로세스에서 계정별로 격리한다.

@@ -1,33 +1,82 @@
 .desktop-connection-dialog {
+  --connection-accent: var(--control-accent, #5579d7);
   box-sizing: border-box;
-  width: min(560px, calc(100vw - 40px));
-  max-height: calc(100vh - 64px);
+  width: min(600px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 28px;
   margin: auto;
   border: 1px solid var(--border, #454552);
-  border-radius: 16px;
+  border-radius: 20px;
   background: var(--bg-base, #181820);
   color: var(--text-primary, #eeeef4);
+  box-shadow: 0 24px 80px #0005;
   font: 14px/1.6 system-ui, sans-serif;
+  scrollbar-gutter: stable;
 }
-.desktop-connection-dialog::backdrop { background: #080810bb; }
-.desktop-connection-dialog h2 { margin: 0 0 16px; font-size: 21px; }
-.desktop-connection-dialog p { color: var(--text-secondary, #bdbdcc); }
-.desktop-connection-dialog fieldset { display: grid; gap: 12px; padding: 16px; margin: 20px 0; border: 1px solid var(--border, #454552); border-radius: 8px; }
-.desktop-connection-dialog fieldset label { display: flex; gap: 10px; align-items: center; cursor: pointer; }
-.desktop-connection-dialog input[type=url] { box-sizing: border-box; width: 100%; padding: 10px; margin-top: 8px; background: var(--bg-elevated, #242430); color: inherit; border: 1px solid var(--border, #454552); border-radius: 6px; }
-.desktop-connection-dialog button, .desktop-connection-badge { cursor: pointer; padding: 9px 14px; border: 1px solid var(--border, #454552); border-radius: 8px; background: var(--bg-elevated, #242430); color: var(--text-primary, #eeeef4); font: inherit; }
-.desktop-connection-dialog button:disabled, .desktop-connection-dialog input:disabled { opacity: .55; cursor: default; }
-.desktop-connection-dialog :focus-visible, .desktop-connection-badge:focus-visible { outline: 2px solid #95b3f5; outline-offset: 3px; }
-.desktop-connection-dialog footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-.desktop-connection-dialog [data-apply] { background: #385cba; color: white; }
-.desktop-connection-dialog [data-status] { min-height: 1.6em; overflow-wrap: anywhere; }
-.desktop-connection-dialog [data-transfer] { border-top: 1px solid var(--border, #454552); margin-top: 20px; }
-.desktop-connection-dialog select { width: 100%; margin: 8px 0; padding: 10px; border-radius: 6px; background: var(--bg-base, #181820); color: inherit; border: 1px solid var(--border, #454552); }
-.desktop-connection-dialog [data-policy] label { display: flex; align-items: center; gap: 8px; }
-.desktop-connection-dialog [data-preview] { padding: 14px; margin: 12px 0; border: 1px solid var(--border, #454552); border-radius: 8px; }
-.desktop-connection-dialog [data-preview-warning] { font-weight: 600; }
+.desktop-connection-dialog [hidden] { display: none !important; }
+.desktop-connection-dialog::backdrop { background: #080810a6; backdrop-filter: blur(5px); }
+.desktop-connection-eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 12px; font-weight: 650; }
+.desktop-connection-eyebrow span { border-left: 1px solid var(--border, #454552); padding-left: 10px; color: var(--text-secondary, #bdbdcc); font-size: 10px; letter-spacing: .1em; }
+.desktop-connection-dialog h2 { margin: 0 0 10px; font-size: 23px; line-height: 1.35; letter-spacing: -.035em; }
+.desktop-connection-dialog h3 { margin: 0 0 12px; font-size: 15px; line-height: 1.4; }
+.desktop-connection-dialog p { margin: 10px 0; color: var(--text-secondary, #bdbdcc); overflow-wrap: anywhere; }
+.desktop-connection-dialog .desktop-mode-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0; margin: 24px 0 20px; border: 0; }
+.desktop-mode-options legend { margin-bottom: 10px; font-size: 12px; font-weight: 600; color: var(--text-secondary, #bdbdcc); }
+.desktop-mode-options label { display: flex; gap: 10px; align-items: flex-start; padding: 15px 12px; border: 1px solid var(--border, #454552); border-radius: 12px; cursor: pointer; }
+.desktop-mode-options label:has(:checked) { border-color: var(--connection-accent); background: color-mix(in srgb, var(--connection-accent) 10%, transparent); box-shadow: inset 0 0 0 1px var(--connection-accent); }
+.desktop-mode-options strong { display: block; font-weight: 600; font-size: 13px; }
+.desktop-mode-options small { display: block; margin-top: 5px; font-size: 12px; color: var(--text-secondary, #bdbdcc); }
+.desktop-connection-dialog input[type=radio], .desktop-connection-dialog input[type=checkbox] { flex-shrink: 0; width: 16px; height: 16px; margin: 3px 0 0; accent-color: var(--connection-accent); }
+.desktop-server-address > label { font-size: 12px; font-weight: 600; }
+.desktop-connection-dialog input[type=url], .desktop-connection-dialog select { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; margin-top: 8px; background: var(--bg-elevated, #242430); color: inherit; border: 1px solid var(--border, #454552); border-radius: 9px; font: inherit; }
+.desktop-connection-dialog input[type=url] { font-size: 13px; }
+.desktop-connection-dialog #desktop-url-help, .desktop-connection-dialog .desktop-fine-print { font-size: 12px; }
+.desktop-connection-dialog button, .desktop-connection-badge { cursor: pointer; min-height: 40px; padding: 9px 14px; border: 1px solid var(--border, #454552); border-radius: 9px; background: var(--bg-elevated, #242430); color: var(--text-primary, #eeeef4); font: inherit; }
+.desktop-connection-dialog button:hover:not(:disabled) { filter: brightness(1.12); }
+.desktop-connection-dialog button:disabled, .desktop-connection-dialog input:disabled, .desktop-connection-dialog select:disabled { opacity: .5; cursor: not-allowed; }
+.desktop-connection-dialog :focus-visible, .desktop-connection-badge:focus-visible { outline: 2px solid var(--connection-accent, #95b3f5); outline-offset: 3px; }
+.desktop-connection-dialog footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border, #454552); }
+.desktop-connection-dialog [data-apply], .desktop-connection-dialog [data-confirm-sync] { background: #385cba; border-color: #385cba; color: white; font-weight: 600; }
+.desktop-connection-dialog [data-status] { margin: 12px 0 0; padding: 12px; border-radius: 9px; background: var(--bg-elevated, #242430); }
+.desktop-connection-dialog [data-status]:empty { display: none; }
+.desktop-connection-dialog [data-status][data-state=error], .desktop-connection-dialog [data-status][data-state=warning] { border-left: 3px solid #c98028; }
+.desktop-connection-dialog [data-status][data-state=success] { border-left: 3px solid #4a9e7b; }
+.desktop-connection-dialog [data-policy] { border-top: 1px solid var(--border, #454552); margin-top: 24px; padding-top: 22px; }
+.desktop-connection-dialog [data-policy] > label { font-size: 12px; }
+.desktop-connection-dialog [data-action-description] { padding: 12px; border-radius: 9px; background: var(--bg-elevated, #242430); font-size: 13px; }
+.desktop-connection-dialog [data-policy][data-policy-action^=replace_] [data-action-description] { border-left: 3px solid #d45b5b; }
+.desktop-connection-dialog .desktop-auto-option { display: flex; align-items: flex-start; gap: 10px; margin-top: 18px; cursor: pointer; }
+.desktop-connection-dialog [data-transfer] { margin-top: 20px; }
+.desktop-connection-dialog [data-transfer] > p { font-size: 12px; }
+.desktop-connection-dialog [data-sync] { width: 100%; font-weight: 600; border-color: var(--connection-accent); }
+.desktop-connection-dialog [data-preview], .desktop-connection-dialog [data-conflicts] { padding: 18px; margin-top: 16px; border: 1px solid var(--border, #454552); border-radius: 12px; }
+.desktop-connection-dialog [data-preview][data-destructive=true] { border-color: #c55252; }
+.desktop-connection-dialog [data-preview][data-destructive=true] [data-confirm-sync] { background: #b33535; border-color: #b33535; }
+.desktop-library-counts { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; padding: 12px 0; }
+.desktop-library-counts > div { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 4px; border-radius: 9px; background: var(--bg-elevated, #242430); }
+.desktop-library-counts span { font-size: 12px; color: var(--text-secondary, #bdbdcc); }
+.desktop-library-counts strong { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.desktop-library-counts .desktop-transfer-direction { font-size: 24px; }
+.desktop-connection-dialog [data-preview-warning] { font-size: 13px; }
+.desktop-delete-ack { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; font-size: 13px; cursor: pointer; }
+.desktop-preview-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.desktop-connection-dialog [data-conflicts] { border-left: 3px solid #c98028; }
+.desktop-connection-dialog [data-conflicts] ul { padding-left: 20px; font-size: 13px; overflow-wrap: anywhere; }
+.desktop-connection-dialog [data-conflicts] p { font-size: 12px; }
+.desktop-copy-option { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border, #454552); font-size: 12px; }
+.desktop-copy-option summary { cursor: pointer; padding: 4px 0; color: var(--text-secondary, #bdbdcc); }
+.desktop-copy-option button { width: 100%; }
+.desktop-connection-dialog progress { display: block; width: 100%; height: 4px; margin-top: 20px; accent-color: var(--connection-accent); }
+.desktop-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .desktop-connection-badge { position: fixed; bottom: 10px; right: 16px; z-index: 1100; font: 12px system-ui, sans-serif; box-shadow: 0 3px 12px #0003; }
 .desktop-connection-section { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
 .desktop-connection-section p { margin-top: 8px; font-size: 13px; color: var(--text-secondary); }
+@media (max-width: 480px) {
+  .desktop-connection-dialog { padding: 20px 16px; width: calc(100vw - 20px); max-height: calc(100dvh - 24px); border-radius: 14px; }
+  .desktop-connection-dialog h2 { font-size: 20px; }
+  .desktop-connection-dialog .desktop-mode-options { grid-template-columns: 1fr; }
+  .desktop-preview-actions { flex-direction: column-reverse; }
+  .desktop-preview-actions button { width: 100%; }
+}

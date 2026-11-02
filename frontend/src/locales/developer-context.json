@@ -6013,5 +6013,74 @@
   },
   "desktop:reload": {
     "description": "Two-way desktop library synchronization: Reload library"
+  },
+  "desktop:workspace": {
+    "description": "Desktop connection and synchronization interface: WORKSPACE"
+  },
+  "desktop:modeLegend": {
+    "description": "Desktop connection and synchronization interface: Library location"
+  },
+  "desktop:localHint": {
+    "description": "Desktop connection and synchronization interface: Your library stays on this device."
+  },
+  "desktop:remoteHint": {
+    "description": "Desktop connection and synchronization interface: Open your library on an EasyPaper server."
+  },
+  "desktop:syncTitle": {
+    "description": "Desktop connection and synchronization interface: Keep your libraries together"
+  },
+  "desktop:deferHelp": {
+    "description": "Desktop connection and synchronization interface: Keep both libraries as they are. You can choose how to sync later."
+  },
+  "desktop:previewTitle": {
+    "description": "Desktop connection and synchronization interface: Review before applying"
+  },
+  "desktop:localLibrary": {
+    "description": "Desktop connection and synchronization interface: This computer"
+  },
+  "desktop:serverLibrary": {
+    "description": "Desktop connection and synchronization interface: Remote server"
+  },
+  "desktop:acknowledgeDeletion": {
+    "description": "Desktop connection and synchronization interface: I understand that the selected library, including its notes and history, will be replaced."
+  },
+  "desktop:confirmDeletion": {
+    "description": "Desktop connection and synchronization interface: Replace selected library"
+  },
+  "desktop:conflictsTitle": {
+    "description": "Desktop connection and synchronization interface: Some changes need your attention"
+  },
+  "desktop:conflictsHelp": {
+    "description": "Desktop connection and synchronization interface: Review these items in both libraries and retry. To keep only one library, select which side to replace above, then review and confirm. Replacing a library also removes its other data."
+  },
+  "desktop:conflictDocuments": {
+    "description": "Desktop connection and synchronization interface: Document details"
+  },
+  "desktop:conflictFiles": {
+    "description": "Desktop connection and synchronization interface: Document files"
+  },
+  "desktop:conflictNotes": {
+    "description": "Desktop connection and synchronization interface: Notes and annotations"
+  },
+  "desktop:conflictChats": {
+    "description": "Desktop connection and synchronization interface: Conversations"
+  },
+  "desktop:conflictFolders": {
+    "description": "Desktop connection and synchronization interface: Folders"
+  },
+  "desktop:conflictCheckpoint": {
+    "description": "Desktop connection and synchronization interface: Sync history changed; review the pending transfer"
+  },
+  "desktop:conflictConfirmation": {
+    "description": "Desktop connection and synchronization interface: Data changed after your preview; review again"
+  },
+  "desktop:conflictRecords": {
+    "description": "Desktop connection and synchronization interface: Other saved records"
+  },
+  "desktop:copyTitle": {
+    "description": "Desktop connection and synchronization interface: Download a separate copy instead"
+  },
+  "desktop:transferProgress": {
+    "description": "Desktop connection and synchronization interface: Data transfer in progress"
   }
 }
