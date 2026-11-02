@@ -1,6 +1,7 @@
 """Account-scoped inference scheduling and cancellation."""
 import asyncio
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 import functools
 import inspect
@@ -13,6 +14,34 @@ _requests = defaultdict(set)
 _limits = weakref.WeakKeyDictionary()
 _depth = ContextVar('lab_inference_depth', default=0)
 cache_scope = ContextVar('lab_cache_scope', default=None)
+
+
+@asynccontextmanager
+async def admission(username):
+    """Keep running counts when limits change, rather than creating a new pool."""
+    from services import lab
+    state = _limits.setdefault(asyncio.get_running_loop(), {
+        'condition': asyncio.Condition(), 'total': 0, 'users': defaultdict(int),
+    })
+    condition = state['condition']
+    async with condition:
+        while True:
+            common = lab.configuration()
+            maximum = common.get('max_concurrent') or (8 if common['engine'] == 'vllm' else 2)
+            if state['total'] < maximum and state['users'].get(username, 0) < common.get('per_user', 1):
+                state['total'] += 1
+                state['users'][username] += 1
+                break
+            await condition.wait()
+    try:
+        yield
+    finally:
+        async with condition:
+            state['total'] -= 1
+            state['users'][username] -= 1
+            if not state['users'][username]:
+                del state['users'][username]
+            condition.notify_all()
 
 
 def cancel(username):
@@ -51,16 +80,8 @@ def scoped(function):
         depth_token = _depth.set(1)
         task = asyncio.current_task()
         _running[username].add(task)
-        loop = asyncio.get_running_loop()
-        limits = _limits.setdefault(loop, {})
-        common = lab.configuration()
-        engine = common['engine']
-        maximum = common.get('max_concurrent') or (8 if engine == 'vllm' else 2)
-        per_user = common.get('per_user', 1)
-        total = limits.setdefault(('total', engine, maximum), asyncio.Semaphore(maximum))
-        personal = limits.setdefault(('user', username, per_user), asyncio.Semaphore(per_user))
         try:
-            async with personal, total:
+            async with admission(username):
                 lab.require_access(username)
                 async for value in function(*args, **kwargs):
                     lab.require_access(username)

@@ -47,3 +47,30 @@ test('switching server accounts archives browser drafts outside exported localSt
   }))
   expect(archived.easypaper_test_draft).toBe('Alice private draft')
 })
+
+test('personal CLI login polls instructions and stops after switching to a common engine', async ({ page }) => {
+  await mockBaseRoutes(page)
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'member', lab_mode: true } }))
+  await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', models: ['test'], model: 'test' } }))
+  await page.route('**/api/me/model-settings', route => route.fulfill({ json: { provider: 'codex', model: 'test' } }))
+  await page.route('**/api/me/providers/codex/login', route => route.fulfill({ json: { status: 'pending' } }))
+  let polls = 0
+  await page.route('**/api/me/providers/codex', route => {
+    polls += 1
+    return route.fulfill({ json: { status: 'pending', instructions: 'Enter code TEST-CODE in your browser' } })
+  })
+  await gotoApp(page)
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-general' } })))
+  await page.locator('#settings-nav-lab').click()
+  await page.locator('#lab-cli-login').click()
+  await expect(page.locator('#lab-cli-output')).toContainText('TEST-CODE')
+  await page.evaluate(() => {
+    const select = document.getElementById('lab-personal-provider')
+    select.value = 'ollama'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await expect(page.locator('#lab-cli-actions')).toBeHidden()
+  const count = polls
+  await page.waitForTimeout(2200)
+  expect(polls).toBe(count)
+})

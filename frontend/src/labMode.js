@@ -15,6 +15,32 @@ export function initializeLabMode() {
   const status = document.getElementById('lab-status')
   const members = document.getElementById('lab-members')
   const report = error => { status.textContent = error.message }
+  const providerSelect = document.getElementById('lab-personal-provider')
+  const output = document.getElementById('lab-cli-output')
+  let loginGeneration = 0
+  let loginTimer
+  function cancelPolling() {
+    loginGeneration += 1
+    clearTimeout(loginTimer)
+  }
+  function updateProviderControls() {
+    cancelPolling()
+    output.textContent = ''
+    document.getElementById('lab-cli-actions').hidden = ['ollama', 'vllm'].includes(providerSelect.value)
+  }
+  providerSelect.addEventListener('change', updateProviderControls)
+  window.addEventListener('pagehide', cancelPolling)
+  async function pollLogin(provider, generation, expires) {
+    if (generation !== loginGeneration || Date.now() >= expires || !output.getClientRects().length) return
+    try {
+      const result = await api(`/me/providers/${provider}`)
+      if (generation !== loginGeneration) return
+      output.textContent = [result.status, result.instructions].filter(Boolean).join('\n')
+      if (result.status === 'pending') loginTimer = setTimeout(() => pollLogin(provider, generation, expires), 2000)
+    } catch (error) {
+      if (generation === loginGeneration) report(error)
+    }
+  }
   const run = action => async event => {
     event?.preventDefault()
     try { await action() } catch (error) { report(error) }
@@ -28,6 +54,7 @@ export function initializeLabMode() {
     const personal = await api('/me/model-settings')
     syncSelectValue(document.getElementById('lab-personal-provider'), personal.provider || common.engine)
     document.getElementById('lab-personal-model').value = personal.model || common.model
+    updateProviderControls()
     if (profile.role !== 'master') return
     syncSelectValue(document.getElementById('lab-engine'), common.engine)
     document.getElementById('lab-url').value = common.url
@@ -99,10 +126,14 @@ export function initializeLabMode() {
   }))
   for (const action of ['status', 'login', 'logout']) {
     document.getElementById(`lab-cli-${action}`).addEventListener('click', run(async () => {
-      const provider = document.getElementById('lab-personal-provider').value
+      cancelPolling()
+      const generation = loginGeneration
+      const provider = providerSelect.value
       const path = `/me/providers/${provider}${action === 'login' ? '/login' : ''}`
       const result = await api(path, action === 'login' ? 'POST' : action === 'logout' ? 'DELETE' : 'GET')
-      document.getElementById('lab-cli-output').textContent = [result.status, result.instructions].filter(Boolean).join('\n')
+      if (generation !== loginGeneration) return
+      output.textContent = [result.status, result.instructions].filter(Boolean).join('\n')
+      if (result.status === 'pending') loginTimer = setTimeout(() => pollLogin(provider, generation, Date.now() + 600000), 1000)
     }))
   }
 }

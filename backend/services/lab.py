@@ -146,7 +146,7 @@ async def inference_health():
         if provider in ('claude_code', 'codex', 'antigravity'):
             from services.lab_runner import operation
             result = await operation(identity.get(), provider, 'status')
-            available = result.get('status') in ('connected', 'terminal_required')
+            available = result.get('status') == 'connected'
             return {'status': 'ok' if available else 'error', 'provider': provider,
                     'model_available': available, 'authentication': result.get('status')}
         path = '/models' if provider == 'vllm' else '/api/tags'
