@@ -10,7 +10,7 @@ import { alignTextLayer, collectTextContent, recoveredTextContent } from './pdfT
 import { pdfResources } from './pdfResources.js'
 import { t } from './i18n.js'
 
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
 let pdfjsLib = null
 let pdfDoc = null
@@ -37,9 +37,11 @@ let lastScrollView = null
 // 조용히 중단한다.
 let renderGeneration = 0
 
+// Desktop WebViews can lag behind browser releases. Use the matching
+// compatibility builds for both the main module and its worker.
 async function loadPDFJS() {
   if (pdfjsLib) return pdfjsLib
-  pdfjsLib = await import('pdfjs-dist/build/pdf.mjs')
+  pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
   pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
   return pdfjsLib
 }
