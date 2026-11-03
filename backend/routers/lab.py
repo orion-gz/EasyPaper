@@ -20,6 +20,7 @@ class ModeUpdate(BaseModel):
 
 
 class NewMember(BaseModel):
+    password: str | None = Field(default=None, min_length=8, max_length=128)
     username: str = Field(min_length=1, max_length=80, pattern=r'^[a-zA-Z0-9_.-]+$')
 
 
@@ -75,7 +76,7 @@ async def users(username: str = Depends(require_admin_user)):
 
 @router.post('/lab/users', status_code=201)
 async def create_member(data: NewMember, username: str = Depends(require_admin_user)):
-    password = secrets.token_urlsafe(18)
+    password = data.password or secrets.token_urlsafe(18)
     identifier = uuid.uuid4().hex
     try:
         with closing(db.get_db()) as conn, conn:
@@ -107,6 +108,17 @@ async def update_member(identifier: str, data: MemberUpdate, username: str = Dep
         from services.lab_runner import cancel_account
         await cancel_account(identifier)
     return {'active': data.active}
+
+
+@router.delete('/lab/users/{identifier}')
+async def delete_member(identifier: str, username: str = Depends(require_admin_user)):
+    await update_member(identifier, MemberUpdate(active=False), username)
+    with closing(db.get_db()) as conn, conn:
+        target = member(conn, identifier)
+        conn.execute('DELETE FROM lab_preferences WHERE account_id=?', (identifier,))
+        conn.execute('DELETE FROM users WHERE username=?', (target['username'],))
+        conn.execute('DELETE FROM lab_accounts WHERE id=?', (identifier,))
+    return {'deleted': True}
 
 
 @router.post('/lab/users/{identifier}/reset-password')
