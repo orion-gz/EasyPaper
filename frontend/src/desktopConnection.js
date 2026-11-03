@@ -1,3 +1,4 @@
+import { setSyncProgress } from './syncProgress.js'
 import { initI18n, loadNamespaces, t } from './i18n.js'
 import './styles/desktop-connection.css'
 
@@ -84,6 +85,7 @@ async function pollDownload() {
   try {
     const job = await connectionRequest('download')
     const running = ['uploading', 'downloading', 'importing'].includes(job.status)
+    setSyncProgress('desktop-transfer', running)
     setBusy(running)
     if (job.status === 'uploading') status(t('desktop:syncUploading'))
     if (job.status === 'downloading') status(t('desktop:downloading', { size: (job.bytes / 1024 ** 2).toFixed(1) }))
@@ -383,7 +385,7 @@ export async function prepareDesktopConnection() {
   badge.addEventListener('click', openSettings)
   document.body.append(badge)
   const section = document.createElement('section')
-  section.className = 'desktop-connection-section'
+  section.className = 'desktop-connection-section form-group settings-action-card'
   const button = document.createElement('button')
   button.type = 'button'
   button.className = 'btn btn-secondary'
@@ -401,7 +403,10 @@ export async function prepareDesktopConnection() {
   })
   section.append(button, syncButton, help)
   startDeviceHeartbeat()
-  document.getElementById('tab-data-system')?.prepend(section)
+  document.querySelector('#tab-data-system .modal-form')?.prepend(section)
+  makeDialog()
+  populate()
+  await pollDownload()
   automaticTimer = setInterval(() => {
     if (connection.remote && connection.sync?.automatic && connection.sync.action === 'merge'
         && document.visibilityState === 'visible' && !document.querySelector('.workspace-document-frame')
