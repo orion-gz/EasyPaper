@@ -24,6 +24,7 @@ import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './do
 import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail, getPDFPageText, getPDFPageWidth } from './pdfViewer.js'
 import { translationFeedback } from './translationFeedback.js'
 import './style.css'
+import './styles/status-states.css'
 import { mountChatQuestionNav } from './chatQuestionNav.js'
 import { applyDesktopUpdate } from './desktopUpdate.js'
 import { pageCoordinates } from './pdfCoordinates.js'
@@ -19743,7 +19744,12 @@ function showDocumentLoadError(error) {
   retry.type = 'button'
   retry.textContent = t('navigation:tabs.retry')
   retry.addEventListener('click', () => location.reload())
-  panel.append(text, retry)
+  const badge = document.createElement('span')
+  badge.className = 'status-state-icon'
+  badge.setAttribute('aria-hidden', 'true')
+  badge.innerHTML = icon('alertTriangle', 24)
+  retry.prepend(document.createRange().createContextualFragment(icon('refreshCw', 16)))
+  panel.append(badge, text, retry)
   viewerScreen.replaceChildren(panel)
   viewerScreen.classList.add('active')
 }

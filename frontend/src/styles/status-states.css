@@ -1,0 +1,73 @@
+/* Shared visual treatment for exceptional and empty page states. */
+:is(.workspace-load-error, .dash-error, .document-home-status.is-error,
+    .aic-state-error, .notes-empty, .notes-detail-empty, .rh-empty,
+    .document-home-empty, .rg-detail-empty-state) {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.workspace-load-error {
+  width: min(440px, calc(100% - 40px));
+  margin: auto;
+  padding: 36px 28px;
+  box-shadow: var(--shadow-sm);
+}
+:is(.workspace-load-error, .dash-error, .aic-state-error, .notes-empty,
+    .notes-detail-empty, .rg-detail-empty-state) > p {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.status-state-icon,
+:is(.dash-error, .aic-state-error, .document-home-status.is-error) > svg {
+  box-sizing: content-box;
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: 14px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
+}
+:is(.workspace-load-error, .aic-state-error, .notes-empty) > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 9px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+:is(.workspace-load-error, .aic-state-error, .notes-empty) > button:hover {
+  background: var(--bg-hover);
+  border-color: var(--control-accent);
+}
+:is(.workspace-load-error, .aic-state-error, .notes-empty) > button:focus-visible {
+  outline: 2px solid var(--control-accent);
+  outline-offset: 3px;
+}
+:is(.dash-empty-note, .document-resources-empty, .lib-detail-summary-error,
+    .rg-detail-error, .rg-recommend-error) {
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
