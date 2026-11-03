@@ -1,3 +1,4 @@
+import { setSyncProgress } from './syncProgress.js'
 import {
   fetchLibraryAnnotations, fetchLibraryMemos,
   patchLibraryAnnotations, patchLibraryMemos,
@@ -219,43 +220,49 @@ function requireSnapshot(value) {
 }
 
 export async function syncResource(resource, docId, options = {}) {
-  const storage = options.storage || localStorage
-  const config = options.config || RESOURCE_CONFIG[resource]
-  const key = resourceKey(resource, docId)
-  const localRaw = parse(storage, key, {})
-  const snapshot = requireSnapshot(await config.fetchSnapshot(docId))
-  const normalized = normalizeResourceData(resource, localRaw, snapshot.data || {})
-  let local = normalized.data
-  const tombstones = snapshot.tombstones || {}
-  Object.keys(local).forEach(pageKey => {
-    local[pageKey] = local[pageKey].filter(item => !tombstones[item.id])
-    if (!local[pageKey].length) delete local[pageKey]
-  })
-  let queue = readQueue(resource, docId, storage)
-  const meta = parse(storage, metaKey(resource, docId), null)
-  if (!meta) queue = seedUpgradeQueue(resource, local, snapshot, queue)
-  writeQueue(resource, docId, queue, storage)
-
-  let latest = snapshot
-  const sentIds = new Set(queue.map(item => item.mutation_id))
-  if (queue.length) {
-    latest = requireSnapshot(await config.patchMutations(docId, {
-      client_id: getSyncClientId(storage), mutations: queue,
-    }, { keepalive: options.keepalive === true }))
-    queue = readQueue(resource, docId, storage).filter(item => !sentIds.has(item.mutation_id))
+  const progressKey = Symbol('annotation-sync')
+  setSyncProgress(progressKey, true)
+  try {
+    const storage = options.storage || localStorage
+    const config = options.config || RESOURCE_CONFIG[resource]
+    const key = resourceKey(resource, docId)
+    const localRaw = parse(storage, key, {})
+    const snapshot = requireSnapshot(await config.fetchSnapshot(docId))
+    const normalized = normalizeResourceData(resource, localRaw, snapshot.data || {})
+    let local = normalized.data
+    const tombstones = snapshot.tombstones || {}
+    Object.keys(local).forEach(pageKey => {
+      local[pageKey] = local[pageKey].filter(item => !tombstones[item.id])
+      if (!local[pageKey].length) delete local[pageKey]
+    })
+    let queue = readQueue(resource, docId, storage)
+    const meta = parse(storage, metaKey(resource, docId), null)
+    if (!meta) queue = seedUpgradeQueue(resource, local, snapshot, queue)
     writeQueue(resource, docId, queue, storage)
-  }
-  const merged = overlayPending(latest.data || {}, queue)
-  storage.setItem(key, JSON.stringify(merged))
-  storage.setItem(metaKey(resource, docId), JSON.stringify({
-    revision: latest.revision || 0,
-    item_versions: latest.item_versions || {},
-    tombstones: latest.tombstones || {},
-  }))
-  return {
-    data: merged,
-    snapshot: latest,
-    conflicts: (latest.results || []).filter(result => result.conflict_copy || result.delete_conflict_preserved),
+
+    let latest = snapshot
+    const sentIds = new Set(queue.map(item => item.mutation_id))
+    if (queue.length) {
+      latest = requireSnapshot(await config.patchMutations(docId, {
+        client_id: getSyncClientId(storage), mutations: queue,
+      }, { keepalive: options.keepalive === true }))
+      queue = readQueue(resource, docId, storage).filter(item => !sentIds.has(item.mutation_id))
+      writeQueue(resource, docId, queue, storage)
+    }
+    const merged = overlayPending(latest.data || {}, queue)
+    storage.setItem(key, JSON.stringify(merged))
+    storage.setItem(metaKey(resource, docId), JSON.stringify({
+      revision: latest.revision || 0,
+      item_versions: latest.item_versions || {},
+      tombstones: latest.tombstones || {},
+    }))
+    return {
+      data: merged,
+      snapshot: latest,
+      conflicts: (latest.results || []).filter(result => result.conflict_copy || result.delete_conflict_preserved),
+    }
+  } finally {
+    setSyncProgress(progressKey, false)
   }
 }
 
