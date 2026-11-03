@@ -87,7 +87,7 @@ export function initializeLabMode() {
         })
         const remove = document.createElement('button')
         remove.type = 'button'
-        remove.className = 'btn btn-secondary'
+        remove.className = 'btn lab-delete-button'
         remove.textContent = t('settings:labDelete')
         remove.onclick = run(async () => {
           if (!window.confirm(t('settings:labDeleteConfirm', { username: user.username }))) return

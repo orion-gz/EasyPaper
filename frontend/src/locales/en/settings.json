@@ -279,5 +279,20 @@
   "labHelp_username": "Use letters, digits, underscore, dot or hyphen. Cannot change in Lab mode.",
   "labHelp_member-password": "8–128 characters. Leave blank to generate a temporary password.",
   "labHelp_personal-provider": "Choose the shared engine or an operator-provisioned personal CLI.",
-  "labHelp_personal-model": "For shared inference use an allowed model ID; for CLI use its provider model ID."
+  "labHelp_personal-model": "For shared inference use an allowed model ID; for CLI use its provider model ID.",
+  "labDeployChoice": "Choose deployment",
+  "labSystemdHelp": "Without Docker: prepare Python and backend dependencies, then adapt the service user and paths to your server. Prepare the runner service for personal CLI. Run these commands after configuring the templates.",
+  "labReadyData": "Data directory permissions prepared",
+  "labReadyNetwork": "HTTPS and server address verified",
+  "labReadyAccount": "Administrator sign-in verified",
+  "labChecklistProgress": "Preparation: {{done}} / {{total}} (self-check)",
+  "labMemberPath": "Choose a personal workspace",
+  "labSharedSpace": "Shared model + private documents",
+  "labCliSpace": "Personal CLI connection",
+  "labPreviewName": "Example username (preview only)",
+  "labPreviewSpace": "Document space for {{name}} → first sign-in → password change → save personal model. This preview does not create an account.",
+  "labPreviewInvalid": "Enter 1–80 letters, digits, underscores, dots or hyphens.",
+  "labCliReady": "Operator has prepared the runner and CLI runtime",
+  "labCliNext": "Next: save personal provider → connect personal CLI → authenticate → check connection status",
+  "labCliWait": "The operator must first prepare the runner socket and CLI runtime."
 }

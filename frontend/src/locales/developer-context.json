@@ -6280,5 +6280,50 @@
   },
   "settings:labHelp_personal-model": {
     "description": "For shared inference use an allowed model ID; for CLI use its provider model ID."
+  },
+  "settings:labDeployChoice": {
+    "description": "Choose deployment"
+  },
+  "settings:labSystemdHelp": {
+    "description": "Without Docker: prepare Python and backend dependencies, then adapt the service user and paths to your server. Prepare the runner service for personal CLI. Run these commands after configuring the templates."
+  },
+  "settings:labReadyData": {
+    "description": "Data directory permissions prepared"
+  },
+  "settings:labReadyNetwork": {
+    "description": "HTTPS and server address verified"
+  },
+  "settings:labReadyAccount": {
+    "description": "Administrator sign-in verified"
+  },
+  "settings:labChecklistProgress": {
+    "description": "Preparation: {{done}} / {{total}} (self-check)"
+  },
+  "settings:labMemberPath": {
+    "description": "Choose a personal workspace"
+  },
+  "settings:labSharedSpace": {
+    "description": "Shared model + private documents"
+  },
+  "settings:labCliSpace": {
+    "description": "Personal CLI connection"
+  },
+  "settings:labPreviewName": {
+    "description": "Example username (preview only)"
+  },
+  "settings:labPreviewSpace": {
+    "description": "Document space for {{name}} → first sign-in → password change → save personal model. This preview does not create an account."
+  },
+  "settings:labPreviewInvalid": {
+    "description": "Enter 1–80 letters, digits, underscores, dots or hyphens."
+  },
+  "settings:labCliReady": {
+    "description": "Operator has prepared the runner and CLI runtime"
+  },
+  "settings:labCliNext": {
+    "description": "Next: save personal provider → connect personal CLI → authenticate → check connection status"
+  },
+  "settings:labCliWait": {
+    "description": "The operator must first prepare the runner socket and CLI runtime."
   }
 }

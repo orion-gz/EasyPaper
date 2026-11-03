@@ -1,6 +1,22 @@
 import { t } from './i18n.js'
 
 const labels = () => ({
+  labDeployChoice: t('settings:labDeployChoice'),
+  labSystemdHelp: t('settings:labSystemdHelp'),
+  labReadyData: t('settings:labReadyData'),
+  labReadyNetwork: t('settings:labReadyNetwork'),
+  labReadyAccount: t('settings:labReadyAccount'),
+  labChecklistProgress: t('settings:labChecklistProgress'),
+  labMemberPath: t('settings:labMemberPath'),
+  labSharedSpace: t('settings:labSharedSpace'),
+  labCliSpace: t('settings:labCliSpace'),
+  labPreviewName: t('settings:labPreviewName'),
+  labPreviewSpace: t('settings:labPreviewSpace'),
+  labPreviewInvalid: t('settings:labPreviewInvalid'),
+  labCliReady: t('settings:labCliReady'),
+  labCliNext: t('settings:labCliNext'),
+  labCliWait: t('settings:labCliWait'),
+
   'labGuideTitle': t('settings:labGuideTitle'),
   'labAdvanced': t('settings:labAdvanced'),
   'labIntro': t('settings:labIntro'),
@@ -68,20 +84,28 @@ export function initializeLabGuide() {
     group.append(button, help)
   }
   const dialog = node('dialog')
-  dialog.className = 'lab-guide-dialog'
+  dialog.className = 'modal-content lab-guide-dialog'
   dialog.setAttribute('aria-labelledby', 'lab-guide-title')
   const title = node('h2', 'labGuideTitle')
   title.id = 'lab-guide-title'
   const close = node('button', 'labCloseGuide')
   close.type = 'button'
-  close.className = 'btn btn-secondary'
+  close.className = 'close-btn'
+  close.removeAttribute('data-i18n')
+  close.textContent = '×'
+  close.setAttribute('aria-label', t('settings:labCloseGuide'))
   close.onclick = () => dialog.close()
-  dialog.append(title, close)
+  const header = node('div')
+  header.className = 'modal-header'
+  header.append(title, close)
+  const body = node('div')
+  body.className = 'lab-guide-body'
+  dialog.append(header, body)
   const section = (titleKey, textKeys) => {
     const details = node('details')
     details.append(node('summary', titleKey))
     for (const key of textKeys) details.append(node('p', key))
-    dialog.append(details)
+    body.append(details)
     return details
   }
   const server = section('labGuideServer', ['labGuideServerText'])
@@ -89,8 +113,40 @@ export function initializeLabGuide() {
   const commands = node('pre')
   commands.textContent = 'mkdir -p lab-data/home\n# Set lab-data ownership to LAB_APP_UID:LAB_APP_GID\ndocker compose -f docker-compose.lab.yml up -d --build\ndocker compose -f docker-compose.lab.yml logs --tail=100'
   server.append(commands)
+  const deployLabel = node('label', 'labDeployChoice')
+  deployLabel.htmlFor = 'lab-guide-deploy'
+  const deploy = node('select')
+  deploy.id = 'lab-guide-deploy'
+  deploy.className = 'form-select'
+  for (const value of ['Docker Compose', 'systemd']) {
+    const option = node('option'); option.value = value; option.textContent = value; deploy.append(option)
+  }
+  const dockerCommands = commands.textContent
+  const deployHelp = node('p')
+  deployHelp.setAttribute('aria-live', 'polite')
+  deploy.onchange = () => {
+    const docker = deploy.value === 'Docker Compose'
+    commands.textContent = docker ? dockerCommands : 'sudo cp deploy/lab/easypaper-lab.service /etc/systemd/system/\nsudo systemctl daemon-reload\nsudo systemctl enable --now easypaper-lab\nsudo systemctl status easypaper-lab'
+    deployHelp.textContent = docker ? t('settings:labGuideServerText') : t('settings:labSystemdHelp')
+  }
+  server.insertBefore(deployLabel, commands)
+  server.insertBefore(deploy, commands)
+  server.insertBefore(deployHelp, commands)
+  const checklist = node('div')
+  checklist.className = 'lab-guide-checklist'
+  const progress = node('p')
+  progress.setAttribute('role', 'status')
+  const updateProgress = () => { progress.textContent = t('settings:labChecklistProgress', { done: checklist.querySelectorAll(':checked').length, total: 3 }) }
+  for (const key of ['labReadyData', 'labReadyNetwork', 'labReadyAccount']) {
+    const label = node('label')
+    const check = node('input'); check.type = 'checkbox'; check.onchange = updateProgress
+    label.append(check, node('span', key)); checklist.append(label)
+  }
+  updateProgress()
+  server.append(checklist, progress)
   const engine = section('labGuideEngine', ['labGuideModels'])
   const choices = node('div')
+  choices.className = 'form-actions'
   const description = node('p')
   const command = node('pre')
   const source = node('a')
@@ -115,7 +171,28 @@ export function initializeLabGuide() {
   }
   engine.append(choices, description, command, node('p', 'labGuideNetwork'), source)
   choose('ollama')
-  section('labGuideMembers', ['labGuideMembersText', 'labGuideCli'])
+  const members = section('labGuideMembers', ['labGuideMembersText'])
+  const nameLabel = node('label', 'labPreviewName')
+  nameLabel.htmlFor = 'lab-guide-name'
+  const name = node('input')
+  name.id = 'lab-guide-name'; name.value = 'alice'; name.maxLength = 80
+  const preview = node('p'); preview.setAttribute('role', 'status')
+  const previewName = () => { preview.textContent = /^[a-zA-Z0-9_.-]{1,80}$/.test(name.value) ? t('settings:labPreviewSpace', { name: name.value }) : t('settings:labPreviewInvalid') }
+  name.oninput = previewName; previewName()
+  const pathLabel = node('label', 'labMemberPath'); pathLabel.htmlFor = 'lab-guide-space'
+  const path = node('select'); path.id = 'lab-guide-space'; path.className = 'form-select'
+  for (const key of ['labSharedSpace', 'labCliSpace']) { const option = node('option', key); option.value = key; path.append(option) }
+  const cli = node('div'); cli.hidden = true
+  cli.append(node('p', 'labGuideCli'))
+  const readyLabel = node('label'); readyLabel.className = 'lab-guide-checklist'
+  const ready = node('input'); ready.type = 'checkbox'
+  readyLabel.append(ready, node('span', 'labCliReady'))
+  const next = node('p'); next.setAttribute('role', 'status')
+  const updateNext = () => { next.textContent = ready.checked ? t('settings:labCliNext') : t('settings:labCliWait') }
+  ready.onchange = updateNext; updateNext()
+  cli.append(readyLabel, next)
+  path.onchange = () => { cli.hidden = path.value !== 'labCliSpace' }
+  members.append(nameLabel, name, preview, pathLabel, path, cli)
   panel.append(dialog)
   open.onclick = () => { choose('ollama'); dialog.showModal() }
   dialog.addEventListener('close', () => open.focus())

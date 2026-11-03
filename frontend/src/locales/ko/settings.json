@@ -279,5 +279,20 @@
   "labHelp_username": "영문·숫자·밑줄·점·하이픈을 사용하세요. Lab mode에서는 변경할 수 없습니다.",
   "labHelp_member-password": "8~128자. 비워두면 임시 비밀번호가 자동 생성됩니다.",
   "labHelp_personal-provider": "공유 엔진 또는 운영자가 준비한 개인 CLI를 선택하세요.",
-  "labHelp_personal-model": "공유 엔진은 허용 모델 ID, CLI는 해당 provider의 모델 ID를 입력하세요."
+  "labHelp_personal-model": "공유 엔진은 허용 모델 ID, CLI는 해당 provider의 모델 ID를 입력하세요.",
+  "labDeployChoice": "설치 방식 선택",
+  "labSystemdHelp": "Docker 없이 설치: Python 환경과 backend 의존성을 준비하고 서비스 템플릿의 사용자·경로를 서버에 맞게 수정하세요. 개인 CLI를 쓰려면 runner 서비스도 준비하세요. 아래 명령은 템플릿 준비 후 실행합니다.",
+  "labReadyData": "데이터 디렉터리 권한 준비",
+  "labReadyNetwork": "HTTPS 및 서버 주소 확인",
+  "labReadyAccount": "관리자 계정 로그인 확인",
+  "labChecklistProgress": "준비 체크: {{done}} / {{total}} (직접 확인용)",
+  "labMemberPath": "사용할 개인 공간 선택",
+  "labSharedSpace": "공유 모델 + 개인 문서",
+  "labCliSpace": "개인 CLI 연결",
+  "labPreviewName": "사용자명 예시 (미리보기 전용)",
+  "labPreviewSpace": "{{name}}의 문서 공간 → 첫 로그인 → 비밀번호 변경 → 개인 모델 저장. 이 미리보기는 계정을 생성하지 않습니다.",
+  "labPreviewInvalid": "영문·숫자·밑줄·점·하이픈으로 1~80자를 입력하세요.",
+  "labCliReady": "운영자가 runner와 CLI runtime을 준비했습니다",
+  "labCliNext": "다음: 개인 provider 저장 → 개인 CLI 연결 → 안내에 따라 인증 → 연결 상태 확인",
+  "labCliWait": "먼저 운영자가 runner 소켓과 CLI runtime을 준비해야 합니다."
 }
