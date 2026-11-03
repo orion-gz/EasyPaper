@@ -65,16 +65,19 @@ export function initializeLabMode() {
     members.replaceChildren()
     for (const user of await api('/lab/users')) {
       const row = document.createElement('div')
+      row.className = 'lab-member-row'
       const name = document.createElement('span')
       name.textContent = `${user.username} · ${user.role} `
       row.append(name)
       if (user.role === 'member') {
         const toggle = document.createElement('button')
         toggle.type = 'button'
+        toggle.className = 'btn btn-secondary'
         toggle.textContent = (user.active ? t('settings:labDisable') : t('settings:labEnable'))
         toggle.onclick = run(async () => { await api(`/lab/users/${user.id}`, 'PATCH', { active: !user.active }); await refresh() })
         const reset = document.createElement('button')
         reset.type = 'button'
+        reset.className = 'btn btn-secondary'
         reset.textContent = t('settings:labReset')
         reset.onclick = run(async () => {
           const result = await api(`/lab/users/${user.id}/reset-password`, 'POST')

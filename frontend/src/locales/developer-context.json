@@ -1,4 +1,13 @@
 {
+  "settings:labModeSettings": {
+    "description": "Section heading for enabling Lab mode."
+  },
+  "settings:labInferenceSettings": {
+    "description": "Section heading for the shared Lab inference server configuration."
+  },
+  "settings:labPersonalSettings": {
+    "description": "Section heading for the current user model and CLI settings."
+  },
   "viewer:sync.inProgress": {"description": "Sidebar accessible label while data synchronization is running"},
   "settings:figurePreviewEnabled": {
     "description": "Mode-specific Figure/Table/Equation preview enablement and hover or click activation preference."
