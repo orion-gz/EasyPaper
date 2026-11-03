@@ -66,5 +66,12 @@
   "conflictConfirmation": "Data changed after your preview; review again",
   "conflictRecords": "Other saved records",
   "copyTitle": "Download a separate copy instead",
-  "transferProgress": "Data transfer in progress"
+  "transferProgress": "Data transfer in progress",
+  "deviceDetails": "{{online}} · Status: {{status}} · Policy: {{action}} · Automatic sync: {{automatic}} · Last seen: {{seen}}",
+  "online": "Online",
+  "offline": "Offline",
+  "enabled": "On",
+  "disabled": "Off",
+  "deviceHelp": "Change connection settings in the desktop app. Confirm the synchronization preview in the app after requesting sync.",
+  "requestPending": "Awaiting desktop confirmation"
 }
