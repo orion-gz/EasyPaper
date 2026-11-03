@@ -1,4 +1,5 @@
 {
+  "viewer:sync.inProgress": {"description": "Sidebar accessible label while data synchronization is running"},
   "settings:figurePreviewEnabled": {
     "description": "Mode-specific Figure/Table/Equation preview enablement and hover or click activation preference."
   },
