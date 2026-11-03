@@ -109,3 +109,52 @@ async def import_user_data(request: Request, current_user: str = Depends(get_cur
             return await run_in_threadpool(data_transfer.import_archive, current_user, source)
         except data_transfer.InvalidArchive as exc:
             raise HTTPException(400, str(exc)) from exc
+
+
+# Live desktop sessions expire when their authenticated heartbeat stops.
+_desktop_devices = {}
+
+
+@router.get('/user-data/devices')
+async def desktop_devices(current_user: str = Depends(get_current_user)):
+    import time
+    devices = _desktop_devices.get(current_user, {})
+    now = time.time()
+    return {'devices': [dict(value, online=now - value['seen'] < 45)
+                        for value in devices.values() if now - value['seen'] < 86400]}
+
+
+@router.put('/user-data/devices/{device_id}')
+async def desktop_heartbeat(device_id: str, request: Request, current_user: str = Depends(get_current_user)):
+    import time
+    from services.desktop_sync import small_body
+    body = await small_body(request)
+    if len(device_id) > 64:
+        raise HTTPException(400, 'Invalid device ID')
+    devices = _desktop_devices.setdefault(current_user, {})
+    now = time.time()
+    for key in list(devices):
+        if now - devices[key]['seen'] > 86400:
+            del devices[key]
+    if device_id not in devices and len(devices) >= 100:
+        raise HTTPException(409, 'Too many connected devices')
+    previous = devices.get(device_id, {})
+    requested = previous.get('requested', False)
+    devices[device_id] = {'id': device_id, 'name': str(body.get('name', 'Desktop'))[:100],
+                          'seen': now, 'status': str(body.get('status', 'idle'))[:100],
+                          'action': str(body.get('action', 'defer'))[:40],
+                          'automatic': body.get('automatic') is True,
+                          'requested': requested and not body.get('acknowledged', False)}
+    return {'requested': devices[device_id]['requested']}
+
+
+@router.post('/user-data/devices/{device_id}/sync')
+async def request_desktop_sync(device_id: str, current_user: str = Depends(get_current_user)):
+    import time
+    device = _desktop_devices.get(current_user, {}).get(device_id)
+    if not device or time.time() - device['seen'] >= 45:
+        raise HTTPException(409, 'Desktop is offline')
+    if device['action'] != 'merge':
+        raise HTTPException(409, 'Enable merge synchronization in desktop connection settings first')
+    device['requested'] = True
+    return {'requested': True}
