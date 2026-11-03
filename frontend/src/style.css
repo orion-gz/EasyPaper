@@ -8536,3 +8536,34 @@ body.light-theme .chat-drawer {
 .lab-guide-dialog :focus-visible { outline: 2px solid var(--control-accent); outline-offset: 3px; }
 .lab-delete-button { background: var(--error); color: white; border: 1px solid var(--error); }
 .lab-delete-button:hover { filter: brightness(.9); }
+
+/* Three-step Lab setup walkthrough. */
+.lab-guide-dialog { font-size: 13px; }
+.lab-guide-dialog > .modal-header { padding: 16px 22px; }
+.lab-guide-dialog .modal-header h2 { font-size: 17px; }
+.lab-guide-body { display: flex; flex-direction: column; gap: 16px; padding: 20px 22px; }
+.lab-guide-body p, .lab-guide-body h3 { margin: 0; }
+.lab-guide-body h3 { font-size: 15px; }
+.lab-guide-body .lab-guide-progress { font-size: 11px; font-weight: 600; letter-spacing: .08em; }
+.lab-guide-dialog p { line-height: 1.65; }
+.lab-guide-demo { display: grid; gap: 12px; }
+.lab-guide-demo > p { font-size: 12px; }
+.lab-guide-screen { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--bg-elevated); }
+.lab-guide-screen > div { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 11px; overflow-wrap: anywhere; }
+.lab-guide-screen pre { margin: 0; border: 0; padding: 18px 16px; min-height: 128px; font-size: 12px; line-height: 1.8; border-radius: 0; }
+.lab-guide-screen.is-playing pre { animation: lab-scene-reveal .65s ease-out both; }
+.lab-guide-controls, .lab-guide-footer { display: flex; gap: 10px; flex-wrap: wrap; }
+.lab-guide-dialog .btn { font-size: 12px; padding: 8px 14px; }
+.lab-guide-footer { flex-shrink: 0; justify-content: space-between; padding: 14px 22px; border-top: 1px solid var(--border); }
+.lab-guide-footer button:disabled { opacity: .45; cursor: default; }
+@keyframes lab-scene-reveal {
+  from { opacity: .2; clip-path: inset(0 0 100% 0); }
+  to { opacity: 1; clip-path: inset(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lab-guide-screen.is-playing pre { animation: none; }
+}
+@media (max-width: 480px) {
+  .lab-guide-body { padding: 16px; gap: 14px; }
+  .lab-guide-dialog > .modal-header, .lab-guide-footer { padding: 14px 16px; }
+}

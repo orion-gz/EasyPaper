@@ -294,5 +294,22 @@
   "labPreviewInvalid": "Enter 1–80 letters, digits, underscores, dots or hyphens.",
   "labCliReady": "Operator has prepared the runner and CLI runtime",
   "labCliNext": "Next: save personal provider → connect personal CLI → authenticate → check connection status",
-  "labCliWait": "The operator must first prepare the runner socket and CLI runtime."
+  "labCliWait": "The operator must first prepare the runner socket and CLI runtime.",
+  "labWizardServer": "SSH into your server. Install Git, Docker Compose and Caddy first. Run the example with the default app UID/GID (1000:1000). Point your domain’s DNS to the server and allow inbound ports 80/443 (forward them if needed). Add the shown block to /etc/caddy/Caddyfile with your real domain, then reload Caddy. Open the HTTPS domain on your PC; localhost only reaches the server itself.",
+  "labWizardEngine": "Install Ollama on the same server. Run sudo systemctl edit ollama and enter the shown service settings, then restart and download the example model. Allow port 11434 only from the Docker network. In Lab settings, enter the shown URL and model for both allowed and default models, then save and test.",
+  "labWizardMembers": "Enable Lab mode with the administrator’s current password. Create a member with a username; leave the initial password blank to generate one. Share the HTTPS address and generated password privately. Each member changes their password at first login and gets a separate document space.",
+  "labWizardConnect": "Save → Test connection → Connected",
+  "labWizardEnable": "Administrator password •••••••• → Enable Lab mode",
+  "labWizardInvite": "Username: alice → Create account → Temporary password",
+  "labWizardLogin": "alice → Sign in → Change initial password",
+  "labWizardSpace": "alice’s documents\nUpload a paper → Start reading",
+  "labWizardDemo": "Animated example · does not run commands or change settings",
+  "labWizardPause": "Pause",
+  "labWizardPlay": "Play",
+  "labWizardReplay": "Replay",
+  "labWizardFrame": "Next scene",
+  "labWizardPrevious": "Previous",
+  "labWizardNext": "Next",
+  "labWizardDone": "Finish",
+  "labWizardDetails": "Advanced setup · systemd, vLLM and personal CLI"
 }

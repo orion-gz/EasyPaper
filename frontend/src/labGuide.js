@@ -1,6 +1,23 @@
 import { t } from './i18n.js'
 
 const labels = () => ({
+  labWizardServer: t('settings:labWizardServer'),
+  labWizardEngine: t('settings:labWizardEngine'),
+  labWizardMembers: t('settings:labWizardMembers'),
+  labWizardConnect: t('settings:labWizardConnect'),
+  labWizardEnable: t('settings:labWizardEnable'),
+  labWizardInvite: t('settings:labWizardInvite'),
+  labWizardLogin: t('settings:labWizardLogin'),
+  labWizardSpace: t('settings:labWizardSpace'),
+  labWizardDemo: t('settings:labWizardDemo'),
+  labWizardPause: t('settings:labWizardPause'),
+  labWizardPlay: t('settings:labWizardPlay'),
+  labWizardReplay: t('settings:labWizardReplay'),
+  labWizardFrame: t('settings:labWizardFrame'),
+  labWizardPrevious: t('settings:labWizardPrevious'),
+  labWizardNext: t('settings:labWizardNext'),
+  labWizardDone: t('settings:labWizardDone'),
+  labWizardDetails: t('settings:labWizardDetails'),
   labDeployChoice: t('settings:labDeployChoice'),
   labSystemdHelp: t('settings:labSystemdHelp'),
   labReadyData: t('settings:labReadyData'),
@@ -52,7 +69,7 @@ export function initializeLabGuide() {
     const element = document.createElement(tag)
     if (key) {
       element.dataset.i18n = `settings:${key}`
-      element.textContent = labels()[key]
+      element.textContent = labels()[key] || t(`settings:${key}`)
     }
     return element
   }
@@ -101,99 +118,133 @@ export function initializeLabGuide() {
   const body = node('div')
   body.className = 'lab-guide-body'
   dialog.append(header, body)
-  const section = (titleKey, textKeys) => {
-    const details = node('details')
-    details.append(node('summary', titleKey))
-    for (const key of textKeys) details.append(node('p', key))
-    body.append(details)
-    return details
-  }
-  const server = section('labGuideServer', ['labGuideServerText'])
-  server.open = true
-  const commands = node('pre')
-  commands.textContent = 'mkdir -p lab-data/home\n# Set lab-data ownership to LAB_APP_UID:LAB_APP_GID\ndocker compose -f docker-compose.lab.yml up -d --build\ndocker compose -f docker-compose.lab.yml logs --tail=100'
-  server.append(commands)
-  const deployLabel = node('label', 'labDeployChoice')
-  deployLabel.htmlFor = 'lab-guide-deploy'
-  const deploy = node('select')
-  deploy.id = 'lab-guide-deploy'
-  deploy.className = 'form-select'
-  for (const value of ['Docker Compose', 'systemd']) {
-    const option = node('option'); option.value = value; option.textContent = value; deploy.append(option)
-  }
-  const dockerCommands = commands.textContent
-  const deployHelp = node('p')
-  deployHelp.setAttribute('aria-live', 'polite')
-  deploy.onchange = () => {
-    const docker = deploy.value === 'Docker Compose'
-    commands.textContent = docker ? dockerCommands : 'sudo cp deploy/lab/easypaper-lab.service /etc/systemd/system/\nsudo systemctl daemon-reload\nsudo systemctl enable --now easypaper-lab\nsudo systemctl status easypaper-lab'
-    deployHelp.textContent = docker ? t('settings:labGuideServerText') : t('settings:labSystemdHelp')
-  }
-  server.insertBefore(deployLabel, commands)
-  server.insertBefore(deploy, commands)
-  server.insertBefore(deployHelp, commands)
-  const checklist = node('div')
-  checklist.className = 'lab-guide-checklist'
+
+  const steps = [
+    { title: 'labGuideServer', text: 'labWizardServer', frames: [
+      ['SSH', '$ ssh user@lab-server\n$ git clone https://github.com/orion-gz/EasyPaper.git\n$ cd EasyPaper'],
+      ['Docker Compose', '$ mkdir -p lab-data/home\n$ sudo chown -R 1000:1000 lab-data\n$ docker compose -f docker-compose.lab.yml up -d --build'],
+      ['HTTPS · /etc/caddy/Caddyfile', 'lab.example.com {\n    reverse_proxy 127.0.0.1:8000\n}'],
+      ['HTTPS', '$ sudo systemctl reload caddy\nhttps://lab.example.com → EasyPaper'],
+    ] },
+    { title: 'labGuideEngine', text: 'labWizardEngine', frames: [
+      ['Ollama · /etc/systemd/system/ollama.service.d/override.conf', '[Service]\nEnvironment="OLLAMA_HOST=0.0.0.0:11434"'],
+      ['SSH', '$ sudo systemctl daemon-reload\n$ sudo systemctl restart ollama\n$ ollama pull qwen3:4b'],
+      ['EasyPaper · Lab', 'Ollama\nhttp://host.docker.internal:11434\nqwen3:4b'],
+      ['EasyPaper · Lab', () => t('settings:labWizardConnect')],
+    ] },
+    { title: 'labGuideMembers', text: 'labWizardMembers', frames: [
+      ['EasyPaper · Lab', () => t('settings:labWizardEnable')],
+      ['EasyPaper · Lab', () => t('settings:labWizardInvite')],
+      ['https://lab.example.com', () => t('settings:labWizardLogin')],
+      ['EasyPaper · alice', () => t('settings:labWizardSpace')],
+    ] },
+  ]
+  let step = 0
+  let frame = 0
+  let timer
+  let paused = false
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
   const progress = node('p')
+  progress.className = 'lab-guide-progress'
   progress.setAttribute('role', 'status')
-  const updateProgress = () => { progress.textContent = t('settings:labChecklistProgress', { done: checklist.querySelectorAll(':checked').length, total: 3 }) }
-  for (const key of ['labReadyData', 'labReadyNetwork', 'labReadyAccount']) {
-    const label = node('label')
-    const check = node('input'); check.type = 'checkbox'; check.onchange = updateProgress
-    label.append(check, node('span', key)); checklist.append(label)
-  }
-  updateProgress()
-  server.append(checklist, progress)
-  const engine = section('labGuideEngine', ['labGuideModels'])
-  const choices = node('div')
-  choices.className = 'form-actions'
+  const heading = node('h3')
+  heading.tabIndex = -1
   const description = node('p')
-  const command = node('pre')
-  const source = node('a')
-  source.target = '_blank'
-  source.rel = 'noopener noreferrer'
-  const choose = value => {
-    const ollama = value === 'ollama'
-    description.textContent = t(`settings:${ollama ? 'labGuideOllama' : 'labGuideVllm'}`)
-    command.textContent = ollama ? 'ollama serve\n# In another terminal:\nollama pull qwen3:4b\n# URL: http://host.docker.internal:11434\n# Model: qwen3:4b' : 'vllm serve Qwen/Qwen3-4B --host 0.0.0.0 --port 8000\n# URL: http://gpu-server:8000/v1\n# Model: Qwen/Qwen3-4B'
-    source.textContent = ollama ? 'Ollama · Qwen3' : 'vLLM · Serving'
-    source.href = ollama ? 'https://ollama.com/library/qwen3' : 'https://docs.vllm.ai/en/stable/serving/online_serving/openai_compatible_server/'
-    for (const button of choices.children) button.setAttribute('aria-pressed', String(button.dataset.engine === value))
+  const demo = node('div')
+  demo.className = 'lab-guide-demo'
+  const demoLabel = node('p', 'labWizardDemo')
+  const screen = node('div')
+  screen.className = 'lab-guide-screen'
+  const screenTitle = node('div')
+  const output = node('pre')
+  const caption = node('p')
+  caption.className = 'lab-guide-caption'
+  screen.append(screenTitle, output)
+  const controls = node('div')
+  controls.className = 'lab-guide-controls'
+  const button = (key, action) => {
+    const el = node('button', key)
+    el.type = 'button'
+    el.className = 'btn btn-secondary'
+    el.onclick = action
+    return el
   }
-  for (const value of ['ollama', 'vllm']) {
-    const button = node('button')
-    button.type = 'button'
-    button.className = 'btn btn-secondary'
-    button.textContent = value === 'ollama' ? 'Ollama' : 'vLLM'
-    button.dataset.engine = value
-    button.onclick = () => choose(value)
-    choices.append(button)
+  const stop = () => { clearTimeout(timer) }
+  const renderFrame = () => {
+    const current = steps[step].frames[frame]
+    screenTitle.textContent = current[0]
+    output.textContent = typeof current[1] === 'function' ? current[1]() : current[1]
+    caption.textContent = `${frame + 1} / ${steps[step].frames.length}`
+    screen.classList.remove('is-playing')
+    void screen.offsetWidth
+    if (!paused && !reducedMotion.matches) screen.classList.add('is-playing')
   }
-  engine.append(choices, description, command, node('p', 'labGuideNetwork'), source)
-  choose('ollama')
-  const members = section('labGuideMembers', ['labGuideMembersText'])
-  const nameLabel = node('label', 'labPreviewName')
-  nameLabel.htmlFor = 'lab-guide-name'
-  const name = node('input')
-  name.id = 'lab-guide-name'; name.value = 'alice'; name.maxLength = 80
-  const preview = node('p'); preview.setAttribute('role', 'status')
-  const previewName = () => { preview.textContent = /^[a-zA-Z0-9_.-]{1,80}$/.test(name.value) ? t('settings:labPreviewSpace', { name: name.value }) : t('settings:labPreviewInvalid') }
-  name.oninput = previewName; previewName()
-  const pathLabel = node('label', 'labMemberPath'); pathLabel.htmlFor = 'lab-guide-space'
-  const path = node('select'); path.id = 'lab-guide-space'; path.className = 'form-select'
-  for (const key of ['labSharedSpace', 'labCliSpace']) { const option = node('option', key); option.value = key; path.append(option) }
-  const cli = node('div'); cli.hidden = true
-  cli.append(node('p', 'labGuideCli'))
-  const readyLabel = node('label'); readyLabel.className = 'lab-guide-checklist'
-  const ready = node('input'); ready.type = 'checkbox'
-  readyLabel.append(ready, node('span', 'labCliReady'))
-  const next = node('p'); next.setAttribute('role', 'status')
-  const updateNext = () => { next.textContent = ready.checked ? t('settings:labCliNext') : t('settings:labCliWait') }
-  ready.onchange = updateNext; updateNext()
-  cli.append(readyLabel, next)
-  path.onchange = () => { cli.hidden = path.value !== 'labCliSpace' }
-  members.append(nameLabel, name, preview, pathLabel, path, cli)
+  const schedule = () => {
+    stop()
+    if (!dialog.open || paused || reducedMotion.matches) return
+    timer = setTimeout(() => {
+      frame = (frame + 1) % steps[step].frames.length
+      renderFrame()
+      schedule()
+    }, 4000)
+  }
+  const toggle = button('labWizardPause', () => {
+    paused = !paused
+    toggle.textContent = t(`settings:${paused ? 'labWizardPlay' : 'labWizardPause'}`)
+    renderFrame()
+    schedule()
+  })
+  toggle.removeAttribute('data-i18n')
+  const replay = button('labWizardReplay', () => { frame = 0; renderFrame(); schedule() })
+  const nextFrame = button('labWizardFrame', () => {
+    frame = (frame + 1) % steps[step].frames.length
+    renderFrame()
+    schedule()
+  })
+  controls.append(toggle, replay, nextFrame)
+  demo.append(demoLabel, screen, caption, controls)
+  const reference = node('a', 'labWizardDetails')
+  reference.href = 'https://github.com/orion-gz/EasyPaper/blob/main/docs/lab-mode.md'
+  reference.target = '_blank'
+  reference.rel = 'noopener noreferrer'
+  body.append(progress, heading, description, demo, reference)
+  const footer = node('div')
+  footer.className = 'lab-guide-footer'
+  const previous = button('labWizardPrevious', () => { step -= 1; renderStep() })
+  const next = button('labWizardNext', () => {
+    if (step === steps.length - 1) dialog.close()
+    else { step += 1; renderStep() }
+  })
+  next.removeAttribute('data-i18n')
+  next.className = 'btn btn-primary'
+  footer.append(previous, next)
+  dialog.append(footer)
+  const renderStep = () => {
+    stop()
+    frame = 0
+    progress.textContent = `STEP ${step + 1} / 3`
+    heading.textContent = t(`settings:${steps[step].title}`)
+    description.textContent = t(`settings:${steps[step].text}`)
+    previous.disabled = step === 0
+    next.textContent = t(`settings:${step === 2 ? 'labWizardDone' : 'labWizardNext'}`)
+    toggle.hidden = reducedMotion.matches
+    renderFrame()
+    body.scrollTop = 0
+    heading.focus()
+    schedule()
+  }
+  reducedMotion.addEventListener('change', () => {
+    toggle.hidden = reducedMotion.matches
+    renderFrame()
+    schedule()
+  })
   panel.append(dialog)
-  open.onclick = () => { choose('ollama'); dialog.showModal() }
-  dialog.addEventListener('close', () => open.focus())
+  open.onclick = () => {
+    step = 0
+    paused = false
+    toggle.textContent = t('settings:labWizardPause')
+    dialog.showModal()
+    renderStep()
+  }
+  dialog.addEventListener('close', () => { stop(); open.focus() })
 }
