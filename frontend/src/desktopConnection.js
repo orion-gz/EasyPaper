@@ -1,5 +1,7 @@
 import { initI18n, loadNamespaces, t } from './i18n.js'
 import './styles/desktop-connection.css'
+import { getModeSetting } from './modeSettings.js'
+import { applyTheme, loadThemes, selectedTheme } from './themes/themeEngine.js'
 
 let connection = null
 let dialog = null
@@ -343,6 +345,9 @@ function populate() {
 // Run before main.js or any reader module touches localStorage or the API.
 export async function prepareDesktopConnection() {
   if (!window.__TAURI_INTERNALS__) return true
+  const mode = localStorage.getItem('easypaper_workspace_mode') === 'general' ? 'general' : 'research'
+  const scheme = getModeSetting('theme', mode) === 'light' ? 'light' : 'dark'
+  applyTheme(document.body, selectedTheme(mode, scheme, loadThemes()))
   await initI18n()
   await loadNamespaces(['desktop'])
   try {
