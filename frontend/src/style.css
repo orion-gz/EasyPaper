@@ -8512,3 +8512,15 @@ body.light-theme .chat-drawer {
   #lab-models { grid-row: auto; }
   #lab-status { margin-inline: 16px; }
 }
+
+/* Lab onboarding keeps optional controls out of the primary flow. */
+#tab-lab .modal-form { border: 1px solid var(--border-color); border-radius: 12px; padding: 18px; margin-top: 18px; }
+.lab-help-button { border: 1px solid currentColor; border-radius: 50%; width: 24px; height: 24px; background: transparent; color: var(--text-muted); cursor: pointer; flex-shrink: 0; }
+.lab-field-help { grid-column: 1 / -1; flex-basis: 100%; font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+.lab-advanced summary, .lab-guide-dialog summary { cursor: pointer; font-weight: 600; padding: 12px 0; }
+.lab-guide-dialog { width: min(720px, 92vw); max-height: 85vh; overflow: auto; padding: 24px; border: 1px solid var(--border-color); border-radius: 16px; background: var(--bg-primary, white); color: var(--text-primary, #222); }
+.lab-guide-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.lab-guide-dialog p { line-height: 1.7; }
+.lab-guide-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; background: rgb(128 128 128 / 12%); border-radius: 8px; }
+.lab-guide-dialog button[aria-pressed="true"] { outline: 2px solid var(--accent-color, #6366f1); }
+.lab-guide-dialog details + details { border-top: 1px solid var(--border-color); }

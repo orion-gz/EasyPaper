@@ -1,3 +1,4 @@
+import { initializeLabGuide } from './labGuide.js'
 import { syncSelectValue } from './uiScale.js'
 import { t } from './i18n.js'
 
@@ -12,6 +13,7 @@ async function api(path, method = 'GET', body) {
 }
 
 export function initializeLabMode() {
+  initializeLabGuide()
   const status = document.getElementById('lab-status')
   const members = document.getElementById('lab-members')
   const report = error => { status.textContent = error.message }
