@@ -1,4 +1,7 @@
 {
+  "settings:labInitialPassword": {"description": "Lab member management: labInitialPassword"},
+  "settings:labDelete": {"description": "Lab member management: labDelete"},
+  "settings:labDeleteConfirm": {"description": "Lab member management: labDeleteConfirm"},
   "settings:labModeSettings": {
     "description": "Section heading for enabling Lab mode."
   },

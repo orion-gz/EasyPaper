@@ -985,6 +985,10 @@
               <label for="lab-username" data-i18n="settings:labUsername">Username</label>
               <input id="lab-username" autocomplete="off" pattern="[a-zA-Z0-9_.-]+" maxlength="80" required>
             </div>
+            <div class="form-group settings-row">
+              <label for="lab-member-password" data-i18n="settings:labInitialPassword">Initial password (blank generates automatically)</label>
+              <input id="lab-member-password" type="password" autocomplete="new-password" minlength="8" maxlength="128">
+            </div>
             <div class="form-actions"><button class="btn btn-primary" type="submit" data-i18n="settings:labCreate">Create member</button></div>
           </form>
         </div>

@@ -83,7 +83,16 @@ export function initializeLabMode() {
           const result = await api(`/lab/users/${user.id}/reset-password`, 'POST')
           status.textContent = `${t('settings:labTemporaryPassword')}: ${result.temporary_password}`
         })
-        row.append(toggle, reset)
+        const remove = document.createElement('button')
+        remove.type = 'button'
+        remove.className = 'btn btn-secondary'
+        remove.textContent = t('settings:labDelete')
+        remove.onclick = run(async () => {
+          if (!window.confirm(t('settings:labDeleteConfirm', { username: user.username }))) return
+          await api(`/lab/users/${user.id}`, 'DELETE')
+          await refresh()
+        })
+        row.append(toggle, reset, remove)
       }
       members.append(row)
     }
@@ -97,7 +106,11 @@ export function initializeLabMode() {
   }))
   document.getElementById('lab-member-form').addEventListener('submit', run(async () => {
     const input = document.getElementById('lab-username')
-    const result = await api('/lab/users', 'POST', { username: input.value.trim() })
+    const password = document.getElementById('lab-member-password')
+    let result
+    try {
+      result = await api('/lab/users', 'POST', { username: input.value.trim(), ...(password.value ? { password: password.value } : {}) })
+    } finally { password.value = '' }
     input.value = ''
     await refresh()
     status.textContent = `${result.username} — ${t('settings:labTemporaryPassword')}: ${result.temporary_password}`

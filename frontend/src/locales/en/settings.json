@@ -1,4 +1,7 @@
 {
+  "labInitialPassword": "Initial password (blank generates automatically)",
+  "labDelete": "Delete member",
+  "labDeleteConfirm": "Delete the member account {{username}}?",
   "labModeSettings": "Lab settings",
   "labInferenceSettings": "Shared inference",
   "labPersonalSettings": "Personal model",

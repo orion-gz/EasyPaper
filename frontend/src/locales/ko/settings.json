@@ -1,4 +1,7 @@
 {
+  "labInitialPassword": "초기 비밀번호 (비우면 자동 생성)",
+  "labDelete": "멤버 삭제",
+  "labDeleteConfirm": "{{username}} 멤버 계정을 삭제하시겠습니까?",
   "labModeSettings": "Lab 설정",
   "labInferenceSettings": "공용 추론 서버",
   "labPersonalSettings": "개인 모델",
