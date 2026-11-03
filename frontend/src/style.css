@@ -8512,3 +8512,27 @@ body.light-theme .chat-drawer {
   #lab-models { grid-row: auto; }
   #lab-status { margin-inline: 16px; }
 }
+
+/* Lab onboarding keeps optional controls out of the primary flow. */
+#tab-lab .modal-form { border: 1px solid var(--border-color); border-radius: 12px; padding: 18px; margin-top: 18px; }
+.lab-help-button { border: 1px solid currentColor; border-radius: 50%; width: 24px; height: 24px; background: transparent; color: var(--text-muted); cursor: pointer; flex-shrink: 0; }
+.lab-field-help { grid-column: 1 / -1; flex-basis: 100%; font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+.lab-advanced summary, .lab-guide-dialog summary { cursor: pointer; font-weight: 600; padding: 12px 0; }
+/* Native dialog behavior with the shared EasyPaper modal surface/header. */
+.lab-guide-dialog { width: min(720px, calc(100vw - 32px)); max-width: 720px; max-height: calc(100dvh - 48px); padding: 0; margin: auto; color: var(--text-primary); transform: none; font: inherit; }
+.lab-guide-dialog::backdrop { background: rgba(0, 0, 0, .6); backdrop-filter: blur(4px); }
+.lab-guide-dialog[open] { display: flex; flex-direction: column; }
+.lab-guide-dialog > .modal-header { flex-shrink: 0; }
+.lab-guide-body { padding: 24px 28px; overflow-y: auto; min-height: 0; }
+.lab-guide-dialog [hidden] { display: none !important; }
+.lab-guide-dialog p { line-height: 1.7; color: var(--text-secondary); }
+.lab-guide-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.lab-guide-dialog button[aria-pressed="true"] { border-color: var(--control-accent); background: color-mix(in srgb, var(--control-accent) 12%, var(--bg-surface)); }
+.lab-guide-dialog details + details { border-top: 1px solid var(--border); }
+.lab-guide-dialog input:not([type=checkbox]), .lab-guide-dialog select { display: block; width: 100%; box-sizing: border-box; margin: 8px 0 16px; padding: 10px 12px; background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font: inherit; }
+.lab-guide-checklist { display: grid; gap: 12px; margin: 16px 0; }
+.lab-guide-checklist label, label.lab-guide-checklist { display: flex; align-items: center; gap: 10px; }
+.lab-guide-dialog input[type=checkbox] { accent-color: var(--control-accent); }
+.lab-guide-dialog :focus-visible { outline: 2px solid var(--control-accent); outline-offset: 3px; }
+.lab-delete-button { background: var(--error); color: white; border: 1px solid var(--error); }
+.lab-delete-button:hover { filter: brightness(.9); }

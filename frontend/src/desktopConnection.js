@@ -384,7 +384,7 @@ export async function prepareDesktopConnection() {
   if (window.parent !== window) return true
   const badge = document.createElement('button')
   badge.type = 'button'
-  badge.className = 'desktop-connection-badge'
+  badge.className = 'btn btn-secondary desktop-connection-badge'
   badge.textContent = (connection.remote ? t('desktop:badgeRemote') : t('desktop:badgeLocal'))
   badge.title = connection.remote ? connection.server_url : t('desktop:settingsTitle')
   badge.addEventListener('click', openSettings)
@@ -393,7 +393,7 @@ export async function prepareDesktopConnection() {
   section.className = 'desktop-connection-section form-group settings-action-card'
   const button = document.createElement('button')
   button.type = 'button'
-  button.className = 'btn btn-secondary'
+  button.className = 'btn btn-primary'
   button.textContent = t('desktop:settingsTitle')
   button.addEventListener('click', openSettings)
   const help = document.createElement('p')

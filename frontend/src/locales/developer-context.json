@@ -1,7 +1,13 @@
 {
-  "settings:labInitialPassword": {"description": "Lab member management: labInitialPassword"},
-  "settings:labDelete": {"description": "Lab member management: labDelete"},
-  "settings:labDeleteConfirm": {"description": "Lab member management: labDeleteConfirm"},
+  "settings:labInitialPassword": {
+    "description": "Lab member management: labInitialPassword"
+  },
+  "settings:labDelete": {
+    "description": "Lab member management: labDelete"
+  },
+  "settings:labDeleteConfirm": {
+    "description": "Lab member management: labDeleteConfirm"
+  },
   "settings:labModeSettings": {
     "description": "Section heading for enabling Lab mode."
   },
@@ -11,7 +17,9 @@
   "settings:labPersonalSettings": {
     "description": "Section heading for the current user model and CLI settings."
   },
-  "viewer:sync.inProgress": {"description": "Sidebar accessible label while data synchronization is running"},
+  "viewer:sync.inProgress": {
+    "description": "Sidebar accessible label while data synchronization is running"
+  },
   "settings:figurePreviewEnabled": {
     "description": "Mode-specific Figure/Table/Equation preview enablement and hover or click activation preference."
   },
@@ -6191,5 +6199,131 @@
   },
   "desktop:requestPending": {
     "description": "Connected desktop device panel: requestPending"
+  },
+  "settings:labGuideTitle": {
+    "description": "Lab setup guide"
+  },
+  "settings:labAdvanced": {
+    "description": "Advanced · concurrency and authentication"
+  },
+  "settings:labIntro": {
+    "description": "Start with shared inference, invite members, then choose your model."
+  },
+  "settings:labGuideServer": {
+    "description": "1. Prepare server"
+  },
+  "settings:labGuideEngine": {
+    "description": "2. Engine and model"
+  },
+  "settings:labGuideMembers": {
+    "description": "3. Members and personal spaces"
+  },
+  "settings:labGuideServerText": {
+    "description": "Run these commands at the repository root after installing Docker Compose. Make lab-data writable by the app UID/GID (default 1000:1000). The app binds to 127.0.0.1:8000; configure an HTTPS reverse proxy for remote access and keep one app worker. Sign in as the existing administrator, save and test shared inference, then enable Lab mode with your current password."
+  },
+  "settings:labGuideOllama": {
+    "description": "Ollama · a starting point for simple setup and small groups. After installation, run ollama serve and pull a model in another terminal."
+  },
+  "settings:labGuideVllm": {
+    "description": "vLLM · consider for concurrent requests on a GPU server. Prepare supported hardware and install vLLM. EasyPaper requires cache_salt support and access to the server-root /openapi.json; test the connection."
+  },
+  "settings:labGuideModels": {
+    "description": "Example starting points: evaluate Qwen3 4B for a smaller trial and 8B for a quality comparison. These are examples, not a claim of best or latest models. Compare translation quality, latency and long-document memory on actual papers. VRAM depends on quantization, context and concurrency."
+  },
+  "settings:labGuideNetwork": {
+    "description": "The URL is reached by the EasyPaper server, not your browser. For a host engine from Docker, use host.docker.internal and configure the engine to bind to an interface reachable from the container. Restrict access with a firewall. Allowed and default models must exactly match served IDs."
+  },
+  "settings:labGuideMembersText": {
+    "description": "Administrator: enter a username in Members and create the account. Leave the initial password blank to generate one. Share the displayed password with that member; they change it on first login. Document spaces are separated by account, with no separate space creation button. On desktop, use Data → Server connection with the same server and account."
+  },
+  "settings:labGuideCli": {
+    "description": "Personal CLI is optional. Operators configure deploy/lab/runner.example.json and easypaper-lab-runner.service, then build CLI images or rootfs following docs/lab-mode.md. Match the runner socket group to the app GID. With automatic provisioning enabled, the first CLI status/login/inference creates a private UID and home. Members choose and save their provider, then connect their personal CLI. Local PC credentials are not transferred. Antigravity needs operator-managed authentication integration."
+  },
+  "settings:labCloseGuide": {
+    "description": "Close"
+  },
+  "settings:labHelp_enabled": {
+    "description": "Enter the administrator password and save to apply."
+  },
+  "settings:labHelp_password": {
+    "description": "The password of the signed-in administrator."
+  },
+  "settings:labHelp_engine": {
+    "description": "Consider Ollama for simple setup or vLLM for GPU concurrency."
+  },
+  "settings:labHelp_url": {
+    "description": "Example: http://host.docker.internal:11434 or http://gpu-server:8000/v1"
+  },
+  "settings:labHelp_models": {
+    "description": "Enter installed model IDs, one per line. Example: qwen3:4b"
+  },
+  "settings:labHelp_default-model": {
+    "description": "Enter one ID from the allowed models list."
+  },
+  "settings:labHelp_total-limit": {
+    "description": "Total concurrent requests. Starting defaults are Ollama 2 / vLLM 8; tune after measuring server load."
+  },
+  "settings:labHelp_user-limit": {
+    "description": "Concurrent requests per person. Start with 1."
+  },
+  "settings:labHelp_api-key": {
+    "description": "Inference server authentication key. Blank preserves the saved key."
+  },
+  "settings:labHelp_username": {
+    "description": "Use letters, digits, underscore, dot or hyphen. Cannot change in Lab mode."
+  },
+  "settings:labHelp_member-password": {
+    "description": "8–128 characters. Leave blank to generate a temporary password."
+  },
+  "settings:labHelp_personal-provider": {
+    "description": "Choose the shared engine or an operator-provisioned personal CLI."
+  },
+  "settings:labHelp_personal-model": {
+    "description": "For shared inference use an allowed model ID; for CLI use its provider model ID."
+  },
+  "settings:labDeployChoice": {
+    "description": "Choose deployment"
+  },
+  "settings:labSystemdHelp": {
+    "description": "Without Docker: prepare Python and backend dependencies, then adapt the service user and paths to your server. Prepare the runner service for personal CLI. Run these commands after configuring the templates."
+  },
+  "settings:labReadyData": {
+    "description": "Data directory permissions prepared"
+  },
+  "settings:labReadyNetwork": {
+    "description": "HTTPS and server address verified"
+  },
+  "settings:labReadyAccount": {
+    "description": "Administrator sign-in verified"
+  },
+  "settings:labChecklistProgress": {
+    "description": "Preparation: {{done}} / {{total}} (self-check)"
+  },
+  "settings:labMemberPath": {
+    "description": "Choose a personal workspace"
+  },
+  "settings:labSharedSpace": {
+    "description": "Shared model + private documents"
+  },
+  "settings:labCliSpace": {
+    "description": "Personal CLI connection"
+  },
+  "settings:labPreviewName": {
+    "description": "Example username (preview only)"
+  },
+  "settings:labPreviewSpace": {
+    "description": "Document space for {{name}} → first sign-in → password change → save personal model. This preview does not create an account."
+  },
+  "settings:labPreviewInvalid": {
+    "description": "Enter 1–80 letters, digits, underscores, dots or hyphens."
+  },
+  "settings:labCliReady": {
+    "description": "Operator has prepared the runner and CLI runtime"
+  },
+  "settings:labCliNext": {
+    "description": "Next: save personal provider → connect personal CLI → authenticate → check connection status"
+  },
+  "settings:labCliWait": {
+    "description": "The operator must first prepare the runner socket and CLI runtime."
   }
 }

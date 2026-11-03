@@ -1,3 +1,4 @@
+import { initializeLabGuide } from './labGuide.js'
 import { syncSelectValue } from './uiScale.js'
 import { t } from './i18n.js'
 
@@ -12,6 +13,7 @@ async function api(path, method = 'GET', body) {
 }
 
 export function initializeLabMode() {
+  initializeLabGuide()
   const status = document.getElementById('lab-status')
   const members = document.getElementById('lab-members')
   const report = error => { status.textContent = error.message }
@@ -85,7 +87,7 @@ export function initializeLabMode() {
         })
         const remove = document.createElement('button')
         remove.type = 'button'
-        remove.className = 'btn btn-secondary'
+        remove.className = 'btn lab-delete-button'
         remove.textContent = t('settings:labDelete')
         remove.onclick = run(async () => {
           if (!window.confirm(t('settings:labDeleteConfirm', { username: user.username }))) return
