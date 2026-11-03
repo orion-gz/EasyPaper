@@ -9,6 +9,7 @@ import hashlib
 from http.cookies import CookieError, SimpleCookie
 import json
 import logging
+import re
 from pathlib import Path
 import socket
 import tempfile
@@ -87,6 +88,30 @@ class RemoteGateway:
         scope = dict(scope, desktop_remote_target=self.target)
         request = Request(scope, receive)
         if scope['path'] == '/api' or scope['path'].startswith('/api/'):
+            options = self.manager.sync.options(self.target)
+            if (self.manager.offline(self.target) and options.get('offline_ready')
+                    and (not scope['path'].startswith('/api/auth/') or scope['path'] == '/api/auth/check')
+                    and not scope['path'].startswith('/api/lab/')):
+                origin = request.headers.get('origin')
+                if (request.url.hostname != '127.0.0.1'
+                        or (origin and origin != str(request.base_url).rstrip('/'))
+                        or request.headers.get('sec-fetch-site') == 'cross-site'):
+                    await JSONResponse({'detail': 'Invalid desktop host.'}, status_code=403)(scope, receive, send)
+                    return
+                path = scope['path']
+                document_change = (
+                    path in ('/api/upload', '/api/library/trash/empty')
+                    or bool(re.fullmatch(r'/api/session/[^/]+', path))
+                    or bool(re.fullmatch(r'/api/library/[^/]+(?:/(?:permanent|restore|title|metadata|tags|languages|processing-policy|reparse-preview)(?:/.*)?)?', path))
+                    or path.startswith('/api/user-data/import')
+                    or path.startswith('/api/user-data/sync/')
+                )
+                if request.method not in ('GET', 'HEAD', 'OPTIONS') and document_change:
+                    await JSONResponse({'detail': 'Manage documents in server access mode. Offline mode synchronizes user data only.'}, status_code=409)(scope, receive, send)
+                    return
+                scope['desktop_offline_user'] = self.manager.local_user(self.target)
+                await self.manager.app(scope, receive, send)
+                return
             response = await self.proxy(request)
             await response(scope, receive, send)
         else:
@@ -150,14 +175,16 @@ class DesktopConnections:
         self.app = app
         self.config_path = Path(config_path)
         self.local_port = local_port
-        self.config = {'enabled': False, 'server_url': '', 'onboarded': False, 'ports': {}, 'sync_options': {}}
+        self.config = {'enabled': False, 'server_url': '', 'onboarded': False, 'ports': {}, 'sync_options': {}, 'access_modes': {}}
         self.config_error = None
         try:
             saved = json.loads(self.config_path.read_text())
             if (not isinstance(saved, dict) or not isinstance(saved.get('ports', {}), dict)
                     or not isinstance(saved.get('enabled', False), bool)
                     or not isinstance(saved.get('onboarded', False), bool)
-                    or not isinstance(saved.get('sync_options', {}), dict)):
+                    or not isinstance(saved.get('sync_options', {}), dict)
+                    or not isinstance(saved.get('access_modes', {}), dict)
+                    or any(v not in ('server', 'offline') for v in saved.get('access_modes', {}).values())):
                 raise ValueError('Invalid connection settings')
             if saved.get('server_url'):
                 saved['server_url'] = normalize_server_url(saved['server_url'])
@@ -189,6 +216,15 @@ class DesktopConnections:
         self.router.add_api_route('/download', self.download_status, methods=['GET'])
         from services.desktop_sync import DesktopSync
         self.sync = DesktopSync(self)
+
+    def offline(self, target):
+        return self.config.get('access_modes', {}).get(target) == 'offline'
+
+    def local_user(self, target):
+        account = self.sync.options(target).get('account')
+        if not account:
+            raise HTTPException(409, 'Download the offline library first.')
+        return 'offline-' + hashlib.sha256((target + '\n' + account).encode()).hexdigest()
 
     def save(self):
         atomic_write_text(str(self.config_path), json.dumps(self.config, indent=2))
@@ -281,6 +317,7 @@ class DesktopConnections:
                 'remote': bool(request.scope.get('desktop_remote_target')),
                 'current_server': request.scope.get('desktop_remote_target', ''),
                 'sync': self.sync.options(self.config['server_url']),
+                'access_mode': self.config.get('access_modes', {}).get(self.config['server_url'], 'server'),
                 'destination': f'http://127.0.0.1:{port}/',
                 'local_url': f'http://127.0.0.1:{self.local_port}/'}
 
@@ -298,6 +335,8 @@ class DesktopConnections:
                     raise ValueError()
             body = json.loads(raw)
             if not isinstance(body, dict) or not isinstance(body.get('enabled'), bool):
+                raise ValueError()
+            if body.get('access_mode', 'server') not in ('server', 'offline'):
                 raise ValueError()
             if 'sync' in body:
                 from services.desktop_sync import POLICIES
@@ -320,8 +359,10 @@ class DesktopConnections:
             import copy
             previous = copy.deepcopy(self.config)
             self.config.update(enabled=body['enabled'], server_url=target, onboarded=True)
+            if 'access_mode' in body:
+                self.config.setdefault('access_modes', {})[target] = body['access_mode']
             if 'sync' in body:
-                self.config['sync_options'][target] = {'action': body['sync']['action'],
+                self.config['sync_options'][target] = {**self.config['sync_options'].get(target, {}), 'action': body['sync']['action'],
                     'automatic': body['sync'].get('automatic', False) and body['sync']['action'] == 'merge'}
             try:
                 self.save()
@@ -337,6 +378,8 @@ class DesktopConnections:
 
     async def download(self, request: Request):
         self.guard(request)
+        if self.offline(self.config['server_url']):
+            raise HTTPException(409, 'Use synchronization to update the offline library.')
         async with self.lock:
             if not self.config['enabled']:
                 raise HTTPException(409, 'Connect to a remote server first.')

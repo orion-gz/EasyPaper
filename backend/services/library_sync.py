@@ -17,6 +17,28 @@ import zipfile
 from services import data_transfer as transfer, db
 
 PROTOCOL = 1
+# Documents and derived artifacts belong to the server in offline mode.
+OFFLINE_USER_TABLES = {
+    'compare_sessions', 'document_mode_metrics', 'reading_time', 'reading_time_receipts',
+    'reading_sessions', 'reading_page_evidence', 'paper_reading_stats', 'folders',
+    'chats', 'chat_evidence', 'annotations', 'memos', 'annotation_mutations',
+    'question_papers', 'document_folders', 'question_concepts',
+}
+
+
+def offline_merge(base, local, remote):
+    local = copy.deepcopy(local)
+    base = copy.deepcopy(base or {'tables': {t: [] for t in transfer.TABLES}, 'files': {}})
+    for table in transfer.TABLES:
+        if table not in OFFLINE_USER_TABLES:
+            local['tables'][table] = copy.deepcopy(remote['tables'][table])
+            base['tables'][table] = copy.deepcopy(remote['tables'][table])
+    for snapshot in (local, base):
+        attachments = {k: v for k, v in snapshot['files'].items() if '/chat_images/' in k}
+        snapshot['files'] = {k: v for k, v in remote['files'].items() if '/chat_images/' not in k}
+        snapshot['files'].update(attachments)
+    return merge_snapshots(base, local, remote)
+
 PREFERENCES = {'user_workspace_settings', 'user_language_settings', 'user_reading_profiles'}
 NATURAL_KEYS = {
     'translations': ('doc_id', 'page_num', 'suffix', 'content_revision'),
@@ -356,6 +378,9 @@ def exchange(username, incoming, destination_dir):
     if not transfer.SAFE_ID.fullmatch(request_id) or len(request_id) > 80:
         raise transfer.InvalidArchive('Invalid synchronization request ID.')
     policy = meta.get('policy', 'merge')
+    offline = meta.get('scope') == 'user-data'
+    if meta.get('scope') not in (None, 'user-data') or (offline and policy != 'merge'):
+        raise transfer.InvalidArchive('Invalid synchronization scope or policy.')
     if policy not in ('merge', 'replace_local', 'replace_remote'):
         raise transfer.InvalidArchive('Invalid synchronization action.')
     request_hash = digest({'content': content(local), 'control': meta})
@@ -380,30 +405,42 @@ def exchange(username, incoming, destination_dir):
         elif policy == 'replace_remote':
             merged = copy.deepcopy(local)
         else:
-            merged = merge_snapshots(previous['manifest'] if previous else None, local, current)
+            merged = (offline_merge if offline else merge_snapshots)(previous['manifest'] if previous else None, local, current)
         merged['sync'] = {'protocol': PROTOCOL, 'account': account_id(username), 'revision': uuid.uuid4().hex,
                           'request_id': request_id}
         root = Path(destination_dir)
         root.mkdir(parents=True, exist_ok=True)
         response = root / (digest([username, peer]) + '-' + request_id + '.zip')
         write_snapshot(merged, [incoming, current_path], response)
+        wire_response = response
+        if offline:
+            known = meta.get('known_files', {})
+            if not isinstance(known, dict):
+                raise transfer.InvalidArchive('Invalid local file inventory.')
+            wire = copy.deepcopy(merged)
+            wire['sync']['cached_files'] = {k: v for k, v in merged['files'].items() if known.get(k) == v}
+            wire['files'] = {k: v for k, v in merged['files'].items() if known.get(k) != v}
+            wire_response = response.with_suffix('.delta.zip')
+            write_snapshot(wire, [response], wire_response)
         try:
             if fingerprint(merged) == fingerprint(current):
                 with closing(db.get_db()) as conn:
                     conn.execute('BEGIN IMMEDIATE')
                     if raw_fingerprint(username, conn) != expected_raw:
                         raise SyncConflict([{'table': 'library', 'key': 'changed during exchange'}])
-                    save_checkpoint(conn, username, peer, merged, request_id, request_hash, response)
+                    save_checkpoint(conn, username, peer, merged, request_id, request_hash, wire_response)
                     conn.commit()
             else:
                 apply_snapshot(username, response, expected_raw, peer=peer, checkpoint=merged,
-                               request_id=request_id, request_hash=request_hash, response_path=response)
+                               request_id=request_id, request_hash=request_hash, response_path=wire_response)
         except Exception:
             response.unlink(missing_ok=True)
             raise
+    if wire_response != response:
+        response.unlink(missing_ok=True)
     if previous and previous.get('response_path') and previous['response_path'] != str(response):
         try:
             Path(previous['response_path']).unlink(missing_ok=True)
         except OSError:
             pass  # A stale retry archive must not turn a committed sync into an error.
-    return response
+    return wire_response

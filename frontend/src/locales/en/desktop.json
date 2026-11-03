@@ -73,5 +73,9 @@
   "enabled": "On",
   "disabled": "Off",
   "deviceHelp": "Change connection settings in the desktop app. Confirm the synchronization preview in the app after requesting sync.",
-  "requestPending": "Awaiting desktop confirmation"
+  "requestPending": "Awaiting desktop confirmation",
+  "accessMode": "Data access",
+  "accessServer": "Access server directly (default)",
+  "accessOffline": "Download documents and work offline",
+  "offlineHelp": "Downloads a separate local library. Chats, notes and reading data sync both ways on reconnection. Documents remain server-owned. First download requires a connection; reload after it completes."
 }

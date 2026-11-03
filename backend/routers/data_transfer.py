@@ -31,7 +31,7 @@ async def sync_info(request: Request, current_user: str = Depends(get_current_us
         require_access(current_user)
         with tempfile.TemporaryDirectory(prefix='easypaper-sync-info-') as temp:
             manifest = await run_in_threadpool(library_sync.export_snapshot, current_user, Path(temp) / 'snapshot.zip')
-    return {'protocol': library_sync.PROTOCOL, 'account': manifest['sync']['account'],
+    return {'capabilities': ['offline-user-data'], 'protocol': library_sync.PROTOCOL, 'account': manifest['sync']['account'],
             'revision': library_sync.fingerprint(manifest), 'documents': len(manifest['tables']['documents'])}
 
 

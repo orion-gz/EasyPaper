@@ -109,12 +109,22 @@ class DesktopSync:
                 if bound_account != remote.get('account'):
                     options['automatic'] = False
                     manager.save()
-                    if body.get('automatic') or bound_account:
+                    if bound_account and manager.offline(target):
+                        raise ValueError('Remote account changed. Switch to server mode before signing in to another account.')
+                    if (body.get('automatic') and not manager.offline(target)) or bound_account:
                         options['account'] = remote.get('account')
+                        options.pop('offline_ready', None)
                         manager.save()
                         raise ValueError('Remote account changed. Automatic synchronization stopped; confirm a new preview.')
                     options['account'] = remote.get('account')
+                    options.pop('offline_ready', None)
                     manager.save()
+                if manager.offline(target):
+                    if 'offline-user-data' not in remote.get('capabilities', []):
+                        raise ValueError('Update the server to support offline user-data synchronization.')
+                    if action != 'merge':
+                        raise ValueError('Offline mode requires merge synchronization.')
+                    username = manager.local_user(target)
                 if remote.get('protocol') != sync.PROTOCOL:
                     raise ValueError('The server synchronization protocol is not compatible.')
                 root = self.directory(target, username)
@@ -133,6 +143,11 @@ class DesktopSync:
                     local = await run_in_threadpool(sync.export_snapshot, username, root / 'local.zip')
                     expected_raw = sync.raw_fingerprint(username)
                 previous = sync.peer_state(username, remote['account'])
+                if manager.offline(target):
+                    local['sync']['scope'] = 'user-data'
+                    # Upload records only; document bytes remain server-owned.
+                    local['sync']['known_files'] = dict(local['files'])
+                    local['files'] = {k: v for k, v in local['files'].items() if '/chat_images/' in k}
                 plan_id = uuid.uuid4().hex
                 local['sync'].update(request_id=plan_id, policy=action,
                                      baseline=previous['revision'] if previous else '',
@@ -157,6 +172,8 @@ class DesktopSync:
         async with manager.lock:
             self.check_available()
             target, username = manager.config['server_url'], get_app_username()
+            if manager.offline(target):
+                username = manager.local_user(target)
             root = self.directory(target, username)
             try:
                 plan = json.loads((root / 'plan.json').read_text())
@@ -221,10 +238,15 @@ class DesktopSync:
                 current = await run_in_threadpool(sync.export_snapshot, username, root / 'current.zip')
                 expected_raw = sync.raw_fingerprint(username)
                 sent = await run_in_threadpool(sync.read_snapshot, root / 'request.zip')
+                if sent['sync'].get('scope') == 'user-data':
+                    received['files'].update(received['sync'].get('cached_files', {}))
+                    await run_in_threadpool(sync.write_snapshot, received,
+                                           [root / 'current.zip', root / 'response.zip'], root / 'hydrated.zip')
+                    sent['files'].update(sent['sync'].get('known_files', {}))
                 if action == 'replace_local' and sync.fingerprint(current) != sync.fingerprint(sent):
                     raise sync.SyncConflict([{'table': 'confirmation', 'key': 'local data changed since preview'}])
-                merged = sync.merge_snapshots(sent, current, received)
-                await run_in_threadpool(sync.write_snapshot, merged, [root / 'current.zip', root / 'response.zip'], root / 'merged.zip')
+                merged = (sync.offline_merge if sent['sync'].get('scope') == 'user-data' else sync.merge_snapshots)(sent, current, received)
+                await run_in_threadpool(sync.write_snapshot, merged, [root / 'current.zip', root / ('hydrated.zip' if sent['sync'].get('scope') == 'user-data' else 'response.zip')], root / 'merged.zip')
                 if sync.fingerprint(merged) != sync.fingerprint(current):
                     result = await run_in_threadpool(sync.apply_snapshot, username, root / 'merged.zip', expected_raw,
                                                     peer=received['sync']['account'], checkpoint=received)
@@ -234,11 +256,13 @@ class DesktopSync:
                         conn.commit()
                     result = {'documents': len(current['tables']['documents'])}
             options = manager.config.setdefault('sync_options', {}).setdefault(target, {})
+            if sent['sync'].get('scope') == 'user-data':
+                options['offline_ready'] = True
             options['action'] = 'merge'  # Never repeat a destructive initial policy automatically.
             manager.save()
             manager.job.update(status='completed', documents=result['documents'])
             plan_file.unlink(missing_ok=True)
-            for name in ('request.zip', 'response.zip', 'response.tmp', 'current.zip', 'local.zip', 'merged.zip'):
+            for name in ('request.zip', 'response.zip', 'response.tmp', 'current.zip', 'local.zip', 'merged.zip', 'hydrated.zip'):
                 (root / name).unlink(missing_ok=True)
         except sync.SyncConflict as exc:
             plan['conflict'] = True
