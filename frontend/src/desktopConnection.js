@@ -1,6 +1,8 @@
 import { setSyncProgress } from './syncProgress.js'
 import { initI18n, loadNamespaces, t } from './i18n.js'
 import './styles/desktop-connection.css'
+import { getModeSetting } from './modeSettings.js'
+import { applyTheme, loadThemes, selectedTheme } from './themes/themeEngine.js'
 
 let connection = null
 let dialog = null
@@ -348,6 +350,9 @@ export async function prepareDesktopConnection() {
     window.addEventListener('load', () => initDevicePanel())
     return true
   }
+  const mode = localStorage.getItem('easypaper_workspace_mode') === 'general' ? 'general' : 'research'
+  const scheme = getModeSetting('theme', mode) === 'light' ? 'light' : 'dark'
+  applyTheme(document.body, selectedTheme(mode, scheme, loadThemes()))
   await initI18n()
   await loadNamespaces(['desktop'])
   try {

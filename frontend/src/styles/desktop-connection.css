@@ -80,3 +80,5 @@
   .desktop-preview-actions { flex-direction: column-reverse; }
   .desktop-preview-actions button { width: 100%; }
 }
+
+.desktop-connection-dialog input[type=url]:focus, .desktop-connection-dialog select:focus { border-color: var(--focus-ring, var(--connection-accent)); outline: 2px solid var(--focus-ring, var(--connection-accent)); outline-offset: 2px; }
