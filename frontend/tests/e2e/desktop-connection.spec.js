@@ -208,8 +208,9 @@ test('sync conflicts stop automatic progress and preserve an explicit choice', a
     kind: 'sync', status: 'conflict', conflicts: [{ table: 'memos', key: 'paper', document: '<script>Paper A</script>' }],
   } }))
   await page.goto(remoteOrigin + '/index.html')
-  await page.locator('.desktop-connection-badge').click()
-  await expect(page.getByRole('dialog').locator('[data-status]')).toContainText('양쪽 변경이 충돌')
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('[data-status]')).toContainText('양쪽 변경이 충돌')
   await expect(page.getByRole('dialog').locator('[data-action]')).toBeEnabled()
   await expect(page.getByRole('dialog').locator('[data-automatic]')).not.toBeChecked()
   await expect(page.getByRole('dialog').locator('[data-conflicts]')).toContainText('메모·주석 · <script>Paper A</script>')

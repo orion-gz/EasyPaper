@@ -1,3 +1,4 @@
+import { setSyncProgress } from './syncProgress.js'
 import { initI18n, loadNamespaces, t } from './i18n.js'
 import './styles/desktop-connection.css'
 
@@ -84,6 +85,7 @@ async function pollDownload() {
   try {
     const job = await connectionRequest('download')
     const running = ['uploading', 'downloading', 'importing'].includes(job.status)
+    setSyncProgress('desktop-transfer', running)
     setBusy(running)
     if (job.status === 'uploading') status(t('desktop:syncUploading'))
     if (job.status === 'downloading') status(t('desktop:downloading', { size: (job.bytes / 1024 ** 2).toFixed(1) }))
@@ -342,7 +344,10 @@ function populate() {
 
 // Run before main.js or any reader module touches localStorage or the API.
 export async function prepareDesktopConnection() {
-  if (!window.__TAURI_INTERNALS__) return true
+  if (!window.__TAURI_INTERNALS__) {
+    window.addEventListener('load', () => initDevicePanel())
+    return true
+  }
   await initI18n()
   await loadNamespaces(['desktop'])
   try {
@@ -380,7 +385,7 @@ export async function prepareDesktopConnection() {
   badge.addEventListener('click', openSettings)
   document.body.append(badge)
   const section = document.createElement('section')
-  section.className = 'desktop-connection-section'
+  section.className = 'desktop-connection-section form-group settings-action-card'
   const button = document.createElement('button')
   button.type = 'button'
   button.className = 'btn btn-secondary'
@@ -388,8 +393,20 @@ export async function prepareDesktopConnection() {
   button.addEventListener('click', openSettings)
   const help = document.createElement('p')
   help.textContent = t('desktop:localSettings')
-  section.append(button, help)
-  document.getElementById('tab-data-system')?.prepend(section)
+  const syncButton = document.createElement('button')
+  syncButton.type = 'button'
+  syncButton.className = 'btn btn-secondary'
+  syncButton.textContent = t('desktop:syncNow')
+  syncButton.addEventListener('click', async () => {
+    await openSettings()
+    if (connection.remote) await prepareSync()
+  })
+  section.append(button, syncButton, help)
+  startDeviceHeartbeat()
+  document.querySelector('#tab-data-system .modal-form')?.prepend(section)
+  makeDialog()
+  populate()
+  await pollDownload()
   automaticTimer = setInterval(() => {
     if (connection.remote && connection.sync?.automatic && connection.sync.action === 'merge'
         && document.visibilityState === 'visible' && !document.querySelector('.workspace-document-frame')
@@ -402,4 +419,89 @@ export async function prepareDesktopConnection() {
     for (const node of dialog?.querySelectorAll('[data-i18n]') || []) node.textContent = t(node.dataset.i18n)
   })
   return true
+}
+
+
+async function deviceRequest(path = '', options = {}) {
+  const response = await fetch('/api/user-data/devices' + path, {
+    ...options, cache: 'no-store', headers: { 'Content-Type': 'application/json' },
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : t('desktop:failed'))
+  return data
+}
+
+function startDeviceHeartbeat() {
+  let acknowledged = false
+  let deviceId = localStorage.getItem('easypaper-device-id')
+  if (!deviceId) {
+    deviceId = crypto.randomUUID()
+    localStorage.setItem('easypaper-device-id', deviceId)
+  }
+  const tick = async () => {
+    try {
+      if (!connection.remote) return
+      const job = await connectionRequest('download')
+      const result = await deviceRequest('/' + deviceId, { method: 'PUT', body: JSON.stringify({
+        name: navigator.platform || 'Desktop', status: job.status,
+        action: connection.sync?.action, automatic: connection.sync?.automatic, acknowledged,
+      }) })
+      acknowledged = false
+      if (result.requested && !busy && !syncPreview && !dialog?.open && connection.sync?.action === 'merge') {
+        // Remote requests open the existing preview; confirmation remains local.
+        await openSettings()
+        await prepareSync()
+        acknowledged = true
+      }
+    } catch { /* Retry after login or connectivity recovers. */ }
+    finally { setTimeout(tick, 15000) }
+  }
+  tick()
+}
+
+async function initDevicePanel() {
+  if (window.parent !== window) return
+  await initI18n()
+  await loadNamespaces(['desktop'])
+  const target = document.getElementById('tab-data-system')
+  if (!target) return
+  const section = document.createElement('section')
+  section.className = 'desktop-connection-section'
+  target.prepend(section)
+  const refresh = async () => {
+    try {
+      const { devices } = await deviceRequest()
+      section.replaceChildren()
+      for (const device of devices) {
+        const row = document.createElement('div')
+        const title = document.createElement('h3')
+        title.textContent = device.name
+        const details = document.createElement('p')
+        details.textContent = t('desktop:deviceDetails', {
+          online: device.online ? t('desktop:online') : t('desktop:offline'),
+          status: device.status, action: device.action,
+          automatic: device.automatic ? t('desktop:enabled') : t('desktop:disabled'),
+          seen: new Date(device.seen * 1000).toLocaleString(),
+        })
+        const help = document.createElement('p')
+        help.textContent = t('desktop:deviceHelp')
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.className = 'btn btn-secondary'
+        button.textContent = device.requested ? t('desktop:requestPending') : t('desktop:syncNow')
+        button.disabled = !device.online || device.action !== 'merge' || device.requested
+        button.onclick = async () => {
+          button.disabled = true
+          try {
+            await deviceRequest('/' + encodeURIComponent(device.id) + '/sync', { method: 'POST' })
+            button.textContent = t('desktop:requestPending')
+          } catch (error) { help.textContent = error.message; button.disabled = false }
+        }
+        row.append(title, details, help, button)
+        section.append(row)
+      }
+    } catch { /* Authentication may not yet be available. */ }
+    finally { setTimeout(refresh, 15000) }
+  }
+  refresh()
 }

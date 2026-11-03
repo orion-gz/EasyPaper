@@ -11,6 +11,7 @@
   "settings:labPersonalSettings": {
     "description": "Section heading for the current user model and CLI settings."
   },
+  "viewer:sync.inProgress": {"description": "Sidebar accessible label while data synchronization is running"},
   "settings:figurePreviewEnabled": {
     "description": "Mode-specific Figure/Table/Equation preview enablement and hover or click activation preference."
   },
@@ -6169,5 +6170,26 @@
   },
   "settings:labUserLimit": {
     "description": "Maximum concurrent inference requests per account."
+  },
+  "desktop:deviceDetails": {
+    "description": "Connected desktop device panel: deviceDetails"
+  },
+  "desktop:online": {
+    "description": "Connected desktop device panel: online"
+  },
+  "desktop:offline": {
+    "description": "Connected desktop device panel: offline"
+  },
+  "desktop:enabled": {
+    "description": "Connected desktop device panel: enabled"
+  },
+  "desktop:disabled": {
+    "description": "Connected desktop device panel: disabled"
+  },
+  "desktop:deviceHelp": {
+    "description": "Connected desktop device panel: deviceHelp"
+  },
+  "desktop:requestPending": {
+    "description": "Connected desktop device panel: requestPending"
   }
 }
