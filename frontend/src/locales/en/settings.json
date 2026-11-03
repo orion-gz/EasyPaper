@@ -1,4 +1,7 @@
 {
+  "labModeSettings": "Lab settings",
+  "labInferenceSettings": "Shared inference",
+  "labPersonalSettings": "Personal model",
   "uiLanguage": "Interface language",
   "uiScale": "UI scale",
   "uiScaleDescription": "Adjust the size of the entire interface.",

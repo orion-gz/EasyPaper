@@ -12,6 +12,8 @@ for (const role of ['master', 'member']) {
     await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-general' } })))
     await page.locator('#settings-nav-lab').click()
     await expect(page.locator('#tab-lab')).toBeVisible()
+    await expect(page.locator('#settings-nav-account + #settings-nav-lab')).toHaveCount(1)
+    await expect(page.locator('#tab-lab h3')).toHaveCount(1)
     await expect(page.locator('#lab-status')).toContainText('alice')
     await expect(page.locator('#lab-personal-model')).toHaveValue('test')
     if (role === 'master') {

@@ -1,4 +1,7 @@
 {
+  "labModeSettings": "Lab 설정",
+  "labInferenceSettings": "공용 추론 서버",
+  "labPersonalSettings": "개인 모델",
   "uiLanguage": "화면 언어",
   "uiScale": "UI 배율",
   "uiScaleDescription": "전체 인터페이스 크기를 조절합니다.",
