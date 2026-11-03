@@ -347,7 +347,11 @@ function populate() {
 // Run before main.js or any reader module touches localStorage or the API.
 export async function prepareDesktopConnection() {
   if (!window.__TAURI_INTERNALS__) {
-    window.addEventListener('load', () => initDevicePanel())
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => initDevicePanel(), { once: true })
+    } else {
+      await initDevicePanel()
+    }
     return true
   }
   const mode = localStorage.getItem('easypaper_workspace_mode') === 'general' ? 'general' : 'research'
