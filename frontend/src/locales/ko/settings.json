@@ -294,5 +294,22 @@
   "labPreviewInvalid": "영문·숫자·밑줄·점·하이픈으로 1~80자를 입력하세요.",
   "labCliReady": "운영자가 runner와 CLI runtime을 준비했습니다",
   "labCliNext": "다음: 개인 provider 저장 → 개인 CLI 연결 → 안내에 따라 인증 → 연결 상태 확인",
-  "labCliWait": "먼저 운영자가 runner 소켓과 CLI runtime을 준비해야 합니다."
+  "labCliWait": "먼저 운영자가 runner 소켓과 CLI runtime을 준비해야 합니다.",
+  "labWizardServer": "SSH로 서버에 접속하세요. Git·Docker Compose·Caddy를 먼저 설치하고, 기본 앱 UID/GID(1000:1000)로 예시를 실행하세요. 도메인 DNS를 서버 IP로 연결하고 80/443 포트를 허용하세요(필요시 포트 포워딩). 예시 블록을 실제 도메인으로 바꿔 /etc/caddy/Caddyfile에 추가하고 Caddy를 다시 불러오세요. PC에서는 localhost가 아닌 HTTPS 도메인으로 접속하세요.",
+  "labWizardEngine": "같은 서버에 Ollama를 설치하세요. sudo systemctl edit ollama에 예시 설정을 입력한 뒤 재시작하고 예시 모델을 받으세요. 11434 포트는 Docker 네트워크에서만 접근하도록 제한하세요. Lab 설정에서 예시 URL과 모델을 입력하고(허용 모델·기본 모델 동일), 저장 후 연결 테스트를 하세요.",
+  "labWizardMembers": "관리자 현재 비밀번호로 Lab mode를 켜세요. 사용자명을 입력하고 초기 비밀번호를 비워 계정을 만들면 비밀번호가 생성됩니다. 멤버에게 HTTPS 주소와 비밀번호를 개별 전달하세요. 멤버는 첫 로그인에서 비밀번호를 바꾸고 개인 문서 공간을 사용합니다.",
+  "labWizardConnect": "저장 → 연결 테스트 → 연결 완료",
+  "labWizardEnable": "관리자 비밀번호 •••••••• → Lab mode 켜기",
+  "labWizardInvite": "사용자명: alice → 계정 생성 → 임시 비밀번호 발급",
+  "labWizardLogin": "alice → 로그인 → 초기 비밀번호 변경",
+  "labWizardSpace": "alice의 개인 문서 공간\n논문 업로드 → 읽기 시작",
+  "labWizardDemo": "과정 재생 예시 · 실제 명령 실행이나 설정 변경은 하지 않습니다",
+  "labWizardPause": "일시정지",
+  "labWizardPlay": "재생",
+  "labWizardReplay": "다시 보기",
+  "labWizardFrame": "다음 장면",
+  "labWizardPrevious": "이전",
+  "labWizardNext": "다음",
+  "labWizardDone": "완료",
+  "labWizardDetails": "상세 설치 · systemd, vLLM, 개인 CLI"
 }
