@@ -8514,9 +8514,17 @@ body.light-theme .chat-drawer {
 }
 
 /* Lab onboarding keeps optional controls out of the primary flow. */
-#tab-lab .modal-form { border: 1px solid var(--border-color); border-radius: 12px; padding: 18px; margin-top: 18px; }
-.lab-help-button { border: 1px solid currentColor; border-radius: 50%; width: 24px; height: 24px; background: transparent; color: var(--text-muted); cursor: pointer; flex-shrink: 0; }
-.lab-field-help { grid-column: 1 / -1; flex-basis: 100%; font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+#tab-lab .lab-introduction { padding: 26px 28px 0; }
+.lab-introduction p { margin: 0 0 14px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.lab-field-heading { display: flex; align-items: center; gap: 6px; }
+.lab-field-heading label { margin: 0; }
+.lab-help-button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid currentColor; border-radius: 50%; width: 16px; height: 16px; padding: 0; background: transparent; color: var(--text-muted); font: 11px/1 var(--font-body); cursor: pointer; flex-shrink: 0; }
+.lab-help-button:hover { color: var(--text-primary); }
+.lab-help-button:focus-visible { outline: 2px solid var(--control-accent); outline-offset: 3px; }
+.lab-field-help { position: fixed; inset: auto; box-sizing: border-box; width: max-content; max-width: min(320px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; margin: 0; padding: 12px 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--bg-elevated); box-shadow: var(--shadow-md); font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+@media (max-width: 720px) {
+  #tab-lab .lab-introduction { padding-inline: 16px; }
+}
 .lab-advanced summary { cursor: pointer; font-weight: 600; padding: 12px 0; }
 /* Lab guide uses one spacing scale and the shared modal/control tokens. */
 .lab-guide-dialog {

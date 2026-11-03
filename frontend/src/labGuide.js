@@ -77,28 +77,50 @@ export function initializeLabGuide() {
   const open = node('button', 'labGuideTitle')
   open.type = 'button'
   open.className = 'btn btn-secondary'
-  panel.prepend(intro, open)
+  const introduction = node('div')
+  introduction.className = 'lab-introduction'
+  introduction.append(intro, open)
+  panel.prepend(introduction)
   for (const input of panel.querySelectorAll('input, select, textarea')) {
     const key = `labHelp_${input.id.replace('lab-', '')}`
     const help = node('p', key)
     help.id = `${input.id}-help`
     help.className = 'lab-field-help'
-    help.hidden = true
+    help.setAttribute('popover', 'auto')
     const button = node('button')
     button.type = 'button'
     button.textContent = '?'
     button.className = 'lab-help-button'
     const label = panel.querySelector(`label[for="${input.id}"]`)
+      || input.closest('label')?.querySelector('.toggle-switch-label')
     button.setAttribute('aria-label', `${label?.textContent || t('settings:labEnable')} ?`)
     button.setAttribute('aria-controls', help.id)
     button.setAttribute('aria-expanded', 'false')
-    button.onclick = () => {
-      help.hidden = !help.hidden
-      button.setAttribute('aria-expanded', String(!help.hidden))
+    button.setAttribute('popovertarget', help.id)
+    button.onclick = event => {
+      event.preventDefault()
+      if (help.matches(':popover-open')) {
+        help.hidePopover()
+        return
+      }
+      help.showPopover()
+      const rect = button.getBoundingClientRect()
+      const left = Math.max(12, Math.min(rect.left, window.innerWidth - help.offsetWidth - 12))
+      const top = rect.bottom + 8 + help.offsetHeight <= window.innerHeight - 12
+        ? rect.bottom + 8
+        : Math.max(12, rect.top - help.offsetHeight - 8)
+      help.style.left = `${left}px`
+      help.style.top = `${top}px`
     }
+    help.addEventListener('toggle', () => {
+      button.setAttribute('aria-expanded', String(help.matches(':popover-open')))
+    })
     input.setAttribute('aria-describedby', help.id)
-    const group = input.closest('.form-group')
-    group.append(button, help)
+    const heading = node('span')
+    heading.className = 'lab-field-heading'
+    label.replaceWith(heading)
+    heading.append(label, button)
+    heading.append(help)
   }
   const dialog = node('dialog')
   dialog.className = 'modal-content lab-guide-dialog'
