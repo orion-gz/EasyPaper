@@ -288,7 +288,7 @@ function renderPaperList(root) {
   if (!listEl) return
 
   if (filtered.length === 0) {
-    listEl.innerHTML = `<div class="notes-empty"><p>${allPapers.length === 0 ? notesCopy('저장된 논문이 없습니다', '저장된 문서가 없습니다') : notesCopy('조건에 맞는 논문이 없습니다', '조건에 맞는 문서가 없습니다')}</p></div>`
+    listEl.innerHTML = `<div class="notes-empty">${icon('fileText', 24, 'aria-hidden="true"')}<p>${allPapers.length === 0 ? notesCopy('저장된 논문이 없습니다', '저장된 문서가 없습니다') : notesCopy('조건에 맞는 논문이 없습니다', '조건에 맞는 문서가 없습니다')}</p></div>`
     return
   }
   listEl.innerHTML = filtered.map(renderPaperRow).join('')
@@ -355,14 +355,14 @@ function renderSummaryTabContent(docId) {
     return `<div class="notes-summary-loading">${icon('refreshCw', 15)}<span>읽기 전 브리핑을 불러오는 중...</span></div>`
   }
   if (cached.status === 'error') {
-    return `<div class="notes-empty"><p style="color:var(--error)">브리핑을 불러오지 못했습니다.</p><button type="button" class="notes-summary-retry">${t('common:briefing.retry')}</button></div>`
+    return `<div class="notes-empty" role="alert">${icon('alertTriangle', 24, 'aria-hidden="true"')}<p>브리핑을 불러오지 못했습니다.</p><button type="button" class="notes-summary-retry">${t('common:briefing.retry')}</button></div>`
   }
   const data = cached.data || {}
   if (hasAdaptiveBriefing(data)) {
     return `<div class="notes-primer-content primer-adaptive-sections">${renderAdaptiveBriefingHtml(data, { suggestedQuestions: t('common:briefing.suggestedQuestions') })}</div>`
   }
   if (!primerHasAnyContent(data)) {
-    return `<div class="notes-empty"><p>${notesCopy("이 논문에는 아직 생성된 브리핑이 없습니다.<br/>뷰어에서 논문을 열면 자동으로 생성됩니다.", "이 문서에는 아직 생성된 브리핑이 없습니다.<br/>뷰어에서 문서를 열면 자동으로 생성됩니다.")}</p></div>`
+    return `<div class="notes-empty">${icon('fileText', 24, 'aria-hidden="true"')}<p>${notesCopy("이 논문에는 아직 생성된 브리핑이 없습니다.<br/>뷰어에서 논문을 열면 자동으로 생성됩니다.", "이 문서에는 아직 생성된 브리핑이 없습니다.<br/>뷰어에서 문서를 열면 자동으로 생성됩니다.")}</p></div>`
   }
 
   const parts = []
@@ -521,7 +521,7 @@ function renderTabContent(entry) {
   if (activeSubtab === 'summary') return renderSummaryTabContent(entry.doc.id)
   const items = entry.items[activeSubtab] || []
   if (items.length === 0) {
-    return `<div class="notes-empty"><p>${emptyMessage(activeSubtab)}</p></div>`
+    return `<div class="notes-empty">${icon('fileText', 24, 'aria-hidden="true"')}<p>${emptyMessage(activeSubtab)}</p></div>`
   }
   const sortedItems = items.slice().sort(compareAnnotationItems)
   return `${renderAnnotationSortControl()}<div class="notes-card-list">${sortedItems.map(renderAnnotationCard).join('')}</div>`
@@ -778,7 +778,7 @@ export async function renderNotesPage(documentMode = 'research') {
     console.error('Notes 페이지: 라이브러리 조회 실패:', err)
     if (isCurrent()) {
       const listEl = root.querySelector('.notes-paper-list-items')
-      if (listEl) listEl.innerHTML = `<div class="notes-empty"><p style="color:var(--error)">${notesCopy("논문 목록을 불러오지 못했습니다", "문서 목록을 불러오지 못했습니다")}</p></div>`
+      if (listEl) listEl.innerHTML = `<div class="notes-empty" role="alert">${icon('alertTriangle', 24, 'aria-hidden="true"')}<p>${notesCopy("논문 목록을 불러오지 못했습니다", "문서 목록을 불러오지 못했습니다")}</p></div>`
     }
     return
   }

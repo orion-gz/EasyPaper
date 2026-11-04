@@ -1,5 +1,5 @@
 /* Shared visual treatment for exceptional and empty page states. */
-:is(.workspace-load-error, .dash-error, .document-home-status.is-error,
+:is(.workspace-load-error, .dash-error, .document-home-status:where(.is-error),
     .aic-state-error, .notes-empty, .notes-detail-empty, .rh-empty,
     .document-home-empty, .rg-detail-empty-state) {
   box-sizing: border-box;
@@ -71,3 +71,72 @@
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
+
+/* Embedded states stay quiet: the surrounding panel already provides a card. */
+:is(.notes-empty, .notes-detail-empty, .rh-empty, .document-home-empty,
+    .rg-detail-empty-state) {
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 0;
+}
+:is(.notes-empty, .rh-empty, .lib-empty) > svg {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+:is(.notes-empty, .lib-empty)[role="alert"] > svg,
+.lib-empty:has([style*="var(--error)"]) > svg,
+.rh-empty[role="alert"] > svg { color: var(--warning); }
+:is(.dash-error, .aic-state-error, .document-home-status.is-error) > p,
+.document-home-status.is-error > strong { color: var(--text-primary); }
+:is(.rg-detail-error, .lib-detail-summary-error, .rg-recommend-error, .dash-error-note) > svg {
+  vertical-align: -3px;
+  margin-right: 5px;
+  color: var(--warning);
+}
+:is(.dash-loading, .document-home-status:not(.is-error), .notes-summary-loading) {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+  gap: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .notes-summary-loading svg,
+  .document-home-status > svg,
+  .dash-loading svg { animation: none; }
+}
+@media (max-width: 480px) {
+  .workspace-load-error { padding: 24px 18px; }
+}
+.lib-empty[role="alert"] > svg { color: var(--warning); }
+.lib-empty[role="alert"] > p { color: var(--text-secondary); }
+
+/* Compact feedback for search, background tasks, and reference analysis. */
+.status-inline:not(:empty) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.status-inline > [aria-hidden] { display: inline-flex; flex-shrink: 0; }
+.status-inline[data-state="error"] > [aria-hidden] { color: var(--warning); }
+.status-inline:empty { display: none; }
+.primer-error:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 32px 24px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+.primer-error > svg { color: var(--warning); flex-shrink: 0; }
+.primer-error > p { margin: 0; }

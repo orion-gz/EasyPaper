@@ -689,7 +689,7 @@ function attachHandlers(root) {
         if (refreshBtn) refreshBtn.classList.remove('is-hidden')
       } catch (err) {
         console.error('추천 논문 조회 실패:', err)
-        recsBody.innerHTML = `<p class="dash-empty-note dash-error-note">추천 논문을 불러오지 못했습니다.</p>`
+        recsBody.innerHTML = `<p class="dash-empty-note dash-error-note">${icon('alertTriangle', 16, 'aria-hidden="true"')} 추천 논문을 불러오지 못했습니다.</p>`
       } finally {
         if (triggerBtn) triggerBtn.disabled = false
         if (refreshBtn) refreshBtn.disabled = false

@@ -1,3 +1,4 @@
+import { setStatusState } from './statusState.js'
 import { icon } from './icons.js'
 import { getDocumentTasksAPI, cancelDocumentTaskAPI, retryDocumentTaskAPI } from './api.js'
 import { t } from './i18n.js'
@@ -28,8 +29,8 @@ export function installTaskCenter({ shell, mount, navigate, toast }) {
     const focusedAction = document.activeElement?.dataset.taskAction
     const label = `${t('viewer:comfort.taskProgress')} (${tasks.filter(task => activeStatuses.has(task.status)).length})`
     toggle.innerHTML = icon('listChecks', 18); toggle.title = label; toggle.setAttribute('aria-label', label)
-    list.replaceChildren()
-    if (!tasks.length) { const empty = document.createElement('p'); empty.textContent = t('viewer:comfort.tasksEmpty'); list.append(empty) }
+    list.replaceChildren(); list.classList.remove('status-inline'); delete list.dataset.state
+    if (!tasks.length) { const empty = document.createElement('p'); setStatusState(empty, t('viewer:comfort.tasksEmpty')); list.append(empty) }
     for (const task of tasks) {
       const row = document.createElement('article')
       const title = document.createElement('strong'); title.textContent = `${task.filename} · ${taskKind(task)}`
@@ -73,7 +74,7 @@ export function installTaskCenter({ shell, mount, navigate, toast }) {
       }
       tasks = next; render()
     } catch {
-      if (token === generation && !panel.hidden) list.textContent = t('viewer:comfort.taskFailedLoad')
+      if (token === generation && !panel.hidden) setStatusState(list, t('viewer:comfort.taskFailedLoad'), 'error')
     } finally { loading = false; timer = setTimeout(poll, panel.hidden ? 15000 : 3000) }
   }
   toggle.addEventListener('click', () => { panel.hidden = !panel.hidden; toggle.setAttribute('aria-expanded', String(!panel.hidden)); if (!panel.hidden) { render(); void poll(); refresh.focus() } })
