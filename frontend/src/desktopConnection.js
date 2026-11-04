@@ -37,6 +37,9 @@ function updatePolicy() {
   dialog.querySelector('[data-action-description]').textContent = ({
     merge: t('desktop:confirmMerge'), replace_local: t('desktop:confirmReplaceLocal'), replace_remote: t('desktop:confirmReplaceRemote'), defer: t('desktop:deferHelp'),
   })[action]
+  if ((connection?.access_mode === 'offline' || dialog.querySelector('[data-access-mode]').value === 'offline') && action.startsWith('replace_')) {
+    dialog.querySelector('[data-action-description]').textContent = t('desktop:offlineResolveHelp')
+  }
 }
 
 function showConflicts(conflicts = []) {
@@ -78,6 +81,7 @@ function setBusy(value) {
   }
   dialog.querySelector('[data-url]').disabled = value || !!syncPreview || !dialog.querySelector('[value=remote]').checked
   dialog.querySelector('[data-close]').disabled = value || !!syncPreview
+  if (connection?.access_mode === 'offline') dialog.querySelector('[data-download]').disabled = true
   dialog.querySelector('[data-automatic]').disabled = value || !!syncPreview || dialog.querySelector('[data-action]').value !== 'merge'
   dialog.querySelector('[data-sync]').disabled = value || !!syncPreview || dialog.querySelector('[data-action]').value === 'defer'
 }
@@ -96,6 +100,10 @@ async function pollDownload() {
       status(job.kind === 'sync' ? t('desktop:syncCompleted', { count: job.documents }) : t('desktop:completed', { count: job.documents }), 'success')
       dialog.querySelector('[data-reload]').hidden = job.kind !== 'sync'
       if (job.kind === 'sync') {
+        if (connection.access_mode === 'offline' && !connection.sync?.offline_ready) {
+          window.location.reload()
+          return
+        }
         dialog.querySelector('[data-action]').value = 'merge'
         dialog.querySelector('[data-action]').dispatchEvent(new Event('change'))
         connection.sync = { ...connection.sync, action: 'merge' }
@@ -139,6 +147,12 @@ function makeDialog(onboarding = false) {
       <input id="desktop-server-url" data-url type="url" placeholder="https://paper.example.com" maxlength="2048" autocomplete="url" aria-describedby="desktop-url-help">
       <p id="desktop-url-help" data-i18n="desktop:urlHelp"></p>
       </div>
+      <label for="desktop-access-mode" data-i18n="desktop:accessMode"></label>
+      <select id="desktop-access-mode" class="form-select" data-access-mode>
+        <option value="server" data-i18n="desktop:accessServer"></option>
+        <option value="offline" data-i18n="desktop:accessOffline"></option>
+      </select>
+      <p data-i18n="desktop:offlineHelp"></p>
       <section data-policy hidden>
         <h3 data-i18n="desktop:syncTitle"></h3>
         <label for="desktop-data-action" data-i18n="desktop:dataAction"></label>
@@ -195,6 +209,13 @@ function makeDialog(onboarding = false) {
   dialog.addEventListener('cancel', event => { if (onboarding || busy || syncPreview) event.preventDefault() })
   dialog.querySelector('[data-close]').addEventListener('click', () => { if (!busy && !syncPreview) dialog.close() })
   dialog.querySelector('[data-reload]').addEventListener('click', () => location.reload())
+  dialog.querySelector('[data-access-mode]').addEventListener('change', () => {
+    if (dialog.querySelector('[data-access-mode]').value === 'offline') {
+      dialog.querySelector('[data-action]').value = 'merge'
+      dialog.querySelector('[data-automatic]').checked = true
+      updatePolicy()
+    }
+  })
   dialog.querySelector('[data-action]').addEventListener('change', () => {
     if (dialog.querySelector('[data-action]').value !== 'merge') dialog.querySelector('[data-automatic]').checked = false
     updatePolicy()
@@ -216,8 +237,9 @@ function makeDialog(onboarding = false) {
     setBusy(true)
     status(t('desktop:connecting'))
     try {
-      const sync = { action: dialog.querySelector('[data-action]').value, automatic: dialog.querySelector('[data-automatic]').checked }
-      const next = await connectionRequest('connection', { method: 'PUT', body: JSON.stringify({ enabled, server_url, sync }) })
+      const offline = dialog.querySelector('[data-access-mode]').value === 'offline'
+      const sync = { action: offline ? 'merge' : dialog.querySelector('[data-action]').value, automatic: offline || dialog.querySelector('[data-automatic]').checked }
+      const next = await connectionRequest('connection', { method: 'PUT', body: JSON.stringify({ enabled, server_url, sync, access_mode: dialog.querySelector('[data-access-mode]').value }) })
       // Navigation (not a live API switch) stops the old document runtime and
       // restores the browser storage belonging to the selected origin.
       window.location.replace(next.destination)
@@ -281,6 +303,9 @@ async function prepareSync(automatic = false) {
     dialog.querySelector('[data-preview-warning]').textContent = syncPreview.action === 'replace_local'
       ? t('desktop:confirmReplaceLocal') : syncPreview.action === 'replace_remote'
         ? t('desktop:confirmReplaceRemote') : t('desktop:confirmMerge')
+    if (connection.access_mode === 'offline' && syncPreview.action.startsWith('replace_')) {
+      dialog.querySelector('[data-preview-warning]').textContent = t('desktop:offlineResolveHelp')
+    }
     const destructive = syncPreview.action.startsWith('replace_')
     dialog.querySelector('[data-preview]').dataset.destructive = String(destructive)
     dialog.querySelector('[data-local-count]').textContent = syncPreview.local_documents
@@ -331,6 +356,7 @@ async function openSettings() {
 
 function populate() {
   dialog.querySelector(`[value=${connection.enabled ? 'remote' : 'local'}]`).checked = true
+  dialog.querySelector('[data-access-mode]').value = connection.access_mode || 'server'
   dialog.querySelector('[data-url]').value = connection.server_url
   dialog.querySelector('[data-url]').disabled = !connection.enabled
   dialog.querySelector('[data-url]').required = connection.enabled
@@ -416,11 +442,14 @@ export async function prepareDesktopConnection() {
   makeDialog()
   populate()
   await pollDownload()
-  automaticTimer = setInterval(() => {
+  const autoSync = () => {
     if (connection.remote && connection.sync?.automatic && connection.sync.action === 'merge'
-        && document.visibilityState === 'visible' && !document.querySelector('.workspace-document-frame')
+        && document.visibilityState === 'visible' && (connection.access_mode === 'offline' || !document.querySelector('.workspace-document-frame'))
         && !dialog?.open) prepareSync(true)
-  }, 5 * 60 * 1000)
+  }
+  automaticTimer = setInterval(autoSync, connection.access_mode === 'offline' ? 30 * 1000 : 5 * 60 * 1000)
+  window.addEventListener('online', autoSync)
+  if (connection.access_mode === 'offline') autoSync()
   document.addEventListener('easypaper:locale-changed', () => {
     badge.textContent = (connection.remote ? t('desktop:badgeRemote') : t('desktop:badgeLocal'))
     button.textContent = t('desktop:settingsTitle')

@@ -69,3 +69,38 @@ npx playwright test --config playwright.webkit.config.js tests/e2e/desktop-conne
 추가 회귀 검증에는 실제 loopback HTTP 서버와 서명된 세션 쿠키를 통한 전송, 서버 반영 후 로컬 저장 실패와 데스크톱 관리자 재시작 후 재개, 세 클라이언트의 변경 수렴, 16 MiB 비압축성 원본 보존 및 체크섬 오류 거부, 오래된 삭제 확인 거부, 동시 API 요청과 동기화의 상호 배제를 포함한다. 화면 검증은 Chromium·WebKit의 라이트/다크 모드, 390px 창 너비, 자동 접근성 검사와 키보드 포커스를 포함한다.
 
 이 검증은 OS별 Tauri 설치 패키지 실행, 실제 HTTPS 역방향 프록시 배포, 수 GiB 라이브러리의 성능 측정을 대신하지 않는다. 네트워크 회귀 테스트는 별도 HTTP 서버와 로컬 관리자를 사용하지만 저장소 fixture는 같은 테스트 프로세스에서 계정별로 격리한다.
+
+
+## Offline document access
+
+In Settings → Data → Remote connection, select **Download documents and work offline**.
+The default remains direct server access. This option also works with a Lab account.
+The server and desktop client must both support offline user-data synchronization.
+
+The initial connection downloads a separate library for the server and account, then
+reloads the application. Documents are managed on the server; offline mode prevents
+original upload, deletion, and bibliographic metadata changes. Reading position
+and recent reading metadata remain editable and synchronize in both directions. Chats, chat attachments, notes,
+annotations, folders, and reading records are merged in both directions. Unchanged
+document files are omitted from subsequent downloads. The initial download also
+includes portable page and image extraction results, so clients do not need the
+server’s Marker/MinerU installation to reopen downloaded documents. Initial
+preparation requires the server parser to be available. Unchanged document files,
+extraction caches, and open sessions are preserved during user-data updates.
+
+While the app is open and visible, synchronization retries every 30 seconds and
+on a browser online event. Local edits survive connection loss and application
+restart. Conflicting edits stop automatic synchronization and show the existing
+conflict panel; they are never silently overwritten. Select the local or server
+replacement policy, inspect the preview, and explicitly confirm to resolve a
+conflict. In offline mode replacement affects user data, not document originals. Server login and Lab management
+require connectivity; AI requests still require their configured provider.
+
+Turning this option off restores direct server access. The downloaded library is
+retained separately from the normal local library. Finish synchronizing local edits
+before changing accounts or returning to server access.
+
+Logging out locks the offline library immediately, including while disconnected.
+The lock survives application restart. Unlocking requires signing in online as
+the same server account; a different account cannot open the previous cache.
+Both client and server must support the `offline-user-data-v2` capability.

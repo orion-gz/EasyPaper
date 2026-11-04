@@ -126,6 +126,11 @@ def verify_session_token(token: str) -> bool:
         return False
 
 async def get_current_user(request: Request) -> str:
+    offline_user = getattr(request, 'scope', {}).get('desktop_offline_user')
+    if offline_user:
+        from services.lab_context import identity
+        identity.set(offline_user)
+        return offline_user
     from services import lab
     if get_skip_login() and not lab.settings()["enabled"]:
         return get_app_username()

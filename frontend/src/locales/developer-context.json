@@ -6377,6 +6377,21 @@
   "settings:labWizardDetails": {
     "description": "Lab setup wizard: Advanced setup · systemd, vLLM and personal CLI"
   },
+  "desktop:accessMode": {
+    "description": "Desktop remote connection offline library option: accessMode"
+  },
+  "desktop:accessServer": {
+    "description": "Desktop remote connection offline library option: accessServer"
+  },
+  "desktop:accessOffline": {
+    "description": "Desktop remote connection offline library option: accessOffline"
+  },
+  "desktop:offlineHelp": {
+    "description": "Desktop remote connection offline library option: offlineHelp"
+  },
+  "desktop:offlineResolveHelp": {
+    "description": "Offline synchronization conflict resolution affects user data only and requires explicit confirmation."
+  },
   "settings:labWizardHosting": {
     "description": "Short instruction accompanying the animated remote Lab hosting scene."
   },

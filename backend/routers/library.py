@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import Request, APIRouter, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, Response
 from pathlib import Path
 from datetime import date
@@ -1365,11 +1365,16 @@ async def update_doc_title(
 async def update_doc_metadata(
     doc_id: str,
     payload: dict,
+    request: Request,
     current_user: str = Depends(get_current_user)
 ):
     """문서의 메타데이터(예: 제목 등)를 업데이트합니다. 제목 변경 시 서지 정보 캐시를 초기화합니다."""
     doc = require_owned_document(doc_id, current_user)
 
+    if request.scope.get('desktop_offline_user'):
+        from services.library_sync import READING_METADATA
+        if not set(payload) <= READING_METADATA:
+            raise HTTPException(409, 'Only reading information can be changed in offline mode.')
     meta = doc.get("metadata") or {}
     old_title = meta.get("title")
 
