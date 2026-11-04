@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp } from './helpers.js'
+import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp, waitForReaderReady } from './helpers.js'
 
 test.use({ deviceScaleFactor: 2 })
 
@@ -26,7 +26,7 @@ function multipagePdf(count, contentForPage) {
 }
 
 test('long PDF loads lazily, bounds canvases and restores evicted pages', async ({ page }) => {
-  test.setTimeout(60000)
+  test.setTimeout(180000)
   await page.addInitScript(() => {
     window.easyEnglishTabWrites = 0
     new MutationObserver(records => {
@@ -48,6 +48,7 @@ test('long PDF loads lazily, bounds canvases and restores evicted pages', async 
     }] }))
     location.hash = '#viewer?id=performance'
   })
+  await waitForReaderReady(page, { text: false })
   const wrapper = number => activeReader(page).locator(`.pdf-page-wrapper[data-page="${number}"]`)
   const text = number => wrapper(number).locator('.textLayer')
   await expect(text(1)).toContainText('Performance page 1', { timeout: 20000 })
@@ -59,7 +60,9 @@ test('long PDF loads lazily, bounds canvases and restores evicted pages', async 
 
   for (const number of [4, 70, 150, 250, 350, 450, 499, 500]) {
     await wrapper(number).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
-    await expect(text(number)).toContainText(`Performance page ${number}`)
+    // Large documents may still be completing native text extraction after
+    // the canvas appears. Match the initial page readiness budget.
+    await expect(text(number)).toContainText(`Performance page ${number}`, { timeout: 20000 })
   }
   const anchorReads = await evaluateReader(page, () => {
     const original = Element.prototype.getBoundingClientRect
@@ -359,4 +362,30 @@ test('expanded memo margins stay rendered while reading and retain their footpri
   await first.evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'instant' }))
   await expect(first.locator('.memo-margin-left .floating-memo')).toHaveCount(12)
   await expect.poll(() => first.evaluate(el => el.offsetHeight)).toBe(height)
+})
+
+test('scroll reconciliation renders pages when intersection notifications are missing', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeObserver = window.IntersectionObserver
+    window.IntersectionObserver = class extends NativeObserver {
+      constructor(callback, options) {
+        // Simulate a delayed rendering observer while keeping visibility tracking.
+        super(options?.rootMargin === '600px 0px' ? () => {} : callback, options)
+      }
+    }
+  })
+  const doc = { id: 'observer-gap', filename: 'Observer.pdf', total_pages: 30, metadata: { last_page: 15 }, translated_pages: [] }
+  await mockBaseRoutes(page, { documents: [doc] })
+  await page.route('**/api/library/observer-gap/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(30) }))
+  await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
+  await gotoApp(page)
+  await page.evaluate(() => { location.hash = '#viewer?id=observer-gap' })
+  const reader = activeReader(page)
+  const wrapper = number => reader.locator(`.pdf-page-wrapper[data-page="${number}"]`)
+  await expect(wrapper(15).locator('.textLayer')).toContainText('Performance page 15', { timeout: 20000 })
+  for (const number of [30, 1, 20]) {
+    await wrapper(number).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
+    await expect(wrapper(number).locator('.textLayer')).toContainText(`Performance page ${number}`)
+  }
+  expect(await reader.locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(8)
 })

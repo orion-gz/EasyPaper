@@ -1,3 +1,4 @@
+import { setStatusState } from './statusState.js'
 import { parseCommandQuery, commandArgumentError } from './commandArguments.js'
 import { fetchLibrary } from './library.js'
 import { compareDocsByLastRead, hasReadActivity } from './readPages.js'
@@ -115,12 +116,12 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate, ac
       const detail = document.createElement('p'); detail.textContent = item.kind === 'command' ? `${item.usage || `/${item.id}`}${item.disabled ? ` · ${item.disabled}` : ''}` : item.text
       option.append(title, detail); option.addEventListener('click', () => execute(index)); list.append(option)
     })
-    status.textContent = items.length ? '' : t('viewer:comfort.searchEmpty'); select(0)
+    setStatusState(status, items.length ? '' : t('viewer:comfort.searchEmpty')); select(0)
   }
   async function search() {
     const token = ++revision; controller?.abort(); controller = new AbortController()
     const query = input.value.trim()
-    status.textContent = t('viewer:comfort.searchLoading')
+    setStatusState(status, t('viewer:comfort.searchLoading'), 'loading')
     try {
       await loadFeatureNamespaces('settings')
       if (token !== revision || !dialog.open) return
@@ -148,7 +149,7 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate, ac
       }
       const result = await searchWorkspaceAPI(query, mode(), controller.signal)
       if (token === revision && dialog.open) render([...(result.results || []), ...(!query ? available : [])])
-    } catch (error) { if (token === revision && error.name !== 'AbortError') { render([]); status.textContent = t('viewer:comfort.searchError') } }
+    } catch (error) { if (token === revision && error.name !== 'AbortError') { render([]); setStatusState(status, t('viewer:comfort.searchError'), 'error') } }
   }
   function open() {
     if (shell.hidden || !readerFeatureEnabled('commandSearch')) return
@@ -160,7 +161,7 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate, ac
   }
   button.addEventListener('click', open)
   document.addEventListener('keydown', handleShortcut)
-  input.addEventListener('input', () => { items = []; list.replaceChildren(); input.removeAttribute('aria-activedescendant'); status.textContent = t('viewer:comfort.searchLoading'); revision++; controller?.abort(); clearTimeout(timer); timer = setTimeout(search, 200) })
+  input.addEventListener('input', () => { items = []; list.replaceChildren(); input.removeAttribute('aria-activedescendant'); setStatusState(status, t('viewer:comfort.searchLoading'), 'loading'); revision++; controller?.abort(); clearTimeout(timer); timer = setTimeout(search, 200) })
   input.addEventListener('keydown', event => {
     if (event.isComposing) return
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return }

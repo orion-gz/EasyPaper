@@ -1,3 +1,4 @@
+import { setStatusState } from './statusState.js'
 // Request state is independent from the reused citation dialog DOM.
 export function createReferenceAnalysisController({ fetchResult, analyze, onChange, delay = 500 }) {
   let generation = 0
@@ -113,9 +114,9 @@ export function renderReferenceAnalysis(container, items, { t, run, reposition }
       body.append(node)
       return node
     }
-    if (item.state === 'checking') add(t('viewer:referenceAnalysis.checking'))
-    else if (item.state === 'loading') add(t('viewer:referenceAnalysis.loading'))
-    else if (item.state === 'error') add(t('viewer:referenceAnalysis.error'))
+    if (item.state === 'checking') setStatusState(add(''), t('viewer:referenceAnalysis.checking'), 'loading')
+    else if (item.state === 'loading') setStatusState(add(''), t('viewer:referenceAnalysis.loading'), 'loading')
+    else if (item.state === 'error') setStatusState(add(''), t('viewer:referenceAnalysis.error'), 'error')
     else if (item.result) {
       const result = item.result
       add(result.score == null ? t('viewer:referenceAnalysis.insufficient')
