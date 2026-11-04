@@ -289,7 +289,7 @@ export function createWorkspaceTabs(adapter) {
         const status = document.createElement('span')
         status.className = `workspace-tab-status ${tab.status}`
         status.setAttribute('aria-label', { busy: t('navigation:tabs.busy'), complete: t('navigation:tabs.complete'), error: t('navigation:tabs.error') }[tab.status])
-        status.textContent = tab.status === 'busy' ? '◌' : tab.status === 'error' ? '!' : '•'
+        status.innerHTML = icon(tab.status === 'busy' ? 'refreshCw' : tab.status === 'error' ? 'alertTriangle' : 'checkCircle', 12, 'aria-hidden="true"')
         button.append(status)
       }
       button.addEventListener('click', () => enqueue(() => activate(tab.id)))

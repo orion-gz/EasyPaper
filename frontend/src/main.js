@@ -24,6 +24,7 @@ import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './do
 import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail, getPDFPageText, getPDFPageWidth } from './pdfViewer.js'
 import { translationFeedback } from './translationFeedback.js'
 import './style.css'
+import './styles/status-states.css'
 import { mountChatQuestionNav } from './chatQuestionNav.js'
 import { applyDesktopUpdate } from './desktopUpdate.js'
 import { pageCoordinates } from './pdfCoordinates.js'
@@ -8111,7 +8112,7 @@ async function renderLibrary() {
   } catch (err) {
     if (!isCurrent()) return
     console.error(err)
-    libraryGrid.innerHTML = `<div class="lib-empty"><p style="color:var(--error)">라이브러리 불러오기 실패</p></div>`
+    libraryGrid.innerHTML = `<div class="lib-empty">${icon('alertTriangle', 24, 'aria-hidden="true"')}<p style="color:var(--error)">라이브러리 불러오기 실패</p></div>`
   }
 }
 
@@ -8257,7 +8258,7 @@ async function renderLibraryHeatmapView(force = false) {
     libraryHeatmapList.innerHTML = renderHeatmapMatrix(data)
   } catch (err) {
     console.error('개념 히트맵 로드 실패:', err)
-    libraryHeatmapList.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">히트맵을 불러오지 못했습니다</p></div>'
+    libraryHeatmapList.innerHTML = `<div class="lib-empty" role="alert">${icon('alertTriangle', 24, 'aria-hidden="true"')}<p>히트맵을 불러오지 못했습니다</p></div>`
   }
 }
 
@@ -8455,7 +8456,7 @@ async function runGraphRecommendationsFetch({ force = false } = {}) {
     }
   } catch (err) {
     console.error('추천 논문 조회 실패:', err)
-    libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status rg-recommend-error">추천 논문을 불러오지 못했습니다.</p>`
+    libraryRecommendationsList.innerHTML = `<p class="rg-recommend-status rg-recommend-error">${icon('alertTriangle', 16, 'aria-hidden="true"')} 추천 논문을 불러오지 못했습니다.</p>`
   } finally {
     libraryRecommendationsBtn.disabled = false
     if (refreshBtn) refreshBtn.disabled = false
@@ -8777,7 +8778,7 @@ async function renderLibraryGraphTab() {
   } catch (err) {
     if (isMinimalUi() || state.currentWorkspacePage !== 'graph') return
     console.error('지식 그래프 로드 실패:', err)
-    libraryGraphCanvas.innerHTML = '<div class="lib-empty"><p style="color:var(--error)">지식 그래프를 불러오지 못했습니다</p></div>'
+    libraryGraphCanvas.innerHTML = `<div class="lib-empty" role="alert">${icon('alertTriangle', 24, 'aria-hidden="true"')}<p>지식 그래프를 불러오지 못했습니다</p></div>`
   }
 }
 
@@ -8876,7 +8877,7 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
           : `<p class="rg-detail-loading">아직 생성된 요약이 없습니다.</p>`
       } catch (err) {
         console.error('AI 요약 로드 실패:', err)
-        summaryEl.innerHTML = `<p class="rg-detail-error">AI 요약을 불러오지 못했습니다.</p>`
+        summaryEl.innerHTML = `<p class="rg-detail-error">${icon('alertTriangle', 16, 'aria-hidden="true"')} AI 요약을 불러오지 못했습니다.</p>`
       }
     })()
   } else if (nodeData.type === 'tag') {
@@ -8967,7 +8968,7 @@ function showGraphDetailPanel(nodeData, neighborNodes = []) {
         const { questions } = await fetchGraphNodeQuestions(nodeData.id)
         listEl.innerHTML = renderRelatedQuestionsList(questions)
       } catch (err) {
-        listEl.innerHTML = `<p class="rg-detail-error">질문을 불러오지 못했습니다.</p>`
+        listEl.innerHTML = `<p class="rg-detail-error">${icon('alertTriangle', 16, 'aria-hidden="true"')} 질문을 불러오지 못했습니다.</p>`
       }
     })
   }
@@ -10478,7 +10479,7 @@ async function loadLibraryDetailOverview(doc) {
   } catch (err) {
     if (myToken !== libraryDetailSummaryReqToken) return
     console.error('AI 요약 로드 실패:', err)
-    if (summaryEl) summaryEl.innerHTML = `<p class="lib-detail-summary-error">AI 요약을 불러오지 못했습니다.</p>`
+    if (summaryEl) summaryEl.innerHTML = `<p class="lib-detail-summary-error">${icon('alertTriangle', 16, 'aria-hidden="true"')} AI 요약을 불러오지 못했습니다.</p>`
   }
 }
 
@@ -19743,7 +19744,12 @@ function showDocumentLoadError(error) {
   retry.type = 'button'
   retry.textContent = t('navigation:tabs.retry')
   retry.addEventListener('click', () => location.reload())
-  panel.append(text, retry)
+  const badge = document.createElement('span')
+  badge.className = 'status-state-icon'
+  badge.setAttribute('aria-hidden', 'true')
+  badge.innerHTML = icon('alertTriangle', 24)
+  retry.prepend(document.createRange().createContextualFragment(icon('refreshCw', 16)))
+  panel.append(badge, text, retry)
   viewerScreen.replaceChildren(panel)
   viewerScreen.classList.add('active')
 }

@@ -376,7 +376,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
   const isCurrent = () => generation === renderGeneration && el.classList.contains('active')
 
   hideRhTooltip() // 다른 페이지로 이동한 뒤에도 뜬 채로 남아있지 않도록
-  el.innerHTML = '<div class="rh-page"><div class="rh-empty">읽기 기록을 불러오는 중...</div></div>'
+  el.innerHTML = `<div class="rh-page"><div class="rh-empty" role="status">${icon('refreshCw', 24, 'aria-hidden="true"')}읽기 기록을 불러오는 중...</div></div>`
 
   let events = []
   let dashboard = null
@@ -400,7 +400,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
   } catch (err) {
     console.error('Reading History 로드 실패:', err)
     if (isCurrent()) {
-      el.innerHTML = '<div class="rh-page"><div class="rh-empty" style="color:var(--error)">읽기 기록을 불러오지 못했습니다.</div></div>'
+      el.innerHTML = `<div class="rh-page"><div class="rh-empty" role="alert">${icon('alertTriangle', 24, 'aria-hidden="true"')}읽기 기록을 불러오지 못했습니다.</div></div>`
     }
     return
   }
@@ -735,7 +735,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
         </div>
         <span class="rh-top-value">${formatDuration(p.seconds)}</span>
       </div>`
-  }).join('') : `<div class="rh-empty">${modeCopy("아직 기록된 읽기 시간이 없습니다. 뷰어에서 논문을 열어 읽으면 자동으로 쌓입니다.", "아직 기록된 읽기 시간이 없습니다. 뷰어에서 문서를 열어 읽으면 자동으로 쌓입니다.")}</div>`
+  }).join('') : `<div class="rh-empty">${icon('fileText', 24, 'aria-hidden="true"')}${modeCopy("아직 기록된 읽기 시간이 없습니다. 뷰어에서 논문을 열어 읽으면 자동으로 쌓입니다.", "아직 기록된 읽기 시간이 없습니다. 뷰어에서 문서를 열어 읽으면 자동으로 쌓입니다.")}</div>`
 
   // ── Reading Streak 위젯: 이번 주(월~일) ──
   const weekStartOffset = (keyToLocalDate(tKey).getDay() + 6) % 7
@@ -837,7 +837,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
               <div class="rh-mix-total">전체 누적: <b>${formatDuration(mixTotalSeconds)}</b></div>
               <div class="rh-mix-bar">${mixBarHtml}</div>
               <div class="rh-mix-legend">${mixLegendHtml}</div>
-            ` : `<div class="rh-empty">아직 기록된 읽기 시간이 없습니다.</div>`}
+            ` : `<div class="rh-empty">${icon('fileText', 24, 'aria-hidden="true"')}아직 기록된 읽기 시간이 없습니다.</div>`}
           </div>
 
           <div class="rh-card">
