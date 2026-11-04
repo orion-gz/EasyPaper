@@ -10,7 +10,8 @@ import { alignTextLayer, collectTextContent, recoveredTextContent } from './pdfT
 import { pdfResources } from './pdfResources.js'
 import { t } from './i18n.js'
 
-import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import './pdfCompatibility.js'
+import pdfWorkerUrl from './pdfWorker.js?worker&url'
 
 let pdfjsLib = null
 let pdfDoc = null
