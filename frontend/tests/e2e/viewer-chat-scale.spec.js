@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { openReaderTools, activeReader, gotoApp, mockBaseRoutes, SAMPLE_PDF_A } from './helpers.js'
+import { openReaderTools, activeReader, gotoApp, mockBaseRoutes, SAMPLE_PDF_A, waitForReaderReady } from './helpers.js'
 
 for (const uiScale of [0.8, 0.9]) {
   test(`reader and AI assistant fit their workspace at ${uiScale * 100}% UI scale`, async ({ page }) => {
@@ -9,6 +9,7 @@ for (const uiScale of [0.8, 0.9]) {
     await page.route(`**/api/library/${doc.id}/pdf`, route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_A }))
     await gotoApp(page)
     await page.evaluate(id => { location.hash = `#viewer?id=${id}` }, doc.id)
+    await waitForReaderReady(page)
     await expect(activeReader(page).locator('#document-find')).toBeVisible()
     const host = await page.locator('#workspace-tab-panel').boundingBox()
     const frame = await page.locator('.workspace-document-frame:not([hidden])').boundingBox()

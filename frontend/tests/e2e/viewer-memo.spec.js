@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A, waitForReaderReady } from './helpers.js'
 
 async function openViewerWithMemo(page, memoOverrides = {}, extraMemos = []) {
   const doc = {
@@ -42,6 +42,8 @@ async function openViewerWithMemo(page, memoOverrides = {}, extraMemos = []) {
     }))
     location.hash = '#viewer?id=doc-memo'
   }, { overrides: memoOverrides, extraMemos })
+
+  await waitForReaderReady(page)
 
   // Wait for the asynchronous parallel fit before measuring or editing cards.
   await expect.poll(() => activeReader(page).locator('#viewer-scroll-container').evaluate(el => {
@@ -114,6 +116,7 @@ test('사용자가 조절한 메모 크기를 저장하고 다시 복원한다',
   })).toEqual({ width: 360, height: 900 })
 
   await page.reload()
+  await waitForReaderReady(page)
   await expect(memo).toBeVisible()
   await expect(memo).toHaveCSS('width', '360px')
   await expect(memo).toHaveCSS('height', '900px')
@@ -506,6 +509,7 @@ for (const rightPosition of ['outside', 'between']) {
 }
 
 test('aligned memo layout follows collapse, resize, settings, zoom and reopen', async ({ page }) => {
+  test.setTimeout(60000) // Two reader boots plus editing, layout and zoom transitions.
   await openViewerWithMemo(page, { charStart: 90, alignment: 'left', autoSize: false, width: 260, height: 250 }, [
     { id: 'earlier', pageNum: 1, sentenceIdx: 0, charStart: 10, content: 'Earlier', x: 20, y: 25, alignment: 'left', autoSize: false, width: 280, height: 300 },
   ])
@@ -540,6 +544,7 @@ test('aligned memo layout follows collapse, resize, settings, zoom and reopen', 
   await late.locator('[data-memo-align="right"]').click()
   await expect(reader.locator('.memo-margin-right [data-id="memo-regression"]')).toHaveCount(1)
   await page.reload()
+  await waitForReaderReady(page)
   await expect(activeReader(page).locator('.memo-margin-right [data-id="memo-regression"]')).toBeVisible()
   await expect(activeReader(page).locator('.memo-margin-left [data-id="earlier"]')).toHaveCount(1)
 })
@@ -586,11 +591,16 @@ async function memoPagePosition(memo) {
 
 for (const side of ['left', 'right']) {
   test(`정렬 해제 후 좌표와 연속 키보드 이동 포커스를 유지한다 (${side})`, async ({ page }) => {
+    test.setTimeout(60000) // Includes saving and a second complete reader boot.
     await openViewerWithMemo(page, alignedMoveMemo('memo-regression', 999, side),
       Array.from({ length: 6 }, (_, i) => alignedMoveMemo(`before-${i}`, i, side)))
     const memo = activeReader(page).locator('.floating-memo[data-id="memo-regression"]')
     const header = memo.locator('.floating-memo-header')
     await header.focus()
+    await expect.poll(async () => {
+      const position = await memoPagePosition(memo)
+      return position.y / position.height
+    }).toBeGreaterThan(2.5)
     const before = await memoPagePosition(memo)
     expect(before.y).toBeGreaterThan(before.height * 2.5)
     if (side === 'right') expect(before.x).toBeGreaterThan(before.width)
@@ -617,6 +627,7 @@ for (const side of ['left', 'right']) {
     expect(saved.y * position.height / 100).toBeCloseTo(position.y, 0)
 
     await page.reload()
+  await waitForReaderReady(page)
     await expect(activeReader(page).locator('.floating-memo[data-id="memo-regression"]')).toBeVisible()
     // Reopening may restore a different zoom; persisted coordinates are page percentages.
     await expect.poll(async () => {

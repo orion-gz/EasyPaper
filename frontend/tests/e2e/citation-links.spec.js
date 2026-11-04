@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_CITATION } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_CITATION, waitForReaderReady } from './helpers.js'
 
 test('Focus reference preview follows its sentence and is hidden only in Focus mode when configured', async ({ page }) => {
   test.setTimeout(60000)
@@ -172,9 +172,10 @@ test('참고문헌이 길어 툴팁 내부를 스크롤해도 툴팁이 닫히�
       body: JSON.stringify({ references: { '1': 'Vaswani et al. ' + 'A long citation entry '.repeat(80) + ' Attention Is All You Need. 2017.' } }),
     }))
 
+  await page.addInitScript(() => localStorage.setItem('easypaper_figure_overlay_trigger_research', 'click'))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=doc-C' })
-  await page.waitForTimeout(1500)
+  await waitForReaderReady(page)
 
   await activeReader(page).locator('.citation-marker-box').first().evaluate(marker => marker.click())
   const tooltip = activeReader(page).locator('.citation-tooltip')
