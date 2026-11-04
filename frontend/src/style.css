@@ -8601,7 +8601,7 @@ body.light-theme .chat-drawer {
   color: var(--text-primary);
   font: 12px/1.8 var(--font-mono);
 }
-.lab-guide-screen.is-playing pre { animation: lab-scene-reveal .65s ease-out both; }
+
 .lab-guide-controls,
 .lab-guide-footer { display: flex; align-items: center; gap: var(--lab-space-sm); flex-wrap: wrap; }
 .lab-guide-dialog .btn {
@@ -8632,14 +8632,37 @@ body.light-theme .chat-drawer {
 .lab-guide-dialog :focus-visible { outline: 2px solid var(--control-accent); outline-offset: 3px; }
 .lab-delete-button { background: var(--error); color: white; border: 1px solid var(--error); }
 .lab-delete-button:hover { filter: brightness(.9); }
-@keyframes lab-scene-reveal {
-  from { opacity: .2; clip-path: inset(0 0 100% 0); }
-  to { opacity: 1; clip-path: inset(0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .lab-guide-screen.is-playing pre { animation: none; }
-}
 @media (max-width: 480px) {
   .lab-guide-dialog { --lab-inset: 16px; }
   .lab-guide-controls > .btn { flex: 1 1 auto; }
+}
+
+/* The guide plays illustrative input; it never submits live settings. */
+.lab-guide-screen.is-playing pre::after {
+  content: '▋';
+  color: var(--control-accent-text);
+}
+.lab-guide-screen.is-playing pre { animation: none; }
+.lab-guide-screen > .lab-guide-preview { padding: 20px; min-height: 160px; }
+.lab-guide-preview-row {
+  min-height: 36px;
+  margin: 8px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.lab-guide-preview-row.is-complete { border-color: var(--control-accent); }
+.lab-guide-preview-row.is-complete::after { content: ' ✓'; color: var(--control-accent-text); }
+.lab-guide-screen[data-scene='network'] .lab-guide-preview-row { text-align: center; }
+
+.lab-guide-preview-label { display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 11px; }
+.lab-guide-preview-value { display: block; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px; font-family: var(--font-mono); }
+.lab-guide-preview-row.is-active { box-shadow: 0 0 0 2px var(--control-accent); }
+.lab-guide-screen[data-scene='fields'] .lab-guide-preview-row { border: 0; padding: 4px; background: transparent; }
+.lab-guide-screen[data-scene='fields'] .lab-guide-preview-row.is-complete::after { content: none; }
+@media (prefers-reduced-motion: reduce) {
+  .lab-guide-controls > button:first-child { display: none; }
 }

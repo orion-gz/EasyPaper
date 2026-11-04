@@ -6376,5 +6376,14 @@
   },
   "settings:labWizardDetails": {
     "description": "Lab setup wizard: Advanced setup · systemd, vLLM and personal CLI"
+  },
+  "settings:labWizardHosting": {
+    "description": "Short instruction accompanying the animated remote Lab hosting scene."
+  },
+  "settings:labWizardProxy": {
+    "description": "Short instruction accompanying the animated remote Lab hosting scene."
+  },
+  "settings:labWizardRemote": {
+    "description": "Short instruction accompanying the animated remote Lab hosting scene."
   }
 }

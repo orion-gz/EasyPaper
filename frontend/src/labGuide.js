@@ -144,27 +144,32 @@ export function initializeLabGuide() {
   const steps = [
     { title: 'labGuideServer', text: 'labWizardServer', frames: [
       ['SSH', '$ ssh user@lab-server\n$ git clone https://github.com/orion-gz/EasyPaper.git\n$ cd EasyPaper'],
-      ['Docker Compose', '$ mkdir -p lab-data/home\n$ sudo chown -R 1000:1000 lab-data\n$ docker compose -f docker-compose.lab.yml up -d --build'],
-      ['HTTPS · /etc/caddy/Caddyfile', 'lab.example.com {\n    reverse_proxy 127.0.0.1:8000\n}'],
-      ['HTTPS', '$ sudo systemctl reload caddy\nhttps://lab.example.com → EasyPaper'],
+      ['Docker Compose', '$ mkdir -p lab-data/home\n$ sudo chown -R 1000:1000 lab-data\n$ docker compose -f docker-compose.lab.yml up -d --build\n✓ EasyPaper → 127.0.0.1:8000'],
+      ['DNS · HTTPS', 'lab.example.com → SERVER_PUBLIC_IP\nTCP 80 / 443 → lab-server', 'network', 'labWizardHosting'],
+      ['HTTPS · /etc/caddy/Caddyfile', 'lab.example.com {\n    reverse_proxy 127.0.0.1:8000\n}', 'terminal', 'labWizardProxy'],
+      ['HTTPS', '$ sudo caddy validate --config /etc/caddy/Caddyfile\n$ sudo systemctl reload caddy\n✓ https://lab.example.com'],
+      ['https://lab.example.com', 'https://lab.example.com → EasyPaper', 'browser', 'labWizardRemote'],
     ] },
     { title: 'labGuideEngine', text: 'labWizardEngine', frames: [
-      ['Ollama · /etc/systemd/system/ollama.service.d/override.conf', '[Service]\nEnvironment="OLLAMA_HOST=0.0.0.0:11434"'],
-      ['SSH', '$ sudo systemctl daemon-reload\n$ sudo systemctl restart ollama\n$ ollama pull qwen3:4b'],
-      ['EasyPaper · Lab', 'Ollama\nhttp://host.docker.internal:11434\nqwen3:4b'],
-      ['EasyPaper · Lab', () => t('settings:labWizardConnect')],
+      ['SSH · sudo systemctl edit ollama', '[Service]\nEnvironment="OLLAMA_HOST=0.0.0.0:11434"'],
+      ['SSH', '$ sudo systemctl daemon-reload\n$ sudo systemctl restart ollama\n$ ollama pull qwen3:4b\n✓ qwen3:4b'],
+      ['EasyPaper · Lab', 'Ollama\nhttp://host.docker.internal:11434\nqwen3:4b\nqwen3:4b', 'fields'],
+      ['EasyPaper · Lab', () => t('settings:labWizardConnect'), 'form'],
     ] },
     { title: 'labGuideMembers', text: 'labWizardMembers', frames: [
-      ['EasyPaper · Lab', () => t('settings:labWizardEnable')],
-      ['EasyPaper · Lab', () => t('settings:labWizardInvite')],
-      ['https://lab.example.com', () => t('settings:labWizardLogin')],
-      ['EasyPaper · alice', () => t('settings:labWizardSpace')],
+      ['EasyPaper · Lab', () => t('settings:labWizardEnable'), 'form'],
+      ['EasyPaper · Lab', () => t('settings:labWizardInvite'), 'form'],
+      ['https://lab.example.com', () => t('settings:labWizardLogin'), 'form'],
+      ['EasyPaper · alice', () => t('settings:labWizardSpace'), 'form'],
     ] },
   ]
   let step = 0
   let frame = 0
   let timer
   let paused = false
+  let position = 0
+  let content = ''
+  let sceneType = 'terminal'
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
   const progress = node('p')
   progress.className = 'lab-guide-progress'
@@ -174,14 +179,19 @@ export function initializeLabGuide() {
   const description = node('p')
   const demo = node('div')
   demo.className = 'lab-guide-demo'
+  const sceneNote = node('p')
   const demoLabel = node('p', 'labWizardDemo')
   const screen = node('div')
   screen.className = 'lab-guide-screen'
+  screen.setAttribute('role', 'img')
   const screenTitle = node('div')
   const output = node('pre')
+  const preview = node('div')
+  preview.className = 'lab-guide-preview'
+  preview.setAttribute('aria-hidden', 'true')
   const caption = node('p')
   caption.className = 'lab-guide-caption'
-  screen.append(screenTitle, output)
+  screen.append(screenTitle, output, preview)
   const controls = node('div')
   controls.className = 'lab-guide-controls'
   const button = (key, action) => {
@@ -192,28 +202,74 @@ export function initializeLabGuide() {
     return el
   }
   const stop = () => { clearTimeout(timer) }
+  const paint = () => {
+    const complete = reducedMotion.matches
+    output.textContent = complete ? content : content.slice(0, position)
+    screen.classList.toggle('is-playing', !paused && !complete && position < content.length)
+    if (sceneType !== 'terminal') {
+      const lines = content.split(/\n| → /)
+      let offset = 0
+      preview.replaceChildren(...lines.map((line, index) => {
+        const row = node('div')
+        row.className = 'lab-guide-preview-row'
+        const visible = complete ? line.length : Math.max(0, position - offset)
+        if (sceneType === 'fields') {
+          const label = node('span')
+          label.className = 'lab-guide-preview-label'
+          label.textContent = [t('settings:labEngine'), t('settings:labUrl'), t('settings:labModels'), t('settings:labDefaultModel')][index]
+          const value = node('span')
+          value.className = 'lab-guide-preview-value'
+          value.textContent = line.slice(0, visible) || '\u00a0'
+          row.append(label, value)
+        } else {
+          row.textContent = `${index + 1}. ${line.slice(0, visible)}`
+        }
+        row.classList.toggle('is-active', visible > 0 && visible < line.length)
+        row.classList.toggle('is-complete', visible >= line.length)
+        const separator = content.slice(offset + line.length).startsWith(' → ') ? 3 : 1
+        offset += line.length + separator
+        return row
+      }))
+    }
+  }
   const renderFrame = () => {
     const current = steps[step].frames[frame]
     screenTitle.textContent = current[0]
-    output.textContent = typeof current[1] === 'function' ? current[1]() : current[1]
+    content = typeof current[1] === 'function' ? current[1]() : current[1]
+    sceneType = current[2] || 'terminal'
+    const notes = { labWizardHosting: t('settings:labWizardHosting'), labWizardProxy: t('settings:labWizardProxy'), labWizardRemote: t('settings:labWizardRemote') }
+    sceneNote.textContent = notes[current[3]] || ''
+    sceneNote.hidden = !current[3]
+    screen.dataset.scene = sceneType
+    output.hidden = sceneType !== 'terminal'
+    preview.hidden = sceneType === 'terminal'
+    // Keep the full scene available to assistive technology without announcing each keystroke.
+    screen.setAttribute('aria-label', `${current[0]}: ${content}`)
+    output.setAttribute('aria-hidden', 'true')
+    position = paused || reducedMotion.matches ? content.length : 0
     caption.textContent = `${frame + 1} / ${steps[step].frames.length}`
-    screen.classList.remove('is-playing')
-    void screen.offsetWidth
-    if (!paused && !reducedMotion.matches) screen.classList.add('is-playing')
+    paint()
   }
   const schedule = () => {
     stop()
+    toggle.hidden = reducedMotion.matches
     if (!dialog.open || paused || reducedMotion.matches) return
+    const typing = position < content.length
     timer = setTimeout(() => {
-      frame = (frame + 1) % steps[step].frames.length
-      renderFrame()
+      if (typing) {
+        position = Math.min(content.length, position + 3)
+        paint()
+      } else {
+        frame = (frame + 1) % steps[step].frames.length
+        renderFrame()
+      }
       schedule()
-    }, 4000)
+    }, typing ? 30 : 1800)
   }
   const toggle = button('labWizardPause', () => {
     paused = !paused
     toggle.textContent = t(`settings:${paused ? 'labWizardPlay' : 'labWizardPause'}`)
-    renderFrame()
+    paint()
     schedule()
   })
   toggle.removeAttribute('data-i18n')
@@ -224,7 +280,7 @@ export function initializeLabGuide() {
     schedule()
   })
   controls.append(toggle, replay, nextFrame)
-  demo.append(demoLabel, screen, caption, controls)
+  demo.append(demoLabel, screen, sceneNote, caption, controls)
   const reference = node('a', 'labWizardDetails')
   reference.href = 'https://github.com/orion-gz/EasyPaper/blob/main/docs/lab-mode.md'
   reference.target = '_blank'
