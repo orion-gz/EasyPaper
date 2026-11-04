@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { activeReader, evaluateReader, mockBaseRoutes, gotoApp } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, waitForReaderReady } from './helpers.js'
 
 // Short landscape pages make the difference from the 841pt placeholder visible.
 function makePDF(pageCount, mixedSizes) {
@@ -38,6 +38,7 @@ for (const mixedSizes of [false, true]) {
       await route.fulfill({ json: doc })
     })
     const expectRestored = async () => {
+      await waitForReaderReady(page, { text: false })
       await expect(activeReader(page).locator(`.pdf-page-wrapper[data-page="${expectedPage}"] canvas`)).toBeAttached()
       // Allow lazy rendering, smooth scrolling and the bookmark debounce to settle.
       await page.waitForTimeout(2200)
