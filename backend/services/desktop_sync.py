@@ -79,6 +79,8 @@ class DesktopSync:
         manager = self.manager
         if not manager.config['enabled']:
             raise HTTPException(409, 'Connect to a remote server first.')
+        if manager.offline(manager.config['server_url']) and self.options(manager.config['server_url']).get('offline_locked'):
+            raise HTTPException(401, 'Sign in to unlock the offline library.')
         if manager.download_task and not manager.download_task.done():
             raise HTTPException(409, 'A data transfer is already running.')
 
@@ -99,6 +101,8 @@ class DesktopSync:
             root = self.directory(target, username)
             headers = upstream_headers(request, target)
             headers['x-easypaper-sync-binding'] = '1'
+            if manager.offline(target):
+                headers['x-easypaper-sync-scope'] = 'user-data'
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False) as client:
                     response = await client.get(target + '/api/user-data/sync/info', headers=headers)
@@ -120,10 +124,8 @@ class DesktopSync:
                     options.pop('offline_ready', None)
                     manager.save()
                 if manager.offline(target):
-                    if 'offline-user-data' not in remote.get('capabilities', []):
+                    if 'offline-user-data-v2' not in remote.get('capabilities', []):
                         raise ValueError('Update the server to support offline user-data synchronization.')
-                    if action != 'merge':
-                        raise ValueError('Offline mode requires merge synchronization.')
                     username = manager.local_user(target)
                 if remote.get('protocol') != sync.PROTOCOL:
                     raise ValueError('The server synchronization protocol is not compatible.')
@@ -140,7 +142,7 @@ class DesktopSync:
                         if not fresh_conflict_preview:
                             return {**pending['preview'], 'resume': True}
                 async with gate.exclusive(username):
-                    local = await run_in_threadpool(sync.export_snapshot, username, root / 'local.zip')
+                    local = await run_in_threadpool(sync.export_snapshot, username, root / 'local.zip', manager.offline(target))
                     expected_raw = sync.raw_fingerprint(username)
                 previous = sync.peer_state(username, remote['account'])
                 if manager.offline(target):
@@ -235,7 +237,7 @@ class DesktopSync:
             received = await run_in_threadpool(sync.read_snapshot, root / 'response.zip')
             manager.job['status'] = 'importing'
             async with gate.exclusive(username):
-                current = await run_in_threadpool(sync.export_snapshot, username, root / 'current.zip')
+                current = await run_in_threadpool(sync.export_snapshot, username, root / 'current.zip', manager.offline(target))
                 expected_raw = sync.raw_fingerprint(username)
                 sent = await run_in_threadpool(sync.read_snapshot, root / 'request.zip')
                 if sent['sync'].get('scope') == 'user-data':

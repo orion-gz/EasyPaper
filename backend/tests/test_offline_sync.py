@@ -1,4 +1,5 @@
 import io
+import pytest
 import httpx
 from fastapi.testclient import TestClient
 from services import library_sync as sync
@@ -7,7 +8,8 @@ from test_user_data_transfer import dataset
 from test_desktop_sync import setup_manager, HEADERS, TARGET
 
 
-def test_offline_download_edit_reconnect_and_delta(dataset, tmp_path, monkeypatch):
+@pytest.mark.parametrize('resolution', ['replace_local', 'replace_remote'])
+def test_offline_download_edit_reconnect_and_delta(dataset, tmp_path, monkeypatch, resolution):
     manager = setup_manager(tmp_path)
     manager.config['access_modes'] = {TARGET: 'offline'}
     requests = []
@@ -18,8 +20,8 @@ def test_offline_download_edit_reconnect_and_delta(dataset, tmp_path, monkeypatc
         if unavailable:
             raise httpx.ConnectError('offline')
         if request.url.path.endswith('/info'):
-            manifest = sync.export_snapshot('alice', tmp_path / 'info.zip')
-            return httpx.Response(200, json={'capabilities': ['offline-user-data'], 'protocol': 1,
+            manifest = sync.export_snapshot('alice', tmp_path / 'info.zip', offline=True)
+            return httpx.Response(200, json={'capabilities': ['offline-user-data', 'offline-user-data-v2'], 'protocol': 1,
                 'account': sync.account_id('alice'), 'revision': sync.fingerprint(manifest), 'documents': 2})
         payload = await request.aread()
         requests.append(sync.read_snapshot(io.BytesIO(payload)))
@@ -33,14 +35,14 @@ def test_offline_download_edit_reconnect_and_delta(dataset, tmp_path, monkeypatc
     with TestClient(manager.app, base_url='http://127.0.0.1:8000') as client:
         client.cookies.set(remote_cookie_name(TARGET), 'session')
 
-        def exchange():
-            preview = client.post('/desktop/sync/preview', headers=HEADERS, json={'action': 'merge'})
+        def exchange(action='merge', expected='completed'):
+            preview = client.post('/desktop/sync/preview', headers=HEADERS, json={'action': action})
             assert preview.status_code == 200, preview.text
             response = client.post('/desktop/sync', headers=HEADERS,
                 json={'plan_id': preview.json()['plan_id'], 'confirmed': True, 'automatic': True})
             assert response.status_code == 202, response.text
             client.portal.call(lambda: manager.download_task)
-            assert manager.job['status'] == 'completed', manager.job
+            assert manager.job['status'] == expected, manager.job
 
         exchange()
         user = manager.local_user(TARGET)
@@ -60,6 +62,17 @@ def test_offline_download_edit_reconnect_and_delta(dataset, tmp_path, monkeypatc
         assert not responses[-1]['files']
         assert responses[-1]['sync']['cached_files']
         assert len(dataset['db'].db_list_documents('alice', include_deleted=True)) == 2
+        with dataset['db'].get_db() as conn:
+            conn.execute("UPDATE memos SET data='local edit',updated_at='conflict' WHERE doc_id=?", (local_doc,))
+            conn.execute("UPDATE memos SET data='server edit',updated_at='conflict' WHERE doc_id='paper-a'")
+        exchange(expected='conflict')
+        exchange(resolution)
+        with dataset['db'].get_db() as conn:
+            desired = 'server edit' if resolution == 'replace_local' else 'local edit'
+            assert conn.execute("SELECT data FROM memos WHERE doc_id='paper-a'").fetchone()[0] == desired
+            assert conn.execute("SELECT data FROM memos WHERE doc_id=?", (local_doc,)).fetchone()[0] == desired
+        exchange()
+
 
 
 def test_offline_gateway_routes_locally_and_guards_documents(tmp_path):

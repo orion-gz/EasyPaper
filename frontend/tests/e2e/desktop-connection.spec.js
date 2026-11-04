@@ -285,3 +285,33 @@ for (const theme of ['dark', 'light']) {
     await expect(page.locator('.desktop-connection-badge')).toBeFocused()
   })
 }
+
+for (const action of ['replace_local', 'replace_remote']) {
+  test(`offline ${action} resolves user-data conflicts only after confirmation`, async ({ page }) => {
+    await desktop(page, {
+      onboarded: true, enabled: true, access_mode: 'offline', server_url: 'https://papers.example.com',
+      sync: { action: 'merge', automatic: false, offline_ready: true },
+    })
+    let started = 0
+    await page.route('**/desktop/sync/preview', route => {
+      expect(route.request().postDataJSON().action).toBe(action)
+      return route.fulfill({ json: { plan_id: 'offline-resolution', action, local_documents: 2, remote_documents: 2 } })
+    })
+    await page.route('**/desktop/sync', route => {
+      started++
+      return route.fulfill({ status: 202, json: { kind: 'sync', status: 'uploading' } })
+    })
+    await page.goto(remoteOrigin + '/index.html')
+    await page.locator('.desktop-connection-badge').click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.locator('[data-access-mode]')).toHaveValue('offline')
+    await dialog.locator('[data-action]').selectOption(action)
+    await dialog.locator('[data-sync]').click()
+    await expect(dialog.locator('[data-preview-warning]')).toContainText('사용자 데이터만')
+    await expect(dialog.locator('[data-confirm-sync]')).toBeDisabled()
+    expect(started).toBe(0)
+    await dialog.locator('[data-acknowledge]').check()
+    await dialog.locator('[data-confirm-sync]').click()
+    await expect.poll(() => started).toBe(1)
+  })
+}

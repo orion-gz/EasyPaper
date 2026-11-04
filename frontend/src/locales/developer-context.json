@@ -6388,5 +6388,8 @@
   },
   "desktop:offlineHelp": {
     "description": "Desktop remote connection offline library option: offlineHelp"
+  },
+  "desktop:offlineResolveHelp": {
+    "description": "Offline synchronization conflict resolution affects user data only and requires explicit confirmation."
   }
 }

@@ -79,16 +79,28 @@ The server and desktop client must both support offline user-data synchronizatio
 
 The initial connection downloads a separate library for the server and account, then
 reloads the application. Documents are managed on the server; offline mode prevents
-original upload, deletion, and metadata changes. Chats, chat attachments, notes,
+original upload, deletion, and bibliographic metadata changes. Reading position
+and recent reading metadata remain editable and synchronize in both directions. Chats, chat attachments, notes,
 annotations, folders, and reading records are merged in both directions. Unchanged
-document files are omitted from subsequent downloads.
+document files are omitted from subsequent downloads. The initial download also
+includes portable page and image extraction results, so clients do not need the
+server’s Marker/MinerU installation to reopen downloaded documents. Initial
+preparation requires the server parser to be available. Unchanged document files,
+extraction caches, and open sessions are preserved during user-data updates.
 
 While the app is open and visible, synchronization retries every 30 seconds and
 on a browser online event. Local edits survive connection loss and application
 restart. Conflicting edits stop automatic synchronization and show the existing
-conflict panel; they are never silently overwritten. Server login and Lab management
+conflict panel; they are never silently overwritten. Select the local or server
+replacement policy, inspect the preview, and explicitly confirm to resolve a
+conflict. In offline mode replacement affects user data, not document originals. Server login and Lab management
 require connectivity; AI requests still require their configured provider.
 
 Turning this option off restores direct server access. The downloaded library is
 retained separately from the normal local library. Finish synchronizing local edits
 before changing accounts or returning to server access.
+
+Logging out locks the offline library immediately, including while disconnected.
+The lock survives application restart. Unlocking requires signing in online as
+the same server account; a different account cannot open the previous cache.
+Both client and server must support the `offline-user-data-v2` capability.

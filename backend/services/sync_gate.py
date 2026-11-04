@@ -70,7 +70,7 @@ class SyncGateMiddleware:
         from services.lab import settings
         request = Request(scope)
         token = request.cookies.get('session_token', '')
-        username = token.rsplit(':', 2)[0] if token and verify_session_token(token) else None
+        username = scope.get('desktop_offline_user') or (token.rsplit(':', 2)[0] if token and verify_session_token(token) else None)
         if username is None and get_skip_login() and not settings()['enabled']:
             username = get_app_username()
         if username in gate.commits or (username is None and gate.busy):

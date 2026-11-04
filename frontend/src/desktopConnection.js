@@ -37,6 +37,9 @@ function updatePolicy() {
   dialog.querySelector('[data-action-description]').textContent = ({
     merge: t('desktop:confirmMerge'), replace_local: t('desktop:confirmReplaceLocal'), replace_remote: t('desktop:confirmReplaceRemote'), defer: t('desktop:deferHelp'),
   })[action]
+  if ((connection?.access_mode === 'offline' || dialog.querySelector('[data-access-mode]').value === 'offline') && action.startsWith('replace_')) {
+    dialog.querySelector('[data-action-description]').textContent = t('desktop:offlineResolveHelp')
+  }
 }
 
 function showConflicts(conflicts = []) {
@@ -274,7 +277,7 @@ function makeDialog(onboarding = false) {
 async function prepareSync(automatic = false) {
   if (busy || syncPreview) return
   if (!dialog) { makeDialog(); populate() }
-  const action = automatic || connection.access_mode === 'offline' ? 'merge' : dialog.querySelector('[data-action]').value
+  const action = automatic ? 'merge' : dialog.querySelector('[data-action]').value
   if (action === 'defer') return
   if (dialog.querySelector('[data-url]').value.trim() !== connection.server_url) {
     status(t('desktop:saveAddressFirst'))
@@ -300,6 +303,9 @@ async function prepareSync(automatic = false) {
     dialog.querySelector('[data-preview-warning]').textContent = syncPreview.action === 'replace_local'
       ? t('desktop:confirmReplaceLocal') : syncPreview.action === 'replace_remote'
         ? t('desktop:confirmReplaceRemote') : t('desktop:confirmMerge')
+    if (connection.access_mode === 'offline' && syncPreview.action.startsWith('replace_')) {
+      dialog.querySelector('[data-preview-warning]').textContent = t('desktop:offlineResolveHelp')
+    }
     const destructive = syncPreview.action.startsWith('replace_')
     dialog.querySelector('[data-preview]').dataset.destructive = String(destructive)
     dialog.querySelector('[data-local-count]').textContent = syncPreview.local_documents

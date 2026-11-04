@@ -60,3 +60,42 @@ for (const readyState of ['loading', 'interactive', 'complete']) {
     assert.equal(timers[0].delay, 15000)
   })
 }
+
+for (const action of ['replace_local', 'replace_remote']) {
+  test(`offline conflict preview respects ${action} without auto-confirming`, async () => {
+    const nodes = new Map()
+    const node = selector => {
+      if (!nodes.has(selector)) nodes.set(selector, {
+        value: '', checked: false, dataset: {}, hidden: false, textContent: '',
+        setAttribute() {}, focus() {},
+      })
+      return nodes.get(selector)
+    }
+    node('[data-action]').value = action
+    node('[data-url]').value = 'https://server.example'
+    node('[value=remote]').checked = true
+    const calls = []
+    const context = vm.createContext({
+      t: key => key,
+      fakeDialog: { querySelector: node, querySelectorAll: () => [] },
+      request: async (path, options) => {
+        const body = JSON.parse(options.body)
+        calls.push({ path, body })
+        return path === 'connection'
+          ? { enabled: true, remote: true, access_mode: 'offline', server_url: 'https://server.example', sync: body.sync }
+          : { plan_id: 'confirmed-preview', action, local_documents: 2, remote_documents: 2 }
+      },
+    })
+    vm.runInContext(source, context)
+    vm.runInContext(`
+      connection = { enabled: true, remote: true, access_mode: 'offline', server_url: 'https://server.example', sync: { automatic: false } };
+      dialog = fakeDialog;
+      connectionRequest = request;
+    `, context)
+    await context.prepareSync(false)
+    assert.deepEqual(calls.map(call => call.path), ['connection', 'sync/preview'])
+    assert.equal(calls[1].body.action, action)
+    assert.equal(node('[data-preview]').dataset.destructive, 'true')
+    assert.equal(node('[data-preview-warning]').textContent, 'desktop:offlineResolveHelp')
+  })
+}

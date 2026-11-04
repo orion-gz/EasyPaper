@@ -89,6 +89,23 @@ class RemoteGateway:
         request = Request(scope, receive)
         if scope['path'] == '/api' or scope['path'].startswith('/api/'):
             options = self.manager.sync.options(self.target)
+            if (request.url.hostname != '127.0.0.1' or request.headers.get('sec-fetch-site') == 'cross-site'
+                    or (request.headers.get('origin') and request.headers['origin'] != str(request.base_url).rstrip('/'))):
+                await JSONResponse({'detail': 'Invalid desktop host.'}, status_code=403)(scope, receive, send)
+                return
+            if self.manager.offline(self.target) and scope['path'] in ('/api/auth/logout', '/api/auth/login') and request.method == 'POST':
+                options['offline_locked'] = True
+                options['automatic'] = False
+                self.manager.save()
+                if scope['path'] == '/api/auth/logout':
+                    response = JSONResponse({'message': 'Offline library locked.'})
+                    response.delete_cookie(remote_cookie_name(self.target), path='/')
+                    await response(scope, receive, send)
+                    return
+            if (self.manager.offline(self.target) and options.get('offline_locked')
+                    and scope['path'] not in ('/api/auth/login', '/api/auth/logout')):
+                await JSONResponse({'detail': 'Sign in to unlock the offline library.'}, status_code=401)(scope, receive, send)
+                return
             if (self.manager.offline(self.target) and options.get('offline_ready')
                     and (not scope['path'].startswith('/api/auth/') or scope['path'] == '/api/auth/check')
                     and not scope['path'].startswith('/api/lab/')):
@@ -102,7 +119,7 @@ class RemoteGateway:
                 document_change = (
                     path in ('/api/upload', '/api/library/trash/empty')
                     or bool(re.fullmatch(r'/api/session/[^/]+', path))
-                    or bool(re.fullmatch(r'/api/library/[^/]+(?:/(?:permanent|restore|title|metadata|tags|languages|processing-policy|reparse-preview)(?:/.*)?)?', path))
+                    or bool(re.fullmatch(r'/api/library/[^/]+(?:/(?:permanent|restore|title|tags|languages|processing-policy|reparse-preview)(?:/.*)?)?', path))
                     or path.startswith('/api/user-data/import')
                     or path.startswith('/api/user-data/sync/')
                 )
@@ -162,6 +179,25 @@ class RemoteGateway:
                 cookie = cookies.get('session_token')
                 if cookie:
                     max_age = int(cookie['max-age']) if cookie['max-age'] else None
+                    if request.url.path == '/api/auth/login' and response.status_code == 200 and self.manager.offline(self.target):
+                        try:
+                            async with httpx.AsyncClient(timeout=15, trust_env=False) as identity_client:
+                                identity = await identity_client.get(self.target + '/api/user-data/sync/info',
+                                    headers={'cookie': 'session_token=' + cookie.value, 'x-easypaper-sync-binding': '1'})
+                        except httpx.HTTPError:
+                            await response.aclose()
+                            await client.aclose()
+                            return JSONResponse({'detail': 'Could not verify the offline account. Sign in again when the server is reachable.'}, status_code=502)
+                        options = self.manager.sync.options(self.target)
+                        if identity.status_code == 200 and identity.json().get('account') and options.get('account') in (None, identity.json().get('account')):
+                            options['account'] = identity.json()['account']
+                            options['offline_locked'] = False
+                            options['automatic'] = True
+                            self.manager.save()
+                        else:
+                            await response.aclose()
+                            await client.aclose()
+                            return JSONResponse({'detail': 'This offline library belongs to another account. Sign in with its account or switch to server access mode.'}, status_code=409)
                     outgoing.set_cookie(remote_cookie_name(self.target), cookie.value,
                                         max_age=max_age, expires=cookie['expires'] or None,
                                         httponly=True, samesite='strict', path='/')

@@ -301,7 +301,7 @@ def import_archive(username, source, *, preserve_user_settings=False, sync_conte
                     raise InvalidArchive('Backup is missing an original document.')
             conn.execute('BEGIN IMMEDIATE')
             if sync_context:
-                sync_context.begin(conn, maps, staged)
+                sync_context.begin(conn, maps, staged, tables)
             # Concepts are shared; reuse by normalized name, never replace others' rows.
             maps['concepts'] = {}
             for row in tables['concepts']:

@@ -26,9 +26,34 @@ OFFLINE_USER_TABLES = {
 }
 
 
-def offline_merge(base, local, remote):
+READING_METADATA = {'last_page', 'last_read_at', 'read_sessions'}
+
+
+def offline_merge(base, local, remote, policy='merge'):
+    if policy == 'replace_local':
+        base = local
+    elif policy == 'replace_remote':
+        base = remote
     local = copy.deepcopy(local)
     base = copy.deepcopy(base or {'tables': {t: [] for t in transfer.TABLES}, 'files': {}})
+    remote = copy.deepcopy(remote)
+    # Reading position is user data even though it lives in the document row.
+    indexed = [index_rows('documents', m['tables']['documents']) for m in (base, local, remote)]
+    for key, row in indexed[2].items():
+        metadata = [json.loads(m.get(key, {}).get('metadata') or '{}') for m in indexed]
+        for field in READING_METADATA:
+            before, left, right = [m.get(field) for m in metadata]
+            if left == right or right == before:
+                value = left
+            elif left == before:
+                value = right
+            else:
+                raise SyncConflict([{'table': 'documents', 'key': key, 'document': row.get('filename')}])
+            if value is None:
+                metadata[2].pop(field, None)
+            else:
+                metadata[2][field] = value
+        row['metadata'] = json.dumps(metadata[2], ensure_ascii=False)
     for table in transfer.TABLES:
         if table not in OFFLINE_USER_TABLES:
             local['tables'][table] = copy.deepcopy(remote['tables'][table])
@@ -137,7 +162,8 @@ def peer_state(username, peer):
 
 
 class CanonicalExport:
-    def __init__(self, username):
+    def __init__(self, username, offline=False):
+        self.offline = offline
         self.username = username
         self.ids = {}
         self.comparisons = set()
@@ -175,9 +201,9 @@ class CanonicalExport:
         return f'{label}/{self.identity("documents", document)}/{rest}'
 
     def include_file(self, name):
-        # Machine-specific parser/translation caches are regenerated from the
-        # original and synchronized database, rather than treated as user edits.
-        return not name.startswith('cache/')
+        # Offline readers need portable extraction results; model-specific
+        # translation caches remain local to their originating installation.
+        return not name.startswith('cache/') or (self.offline and name.endswith(('_pages_extract.json', '_images_extract.json')))
 
     def transform(self, manifest):
         for table, rows in manifest['tables'].items():
@@ -207,8 +233,23 @@ class CanonicalExport:
         return manifest
 
 
-def export_snapshot(username, destination):
-    transfer.export_archive(username, {}, destination, sync_export=CanonicalExport(username))
+def prepare_offline_documents(username):
+    from services import cache
+    from services.reparse import load_document_parse
+    with closing(db.get_db()) as conn:
+        documents = transfer._snapshot(conn, username)['documents']
+    for row in documents:
+        if row.get('is_deleted') or row.get('content_kind') == 'html_article':
+            continue
+        doc = db.db_get_document(row['id'])
+        engine, version = doc.get('parser_engine'), doc.get('parser_version')
+        if (cache.get_cached_pages(row['id'], doc['pdf_path'], engine, version) is None
+                or cache.get_cached_images(row['id'], doc['pdf_path'], engine, version) is None):
+            load_document_parse(row['id'], doc, doc['pdf_path'])
+
+
+def export_snapshot(username, destination, offline=False):
+    transfer.export_archive(username, {}, destination, sync_export=CanonicalExport(username, offline))
     return read_snapshot(destination)
 
 
@@ -379,7 +420,7 @@ def exchange(username, incoming, destination_dir):
         raise transfer.InvalidArchive('Invalid synchronization request ID.')
     policy = meta.get('policy', 'merge')
     offline = meta.get('scope') == 'user-data'
-    if meta.get('scope') not in (None, 'user-data') or (offline and policy != 'merge'):
+    if meta.get('scope') not in (None, 'user-data'):
         raise transfer.InvalidArchive('Invalid synchronization scope or policy.')
     if policy not in ('merge', 'replace_local', 'replace_remote'):
         raise transfer.InvalidArchive('Invalid synchronization action.')
@@ -396,11 +437,13 @@ def exchange(username, incoming, destination_dir):
         raise SyncConflict([{'table': 'checkpoint', 'key': 'stale'}])
     with tempfile.TemporaryDirectory(prefix='easypaper-sync-server-') as temp:
         current_path = Path(temp) / 'current.zip'
-        current = export_snapshot(username, current_path)
+        current = export_snapshot(username, current_path, offline=offline)
         expected_raw = raw_fingerprint(username)
         if policy != 'merge' and meta.get('expected_remote') != fingerprint(current):
             raise SyncConflict([{'table': 'confirmation', 'key': 'server changed since preview'}])
-        if policy == 'replace_local':
+        if offline:
+            merged = offline_merge(previous['manifest'] if previous else None, local, current, policy)
+        elif policy == 'replace_local':
             merged = copy.deepcopy(current)
         elif policy == 'replace_remote':
             merged = copy.deepcopy(local)
