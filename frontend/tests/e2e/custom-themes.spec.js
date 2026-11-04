@@ -75,7 +75,7 @@ test('invalid colors and storage failures never replace the applied theme', asyn
   await expect(page.locator('.theme-status')).toContainText('저장하지 못했습니다')
 })
 
-test.skip('all preset previews render without horizontal overflow at narrow widths', async ({ page }) => {
+test('all preset previews render without horizontal overflow at narrow widths', async ({ page }) => {
   test.setTimeout(180000) // Exercise 64 real clicks across all presets on WebKit as well.
   await page.setViewportSize({ width: 720, height: 900 })
   await setup(page)
@@ -86,9 +86,14 @@ test.skip('all preset previews render without horizontal overflow at narrow widt
       await page.locator('#sidebar-settings-btn').click()
     }
     await page.locator('[data-theme-scheme="' + scheme + '"]').click()
+    await expect(page.locator('[data-theme-scheme="' + scheme + '"]')).toHaveAttribute('aria-pressed', 'true')
     const ids = await page.locator('[data-preset]').evaluateAll(nodes => nodes.map(node => node.dataset.preset))
     for (const id of ids) {
       await page.locator('[data-preset="' + id + '"]').click()
+      // Verify the draft transition before committing it. Selection rebuilds
+      // the cards and may still be settling after the preceding theme change.
+      await expect(page.locator('[data-preset="' + id + '"]')).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.locator('[data-theme-preview]')).toHaveAttribute('data-theme-id', id)
       await page.locator('[data-theme-apply]').click()
       await expect(page.locator('[data-theme-preview]')).toHaveAttribute('data-theme-id', id)
       await expect(page.locator('body')).toHaveAttribute('data-theme-id', id)

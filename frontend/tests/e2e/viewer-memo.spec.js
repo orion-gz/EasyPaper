@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A } from './helpers.js'
+import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A, waitForReaderReady } from './helpers.js'
 
 async function openViewerWithMemo(page, memoOverrides = {}, extraMemos = []) {
   const doc = {
@@ -42,6 +42,8 @@ async function openViewerWithMemo(page, memoOverrides = {}, extraMemos = []) {
     }))
     location.hash = '#viewer?id=doc-memo'
   }, { overrides: memoOverrides, extraMemos })
+
+  await waitForReaderReady(page)
 
   // Wait for the asynchronous parallel fit before measuring or editing cards.
   await expect.poll(() => activeReader(page).locator('#viewer-scroll-container').evaluate(el => {
@@ -114,6 +116,7 @@ test('사용자가 조절한 메모 크기를 저장하고 다시 복원한다',
   })).toEqual({ width: 360, height: 900 })
 
   await page.reload()
+  await waitForReaderReady(page)
   await expect(memo).toBeVisible()
   await expect(memo).toHaveCSS('width', '360px')
   await expect(memo).toHaveCSS('height', '900px')
@@ -540,6 +543,7 @@ test('aligned memo layout follows collapse, resize, settings, zoom and reopen', 
   await late.locator('[data-memo-align="right"]').click()
   await expect(reader.locator('.memo-margin-right [data-id="memo-regression"]')).toHaveCount(1)
   await page.reload()
+  await waitForReaderReady(page)
   await expect(activeReader(page).locator('.memo-margin-right [data-id="memo-regression"]')).toBeVisible()
   await expect(activeReader(page).locator('.memo-margin-left [data-id="earlier"]')).toHaveCount(1)
 })
@@ -617,6 +621,7 @@ for (const side of ['left', 'right']) {
     expect(saved.y * position.height / 100).toBeCloseTo(position.y, 0)
 
     await page.reload()
+  await waitForReaderReady(page)
     await expect(activeReader(page).locator('.floating-memo[data-id="memo-regression"]')).toBeVisible()
     // Reopening may restore a different zoom; persisted coordinates are page percentages.
     await expect.poll(async () => {
