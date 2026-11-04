@@ -1,6 +1,9 @@
+import { labScenes, mountLabScene } from './labGuideScenes.js'
 import { t } from './i18n.js'
 
 const labels = () => ({
+  labSceneTools: t('settings:labSceneTools'),
+  labScenePrevious: t('settings:labScenePrevious'),
   labWizardServer: t('settings:labWizardServer'),
   labWizardEngine: t('settings:labWizardEngine'),
   labWizardMembers: t('settings:labWizardMembers'),
@@ -142,29 +145,18 @@ export function initializeLabGuide() {
   dialog.append(header, body)
 
   const steps = [
-    { title: 'labGuideServer', text: 'labWizardServer', frames: [
-      ['SSH', '$ ssh user@lab-server\n$ git clone https://github.com/orion-gz/EasyPaper.git\n$ cd EasyPaper'],
-      ['Docker Compose', '$ mkdir -p lab-data/home\n$ sudo chown -R 1000:1000 lab-data\n$ docker compose -f docker-compose.lab.yml up -d --build'],
-      ['HTTPS · /etc/caddy/Caddyfile', 'lab.example.com {\n    reverse_proxy 127.0.0.1:8000\n}'],
-      ['HTTPS', '$ sudo systemctl reload caddy\nhttps://lab.example.com → EasyPaper'],
-    ] },
-    { title: 'labGuideEngine', text: 'labWizardEngine', frames: [
-      ['Ollama · /etc/systemd/system/ollama.service.d/override.conf', '[Service]\nEnvironment="OLLAMA_HOST=0.0.0.0:11434"'],
-      ['SSH', '$ sudo systemctl daemon-reload\n$ sudo systemctl restart ollama\n$ ollama pull qwen3:4b'],
-      ['EasyPaper · Lab', 'Ollama\nhttp://host.docker.internal:11434\nqwen3:4b'],
-      ['EasyPaper · Lab', () => t('settings:labWizardConnect')],
-    ] },
-    { title: 'labGuideMembers', text: 'labWizardMembers', frames: [
-      ['EasyPaper · Lab', () => t('settings:labWizardEnable')],
-      ['EasyPaper · Lab', () => t('settings:labWizardInvite')],
-      ['https://lab.example.com', () => t('settings:labWizardLogin')],
-      ['EasyPaper · alice', () => t('settings:labWizardSpace')],
-    ] },
+    { title: 'labGuideServer', text: 'labWizardServer' },
+    { title: 'labGuideEngine', text: 'labWizardEngine' },
+    { title: 'labGuideMembers', text: 'labWizardMembers' },
   ]
+  let scenes
   let step = 0
   let frame = 0
+  let elapsed = 0
   let timer
   let paused = false
+  let animation
+  let followedElement
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
   const progress = node('p')
   progress.className = 'lab-guide-progress'
@@ -172,64 +164,129 @@ export function initializeLabGuide() {
   const heading = node('h3')
   heading.tabIndex = -1
   const description = node('p')
+  const prerequisites = node('details')
+  prerequisites.className = 'lab-guide-prerequisites'
+  prerequisites.append(node('summary', 'labSceneTools'))
+  const links = node('div')
+  for (const [name, href] of [
+    ['Git', 'https://git-scm.com/downloads/linux'],
+    ['Docker Compose', 'https://docs.docker.com/engine/install/'],
+    ['Caddy', 'https://caddyserver.com/docs/install'],
+    ['Ollama', 'https://docs.ollama.com/linux'],
+  ]) {
+    const link = node('a')
+    link.textContent = name
+    link.href = href
+    link.target = '_blank'
+    link.rel = 'noopener noreferrer'
+    links.append(link)
+  }
+  prerequisites.append(links)
+  const firstLogin = node('p')
+  firstLogin.textContent = t('settings:labSceneFirstLogin')
+  const tunnel = node('code')
+  tunnel.className = 'lab-guide-tunnel'
+  tunnel.textContent = 'ssh -N -L 18000:127.0.0.1:8000 user@lab-server'
+  const account = node('p')
+  account.textContent = t('settings:labSceneFirstAccount')
+  prerequisites.append(firstLogin, tunnel, account)
   const demo = node('div')
   demo.className = 'lab-guide-demo'
-  const demoLabel = node('p', 'labWizardDemo')
   const screen = node('div')
   screen.className = 'lab-guide-screen'
+  screen.setAttribute('role', 'img')
   const screenTitle = node('div')
-  const output = node('pre')
+  const canvas = node('div')
+  canvas.className = 'lab-scene-canvas'
+  canvas.setAttribute('aria-hidden', 'true')
+  screen.append(screenTitle, canvas)
+  const sceneNote = node('p')
   const caption = node('p')
   caption.className = 'lab-guide-caption'
-  screen.append(screenTitle, output)
   const controls = node('div')
   controls.className = 'lab-guide-controls'
   const button = (key, action) => {
-    const el = node('button', key)
-    el.type = 'button'
-    el.className = 'btn btn-secondary'
-    el.onclick = action
-    return el
+    const element = node('button', key)
+    element.type = 'button'
+    element.className = 'btn btn-secondary'
+    element.onclick = action
+    return element
   }
-  const stop = () => { clearTimeout(timer) }
-  const renderFrame = () => {
-    const current = steps[step].frames[frame]
-    screenTitle.textContent = current[0]
-    output.textContent = typeof current[1] === 'function' ? current[1]() : current[1]
-    caption.textContent = `${frame + 1} / ${steps[step].frames.length}`
-    screen.classList.remove('is-playing')
-    void screen.offsetWidth
-    if (!paused && !reducedMotion.matches) screen.classList.add('is-playing')
+  const stop = () => clearTimeout(timer)
+  const updateToggle = () => {
+    toggle.textContent = t(`settings:${paused ? 'labWizardPlay' : 'labWizardPause'}`)
+    toggle.hidden = reducedMotion.matches
+  }
+  const paint = () => {
+    animation.update(reducedMotion.matches ? animation.duration : elapsed, reducedMotion.matches)
+    canvas.dataset.elapsed = String(elapsed)
+    canvas.dataset.complete = String(reducedMotion.matches || elapsed >= animation.duration)
+    const candidates = [...canvas.querySelectorAll('.is-active, .is-pressed, .lab-demo-result')]
+    const active = candidates.filter(element => element.getClientRects().length).at(-1)
+    if (!reducedMotion.matches && active && active !== followedElement) {
+      const bounds = active.getBoundingClientRect()
+      const viewport = body.getBoundingClientRect()
+      if (bounds.bottom > viewport.bottom) body.scrollTop += bounds.bottom - viewport.bottom + 12
+      else if (bounds.top < viewport.top) body.scrollTop -= viewport.top - bounds.top + 12
+    }
+    followedElement = active
   }
   const schedule = () => {
     stop()
     if (!dialog.open || paused || reducedMotion.matches) return
     timer = setTimeout(() => {
-      frame = (frame + 1) % steps[step].frames.length
-      renderFrame()
+      elapsed += 80
+      paint()
+      // Leave each completed scene readable for five seconds. The final scene
+      // stays visible rather than restarting the whole sequence unexpectedly.
+      if (elapsed >= animation.duration + 5000) {
+        if (frame < scenes[step].length - 1) { frame += 1; renderFrame() }
+        else { paused = true; updateToggle() }
+      }
       schedule()
-    }, 4000)
+    }, 80)
+  }
+  const renderFrame = () => {
+    stop()
+    const scene = scenes[step][frame]
+    followedElement = undefined
+    screenTitle.textContent = scene.title
+    sceneNote.textContent = scene.note
+    animation = mountLabScene(canvas, scene)
+    animation.update(animation.duration, true)
+    screen.setAttribute('aria-label', `${scene.title}. ${scene.note}. ${canvas.textContent}`)
+    elapsed = paused || reducedMotion.matches ? animation.duration : 0
+    caption.textContent = `${frame + 1} / ${scenes[step].length}`
+    backFrame.disabled = frame === 0
+    nextFrame.disabled = frame === scenes[step].length - 1
+    paint()
+    schedule()
   }
   const toggle = button('labWizardPause', () => {
     paused = !paused
-    toggle.textContent = t(`settings:${paused ? 'labWizardPlay' : 'labWizardPause'}`)
-    renderFrame()
+    if (!paused && elapsed >= animation.duration) elapsed = 0
+    updateToggle()
+    paint()
     schedule()
   })
   toggle.removeAttribute('data-i18n')
-  const replay = button('labWizardReplay', () => { frame = 0; renderFrame(); schedule() })
-  const nextFrame = button('labWizardFrame', () => {
-    frame = (frame + 1) % steps[step].frames.length
+  const replay = button('labWizardReplay', () => {
+    paused = false
+    updateToggle()
     renderFrame()
-    schedule()
   })
-  controls.append(toggle, replay, nextFrame)
-  demo.append(demoLabel, screen, caption, controls)
+  const backFrame = button('labScenePrevious', () => { frame -= 1; renderFrame() })
+  const nextFrame = button('labWizardFrame', () => { frame += 1; renderFrame() })
+  controls.append(backFrame, toggle, replay, nextFrame, caption)
+  demo.append(node('p', 'labWizardDemo'), screen, sceneNote)
   const reference = node('a', 'labWizardDetails')
   reference.href = 'https://github.com/orion-gz/EasyPaper/blob/main/docs/lab-mode.md'
   reference.target = '_blank'
   reference.rel = 'noopener noreferrer'
-  body.append(progress, heading, description, demo, reference)
+  const stepHeader = node('div')
+  stepHeader.className = 'lab-guide-step-header'
+  stepHeader.append(heading, progress)
+  body.append(stepHeader, description, prerequisites, demo, reference)
   const footer = node('div')
   footer.className = 'lab-guide-footer'
   const previous = button('labWizardPrevious', () => { step -= 1; renderStep() })
@@ -240,28 +297,30 @@ export function initializeLabGuide() {
   next.removeAttribute('data-i18n')
   next.className = 'btn btn-primary'
   footer.append(previous, next)
-  dialog.append(footer)
+  dialog.append(controls, footer)
   const renderStep = () => {
-    stop()
     frame = 0
-    progress.textContent = `STEP ${step + 1} / 3`
+    paused = false
+    progress.textContent = `STEP ${step + 1} / ${steps.length}`
     heading.textContent = t(`settings:${steps[step].title}`)
     description.textContent = t(`settings:${steps[step].text}`)
+    prerequisites.hidden = step === 2
     previous.disabled = step === 0
     next.textContent = t(`settings:${step === 2 ? 'labWizardDone' : 'labWizardNext'}`)
-    toggle.hidden = reducedMotion.matches
+    updateToggle()
     renderFrame()
     body.scrollTop = 0
     heading.focus()
-    schedule()
   }
   reducedMotion.addEventListener('change', () => {
-    toggle.hidden = reducedMotion.matches
-    renderFrame()
+    updateToggle()
+    if (!animation) return
+    paint()
     schedule()
   })
   panel.append(dialog)
   open.onclick = () => {
+    scenes = labScenes()
     step = 0
     paused = false
     toggle.textContent = t('settings:labWizardPause')
