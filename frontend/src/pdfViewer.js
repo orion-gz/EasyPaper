@@ -184,7 +184,11 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   const queue = new Map()
   let active = 0
   let pumpTimer = null
+  let reconcileFrame = null
+  let renderTargets = []
+  let resizeObserver
   let currentPage = 1
+  let renderPriorityPage = 1
   let lastNotifiedPage = null
   const isCurrent = () => myGeneration === renderGeneration
 
@@ -231,7 +235,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
       pumpTimer = null
       if (!isCurrent()) return
       while (active < 2 && queue.size) {
-        const pageNum = [...queue.keys()].sort((a, b) => Math.abs(a - currentPage) - Math.abs(b - currentPage))[0]
+        const pageNum = [...queue.keys()].sort((a, b) => Math.abs(a - renderPriorityPage) - Math.abs(b - renderPriorityPage))[0]
         const wrapper = queue.get(pageNum)
         queue.delete(pageNum)
         if (!nearby.has(pageNum) || jobs.has(pageNum)) continue
@@ -250,10 +254,52 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     }, 0)
   }
 
+  // Intersection notifications can lag behind instant jumps and fit/zoom layout
+  // changes (especially in WebKit). Reconcile from current geometry as well.
+  // Binary search keeps long PDFs from measuring every page on each scroll.
+  function reconcileRenderWindow() {
+    reconcileFrame = null
+    if (!isCurrent() || !renderTargets.length) return
+    const viewport = container.getBoundingClientRect()
+    if (!viewport.height) return
+    const top = viewport.top - 600
+    const bottom = viewport.bottom + 600
+    let low = 0
+    let high = renderTargets.length
+    while (low < high) {
+      const middle = (low + high) >>> 1
+      if (renderTargets[middle].getBoundingClientRect().bottom < top) low = middle + 1
+      else high = middle
+    }
+    const next = new Set()
+    let firstVisible = null
+    for (let index = low; index < renderTargets.length; index++) {
+      const target = renderTargets[index]
+      const rect = target.getBoundingClientRect()
+      if (rect.top > bottom) break
+      if (firstVisible === null && rect.bottom > viewport.top && rect.top < viewport.bottom) firstVisible = Number(target.dataset.page)
+      const pageNum = Number(target.dataset.page)
+      next.add(pageNum)
+      if (!jobs.has(pageNum)) queue.set(pageNum, target.matches('.pdf-page-wrapper') ? target : target.querySelector('.pdf-page-wrapper'))
+    }
+    renderPriorityPage = firstVisible ?? currentPage
+    nearby.clear()
+    next.forEach(pageNum => nearby.add(pageNum))
+    for (const pageNum of queue.keys()) if (!nearby.has(pageNum)) queue.delete(pageNum)
+    trimPages()
+    scheduleRender()
+  }
+  function requestReconcile() {
+    if (reconcileFrame === null && isCurrent()) reconcileFrame = requestAnimationFrame(reconcileRenderWindow)
+  }
+
   disposeScrollView = (preserveCanvas = false) => {
     pageObserver?.disconnect()
     pageVisibilityObserver?.disconnect()
     clearTimeout(pumpTimer)
+    cancelAnimationFrame(reconcileFrame)
+    container.removeEventListener('scroll', requestReconcile)
+    resizeObserver?.disconnect()
     queue.clear()
     for (const job of jobs.values()) release(job, preserveCanvas)
     // Also release retained pages that have not entered the new render queue.
@@ -364,8 +410,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         }
       }
     })
-    trimPages()
-    scheduleRender()
+    reconcileRenderWindow()
   }, {
     root: container,
     rootMargin: '600px 0px',  // 미리 600px 앞서 렌더링
@@ -411,6 +456,11 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     threshold: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], // 정밀한 노출 비율 판정
   })
 
+  renderTargets = Array.from(wrappers, wrapper => wrapper.closest('.page-pair') || wrapper)
+  container.addEventListener('scroll', requestReconcile, { passive: true })
+  resizeObserver = new ResizeObserver(requestReconcile)
+  resizeObserver.observe(container)
+  requestReconcile()
   wrappers.forEach(w => {
     // Margin memos may extend below or beside the PDF itself. Keep the page
     // alive while any part of its reading row is in the render window.
