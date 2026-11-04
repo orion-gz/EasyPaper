@@ -728,9 +728,13 @@ for (const previewClass of ['figure-preview-tooltip', 'citation-tooltip']) {
     await expect(page.locator('.focus-tint-hole')).toHaveCount(2)
     await expect(preview).toHaveCSS('filter', 'opacity(0.9)')
     await expect(page.locator('#panel')).toHaveCSS('filter', 'blur(6px)')
-    await page.evaluate(() => controller.leave())
-    // Resolve the current preview geometry after focus transforms are removed.
-    await preview.hover()
+    // Enter within the controller's 150 ms grace period in the same browser
+    // task; Playwright IPC/actionability can otherwise consume the deadline.
+    await preview.evaluate(element => {
+      controller.leave()
+      element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+    })
+    await page.waitForTimeout(250)
     await expect(page.locator('.focus-mode-layer')).toBeVisible()
     await preview.click()
     await expect(page.locator('.focus-mode-layer')).toBeVisible()

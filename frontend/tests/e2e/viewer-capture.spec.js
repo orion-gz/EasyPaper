@@ -142,6 +142,7 @@ test('failed image encoding releases capture mode and allows retry', async ({ pa
 })
 
 test('document switches clear captures and discard pending images', async ({ page }) => {
+  test.setTimeout(60000) // Loads two isolated document runtimes and encodes a capture.
   await openPDF(page)
   const replacement = { id: 'capture-next', filename: 'Next.pdf', total_pages: 2, metadata: { title: 'Next PDF' }, translated_pages: [] }
   await page.route('**/api/library/capture-next', route => route.fulfill({ json: replacement }))

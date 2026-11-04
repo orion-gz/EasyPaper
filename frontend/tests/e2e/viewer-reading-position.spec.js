@@ -23,6 +23,7 @@ function makePDF(pageCount, mixedSizes) {
 
 for (const mixedSizes of [false, true]) {
   test(`읽던 페이지가 최초 복원, 새로고침, 재진입 후에도 유지된다 (${mixedSizes ? '혼합 크기' : '가로 페이지'})`, async ({ page }) => {
+    test.setTimeout(60000) // Initial boot, reload, tab re-entry and bookmark debounces.
     const doc = { id: 'reading-position', filename: 'Landscape.pdf', total_pages: 30, metadata: { last_page: 15 }, translated_pages: [19] }
     await mockBaseRoutes(page, { documents: [doc] })
     await page.route('**/api/library/reading-position/pdf', route => route.fulfill({ contentType: 'application/pdf', body: makePDF(30, mixedSizes) }))

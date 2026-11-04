@@ -75,36 +75,41 @@ test('invalid colors and storage failures never replace the applied theme', asyn
   await expect(page.locator('.theme-status')).toContainText('저장하지 못했습니다')
 })
 
-test('all preset previews render without horizontal overflow at narrow widths', async ({ page }) => {
-  test.setTimeout(180000) // Exercise 64 real clicks across all presets on WebKit as well.
-  await page.setViewportSize({ width: 720, height: 900 })
-  await setup(page)
-  for (const scheme of ['dark', 'light']) {
+// Isolate schemes so applying every dark preset cannot leave an asynchronous
+// theme refresh racing the first light selection (and vice versa).
+for (const scheme of ['dark', 'light']) {
+  test(`all preset previews render without horizontal overflow at narrow widths (${scheme})`, async ({ page }) => {
+    test.setTimeout(180000)
+    await page.setViewportSize({ width: 720, height: 900 })
+    await setup(page)
     if (scheme === 'light') {
       await page.locator('#close-settings-btn').click()
       await page.locator('#sidebar-theme-toggle-btn').click()
+      await expect(page.locator('body')).toHaveClass(/light-theme/)
       await page.locator('#sidebar-settings-btn').click()
+      await expect(page.locator('.theme-editor')).toBeVisible()
     }
-    await page.locator('[data-theme-scheme="' + scheme + '"]').click()
-    await expect(page.locator('[data-theme-scheme="' + scheme + '"]')).toHaveAttribute('aria-pressed', 'true')
+    await page.locator(`[data-theme-scheme="${scheme}"]`).press('Enter')
+    await expect(page.locator(`[data-theme-scheme="${scheme}"]`)).toHaveAttribute('aria-pressed', 'true')
     const ids = await page.locator('[data-preset]').evaluateAll(nodes => nodes.map(node => node.dataset.preset))
+    expect(ids.length).toBeGreaterThan(0)
     for (const id of ids) {
-      await page.locator('[data-preset="' + id + '"]').click()
-      // Verify the draft transition before committing it. Selection rebuilds
-      // the cards and may still be settling after the preceding theme change.
-      await expect(page.locator('[data-preset="' + id + '"]')).toHaveAttribute('aria-pressed', 'true')
+      // Exercise native keyboard activation while the nested preset list and
+      // modal can reflow; pointer hit-testing is covered by the selection tests.
+      await page.locator(`[data-preset="${id}"]`).press('Enter')
+      await expect(page.locator(`[data-preset="${id}"]`)).toHaveAttribute('aria-pressed', 'true')
       await expect(page.locator('[data-theme-preview]')).toHaveAttribute('data-theme-id', id)
-      await page.locator('[data-theme-apply]').click()
+      await page.locator('[data-theme-apply]').press('Enter')
       await expect(page.locator('[data-theme-preview]')).toHaveAttribute('data-theme-id', id)
       await expect(page.locator('body')).toHaveAttribute('data-theme-id', id)
       for (const [actual, sample] of [['#tab-workspace', '[data-theme-preview]'], ['#app-sidebar', '.theme-sample-sidebar'], ['.workspace-topnav', '.theme-sample-topbar']]) {
         const expected = await page.locator(sample).evaluate(node => getComputedStyle(node).backgroundColor)
         await expect(page.locator(actual)).toHaveCSS('background-color', expected)
       }
+      expect(await page.locator('.theme-editor').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
     }
-  }
-  expect(await page.locator('.theme-editor').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
-})
+  })
+}
 
 test('JSON import creates a draft, export round trips, and HTML-like names stay text', async ({ page }) => {
   await setup(page)
