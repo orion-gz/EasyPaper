@@ -126,7 +126,7 @@ def verify_session_token(token: str) -> bool:
         return False
 
 async def get_current_user(request: Request) -> str:
-    offline_user = request.scope.get('desktop_offline_user')
+    offline_user = getattr(request, 'scope', {}).get('desktop_offline_user')
     if offline_user:
         from services.lab_context import identity
         identity.set(offline_user)
