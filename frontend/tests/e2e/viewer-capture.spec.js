@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { test, expect } from '@playwright/test'
-import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp } from './helpers.js'
+import { activeReader, evaluateReader, readerPoint, mockBaseRoutes, gotoApp, waitForReaderReady } from './helpers.js'
 
 test.use({ deviceScaleFactor: 2 })
 test.setTimeout(60000)
@@ -142,6 +142,7 @@ test('failed image encoding releases capture mode and allows retry', async ({ pa
 })
 
 test('document switches clear captures and discard pending images', async ({ page }) => {
+  test.setTimeout(60000) // Loads two isolated document runtimes and encodes a capture.
   await openPDF(page)
   const replacement = { id: 'capture-next', filename: 'Next.pdf', total_pages: 2, metadata: { title: 'Next PDF' }, translated_pages: [] }
   await page.route('**/api/library/capture-next', route => route.fulfill({ json: replacement }))
@@ -159,6 +160,8 @@ test('document switches clear captures and discard pending images', async ({ pag
   await expect.poll(() => evaluateReader(page, () => typeof window.finishCapture)).toBe('function')
   const oldFrame = await (await page.locator('.workspace-document-frame:not([hidden])').elementHandle()).contentFrame()
   await evaluateReader(page, () => { location.hash = '#viewer?id=capture-next' })
+  await expect(page.locator('.workspace-document-frame:not([hidden])')).toHaveAttribute('data-document-id', 'capture-next')
+  await waitForReaderReady(page)
   await expect(activeReader(page).locator('.pdf-page-wrapper[data-page="1"] .textLayer')).toContainText('Next document')
   await expect(oldFrame.locator('.capture-overlay')).toHaveCount(0)
   await expect(oldFrame.locator('#pin-capture-btn')).toHaveAttribute('aria-busy', 'false')

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockBaseRoutes } from './helpers.js'
+import { mockBaseRoutes, activeReader, SAMPLE_PDF_A } from './helpers.js'
 
 const localOrigin = 'http://localhost:8934'
 const remoteOrigin = 'http://127.0.0.1:8934'
@@ -285,3 +285,31 @@ for (const theme of ['dark', 'light']) {
     await expect(page.locator('.desktop-connection-badge')).toBeFocused()
   })
 }
+
+test('remote desktop opens a document without recent WebView APIs', async ({ page }) => {
+  await desktop(page, { onboarded: true, enabled: true, server_url: 'https://papers.example.com' })
+  await page.addInitScript(() => {
+    delete Promise.withResolvers
+    delete Promise.try
+    delete Map.prototype.getOrInsertComputed
+    delete Uint8Array.prototype.toBase64
+  })
+  // addInitScript does not run in workers. Remove the APIs from the actual
+  // built worker entry as well, before its compatibility code executes.
+  let workerRequested = false
+  await page.route('**/assets/pdfWorker-*.js', async route => {
+    workerRequested = true
+    const response = await route.fetch()
+    await route.fulfill({ response, body: `delete Promise.withResolvers; delete Promise.try; delete Map.prototype.getOrInsertComputed; delete Uint8Array.prototype.toBase64;\n${await response.text()}` })
+  })
+  const doc = { id: 'remote-doc', filename: 'Remote.pdf', total_pages: 1, metadata: { primer_shown: true }, translated_pages: [] }
+  await page.route('**/api/library/remote-doc', route => route.fulfill({ json: doc }))
+  await page.route('**/api/library/remote-doc/pdf', route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_A }))
+  const workerStarted = page.waitForEvent('worker', worker => worker.url().includes('/pdfWorker-'))
+  await page.goto(remoteOrigin + '/#viewer?id=remote-doc')
+  await expect(activeReader(page).locator('.pdf-page-wrapper canvas')).toBeAttached({ timeout: 15000 })
+  expect(workerRequested).toBe(true)
+  const worker = await workerStarted
+  expect(await worker.evaluate(() => [Promise.withResolvers, Promise.try, Map.prototype.getOrInsertComputed, Uint8Array.prototype.toBase64].every(api => typeof api === 'function'))).toBe(true)
+  await expect(activeReader(page).locator('.textLayer span').first()).toBeAttached()
+})
