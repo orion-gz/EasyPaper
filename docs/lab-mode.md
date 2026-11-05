@@ -199,3 +199,41 @@ invocation. Provider-native conversation resumption is not enabled: Codex runs
 with `--ephemeral`, and Claude uses a fresh print request. This avoids retaining
 hidden cross-document conversation state; native session IDs are not portable
 between web, desktop and server. App document history remains the source of truth.
+
+## Installation and connection guides
+
+Settings → Lab Mode offers an **Installation guide** and a **Connection guide**.
+Finish all installation scenes to unlock the connection guide. Each command has
+its own animation and copy icon; scenes advance only when Next is selected.
+SSH host, username and ports, or the HTTPS domain, update the command examples.
+Only the completed connection method is remembered in this browser; credentials
+and server addresses are not stored by the guide. Changing an installation choice
+locks the connection guide until that path is reviewed again.
+
+The installation commands target a fresh **Ubuntu 24.04** server:
+
+- Docker: clone the repository, install Docker Compose, prepare `lab-data`, then
+  run `sudo docker compose -f docker-compose.lab.yml up -d --build`.
+- systemd: clone the repository and run
+  `sudo bash deploy/lab/install-systemd.sh`. The script installs dependencies,
+  builds the app in `/opt/easypaper`, creates the service user and registers
+  `easypaper-lab.service`. It refuses to overwrite an existing installation.
+  Persistent data is in `/var/lib/easypaper`. This installs the application;
+  optional isolated personal CLI runtimes still require the setup above.
+
+For SSH access, run the generated tunnel command on your PC, enter your SSH
+password in the terminal, and keep it open. Use `http://localhost:18000` (or your
+chosen local port) as the desktop server URL or browser address. SSH forwarding
+must be permitted by the server. The EasyPaper login uses its own account, not
+SSH credentials.
+
+For HTTPS, first use the private SSH tunnel to change the initial `admin / admin`
+password in Settings → Account. Register a domain, point its DNS A record to the
+server public IPv4, and allow/forward TCP ports 80 and 443 through the router and
+server/cloud firewalls. The guide installs Caddy and shows a reverse proxy to
+`127.0.0.1:8000`. Keep 8000 private. On hosts with existing Caddy sites, add the
+shown domain block to the existing configuration rather than replacing it.
+
+Dependency references: [Docker on Ubuntu](https://docs.docker.com/engine/install/ubuntu/),
+[Caddy installation](https://caddyserver.com/docs/install), and
+[NodeSource Node.js packages](https://github.com/nodesource/distributions).

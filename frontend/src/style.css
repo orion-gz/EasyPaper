@@ -8720,3 +8720,15 @@ body.light-theme .chat-drawer {
 }
 .lab-guide-prerequisites p { margin-top: 12px; }
 .lab-guide-tunnel { display: block; padding: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.lab-introduction > button + button { margin-left: 8px; }
+.lab-introduction > button:disabled { opacity: .45; cursor: default; }
+.lab-guide-choices { display: flex; flex-wrap: wrap; gap: var(--lab-space-sm); }
+.lab-guide-choices [aria-pressed="true"] { border-color: var(--control-accent); color: var(--control-accent-text); }
+.lab-guide-commands { display: grid; gap: var(--lab-space-sm); min-width: 0; }
+.lab-guide-parameters { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--lab-space-sm); }
+.lab-guide-parameters label { display: block; margin-bottom: 4px; }
+.lab-guide-parameters input { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; }
+.lab-guide-snippet { display: flex; align-items: flex-start; gap: var(--lab-space-sm); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; }
+.lab-guide-snippet code { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; user-select: text; }
+.lab-guide-snippet button { flex-shrink: 0; padding: 6px; }
