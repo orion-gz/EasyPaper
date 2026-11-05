@@ -2,6 +2,9 @@
 import hashlib
 import time
 
+from services.ssh_connections import client as connection_client
+import json
+
 import httpx
 
 _verified = {}
@@ -9,13 +12,15 @@ _verified = {}
 
 async def require_cache_salt(configuration):
     endpoint = configuration['url'].rstrip('/')
-    key = (endpoint, hashlib.sha256(configuration.get('api_key', '').encode()).hexdigest())
+    key = (configuration.get('id'), configuration.get('transport', 'https'), endpoint,
+           json.dumps(configuration.get('ssh'), sort_keys=True),
+           hashlib.sha256(configuration.get('api_key', '').encode()).hexdigest())
     if _verified.get(key, 0) > time.monotonic():
         return
     # vLLM exposes OpenAPI at the server root, outside its /v1 API prefix.
     root = endpoint[:-3] if endpoint.endswith('/v1') else endpoint
     headers = {'Authorization': 'Bearer ' + configuration['api_key']} if configuration.get('api_key') else {}
-    async with httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False) as client:
+    async with connection_client('inference:' + configuration.get('id', 'default'), configuration, timeout=15, follow_redirects=False, trust_env=False) as client:
         response = await client.get(root + '/openapi.json', headers=headers)
         response.raise_for_status()
         schema = response.json()
@@ -54,7 +59,7 @@ async def probe(configuration):
         payload.update(max_tokens=1, cache_salt=secrets.token_hex(32))
     else:
         payload['options'] = {'num_predict': 1}
-    async with httpx.AsyncClient(timeout=120, follow_redirects=False, trust_env=False) as client:
+    async with connection_client('inference:' + configuration.get('id', 'default'), configuration, timeout=120, follow_redirects=False, trust_env=False) as client:
         response = await client.post(configuration['url'].rstrip('/') + path, headers=headers, json=payload)
         response.raise_for_status()
         result = response.json()

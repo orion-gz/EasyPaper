@@ -7,7 +7,7 @@ import functools
 import inspect
 import weakref
 
-from services.lab_context import identity
+from services.lab_context import identity, selected_server
 
 _running = defaultdict(set)
 _requests = defaultdict(set)
@@ -17,16 +17,18 @@ cache_scope = ContextVar('lab_cache_scope', default=None)
 
 
 @asynccontextmanager
-async def admission(username):
+async def admission(username, server_id=None):
     """Keep running counts when limits change, rather than creating a new pool."""
     from services import lab
-    state = _limits.setdefault(asyncio.get_running_loop(), {
+    pools = _limits.setdefault(asyncio.get_running_loop(), {})
+    state = pools.setdefault(server_id, {
         'condition': asyncio.Condition(), 'total': 0, 'users': defaultdict(int),
     })
     condition = state['condition']
     async with condition:
         while True:
-            common = lab.configuration()
+            from services import inference_servers
+            common = inference_servers.get(server_id, with_secrets=False) if server_id else lab.configuration()
             maximum = common.get('max_concurrent') or (8 if common['engine'] == 'vllm' else 2)
             if state['total'] < maximum and state['users'].get(username, 0) < common.get('per_user', 1):
                 state['total'] += 1
@@ -57,7 +59,7 @@ def scoped(function):
         from services import lab, db
         if identity.get():
             lab.require_access(identity.get())
-        if not lab.settings()['enabled'] or _depth.get():
+        if not lab.selection() or _depth.get():
             async for value in function(*args, **kwargs):
                 yield value
             return
@@ -80,8 +82,12 @@ def scoped(function):
         depth_token = _depth.set(1)
         task = asyncio.current_task()
         _running[username].add(task)
+        common = lab.selection()
+        from services.ssh_connections import manager
+        selection_token = selected_server.set(common)
+        server_key = 'inference:' + common.get('id', 'default')
         try:
-            async with admission(username):
+            async with manager.lease(server_key), admission(username, common.get('id')):
                 lab.require_access(username)
                 async for value in function(*args, **kwargs):
                     lab.require_access(username)
@@ -90,6 +96,7 @@ def scoped(function):
             _running[username].discard(task)
             if not _running[username]:
                 _running.pop(username, None)
+            selected_server.reset(selection_token)
             _depth.reset(depth_token)
             cache_scope.reset(scope_token)
             identity.reset(token)

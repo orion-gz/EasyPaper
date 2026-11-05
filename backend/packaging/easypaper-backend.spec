@@ -59,6 +59,10 @@ a = Analysis(
     # cannot see their transitive stdlib imports. Collect the platform stdlib
     # instead of discovering missing modules one user failure at a time.
     hiddenimports=pip_hiddenimports + parser_stdlib_modules() + [
+        "keyring.backends.macOS",
+        "keyring.backends.Windows",
+        "keyring.backends.SecretService",
+        "bcrypt",
         "parser_worker",
         "parser_stdlib_check",
         # uvicorn은 프로토콜/루프 구현체를 동적으로 임포트하므로 PyInstaller의

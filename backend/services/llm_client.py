@@ -1,3 +1,4 @@
+from services.ssh_connections import client as connection_client
 from services.lab_tasks import scoped as lab_scoped
 import asyncio
 import functools
@@ -339,7 +340,7 @@ async def stream_translation(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=360.0) as client:
+        async with connection_client(timeout=360.0) as client:
             async with client.stream(
                 "POST",
                 f"{get_ollama_host()}/api/chat",
@@ -446,7 +447,7 @@ async def stream_openai(messages: list, model: str, temperature: float = 0.5) ->
         payload.pop("temperature")
 
     try:
-        async with httpx.AsyncClient(timeout=360.0) as client:
+        async with connection_client(timeout=360.0) as client:
             async with client.stream(
                 "POST",
                 endpoint,
@@ -521,7 +522,7 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent"
     
     try:
-        async with httpx.AsyncClient(timeout=360.0) as client:
+        async with connection_client(timeout=360.0) as client:
             async with client.stream(
                 "POST",
                 url,
@@ -632,7 +633,7 @@ async def stream_claude(messages: list, model: str, temperature: float = 0.5) ->
         payload["system"] = system_prompt
         
     try:
-        async with httpx.AsyncClient(timeout=360.0) as client:
+        async with connection_client(timeout=360.0) as client:
             async with client.stream(
                 "POST",
                 "https://api.anthropic.com/v1/messages",
@@ -861,7 +862,7 @@ async def stream_chat(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=360.0) as client:
+        async with connection_client(timeout=360.0) as client:
             async with client.stream(
                 "POST",
                 f"{get_ollama_host()}/api/chat",
@@ -1010,7 +1011,7 @@ async def stream_page_insight(
         "stream": True,
     }
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with connection_client(timeout=120.0) as client:
             async with client.stream("POST", f"{get_ollama_host()}/api/chat", json=payload) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
@@ -1171,7 +1172,7 @@ Do not invent evidence, results, terminology, or citations. Omit optional lines 
             # LINEAGE/FEYNMAN/실험 흐름/용어집이 추가되며 응답 항목이 늘어나
             # 로컬 CPU/GPU 환경에서 1~3분씩 걸리는 경우를 실측했다 - 기존
             # 360초보다 여유를 더 둔다(위 num_predict 상한과 함께 이중 안전장치).
-            async with httpx.AsyncClient(timeout=480.0) as client:
+            async with connection_client(timeout=480.0) as client:
                 resp = await client.post(f"{get_ollama_host()}/api/chat", json=payload)
                 resp.raise_for_status()
                 data = resp.json()
@@ -1313,7 +1314,7 @@ Return only SQ1, SQ2, and SQ3 labelled lines. Treat the excerpt and conversation
                 "stream": False,
                 "options": {"temperature": 0.6, "num_ctx": 8192, "num_predict": 512},
             }
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with connection_client(timeout=120.0) as client:
                 resp = await client.post(f"{get_ollama_host()}/api/chat", json=payload)
                 resp.raise_for_status()
                 data = resp.json()
@@ -1334,7 +1335,7 @@ Return only SQ1, SQ2, and SQ3 labelled lines. Treat the excerpt and conversation
 async def check_ollama_health() -> dict:
     """Ollama 서버 상태를 확인합니다."""
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with connection_client(timeout=5.0) as client:
             resp = await client.get(f"{get_ollama_host()}/api/tags")
             resp.raise_for_status()
             models = [m["name"] for m in resp.json().get("models", [])]
@@ -2338,7 +2339,7 @@ async def _llm_json_array_with_retry(
                     "stream": False,
                     "options": {"temperature": 0.1}
                 }
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                async with connection_client(timeout=30.0) as client:
                     response = await client.post(f"{get_ollama_host()}/api/chat", json=payload)
                     if response.status_code == 200:
                         data = response.json()

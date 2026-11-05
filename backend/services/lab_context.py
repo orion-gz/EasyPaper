@@ -2,6 +2,7 @@
 from contextvars import ContextVar
 
 identity = ContextVar('lab_identity', default=None)
+selected_server = ContextVar('selected_inference_server', default=None)
 
 
 from contextlib import contextmanager

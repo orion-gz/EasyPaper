@@ -14,3 +14,7 @@ matplotlib==3.11.1
 # marker-pdf/surya-ocr require Pillow >=10.2.0,<11.
 pillow>=10.2.0,<11
 lingua-language-detector==2.2.0
+asyncssh>=2.21,<3
+cryptography>=45,<47
+keyring>=25,<26
+bcrypt>=4,<6

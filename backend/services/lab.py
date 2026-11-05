@@ -78,10 +78,11 @@ def cache_salt(username, document_id, revision):
     return hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
-def configuration():
-    with closing(db.get_db()) as conn:
-        row = conn.execute("SELECT value FROM lab_configuration WHERE key='inference'").fetchone()
-    return json.loads(row[0]) if row else {'engine': 'ollama', 'url': 'http://localhost:11434', 'models': [], 'model': '', 'api_key': ''}
+def configuration(with_secrets=True):
+    from services import inference_servers
+    if inference_servers.state()['servers']:
+        return inference_servers.get(with_secrets=with_secrets)
+    return {'engine': 'ollama', 'url': 'http://localhost:11434', 'models': [], 'model': '', 'api_key': ''}
 
 
 def preference(username):
@@ -94,15 +95,26 @@ def preference(username):
 
 
 def selection():
-    if not settings()['enabled']:
+    from services.lab_context import selected_server
+    if selected_server.get() is not None:
+        return selected_server.get()
+    from services import inference_servers
+    enabled = settings()['enabled']
+    if not enabled and not inference_servers.state()['servers']:
         return None
     from services.lab_context import identity
     username = identity.get()
     if not username:
-        raise RuntimeError('Lab inference requires an explicit user identity.')
+        if enabled:
+            raise RuntimeError('Lab inference requires an explicit user identity.')
+        from config import get_app_username
+        username = get_app_username()
     require_access(username)
-    common = configuration()
     personal = preference(username)
+    if personal.get('server_id') and personal.get('provider') in ('ollama', 'vllm'):
+        common = inference_servers.get(personal['server_id'])
+    else:
+        common = configuration(with_secrets=personal.get('provider') not in ('claude_code', 'codex', 'antigravity'))
     provider = personal.get('provider', common['engine'])
     model = personal.get('model', common['model'])
     if provider in ('ollama', 'vllm'):
@@ -120,7 +132,7 @@ def result_namespace(function):
     @functools.wraps(function)
     def wrapped(*args, **kwargs):
         suffix = function(*args, **kwargs)
-        if not settings()['enabled']:
+        if not selection():
             return suffix
         from services.lab_context import identity
         from config import get_translation_prompt_template
@@ -128,7 +140,7 @@ def result_namespace(function):
         if not user:
             raise RuntimeError('Lab cache access requires a user identity.')
         selected = selection()
-        payload = [user['id'], selected['provider'], selected['model'], selected['url'],
+        payload = [user['id'], selected['provider'], selected['model'], selected.get('id'), selected['url'],
                    get_translation_prompt_template(), 'lab-results-v1']
         key = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
         return suffix + '_lab_' + key
@@ -151,7 +163,8 @@ async def inference_health():
                     'model_available': available, 'authentication': result.get('status')}
         path = '/models' if provider == 'vllm' else '/api/tags'
         headers = {'Authorization': 'Bearer ' + selected['api_key']} if selected.get('api_key') else {}
-        async with httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False) as connection:
+        from services.ssh_connections import client
+        async with client(timeout=15, follow_redirects=False, trust_env=False) as connection:
             response = await connection.get(selected['url'].rstrip('/') + path, headers=headers)
             response.raise_for_status()
             data = response.json()

@@ -1,9 +1,11 @@
 import { setSyncProgress } from './syncProgress.js'
+import { connectionEditor } from './sshConnectionForm.js'
 import { initI18n, loadNamespaces, t } from './i18n.js'
 import './styles/desktop-connection.css'
 import { getModeSetting } from './modeSettings.js'
 import { applyTheme, loadThemes, selectedTheme } from './themes/themeEngine.js'
 
+let sshEditor = null
 let connection = null
 let dialog = null
 let beforeDownload = async () => {}
@@ -84,6 +86,7 @@ function setBusy(value) {
   if (connection?.access_mode === 'offline') dialog.querySelector('[data-download]').disabled = true
   dialog.querySelector('[data-automatic]').disabled = value || !!syncPreview || dialog.querySelector('[data-action]').value !== 'merge'
   dialog.querySelector('[data-sync]').disabled = value || !!syncPreview || dialog.querySelector('[data-action]').value === 'defer'
+  if (!value) sshEditor?.storage(connection?.credential_storage)
 }
 
 async function pollDownload() {
@@ -229,6 +232,8 @@ function makeDialog(onboarding = false) {
     dialog.querySelector('[data-policy]').hidden = !remote
     dialog.querySelector('[data-transfer]').hidden = !remote || !connection.remote
   })
+  sshEditor = connectionEditor(dialog.querySelector('.desktop-server-address'), data => connectionRequest('ssh/host-key', { method: 'POST', body: JSON.stringify(data) }))
+  dialog.addEventListener('close', () => sshEditor.clear())
   dialog.querySelector('form').addEventListener('submit', async event => {
     event.preventDefault()
     if (busy || syncPreview) return
@@ -239,9 +244,10 @@ function makeDialog(onboarding = false) {
     try {
       const offline = dialog.querySelector('[data-access-mode]').value === 'offline'
       const sync = { action: offline ? 'merge' : dialog.querySelector('[data-action]').value, automatic: offline || dialog.querySelector('[data-automatic]').checked }
-      const next = await connectionRequest('connection', { method: 'PUT', body: JSON.stringify({ enabled, server_url, sync, access_mode: dialog.querySelector('[data-access-mode]').value }) })
+      const next = await connectionRequest('connection', { method: 'PUT', body: JSON.stringify({ enabled, server_url, sync, access_mode: dialog.querySelector('[data-access-mode]').value, ...(enabled ? sshEditor.read() : {}) }) })
       // Navigation (not a live API switch) stops the old document runtime and
       // restores the browser storage belonging to the selected origin.
+      sshEditor.clear()
       window.location.replace(next.destination)
     } catch (error) {
       status(error.message)
@@ -357,6 +363,8 @@ async function openSettings() {
 function populate() {
   dialog.querySelector(`[value=${connection.enabled ? 'remote' : 'local'}]`).checked = true
   dialog.querySelector('[data-access-mode]').value = connection.access_mode || 'server'
+  sshEditor.load(connection.connection || {})
+  sshEditor.storage(connection.credential_storage)
   dialog.querySelector('[data-url]').value = connection.server_url
   dialog.querySelector('[data-url]').disabled = !connection.enabled
   dialog.querySelector('[data-url]').required = connection.enabled
@@ -384,7 +392,7 @@ export async function prepareDesktopConnection() {
   const scheme = getModeSetting('theme', mode) === 'light' ? 'light' : 'dark'
   applyTheme(document.body, selectedTheme(mode, scheme, loadThemes()))
   await initI18n()
-  await loadNamespaces(['desktop'])
+  await loadNamespaces(['desktop', 'settings'])
   try {
     connection = await connectionRequest('connection')
   } catch (error) {

@@ -1,6 +1,7 @@
 import { initializeLabGuide } from './labGuide.js'
+import { connectionEditor } from './sshConnectionForm.js'
 import { syncSelectValue } from './uiScale.js'
-import { t } from './i18n.js'
+import { t, loadNamespaces } from './i18n.js'
 
 async function api(path, method = 'GET', body) {
   const response = await fetch(`/api${path}`, {
@@ -12,7 +13,8 @@ async function api(path, method = 'GET', body) {
   return result
 }
 
-export function initializeLabMode() {
+export async function initializeLabMode() {
+  await loadNamespaces(['settings'])
   initializeLabGuide()
   const status = document.getElementById('lab-status')
   const members = document.getElementById('lab-members')
@@ -47,23 +49,81 @@ export function initializeLabMode() {
     event?.preventDefault()
     try { await action() } catch (error) { report(error) }
   }
-  async function refresh() {
+  let servers = []
+  let defaultId = null
+  const form = document.getElementById('lab-inference-form')
+  const editor = connectionEditor(form, data => api('/inference/ssh/host-key', 'POST', data))
+  const serverSelect = document.createElement('select')
+  serverSelect.id = 'lab-server-select'
+  serverSelect.className = 'form-select'
+  serverSelect.setAttribute('aria-label', t('settings:connectionInferenceServer'))
+  const name = document.createElement('input')
+  name.placeholder = t('settings:connectionServerName')
+  name.setAttribute('aria-label', name.placeholder)
+  name.required = true
+  form.prepend(serverSelect, name)
+  const personalServer = document.createElement('select')
+  personalServer.id = 'lab-personal-server'
+  personalServer.className = 'form-select'
+  personalServer.setAttribute('aria-label', t('settings:connectionInferenceServer'))
+  document.getElementById('lab-personal-form').prepend(personalServer)
+  function loadServer(server = {}) {
+    name.value = server.name || ''
+    syncSelectValue(document.getElementById('lab-engine'), server.engine || 'ollama')
+    document.getElementById('lab-url').value = server.url || ''
+    document.getElementById('lab-models').value = (server.models || []).join('\n')
+    document.getElementById('lab-default-model').value = server.model || ''
+    document.getElementById('lab-total-limit').value = server.max_concurrent || 2
+    document.getElementById('lab-user-limit').value = server.per_user || 1
+    document.getElementById('lab-api-key').value = ''
+    editor.load(server)
+  }
+  serverSelect.onchange = () => loadServer(servers.find(s => s.id === serverSelect.value))
+  personalServer.onchange = () => {
+    const server = servers.find(s => s.id === personalServer.value)
+    if (server) {
+      syncSelectValue(document.getElementById('lab-personal-provider'), server.engine)
+      document.getElementById('lab-personal-model').value = server.model
+      updateProviderControls()
+    }
+  }
+  for (const [label, action] of [
+    [t('settings:connectionSetDefault'), async () => api(`/inference/servers/${serverSelect.value}/default`, 'POST')],
+    [t('settings:connectionDeleteServer'), async () => {
+      if (!window.confirm(t('settings:connectionDeleteThisServer'))) return
+      await api(`/inference/servers/${serverSelect.value}`, 'DELETE')
+    }],
+  ]) {
+    const button = document.createElement('button')
+    button.type = 'button'; button.className = 'btn btn-secondary'; button.textContent = label
+    button.onclick = run(async () => { if (serverSelect.value) { await action(); await refresh() } })
+    form.append(button)
+  }
+  async function refresh(preferredId) {
     const profile = await api('/auth/me')
     document.getElementById('lab-admin').hidden = profile.role !== 'master'
     status.textContent = `${profile.username} · ${(profile.lab_mode ? t('settings:labOn') : t('settings:labOff'))}`
     document.getElementById('lab-enabled').checked = profile.lab_mode
     const common = await api('/lab/inference')
     const personal = await api('/me/model-settings')
+    const listing = await api('/inference/servers')
+    editor.storage(listing.credential_storage)
+    servers = listing.servers; defaultId = listing.default_id
+    const previous = preferredId || serverSelect.value
+    serverSelect.replaceChildren(new Option(t('settings:connectionNewServer'), ''))
+    personalServer.replaceChildren()
+    for (const server of servers) {
+      const label = server.name + (server.id === defaultId ? ' ★' : '')
+      serverSelect.add(new Option(label, server.id))
+      personalServer.add(new Option(label, server.id))
+    }
+    syncSelectValue(serverSelect, servers.some(s => s.id === previous) ? previous : defaultId || '')
+    syncSelectValue(personalServer, personal.server_id || defaultId || '')
     syncSelectValue(document.getElementById('lab-personal-provider'), personal.provider || common.engine)
     document.getElementById('lab-personal-model').value = personal.model || common.model
     updateProviderControls()
     if (profile.role !== 'master') return
-    syncSelectValue(document.getElementById('lab-engine'), common.engine)
-    document.getElementById('lab-url').value = common.url
-    document.getElementById('lab-models').value = common.models.join('\n')
-    document.getElementById('lab-default-model').value = common.model
-    document.getElementById('lab-total-limit').value = common.max_concurrent || (common.engine === 'vllm' ? 8 : 2)
-    document.getElementById('lab-user-limit').value = common.per_user || 1
+    loadServer(servers.find(s => s.id === serverSelect.value))
     members.replaceChildren()
     for (const user of await api('/lab/users')) {
       const row = document.createElement('div')
@@ -118,25 +178,31 @@ export function initializeLabMode() {
     status.textContent = `${result.username} — ${t('settings:labTemporaryPassword')}: ${result.temporary_password}`
   }))
   document.getElementById('lab-check-inference').addEventListener('click', run(async () => {
-    const result = await api('/lab/inference/check', 'POST')
+    if (!serverSelect.value) throw new Error(t('settings:connectionSaveTheServerFirst'))
+    const result = await api(`/inference/servers/${serverSelect.value}/check`, 'POST')
     status.textContent = result.models.join(', ')
   }))
   document.getElementById('lab-inference-form').addEventListener('submit', run(async () => {
     const key = document.getElementById('lab-api-key')
+    let saved
     try {
-      await api('/lab/inference', 'PUT', {
+      const connection = editor.read()
+      saved = await api('/inference/servers' + (serverSelect.value ? '/' + serverSelect.value : ''), serverSelect.value ? 'PUT' : 'POST', {
+        ...connection, name: name.value.trim(),
+        credentials: { ...connection.credentials, api_key: key.value },
         engine: document.getElementById('lab-engine').value,
         url: document.getElementById('lab-url').value,
         models: document.getElementById('lab-models').value.split('\n').map(value => value.trim()).filter(Boolean),
-        model: document.getElementById('lab-default-model').value.trim(), api_key: key.value,
+        model: document.getElementById('lab-default-model').value.trim(),
         max_concurrent: Number(document.getElementById('lab-total-limit').value),
         per_user: Number(document.getElementById('lab-user-limit').value),
       })
-    } finally { key.value = '' }
-    await refresh()
+    } finally { key.value = ''; editor.clear() }
+    await refresh(saved.id)
   }))
   document.getElementById('lab-personal-form').addEventListener('submit', run(async () => {
     await api('/me/model-settings', 'PUT', {
+      server_id: personalServer.value || null,
       provider: document.getElementById('lab-personal-provider').value,
       model: document.getElementById('lab-personal-model').value.trim(),
     })

@@ -34,6 +34,9 @@ export async function mockBaseRoutes(page, {
   await page.route('**/api/**', async route => {
     const url = route.request().url()
 
+    if (new URL(url).pathname === '/api/inference/servers') {
+      return route.fulfill({ json: { servers: [], default_id: null } })
+    }
     if (url.includes('/api/auth/check')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'authenticated', username: 'admin' }) })
     }
