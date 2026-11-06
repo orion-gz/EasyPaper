@@ -89,3 +89,8 @@ global default changes. Failed desktop SSH authentication leaves the previous
 connection and credentials intact.
 
 SSH credentials never appear in configuration responses.
+
+Deleting a migrated server also removes its legacy API-key record. Changing the
+connection transport or SSH host, port, username, or pinned host key invalidates
+model-derived result caches. The updated cache format recomputes older cached
+results on first use; it does not delete source documents.

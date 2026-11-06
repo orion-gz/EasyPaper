@@ -147,8 +147,11 @@ def result_namespace(function):
         if not user:
             raise RuntimeError('Lab cache access requires a user identity.')
         selected = selection()
+        transport = selected.get('transport', 'https')
+        ssh = selected.get('ssh') or {}
+        destination = {field: ssh.get(field) for field in ('host', 'port', 'username', 'host_key')} if transport == 'ssh' else None
         payload = [user['id'], selected['provider'], selected['model'], selected.get('id'), selected['url'],
-                   get_translation_prompt_template(), 'lab-results-v1']
+                   transport, destination, get_translation_prompt_template(), 'lab-results-v2']
         key = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
         return suffix + '_lab_' + key
     return wrapped

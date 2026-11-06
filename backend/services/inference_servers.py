@@ -136,14 +136,17 @@ async def save(data, identifier=None):
 
 async def delete(identifier):
     data = state()
-    get(identifier, False)
+    server = get(identifier, False)
     if data['default_id'] == identifier:
         raise HTTPException(409, 'Choose another default server before deleting this server.')
     key = 'inference:' + identifier
     manager.guard(key)
     secrets.delete(key)
     data['servers'] = [s for s in data['servers'] if s['id'] != identifier]
-    write(data)
+    with closing(db.get_db()) as conn, conn:
+        conn.execute('INSERT OR REPLACE INTO lab_configuration VALUES (?,?)', ('inference_servers', json.dumps(data)))
+        if server.get('legacy_credentials'):
+            conn.execute("DELETE FROM lab_configuration WHERE key='inference'")
     await manager.close(key)
 
 
