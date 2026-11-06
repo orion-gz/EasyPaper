@@ -1,17 +1,25 @@
+import { syncSelectValue } from './uiScale.js'
 import { t } from './i18n.js'
 import './styles/ssh-connection-form.css'
+let editorSequence = 0
 /** Shared backend-owned SSH connection editor. Never repopulates secret inputs. */
 export function connectionEditor(parent, probe) {
   const root = document.createElement('fieldset')
   root.className = 'ssh-connection-form'
   root.setAttribute('aria-label', t('settings:connectionConnection'))
   const fields = {}
+  const wrappers = {}
+  const prefix = `ssh-editor-${++editorSequence}`
+  let storageAvailable = true
   function field(name, label, type = 'text', options) {
     const wrapper = document.createElement('label')
     wrapper.textContent = label
     const input = document.createElement(options ? 'select' : type === 'textarea' ? 'textarea' : 'input')
     if (options) for (const [value, text] of options) input.add(new Option(text, value))
     else if (type !== 'textarea') input.type = type
+    input.id = `${prefix}-${name}`
+    wrapper.htmlFor = input.id
+    wrappers[name] = wrapper
     input.autocomplete = 'off'
     wrapper.append(input)
     root.append(wrapper)
@@ -40,8 +48,8 @@ export function connectionEditor(parent, probe) {
   const ssh = () => ({ host: fields.host.value.trim(), port: Number(fields.port.value), username: fields.username.value.trim(), auth: fields.auth.value, host_key: hostKey })
   function visibility() {
     const enabled = fields.transport.value === 'ssh'
-    for (const name of ['host', 'port', 'username', 'auth']) fields[name].parentElement.hidden = !enabled
-    for (const name of ['password', 'private_key', 'passphrase']) fields[name].parentElement.hidden = !enabled || (name === 'password' ? fields.auth.value !== 'password' : fields.auth.value !== 'key')
+    for (const name of ['host', 'port', 'username', 'auth']) wrappers[name].hidden = !enabled
+    for (const name of ['password', 'private_key', 'passphrase']) wrappers[name].hidden = !enabled || (name === 'password' ? fields.auth.value !== 'password' : fields.auth.value !== 'key')
     button.hidden = !enabled
     message.hidden = !enabled
   }
@@ -63,21 +71,23 @@ export function connectionEditor(parent, probe) {
   visibility()
   return {
     storage(capability) {
-      fields.save_credentials.disabled = capability?.available === false
+      storageAvailable = capability?.available !== false
+      fields.save_credentials.disabled = !storageAvailable
+      if (!storageAvailable) fields.save_credentials.checked = false
       fields.save_credentials.title = capability?.reason || ''
     },
     read() {
       if (fields.transport.value === 'ssh' && !hostKey) throw new Error(t('settings:connectionVerifyTheSshHostKeyFirst'))
       return { transport: fields.transport.value, ssh: fields.transport.value === 'ssh' ? ssh() : null,
-        save_credentials: fields.save_credentials.checked,
+        save_credentials: storageAvailable && fields.save_credentials.checked,
         credentials: Object.fromEntries(['password', 'private_key', 'passphrase'].map(name => [name, fields[name].value])) }
     },
     load(profile = {}) {
-      fields.transport.value = profile.transport || 'https'
+      syncSelectValue(fields.transport, profile.transport || 'https')
       for (const name of ['host', 'username']) fields[name].value = profile.ssh?.[name] || ''
       fields.port.value = profile.ssh?.port || 22
-      fields.auth.value = profile.ssh?.auth || 'password'
-      fields.save_credentials.checked = !!profile.save_credentials
+      syncSelectValue(fields.auth, profile.ssh?.auth || 'password')
+      fields.save_credentials.checked = storageAvailable && !!profile.save_credentials
       hostKey = profile.ssh?.host_key || ''
       message.textContent = hostKey ? t('settings:connectionHostKeyConfirmed') : ''
       clear(); visibility()

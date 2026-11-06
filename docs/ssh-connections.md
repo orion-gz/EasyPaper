@@ -3,7 +3,10 @@
 In Settings → Lab Mode, an administrator can register several Ollama or vLLM
 servers, select a default server and allow models on each server. Members select
 a server and model in their personal settings. The same server registry also
-works in personal mode. For vLLM, include `/v1` in the service URL.
+works in personal mode. Registration alone does not change personal model settings.
+Save a personal server/model selection to activate it, or choose “Use existing
+personal model settings” to restore the regular settings. Personal and Lab
+selections are independent and retained when switching modes. For vLLM, include `/v1` in the service URL.
 
 Save a server with an empty model list first if necessary, test its connection
 to list available models, then configure allowed models and a default model.
@@ -57,7 +60,9 @@ python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 Keep this key stable across restarts and supply it through the deployment's secret
 management. Encrypted records are stored in `connection-secrets` under the app
-configuration directory. Missing/invalid keys disable persistent saves; changing
+configuration directory. Docker images use `/data/connection-secrets`, covered
+by the `/data` volume; retain this volume and the encryption key when replacing
+containers. Missing/invalid keys disable persistent saves; changing
 the key requires re-entering credentials. Do not expose web login/settings over
 an untrusted plaintext network when entering credentials.
 
@@ -79,4 +84,8 @@ silently discarding keys where no secure store has been provisioned.
 
 Only administrators can configure connections or probe hosts. Member responses
 contain names and allowed models, without connection details or credentials.
+Existing Lab model preferences retain the migrated server identity even if the
+global default changes. Failed desktop SSH authentication leaves the previous
+connection and credentials intact.
+
 SSH credentials never appear in configuration responses.

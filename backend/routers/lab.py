@@ -119,6 +119,7 @@ async def delete_member(identifier: str, username: str = Depends(require_admin_u
     with closing(db.get_db()) as conn, conn:
         target = member(conn, identifier)
         conn.execute('DELETE FROM lab_preferences WHERE account_id=?', (identifier,))
+        conn.execute('DELETE FROM inference_preferences WHERE account_id=?', (identifier,))
         conn.execute('DELETE FROM users WHERE username=?', (target['username'],))
         conn.execute('DELETE FROM lab_accounts WHERE id=?', (identifier,))
     return {'deleted': True}
@@ -187,6 +188,16 @@ async def model_preferences(username: str = Depends(get_current_user)):
     return lab.preference(username)
 
 
+@router.delete('/me/model-settings')
+async def reset_personal_preferences(username: str = Depends(get_current_user)):
+    if lab.settings()['enabled']:
+        raise HTTPException(409, 'Personal settings are available when Lab mode is disabled.')
+    profile = lab.require_access(username)
+    with closing(db.get_db()) as conn, conn:
+        conn.execute('DELETE FROM inference_preferences WHERE account_id=?', (profile['id'],))
+    return {'saved': True}
+
+
 @router.put('/me/model-settings')
 async def save_preferences(data: ModelPreference, username: str = Depends(get_current_user)):
     import json
@@ -198,7 +209,7 @@ async def save_preferences(data: ModelPreference, username: str = Depends(get_cu
         data.server_id = common.get('id')
     profile = lab.require_access(username)
     with closing(db.get_db()) as conn, conn:
-        conn.execute('INSERT OR REPLACE INTO lab_preferences VALUES (?,?)', (profile['id'], json.dumps(data.model_dump())))
+        conn.execute(f'INSERT OR REPLACE INTO {lab.preference_table()} VALUES (?,?)', (profile['id'], json.dumps(data.model_dump())))
     return data
 
 

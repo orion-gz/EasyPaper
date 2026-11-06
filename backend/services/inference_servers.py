@@ -46,7 +46,9 @@ def state():
             raise
         return {'default_id': None, 'servers': []}
     if row:
-        return json.loads(row[0])
+        result = json.loads(row[0])
+        migrate_preferences(result)
+        return result
     if not legacy:
         return {'default_id': None, 'servers': []}
     old = json.loads(legacy[0])
@@ -56,7 +58,23 @@ def state():
     server = dict(old, id='default', name='Default', transport='https', save_credentials=False, legacy_credentials=True)
     result = {'default_id': 'default', 'servers': [server]}
     write(result)
+    migrate_preferences(result)
     return result
+
+
+def migrate_preferences(value):
+    if value.get('preferences_migrated'):
+        return
+    legacy = next((s for s in value['servers'] if s.get('legacy_credentials')), None)
+    with closing(db.get_db()) as conn, conn:
+        if legacy:
+            for account_id, raw in conn.execute('SELECT account_id,value FROM lab_preferences').fetchall():
+                preference = json.loads(raw)
+                if preference.get('provider') in ('ollama', 'vllm') and not preference.get('server_id'):
+                    preference['server_id'] = legacy['id']
+                    conn.execute('UPDATE lab_preferences SET value=? WHERE account_id=?', (json.dumps(preference), account_id))
+        value['preferences_migrated'] = True
+        conn.execute('INSERT OR REPLACE INTO lab_configuration VALUES (?,?)', ('inference_servers', json.dumps(value)))
 
 
 def write(value):
@@ -91,10 +109,11 @@ async def save(data, identifier=None):
         raise HTTPException(404, 'Inference server not found.')
     identifier = identifier or uuid.uuid4().hex
     key = 'inference:' + identifier
+    previous = next((s for s in current['servers'] if s['id'] == identifier), {})
     manager.guard(key)
     try:
         credentials = secrets.get(key)
-        if identifier == current['default_id'] and current['servers']:
+        if previous.get('legacy_credentials'):
             credentials.setdefault('api_key', get(identifier).get('api_key', ''))
     except HTTPException:
         if not any(data.credentials.model_dump().values()):
@@ -108,7 +127,7 @@ async def save(data, identifier=None):
         current['servers'].append(server)
     current['default_id'] = current['default_id'] or identifier
     write(current)
-    if identifier == current['default_id']:
+    if previous.get('legacy_credentials'):
         with closing(db.get_db()) as conn, conn:
             conn.execute("DELETE FROM lab_configuration WHERE key='inference'")
     await manager.close(key)

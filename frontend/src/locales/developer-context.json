@@ -6526,5 +6526,8 @@
   },
   "settings:connectionConfirmFingerprint": {
     "description": "Connection settings UI: Compare this fingerprint with the server administrator before approving.\n{{fingerprint}}"
+  },
+  "settings:connectionUsePersonalSettings": {
+    "description": "Button in personal mode to stop overriding the existing model configuration with a registered inference server."
   }
 }

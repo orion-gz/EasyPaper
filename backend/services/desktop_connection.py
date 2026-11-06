@@ -411,6 +411,8 @@ class DesktopConnections:
             if self.download_task and not self.download_task.done():
                 raise HTTPException(409, 'Wait for the local download to finish before changing connections.')
             target = normalize_server_url(body.get('server_url', '')) if body['enabled'] else self.config['server_url']
+            import copy
+            previous = copy.deepcopy(self.config)
             profile = None
             current_profile = self.config['connections'].get(self.config['server_url'], {})
             if 'transport' not in body and target == current_profile.get('url'):
@@ -430,23 +432,35 @@ class DesktopConnections:
                     target = 'http://' + fingerprint + '.ssh.easypaper.invalid'
                 key = 'desktop:' + target
                 manager.guard(key)
-                credentials = secrets.get(key)
+                try:
+                    credentials = secrets.get(key)
+                except HTTPException:
+                    if not any(profile.credentials.model_dump().values()):
+                        raise
+                    credentials = {}
                 credentials.update({k: v for k, v in profile.credentials.model_dump().items() if v})
-                secrets.put(key, credentials, profile.save_credentials)
                 profile = profile.model_dump(exclude={'credentials'})
                 profile['logical_url'] = target
-                await manager.close(key)
                 if profile['transport'] == 'ssh':
-                    await manager.port(key, profile)
-                self.config['connections'][target] = profile
+                    import uuid
+                    candidate = 'candidate:' + uuid.uuid4().hex
+                    secrets.memory[candidate] = credentials
+                    try:
+                        await manager.port(candidate, profile)
+                    finally:
+                        await manager.close(candidate)
+                        secrets.memory.pop(candidate, None)
+                        manager.locks.pop(candidate, None)
+                manager.guard(key)
             if body['enabled']:
                 parsed = urlsplit(target)
                 own_ports = {self.local_port, *self.config['ports'].values()}
                 if parsed.hostname in ('127.0.0.1', 'localhost', '::1') and (parsed.port or 80) in own_ports:
                     raise HTTPException(400, 'Choose an EasyPaper server, not this desktop application.')
                 await self.ensure_gateway(target)
-            import copy
-            previous = copy.deepcopy(self.config)
+            if profile is not None:
+                manager.guard(key)
+                self.config['connections'][target] = profile
             self.config.update(enabled=body['enabled'], server_url=target, onboarded=True)
             if 'access_mode' in body:
                 self.config.setdefault('access_modes', {})[target] = body['access_mode']
@@ -455,9 +469,17 @@ class DesktopConnections:
                     'automatic': body['sync'].get('automatic', False) and body['sync']['action'] == 'merge'}
             try:
                 self.save()
+                if profile is not None:
+                    secrets.put(key, credentials, profile['save_credentials'])
             except OSError:
                 self.config = previous
                 raise HTTPException(500, 'Could not save connection settings.')
+            except HTTPException:
+                self.config = previous
+                self.save()
+                raise
+            if profile is not None:
+                await manager.close(key)
             self.config_error = None
             return self.snapshot(request)
 

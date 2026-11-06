@@ -356,5 +356,6 @@
   "connectionVerifyHostKey": "Verify host key",
   "connectionVerifyTheSshHostKeyFirst": "Verify the SSH host key first.",
   "connectionHostKeyConfirmed": "Host key confirmed",
-  "connectionConfirmFingerprint": "Compare this fingerprint with the server administrator before approving.\n{{fingerprint}}"
+  "connectionConfirmFingerprint": "Compare this fingerprint with the server administrator before approving.\n{{fingerprint}}",
+  "connectionUsePersonalSettings": "Use existing personal model settings"
 }

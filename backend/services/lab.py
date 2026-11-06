@@ -23,6 +23,7 @@ def migrate():
         conn.execute('INSERT OR IGNORE INTO lab_settings(id) VALUES (1)')
         conn.execute('CREATE TABLE IF NOT EXISTS lab_configuration (key TEXT PRIMARY KEY,value TEXT NOT NULL)')
         conn.execute('CREATE TABLE IF NOT EXISTS lab_preferences (account_id TEXT PRIMARY KEY,value TEXT NOT NULL)')
+        conn.execute('CREATE TABLE IF NOT EXISTS inference_preferences (account_id TEXT PRIMARY KEY,value TEXT NOT NULL)')
         for row in conn.execute('SELECT username FROM users').fetchall():
             conn.execute('INSERT OR IGNORE INTO lab_accounts(username,id,role) VALUES (?,?,?)',
                          (row[0], uuid.uuid4().hex, 'master' if row[0] == get_app_username() else 'member'))
@@ -85,12 +86,16 @@ def configuration(with_secrets=True):
     return {'engine': 'ollama', 'url': 'http://localhost:11434', 'models': [], 'model': '', 'api_key': ''}
 
 
+def preference_table():
+    return 'lab_preferences' if settings()['enabled'] else 'inference_preferences'
+
+
 def preference(username):
     user = account(username)
     if not user:
         return {}
     with closing(db.get_db()) as conn:
-        row = conn.execute('SELECT value FROM lab_preferences WHERE account_id=?', (user['id'],)).fetchone()
+        row = conn.execute(f'SELECT value FROM {preference_table()} WHERE account_id=?', (user['id'],)).fetchone()
     return json.loads(row[0]) if row else {}
 
 
@@ -111,6 +116,8 @@ def selection():
         username = get_app_username()
     require_access(username)
     personal = preference(username)
+    if not enabled and not personal:
+        return None
     if personal.get('server_id') and personal.get('provider') in ('ollama', 'vllm'):
         common = inference_servers.get(personal['server_id'])
     else:

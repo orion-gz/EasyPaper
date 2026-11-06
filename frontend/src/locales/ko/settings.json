@@ -356,5 +356,6 @@
   "connectionVerifyHostKey": "호스트 키 확인",
   "connectionVerifyTheSshHostKeyFirst": "SSH 호스트 키를 먼저 확인하세요.",
   "connectionHostKeyConfirmed": "호스트 키 확인됨",
-  "connectionConfirmFingerprint": "서버 관리자의 지문과 비교 후 승인하세요.\n{{fingerprint}}"
+  "connectionConfirmFingerprint": "서버 관리자의 지문과 비교 후 승인하세요.\n{{fingerprint}}",
+  "connectionUsePersonalSettings": "기존 개인 모델 설정 사용"
 }

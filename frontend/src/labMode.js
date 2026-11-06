@@ -49,6 +49,15 @@ export async function initializeLabMode() {
     event?.preventDefault()
     try { await action() } catch (error) { report(error) }
   }
+  const resetPersonal = document.createElement('button')
+  resetPersonal.type = 'button'
+  resetPersonal.className = 'btn btn-secondary'
+  resetPersonal.textContent = t('settings:connectionUsePersonalSettings')
+  resetPersonal.onclick = run(async () => {
+    await api('/me/model-settings', 'DELETE')
+    await refresh()
+  })
+  document.getElementById('lab-personal-form').append(resetPersonal)
   let servers = []
   let defaultId = null
   const form = document.getElementById('lab-inference-form')
@@ -104,6 +113,8 @@ export async function initializeLabMode() {
     document.getElementById('lab-admin').hidden = profile.role !== 'master'
     status.textContent = `${profile.username} · ${(profile.lab_mode ? t('settings:labOn') : t('settings:labOff'))}`
     document.getElementById('lab-enabled').checked = profile.lab_mode
+    resetPersonal.hidden = !!profile.lab_mode
+    resetPersonal.disabled = false
     const common = await api('/lab/inference')
     const personal = await api('/me/model-settings')
     const listing = await api('/inference/servers')
