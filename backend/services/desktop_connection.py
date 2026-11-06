@@ -108,7 +108,7 @@ class RemoteGateway:
                 return
             if (self.manager.offline(self.target) and options.get('offline_ready')
                     and (not scope['path'].startswith('/api/auth/') or scope['path'] == '/api/auth/check')
-                    and not scope['path'].startswith('/api/lab/')):
+                    and not scope['path'].startswith(('/api/lab/', '/api/inference/', '/api/me/'))):
                 origin = request.headers.get('origin')
                 if (request.url.hostname != '127.0.0.1'
                         or (origin and origin != str(request.base_url).rstrip('/'))
@@ -144,7 +144,7 @@ class RemoteGateway:
         target = self.target + request.url.path
         if request.url.query:
             target += '?' + request.url.query
-        client = httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False)
+        client = self.manager.connection_client(self.target, timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False)
         try:
             upstream = client.build_request(request.method, target,
                                             headers=upstream_headers(request, self.target),
@@ -154,6 +154,9 @@ class RemoteGateway:
                 await response.aclose()
                 await client.aclose()
                 return JSONResponse({'detail': 'Server redirected the request. Use its final URL in connection settings.'}, status_code=502)
+        except HTTPException as exc:
+            await client.aclose()
+            return JSONResponse({'detail': exc.detail}, status_code=exc.status_code)
         except httpx.HTTPError:
             await client.aclose()
             return JSONResponse({'detail': 'Cannot reach the remote server. Check connection settings or switch to local mode.'}, status_code=502)
@@ -181,10 +184,10 @@ class RemoteGateway:
                     max_age = int(cookie['max-age']) if cookie['max-age'] else None
                     if request.url.path == '/api/auth/login' and response.status_code == 200 and self.manager.offline(self.target):
                         try:
-                            async with httpx.AsyncClient(timeout=15, trust_env=False) as identity_client:
+                            async with self.manager.connection_client(self.target, timeout=15, trust_env=False) as identity_client:
                                 identity = await identity_client.get(self.target + '/api/user-data/sync/info',
                                     headers={'cookie': 'session_token=' + cookie.value, 'x-easypaper-sync-binding': '1'})
-                        except httpx.HTTPError:
+                        except (httpx.HTTPError, HTTPException):
                             await response.aclose()
                             await client.aclose()
                             return JSONResponse({'detail': 'Could not verify the offline account. Sign in again when the server is reachable.'}, status_code=502)
@@ -211,7 +214,7 @@ class DesktopConnections:
         self.app = app
         self.config_path = Path(config_path)
         self.local_port = local_port
-        self.config = {'enabled': False, 'server_url': '', 'onboarded': False, 'ports': {}, 'sync_options': {}, 'access_modes': {}}
+        self.config = {'enabled': False, 'server_url': '', 'onboarded': False, 'ports': {}, 'sync_options': {}, 'access_modes': {}, 'connections': {}}
         self.config_error = None
         try:
             saved = json.loads(self.config_path.read_text())
@@ -220,6 +223,8 @@ class DesktopConnections:
                     or not isinstance(saved.get('onboarded', False), bool)
                     or not isinstance(saved.get('sync_options', {}), dict)
                     or not isinstance(saved.get('access_modes', {}), dict)
+                    or not isinstance(saved.get('connections', {}), dict)
+                    or any(not isinstance(value, dict) for value in saved.get('connections', {}).values())
                     or any(v not in ('server', 'offline') for v in saved.get('access_modes', {}).values())):
                 raise ValueError('Invalid connection settings')
             if saved.get('server_url'):
@@ -246,6 +251,7 @@ class DesktopConnections:
         self.job = {'status': 'idle', 'bytes': 0}
         self.download_task = None
         self.router = APIRouter(prefix='/desktop')
+        self.router.add_api_route('/ssh/host-key', self.host_key, methods=['POST'])
         self.router.add_api_route('/connection', self.read, methods=['GET'])
         self.router.add_api_route('/connection', self.update, methods=['PUT'])
         self.router.add_api_route('/download', self.download, methods=['POST'])
@@ -261,6 +267,20 @@ class DesktopConnections:
         if not account:
             raise HTTPException(409, 'Download the offline library first.')
         return 'offline-' + hashlib.sha256((target + '\n' + account).encode()).hexdigest()
+
+    def connection_client(self, target, **kwargs):
+        from services.ssh_connections import client
+        return client('desktop:' + target, self.config['connections'].get(target, {'url': target}), **kwargs)
+
+    async def host_key(self, request: Request):
+        self.guard(request)
+        from services.ssh_connections import SSHSettings, discover_host_key
+        from pydantic import ValidationError
+        try:
+            data = SSHSettings(**await request.json())
+        except (ValueError, TypeError, ValidationError):
+            raise HTTPException(400, 'Invalid SSH settings.')
+        return await discover_host_key(data)
 
     def save(self):
         atomic_write_text(str(self.config_path), json.dumps(self.config, indent=2))
@@ -279,6 +299,9 @@ class DesktopConnections:
             if self.job['status'] != 'importing':
                 self.download_task.cancel()
             await asyncio.gather(self.download_task, return_exceptions=True)
+        from services.ssh_connections import manager
+        for target in self.config['connections']:
+            await manager.close('desktop:' + target)
         for server, task, sock in self.listeners.values():
             server.should_exit = True
         for server, task, sock in self.listeners.values():
@@ -345,10 +368,12 @@ class DesktopConnections:
             raise HTTPException(403, 'Cross-site desktop controls are not allowed.')
 
     def snapshot(self, request):
+        from services.ssh_connections import secrets
         port = self.local_port
         if self.config['enabled']:
             port = self.config['ports'].get(self.config['server_url'], port)
-        return {'enabled': self.config['enabled'], 'server_url': self.config['server_url'],
+        return {'credential_storage': secrets.availability(), 'enabled': self.config['enabled'], 'server_url': self.config['connections'].get(self.config['server_url'], {}).get('url', self.config['server_url']),
+                'connection': self.config['connections'].get(self.config['server_url'], {}),
                 'onboarded': self.config['onboarded'], 'error': self.config_error,
                 'remote': bool(request.scope.get('desktop_remote_target')),
                 'current_server': request.scope.get('desktop_remote_target', ''),
@@ -367,7 +392,7 @@ class DesktopConnections:
             raw = bytearray()
             async for chunk in request.stream():
                 raw.extend(chunk)
-                if len(raw) > 8192:
+                if len(raw) > 65536:
                     raise ValueError()
             body = json.loads(raw)
             if not isinstance(body, dict) or not isinstance(body.get('enabled'), bool):
@@ -386,14 +411,56 @@ class DesktopConnections:
             if self.download_task and not self.download_task.done():
                 raise HTTPException(409, 'Wait for the local download to finish before changing connections.')
             target = normalize_server_url(body.get('server_url', '')) if body['enabled'] else self.config['server_url']
+            import copy
+            previous = copy.deepcopy(self.config)
+            profile = None
+            current_profile = self.config['connections'].get(self.config['server_url'], {})
+            if 'transport' not in body and target == current_profile.get('url'):
+                target = self.config['server_url']
+            if body['enabled'] and 'transport' in body:
+                from services.inference_servers import ServerSettings
+                from services.ssh_connections import secrets, manager
+                from pydantic import ValidationError
+                try:
+                    profile = ServerSettings(name='Desktop', engine='ollama', url=target,
+                        transport=body['transport'], ssh=body.get('ssh'),
+                        credentials=body.get('credentials') or {}, save_credentials=body.get('save_credentials', False))
+                except ValidationError:
+                    raise HTTPException(400, 'Invalid SSH connection settings.')
+                if profile.transport == 'ssh':
+                    fingerprint = hashlib.sha256(json.dumps([profile.ssh.host, profile.ssh.port, profile.ssh.username, target]).encode()).hexdigest()[:32]
+                    target = 'http://' + fingerprint + '.ssh.easypaper.invalid'
+                key = 'desktop:' + target
+                manager.guard(key)
+                try:
+                    credentials = secrets.get(key)
+                except HTTPException:
+                    if not any(profile.credentials.model_dump().values()):
+                        raise
+                    credentials = {}
+                credentials.update({k: v for k, v in profile.credentials.model_dump().items() if v})
+                profile = profile.model_dump(exclude={'credentials'})
+                profile['logical_url'] = target
+                if profile['transport'] == 'ssh':
+                    import uuid
+                    candidate = 'candidate:' + uuid.uuid4().hex
+                    secrets.memory[candidate] = credentials
+                    try:
+                        await manager.port(candidate, profile)
+                    finally:
+                        await manager.close(candidate)
+                        secrets.memory.pop(candidate, None)
+                        manager.locks.pop(candidate, None)
+                manager.guard(key)
             if body['enabled']:
                 parsed = urlsplit(target)
                 own_ports = {self.local_port, *self.config['ports'].values()}
                 if parsed.hostname in ('127.0.0.1', 'localhost', '::1') and (parsed.port or 80) in own_ports:
                     raise HTTPException(400, 'Choose an EasyPaper server, not this desktop application.')
                 await self.ensure_gateway(target)
-            import copy
-            previous = copy.deepcopy(self.config)
+            if profile is not None:
+                manager.guard(key)
+                self.config['connections'][target] = profile
             self.config.update(enabled=body['enabled'], server_url=target, onboarded=True)
             if 'access_mode' in body:
                 self.config.setdefault('access_modes', {})[target] = body['access_mode']
@@ -402,9 +469,17 @@ class DesktopConnections:
                     'automatic': body['sync'].get('automatic', False) and body['sync']['action'] == 'merge'}
             try:
                 self.save()
+                if profile is not None:
+                    secrets.put(key, credentials, profile['save_credentials'])
             except OSError:
                 self.config = previous
                 raise HTTPException(500, 'Could not save connection settings.')
+            except HTTPException:
+                self.config = previous
+                self.save()
+                raise
+            if profile is not None:
+                await manager.close(key)
             self.config_error = None
             return self.snapshot(request)
 
@@ -433,7 +508,7 @@ class DesktopConnections:
             # Only remote authentication is forwarded; local credentials and
             # settings never leave this machine. Large archives stay on disk.
             headers = {k: v for k, v in headers.items() if k in ('cookie', 'accept-encoding')}
-            async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False) as client:
+            async with self.connection_client(target, timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False) as client:
                 with tempfile.TemporaryFile() as archive:
                     async with client.stream('POST', target + '/api/user-data/export', json={}, headers=headers) as response:
                         if response.status_code in (401, 403):

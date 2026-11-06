@@ -104,7 +104,7 @@ class DesktopSync:
             if manager.offline(target):
                 headers['x-easypaper-sync-scope'] = 'user-data'
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False) as client:
+                async with manager.connection_client(target, timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False) as client:
                     response = await client.get(target + '/api/user-data/sync/info', headers=headers)
                     await checked(response)
                     remote = response.json()
@@ -206,7 +206,7 @@ class DesktopSync:
         headers['x-easypaper-sync'] = '1'
         headers['x-easypaper-sync-binding'] = '1'
         try:
-            async with httpx.AsyncClient(timeout=30, follow_redirects=False, trust_env=False) as client:
+            async with manager.connection_client(target, timeout=30, follow_redirects=False, trust_env=False) as client:
                 identity = await client.get(target + '/api/user-data/sync/info', headers=headers)
                 await checked(identity)
                 if identity.json().get('account') != plan['remote_account']:
@@ -220,7 +220,7 @@ class DesktopSync:
                         while chunk := await run_in_threadpool(source.read, 1024 * 1024):
                             yield chunk
 
-                async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False) as client:
+                async with manager.connection_client(target, timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False) as client:
                     async with client.stream('POST', target + '/api/user-data/sync/exchange', headers=headers, content=upload()) as response:
                         await checked(response)
                         manager.job['status'] = 'downloading'

@@ -85,6 +85,8 @@ async def lifespan(_app: FastAPI):
     finally:
         if desktop_connections:
             await desktop_connections.close()
+        from services.ssh_connections import manager
+        await manager.close()
         recovery.cancel()
         with suppress(asyncio.CancelledError):
             await recovery
