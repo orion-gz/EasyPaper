@@ -199,6 +199,7 @@ export function initializeLabGuide() {
   close.className = 'close-btn'
   close.removeAttribute('data-i18n')
   close.textContent = '×'
+  close.dataset.i18nAriaLabel = 'settings:labCloseGuide'
   close.setAttribute('aria-label', t('settings:labCloseGuide'))
   close.onclick = () => dialog.close()
   const header = node('div')
@@ -273,6 +274,7 @@ export function initializeLabGuide() {
   canvas.setAttribute('aria-hidden', 'true')
   screen.append(screenTitle, canvas)
   const sceneNote = node('p')
+  sceneNote.id = 'lab-guide-scene-note'
   const caption = node('p')
   caption.className = 'lab-guide-caption'
   const controls = node('div')
@@ -375,8 +377,11 @@ export function initializeLabGuide() {
       copyStatus.textContent = t('settings:labCopiedCommand')
     } catch { copyStatus.textContent = t('settings:labCopyFailed') }
   })
+  copy.className = 'icon-btn lab-guide-copy'
   copy.removeAttribute('data-i18n')
   copy.innerHTML = icon('clipboard', 16, 'aria-hidden="true"')
+  copy.dataset.i18nAriaLabel = 'settings:labCopyCommand'
+  copy.dataset.i18nTitle = 'settings:labCopyCommand'
   copy.setAttribute('aria-label', t('settings:labCopyCommand'))
   copy.title = t('settings:labCopyCommand')
   snippet.append(code, copy)
@@ -404,6 +409,8 @@ export function initializeLabGuide() {
       input.className = 'lab-guide-input'
       input.id = `lab-guide-param-${name}`
       input.value = parameters[name]
+      input.readOnly = scene.readOnlyParameters?.includes(name) || false
+      input.setAttribute('aria-describedby', sceneNote.id)
       input.type = name.toLowerCase().includes('port') ? 'number' : 'text'
       if (input.type === 'number') { input.min = '1'; input.max = '65535' }
       input.autocomplete = 'off'

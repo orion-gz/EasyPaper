@@ -282,7 +282,9 @@ For SSH access, run the generated tunnel command on your PC, enter your SSH
 password in the terminal, and keep it open. Use `http://localhost:18000` (or your
 chosen local port) as the desktop server URL or browser address. SSH forwarding
 must be permitted by the server. The EasyPaper login uses its own account, not
-SSH credentials.
+SSH credentials. The final connection example keeps the local port read-only.
+To change it, return to the tunnel scene, edit the port, and restart the SSH
+command before using the updated URL.
 
 For HTTPS, first use the private SSH tunnel to change the initial `admin / admin`
 password in Settings → Account. Register a domain, point its DNS A record to the
@@ -290,6 +292,12 @@ server public IPv4, and allow/forward TCP ports 80 and 443 through the router an
 server/cloud firewalls. The guide installs Caddy and shows a reverse proxy to
 `127.0.0.1:8000`. Keep 8000 private. On hosts with existing Caddy sites, add the
 shown domain block to the existing configuration rather than replacing it.
+The HTTPS check fetches the page and prints its HTTP status; `HTTP 200` confirms
+a successful response:
+
+```sh
+curl --fail --show-error --silent --output /dev/null --write-out 'HTTP %{http_code}\n' https://lab.example.com
+```
 
 Dependency references: [Docker on Ubuntu](https://docs.docker.com/engine/install/ubuntu/),
 [Caddy installation](https://caddyserver.com/docs/install), and
