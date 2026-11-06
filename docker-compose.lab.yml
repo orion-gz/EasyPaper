@@ -10,6 +10,7 @@ services:
     environment:
       HOME: /data/home
       EASYPAPER_CONFIG_DIR: /data
+      EASYPAPER_LOG_DIR: /data/logs
       EASYPAPER_LAB_RUNNER_SOCKET: /run/easypaper-lab/runner.sock
       OLLAMA_HOST: http://host.docker.internal:11434
     volumes:

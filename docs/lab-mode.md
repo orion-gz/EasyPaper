@@ -206,7 +206,7 @@ Settings → Lab Mode offers an **Installation guide** and a **Connection guide*
 Finish all installation scenes to unlock the connection guide. Each command has
 its own animation and copy icon; scenes advance only when Next is selected.
 SSH host, username and ports, or the HTTPS domain, update the command examples.
-Only the completed connection method is remembered in this browser; credentials
+The completed installation and connection methods are remembered in this browser; credentials
 and server addresses are not stored by the guide. Changing an installation choice
 locks the connection guide until that path is reviewed again.
 
@@ -217,9 +217,66 @@ The installation commands target a fresh **Ubuntu 24.04** server:
 - systemd: clone the repository and run
   `sudo bash deploy/lab/install-systemd.sh`. The script installs dependencies,
   builds the app in `/opt/easypaper`, creates the service user and registers
-  `easypaper-lab.service`. It refuses to overwrite an existing installation.
+  `easypaper-lab.service`. Requires a host booted with systemd and Node.js 22.13+
+  (installed when missing or too old). It refuses to overwrite a completed or
+  unmanaged installation. An interrupted installation retains a private
+  `.lab-installing` marker: fix the reported error and rerun the same command.
+  Do not add this marker to an existing deployment. Concurrent installers are
+  blocked; success requires both an HTTP response and an active service.
   Persistent data is in `/var/lib/easypaper`. This installs the application;
   optional isolated personal CLI runtimes still require the setup above.
+
+Both deployment templates write logs inside their writable data directories:
+`/data/logs` for Docker and `/var/lib/easypaper/logs` for systemd.
+
+### Shared Ollama setup
+
+The installation guide now includes Ollama installation, a private listener,
+service restart/response check, and model download. Each is a separate scene.
+The example model is `qwen3:4b`; enter another served model name if needed.
+GPU use requires a working GPU driver; verify acceleration on the actual server.
+
+For a **new** Ollama installation, run in the server terminal:
+
+```sh
+LAB_OLLAMA_INSTALL="$(mktemp)" && curl -fsSL https://ollama.com/install.sh -o "$LAB_OLLAMA_INSTALL" && sh "$LAB_OLLAMA_INSTALL" && rm -f "$LAB_OLLAMA_INSTALL"
+```
+
+Set the listener address for the chosen EasyPaper deployment:
+
+```sh
+# systemd application:
+LAB_OLLAMA_IP=127.0.0.1
+# Docker application (standard rootful Docker on Ubuntu): use this instead:
+LAB_OLLAMA_IP="$(sudo docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
+```
+
+Then configure the service and download the model:
+
+```sh
+test -n "$LAB_OLLAMA_IP" && sudo install -d /etc/systemd/system/ollama.service.d && printf '[Service]\nEnvironment="OLLAMA_HOST=%s:11434"\n' "$LAB_OLLAMA_IP" | sudo tee /etc/systemd/system/ollama.service.d/90-easypaper.conf
+sudo systemctl daemon-reload && sudo systemctl enable ollama && sudo systemctl restart ollama
+curl --fail --retry 20 --retry-connrefused --retry-delay 3 --max-time 5 "http://$LAB_OLLAMA_IP:11434/api/tags"
+OLLAMA_HOST="http://$LAB_OLLAMA_IP:11434" ollama pull qwen3:4b
+```
+
+For Docker, the host firewall must permit the app container to reach that bridge
+address. Keep port 11434 private. Custom `host-gateway` overrides or rootless
+Docker require matching network configuration. An existing shared Ollama service
+may have other clients: inspect its listener and drop-ins before changing them;
+do not blindly replace its address with the example.
+
+In **Settings → Lab**, select Ollama and set:
+
+| Deployment | Engine URL | Allowed/default model |
+| --- | --- | --- |
+| Docker | `http://host.docker.internal:11434` | The model downloaded above |
+| systemd | `http://127.0.0.1:11434` | The model downloaded above |
+
+Save and run the connection test before enabling Lab mode. The guide separately
+shows initial administrator login, **Settings → Account** password change, shared
+inference configuration, Lab activation, and member invitation. Password change
+keeps the current session signed in; use the new password for later logins.
 
 For SSH access, run the generated tunnel command on your PC, enter your SSH
 password in the terminal, and keep it open. Use `http://localhost:18000` (or your
@@ -236,4 +293,6 @@ shown domain block to the existing configuration rather than replacing it.
 
 Dependency references: [Docker on Ubuntu](https://docs.docker.com/engine/install/ubuntu/),
 [Caddy installation](https://caddyserver.com/docs/install), and
-[NodeSource Node.js packages](https://github.com/nodesource/distributions).
+[NodeSource Node.js packages](https://github.com/nodesource/distributions),
+[Ollama on Linux](https://docs.ollama.com/linux), and
+[Docker host networking](https://docs.docker.com/compose/how-tos/networking/).

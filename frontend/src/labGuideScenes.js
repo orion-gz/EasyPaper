@@ -111,6 +111,22 @@ export function mountLabScene(root, scene) {
     field(t('settings:labAccountExample'), 'alice', 1500)
     field(t('settings:labPasswordExample'), '••••••••', 3000)
     duration = 4500
+  } else if (scene.kind === 'admin-login') {
+    root.append(el('div', 'lab-demo-address', scene.url))
+    field(t('common:login.username'), 'admin', 0)
+    field(t('common:login.password'), '••••••••', 1500)
+    action(t('common:login.submit'), 3200)
+    result(t('settings:labAccountScene'), 4200)
+    duration = 5000
+  } else if (scene.kind === 'account') {
+    root.append(el('div', 'lab-demo-tabs', t('settings:labAccountScene')))
+    field(t('settings:labAccountCurrentPassword'), '••••••••', 0)
+    field(t('settings:labAccountUsername'), 'admin', 1500)
+    field(t('settings:labSceneNewPassword'), '••••••••••••', 3000)
+    field(t('settings:labSceneConfirmPassword'), '••••••••••••', 4500)
+    action(t('settings:labAccountSubmit'), 6200)
+    result(t('settings:labAccountSaved'), 7200)
+    duration = 8000
   } else if (scene.kind === 'browser') {
     const address = el('div', 'lab-demo-address')
     const login = el('div', 'lab-demo-card')
@@ -134,9 +150,9 @@ export function mountLabScene(root, scene) {
     const grid = el('div', 'lab-demo-grid')
     root.append(grid)
     field(t('settings:labEngine'), 'Ollama', 0, grid)
-    field(t('settings:labUrl'), 'http://host.docker.internal:11434', 1500, grid)
-    field(t('settings:labModels'), 'qwen3:4b', 3000, grid)
-    field(t('settings:labDefaultModel'), 'qwen3:4b', 4500, grid)
+    field(t('settings:labUrl'), scene.url || 'http://host.docker.internal:11434', 1500, grid)
+    field(t('settings:labModels'), scene.model || 'qwen3:4b', 3000, grid)
+    field(t('settings:labDefaultModel'), scene.model || 'qwen3:4b', 4500, grid)
     const actions = el('div', 'lab-demo-actions')
     root.append(actions)
     action(t('settings:labSave'), 6100, actions)
