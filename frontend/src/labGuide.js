@@ -4,6 +4,23 @@ import { icon } from './icons.js'
 import { defaultGuideParameters, validGuideParameters, installationScenes, connectionScenes } from './labGuideFlow.js'
 
 const labels = () => ({
+  labEngineInstallNote: t('settings:labEngineInstallNote'),
+  labEngineBindDocker: t('settings:labEngineBindDocker'),
+  labEngineBindSystemd: t('settings:labEngineBindSystemd'),
+  labEngineStartNote: t('settings:labEngineStartNote'),
+  labEnginePullNote: t('settings:labEnginePullNote'),
+  labEngineModelField: t('settings:labEngineModelField'),
+  labEngineConfigureNote: t('settings:labEngineConfigureNote'),
+  labAdminLoginNote: t('settings:labAdminLoginNote'),
+  labAccountScene: t('settings:labAccountScene'),
+  labAccountNote: t('settings:labAccountNote'),
+  labAccountCurrentPassword: t('settings:labAccountCurrentPassword'),
+  labAccountUsername: t('settings:labAccountUsername'),
+  labAccountSubmit: t('settings:labAccountSubmit'),
+  labAccountSaved: t('settings:labAccountSaved'),
+  labInviteSsh: t('settings:labInviteSsh'),
+  labInviteHttps: t('settings:labInviteHttps'),
+
   labInstallGuide: t('settings:labInstallGuide'),
   labConnectionGuide: t('settings:labConnectionGuide'),
   labInstallFirst: t('settings:labInstallFirst'),
@@ -202,6 +219,7 @@ export function initializeLabGuide() {
     const saved = JSON.parse(localStorage.getItem('easypaper.labGuide.v1') || 'null')
     if (['ssh', 'https'].includes(saved?.method)) {
       completedMethod = method = saved.method
+      if (['docker', 'systemd'].includes(saved.deployment)) deployment = saved.deployment
       connect.disabled = false
       unlockHint.hidden = true
     }
@@ -379,7 +397,7 @@ export function initializeLabGuide() {
       next.disabled = frame < scenes[step].length - 1 || copy.disabled
       copyStatus.textContent = copy.disabled ? t('settings:labInvalidParameters') : ''
     }
-    const keys = { host: 'labHostField', user: 'labUserField', port: 'labPortField', localPort: 'labLocalPortField', domain: 'labDomainField' }
+    const keys = { host: 'labHostField', user: 'labUserField', port: 'labPortField', localPort: 'labLocalPortField', domain: 'labDomainField', model: 'labEngineModelField' }
     for (const name of scene.parameters || []) {
       const label = node('label', keys[name])
       const input = node('input')
@@ -445,7 +463,7 @@ export function initializeLabGuide() {
         completedMethod = method
         connect.disabled = false
         unlockHint.hidden = true
-        try { localStorage.setItem('easypaper.labGuide.v1', JSON.stringify({ method })) } catch { /* optional persistence */ }
+        try { localStorage.setItem('easypaper.labGuide.v1', JSON.stringify({ method, deployment })) } catch { /* optional persistence */ }
       }
       dialog.close()
     } else { step += 1; renderStep() }
