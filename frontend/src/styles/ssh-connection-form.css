@@ -1,34 +1,9 @@
 .ssh-connection-form {
-  display: grid;
-  gap: 12px;
   min-width: 0;
-  margin: 16px 0;
-  padding: 16px;
-  border: 1px solid var(--border, #454552);
-  border-radius: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
-.ssh-connection-form > label {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  color: var(--text-secondary, #bdbdcc);
-  font-size: 13px;
-}
-.ssh-connection-form > label[hidden], .ssh-connection-form > [hidden] { display: none !important; }
-.ssh-connection-form input:not([type=checkbox]), .ssh-connection-form select, .ssh-connection-form textarea {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  min-height: 40px;
-  padding: 9px 12px;
-  border: 1px solid var(--border, #454552);
-  border-radius: 8px;
-  background: var(--bg-elevated, #242430);
-  color: var(--text-primary, #eeeef4);
-  font: inherit;
-}
+.ssh-connection-form > [hidden] { display: none !important; }
 .ssh-connection-form textarea { min-height: 100px; resize: vertical; }
-.ssh-connection-form label:has(input[type=checkbox]) { display: flex; align-items: center; gap: 10px; }
-.ssh-connection-form :focus-visible { outline: 2px solid var(--control-accent, #5579d7); outline-offset: 2px; }
-.ssh-connection-form :disabled { opacity: .5; cursor: not-allowed; }
-.ssh-connection-form p { margin: 0; overflow-wrap: anywhere; }
+.ssh-connection-form p { overflow-wrap: anywhere; }

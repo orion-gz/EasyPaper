@@ -12,16 +12,32 @@ export function connectionEditor(parent, probe) {
   const prefix = `ssh-editor-${++editorSequence}`
   let storageAvailable = true
   function field(name, label, type = 'text', options) {
-    const wrapper = document.createElement('label')
-    wrapper.textContent = label
+    const wrapper = document.createElement('div')
+    wrapper.className = 'form-group settings-row'
+    const caption = document.createElement('label')
+    caption.textContent = label
     const input = document.createElement(options ? 'select' : type === 'textarea' ? 'textarea' : 'input')
     if (options) for (const [value, text] of options) input.add(new Option(text, value))
     else if (type !== 'textarea') input.type = type
     input.id = `${prefix}-${name}`
-    wrapper.htmlFor = input.id
+    caption.htmlFor = input.id
+    if (options) input.className = 'form-select'
     wrappers[name] = wrapper
     input.autocomplete = 'off'
-    wrapper.append(input)
+    if (type === 'checkbox') {
+      wrapper.className = 'form-group'
+      caption.className = 'toggle-switch'
+      const text = document.createElement('span')
+      text.className = 'toggle-switch-label'
+      text.textContent = label
+      const track = document.createElement('span')
+      track.className = 'toggle-switch-track'
+      const thumb = document.createElement('span')
+      thumb.className = 'toggle-switch-thumb'
+      track.append(thumb)
+      caption.replaceChildren(input, track, text)
+      wrapper.append(caption)
+    } else wrapper.append(caption, input)
     root.append(wrapper)
     fields[name] = input
     return input
