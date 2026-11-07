@@ -992,26 +992,6 @@
             <div class="form-actions"><button class="btn btn-primary" type="submit" data-i18n="settings:labCreate">Create member</button></div>
           </form>
         </div>
-        <form id="lab-personal-form" class="modal-form">
-          <div class="settings-section-heading"><strong data-i18n="settings:labPersonalSettings">Personal model</strong></div>
-          <div class="form-group settings-row">
-            <label for="lab-personal-provider" data-i18n="settings:labProvider">Personal provider</label>
-            <select class="form-select" id="lab-personal-provider"><option value="ollama">Ollama</option><option value="vllm">vLLM</option><option value="claude_code">Claude Code</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option></select>
-          </div>
-          <div class="form-group settings-row">
-            <label for="lab-personal-model" data-i18n="settings:labDefaultModel">Model</label>
-            <input id="lab-personal-model" required>
-          </div>
-          <div class="form-actions"><button class="btn btn-primary" type="submit" data-i18n="settings:labSave">Save</button></div>
-          <div id="lab-cli-actions">
-            <div class="form-actions">
-              <button class="btn btn-secondary" type="button" id="lab-cli-status" data-i18n="settings:labCliStatus">Connection status</button>
-              <button class="btn btn-secondary" type="button" id="lab-cli-login" data-i18n="settings:labCliLogin">Connect personal CLI</button>
-              <button class="btn btn-secondary" type="button" id="lab-cli-logout" data-i18n="settings:labCliLogout">Disconnect personal CLI</button>
-            </div>
-            <pre id="lab-cli-output" role="status"></pre>
-          </div>
-        </form>
       </div>
 
       <!-- 일반 설정 탭 -->
@@ -1312,6 +1292,28 @@
 
       <!-- 모델 설정 탭 -->
       <div id="tab-model" class="tab-pane">
+        <p id="lab-personal-status" role="status" aria-live="polite"></p>
+        <form id="lab-personal-form" class="modal-form">
+          <div class="settings-section-heading"><strong data-i18n="settings:labPersonalSettings">Personal model</strong></div>
+          <div class="form-group settings-row">
+            <label for="lab-personal-provider" data-i18n="settings:labProvider">Personal provider</label>
+            <select class="form-select" id="lab-personal-provider"><option value="ollama">Ollama</option><option value="vllm">vLLM</option><option value="claude_code">Claude Code</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option></select>
+          </div>
+          <div class="form-group settings-row">
+            <label for="lab-personal-model" data-i18n="settings:labDefaultModel">Model</label>
+            <input id="lab-personal-model" required>
+          </div>
+          <div class="form-actions"><button class="btn btn-primary" type="submit" data-i18n="settings:labSave">Save</button></div>
+          <div id="lab-cli-actions">
+            <div class="form-actions">
+              <button class="btn btn-secondary" type="button" id="lab-cli-status" data-i18n="settings:labCliStatus">Connection status</button>
+              <button class="btn btn-secondary" type="button" id="lab-cli-login" data-i18n="settings:labCliLogin">Connect personal CLI</button>
+              <button class="btn btn-secondary" type="button" id="lab-cli-logout" data-i18n="settings:labCliLogout">Disconnect personal CLI</button>
+            </div>
+            <pre id="lab-cli-output" role="status"></pre>
+          </div>
+        </form>
+
         <!-- 시스템 설정 폼 (Ollama, OpenAI, Gemini, Claude 통합 및 번역/대화 분리) -->
         <form id="system-settings-form" class="modal-form" style="border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 10px;">
           <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v2"/><path d="M17 2v2"/><path d="M2 12h2"/><path d="M2 17h2"/><path d="M2 7h2"/><path d="M20 12h2"/><path d="M20 17h2"/><path d="M20 7h2"/><path d="M7 20v2"/><path d="M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>AI 엔진 및 서버 설정</h3>

@@ -148,7 +148,7 @@ export function initializeLabGuide() {
   connect.setAttribute('aria-describedby', unlockHint.id)
   introduction.append(intro, open, connect, unlockHint)
   panel.prepend(introduction)
-  for (const input of panel.querySelectorAll('input, select, textarea')) {
+  for (const input of document.querySelectorAll('#tab-lab input, #tab-lab select, #tab-lab textarea, #lab-personal-form input, #lab-personal-form select')) {
     const key = `labHelp_${input.id.replace('lab-', '')}`
     const help = node('p', key)
     help.id = `${input.id}-help`
@@ -158,7 +158,7 @@ export function initializeLabGuide() {
     button.type = 'button'
     button.textContent = '?'
     button.className = 'lab-help-button'
-    const label = panel.querySelector(`label[for="${input.id}"]`)
+    const label = document.querySelector(`label[for="${input.id}"]`)
       || input.closest('label')?.querySelector('.toggle-switch-label')
     button.setAttribute('aria-label', `${label?.textContent || t('settings:labEnable')} ?`)
     button.setAttribute('aria-controls', help.id)

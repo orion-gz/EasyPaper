@@ -18,7 +18,11 @@ export async function initializeLabMode() {
   initializeLabGuide()
   const status = document.getElementById('lab-status')
   const members = document.getElementById('lab-members')
-  const report = error => { status.textContent = error.message }
+  const personalStatus = document.getElementById('lab-personal-status')
+  const report = error => {
+    const target = document.getElementById('tab-model').classList.contains('active') ? personalStatus : status
+    target.textContent = error.message
+  }
   const providerSelect = document.getElementById('lab-personal-provider')
   const output = document.getElementById('lab-cli-output')
   let loginGeneration = 0
@@ -122,7 +126,19 @@ export async function initializeLabMode() {
     button.onclick = run(async () => { if (serverSelect.value) { await action(); await refresh() } })
     form.querySelector('.form-actions').append(button)
   }
+  const personalForm = document.getElementById('lab-personal-form')
+  let pendingRefreshes = 0
   async function refresh(preferredId) {
+    pendingRefreshes += 1
+    personalForm.inert = true
+    try { await refreshSettings(preferredId) }
+    finally {
+      pendingRefreshes -= 1
+      personalForm.inert = pendingRefreshes > 0
+    }
+  }
+  async function refreshSettings(preferredId) {
+    personalStatus.textContent = ''
     const profile = await api('/auth/me')
     document.getElementById('lab-admin').hidden = profile.role !== 'master'
     status.textContent = `${profile.username} · ${(profile.lab_mode ? t('settings:labOn') : t('settings:labOff'))}`
@@ -184,7 +200,10 @@ export async function initializeLabMode() {
       members.append(row)
     }
   }
-  document.getElementById('settings-nav-lab').addEventListener('click', run(refresh))
+  document.addEventListener('easypaper:settings-category-changed', event => {
+    if (['tab-lab', 'tab-model'].includes(event.detail.category)) run(() => refresh())()
+    else cancelPolling()
+  })
   document.getElementById('lab-mode-form').addEventListener('submit', run(async () => {
     const password = document.getElementById('lab-password')
     try { await api('/lab/settings', 'PUT', { enabled: document.getElementById('lab-enabled').checked, password: password.value }) }
