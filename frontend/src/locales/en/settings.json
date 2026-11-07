@@ -386,7 +386,7 @@
   "labDnsNote": "Register a domain and point its DNS A record (e.g. lab) to the server public IPv4. Forward TCP 80/443 on the router and allow them in server/cloud firewalls. Keep port 8000 private.",
   "labCaddyNote": "Install Caddy in the server terminal.",
   "labProxyNote": "Run on the server for a new Caddy configuration. If you have existing sites, add only this domain block to your existing Caddyfile.",
-  "labVerifyNote": "Run on the server to check the HTTPS response.",
+  "labVerifyNote": "Run on the server. HTTP 200 confirms a successful response.",
   "labConnectIntro": "Examples for the connection method selected during installation. These values are illustrative and do not change your connection settings.",
   "labConnectNote": "Desktop: enter the server URL below in Settings → Data → Server connection. Browser: open the same address. Sign in with the EasyPaper account and password created by your administrator; these are separate from your SSH credentials.",
   "labServerUrlField": "Server URL",
@@ -408,5 +408,6 @@
   "labAccountSubmit": "Change credentials",
   "labAccountSaved": "New password saved",
   "labInviteSsh": "Privately share the EasyPaper temporary password and SSH tunnel instructions with each member. Members open a tunnel on their own PC before using the localhost URL. SSH and EasyPaper accounts are separate.",
-  "labInviteHttps": "Privately share the EasyPaper temporary password and HTTPS URL below with each member. A blank initial password is generated automatically. The password shown here is only an example."
+  "labInviteHttps": "Privately share the EasyPaper temporary password and HTTPS URL below with each member. A blank initial password is generated automatically. The password shown here is only an example.",
+  "labConnectSshPortNote": "To change the port, return to the previous scene, edit it, and restart the SSH tunnel."
 }

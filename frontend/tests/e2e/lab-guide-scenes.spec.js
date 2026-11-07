@@ -1,13 +1,17 @@
 import { test, expect } from '@playwright/test'
 import { mockBaseRoutes, gotoApp, reloadToLibrary } from './helpers.js'
 
-async function openGuide(page, clock = true) {
+async function openGuide(page, clock = true, scheme = 'dark') {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await mockBaseRoutes(page)
   await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'admin', role: 'master', lab_mode: true } }))
   for (const path of ['lab/inference', 'me/model-settings', 'lab/users']) await page.route(`**/api/${path}`, route => route.fulfill({ json: path === 'lab/users' ? [] : {} }))
   await gotoApp(page)
+  if (scheme === 'light') {
+    await page.locator('#sidebar-theme-toggle-btn').click()
+    await expect(page.locator('body')).toHaveClass(/light-theme/)
+  }
   if (!clock) {
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -100,8 +104,17 @@ test('installation gates connection, keeps SSH parameters and persists completio
   await expect(guide.locator('.lab-guide-snippet code')).toContainText('alice@gpu.example.edu')
   await scene.click()
   await expect(guide.locator('.lab-guide-snippet code')).toHaveText('http://localhost:19000')
+  await expect(guide.locator('#lab-guide-param-localPort')).toHaveAttribute('readonly', '')
+  await expect(guide.locator('#lab-guide-param-localPort')).not.toBeEditable()
+  await expect(guide.locator('#lab-guide-scene-note')).toContainText('SSH 터널을 다시 실행')
+  await guide.locator('.lab-guide-controls button').first().click()
+  await expect(guide.locator('#lab-guide-param-localPort')).toBeEditable()
+  await guide.locator('#lab-guide-param-localPort').fill('19001')
+  await expect(guide.locator('.lab-guide-snippet code')).toContainText('-L 19001:127.0.0.1:8000')
+  await scene.click()
+  await expect(guide.locator('.lab-guide-snippet code')).toHaveText('http://localhost:19001')
   await page.clock.runFor(5000)
-  await expect(guide.locator('.lab-demo-input')).toHaveText(['http://localhost:19000', 'alice', '••••••••'])
+  await expect(guide.locator('.lab-demo-input')).toHaveText(['http://localhost:19001', 'alice', '••••••••'])
   await step.click()
   await page.clock.resume()
   await reloadToLibrary(page)
@@ -205,3 +218,50 @@ test('completed systemd and HTTPS choices survive reload without storing server 
   await page.locator('#tab-lab .lab-introduction > button').first().click()
   await expect(guide.locator('.lab-guide-choices button').nth(1)).toHaveAttribute('aria-pressed', 'true')
 })
+
+
+for (const scheme of ['dark', 'light']) {
+  for (const width of [390, 1280]) {
+    test(`guide controls remain consistent and usable: ${scheme}, ${width}px`, async ({ page }) => {
+      test.setTimeout(60_000)
+      await page.setViewportSize({ width, height: 900 })
+      const { guide, scene, step, errors } = await openGuide(page, false, scheme)
+      const introButtons = page.locator('#tab-lab .lab-introduction > button')
+      const guideButton = guide.locator('.lab-guide-controls button').first()
+      for (const property of ['font-size', 'border-radius', 'min-height']) {
+        const expected = await guideButton.evaluate((node, key) => getComputedStyle(node).getPropertyValue(key), property)
+        await expect(introButtons.first()).toHaveCSS(property, expected)
+      }
+      await expect(introButtons.last()).toBeDisabled()
+      await expect(introButtons.last()).toHaveCSS('opacity', '0.45')
+      const selected = guide.locator('.lab-guide-choices [aria-pressed=true]')
+      const unselected = guide.locator('.lab-guide-choices [aria-pressed=false]')
+      expect(await selected.evaluate(node => getComputedStyle(node).backgroundColor))
+        .not.toBe(await unselected.evaluate(node => getComputedStyle(node).backgroundColor))
+      await finishScenes(scene)
+      await step.click()
+      await step.click()
+      await guide.locator('#lab-guide-param-host').fill('gpu-lab.example.edu')
+      await guide.locator('.lab-guide-commands').scrollIntoViewIfNeeded()
+      const copy = guide.locator('.lab-guide-copy')
+      await expect(copy).toHaveClass(/icon-btn/)
+      await expect(copy.locator('svg')).toHaveCount(1)
+      const bounds = await copy.boundingBox()
+      expect(bounds.width).toBe(32)
+      expect(bounds.height).toBe(32)
+      await expect(copy).toHaveAccessibleName('명령어 복사')
+      await expect(copy).toHaveAttribute('title', '명령어 복사')
+      await expect(guide.locator('.close-btn')).not.toHaveAccessibleName('')
+      await guide.locator('.lab-guide-snippet code').focus()
+      await page.keyboard.press('Tab')
+      await expect(copy).toBeFocused()
+      await expect(copy).toHaveCSS('outline-style', 'solid')
+      const codeFont = await guide.locator('.lab-demo-command-input').evaluate(node => getComputedStyle(node).fontFamily)
+      await expect(guide.locator('.lab-guide-snippet code')).toHaveCSS('font-family', codeFont)
+      const overflow = await guide.evaluate(node => node.scrollWidth > node.clientWidth)
+      expect(overflow).toBe(false)
+      await page.screenshot({ path: `/tmp/lab-final-ui-${scheme}-${width}.png`, animations: 'disabled' })
+      expect(errors).toEqual([])
+    })
+  }
+}

@@ -44,7 +44,7 @@ export function installationScenes(deployment, method, values) {
     { kind: 'network', title: 'DNS · HTTPS', domain: values.domain, note: t('settings:labDnsNote'), parameters: ['domain'] },
     terminal('Caddy', 'sudo apt-get update && sudo apt-get install -y caddy', 'labCaddyNote'),
     terminal('Caddyfile', `printf '%s\\n' '${values.domain} {' '    reverse_proxy 127.0.0.1:8000' '}' | sudo tee /etc/caddy/Caddyfile\nsudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`, 'labProxyNote', ['domain']),
-    terminal('HTTPS', `curl --fail --head https://${values.domain}`, 'labVerifyNote', ['domain']),
+    terminal('HTTPS', `curl --fail --show-error --silent --output /dev/null --write-out 'HTTP %{http_code}\\n' https://${values.domain}`, 'labVerifyNote', ['domain']),
   )
   access.push(
     { kind: 'inference', title: 'EasyPaper · Lab', url: engineUrl, model: values.model, copy: engineUrl, parameters: ['model'], note: t('settings:labEngineConfigureNote') },
@@ -57,6 +57,6 @@ export function installationScenes(deployment, method, values) {
 export function connectionScenes(method, values) {
   const scenes = []
   if (method === 'ssh') scenes.push({ kind: 'terminal', title: 'SSH', commands: [[tunnelCommand(values), ['✓']]], note: t('settings:labSshNote'), parameters: ['host', 'user', 'port', 'localPort'] })
-  scenes.push({ kind: 'connection', title: guideServerUrl(method, values), url: guideServerUrl(method, values), note: t('settings:labConnectNote'), parameters: method === 'https' ? ['domain'] : ['localPort'], copy: guideServerUrl(method, values) })
+  scenes.push({ kind: 'connection', title: guideServerUrl(method, values), url: guideServerUrl(method, values), note: method === 'ssh' ? `${t('settings:labConnectNote')} ${t('settings:labConnectSshPortNote')}` : t('settings:labConnectNote'), parameters: method === 'https' ? ['domain'] : ['localPort'], readOnlyParameters: method === 'ssh' ? ['localPort'] : [], copy: guideServerUrl(method, values) })
   return [scenes]
 }

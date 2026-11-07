@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
-import { defaultGuideParameters, installationScenes, validGuideParameters } from '../src/labGuideFlow.js'
+import { execFile, execFileSync } from 'node:child_process'
+import { createServer } from 'node:http'
+import { promisify } from 'node:util'
+import { defaultGuideParameters, installationScenes, connectionScenes, validGuideParameters } from '../src/labGuideFlow.js'
 
 for (const deployment of ['docker', 'systemd']) {
   for (const method of ['ssh', 'https']) {
@@ -39,4 +41,42 @@ test('model names cannot inject shell syntax', () => {
   for (const model of ['', '-x', 'qwen3;id', '$(id)', 'qwen3\nwhoami', "qwen3'", 'qwen3 model']) {
     assert.equal(validGuideParameters({ ...defaultGuideParameters, model }, ['model']), false)
   }
+})
+
+
+test('HTTPS check uses GET and reports HTTP failures', async () => {
+  const methods = []
+  let status = 200
+  const server = createServer((request, response) => {
+    methods.push(request.method)
+    response.writeHead(request.method === 'HEAD' ? 405 : status)
+    response.end('EasyPaper')
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const generated = installationScenes('docker', 'https', defaultGuideParameters)[2]
+      .find(scene => scene.title === 'HTTPS').commands[0][0]
+    // Only substitute the origin; execute the exact copied curl options.
+    const command = generated.replace('https://lab.example.com', `http://127.0.0.1:${server.address().port}`)
+    const run = promisify(execFile)
+    const success = await run('bash', ['-c', command])
+    assert.equal(success.stdout, 'HTTP 200\n')
+    status = 503
+    await assert.rejects(run('bash', ['-c', command]), error => error.code === 22)
+    assert.deepEqual(methods, ['GET', 'GET'])
+  } finally {
+    await new Promise(resolve => server.close(resolve))
+  }
+})
+
+test('SSH URL reflects the tunnel port but cannot edit it independently', () => {
+  const values = { ...defaultGuideParameters, localPort: '19000' }
+  const [tunnel, connection] = connectionScenes('ssh', values)[0]
+  assert.ok(tunnel.parameters.includes('localPort'))
+  assert.ok(tunnel.commands[0][0].includes('-L 19000:'))
+  assert.equal(connection.copy, 'http://localhost:19000')
+  assert.deepEqual(connection.readOnlyParameters, ['localPort'])
+  const https = connectionScenes('https', values)[0][0]
+  assert.deepEqual(https.parameters, ['domain'])
+  assert.deepEqual(https.readOnlyParameters, [])
 })

@@ -6615,7 +6615,7 @@
     "description": "Run on the server for a new Caddy configuration. If you have existing sites, add only this domain block to your existing Caddyfile."
   },
   "settings:labVerifyNote": {
-    "description": "Run on the server to check the HTTPS response."
+    "description": "Run on the server. HTTP 200 confirms a successful response."
   },
   "settings:labConnectIntro": {
     "description": "Examples for the connection method selected during installation. These values are illustrative and do not change your connection settings."
@@ -6682,5 +6682,8 @@
   },
   "settings:labInviteHttps": {
     "description": "Privately share the EasyPaper temporary password and HTTPS URL below with each member. A blank initial password is generated automatically. The password shown here is only an example."
+  },
+  "settings:labConnectSshPortNote": {
+    "description": "To change the port, return to the previous scene, edit it, and restart the SSH tunnel."
   }
 }

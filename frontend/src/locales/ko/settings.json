@@ -386,7 +386,7 @@
   "labDnsNote": "도메인을 등록한 뒤 DNS 관리에서 A 레코드(예: lab)를 서버 공인 IPv4로 지정하세요. 공유기는 TCP 80·443을 서버로 포트 전달하고 서버·클라우드 방화벽에서도 허용하세요. 8000은 공개하지 마세요.",
   "labCaddyNote": "서버 터미널에서 Caddy를 설치하세요.",
   "labProxyNote": "서버에서 실행하세요. 새 Caddy 설정용입니다. 기존 사이트가 있다면 아래 도메인 블록만 기존 Caddyfile에 추가하세요.",
-  "labVerifyNote": "서버에서 실행하여 HTTPS 응답을 확인하세요.",
+  "labVerifyNote": "서버에서 실행하세요. HTTP 200이면 정상 응답입니다.",
   "labConnectIntro": "설치 때 선택한 접속 방식의 예시입니다. 아래 값은 안내용이며 실제 연결 설정을 변경하지 않습니다.",
   "labConnectNote": "데스크톱: 설정 → 데이터 → 서버 연결에 아래 서버 URL을 입력하세요. 브라우저: 같은 주소를 여세요. 로그인에는 관리자가 만든 EasyPaper 계정과 비밀번호를 사용하세요. SSH 계정과는 별개입니다.",
   "labServerUrlField": "서버 URL",
@@ -408,5 +408,6 @@
   "labAccountSubmit": "계정 정보 변경",
   "labAccountSaved": "새 비밀번호 저장 완료",
   "labInviteSsh": "표시된 EasyPaper 임시 비밀번호와 SSH 터널 실행 방법을 멤버에게 개별 전달하세요. 멤버는 자신의 PC에서 터널을 연 뒤 localhost 주소로 접속합니다. SSH 계정과 EasyPaper 계정은 별개입니다.",
-  "labInviteHttps": "표시된 EasyPaper 임시 비밀번호와 아래 HTTPS 주소를 멤버에게 개별 전달하세요. 초기 비밀번호를 비워 두면 자동 생성됩니다. 화면의 비밀번호는 예시입니다."
+  "labInviteHttps": "표시된 EasyPaper 임시 비밀번호와 아래 HTTPS 주소를 멤버에게 개별 전달하세요. 초기 비밀번호를 비워 두면 자동 생성됩니다. 화면의 비밀번호는 예시입니다.",
+  "labConnectSshPortNote": "포트를 바꾸려면 이전 장면에서 수정하고 SSH 터널을 다시 실행하세요."
 }
