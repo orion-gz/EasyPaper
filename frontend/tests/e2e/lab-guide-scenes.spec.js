@@ -25,7 +25,14 @@ async function openGuide(page, clock = true) {
 }
 
 test('terminal typing, execution, completion, pause, replay and close are distinct', async ({ page }) => {
-  const { canvas, pause, replay, scene } = await openGuide(page)
+  const { canvas, guide, pause, replay, scene } = await openGuide(page)
+  for (const control of await guide.locator('.lab-guide-controls button').all()) {
+    await expect(control).toHaveText('')
+    await expect(control).toHaveAttribute('aria-label', /.+/)
+    await expect(control).toHaveAttribute('title', await control.getAttribute('aria-label'))
+    await expect(control.locator('svg[aria-hidden="true"]')).toHaveCount(1)
+  }
+  const pauseIcon = await pause.innerHTML()
   const writes = []
   page.on('request', request => { if (request.url().includes('/api/') && request.method() !== 'GET') writes.push(request.url()) })
   const command = canvas.locator('.lab-demo-command').first()
@@ -33,10 +40,12 @@ test('terminal typing, execution, completion, pause, replay and close are distin
   await expect(command).toHaveAttribute('data-phase', 'typing')
   await expect(command.locator('.lab-demo-command-output')).toBeEmpty()
   await pause.click()
+  expect(await pause.innerHTML()).not.toBe(pauseIcon)
   const frozen = await canvas.innerHTML()
   await page.clock.runFor(2000)
   expect(await canvas.innerHTML()).toBe(frozen)
   await pause.click()
+  expect(await pause.innerHTML()).toBe(pauseIcon)
   await page.clock.runFor(1600)
   await expect(command).toHaveAttribute('data-phase', 'running')
   await expect(command.locator('.lab-demo-percent')).not.toHaveText('100%')
