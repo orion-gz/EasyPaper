@@ -204,8 +204,7 @@ export function labScenes() {
   const terminal = (title, commands, note) => ({ kind: 'terminal', title, commands, note })
   return [
     [
-      terminal('SSH', [['ssh user@lab-server', ['→ lab-server']], ['git --version && docker compose version && caddy version', ['Git ✓', 'Docker Compose ✓', 'Caddy ✓']]], t('settings:labScenePrerequisites')),
-      terminal('EasyPaper · Docker', [['git clone https://github.com/orion-gz/EasyPaper.git && cd EasyPaper', ['Cloning EasyPaper…', 'EasyPaper ✓']], ['mkdir -p lab-data/home && sudo chown -R 1000:1000 lab-data', ['lab-data ✓']], ['docker compose -f docker-compose.lab.yml up -d --build', ['Building frontend…', 'Installing backend…', 'Starting easypaper…', '✓ 127.0.0.1:8000']]], t('settings:labSceneInstall')),
+      terminal('EasyPaper · ~/EasyPaper', [['bash deploy/lab/install.sh', ['Building EasyPaper…', 'Preparing data directories…', 'Starting EasyPaper…', '✓ http://127.0.0.1:8000']]], t('settings:labSceneInstall')),
       { kind: 'network', title: 'DNS · HTTPS', note: t('settings:labWizardHosting') },
       { kind: 'editor', title: 'Caddyfile', path: '/etc/caddy/Caddyfile', code: 'lab.example.com {\n    reverse_proxy 127.0.0.1:8000\n}', note: t('settings:labWizardProxy') },
       terminal('HTTPS', [['sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy', ['Valid configuration', '✓ Caddy']], ['curl -I https://lab.example.com', ['HTTP/2 200', '✓ HTTPS']]], t('settings:labWizardRemote')),

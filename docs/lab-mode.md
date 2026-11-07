@@ -5,6 +5,29 @@ through **Data → Server connection** use the same server accounts, documents a
 inference services. Tauri does not need to synchronize or download a library to
 use the lab GPU. Local mode continues to use the desktop's own data and models.
 
+## Install the server
+
+Download this repository onto your Linux server and open the EasyPaper project
+folder. Install Docker Engine with the Compose plugin and Python 3 first; the
+current user must be able to access Docker. Then run:
+
+```sh
+bash deploy/lab/install.sh
+```
+
+The script builds the application, prepares the data and home directories and
+starts `docker-compose.lab.yml` at `http://127.0.0.1:8000`. It works from any
+working directory and stops if a command fails. It respects Compose `.env` and
+environment settings, including `LAB_DATA_DIR`, `LAB_APP_UID` and `LAB_APP_GID`
+(default owner `1000:1000`). Existing files are retained; it only changes ownership
+of the data directory and its `home` directory, not their contents. If migrating
+existing data, ensure its files are writable by the selected application user.
+Rerunning rebuilds and starts the service without deleting its data.
+
+Configure DNS and an HTTPS reverse proxy separately (for example Caddy), then
+follow the account setup below. Ollama/vLLM and the optional personal CLI runner
+are separate installations; the script does not enable Lab Mode or create accounts.
+
 ## Accounts and setup
 
 1. Start the updated server and sign in with its existing administrator account.

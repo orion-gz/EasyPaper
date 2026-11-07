@@ -48,8 +48,10 @@ test('terminal typing, execution, completion, pause, replay and close are distin
   await expect(canvas).toHaveAttribute('data-elapsed', '0')
   await page.clock.runFor(800)
   await expect(command).toHaveAttribute('data-phase', 'typing')
-  await scene.click()
-  await page.clock.runFor(14400)
+  await expect(command.locator('.lab-demo-command-input')).toContainText('$ bash')
+  await page.clock.runFor(3600)
+  await expect(command.locator('.lab-demo-command-input')).toHaveText('$ bash deploy/lab/install.sh')
+  await expect(canvas.locator('.lab-demo-command')).toHaveCount(1)
   await expect(canvas.locator('.lab-demo-command').last()).toHaveAttribute('data-phase', 'complete')
   await page.screenshot({ animations: 'disabled', path: '/tmp/lab-scene-terminal.png' })
   await page.keyboard.press('Escape')
@@ -61,7 +63,7 @@ test('terminal typing, execution, completion, pause, replay and close are distin
 
 test('hosting, configuration, membership and document scenes play their actions', async ({ page }) => {
   const { canvas, guide, replay, scene, step } = await openGuide(page)
-  await scene.click(); await scene.click()
+  await scene.click()
   await page.clock.runFor(3200)
   await expect(canvas.locator('.lab-demo-hop.is-connected')).toHaveCount(1)
   await page.clock.runFor(3000)

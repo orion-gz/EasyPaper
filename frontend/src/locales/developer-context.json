@@ -6428,9 +6428,6 @@
   "settings:labSceneRead": {
     "description": "Lab setup demonstration: Read"
   },
-  "settings:labScenePrerequisites": {
-    "description": "Lab setup demonstration: Connect over SSH and check the required tools. If a command is missing, use the installation links first."
-  },
   "settings:labSceneInstall": {
     "description": "Lab setup demonstration: Clone the repository and start the service. The default data owner is 1000:1000. Timing and logs are illustrative."
   },
