@@ -52,7 +52,8 @@ RUN ln -sf /data/.env .env && ln -sf /data/translation_prompt.txt translation_pr
 # services/db.py의 DB_PATH, config.py의 UPLOAD_DIR/CACHE_DIR/LIBRARY_DIR는
 # 모두 이 환경변수를 우선 사용하도록 되어 있다 (미설정 시 네이티브 실행과
 # 동일하게 backend/ 하위 상대경로로 폴백).
-ENV DB_PATH=/data/easypaper.db \
+ENV EASYPAPER_CONFIG_DIR=/data \
+    DB_PATH=/data/easypaper.db \
     UPLOAD_DIR=/data/uploads \
     CACHE_DIR=/data/cache \
     LIBRARY_DIR=/data/library \

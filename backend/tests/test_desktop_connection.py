@@ -263,3 +263,33 @@ def test_invalid_saved_config_requires_selection_without_overwriting_file(tmp_pa
     assert not manager.config['onboarded']
     assert not manager.config['enabled']
     assert path.read_text() == original
+
+def test_ssh_identity_and_sync_preference_updates(manager, monkeypatch):
+    from services.ssh_connections import manager as tunnels, secrets
+    async def port(*args):
+        return 19999
+    async def gateway(target):
+        manager.config['ports'][target] = 19000 + len(manager.config['ports'])
+        return manager.config['ports'][target]
+    monkeypatch.setattr(tunnels, 'port', port)
+    monkeypatch.setattr(manager, 'ensure_gateway', gateway)
+    monkeypatch.setattr(secrets, 'put', lambda *args: None)
+    monkeypatch.setattr(secrets, 'get', lambda *args: {})
+    body = {'enabled': True, 'server_url': 'http://127.0.0.1:8000', 'transport': 'ssh',
+            'ssh': {'host': 'host-one', 'username': 'researcher', 'host_key': 'confirmed'},
+            'credentials': {'password': 'secret'}}
+    with TestClient(manager.app, base_url=ORIGIN) as client:
+        headers = {'X-EasyPaper-Desktop': '1'}
+        first = client.put('/desktop/connection', json=body, headers=headers)
+        assert first.status_code == 200
+        identifier = manager.config['server_url']
+        assert identifier != body['server_url']
+        assert 'secret' not in manager.config_path.read_text()
+        response = client.put('/desktop/connection', json={
+            'enabled': True, 'server_url': body['server_url'],
+            'sync': {'action': 'defer', 'automatic': False}}, headers=headers)
+        assert response.status_code == 200
+        assert manager.config['server_url'] == identifier
+        body['ssh']['host'] = 'host-two'
+        assert client.put('/desktop/connection', json=body, headers=headers).status_code == 200
+        assert manager.config['server_url'] != identifier

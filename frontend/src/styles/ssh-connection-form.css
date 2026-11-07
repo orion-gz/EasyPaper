@@ -1,0 +1,9 @@
+.ssh-connection-form {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ssh-connection-form > [hidden] { display: none !important; }
+.ssh-connection-form textarea { min-height: 100px; resize: vertical; }
+.ssh-connection-form p { overflow-wrap: anywhere; }

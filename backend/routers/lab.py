@@ -5,6 +5,9 @@ import secrets
 import sqlite3
 import uuid
 
+from services.inference_servers import ServerSettings
+from services.ssh_connections import SSHSettings
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -116,6 +119,7 @@ async def delete_member(identifier: str, username: str = Depends(require_admin_u
     with closing(db.get_db()) as conn, conn:
         target = member(conn, identifier)
         conn.execute('DELETE FROM lab_preferences WHERE account_id=?', (identifier,))
+        conn.execute('DELETE FROM inference_preferences WHERE account_id=?', (identifier,))
         conn.execute('DELETE FROM users WHERE username=?', (target['username'],))
         conn.execute('DELETE FROM lab_accounts WHERE id=?', (identifier,))
     return {'deleted': True}
@@ -142,16 +146,18 @@ class InferenceSettings(BaseModel):
 
 
 class ModelPreference(BaseModel):
+    server_id: str | None = Field(default=None, max_length=100)
     provider: str = Field(pattern=r'^(ollama|vllm|claude_code|codex|antigravity)$')
     model: str = Field(min_length=1, max_length=200)
 
 
 @router.get('/lab/inference')
 async def inference_settings(username: str = Depends(get_current_user)):
-    result = lab.configuration()
+    from services import inference_servers as servers
+    result = servers.get(with_secrets=False) if servers.state()['servers'] else lab.configuration()
     result.pop('api_key', None)
     if (lab.account(username) or {}).get('role') != 'master':
-        result.pop('url', None)
+        result = {k: v for k, v in result.items() if k in ('id', 'name', 'engine', 'models', 'model')}
     return result
 
 
@@ -164,14 +170,16 @@ async def save_inference(data: InferenceSettings, username: str = Depends(requir
         raise HTTPException(400, 'Use an HTTP(S) inference server URL without credentials or query parameters.')
     if data.model not in data.models or any(not name.strip() for name in data.models):
         raise HTTPException(400, 'The default model must be in the allowed model list.')
+    from services import inference_servers as servers
+    current = servers.state()
+    existing = servers.get(with_secrets=False) if current['servers'] else {}
     value = data.model_dump()
-    value['max_concurrent'] = value['max_concurrent'] or (8 if data.engine == 'vllm' else 2)
+    value['max_concurrent'] = value['max_concurrent'] or (8 if value['engine'] == 'vllm' else 2)
     if value['per_user'] > value['max_concurrent']:
         raise HTTPException(400, 'The per-user limit cannot exceed the server limit.')
-    if not value['api_key']:
-        value['api_key'] = lab.configuration().get('api_key', '')
-    with closing(db.get_db()) as conn, conn:
-        conn.execute("INSERT OR REPLACE INTO lab_configuration VALUES ('inference',?)", (json.dumps(value),))
+    key = value.pop('api_key')
+    await servers.save(servers.ServerSettings(**{**existing, **value,
+        'name': existing.get('name', 'Default'), 'credentials': {'api_key': key}}), current['default_id'])
     return {'saved': True}
 
 
@@ -180,15 +188,28 @@ async def model_preferences(username: str = Depends(get_current_user)):
     return lab.preference(username)
 
 
+@router.delete('/me/model-settings')
+async def reset_personal_preferences(username: str = Depends(get_current_user)):
+    if lab.settings()['enabled']:
+        raise HTTPException(409, 'Personal settings are available when Lab mode is disabled.')
+    profile = lab.require_access(username)
+    with closing(db.get_db()) as conn, conn:
+        conn.execute('DELETE FROM inference_preferences WHERE account_id=?', (profile['id'],))
+    return {'saved': True}
+
+
 @router.put('/me/model-settings')
 async def save_preferences(data: ModelPreference, username: str = Depends(get_current_user)):
     import json
-    common = lab.configuration()
+    from services import inference_servers as servers
+    common = servers.get(data.server_id, with_secrets=False) if data.provider in ('ollama', 'vllm') and servers.state()['servers'] else lab.configuration(with_secrets=False)
     if data.provider in ('ollama', 'vllm') and (data.provider != common['engine'] or data.model not in common['models']):
         raise HTTPException(400, 'Choose an allowed lab model.')
+    if data.provider in ('ollama', 'vllm'):
+        data.server_id = common.get('id')
     profile = lab.require_access(username)
     with closing(db.get_db()) as conn, conn:
-        conn.execute('INSERT OR REPLACE INTO lab_preferences VALUES (?,?)', (profile['id'], json.dumps(data.model_dump())))
+        conn.execute(f'INSERT OR REPLACE INTO {lab.preference_table()} VALUES (?,?)', (profile['id'], json.dumps(data.model_dump())))
     return data
 
 
@@ -217,7 +238,8 @@ async def check_inference(username: str = Depends(require_admin_user)):
     path = '/models' if value['engine'] == 'vllm' else '/api/tags'
     headers = {'Authorization': 'Bearer ' + value['api_key']} if value.get('api_key') else {}
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False) as connection:
+        from services.ssh_connections import client
+        async with client('inference:' + value.get('id', 'default'), value, timeout=15, follow_redirects=False, trust_env=False) as connection:
             response = await connection.get(value['url'].rstrip('/') + path, headers=headers)
             response.raise_for_status()
             data = response.json()
@@ -229,3 +251,54 @@ async def check_inference(username: str = Depends(require_admin_user)):
         return {'connected': True, 'models': models, 'default_available': True, **verified}
     except (httpx.HTTPError, ValueError, KeyError, RuntimeError):
         raise HTTPException(502, 'Inference verification failed. Check the model, server logs and vLLM cache_salt/OpenAPI support.')
+
+
+@router.get('/inference/servers')
+async def list_servers(username: str = Depends(get_current_user)):
+    from services import inference_servers as servers
+    admin = (lab.account(username) or {}).get('role') == 'master'
+    value = servers.state()
+    from services.ssh_connections import secrets
+    return {**value, 'servers': [servers.public(s, admin) for s in value['servers']],
+            'credential_storage': secrets.availability() if admin else {'available': False}}
+
+
+@router.post('/inference/servers', status_code=201)
+async def create_server(data: 'ServerSettings', username: str = Depends(require_admin_user)):
+    from services import inference_servers as servers
+    return await servers.save(data)
+
+
+@router.put('/inference/servers/{identifier}')
+async def update_server(identifier: str, data: 'ServerSettings', username: str = Depends(require_admin_user)):
+    from services import inference_servers as servers
+    return await servers.save(data, identifier)
+
+
+@router.delete('/inference/servers/{identifier}')
+async def delete_server(identifier: str, username: str = Depends(require_admin_user)):
+    from services import inference_servers as servers
+    await servers.delete(identifier)
+    return {'deleted': True}
+
+
+@router.post('/inference/servers/{identifier}/default')
+async def default_server(identifier: str, username: str = Depends(require_admin_user)):
+    from services import inference_servers as servers
+    servers.get(identifier, False)
+    value = servers.state()
+    value['default_id'] = identifier
+    servers.write(value)
+    return {'saved': True}
+
+
+@router.post('/inference/servers/{identifier}/check')
+async def test_server(identifier: str, username: str = Depends(require_admin_user)):
+    from services import inference_servers as servers
+    return await servers.check(identifier)
+
+
+@router.post('/inference/ssh/host-key')
+async def ssh_host_key(data: 'SSHSettings', username: str = Depends(require_admin_user)):
+    from services.ssh_connections import discover_host_key
+    return await discover_host_key(data)

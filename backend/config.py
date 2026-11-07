@@ -70,9 +70,10 @@ def get_project_root() -> str:
     return PROJECT_ROOT
 
 def get_ollama_host() -> str:
-    from services.lab import settings, configuration
-    if settings()['enabled']:
-        return configuration()['url']
+    from services.lab import selection
+    selected = selection()
+    if selected and selected['provider'] == 'ollama':
+        return selected['url']
     return OLLAMA_HOST
 
 def is_ollama_host_local() -> bool:
