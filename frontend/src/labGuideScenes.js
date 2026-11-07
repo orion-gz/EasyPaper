@@ -95,7 +95,7 @@ export function mountLabScene(root, scene) {
   } else if (scene.kind === 'network') {
     const dns = el('div', 'lab-demo-card')
     root.append(dns)
-    field('DNS · A', 'lab.example.com → SERVER_PUBLIC_IP', 0, dns)
+    field('DNS · A', `${scene.domain || 'lab.example.com'} → SERVER_PUBLIC_IP`, 0, dns)
     action(t('settings:labSave'), 1900, dns)
     const route = el('div', 'lab-demo-route')
     root.append(route)
@@ -106,11 +106,16 @@ export function mountLabScene(root, scene) {
     })
     result(t('settings:labScenePorts'), 6000)
     duration = 7500
+  } else if (scene.kind === 'connection') {
+    field(t('settings:labServerUrlField'), scene.url, 0)
+    field(t('settings:labAccountExample'), 'alice', 1500)
+    field(t('settings:labPasswordExample'), '••••••••', 3000)
+    duration = 4500
   } else if (scene.kind === 'browser') {
     const address = el('div', 'lab-demo-address')
     const login = el('div', 'lab-demo-card')
     root.append(address, login)
-    updates.push(time => { address.textContent = `◉ ${typed('https://lab.example.com', time, 0)}`; show(login, time >= 2500) })
+    updates.push(time => { address.textContent = `◉ ${typed(scene.url || 'https://lab.example.com', time, 0)}`; show(login, time >= 2500) })
     login.append(el('strong', '', 'EasyPaper'))
     field(t('common:login.username'), 'admin', 2600, login)
     field(t('common:login.password'), '••••••••', 4100, login)
@@ -159,7 +164,7 @@ export function mountLabScene(root, scene) {
     updates.push(time => show(form, time < 3400))
     const credentials = result(t('settings:labTemporaryPassword'), 3400)
     credentials.append(el('code', 'lab-demo-secret', 'demo-only-A7!2'))
-    result('alice  ·  https://lab.example.com', 4500)
+    result(`alice  ·  ${scene.url || 'https://lab.example.com'}`, 4500)
     duration = 6000
   } else if (scene.kind === 'login') {
     root.append(el('div', 'lab-demo-address', 'https://lab.example.com'))
