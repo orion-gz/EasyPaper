@@ -15,10 +15,8 @@ for (const deployment of ['docker', 'systemd']) {
       assert.ok(!JSON.stringify(install).includes(deployment === 'docker' ? 'install-systemd.sh' : 'install-docker.sh'))
       assert.ok(!JSON.stringify(install).includes('apt-get'))
       const commands = install.flatMap(scene => scene.commands?.map(([command]) => command) || [])
-      assert.ok(commands.some(command => command.includes('ollama.com/install.sh')))
-      assert.ok(commands.some(command => command.includes('OLLAMA_HOST=') && command.includes('90-easypaper.conf')))
-      assert.ok(commands.some(command => command.includes('systemctl restart ollama')))
-      assert.ok(commands.at(-1).includes('ollama pull qwen3:4b'))
+      assert.ok(commands.some(command => command.includes(`install-inference.sh --deployment ${deployment} --model qwen3:4b`)))
+      assert.ok(commands.at(-1).includes(`diagnose.sh --deployment ${deployment} --model qwen3:4b`))
       assert.equal(access[0].title, 'SSH')
       assert.equal(access[1].kind, 'admin-login')
       assert.equal(access[2].kind, 'account')
@@ -31,9 +29,10 @@ for (const deployment of ['docker', 'systemd']) {
       for (const scene of [...install, ...access]) {
         for (const [command] of scene.commands || []) execFileSync('bash', ['-n', '-c', command])
       }
-      const binding = commands.find(command => command.includes('90-easypaper.conf'))
-      assert.ok(!binding.includes('0.0.0.0'))
-      assert.equal(binding.includes('docker network inspect bridge'), deployment === 'docker')
+      if (method === 'https') {
+        const command = access.find(scene => scene.title === 'Caddy · HTTPS').commands[0][0]
+        assert.ok(command.includes('install-https.sh --domain lab.example.com --public-ip 203.0.113.10'))
+      }
     })
   }
 }
@@ -77,7 +76,7 @@ test('SSH URL reflects the tunnel port but cannot edit it independently', () => 
   const values = { ...defaultGuideParameters, localPort: '19000' }
   const [tunnel, connection] = connectionScenes('ssh', values)[0]
   assert.ok(tunnel.parameters.includes('localPort'))
-  assert.ok(tunnel.commands[0][0].includes('-L 19000:'))
+  assert.ok(tunnel.commands[0][0].includes('-L 127.0.0.1:19000:'))
   assert.equal(connection.copy, 'http://localhost:19000')
   assert.deepEqual(connection.readOnlyParameters, ['localPort'])
   const https = connectionScenes('https', values)[0][0]

@@ -1,9 +1,10 @@
 import { t } from './i18n.js'
 
-export const defaultGuideParameters = { host: 'lab-server', user: 'user', port: '22', localPort: '18000', domain: 'lab.example.com', model: 'qwen3:4b' }
+export const defaultGuideParameters = { host: 'lab-server', user: 'user', port: '22', localPort: '18000', domain: 'lab.example.com', model: 'qwen3:4b', publicIp: '203.0.113.10' }
 export function validGuideParameters(values, names = Object.keys(defaultGuideParameters)) {
   const port = value => /^\d+$/.test(value) && Number(value) > 0 && Number(value) <= 65535
   const valid = {
+    publicIp: /^(?:\d{1,3}\.){3}\d{1,3}$/.test(values.publicIp) && values.publicIp.split('.').every(part => Number(part) <= 255),
     host: /^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(values.host),
     user: /^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$/.test(values.user),
     model: /^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/.test(values.model),
@@ -13,7 +14,7 @@ export function validGuideParameters(values, names = Object.keys(defaultGuidePar
   }
   return names.every(name => valid[name])
 }
-export const tunnelCommand = values => `ssh -o ExitOnForwardFailure=yes -N -L ${values.localPort}:127.0.0.1:8000 -p ${values.port} ${values.user}@${values.host}`
+export const tunnelCommand = values => `ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L 127.0.0.1:${values.localPort}:127.0.0.1:8000 -p ${values.port} ${values.user}@${values.host}`
 export const guideServerUrl = (method, values) => method === 'ssh' ? `http://localhost:${values.localPort}` : `https://${values.domain}`
 
 export function installationScenes(deployment, method, values) {
@@ -23,20 +24,16 @@ export function installationScenes(deployment, method, values) {
   const install = [deployment === 'docker'
     ? terminal('EasyPaper · Docker', 'sudo bash deploy/lab/install-docker.sh', 'labDockerRun')
     : terminal('EasyPaper · systemd', 'sudo bash deploy/lab/install-systemd.sh', 'labSystemdRun')]
-  const bridge = "$(sudo docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
-  const engineHost = deployment === 'docker' ? bridge : '127.0.0.1'
   const engineUrl = deployment === 'docker' ? 'http://host.docker.internal:11434' : 'http://127.0.0.1:11434'
   install.push(
-    terminal('Ollama', 'LAB_OLLAMA_INSTALL="$(mktemp)" && curl -fsSL https://ollama.com/install.sh -o "$LAB_OLLAMA_INSTALL" && sh "$LAB_OLLAMA_INSTALL" && rm -f "$LAB_OLLAMA_INSTALL"', 'labEngineInstallNote'),
-    terminal('Ollama · OLLAMA_HOST', `LAB_OLLAMA_IP="${engineHost}" && test -n "$LAB_OLLAMA_IP" && sudo install -d /etc/systemd/system/ollama.service.d && printf '[Service]\\nEnvironment="OLLAMA_HOST=%s:11434"\\n' "$LAB_OLLAMA_IP" | sudo tee /etc/systemd/system/ollama.service.d/90-easypaper.conf`, deployment === 'docker' ? 'labEngineBindDocker' : 'labEngineBindSystemd'),
-    terminal('Ollama', `sudo systemctl daemon-reload && sudo systemctl enable ollama && sudo systemctl restart ollama && curl --fail --retry 20 --retry-connrefused --retry-delay 3 --max-time 5 "http://${engineHost}:11434/api/tags"`, 'labEngineStartNote'),
-    terminal('Ollama · model', `OLLAMA_HOST="http://${engineHost}:11434" ollama pull ${values.model}`, 'labEnginePullNote', ['model']),
+    terminal('Ollama', `sudo bash deploy/lab/install-inference.sh --deployment ${deployment} --model ${values.model}`, 'labAutomatedInference', ['model']),
+    terminal('Diagnostics', `sudo bash deploy/lab/diagnose.sh --deployment ${deployment} --model ${values.model}`, 'labDiagnosticsNote', ['model']),
   )
+  tunnel.sshDownload = true
   const access = [tunnel, admin, { kind: 'account', title: t('settings:labAccountScene'), note: t('settings:labAccountNote') }]
   if (method === 'https') access.push(
     { kind: 'network', title: 'DNS · HTTPS', domain: values.domain, note: t('settings:labDnsNote'), parameters: ['domain'] },
-    terminal('Caddy', 'sudo apt-get update && sudo apt-get install -y caddy', 'labCaddyNote'),
-    terminal('Caddyfile', `printf '%s\\n' '${values.domain} {' '    reverse_proxy 127.0.0.1:8000' '}' | sudo tee /etc/caddy/Caddyfile\nsudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`, 'labProxyNote', ['domain']),
+    terminal('Caddy · HTTPS', `sudo bash deploy/lab/install-https.sh --domain ${values.domain} --public-ip ${values.publicIp}`, 'labAutomatedHttps', ['domain', 'publicIp']),
     terminal('HTTPS', `curl --fail --show-error --silent --output /dev/null --write-out 'HTTP %{http_code}\\n' https://${values.domain}`, 'labVerifyNote', ['domain']),
   )
   access.push(
@@ -49,7 +46,7 @@ export function installationScenes(deployment, method, values) {
 
 export function connectionScenes(method, values) {
   const scenes = []
-  if (method === 'ssh') scenes.push({ kind: 'terminal', title: 'SSH', commands: [[tunnelCommand(values), ['✓']]], note: t('settings:labSshNote'), parameters: ['host', 'user', 'port', 'localPort'] })
+  if (method === 'ssh') scenes.push({ kind: 'terminal', title: 'SSH', commands: [[tunnelCommand(values), ['✓']]], sshDownload: true, note: t('settings:labSshNote'), parameters: ['host', 'user', 'port', 'localPort'] })
   scenes.push({ kind: 'connection', title: guideServerUrl(method, values), url: guideServerUrl(method, values), note: method === 'ssh' ? `${t('settings:labConnectNote')} ${t('settings:labConnectSshPortNote')}` : t('settings:labConnectNote'), parameters: method === 'https' ? ['domain'] : ['localPort'], readOnlyParameters: method === 'ssh' ? ['localPort'] : [], copy: guideServerUrl(method, values) })
   return [scenes]
 }
