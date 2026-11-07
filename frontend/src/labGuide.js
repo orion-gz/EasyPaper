@@ -286,9 +286,24 @@ export function initializeLabGuide() {
     element.onclick = action
     return element
   }
+  const playbackIcons = {
+    labScenePrevious: '<path d="m14 6-6 6 6 6"/>',
+    labWizardPause: '<path d="M9 5v14M15 5v14"/>',
+    labWizardPlay: '<path d="m8 5 11 7-11 7Z"/>',
+    labWizardReplay: '<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>',
+    labWizardFrame: '<path d="m10 6 6 6-6 6"/>',
+  }
+  const setPlaybackIcon = (element, key) => {
+    element.removeAttribute('data-i18n')
+    element.dataset.i18nTitle = `settings:${key}`
+    element.dataset.i18nAriaLabel = `settings:${key}`
+    element.title = t(`settings:${key}`)
+    element.setAttribute('aria-label', element.title)
+    element.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${playbackIcons[key]}</svg>`
+  }
   const stop = () => clearTimeout(timer)
   const updateToggle = () => {
-    toggle.textContent = t(`settings:${paused ? 'labWizardPlay' : 'labWizardPause'}`)
+    setPlaybackIcon(toggle, paused ? 'labWizardPlay' : 'labWizardPause')
     toggle.hidden = reducedMotion.matches
   }
   const paint = () => {
@@ -350,6 +365,9 @@ export function initializeLabGuide() {
   })
   const backFrame = button('labScenePrevious', () => { frame -= 1; renderFrame() })
   const nextFrame = button('labWizardFrame', () => { frame += 1; renderFrame() })
+  for (const [element, key] of [[backFrame, 'labScenePrevious'], [toggle, 'labWizardPause'], [replay, 'labWizardReplay'], [nextFrame, 'labWizardFrame']]) {
+    setPlaybackIcon(element, key)
+  }
   controls.append(backFrame, toggle, replay, nextFrame, caption)
   demo.append(node('p', 'labWizardDemo'), screen, sceneNote)
   const reference = node('a', 'labWizardDetails')
@@ -513,7 +531,6 @@ export function initializeLabGuide() {
     refreshScenes()
     step = 0
     paused = false
-    toggle.textContent = t('settings:labWizardPause')
     dialog.showModal()
     renderStep()
   }

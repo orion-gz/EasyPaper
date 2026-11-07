@@ -33,16 +33,25 @@ async function finishScenes(scene) {
 }
 
 test('commands animate individually and never advance automatically', async ({ page }) => {
-  const { canvas, pause, replay, scene } = await openGuide(page)
+  const { canvas, guide, pause, replay, scene } = await openGuide(page)
+  for (const control of await guide.locator('.lab-guide-controls button').all()) {
+    await expect(control).toHaveText('')
+    await expect(control).toHaveAttribute('aria-label', /.+/)
+    await expect(control).toHaveAttribute('title', await control.getAttribute('aria-label'))
+    await expect(control.locator('svg[aria-hidden="true"]')).toHaveCount(1)
+  }
+  const pauseIcon = await pause.innerHTML()
   const command = canvas.locator('.lab-demo-command')
   await expect(command).toHaveCount(1)
   await page.clock.runFor(800)
   await expect(command).toHaveAttribute('data-phase', 'typing')
   await pause.click()
+  expect(await pause.innerHTML()).not.toBe(pauseIcon)
   const frozen = await canvas.innerHTML()
   await page.clock.runFor(2000)
   expect(await canvas.innerHTML()).toBe(frozen)
   await pause.click()
+  expect(await pause.innerHTML()).toBe(pauseIcon)
   await page.clock.runFor(1600)
   await expect(command).toHaveAttribute('data-phase', 'running')
   await page.clock.runFor(60000)

@@ -8622,6 +8622,7 @@ body.light-theme .chat-drawer {
   font-size: 12px;
   line-height: 1.5;
 }
+.lab-guide-controls > .btn { width: 36px; padding: 8px; }
 .lab-guide-dialog .btn-secondary,
 .lab-introduction > .btn-secondary { border-color: var(--border-strong); }
 .lab-guide-footer { justify-content: space-between; border-top: 1px solid var(--border); }
@@ -8642,7 +8643,7 @@ body.light-theme .chat-drawer {
 .lab-delete-button:hover { filter: brightness(.9); }
 @media (max-width: 480px) {
   .lab-guide-dialog { --lab-inset: 16px; }
-  .lab-guide-controls > .btn { flex: 1 1 auto; }
+  .lab-guide-controls > .btn { flex: 0 0 36px; }
 }
 
 /* Fixed playback controls, independently scrolling explanation and stage. */
@@ -8711,7 +8712,7 @@ body.light-theme .chat-drawer {
   .lab-demo-grid { grid-template-columns: 1fr; }
   .lab-demo-route { flex-direction: column; }
   .lab-guide-dialog > .lab-guide-controls { gap: 6px; }
-  .lab-guide-controls > .btn { flex: 1 1 40%; }
+  .lab-guide-controls > .btn { flex: 0 0 36px; }
 }
 .lab-guide-body { gap: 10px; padding: 16px var(--lab-inset); }
 .lab-guide-step-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
