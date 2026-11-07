@@ -210,10 +210,31 @@ The completed installation and connection methods are remembered in this browser
 and server addresses are not stored by the guide. Changing an installation choice
 locks the connection guide until that path is reviewed again.
 
-The installation commands target a fresh **Ubuntu 24.04** server:
+The installation scripts target an **Ubuntu 24.04** server booted with systemd,
+with sudo privileges and internet access. Download this repository and open its
+EasyPaper folder first. Choose one application deployment (both use port 8000).
+The guide shows only the selected deployment's script and prerequisites:
 
-- Docker: clone the repository, install Docker Compose, prepare `lab-data`, then
-  run `sudo docker compose -f docker-compose.lab.yml up -d --build`.
+| Deployment | Run from the EasyPaper folder | Automation | Persistent data |
+| --- | --- | --- | --- |
+| Docker | `sudo bash deploy/lab/install-docker.sh` | Docker/Compose if absent, image build, data directories, container and health check | `lab-data` by default |
+| systemd | `sudo bash deploy/lab/install-systemd.sh` | Python/Node.js dependencies, app build, service user, boot service and health check | `/var/lib/easypaper` |
+
+`sudo bash deploy/lab/install.sh docker` and `sudo bash deploy/lab/install.sh systemd`
+are explicit aliases. Calling `install.sh` without a deployment prints usage and
+makes no changes. The scripts also work when invoked by absolute path from another
+directory. Ollama, HTTPS and optional personal CLI setup remain separate steps.
+
+- Docker: installs Ubuntu's `docker.io` and `docker-compose-v2` packages only when
+  Docker is absent. An existing Docker installation must already have Compose v2
+  and an accessible daemon; the script does not replace vendor-managed packages.
+  Compose reads `.env` in the project folder, including `LAB_DATA_DIR`,
+  `LAB_APP_UID` and `LAB_APP_GID` (default `1000:1000`). Put overrides there because
+  sudo may remove shell environment variables. The script changes ownership only
+  of the data directory and its `home` directory, never existing files recursively.
+  Existing data must be writable by the selected non-root UID/GID. Rerunning
+  rebuilds/recreates the app while preserving its data. Concurrent script runs are
+  blocked and success requires a healthy application container within 180 seconds.
 - systemd: clone the repository and run
   `sudo bash deploy/lab/install-systemd.sh`. The script installs dependencies,
   builds the app in `/opt/easypaper`, creates the service user and registers

@@ -41,9 +41,6 @@ const labels = () => ({
   labCopiedCommand: t('settings:labCopiedCommand'),
   labCopyFailed: t('settings:labCopyFailed'),
   labInvalidParameters: t('settings:labInvalidParameters'),
-  labCloneNote: t('settings:labCloneNote'),
-  labToolsNote: t('settings:labToolsNote'),
-  labDockerData: t('settings:labDockerData'),
   labDockerRun: t('settings:labDockerRun'),
   labSystemdRun: t('settings:labSystemdRun'),
   labSshNote: t('settings:labSshNote'),
@@ -249,18 +246,19 @@ export function initializeLabGuide() {
   prerequisites.className = 'lab-guide-prerequisites'
   prerequisites.append(node('summary', 'labSceneTools'))
   const links = node('div')
-  for (const [name, href] of [
-    ['Git', 'https://git-scm.com/downloads/linux'],
-    ['Docker Compose', 'https://docs.docker.com/engine/install/'],
-    ['Caddy', 'https://caddyserver.com/docs/install'],
-    ['Ollama', 'https://docs.ollama.com/linux'],
-  ]) {
-    const link = node('a')
-    link.textContent = name
-    link.href = href
-    link.target = '_blank'
-    link.rel = 'noopener noreferrer'
-    links.append(link)
+  const renderPrerequisites = () => {
+    links.replaceChildren()
+    const resources = deployment === 'docker'
+      ? [['Docker Compose', 'https://docs.docker.com/engine/install/ubuntu/']]
+      : [['Node.js', 'https://nodejs.org/en/download'], ['Python', 'https://www.python.org/downloads/']]
+    for (const [name, href] of resources) {
+      const link = node('a')
+      link.textContent = name
+      link.href = href
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      links.append(link)
+    }
   }
   prerequisites.append(links)
   const demo = node('div')
@@ -503,6 +501,10 @@ export function initializeLabGuide() {
     progress.textContent = `STEP ${step + 1} / ${scenes.length}`
     heading.textContent = t(`settings:${mode === 'install' ? steps[step].title : 'labConnectionGuide'}`)
     description.textContent = t(`settings:${mode === 'install' ? steps[step].text : 'labConnectIntro'}`)
+    if (mode === 'install' && step === 0) {
+      description.textContent += ` ${t(deployment === 'docker' ? 'settings:labDockerRun' : 'settings:labSystemdRun')}`
+      renderPrerequisites()
+    }
     prerequisites.hidden = mode !== 'install' || step !== 0
     renderChoices()
     previous.disabled = step === 0
