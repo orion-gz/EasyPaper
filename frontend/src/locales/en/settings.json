@@ -334,8 +334,6 @@
   "labScenePrevious": "Previous scene",
   "labSceneNewPassword": "New password",
   "labSceneConfirmPassword": "Confirm new password",
-  "labSceneFirstLogin": "For a new installation, change the administrator password before public exposure. Open this SSH tunnel in a terminal on your PC to access the server privately.",
-  "labSceneFirstAccount": "With the tunnel running, open http://localhost:18000 on your PC, sign in with admin / admin, then change credentials in Settings → Account. Here localhost is the SSH tunnel entrance. Existing installations use their existing administrator account.",
   "connectionInferenceServer": "Inference server",
   "connectionServerName": "Server name",
   "connectionSetDefault": "Set default",
