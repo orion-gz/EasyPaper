@@ -24,7 +24,7 @@ for (const role of ['master', 'member']) {
     await expect(guide.locator('.lab-guide-footer button').first()).toBeDisabled()
     await expect(guide.locator('.lab-demo-transcript')).toContainText('install-docker.sh')
     await nextScene.click()
-    await expect(guide.locator('.lab-demo-transcript')).toContainText('ollama.com/install.sh')
+    await expect(guide.locator('.lab-demo-transcript')).toContainText('install-inference.sh')
     while (await nextScene.isEnabled()) await nextScene.click()
     await next.click()
     await expect(guide.locator('.lab-guide-progress')).toHaveText('STEP 2 / 3')

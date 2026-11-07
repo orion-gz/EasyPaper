@@ -15,6 +15,10 @@ require_supported_host() {
 install_docker() (
   set -euo pipefail
   require_supported_host
+  if [[ -e /var/lib/easypaper-deployment/docker.json ]]; then
+    echo 'This deployment is managed by update.sh. Use sudo bash deploy/lab/update.sh --deployment docker.' >&2
+    exit 1
+  fi
   exec 9>"$lock_file"
   flock -n 9 || { echo 'Another Docker installation is running.' >&2; exit 1; }
   cd "$source_dir"
