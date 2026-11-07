@@ -10,6 +10,10 @@ for (const deployment of ['docker', 'systemd']) {
     test(`${deployment}/${method}: complete setup order and safe shell commands`, () => {
       const [install, choice, access] = installationScenes(deployment, method, defaultGuideParameters)
       assert.deepEqual(choice, [])
+      assert.equal(install[0].commands[0][0], `sudo bash deploy/lab/install-${deployment}.sh`)
+      assert.equal(install.filter(scene => scene.title.startsWith('EasyPaper')).length, 1)
+      assert.ok(!JSON.stringify(install).includes(deployment === 'docker' ? 'install-systemd.sh' : 'install-docker.sh'))
+      assert.ok(!JSON.stringify(install).includes('apt-get'))
       const commands = install.flatMap(scene => scene.commands?.map(([command]) => command) || [])
       assert.ok(commands.some(command => command.includes('ollama.com/install.sh')))
       assert.ok(commands.some(command => command.includes('OLLAMA_HOST=') && command.includes('90-easypaper.conf')))

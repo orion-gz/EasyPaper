@@ -20,16 +20,9 @@ export function installationScenes(deployment, method, values) {
   const terminal = (title, command, note, parameters = []) => ({ kind: 'terminal', title, commands: [[command, ['✓']]], note: t(`settings:${note}`), parameters })
   const tunnel = terminal('SSH', tunnelCommand(values), 'labSshNote', ['host', 'user', 'port', 'localPort'])
   const admin = { kind: 'admin-login', title: `http://localhost:${values.localPort}`, url: `http://localhost:${values.localPort}`, note: t('settings:labAdminLoginNote'), copy: `http://localhost:${values.localPort}` }
-  const install = [
-    terminal('Git', 'sudo apt-get update && sudo apt-get install -y git curl ca-certificates', 'labToolsNote'),
-    terminal('EasyPaper', 'git clone https://github.com/orion-gz/EasyPaper.git && cd EasyPaper', 'labCloneNote'),
-  ]
-  if (deployment === 'docker') install.push(
-    terminal('Docker Compose', 'sudo apt-get install -y docker.io docker-compose-v2 && sudo systemctl enable --now docker', 'labToolsNote'),
-    terminal('EasyPaper · Docker', 'mkdir -p lab-data/home && sudo chown -R 1000:1000 lab-data', 'labDockerData'),
-    terminal('EasyPaper · Docker', 'sudo docker compose -f docker-compose.lab.yml up -d --build', 'labDockerRun'),
-  )
-  else install.push(terminal('EasyPaper · systemd', 'sudo bash deploy/lab/install-systemd.sh', 'labSystemdRun'))
+  const install = [deployment === 'docker'
+    ? terminal('EasyPaper · Docker', 'sudo bash deploy/lab/install-docker.sh', 'labDockerRun')
+    : terminal('EasyPaper · systemd', 'sudo bash deploy/lab/install-systemd.sh', 'labSystemdRun')]
   const bridge = "$(sudo docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
   const engineHost = deployment === 'docker' ? bridge : '127.0.0.1'
   const engineUrl = deployment === 'docker' ? 'http://host.docker.internal:11434' : 'http://127.0.0.1:11434'

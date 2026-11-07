@@ -6543,7 +6543,7 @@
     "description": "3. Prepare access"
   },
   "settings:labInstallIntro": {
-    "description": "Run these commands in order in your Ubuntu 24.04 server terminal. Choose an installation method."
+    "description": "On an Ubuntu 24.04 server booted with systemd, download the repository and open the EasyPaper project folder. Select your deployment environment and run its script with sudo. Internet access is required."
   },
   "settings:labMethodIntro": {
     "description": "Choose SSH if you have a lab server SSH account, or HTTPS to use a domain."
@@ -6584,20 +6584,11 @@
   "settings:labInvalidParameters": {
     "description": "Check the host, username, domain, model name and ports from 1 to 65535."
   },
-  "settings:labCloneNote": {
-    "description": "Download on the server. Run subsequent commands in the same terminal."
-  },
-  "settings:labToolsNote": {
-    "description": "Install tools on a fresh Ubuntu 24.04 server. For an existing Docker installation, check the official installation instructions."
-  },
-  "settings:labDockerData": {
-    "description": "Prepare the application data directory."
-  },
   "settings:labDockerRun": {
-    "description": "Wait for the build to finish. The service listens on 127.0.0.1:8000 on the server."
+    "description": "Docker: install Docker Engine and Compose if absent, build the image, prepare data directories and start the container. Existing Docker must have a working daemon and Compose v2. Data stays in lab-data by default; wait for the health check at 127.0.0.1:8000."
   },
   "settings:labSystemdRun": {
-    "description": "Installs to /opt/easypaper and starts at boot. If interrupted, fix the error and rerun the same command. Completed existing installations are not overwritten."
+    "description": "systemd: install Python, Node.js and application dependencies, build in /opt/easypaper and register the boot service. Data stays in /var/lib/easypaper. Docker is not required. Fix errors and rerun interrupted installs; completed installations are not overwritten."
   },
   "settings:labSshNote": {
     "description": "Run in your PC terminal. Enter your SSH password there and keep the terminal open. The server must allow SSH access and port forwarding."
