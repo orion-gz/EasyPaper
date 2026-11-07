@@ -40,6 +40,9 @@ for (const role of ['master', 'member']) {
     await expect(guide.locator('.lab-guide-controls button').nth(1)).toBeHidden()
     await page.keyboard.press('Escape')
     await expect(guide).not.toBeVisible()
+    await page.locator('#settings-nav-model').click()
+    await expect(page.locator('#tab-lab #lab-personal-form')).toHaveCount(0)
+    await expect(page.locator('#tab-model #lab-personal-form')).toBeVisible()
     await page.locator('#lab-personal-form .lab-help-button').first().click()
     await expect(page.locator('#lab-personal-provider-help')).toBeVisible()
     await expect(page.locator('#lab-personal-form .lab-field-heading').first().locator('.lab-help-button')).toHaveCSS('width', '16px')
@@ -59,6 +62,7 @@ for (const role of ['master', 'member']) {
     await page.screenshot({ path: `/tmp/lab-settings-${role}.png` })
     await page.keyboard.press('Escape')
     await expect(page.locator('#lab-personal-model-help')).toBeHidden()
+    await page.locator('#settings-nav-lab').click()
     await expect(page.locator('#lab-status')).toContainText('alice')
     await expect(page.locator('#lab-personal-model')).toHaveValue('test')
     if (role === 'master') {
@@ -114,7 +118,7 @@ test('personal CLI login polls instructions and stops after switching to a commo
   })
   await gotoApp(page)
   await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-general' } })))
-  await page.locator('#settings-nav-lab').click()
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-model' } })))
   await page.locator('#lab-cli-login').click()
   await expect(page.locator('#lab-cli-output')).toContainText('TEST-CODE')
   await page.evaluate(() => {
@@ -126,4 +130,32 @@ test('personal CLI login polls instructions and stops after switching to a commo
   const count = polls
   await page.waitForTimeout(2200)
   expect(polls).toBe(count)
+})
+
+test('member saves personal models in AI settings and sees errors there', async ({ page }) => {
+  await mockBaseRoutes(page)
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'member', lab_mode: true } }))
+  await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', model: 'test' } }))
+  let personal = {}
+  let fail = false
+  await page.route('**/api/me/model-settings', async route => {
+    if (route.request().method() === 'PUT') {
+      if (fail) return route.fulfill({ status: 400, json: { detail: 'Model unavailable' } })
+      personal = route.request().postDataJSON()
+    }
+    await route.fulfill({ json: personal })
+  })
+  await gotoApp(page)
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-model' } })))
+  await expect(page.locator('#lab-personal-model')).toHaveValue('test')
+  await page.locator('#lab-personal-model').fill('my-model')
+  await page.locator('#lab-personal-form button[type=submit]').click()
+  await expect.poll(() => personal.model).toBe('my-model')
+  await page.locator('#settings-nav-general').click()
+  await page.locator('#settings-nav-model').click()
+  await expect(page.locator('#lab-personal-model')).toHaveValue('my-model')
+  fail = true
+  await page.locator('#lab-personal-form button[type=submit]').click()
+  await expect(page.locator('#lab-personal-status')).toHaveText('Model unavailable')
+  await expect(page.locator('#lab-personal-status')).toBeVisible()
 })

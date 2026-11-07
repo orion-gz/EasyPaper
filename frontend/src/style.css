@@ -8474,7 +8474,7 @@ body.light-theme .chat-drawer {
   overflow-wrap: anywhere;
 }
 #lab-status:empty { display: none; }
-#tab-lab .form-actions { flex-wrap: wrap; }
+#tab-lab .form-actions, #lab-personal-form .form-actions { flex-wrap: wrap; }
 #lab-models {
   grid-row: 1 / span 2;
   padding: 12px 16px;
