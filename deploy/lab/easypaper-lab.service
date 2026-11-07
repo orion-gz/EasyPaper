@@ -8,6 +8,7 @@ User=easypaper
 Group=easypaper
 WorkingDirectory=/opt/easypaper/backend
 Environment=EASYPAPER_CONFIG_DIR=/var/lib/easypaper
+Environment=EASYPAPER_LOG_DIR=/var/lib/easypaper/logs
 Environment=DB_PATH=/var/lib/easypaper/easypaper.db
 Environment=UPLOAD_DIR=/var/lib/easypaper/uploads
 Environment=LIBRARY_DIR=/var/lib/easypaper/library

@@ -8527,11 +8527,15 @@ body.light-theme .chat-drawer {
 }
 .lab-advanced summary { cursor: pointer; font-weight: 600; padding: 12px 0; }
 /* Lab guide uses one spacing scale and the shared modal/control tokens. */
-.lab-guide-dialog {
+.lab-guide-dialog,
+.lab-introduction {
   --lab-space-sm: 8px;
   --lab-space-md: 12px;
   --lab-space-lg: 16px;
   --lab-inset: 24px;
+  --lab-control-height: 36px;
+}
+.lab-guide-dialog {
   width: min(720px, calc(100vw - 32px));
   max-width: 720px;
   max-height: calc(100dvh - 48px);
@@ -8604,12 +8608,13 @@ body.light-theme .chat-drawer {
 
 .lab-guide-controls,
 .lab-guide-footer { display: flex; align-items: center; gap: var(--lab-space-sm); flex-wrap: wrap; }
-.lab-guide-dialog .btn {
+.lab-guide-dialog .btn,
+.lab-introduction > .btn {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  min-height: var(--lab-control-height);
   margin: 0;
   padding: var(--lab-space-sm) var(--lab-space-lg);
   border: 1px solid transparent;
@@ -8618,11 +8623,12 @@ body.light-theme .chat-drawer {
   line-height: 1.5;
 }
 .lab-guide-controls > .btn { width: 36px; padding: 8px; }
-.lab-guide-controls button:disabled { opacity: .45; cursor: default; }
-.lab-guide-dialog .btn-secondary { border-color: var(--border-strong); }
+.lab-guide-dialog .btn-secondary,
+.lab-introduction > .btn-secondary { border-color: var(--border-strong); }
 .lab-guide-footer { justify-content: space-between; border-top: 1px solid var(--border); }
 .lab-guide-footer .btn { min-width: 80px; }
-.lab-guide-footer button:disabled { opacity: .45; cursor: default; }
+.lab-guide-dialog button:disabled,
+.lab-introduction > button:disabled { opacity: .45; cursor: default; transform: none; }
 .lab-guide-body > a {
   align-self: flex-start;
   color: var(--control-accent-text);
@@ -8631,6 +8637,7 @@ body.light-theme .chat-drawer {
   text-underline-offset: 3px;
 }
 .lab-guide-body > a:hover { color: var(--text-primary); }
+.lab-introduction > button:focus-visible,
 .lab-guide-dialog :focus-visible { outline: 2px solid var(--control-accent); outline-offset: 3px; }
 .lab-delete-button { background: var(--error); color: white; border: 1px solid var(--error); }
 .lab-delete-button:hover { filter: brightness(.9); }
@@ -8722,3 +8729,17 @@ body.light-theme .chat-drawer {
 }
 .lab-guide-prerequisites p { margin-top: 12px; }
 .lab-guide-tunnel { display: block; padding: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.lab-introduction { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lab-space-sm); }
+.lab-introduction > p { flex-basis: 100%; margin: 0; }
+.lab-guide-choices { display: flex; flex-wrap: wrap; gap: var(--lab-space-sm); }
+.lab-guide-choices [aria-pressed="true"] { border-color: var(--control-accent); color: var(--control-accent-text); background: var(--control-accent-soft); }
+.lab-guide-commands { display: grid; gap: var(--lab-space-sm); min-width: 0; }
+.lab-guide-parameters { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--lab-space-sm); }
+.lab-guide-parameters .form-group { min-width: 0; gap: var(--lab-space-sm); }
+.lab-guide-parameters label { display: block; margin: 0; }
+.lab-guide-parameters input { width: 100%; min-width: 0; min-height: var(--lab-control-height); box-sizing: border-box; padding: 6px var(--lab-space-md); font: inherit; }
+.lab-guide-parameters input:read-only { background: var(--bg-primary); color: var(--text-secondary); }
+.lab-guide-snippet { display: flex; align-items: flex-start; gap: var(--lab-space-sm); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--lab-space-md); background: var(--bg-elevated); }
+.lab-guide-snippet code { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 var(--font-mono); user-select: text; }
+.lab-guide-snippet .lab-guide-copy { flex-shrink: 0; padding: 6px; }

@@ -57,7 +57,7 @@ export async function initializeLabMode() {
     await api('/me/model-settings', 'DELETE')
     await refresh()
   })
-  document.getElementById('lab-personal-form').append(resetPersonal)
+  document.querySelector('#lab-personal-form > .form-actions').append(resetPersonal)
   let servers = []
   let defaultId = null
   const form = document.getElementById('lab-inference-form')
@@ -70,12 +70,26 @@ export async function initializeLabMode() {
   name.placeholder = t('settings:connectionServerName')
   name.setAttribute('aria-label', name.placeholder)
   name.required = true
-  form.prepend(serverSelect, name)
+  function settingsRow(control, title) {
+    const row = document.createElement('div')
+    row.className = 'form-group settings-row'
+    const label = document.createElement('label')
+    label.htmlFor = control.id
+    label.textContent = title
+    row.append(label, control)
+    return row
+  }
+  name.id = 'lab-server-name'
+  form.querySelector('.settings-section-heading').after(
+    settingsRow(serverSelect, t('settings:connectionInferenceServer')),
+    settingsRow(name, t('settings:connectionServerName')),
+  )
+  document.getElementById('lab-url').closest('.form-group').after(form.querySelector('.ssh-connection-form'))
   const personalServer = document.createElement('select')
   personalServer.id = 'lab-personal-server'
   personalServer.className = 'form-select'
   personalServer.setAttribute('aria-label', t('settings:connectionInferenceServer'))
-  document.getElementById('lab-personal-form').prepend(personalServer)
+  document.querySelector('#lab-personal-form .settings-section-heading').after(settingsRow(personalServer, t('settings:connectionInferenceServer')))
   function loadServer(server = {}) {
     name.value = server.name || ''
     syncSelectValue(document.getElementById('lab-engine'), server.engine || 'ollama')
@@ -106,7 +120,7 @@ export async function initializeLabMode() {
     const button = document.createElement('button')
     button.type = 'button'; button.className = 'btn btn-secondary'; button.textContent = label
     button.onclick = run(async () => { if (serverSelect.value) { await action(); await refresh() } })
-    form.append(button)
+    form.querySelector('.form-actions').append(button)
   }
   async function refresh(preferredId) {
     const profile = await api('/auth/me')

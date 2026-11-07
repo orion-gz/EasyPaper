@@ -1,7 +1,64 @@
-import { labScenes, mountLabScene } from './labGuideScenes.js'
+import { mountLabScene } from './labGuideScenes.js'
 import { t } from './i18n.js'
+import { icon } from './icons.js'
+import { defaultGuideParameters, validGuideParameters, installationScenes, connectionScenes } from './labGuideFlow.js'
 
 const labels = () => ({
+  labEngineInstallNote: t('settings:labEngineInstallNote'),
+  labEngineBindDocker: t('settings:labEngineBindDocker'),
+  labEngineBindSystemd: t('settings:labEngineBindSystemd'),
+  labEngineStartNote: t('settings:labEngineStartNote'),
+  labEnginePullNote: t('settings:labEnginePullNote'),
+  labEngineModelField: t('settings:labEngineModelField'),
+  labEngineConfigureNote: t('settings:labEngineConfigureNote'),
+  labAdminLoginNote: t('settings:labAdminLoginNote'),
+  labAccountScene: t('settings:labAccountScene'),
+  labAccountNote: t('settings:labAccountNote'),
+  labAccountCurrentPassword: t('settings:labAccountCurrentPassword'),
+  labAccountUsername: t('settings:labAccountUsername'),
+  labAccountSubmit: t('settings:labAccountSubmit'),
+  labAccountSaved: t('settings:labAccountSaved'),
+  labInviteSsh: t('settings:labInviteSsh'),
+  labInviteHttps: t('settings:labInviteHttps'),
+
+  labInstallGuide: t('settings:labInstallGuide'),
+  labConnectionGuide: t('settings:labConnectionGuide'),
+  labInstallFirst: t('settings:labInstallFirst'),
+  labInstallStep: t('settings:labInstallStep'),
+  labMethodStep: t('settings:labMethodStep'),
+  labAccessStep: t('settings:labAccessStep'),
+  labInstallIntro: t('settings:labInstallIntro'),
+  labMethodIntro: t('settings:labMethodIntro'),
+  labAccessIntro: t('settings:labAccessIntro'),
+  labSshChoice: t('settings:labSshChoice'),
+  labHttpsChoice: t('settings:labHttpsChoice'),
+  labHostField: t('settings:labHostField'),
+  labUserField: t('settings:labUserField'),
+  labPortField: t('settings:labPortField'),
+  labLocalPortField: t('settings:labLocalPortField'),
+  labDomainField: t('settings:labDomainField'),
+  labCopyCommand: t('settings:labCopyCommand'),
+  labCopiedCommand: t('settings:labCopiedCommand'),
+  labCopyFailed: t('settings:labCopyFailed'),
+  labInvalidParameters: t('settings:labInvalidParameters'),
+  labCloneNote: t('settings:labCloneNote'),
+  labToolsNote: t('settings:labToolsNote'),
+  labDockerData: t('settings:labDockerData'),
+  labDockerRun: t('settings:labDockerRun'),
+  labSystemdRun: t('settings:labSystemdRun'),
+  labSshNote: t('settings:labSshNote'),
+  labAdminNote: t('settings:labAdminNote'),
+  labDnsNote: t('settings:labDnsNote'),
+  labCaddyNote: t('settings:labCaddyNote'),
+  labProxyNote: t('settings:labProxyNote'),
+  labVerifyNote: t('settings:labVerifyNote'),
+  labConnectIntro: t('settings:labConnectIntro'),
+  labConnectNote: t('settings:labConnectNote'),
+  labServerUrlField: t('settings:labServerUrlField'),
+  labAccountExample: t('settings:labAccountExample'),
+  labPasswordExample: t('settings:labPasswordExample'),
+  labEngineSetupNote: t('settings:labEngineSetupNote'),
+
   labSceneTools: t('settings:labSceneTools'),
   labScenePrevious: t('settings:labScenePrevious'),
   labWizardServer: t('settings:labWizardServer'),
@@ -77,12 +134,19 @@ export function initializeLabGuide() {
     return element
   }
   const intro = node('p', 'labIntro')
-  const open = node('button', 'labGuideTitle')
+  const open = node('button', 'labInstallGuide')
   open.type = 'button'
   open.className = 'btn btn-secondary'
   const introduction = node('div')
   introduction.className = 'lab-introduction'
-  introduction.append(intro, open)
+  const connect = node('button', 'labConnectionGuide')
+  connect.type = 'button'
+  connect.className = 'btn btn-secondary'
+  connect.disabled = true
+  const unlockHint = node('p', 'labInstallFirst')
+  unlockHint.id = 'lab-guide-unlock-hint'
+  connect.setAttribute('aria-describedby', unlockHint.id)
+  introduction.append(intro, open, connect, unlockHint)
   panel.prepend(introduction)
   for (const input of panel.querySelectorAll('input, select, textarea')) {
     const key = `labHelp_${input.id.replace('lab-', '')}`
@@ -135,6 +199,7 @@ export function initializeLabGuide() {
   close.className = 'close-btn'
   close.removeAttribute('data-i18n')
   close.textContent = '×'
+  close.dataset.i18nAriaLabel = 'settings:labCloseGuide'
   close.setAttribute('aria-label', t('settings:labCloseGuide'))
   close.onclick = () => dialog.close()
   const header = node('div')
@@ -144,10 +209,26 @@ export function initializeLabGuide() {
   body.className = 'lab-guide-body'
   dialog.append(header, body)
 
+  let mode = 'install'
+  let deployment = 'docker'
+  let method = 'ssh'
+  let completedMethod
+  let opener = open
+  const parameters = { ...defaultGuideParameters }
+  // Only completion and method are persisted; hostnames and credentials are not.
+  try {
+    const saved = JSON.parse(localStorage.getItem('easypaper.labGuide.v1') || 'null')
+    if (['ssh', 'https'].includes(saved?.method)) {
+      completedMethod = method = saved.method
+      if (['docker', 'systemd'].includes(saved.deployment)) deployment = saved.deployment
+      connect.disabled = false
+      unlockHint.hidden = true
+    }
+  } catch { /* The guide also works when storage is unavailable. */ }
   const steps = [
-    { title: 'labGuideServer', text: 'labWizardServer' },
-    { title: 'labGuideEngine', text: 'labWizardEngine' },
-    { title: 'labGuideMembers', text: 'labWizardMembers' },
+    { title: 'labInstallStep', text: 'labInstallIntro' },
+    { title: 'labMethodStep', text: 'labMethodIntro' },
+    { title: 'labAccessStep', text: 'labAccessIntro' },
   ]
   let scenes
   let step = 0
@@ -182,14 +263,6 @@ export function initializeLabGuide() {
     links.append(link)
   }
   prerequisites.append(links)
-  const firstLogin = node('p')
-  firstLogin.textContent = t('settings:labSceneFirstLogin')
-  const tunnel = node('code')
-  tunnel.className = 'lab-guide-tunnel'
-  tunnel.textContent = 'ssh -N -L 18000:127.0.0.1:8000 user@lab-server'
-  const account = node('p')
-  account.textContent = t('settings:labSceneFirstAccount')
-  prerequisites.append(firstLogin, tunnel, account)
   const demo = node('div')
   demo.className = 'lab-guide-demo'
   const screen = node('div')
@@ -201,6 +274,7 @@ export function initializeLabGuide() {
   canvas.setAttribute('aria-hidden', 'true')
   screen.append(screenTitle, canvas)
   const sceneNote = node('p')
+  sceneNote.id = 'lab-guide-scene-note'
   const caption = node('p')
   caption.className = 'lab-guide-caption'
   const controls = node('div')
@@ -248,32 +322,31 @@ export function initializeLabGuide() {
   }
   const schedule = () => {
     stop()
-    if (!dialog.open || paused || reducedMotion.matches) return
+    if (!dialog.open || paused || reducedMotion.matches || elapsed >= animation.duration) return
     timer = setTimeout(() => {
       elapsed += 80
       paint()
-      // Leave each completed scene readable for five seconds. The final scene
-      // stays visible rather than restarting the whole sequence unexpectedly.
-      if (elapsed >= animation.duration + 5000) {
-        if (frame < scenes[step].length - 1) { frame += 1; renderFrame() }
-        else { paused = true; updateToggle() }
-      }
       schedule()
     }, 80)
   }
   const renderFrame = () => {
     stop()
     const scene = scenes[step][frame]
+    renderCommands(scene)
     followedElement = undefined
     screenTitle.textContent = scene.title
     sceneNote.textContent = scene.note
     animation = mountLabScene(canvas, scene)
     animation.update(animation.duration, true)
     screen.setAttribute('aria-label', `${scene.title}. ${scene.note}. ${canvas.textContent}`)
-    elapsed = paused || reducedMotion.matches ? animation.duration : 0
+    elapsed = reducedMotion.matches ? animation.duration : 0
     caption.textContent = `${frame + 1} / ${scenes[step].length}`
     backFrame.disabled = frame === 0
-    nextFrame.disabled = frame === scenes[step].length - 1
+    const valid = validGuideParameters(parameters, scene.parameters || [])
+    nextFrame.disabled = frame === scenes[step].length - 1 || !valid
+    next.disabled = frame < scenes[step].length - 1 || !valid
+    paused = false
+    updateToggle()
     paint()
     schedule()
   }
@@ -304,13 +377,121 @@ export function initializeLabGuide() {
   const stepHeader = node('div')
   stepHeader.className = 'lab-guide-step-header'
   stepHeader.append(heading, progress)
-  body.append(stepHeader, description, prerequisites, demo, reference)
+  const choices = node('div')
+  choices.className = 'lab-guide-choices'
+  const commandArea = node('div')
+  commandArea.className = 'lab-guide-commands'
+  const parameterFields = node('div')
+  parameterFields.className = 'lab-guide-parameters'
+  const snippet = node('div')
+  snippet.className = 'lab-guide-snippet'
+  const code = node('code')
+  code.tabIndex = 0
+  const copyStatus = node('p')
+  copyStatus.setAttribute('role', 'status')
+  const copy = button('labCopyCommand', async () => {
+    try {
+      await navigator.clipboard.writeText(code.textContent)
+      copyStatus.textContent = t('settings:labCopiedCommand')
+    } catch { copyStatus.textContent = t('settings:labCopyFailed') }
+  })
+  copy.className = 'icon-btn lab-guide-copy'
+  copy.removeAttribute('data-i18n')
+  copy.innerHTML = icon('clipboard', 16, 'aria-hidden="true"')
+  copy.dataset.i18nAriaLabel = 'settings:labCopyCommand'
+  copy.dataset.i18nTitle = 'settings:labCopyCommand'
+  copy.setAttribute('aria-label', t('settings:labCopyCommand'))
+  copy.title = t('settings:labCopyCommand')
+  snippet.append(code, copy)
+  commandArea.append(parameterFields, snippet, copyStatus)
+  const refreshScenes = () => {
+    scenes = mode === 'install' ? installationScenes(deployment, method, parameters) : connectionScenes(completedMethod, parameters)
+  }
+  const renderCommands = scene => {
+    parameterFields.replaceChildren()
+    copyStatus.textContent = ''
+    const updateCode = () => {
+      refreshScenes()
+      const current = scenes[step][frame]
+      code.textContent = current.copy || current.commands?.map(([command]) => command).join('\n') || ''
+      snippet.hidden = !code.textContent
+      copy.disabled = !validGuideParameters(parameters, scene.parameters || [])
+      nextFrame.disabled = frame === scenes[step].length - 1 || copy.disabled
+      next.disabled = frame < scenes[step].length - 1 || copy.disabled
+      copyStatus.textContent = copy.disabled ? t('settings:labInvalidParameters') : ''
+    }
+    const keys = { host: 'labHostField', user: 'labUserField', port: 'labPortField', localPort: 'labLocalPortField', domain: 'labDomainField', model: 'labEngineModelField' }
+    for (const name of scene.parameters || []) {
+      const label = node('label', keys[name])
+      const input = node('input')
+      input.className = 'lab-guide-input'
+      input.id = `lab-guide-param-${name}`
+      input.value = parameters[name]
+      input.readOnly = scene.readOnlyParameters?.includes(name) || false
+      input.setAttribute('aria-describedby', sceneNote.id)
+      input.type = name.toLowerCase().includes('port') ? 'number' : 'text'
+      if (input.type === 'number') { input.min = '1'; input.max = '65535' }
+      input.autocomplete = 'off'
+      input.spellcheck = false
+      label.htmlFor = input.id
+      input.oninput = () => {
+        parameters[name] = input.value.trim()
+        updateCode()
+        // Keep the existing animation in sync without stealing input focus.
+        stop()
+        animation = mountLabScene(canvas, scenes[step][frame])
+        screenTitle.textContent = scenes[step][frame].title
+        animation.update(animation.duration, true)
+        screen.setAttribute('aria-label', `${scene.note}. ${canvas.textContent}`)
+        elapsed = animation.duration
+        paint()
+      }
+      const field = node('div')
+      field.className = 'form-group'
+      field.append(label, input)
+      parameterFields.append(field)
+    }
+    updateCode()
+    commandArea.hidden = !scene.parameters?.length && snippet.hidden
+  }
+  const renderChoices = () => {
+    choices.replaceChildren()
+    const options = mode === 'install' && step === 0
+      ? [['docker', 'Docker'], ['systemd', 'systemd']]
+      : mode === 'install' && step === 1
+        ? [['ssh', t('settings:labSshChoice')], ['https', t('settings:labHttpsChoice')]] : []
+    choices.hidden = !options.length
+    for (const [value, text] of options) {
+      const choice = button(null, () => {
+        if (step === 0) deployment = value
+        else method = value
+        // Changing the installation path requires reviewing it before reconnecting.
+        completedMethod = undefined
+        connect.disabled = true
+        unlockHint.hidden = false
+        try { localStorage.removeItem('easypaper.labGuide.v1') } catch { /* optional persistence */ }
+        refreshScenes()
+        renderStep()
+      })
+      choice.textContent = text
+      choice.setAttribute('aria-pressed', String(value === (step === 0 ? deployment : method)))
+      choices.append(choice)
+    }
+  }
+  body.append(stepHeader, description, choices, prerequisites, demo, commandArea, reference)
   const footer = node('div')
   footer.className = 'lab-guide-footer'
   const previous = button('labWizardPrevious', () => { step -= 1; renderStep() })
   const next = button('labWizardNext', () => {
-    if (step === steps.length - 1) dialog.close()
-    else { step += 1; renderStep() }
+    if (step === scenes.length - 1) {
+      if (mode === 'install') {
+        completedMethod = method
+        connect.disabled = false
+        unlockHint.hidden = true
+        try { localStorage.setItem('easypaper.labGuide.v1', JSON.stringify({ method, deployment })) } catch { /* optional persistence */ }
+      }
+      dialog.close()
+    } else { step += 1; renderStep() }
   })
   next.removeAttribute('data-i18n')
   next.className = 'btn btn-primary'
@@ -319,30 +500,41 @@ export function initializeLabGuide() {
   const renderStep = () => {
     frame = 0
     paused = false
-    progress.textContent = `STEP ${step + 1} / ${steps.length}`
-    heading.textContent = t(`settings:${steps[step].title}`)
-    description.textContent = t(`settings:${steps[step].text}`)
-    prerequisites.hidden = step === 2
+    progress.textContent = `STEP ${step + 1} / ${scenes.length}`
+    heading.textContent = t(`settings:${mode === 'install' ? steps[step].title : 'labConnectionGuide'}`)
+    description.textContent = t(`settings:${mode === 'install' ? steps[step].text : 'labConnectIntro'}`)
+    prerequisites.hidden = mode !== 'install' || step !== 0
+    renderChoices()
     previous.disabled = step === 0
-    next.textContent = t(`settings:${step === 2 ? 'labWizardDone' : 'labWizardNext'}`)
+    next.textContent = t(`settings:${step === scenes.length - 1 ? 'labWizardDone' : 'labWizardNext'}`)
     updateToggle()
-    renderFrame()
+    const hasScenes = scenes[step].length > 0
+    demo.hidden = controls.hidden = commandArea.hidden = !hasScenes
+    next.disabled = false
+    if (hasScenes) renderFrame()
+    else stop()
     body.scrollTop = 0
     heading.focus()
   }
   reducedMotion.addEventListener('change', () => {
     updateToggle()
-    if (!animation) return
+    if (!animation || controls.hidden) return
     paint()
     schedule()
   })
   panel.append(dialog)
-  open.onclick = () => {
-    scenes = labScenes()
+  const showGuide = guideMode => {
+    mode = guideMode
+    opener = mode === 'install' ? open : connect
+    title.removeAttribute('data-i18n')
+    title.textContent = t(`settings:${mode === 'install' ? 'labInstallGuide' : 'labConnectionGuide'}`)
+    refreshScenes()
     step = 0
     paused = false
     dialog.showModal()
     renderStep()
   }
-  dialog.addEventListener('close', () => { stop(); open.focus() })
+  open.onclick = () => showGuide('install')
+  connect.onclick = () => showGuide('connect')
+  dialog.addEventListener('close', () => { stop(); opener.focus() })
 }

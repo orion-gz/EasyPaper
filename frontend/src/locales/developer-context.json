@@ -6207,7 +6207,7 @@
     "description": "Advanced · concurrency and authentication"
   },
   "settings:labIntro": {
-    "description": "Start with shared inference, invite members, then choose your model."
+    "description": "Prepare the server with the installation guide, then follow the connection guide."
   },
   "settings:labGuideServer": {
     "description": "1. Prepare server"
@@ -6458,12 +6458,6 @@
   "settings:labSceneConfirmPassword": {
     "description": "Lab setup demonstration: Confirm new password"
   },
-  "settings:labSceneFirstLogin": {
-    "description": "Lab setup demonstration: For a new installation, change the administrator password before public exposure. Open this SSH tunnel in a terminal on your PC to access the server privately."
-  },
-  "settings:labSceneFirstAccount": {
-    "description": "Lab setup demonstration: With the tunnel running, open http://localhost:18000 on your PC, sign in with admin / admin, then change credentials in Settings → Account. Here localhost is the SSH tunnel entrance. Existing installations use their existing administrator account."
-  },
   "settings:connectionInferenceServer": {
     "description": "Connection settings UI: Inference server"
   },
@@ -6529,5 +6523,167 @@
   },
   "settings:connectionUsePersonalSettings": {
     "description": "Button in personal mode to stop overriding the existing model configuration with a registered inference server."
+  },
+  "settings:labInstallGuide": {
+    "description": "Installation guide"
+  },
+  "settings:labConnectionGuide": {
+    "description": "Connection guide"
+  },
+  "settings:labInstallFirst": {
+    "description": "Finish the installation guide to unlock the connection guide."
+  },
+  "settings:labInstallStep": {
+    "description": "1. Download and install"
+  },
+  "settings:labMethodStep": {
+    "description": "2. Choose a connection"
+  },
+  "settings:labAccessStep": {
+    "description": "3. Prepare access"
+  },
+  "settings:labInstallIntro": {
+    "description": "Run these commands in order in your Ubuntu 24.04 server terminal. Choose an installation method."
+  },
+  "settings:labMethodIntro": {
+    "description": "Choose SSH if you have a lab server SSH account, or HTTPS to use a domain."
+  },
+  "settings:labAccessIntro": {
+    "description": "Complete each instruction, then select Next."
+  },
+  "settings:labSshChoice": {
+    "description": "SSH · Recommended"
+  },
+  "settings:labHttpsChoice": {
+    "description": "HTTPS · Domain required"
+  },
+  "settings:labHostField": {
+    "description": "SSH server address"
+  },
+  "settings:labUserField": {
+    "description": "SSH username"
+  },
+  "settings:labPortField": {
+    "description": "SSH port"
+  },
+  "settings:labLocalPortField": {
+    "description": "Local PC port"
+  },
+  "settings:labDomainField": {
+    "description": "Domain"
+  },
+  "settings:labCopyCommand": {
+    "description": "Copy command"
+  },
+  "settings:labCopiedCommand": {
+    "description": "Copied."
+  },
+  "settings:labCopyFailed": {
+    "description": "Could not copy. Select the command and copy it manually."
+  },
+  "settings:labInvalidParameters": {
+    "description": "Check the host, username, domain, model name and ports from 1 to 65535."
+  },
+  "settings:labCloneNote": {
+    "description": "Download on the server. Run subsequent commands in the same terminal."
+  },
+  "settings:labToolsNote": {
+    "description": "Install tools on a fresh Ubuntu 24.04 server. For an existing Docker installation, check the official installation instructions."
+  },
+  "settings:labDockerData": {
+    "description": "Prepare the application data directory."
+  },
+  "settings:labDockerRun": {
+    "description": "Wait for the build to finish. The service listens on 127.0.0.1:8000 on the server."
+  },
+  "settings:labSystemdRun": {
+    "description": "Installs to /opt/easypaper and starts at boot. If interrupted, fix the error and rerun the same command. Completed existing installations are not overwritten."
+  },
+  "settings:labSshNote": {
+    "description": "Run in your PC terminal. Enter your SSH password there and keep the terminal open. The server must allow SSH access and port forwarding."
+  },
+  "settings:labAdminNote": {
+    "description": "Open the address below in your PC browser. For a new installation, sign in with admin / admin and change the password in Settings → Account. Use your existing account for an existing installation."
+  },
+  "settings:labDnsNote": {
+    "description": "Register a domain and point its DNS A record (e.g. lab) to the server public IPv4. Forward TCP 80/443 on the router and allow them in server/cloud firewalls. Keep port 8000 private."
+  },
+  "settings:labCaddyNote": {
+    "description": "Install Caddy in the server terminal."
+  },
+  "settings:labProxyNote": {
+    "description": "Run on the server for a new Caddy configuration. If you have existing sites, add only this domain block to your existing Caddyfile."
+  },
+  "settings:labVerifyNote": {
+    "description": "Run on the server. HTTP 200 confirms a successful response."
+  },
+  "settings:labConnectIntro": {
+    "description": "Examples for the connection method selected during installation. These values are illustrative and do not change your connection settings."
+  },
+  "settings:labConnectNote": {
+    "description": "Desktop: enter the server URL below in Settings → Data → Server connection. Browser: open the same address. Sign in with the EasyPaper account and password created by your administrator; these are separate from your SSH credentials."
+  },
+  "settings:labServerUrlField": {
+    "description": "Server URL"
+  },
+  "settings:labAccountExample": {
+    "description": "EasyPaper account (example)"
+  },
+  "settings:labPasswordExample": {
+    "description": "EasyPaper password (example)"
+  },
+  "settings:labEngineSetupNote": {
+    "description": "After the shared engine connection test succeeds, enable Lab mode and save with your current administrator password. Create member accounts in the next scene."
+  },
+  "settings:labEngineInstallNote": {
+    "description": "Install Ollama in the server terminal. GPU use requires a working GPU driver. If already installed, continue to the next scene."
+  },
+  "settings:labEngineBindDocker": {
+    "description": "For a new Ollama setup. Bind to the Docker bridge address for the application container. The host firewall must allow the app container. For an existing Ollama setup, read the detailed instructions first."
+  },
+  "settings:labEngineBindSystemd": {
+    "description": "For a new Ollama setup. Bind to 127.0.0.1 so EasyPaper on this server can connect. For an existing Ollama setup, read the detailed instructions first."
+  },
+  "settings:labEngineStartNote": {
+    "description": "Restart Ollama and check its response. Continue only after the command succeeds."
+  },
+  "settings:labEnginePullNote": {
+    "description": "Download a model on the server and wait for completion. The example is qwen3:4b; edit the model name to use another model."
+  },
+  "settings:labEngineModelField": {
+    "description": "Ollama model name"
+  },
+  "settings:labEngineConfigureNote": {
+    "description": "In Settings → Lab, enter the engine URL and model below, save, then test the connection. Continue after the test succeeds. Loading the model can take time."
+  },
+  "settings:labAdminLoginNote": {
+    "description": "Open the address on your PC. Sign in with admin / admin for a new installation, or your existing administrator account. The next scene shows the password change."
+  },
+  "settings:labAccountScene": {
+    "description": "Settings → Account · Change password"
+  },
+  "settings:labAccountNote": {
+    "description": "In Settings → Account, enter the current password, username (you can keep admin), new password and confirmation, then change credentials. Use the new password when signing in again."
+  },
+  "settings:labAccountCurrentPassword": {
+    "description": "Current password"
+  },
+  "settings:labAccountUsername": {
+    "description": "New username"
+  },
+  "settings:labAccountSubmit": {
+    "description": "Change credentials"
+  },
+  "settings:labAccountSaved": {
+    "description": "New password saved"
+  },
+  "settings:labInviteSsh": {
+    "description": "Privately share the EasyPaper temporary password and SSH tunnel instructions with each member. Members open a tunnel on their own PC before using the localhost URL. SSH and EasyPaper accounts are separate."
+  },
+  "settings:labInviteHttps": {
+    "description": "Privately share the EasyPaper temporary password and HTTPS URL below with each member. A blank initial password is generated automatically. The password shown here is only an example."
+  },
+  "settings:labConnectSshPortNote": {
+    "description": "To change the port, return to the previous scene, edit it, and restart the SSH tunnel."
   }
 }
