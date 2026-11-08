@@ -9,12 +9,49 @@ import os
 from pathlib import Path
 import sys
 import time
+import tempfile
 
 OUTPUT = sys.stdout
 
 
 def emit(**data):
     print(json.dumps(data), file=OUTPUT, flush=True)
+
+
+def validate_runtime(snapshot, architectures):
+    """Run the installed vLLM config checks without creating an engine or weights."""
+    from vllm import ModelRegistry
+    from vllm.config import ModelConfig
+    model_config = ModelConfig(model=str(snapshot), tokenizer=str(snapshot), trust_remote_code=False)
+    check = ModelRegistry.is_text_generation_model
+    kwargs = {'model_config': model_config} if 'model_config' in inspect.signature(check).parameters else {}
+    if not check(architectures, **kwargs):
+        raise ValueError('This vLLM model is not a text-generation model; pooling/embedding models cannot be shared for chat.')
+    return getattr(model_config, 'quantization', None)
+
+
+def verify_files(snapshot, files):
+    """Validate real local files and chat rendering, without loading tensor data."""
+    from safetensors import safe_open
+    from transformers import AutoTokenizer
+    snapshot = Path(snapshot)
+    for name, size in files:
+        path = snapshot / name
+        if not path.is_file() or path.stat().st_size != size:
+            raise ValueError('Downloaded cache is incomplete or a file size is incorrect.')
+        if path.suffix == '.safetensors':
+            with safe_open(path, framework='np') as weights:
+                if not weights.keys():
+                    raise ValueError('A model weight file is empty.')
+        if path.name.endswith('.safetensors.index.json'):
+            for shard in set(json.loads(path.read_text()).get('weight_map', {}).values()):
+                if Path(shard).name != shard or not (snapshot / shard).is_file():
+                    raise ValueError('A weight shard is missing.')
+    tokenizer = AutoTokenizer.from_pretrained(str(snapshot), local_files_only=True, trust_remote_code=False)
+    try:
+        tokenizer.apply_chat_template([{'role': 'user', 'content': 'Hello'}], tokenize=False, add_generation_prompt=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError('This model has no usable chat template. Choose an instruction/chat model.') from exc
 
 
 def run(action, model_id, cache):
@@ -25,7 +62,11 @@ def run(action, model_id, cache):
         raise ValueError('Upgrade huggingface_hub in the vLLM environment to a version supporting hf_hub_download(tqdm_class=...).')
     architectures = list(ModelRegistry.get_supported_archs())
     if action == 'capabilities':
-        emit(architectures=architectures, version=version('vllm'))
+        Path(cache).mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryFile(dir=cache) as probe:
+            probe.write(b'cache probe')
+            probe.flush()
+        emit(architectures=architectures, version=version('vllm'), cache_writable=True)
         return
     from huggingface_hub.utils import tqdm
     api = HfApi(token=os.environ.get('HF_TOKEN'))
@@ -59,8 +100,14 @@ def run(action, model_id, cache):
                 last = now
             return result
 
+    files.sort(key=lambda file: file.rfilename.endswith('.safetensors'))
     paths = []
+    runtime_checked = False
+    quantization = None
     for file in files:
+        if file.rfilename.endswith('.safetensors') and not runtime_checked:
+            quantization = validate_runtime(Path(config_path).parent, config.get('architectures', []))
+            runtime_checked = True
         path = Path(hf_hub_download(model_id, file.rfilename, revision=revision, cache_dir=cache, tqdm_class=Progress))
         if path.stat().st_size != file.size:
             raise ValueError('Downloaded file size does not match the Hub manifest.')
@@ -68,24 +115,8 @@ def run(action, model_id, cache):
         completed += file.size
         emit(status='Downloading', total=total, completed=completed)
     emit(status='Verifying', total=total, completed=completed)
-    for path, size in paths:
-        if not path.is_file() or path.stat().st_size != size:
-            raise ValueError('Downloaded cache is incomplete.')
-    from safetensors import safe_open
-    from transformers import AutoTokenizer
-    AutoTokenizer.from_pretrained(str(Path(config_path).parent), local_files_only=True, trust_remote_code=False)
-    for path, _ in paths:
-        if path.suffix == '.safetensors':
-            with safe_open(path, framework='pt', device='cpu') as weights:
-                if not weights.keys():
-                    raise ValueError('A model weight file is empty.')
-    # Ensure every shard referenced by the index exists.
-    for path, _ in paths:
-        if path.name.endswith('.safetensors.index.json'):
-            for shard in set(json.loads(path.read_text()).get('weight_map', {}).values()):
-                if Path(shard).name != shard or not (path.parent / shard).is_file():
-                    raise ValueError('A weight shard is missing.')
-    emit(status='Completed', total=total, completed=completed, revision=revision)
+    verify_files(Path(config_path).parent, [(path.name, size) for path, size in paths])
+    emit(status='Completed', total=total, completed=completed, revision=revision, quantization=quantization or 'unquantized', validation='vllm-config-and-local-files')
 
 
 if __name__ == '__main__':
