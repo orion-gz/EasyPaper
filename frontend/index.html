@@ -948,7 +948,8 @@
           </form>
           <form id="lab-inference-form" class="modal-form">
             <div class="settings-section-heading"><strong data-i18n="settings:labInferenceSettings">Shared inference</strong></div>
-            <div class="form-group settings-row">
+            <div class="form-group settings-row"><label for="lab-server-enabled" data-i18n="settings:labServerEnabled">Shared server enabled</label><input id="lab-server-enabled" type="checkbox" checked></div>
+              <div class="form-group settings-row">
               <label for="lab-engine" data-i18n="settings:labEngine">Inference engine</label>
               <select class="form-select" id="lab-engine"><option value="ollama">Ollama</option><option value="vllm">vLLM</option></select>
             </div>

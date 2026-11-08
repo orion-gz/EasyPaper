@@ -122,6 +122,8 @@ def selection():
         common = inference_servers.get(personal['server_id'])
     else:
         common = configuration(with_secrets=personal.get('provider') not in ('claude_code', 'codex', 'antigravity'))
+    if enabled and personal.get('provider') not in ('claude_code', 'codex', 'antigravity') and (not common.get('enabled', True) or not common.get('lab_shared', True)):
+        raise HTTPException(409, 'The selected shared server is disabled. Choose another model.')
     provider = personal.get('provider', common['engine'])
     model = personal.get('model', common['model'])
     if provider in ('ollama', 'vllm'):

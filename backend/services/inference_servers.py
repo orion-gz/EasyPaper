@@ -7,6 +7,7 @@ import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, model_validator
 from services import db
+from services.lab_resources import MemoryPolicy
 from services.ssh_connections import SSHSettings, Credentials, secrets, manager
 
 
@@ -20,6 +21,9 @@ class ServerSettings(BaseModel):
     save_credentials: bool = False
     models: list[str] = Field(default_factory=list, max_length=100)
     model: str = Field(default='', max_length=200)
+    lab_shared: bool = False
+    enabled: bool = True
+    memory_policy: MemoryPolicy | None = None
     max_concurrent: int = Field(default=2, ge=1, le=64)
     per_user: int = Field(default=1, ge=1, le=16)
 
@@ -137,12 +141,16 @@ async def save(data, identifier=None):
 async def delete(identifier):
     data = state()
     server = get(identifier, False)
-    if data['default_id'] == identifier:
+    from services import lab
+    if data['default_id'] == identifier and not lab.settings()['enabled']:
         raise HTTPException(409, 'Choose another default server before deleting this server.')
     key = 'inference:' + identifier
     manager.guard(key)
     secrets.delete(key)
     data['servers'] = [s for s in data['servers'] if s['id'] != identifier]
+    if data['default_id'] == identifier:
+        candidates = [s for s in data['servers'] if s.get('lab_shared', True) and s.get('enabled', True)]
+        data['default_id'] = (candidates or data['servers'] or [{}])[0].get('id')
     with closing(db.get_db()) as conn, conn:
         conn.execute('INSERT OR REPLACE INTO lab_configuration VALUES (?,?)', ('inference_servers', json.dumps(data)))
         if server.get('legacy_credentials'):

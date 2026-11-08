@@ -1,7 +1,7 @@
 """Account-scoped inference scheduling and cancellation."""
 import asyncio
 from collections import defaultdict
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, AsyncExitStack
 from contextvars import ContextVar
 import functools
 import inspect
@@ -17,30 +17,47 @@ cache_scope = ContextVar('lab_cache_scope', default=None)
 
 
 @asynccontextmanager
-async def admission(username, server_id=None):
+async def admission(username, server_id=None, model=None):
     """Keep running counts when limits change, rather than creating a new pool."""
     from services import lab
     pools = _limits.setdefault(asyncio.get_running_loop(), {})
     state = pools.setdefault(server_id, {
-        'condition': asyncio.Condition(), 'total': 0, 'users': defaultdict(int),
+        'condition': asyncio.Condition(), 'total': 0, 'users': defaultdict(int), 'models': defaultdict(int), 'waiters': [],
     })
     condition = state['condition']
+    ticket = object()
     async with condition:
-        while True:
-            from services import inference_servers
-            common = inference_servers.get(server_id, with_secrets=False) if server_id else lab.configuration()
-            maximum = common.get('max_concurrent') or (8 if common['engine'] == 'vllm' else 2)
-            if state['total'] < maximum and state['users'].get(username, 0) < common.get('per_user', 1):
-                state['total'] += 1
-                state['users'][username] += 1
-                break
-            await condition.wait()
+        state['waiters'].append((ticket, username, model))
+        try:
+            while True:
+                from services import inference_servers, lab
+                common = inference_servers.get(server_id, with_secrets=False) if server_id else lab.configuration()
+                if lab.settings()['enabled'] and not common.get('enabled', True):
+                    raise RuntimeError('This shared server is disabled.')
+                maximum = common.get('max_concurrent') or (8 if common['engine'] == 'vllm' else 2)
+                per_user = common.get('per_user', 1)
+                specs = (common.get('memory_policy') or {}).get('models', {})
+                first = next((item for item, owner, selected in state['waiters']
+                              if state['users'].get(owner, 0) < per_user
+                              and state['models'].get(selected, 0) < specs.get(selected, {}).get('concurrency', maximum)), None)
+                if first is ticket and state['total'] < maximum:
+                    state['total'] += 1
+                    state['users'][username] += 1
+                    state['models'][model] += 1
+                    break
+                await condition.wait()
+        finally:
+            state['waiters'].remove((ticket, username, model))
+            condition.notify_all()
     try:
         yield
     finally:
         async with condition:
             state['total'] -= 1
             state['users'][username] -= 1
+            state['models'][model] -= 1
+            if not state['models'][model]:
+                del state['models'][model]
             if not state['users'][username]:
                 del state['users'][username]
             condition.notify_all()
@@ -87,11 +104,21 @@ def scoped(function):
         selection_token = selected_server.set(common)
         server_key = 'inference:' + common.get('id', 'default')
         try:
-            async with manager.lease(server_key), admission(username, common.get('id')):
-                lab.require_access(username)
+            if common['provider'] in ('claude_code', 'codex', 'antigravity'):
                 async for value in function(*args, **kwargs):
                     lab.require_access(username)
                     yield value
+            else:
+                from services.lab_models import tracking
+                async with manager.lease(server_key), AsyncExitStack() as stack:
+                    async with tracking(common, waiting=True):
+                        await stack.enter_async_context(admission(username, common.get('id'), common['model']))
+                    from services.lab_resources import admission as memory_admission
+                    async with memory_admission(common), tracking(common):
+                        lab.require_access(username)
+                        async for value in function(*args, **kwargs):
+                            lab.require_access(username)
+                            yield value
         finally:
             _running[username].discard(task)
             if not _running[username]:

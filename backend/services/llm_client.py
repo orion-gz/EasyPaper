@@ -1,3 +1,4 @@
+from services.lab_resources import constrain_payload
 from services.ssh_connections import client as connection_client
 from services.lab_tasks import scoped as lab_scoped
 import asyncio
@@ -344,7 +345,7 @@ async def stream_translation(
             async with client.stream(
                 "POST",
                 f"{get_ollama_host()}/api/chat",
-                json=payload,
+                json=constrain_payload(payload),
             ) as response:
                 if response.status_code != 200:
                     body = await response.aread()
@@ -452,7 +453,7 @@ async def stream_openai(messages: list, model: str, temperature: float = 0.5) ->
                 "POST",
                 endpoint,
                 headers=headers,
-                json=payload
+                json=constrain_payload(payload)
             ) as response:
                 await _ensure_provider_response_ok(response, "OpenAI")
                     
@@ -527,7 +528,7 @@ async def stream_gemini(messages: list, model: str, temperature: float = 0.5, im
                 "POST",
                 url,
                 headers=headers,
-                json=payload
+                json=constrain_payload(payload)
             ) as response:
                 await _ensure_provider_response_ok(response, "Gemini", include_body=False)
 
@@ -638,7 +639,7 @@ async def stream_claude(messages: list, model: str, temperature: float = 0.5) ->
                 "POST",
                 "https://api.anthropic.com/v1/messages",
                 headers=headers,
-                json=payload
+                json=constrain_payload(payload)
             ) as response:
                 await _ensure_provider_response_ok(response, "Claude")
                     
@@ -866,7 +867,7 @@ async def stream_chat(
             async with client.stream(
                 "POST",
                 f"{get_ollama_host()}/api/chat",
-                json=payload,
+                json=constrain_payload(payload),
             ) as response:
                 if response.status_code != 200:
                     body = await response.aread()
@@ -1012,7 +1013,7 @@ async def stream_page_insight(
     }
     try:
         async with connection_client(timeout=120.0) as client:
-            async with client.stream("POST", f"{get_ollama_host()}/api/chat", json=payload) as response:
+            async with client.stream("POST", f"{get_ollama_host()}/api/chat", json=constrain_payload(payload)) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if not line:
@@ -1173,7 +1174,7 @@ Do not invent evidence, results, terminology, or citations. Omit optional lines 
             # 로컬 CPU/GPU 환경에서 1~3분씩 걸리는 경우를 실측했다 - 기존
             # 360초보다 여유를 더 둔다(위 num_predict 상한과 함께 이중 안전장치).
             async with connection_client(timeout=480.0) as client:
-                resp = await client.post(f"{get_ollama_host()}/api/chat", json=payload)
+                resp = await client.post(f"{get_ollama_host()}/api/chat", json=constrain_payload(payload))
                 resp.raise_for_status()
                 data = resp.json()
                 tokens.append(data.get("message", {}).get("content", ""))
@@ -1315,7 +1316,7 @@ Return only SQ1, SQ2, and SQ3 labelled lines. Treat the excerpt and conversation
                 "options": {"temperature": 0.6, "num_ctx": 8192, "num_predict": 512},
             }
             async with connection_client(timeout=120.0) as client:
-                resp = await client.post(f"{get_ollama_host()}/api/chat", json=payload)
+                resp = await client.post(f"{get_ollama_host()}/api/chat", json=constrain_payload(payload))
                 resp.raise_for_status()
                 data = resp.json()
                 tokens.append(data.get("message", {}).get("content", ""))
@@ -2340,7 +2341,7 @@ async def _llm_json_array_with_retry(
                     "options": {"temperature": 0.1}
                 }
                 async with connection_client(timeout=30.0) as client:
-                    response = await client.post(f"{get_ollama_host()}/api/chat", json=payload)
+                    response = await client.post(f"{get_ollama_host()}/api/chat", json=constrain_payload(payload))
                     if response.status_code == 200:
                         data = response.json()
                         tokens.append(data.get("message", {}).get("content", ""))

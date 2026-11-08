@@ -153,15 +153,23 @@ async def execute(data, action, on_chunk):
                 pass
             finally:
                 process.stdin.close()
-        writer = asyncio.create_task(feed())
+        login_state = logins.get((data.account, data.provider)) if action == 'login' else None
+        if login_state is not None:
+            login_state['stdin'] = process.stdin
+        writer = None if action == 'login' else asyncio.create_task(feed())
         try:
             async with asyncio.timeout(600):
                 while chunk := await process.stdout.read(4096):
                     await on_chunk(chunk.decode('utf-8', errors='replace'))
-                await writer
+                if writer:
+                    await writer
                 return await process.wait()
         finally:
-            writer.cancel()
+            if writer:
+                writer.cancel()
+            if login_state is not None:
+                login_state.pop('stdin', None)
+                process.stdin.close()
     finally:
         active.get(data.account, set()).discard(task)
         stopper = await asyncio.create_subprocess_exec(*cleanup, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
@@ -208,7 +216,7 @@ async def run(data: Inference):
 async def provider(data: Operation):
     _, _, profile = settings(data)
     if not profile.get(data.action):
-        return {'status': 'terminal_required', 'instructions': 'Ask the operator to perform this authentication operation inside your personal isolated CLI environment.'}
+        return {'status': 'unsupported', 'instructions': 'This installed provider has no configured authentication-only command. Ask the administrator to provision a compatible CLI version.'}
     key = (data.account, data.provider)
     if data.action == 'status' and key in logins:
         state = logins[key]
@@ -222,6 +230,8 @@ async def provider(data: Operation):
     if lock(data).locked():
         raise HTTPException(409, 'This account/provider is busy.')
     if data.action == 'login':
+        if key in logins and logins[key]['status'] == 'pending':
+            raise HTTPException(409, 'A login is already pending for this account/provider.')
         state = {'status': 'pending', 'output': ''}
         async def login():
             async with lock(data):
@@ -259,3 +269,20 @@ async def cancel_account(data: AccountCancellation):
             logins.pop(key, None)
     await asyncio.gather(*tasks, return_exceptions=True)
     return {'cancelled': True}
+
+
+class LoginInput(Operation):
+    text: str = Field(min_length=1, max_length=4096)
+
+
+@app.post('/provider/input')
+async def provider_input(data: LoginInput):
+    state = logins.get((data.account, data.provider))
+    if not state or state['status'] != 'pending' or not state.get('stdin'):
+        raise HTTPException(409, 'No active login is accepting input.')
+    try:
+        state['stdin'].write(data.text.encode())
+        await state['stdin'].drain()
+    except (BrokenPipeError, ConnectionResetError):
+        raise HTTPException(409, 'Login has finished.')
+    return {'accepted': True}

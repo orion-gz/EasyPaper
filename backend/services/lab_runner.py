@@ -57,3 +57,15 @@ async def cancel_account(identifier):
     async with client() as connection:
         response = await connection.post('/cancel-account', json={'account': identifier})
         response.raise_for_status()
+
+
+async def send_input(username, provider, text):
+    user = lab.require_access(username)
+    if not user or provider not in PROVIDERS:
+        raise HTTPException(404, 'Provider not found.')
+    async with client() as connection:
+        response = await connection.post('/provider/input', json={
+            'account': user['id'], 'provider': provider, 'text': text}, timeout=15)
+        if response.status_code != 200:
+            raise HTTPException(409, 'No active login is accepting input.')
+        return {'accepted': True}

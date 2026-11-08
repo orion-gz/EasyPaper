@@ -8743,3 +8743,13 @@ body.light-theme .chat-drawer {
 .lab-guide-snippet { display: flex; align-items: flex-start; gap: var(--lab-space-sm); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--lab-space-md); background: var(--bg-elevated); }
 .lab-guide-snippet code { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 var(--font-mono); user-select: text; }
 .lab-guide-snippet .lab-guide-copy { flex-shrink: 0; padding: 6px; }
+
+/* Lab choices are separate from preserved personal provider controls. */
+.lab-models-active [data-personal-models],
+.lab-models-active #lab-personal-form,
+.lab-models-active #setting-ollama-host-group,
+.lab-models-active #setting-apikeys-section,
+.lab-models-active #pull-model-section,
+.lab-models-active #ollama-install-section { display: none !important; }
+.lab-auth-terminal { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+#lab-model-settings[hidden], #lab-model-settings [hidden] { display: none !important; }

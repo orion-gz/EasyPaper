@@ -78,3 +78,25 @@ async def test_failed_logout_is_not_reported_as_disconnected(monkeypatch):
     runner.locks.clear()
     result = await runner.provider(runner.Operation(account='d' * 32, provider='codex', action='logout'))
     assert result['status'] == 'failed'
+
+
+@pytest.mark.asyncio
+async def test_auth_input_is_account_scoped_and_only_for_pending_login():
+    class Input:
+        def __init__(self):
+            self.values = []
+        def write(self, value):
+            self.values.append(value)
+        async def drain(self):
+            pass
+    stream = Input()
+    runner.logins.clear()
+    runner.logins[('a' * 32, 'codex')] = {'status': 'pending', 'stdin': stream}
+    await runner.provider_input(runner.LoginInput(account='a' * 32, provider='codex', text='code\n'))
+    assert stream.values == [b'code\n']
+    with pytest.raises(HTTPException):
+        await runner.provider_input(runner.LoginInput(account='b' * 32, provider='codex', text='wrong\n'))
+    runner.logins[('a' * 32, 'codex')]['status'] = 'connected'
+    with pytest.raises(HTTPException):
+        await runner.provider_input(runner.LoginInput(account='a' * 32, provider='codex', text='late\n'))
+    runner.logins.clear()

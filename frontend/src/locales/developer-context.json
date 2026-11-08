@@ -6685,5 +6685,92 @@
   },
   "settings:labConnectSshPortNote": {
     "description": "To change the port, return to the previous scene, edit it, and restart the SSH tunnel."
+  },
+  "settings:labModelSelection": {
+    "description": "Lab model management UI: Lab AI model settings"
+  },
+  "settings:labChooseModel": {
+    "description": "Lab model management UI: Choose a model"
+  },
+  "settings:labCliProviders": {
+    "description": "Lab model management UI: Personal CLI providers"
+  },
+  "settings:labSharedModels": {
+    "description": "Lab model management UI: Lab shared models"
+  },
+  "settings:labLoginRequired": {
+    "description": "Lab model management UI: Sign in to this provider below before using it."
+  },
+  "settings:labAuthInput": {
+    "description": "Lab model management UI: Authentication input (Enter to send)"
+  },
+  "settings:labStatusReconnecting": {
+    "description": "Lab model management UI: Reconnecting to model status…"
+  },
+  "settings:labServerEnabled": {
+    "description": "Lab model management UI: Shared server enabled"
+  },
+  "settings:labState_unloaded": {
+    "description": "Lab model management UI: Unloaded"
+  },
+  "settings:labState_loading": {
+    "description": "Lab model management UI: Loading"
+  },
+  "settings:labState_idle": {
+    "description": "Lab model management UI: Idle"
+  },
+  "settings:labState_inferencing": {
+    "description": "Lab model management UI: Inferencing"
+  },
+  "settings:labState_error": {
+    "description": "Lab model management UI: Error"
+  },
+  "settings:labMemoryPolicy": {
+    "description": "Lab model management UI: GPU memory policy"
+  },
+  "settings:labMemoryEnforce": {
+    "description": "Lab model management UI: Enforce an assigned memory budget"
+  },
+  "settings:labMemoryBudget": {
+    "description": "Lab model management UI: Assigned budget (GiB)"
+  },
+  "settings:labMemoryLoaded": {
+    "description": "Lab model management UI: Maximum resident models"
+  },
+  "settings:labMemoryParameters": {
+    "description": "Lab model management UI: Parameters (billions)"
+  },
+  "settings:labMemoryBits": {
+    "description": "Lab model management UI: Weight quantization (bits)"
+  },
+  "settings:labMemoryContext": {
+    "description": "Lab model management UI: Context tokens"
+  },
+  "settings:labMemoryKv": {
+    "description": "Lab model management UI: KV bytes per token"
+  },
+  "settings:labMemoryConcurrency": {
+    "description": "Lab model management UI: Concurrent sequences"
+  },
+  "settings:labMemoryMeasured": {
+    "description": "Lab model management UI: Measured allocation floor (GiB, 0 = none)"
+  },
+  "settings:labMemoryPlan": {
+    "description": "Lab model management UI: Check GPU and saved serving plan"
+  },
+  "settings:labUnload": {
+    "description": "Lab model management UI: Unload idle Ollama model"
+  },
+  "settings:labMemoryTelemetryMissing": {
+    "description": "Lab model management UI: GPU telemetry unavailable. Assign a verified server budget."
+  },
+  "settings:labMemoryNoPlan": {
+    "description": "Lab model management UI: No fitting saved configuration. Save estimates and check the budget."
+  },
+  "settings:labMemoryNote": {
+    "description": "Lab model management UI: Estimates include a 20% margin. Verify model architecture, KV size and concurrency. Budgets on the same GPU must not overlap. vLLM process memory remains operator-managed."
+  },
+  "settings:labModelActivity": {
+    "description": "Aggregate active and queued requests for a shared model in the selection dropdown."
   }
 }

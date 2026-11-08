@@ -9,6 +9,8 @@ test('administrator selects and edits independent inference servers', async ({ p
   ]
   let personal = {}
   await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'admin', role: 'master', lab_mode: true } }))
+  await page.route('**/api/lab/models', route => route.fulfill({ json: { enabled: true, models: servers.map(server => ({ server_id: server.id, provider: server.engine, model: server.model, name: server.name, state: 'idle', available: true, active_requests: 0, queued_requests: 0 })) } }))
+  await page.route('**/api/lab/models/events', route => route.fulfill({ contentType: 'text/event-stream', body: ': heartbeat\n\n' }))
   await page.route('**/api/lab/users', route => route.fulfill({ json: [] }))
   await page.route('**/api/lab/inference', route => route.fulfill({ json: servers[0] }))
   await page.route('**/api/inference/servers', route => route.fulfill({ json: { servers, default_id: 'one' } }))
@@ -22,8 +24,8 @@ test('administrator selects and edits independent inference servers', async ({ p
   await expect(page.locator('#lab-url')).toHaveValue('http://one:11434')
   await page.locator('#lab-server-select').selectOption('two', { force: true })
   await expect(page.locator('#lab-url')).toHaveValue('https://two/v1')
-  await page.locator('#lab-personal-server').selectOption('two', { force: true })
-  await page.locator('#lab-personal-form button[type=submit]').click()
+  await page.locator('#settings-nav-model').click()
+  await page.locator('#lab-model-selection').selectOption(JSON.stringify(['vllm', 'two', 'model']))
   await expect.poll(() => personal.server_id).toBe('two')
   expect(personal.provider).toBe('vllm')
   expect(personal.model).toBe('model')
