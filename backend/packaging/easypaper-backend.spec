@@ -40,6 +40,8 @@ a = Analysis(
     binaries=pip_binaries,
     datas=pip_datas + [
         (parser_wheel_dir, "parser-wheels"),
+        # Executed by the configured external vLLM Python, not the frozen API.
+        (os.path.join(BACKEND_DIR, "services", "hf_model_worker.py"), "services"),
         # DEFAULT_PROMPT_TEMPLATE 폴백이 config.py에 있어 필수는 아니지만,
         # 사용자가 커스터마이징하기 전 기본 템플릿 파일을 그대로 들고 있으면
         # 첫 실행 UX가 서버/Docker 배포와 동일해진다.

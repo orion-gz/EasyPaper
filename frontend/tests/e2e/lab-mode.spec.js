@@ -6,6 +6,7 @@ for (const role of ['master', 'member']) {
     await mockBaseRoutes(page)
     await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role, lab_mode: true } }))
     await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', url: 'http://localhost:11434', models: ['test'], model: 'test' } }))
+    await page.route('**/api/inference/servers', route => route.fulfill({ json: { servers: [{ id: 'gpu', name: 'GPU', engine: 'ollama', models: ['test'], model: 'test' }], default_id: 'gpu' } }))
     await page.route('**/api/me/model-settings', route => route.fulfill({ json: {} }))
     await page.route('**/api/lab/users', route => route.fulfill({ json: [{ id: 'member-id', username: '<script>alert(1)</script>', role: 'member', active: true }] }))
     await gotoApp(page)
@@ -46,7 +47,8 @@ for (const role of ['master', 'member']) {
     await page.locator('#lab-personal-form .lab-help-button').first().click()
     await expect(page.locator('#lab-personal-provider-help')).toBeVisible()
     await expect(page.locator('#lab-personal-form .lab-field-heading').first().locator('.lab-help-button')).toHaveCSS('width', '16px')
-    await page.locator('#lab-personal-model').click()
+    await page.locator('button[aria-controls="lab-personal-shared-model-picker-panel"]').click()
+    await page.keyboard.press('Escape')
     await expect(page.locator('#lab-personal-provider-help')).toBeHidden()
     await expect(page.locator('#lab-personal-form .lab-help-button').first()).toHaveAttribute('aria-expanded', 'false')
     await page.locator('#lab-personal-form .lab-help-button').first().click()
@@ -64,7 +66,7 @@ for (const role of ['master', 'member']) {
     await expect(page.locator('#lab-personal-model-help')).toBeHidden()
     await page.locator('#settings-nav-lab').click()
     await expect(page.locator('#lab-status')).toContainText('alice')
-    await expect(page.locator('#lab-personal-model')).toHaveValue('test')
+    await expect(page.locator('#lab-personal-shared-model')).toHaveValue('test')
     if (role === 'master') {
       await expect(page.locator('#lab-admin')).toBeVisible()
       const enabled = await page.locator('#lab-enabled').isChecked()
@@ -136,6 +138,7 @@ test('member saves personal models in AI settings and sees errors there', async 
   await mockBaseRoutes(page)
   await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'member', lab_mode: true } }))
   await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', model: 'test' } }))
+  await page.route('**/api/inference/servers', route => route.fulfill({ json: { servers: [{ id: 'gpu', name: 'GPU', engine: 'ollama', models: ['test', 'my-model'], model: 'test' }], default_id: 'gpu' } }))
   let personal = {}
   let fail = false
   await page.route('**/api/me/model-settings', async route => {
@@ -147,13 +150,13 @@ test('member saves personal models in AI settings and sees errors there', async 
   })
   await gotoApp(page)
   await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-model' } })))
-  await expect(page.locator('#lab-personal-model')).toHaveValue('test')
-  await page.locator('#lab-personal-model').fill('my-model')
+  await expect(page.locator('#lab-personal-shared-model')).toHaveValue('test')
+  await page.locator('#lab-personal-shared-model').selectOption('my-model', { force: true })
   await page.locator('#lab-personal-form button[type=submit]').click()
   await expect.poll(() => personal.model).toBe('my-model')
   await page.locator('#settings-nav-general').click()
   await page.locator('#settings-nav-model').click()
-  await expect(page.locator('#lab-personal-model')).toHaveValue('my-model')
+  await expect(page.locator('#lab-personal-shared-model')).toHaveValue('my-model')
   fail = true
   await page.locator('#lab-personal-form button[type=submit]').click()
   await expect(page.locator('#lab-personal-status')).toHaveText('Model unavailable')

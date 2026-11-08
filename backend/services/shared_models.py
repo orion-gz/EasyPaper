@@ -184,6 +184,15 @@ async def ollama(record, server, update):
                         continue
                     event = json.loads(line)
                     if event.get('error'):
+                        reason = str(event['error']).lower()
+                        if 'not found' in reason or 'does not exist' in reason:
+                            raise ValueError('Ollama model or tag does not exist. Check the model ID.')
+                        if 'version' in reason:
+                            raise ValueError('This model requires a newer Ollama version. Upgrade the inference server.')
+                        if 'space' in reason:
+                            raise ValueError('Ollama has insufficient disk space for this model.')
+                        if 'unauthorized' in reason or 'denied' in reason:
+                            raise ValueError('Ollama registry authentication or access was denied.')
                         raise ValueError('Ollama rejected the model. Check its ID/tag, engine version, registry access and free disk space.')
                     if event.get('digest') and event.get('total'):
                         layers[event['digest']] = (event.get('completed', 0), event['total'])

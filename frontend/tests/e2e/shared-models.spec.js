@@ -33,6 +33,7 @@ async function setup(page, role = 'master') {
   await page.goto('/index.html')
   await page.locator('#sidebar-settings-btn').click()
   await page.locator('#settings-nav-lab').click()
+  await expect(page.locator('#lab-inference-form')).not.toHaveAttribute('inert', '')
   return { server, rows, requests }
 }
 
@@ -44,16 +45,16 @@ test('master adds a recommendation, returns to progress, and disables sharing', 
   await page.getByRole('button', { name: 'Add and download', exact: true }).click()
   await expect(page.locator('#lab-shared-model-list')).toContainText('50%')
   expect(requests).toEqual([{ model_id: 'qwen3.5:4b' }])
-  await expect(page.locator('#lab-personal-model option')).toHaveCount(0)
+  await expect(page.locator('#lab-personal-shared-model option')).toHaveCount(0)
   await page.locator('#settings-nav-account').click()
   await page.locator('#settings-nav-lab').click()
   await expect(page.locator('#lab-shared-model-list')).toContainText('Downloading')
   rows[0] = { ...rows[0], status: 'Completed', enabled: true, verified: true, completed: 1024 ** 3, percent: 100, available: true }
   server.models = ['qwen3.5:4b']; server.model = 'qwen3.5:4b'
   await expect(page.locator('#lab-shared-model-list')).toContainText('Completed', { timeout: 10000 })
-  await expect(page.locator('#lab-personal-model')).toHaveValue('qwen3.5:4b')
+  await expect(page.locator('#lab-personal-shared-model')).toHaveValue('qwen3.5:4b')
   await page.locator('#lab-shared-model-list').getByRole('button', { name: 'Disable', exact: true }).click()
-  await expect(page.locator('#lab-personal-model option')).toHaveCount(0)
+  await expect(page.locator('#lab-personal-shared-model option')).toHaveCount(0)
   await page.locator('#lab-shared-model-list').getByRole('button', { name: 'Remove sharing (keep files)' }).click()
   await expect(page.locator('#lab-shared-model-list')).toContainText('No shared models')
 })
@@ -61,6 +62,7 @@ test('master adds a recommendation, returns to progress, and disables sharing', 
 test('direct input displays failures safely and allows retry and cancellation', async ({ page }) => {
   const { rows } = await setup(page)
   await page.locator('#lab-model-id').fill('custom:tag')
+  await expect(page.locator('#lab-model-id')).toHaveValue('custom:tag')
   await page.getByRole('button', { name: 'Add and download', exact: true }).click()
   await expect(page.locator('#lab-shared-model-list')).toContainText('custom:tag')
   rows[0].status = 'Failed'; rows[0].error = '<script>invalid model</script>'
@@ -74,9 +76,24 @@ test('direct input displays failures safely and allows retry and cancellation', 
 
 test('member model choices synchronize without management controls', async ({ page }) => {
   const { server } = await setup(page, 'member')
+  await page.locator('#settings-nav-model').click()
   await expect(page.locator('#lab-admin')).toBeHidden()
   server.models = ['qwen3.5:4b']; server.model = 'qwen3.5:4b'
-  await expect(page.locator('#lab-personal-model')).toHaveValue('qwen3.5:4b', { timeout: 10000 })
+  await expect(page.locator('#lab-personal-shared-model')).toHaveValue('qwen3.5:4b', { timeout: 10000 })
   server.models = []; server.model = ''
-  await expect(page.locator('#lab-personal-model option')).toHaveCount(0, { timeout: 10000 })
+  await expect(page.locator('#lab-personal-shared-model option')).toHaveCount(0, { timeout: 10000 })
+})
+
+test('switching to personal CLI providers preserves a usable text input', async ({ page }) => {
+  await setup(page, 'member')
+  await page.locator('#settings-nav-model').click()
+  await expect(page.locator('#lab-personal-form')).not.toHaveAttribute('inert', '')
+  await page.locator('#lab-personal-provider').selectOption('codex', { force: true })
+  await expect(page.locator('#lab-personal-model')).toBeVisible()
+  await page.locator('#lab-personal-model').fill('personal-model')
+  await page.locator('#lab-personal-provider').selectOption('ollama', { force: true })
+  await expect(page.locator('#lab-personal-model')).toBeHidden()
+  await page.locator('#lab-personal-provider').selectOption('codex', { force: true })
+  await expect(page.locator('#lab-personal-model')).toHaveValue('personal-model')
+  await expect(page.locator('#lab-personal-model')).toBeEditable()
 })

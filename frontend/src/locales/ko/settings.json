@@ -243,7 +243,7 @@
   "labFailed": "요청을 처리하지 못했습니다.",
   "labEngine": "추론 엔진",
   "labUrl": "서버 주소 (vLLM: /v1 포함)",
-  "labModels": "허용 모델 (줄마다 하나)",
+  "labModels": "공유 모델",
   "labDefaultModel": "모델",
   "labApiKey": "API 키 (비워 두면 기존 값 유지)",
   "labProvider": "개인 모델 제공자",

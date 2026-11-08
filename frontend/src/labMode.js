@@ -98,8 +98,12 @@ export async function initializeLabMode() {
   function setDefaultModels(server = {}) {
     const control = document.getElementById('lab-default-model')
     const selected = control.value
-    control.replaceChildren(...(server.models || []).map(model => new Option(model, model)))
-    control.value = server.models?.includes(selected) ? selected : server.model || ''
+    const allowed = server.models || []
+    if (JSON.stringify([...control.options].map(option => option.value)) !== JSON.stringify(allowed)) {
+      control.replaceChildren(...allowed.map(model => new Option(model, model)))
+    }
+    const value = allowed.includes(selected) ? selected : server.model || ''
+    if (control.value !== value) syncSelectValue(control, value)
   }
   let modelRefresh = false
   async function updateModels() {
@@ -113,24 +117,37 @@ export async function initializeLabMode() {
     } finally { modelRefresh = false }
   }
   const modelManager = sharedModelManager({ api, container: document.getElementById('lab-shared-models'), report, changed: updateModels })
+  document.getElementById('lab-engine').addEventListener('change', () => { void modelManager.load() })
   let personalTimer
-  function updatePersonalModels() {
+  const personalInput = document.getElementById('lab-personal-model')
+  const personalModels = document.createElement('select')
+  personalModels.id = 'lab-personal-shared-model'
+  personalModels.className = 'form-select'
+  personalModels.setAttribute('aria-label', t('settings:labDefaultModel'))
+  const personalModelContainer = document.createElement('div')
+  personalModelContainer.append(personalModels)
+  personalInput.after(personalModelContainer)
+  function personalModelControl() {
+    return ['ollama', 'vllm'].includes(providerSelect.value) ? personalModels : personalInput
+  }
+  function updatePersonalModels(preferredModel) {
     const server = servers.find(s => s.id === personalServer.value)
-    const current = document.getElementById('lab-personal-model')
     const local = ['ollama', 'vllm'].includes(providerSelect.value)
-    let control = current
-    if (local !== (current.tagName === 'SELECT')) {
-      control = document.createElement(local ? 'select' : 'input')
-      control.id = current.id; control.className = local ? 'form-select' : current.className
-      control.setAttribute('aria-label', t('settings:labDefaultModel'))
-      control.value = current.value
-      current.replaceWith(control)
-    }
+    personalInput.hidden = local
+    personalInput.disabled = local
+    personalModelContainer.hidden = !local
+    personalModels.disabled = !local
+    personalModels.required = local
+    document.querySelector('#lab-personal-form label[for="lab-personal-model"], #lab-personal-form label[for="lab-personal-shared-model"]').htmlFor = local ? personalModels.id : personalInput.id
     if (local) {
-      const value = current.value
-      control.replaceChildren(...(server?.models || []).map(model => new Option(model, model)))
-      control.value = server?.models.includes(value) ? value : server?.model || ''
-    }
+      const value = typeof preferredModel === 'string' ? preferredModel : personalModels.value
+      const allowed = server?.models || []
+      if (JSON.stringify([...personalModels.options].map(option => option.value)) !== JSON.stringify(allowed)) {
+        personalModels.replaceChildren(...allowed.map(model => new Option(model, model)))
+      }
+      const selected = allowed.includes(value) ? value : server?.model || ''
+      if (personalModels.value !== selected) syncSelectValue(personalModels, selected)
+    } else if (typeof preferredModel === 'string') personalInput.value = preferredModel
   }
   providerSelect.addEventListener('change', updatePersonalModels)
   async function pollPersonalModels() {
@@ -145,7 +162,7 @@ export async function initializeLabMode() {
     document.getElementById('lab-url').value = server.url || ''
     setDefaultModels(server)
     void modelManager.load(server)
-    document.getElementById('lab-default-model').value = server.model || ''
+    syncSelectValue(document.getElementById('lab-default-model'), server.model || '')
     document.getElementById('lab-total-limit').value = server.max_concurrent || 2
     document.getElementById('lab-user-limit').value = server.per_user || 1
     document.getElementById('lab-api-key').value = ''
@@ -156,9 +173,8 @@ export async function initializeLabMode() {
     const server = servers.find(s => s.id === personalServer.value)
     if (server) {
       syncSelectValue(document.getElementById('lab-personal-provider'), server.engine)
-      document.getElementById('lab-personal-model').value = server.model
       updateProviderControls()
-      updatePersonalModels()
+      updatePersonalModels(server.model)
     }
   }
   for (const [label, action] of [
@@ -178,10 +194,12 @@ export async function initializeLabMode() {
   async function refresh(preferredId) {
     pendingRefreshes += 1
     personalForm.inert = true
+    form.inert = true
     try { await refreshSettings(preferredId) }
     finally {
       pendingRefreshes -= 1
       personalForm.inert = pendingRefreshes > 0
+      form.inert = pendingRefreshes > 0
     }
   }
   async function refreshSettings(preferredId) {
@@ -208,9 +226,8 @@ export async function initializeLabMode() {
     syncSelectValue(serverSelect, servers.some(s => s.id === previous) ? previous : defaultId || '')
     syncSelectValue(personalServer, personal.server_id || defaultId || '')
     syncSelectValue(document.getElementById('lab-personal-provider'), personal.provider || common.engine)
-    document.getElementById('lab-personal-model').value = personal.model || common.model
     updateProviderControls()
-    updatePersonalModels()
+    updatePersonalModels(personal.model || common.model)
     void pollPersonalModels()
     if (profile.role !== 'master') { modelManager.stop(); return }
     loadServer(servers.find(s => s.id === serverSelect.value))
@@ -297,7 +314,7 @@ export async function initializeLabMode() {
     await api('/me/model-settings', 'PUT', {
       server_id: personalServer.value || null,
       provider: document.getElementById('lab-personal-provider').value,
-      model: document.getElementById('lab-personal-model').value.trim(),
+      model: personalModelControl().value.trim(),
     })
     await refresh()
   }))

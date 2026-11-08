@@ -2,7 +2,7 @@ import { t } from './i18n.js'
 
 // Server tasks outlive this view; polling is only a read-only observer.
 export function sharedModelManager({ api, container, report, changed }) {
-  let serverId = '', generation = 0, timer, catalog = []
+  let serverId = '', generation = 0, pollSequence = 0, timer, catalog = [], lastRender = ''
   const heading = document.createElement('h4')
   heading.textContent = t('settings:sharedModelsTitle')
   const notice = document.createElement('p')
@@ -21,6 +21,7 @@ export function sharedModelManager({ api, container, report, changed }) {
   const add = document.createElement('button')
   add.type = 'button'; add.className = 'btn btn-secondary'
   add.textContent = t('settings:sharedModelsAdd')
+  add.disabled = true; input.disabled = true; select.disabled = true
   const list = document.createElement('div')
   list.id = 'lab-shared-model-list'
   const actions = document.createElement('div')
@@ -49,10 +50,18 @@ export function sharedModelManager({ api, container, report, changed }) {
     const control = document.createElement('button')
     control.type = 'button'; control.className = 'btn btn-secondary'
     control.textContent = title
-    control.onclick = async () => { control.disabled = true; await perform(action) }
+    control.dataset.modelAction = `${row.dataset.modelId}:${title}`
+    control.onclick = async () => {
+      control.disabled = true
+      try { await perform(action) } finally { control.disabled = false }
+    }
     row.append(control)
   }
   function render(models, id) {
+    const serialized = JSON.stringify(models)
+    if (serialized === lastRender) return
+    lastRender = serialized
+    const focused = list.contains(document.activeElement) ? document.activeElement.dataset.modelAction : null
     const states = {
       Pending: t('settings:sharedModelsPending'), Downloading: t('settings:sharedModelsDownloading'),
       Verifying: t('settings:sharedModelsVerifying'), Completed: t('settings:sharedModelsCompleted'),
@@ -63,8 +72,9 @@ export function sharedModelManager({ api, container, report, changed }) {
     for (const model of models) {
       const row = document.createElement('article')
       row.className = 'shared-model-row'
+      row.dataset.modelId = model.id
       const title = document.createElement('strong')
-      title.textContent = `${model.name || model.model_id} · ${model.engine}`
+      title.textContent = `${model.name ? model.name + ' (' + model.model_id + ')' : model.model_id} · ${model.engine}`
       const state = document.createElement('p')
       state.textContent = `${states[model.status] || model.status} · ${model.parameters || '—'} · ${bytes(model.completed)} / ${bytes(model.total)}${model.speed ? ` · ${bytes(model.speed)}/s` : ''}`
       const available = document.createElement('p')
@@ -99,18 +109,20 @@ export function sharedModelManager({ api, container, report, changed }) {
       }
       list.append(row)
     }
+    if (focused) [...list.querySelectorAll('button')].find(button => button.dataset.modelAction === focused)?.focus({ preventScroll: true })
   }
   async function poll(version) {
     clearTimeout(timer)
     const id = serverId
+    const sequence = ++pollSequence
     if (!id || version !== generation) return
     try {
       const result = await api(root(id))
-      if (version !== generation) return
+      if (version !== generation || sequence !== pollSequence) return
       render(result.models, id)
       await changed()
     } catch (error) { if (version === generation) report(error) }
-    if (version === generation) timer = setTimeout(() => poll(version), 2000)
+    if (version === generation && sequence === pollSequence) timer = setTimeout(() => poll(version), 2000)
   }
   return {
     async load(server) {
@@ -118,7 +130,7 @@ export function sharedModelManager({ api, container, report, changed }) {
       clearTimeout(timer)
       serverId = server?.id || ''
       add.disabled = !serverId; input.disabled = !serverId; select.disabled = !serverId
-      input.value = ''; details.textContent = ''; list.replaceChildren()
+      input.value = ''; details.textContent = ''; list.replaceChildren(); lastRender = ''
       select.replaceChildren(new Option(t('settings:sharedModelsRecommend'), ''))
       notice.textContent = serverId ? t('settings:sharedModelsRetained') : t('settings:connectionSaveTheServerFirst')
       if (!serverId) return
