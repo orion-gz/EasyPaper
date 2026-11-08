@@ -956,13 +956,10 @@
               <label for="lab-url" data-i18n="settings:labUrl">Server URL (vLLM: include /v1)</label>
               <input id="lab-url" type="url" required>
             </div>
-            <div class="form-group settings-row">
-              <label for="lab-models" data-i18n="settings:labModels">Allowed models (one per line)</label>
-              <textarea rows="4" id="lab-models"></textarea>
-            </div>
+            <section id="lab-shared-models" aria-label="Shared models"></section>
             <div class="form-group settings-row">
               <label for="lab-default-model" data-i18n="settings:labDefaultModel">Default model</label>
-              <input id="lab-default-model">
+              <select id="lab-default-model" class="form-select"></select>
             </div>
 <details class="lab-advanced"><summary data-i18n="settings:labAdvanced">Advanced</summary>            <div class="form-group settings-row">
               <label for="lab-total-limit" data-i18n="settings:labTotalLimit">Server concurrent requests</label>

@@ -1,3 +1,4 @@
+import { sharedModelManager } from './sharedModels.js'
 import { initializeLabGuide } from './labGuide.js'
 import { connectionEditor } from './sshConnectionForm.js'
 import { syncSelectValue } from './uiScale.js'
@@ -94,11 +95,56 @@ export async function initializeLabMode() {
   personalServer.className = 'form-select'
   personalServer.setAttribute('aria-label', t('settings:connectionInferenceServer'))
   document.querySelector('#lab-personal-form .settings-section-heading').after(settingsRow(personalServer, t('settings:connectionInferenceServer')))
+  function setDefaultModels(server = {}) {
+    const control = document.getElementById('lab-default-model')
+    const selected = control.value
+    control.replaceChildren(...(server.models || []).map(model => new Option(model, model)))
+    control.value = server.models?.includes(selected) ? selected : server.model || ''
+  }
+  let modelRefresh = false
+  async function updateModels() {
+    if (modelRefresh) return
+    modelRefresh = true
+    try {
+      const listing = await api('/inference/servers')
+      servers = listing.servers
+      setDefaultModels(servers.find(s => s.id === serverSelect.value))
+      updatePersonalModels()
+    } finally { modelRefresh = false }
+  }
+  const modelManager = sharedModelManager({ api, container: document.getElementById('lab-shared-models'), report, changed: updateModels })
+  let personalTimer
+  function updatePersonalModels() {
+    const server = servers.find(s => s.id === personalServer.value)
+    const current = document.getElementById('lab-personal-model')
+    const local = ['ollama', 'vllm'].includes(providerSelect.value)
+    let control = current
+    if (local !== (current.tagName === 'SELECT')) {
+      control = document.createElement(local ? 'select' : 'input')
+      control.id = current.id; control.className = local ? 'form-select' : current.className
+      control.setAttribute('aria-label', t('settings:labDefaultModel'))
+      control.value = current.value
+      current.replaceWith(control)
+    }
+    if (local) {
+      const value = current.value
+      control.replaceChildren(...(server?.models || []).map(model => new Option(model, model)))
+      control.value = server?.models.includes(value) ? value : server?.model || ''
+    }
+  }
+  providerSelect.addEventListener('change', updatePersonalModels)
+  async function pollPersonalModels() {
+    clearTimeout(personalTimer)
+    try { await updateModels() } catch (error) { report(error) }
+    personalTimer = setTimeout(pollPersonalModels, 5000)
+  }
+  window.addEventListener('pagehide', () => { modelManager.stop(); clearTimeout(personalTimer) })
   function loadServer(server = {}) {
     name.value = server.name || ''
     syncSelectValue(document.getElementById('lab-engine'), server.engine || 'ollama')
     document.getElementById('lab-url').value = server.url || ''
-    document.getElementById('lab-models').value = (server.models || []).join('\n')
+    setDefaultModels(server)
+    void modelManager.load(server)
     document.getElementById('lab-default-model').value = server.model || ''
     document.getElementById('lab-total-limit').value = server.max_concurrent || 2
     document.getElementById('lab-user-limit').value = server.per_user || 1
@@ -112,6 +158,7 @@ export async function initializeLabMode() {
       syncSelectValue(document.getElementById('lab-personal-provider'), server.engine)
       document.getElementById('lab-personal-model').value = server.model
       updateProviderControls()
+      updatePersonalModels()
     }
   }
   for (const [label, action] of [
@@ -163,7 +210,9 @@ export async function initializeLabMode() {
     syncSelectValue(document.getElementById('lab-personal-provider'), personal.provider || common.engine)
     document.getElementById('lab-personal-model').value = personal.model || common.model
     updateProviderControls()
-    if (profile.role !== 'master') return
+    updatePersonalModels()
+    void pollPersonalModels()
+    if (profile.role !== 'master') { modelManager.stop(); return }
     loadServer(servers.find(s => s.id === serverSelect.value))
     members.replaceChildren()
     for (const user of await api('/lab/users')) {
@@ -236,7 +285,7 @@ export async function initializeLabMode() {
         credentials: { ...connection.credentials, api_key: key.value },
         engine: document.getElementById('lab-engine').value,
         url: document.getElementById('lab-url').value,
-        models: document.getElementById('lab-models').value.split('\n').map(value => value.trim()).filter(Boolean),
+        models: servers.find(s => s.id === serverSelect.value)?.models || [],
         model: document.getElementById('lab-default-model').value.trim(),
         max_concurrent: Number(document.getElementById('lab-total-limit').value),
         per_user: Number(document.getElementById('lab-user-limit').value),
