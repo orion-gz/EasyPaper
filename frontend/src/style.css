@@ -8743,3 +8743,6 @@ body.light-theme .chat-drawer {
 .lab-guide-snippet { display: flex; align-items: flex-start; gap: var(--lab-space-sm); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--lab-space-md); background: var(--bg-elevated); }
 .lab-guide-snippet code { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 var(--font-mono); user-select: text; }
 .lab-guide-snippet .lab-guide-copy { flex-shrink: 0; padding: 6px; }
+.lab-guide-maintenance { min-width: 0; }
+.lab-guide-maintenance summary { cursor: pointer; }
+.lab-guide-maintenance pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 var(--font-mono); }
