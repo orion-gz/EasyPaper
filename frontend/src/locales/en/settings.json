@@ -437,5 +437,8 @@
   "sharedModelsCancel": "Cancel download",
   "sharedModelsRetry": "Retry / verify",
   "sharedModelsRemove": "Remove sharing (keep files)",
-  "sharedModelsRetained": "Downloads continue when you leave this screen. Removing sharing keeps cached files. Downloading does not load a model into VRAM. Ollama progress covers discovered layers."
+  "sharedModelsRetained": "Downloads continue when you leave this screen. Removing sharing keeps cached files. Downloading does not load a model into VRAM. Ollama progress covers discovered layers.",
+  "sharedModelsDeleteFiles": "Delete model files",
+  "sharedModelsDeleteConfirm": "Delete {{model}} files from the server and remove sharing? This cannot be undone.",
+  "sharedModelsDeleteHelp": "File deletion requires disabled sharing and an isolated maintenance server configured by the operator."
 }

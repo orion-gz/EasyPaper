@@ -124,6 +124,7 @@ class TunnelManager:
         self.connections = {}
         self.locks = {}
         self.active = {}
+        self.maintenance = False
 
     async def close(self, identifier=None):
         keys = list(self.connections) if identifier is None else [identifier]
@@ -135,8 +136,23 @@ class TunnelManager:
                 connection.close()
                 await connection.wait_closed()
 
+    def require_available(self, identifier):
+        if self.maintenance and identifier and identifier.startswith('inference:'):
+            raise HTTPException(409, 'Inference model files are under maintenance. Retry shortly.')
+
+    @asynccontextmanager
+    async def inference_maintenance(self):
+        if self.maintenance or any(count for key, count in self.active.items() if isinstance(key, str) and key.startswith('inference:')):
+            raise HTTPException(409, 'Wait for all active inference requests and downloads before file maintenance.')
+        self.maintenance = True
+        try:
+            yield
+        finally:
+            self.maintenance = False
+
     @asynccontextmanager
     async def lease(self, identifier):
+        self.require_available(identifier)
         self.active[identifier] = self.active.get(identifier, 0) + 1
         try:
             yield
@@ -144,6 +160,7 @@ class TunnelManager:
             self.active[identifier] -= 1
 
     def guard(self, identifier):
+        self.require_available(identifier)
         if self.active.get(identifier):
             raise HTTPException(409, 'Wait for this server’s active requests to finish.')
 
@@ -224,11 +241,14 @@ class LeasedStream(httpx.AsyncByteStream):
 
 
 class TunnelTransport(httpx.AsyncBaseTransport):
-    def __init__(self, identifier, profile):
+    def __init__(self, identifier, profile, maintenance=False):
         self.identifier, self.profile = identifier, profile
+        self.maintenance = maintenance
         self.transport = httpx.AsyncHTTPTransport()
 
     async def handle_async_request(self, request):
+        if not self.maintenance:
+            manager.require_available(self.identifier)
         source = httpx.URL(self.profile['url'])
         logical = httpx.URL(self.profile.get('logical_url', self.profile['url']))
         if (request.url.scheme, request.url.host, request.url.port) != (logical.scheme, logical.host, logical.port):
@@ -239,7 +259,10 @@ class TunnelTransport(httpx.AsyncBaseTransport):
         except BaseException:
             manager.active[self.identifier] -= 1
             raise
-        response.stream = LeasedStream(response.stream, self.identifier)
+        if response.is_closed:
+            manager.active[self.identifier] -= 1
+        else:
+            response.stream = LeasedStream(response.stream, self.identifier)
         return response
 
     async def forward(self, request, source):
@@ -262,15 +285,16 @@ class TunnelTransport(httpx.AsyncBaseTransport):
         await self.transport.aclose()
 
 
-def client(identifier=None, profile=None, **kwargs):
+def client(identifier=None, profile=None, *, maintenance=False, **kwargs):
     if profile is None:
         from services import lab
         selected = lab.selection()
         if selected and selected.get('provider') in ('ollama', 'vllm'):
             profile = selected
             identifier = 'inference:' + selected.get('id', 'default')
-    if profile and (profile.get('transport') == 'ssh' or profile.get('api_key')):
-        kwargs['transport'] = TunnelTransport(identifier, profile)
+    if profile and (profile.get('transport') == 'ssh' or profile.get('api_key') or
+                    (identifier and identifier.startswith('inference:'))):
+        kwargs['transport'] = TunnelTransport(identifier, profile, maintenance=maintenance)
         kwargs['trust_env'] = False
         kwargs['follow_redirects'] = False
     return httpx.AsyncClient(**kwargs)

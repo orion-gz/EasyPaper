@@ -56,9 +56,10 @@ export function sharedModelManager({ api, container, report, changed }) {
       try { await perform(action) } finally { control.disabled = false }
     }
     row.append(control)
+    return control
   }
-  function render(models, id) {
-    const serialized = JSON.stringify(models)
+  function render(models, id, deletionAllowed) {
+    const serialized = JSON.stringify([models, deletionAllowed])
     if (serialized === lastRender) return
     lastRender = serialized
     const focused = list.contains(document.activeElement) ? document.activeElement.dataset.modelAction : null
@@ -101,6 +102,16 @@ export function sharedModelManager({ api, container, report, changed }) {
           button(row, t('settings:sharedModelsRetry'), () => api(`${root(id)}/${model.id}`, 'PATCH', { action: 'retry' }))
         }
         button(row, t('settings:sharedModelsRemove'), () => api(`${root(id)}/${model.id}`, 'DELETE'))
+        const removeFiles = button(row, t('settings:sharedModelsDeleteFiles'), async () => {
+          if (window.confirm(t('settings:sharedModelsDeleteConfirm', { model: model.model_id }))) {
+            await api(`${root(id)}/${model.id}?delete_files=true`, 'DELETE')
+          }
+        })
+        removeFiles.disabled = !deletionAllowed || model.enabled
+        const help = document.createElement('p')
+        help.className = 'form-help'
+        help.textContent = t('settings:sharedModelsDeleteHelp')
+        row.append(help)
       }
       if (model.error) {
         const error = document.createElement('p')
@@ -119,7 +130,7 @@ export function sharedModelManager({ api, container, report, changed }) {
     try {
       const result = await api(root(id))
       if (version !== generation || sequence !== pollSequence) return
-      render(result.models, id)
+      render(result.models, id, result.file_deletion?.allowed === true)
       await changed()
     } catch (error) { if (version === generation) report(error) }
     if (version === generation && sequence === pollSequence) timer = setTimeout(() => poll(version), 2000)

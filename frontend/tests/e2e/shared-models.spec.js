@@ -6,6 +6,7 @@ async function setup(page, role = 'master') {
   const server = { id: 'gpu', name: 'Lab GPU', engine: 'ollama', url: 'http://gpu:11434', models: [], model: '', transport: 'https' }
   const rows = []
   const requests = []
+  const maintenance = { allowed: false }
   await page.route('**/api/auth/me', route => route.fulfill({ json: { username: role, role, lab_mode: true } }))
   await page.route('**/api/lab/users', route => route.fulfill({ json: [] }))
   await page.route('**/api/lab/inference', route => route.fulfill({ json: server }))
@@ -18,7 +19,7 @@ async function setup(page, role = 'master') {
       rows.push({ id: 'job', model_id: requests.at(-1).model_id, engine: 'ollama', status: 'Downloading', enabled: false, total: 1024 ** 3, completed: 512 * 1024 ** 2, percent: 50 })
       return route.fulfill({ json: rows.at(-1), status: 202 })
     }
-    return route.fulfill({ json: { models: rows } })
+    return route.fulfill({ json: { models: rows, file_deletion: maintenance } })
   })
   await page.route('**/api/inference/servers/gpu/shared-models/job', async route => {
     if (route.request().method() === 'DELETE') rows.length = 0
@@ -34,7 +35,7 @@ async function setup(page, role = 'master') {
   await page.locator('#sidebar-settings-btn').click()
   await page.locator('#settings-nav-lab').click()
   await expect(page.locator('#lab-inference-form')).not.toHaveAttribute('inert', '')
-  return { server, rows, requests }
+  return { server, rows, requests, maintenance }
 }
 
 test('master adds a recommendation, returns to progress, and disables sharing', async ({ page }) => {
@@ -96,4 +97,29 @@ test('switching to personal CLI providers preserves a usable text input', async 
   await page.locator('#lab-personal-provider').selectOption('codex', { force: true })
   await expect(page.locator('#lab-personal-model')).toHaveValue('personal-model')
   await expect(page.locator('#lab-personal-model')).toBeEditable()
+})
+
+
+test('file deletion requires maintenance and disabled sharing, then explicit confirmation', async ({ page }) => {
+  const { rows, maintenance } = await setup(page)
+  rows.push({ id: 'job', model_id: 'custom:tag', engine: 'ollama', status: 'Completed', enabled: true })
+  const button = page.getByRole('button', { name: 'Delete model files', exact: true })
+  await expect(button).toBeDisabled()
+  maintenance.allowed = true
+  await expect(button).toBeDisabled()
+  rows[0].enabled = false
+  await expect(button).toBeEnabled()
+  let deleted = false
+  await page.route('**/shared-models/job?delete_files=true', route => {
+    expect(route.request().method()).toBe('DELETE')
+    deleted = true; rows.length = 0
+    return route.fulfill({ json: { deleted: true, files_deleted: true } })
+  })
+  page.once('dialog', dialog => dialog.dismiss())
+  await button.click()
+  expect(deleted).toBe(false)
+  page.once('dialog', dialog => dialog.accept())
+  await button.click()
+  await expect(page.locator('#lab-shared-model-list')).toContainText('No shared models')
+  expect(deleted).toBe(true)
 })

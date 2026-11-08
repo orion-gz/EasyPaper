@@ -54,7 +54,39 @@ def verify_files(snapshot, files):
         raise ValueError('This model has no usable chat template. Choose an instruction/chat model.') from exc
 
 
+def delete_cached_model(model_id, cache):
+    """Use the Hub's cache planner, refusing any plan affecting another repo."""
+    from huggingface_hub import scan_cache_dir
+    import re
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*', model_id) or '..' in model_id:
+        raise ValueError('Invalid Hugging Face model ID.')
+    root = Path(cache).resolve()
+    expected = root / ('models--' + model_id.replace('/', '--'))
+    if not expected.exists():
+        return {'files_deleted': True}
+    if expected.is_symlink():
+        raise ValueError('Refusing a symlinked repository cache.')
+    info = scan_cache_dir(root)
+    repo = next((r for r in info.repos if r.repo_id == model_id and r.repo_type == 'model'), None)
+    if repo is None or not repo.revisions:
+        raise ValueError('The cache is incomplete or unrecognized. Use host maintenance tools to inspect it.')
+    revisions = {r.commit_hash for r in repo.revisions}
+    if any(revisions.intersection(r.commit_hash for r in other.revisions) for other in info.repos if other != repo):
+        raise ValueError('Another repository shares a revision ID; automatic deletion is unsafe.')
+    plan = info.delete_revisions(*revisions)
+    for path in set(plan.repos) | set(plan.snapshots) | set(plan.blobs) | set(plan.refs):
+        if not Path(path).resolve().is_relative_to(expected):
+            raise ValueError('The deletion plan touches shared storage outside this repository.')
+    plan.execute()
+    if expected.exists():
+        raise ValueError('Cache deletion did not remove the repository completely.')
+    return {'files_deleted': True}
+
+
 def run(action, model_id, cache):
+    if action == 'delete':
+        emit(**delete_cached_model(model_id, cache))
+        return
     from vllm import ModelRegistry
     from importlib.metadata import version
     from huggingface_hub import HfApi, hf_hub_download

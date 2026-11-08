@@ -6773,5 +6773,17 @@
   "settings:sharedModelsRetained": {
     "description": "Shared inference model management: Downloads continue when you leave this screen. Removing sharing keeps cached files. Downloading does not load a model into VRAM. Ollama progress covers discovered layers.",
     "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsDeleteFiles": {
+    "description": "Shared model file maintenance: sharedModelsDeleteFiles",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsDeleteConfirm": {
+    "description": "Shared model file maintenance: sharedModelsDeleteConfirm",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsDeleteHelp": {
+    "description": "Shared model file maintenance: sharedModelsDeleteHelp",
+    "file": "src/sharedModels.js"
   }
 }

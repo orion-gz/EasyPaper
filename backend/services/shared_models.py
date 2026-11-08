@@ -175,6 +175,7 @@ def sync_permissions(server_id):
 
 
 async def add(server_id, value):
+    manager.require_available('inference:' + server_id)
     server = servers.get(server_id)
     value = model_id(server['engine'], value)
     rows = records(server_id)
@@ -305,6 +306,7 @@ async def download(record):
 
 
 async def action(server_id, identifier, operation):
+    manager.require_available('inference:' + server_id)
     record = find(server_id, identifier)
     if operation == 'cancel':
         task = _tasks.get(identifier)
@@ -335,17 +337,19 @@ async def action(server_id, identifier, operation):
 
 
 async def remove(server_id, identifier, delete_files=False):
+    manager.require_available('inference:' + server_id)
     record = find(server_id, identifier)
     if record['status'] in ACTIVE:
         raise HTTPException(409, 'Cancel the download before removing this model.')
     if delete_files:
-        # Neither remote engine can prove absence of external clients. Fail closed.
-        raise HTTPException(409, 'File deletion requires maintenance on the inference host after stopping consumers. Remove sharing here; cached files are retained safely.')
+        from services.shared_model_deletion import delete
+        return await delete(server_id, identifier)
     record['enabled'] = False
     write(record)
     sync_permissions(server_id)
     with closing(db.get_db()) as conn, conn:
         conn.execute('DELETE FROM shared_models WHERE id=?', (identifier,))
+    return {'deleted': True, 'files_deleted': False}
 
 
 async def listing(server_id):
