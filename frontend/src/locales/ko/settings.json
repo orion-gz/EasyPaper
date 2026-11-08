@@ -406,5 +406,14 @@
   "labAccountSaved": "새 비밀번호 저장 완료",
   "labInviteSsh": "표시된 EasyPaper 임시 비밀번호와 SSH 터널 실행 방법을 멤버에게 개별 전달하세요. 멤버는 자신의 PC에서 터널을 연 뒤 localhost 주소로 접속합니다. SSH 계정과 EasyPaper 계정은 별개입니다.",
   "labInviteHttps": "표시된 EasyPaper 임시 비밀번호와 아래 HTTPS 주소를 멤버에게 개별 전달하세요. 초기 비밀번호를 비워 두면 자동 생성됩니다. 화면의 비밀번호는 예시입니다.",
-  "labConnectSshPortNote": "포트를 바꾸려면 이전 장면에서 수정하고 SSH 터널을 다시 실행하세요."
+  "labConnectSshPortNote": "포트를 바꾸려면 이전 장면에서 수정하고 SSH 터널을 다시 실행하세요.",
+  "labAutomatedInference": "Ollama 설치, 환경별 내부 접속 주소 설정, 모델 다운로드와 앱에서의 한 토큰 추론 검사를 자동으로 진행합니다. GPU 드라이버는 미리 준비하세요.",
+  "labAutomatedHttps": "관리자 계정 설정을 마친 뒤 도메인과 서버 공인 IPv4를 입력하세요. DNS 확인, Caddy 설치, 기존 사이트를 보존한 설정 추가와 인증서 검사를 진행합니다. 외부 80/443 포트를 열어 두세요. A/AAAA 주소가 여러 개면 터미널에서 --public-ip 옵션을 반복해 지정하세요.",
+  "labDiagnosticsNote": "앱 상태, 데이터 쓰기 권한, 내부 포트와 설치된 모델을 검사합니다. 실패하면 해결 방법을 표시하고 오류로 종료합니다.",
+  "labPublicIpField": "서버 공인 IPv4",
+  "labDownloadSshUnix": "SSH 실행 파일 · Linux/macOS",
+  "labDownloadSshWindows": "SSH 실행 파일 · Windows",
+  "labDownloadSshHint": "Windows는 .cmd 파일을 실행하고, Linux/macOS는 다운로드 폴더에서 bash easypaper-connect.sh를 실행하세요. OpenSSH가 필요합니다. 터미널에서 인증한 뒤 창을 열어 두세요. 파일에는 비밀번호나 개인 키를 저장하지 않습니다.",
+  "labMaintenanceTitle": "진단·업데이트·복구",
+  "labMaintenanceNote": "서버의 원본 Git 프로젝트 폴더에서 실행하세요. 업데이트는 origin/main의 새 버전을 준비하고 앱을 잠시 중지해 데이터를 백업한 뒤 시작 상태를 확인합니다. 실패하면 이전 버전과 데이터를 복구합니다. 수동 복구도 이전 데이터를 복원하며 최신 데이터는 별도 폴더에 보관합니다. SNAPSHOT_ID는 업데이트가 출력한 값으로 바꾸세요."
 }
