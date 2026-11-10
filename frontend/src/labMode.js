@@ -28,17 +28,18 @@ export async function initializeLabMode() {
   const output = document.getElementById('lab-cli-output')
   let loginGeneration = 0
   let loginTimer
-  function cancelPolling() {
+  let personalGeneration = 0
+  let personalTimer
+  function cancelLoginPolling() {
     loginGeneration += 1
     clearTimeout(loginTimer)
   }
   function updateProviderControls() {
-    cancelPolling()
+    cancelLoginPolling()
     output.textContent = ''
     document.getElementById('lab-cli-actions').hidden = ['ollama', 'vllm'].includes(providerSelect.value)
   }
   providerSelect.addEventListener('change', updateProviderControls)
-  window.addEventListener('pagehide', cancelPolling)
   async function pollLogin(provider, generation, expires) {
     if (generation !== loginGeneration || Date.now() >= expires || !output.getClientRects().length) return
     try {
@@ -102,8 +103,8 @@ export async function initializeLabMode() {
     if (JSON.stringify([...control.options].map(option => option.value)) !== JSON.stringify(allowed)) {
       control.replaceChildren(...allowed.map(model => new Option(model, model)))
     }
-    const value = allowed.includes(selected) ? selected : server.model || ''
-    if (control.value !== value) syncSelectValue(control, value)
+    const value = allowed.includes(selected) ? selected : (allowed.includes(server.model) ? server.model : allowed[0] || '')
+    syncSelectValue(control, value)
   }
   let modelRefresh = false
   async function updateModels() {
@@ -117,8 +118,21 @@ export async function initializeLabMode() {
     } finally { modelRefresh = false }
   }
   const modelManager = sharedModelManager({ api, container: document.getElementById('lab-shared-models'), report, changed: updateModels })
-  document.getElementById('lab-engine').addEventListener('change', () => { void modelManager.load() })
-  let personalTimer
+  function cancelPolling() {
+    cancelLoginPolling()
+    personalGeneration += 1
+    clearTimeout(personalTimer)
+    modelManager.stop()
+  }
+  window.addEventListener('pagehide', cancelPolling)
+  document.getElementById('close-settings-btn')?.addEventListener('click', cancelPolling)
+  document.getElementById('settings-modal')?.addEventListener('click', event => {
+    if (event.target.id === 'settings-modal') cancelPolling()
+  })
+  document.getElementById('lab-engine').addEventListener('change', event => {
+    const current = servers.find(s => s.id === serverSelect.value)
+    void modelManager.load(current?.engine === event.target.value ? current : undefined)
+  })
   const personalInput = document.getElementById('lab-personal-model')
   const personalModels = document.createElement('select')
   personalModels.id = 'lab-personal-shared-model'
@@ -145,23 +159,24 @@ export async function initializeLabMode() {
       if (JSON.stringify([...personalModels.options].map(option => option.value)) !== JSON.stringify(allowed)) {
         personalModels.replaceChildren(...allowed.map(model => new Option(model, model)))
       }
-      const selected = allowed.includes(value) ? value : server?.model || ''
-      if (personalModels.value !== selected) syncSelectValue(personalModels, selected)
+      const selected = allowed.includes(value) ? value : (allowed.includes(server?.model) ? server.model : allowed[0] || '')
+      syncSelectValue(personalModels, selected)
     } else if (typeof preferredModel === 'string') personalInput.value = preferredModel
   }
   providerSelect.addEventListener('change', updatePersonalModels)
-  async function pollPersonalModels() {
+  async function pollPersonalModels(generation = ++personalGeneration) {
     clearTimeout(personalTimer)
-    try { await updateModels() } catch (error) { report(error) }
-    personalTimer = setTimeout(pollPersonalModels, 5000)
+    if (generation !== personalGeneration || document.getElementById('settings-modal')?.classList.contains('hidden')) return
+    try { await updateModels() } catch (error) { if (generation === personalGeneration) report(error) }
+    if (generation === personalGeneration) personalTimer = setTimeout(() => pollPersonalModels(generation), 5000)
   }
-  window.addEventListener('pagehide', () => { modelManager.stop(); clearTimeout(personalTimer) })
   function loadServer(server = {}) {
     name.value = server.name || ''
     syncSelectValue(document.getElementById('lab-engine'), server.engine || 'ollama')
     document.getElementById('lab-url').value = server.url || ''
     setDefaultModels(server)
-    void modelManager.load(server)
+    if (document.getElementById('tab-lab').classList.contains('active')) void modelManager.load(server)
+    else modelManager.stop()
     syncSelectValue(document.getElementById('lab-default-model'), server.model || '')
     document.getElementById('lab-total-limit').value = server.max_concurrent || 2
     document.getElementById('lab-user-limit').value = server.per_user || 1
@@ -320,7 +335,7 @@ export async function initializeLabMode() {
   }))
   for (const action of ['status', 'login', 'logout']) {
     document.getElementById(`lab-cli-${action}`).addEventListener('click', run(async () => {
-      cancelPolling()
+      cancelLoginPolling()
       const generation = loginGeneration
       const provider = providerSelect.value
       const path = `/me/providers/${provider}${action === 'login' ? '/login' : ''}`

@@ -7819,11 +7819,19 @@ body.light-theme .chat-drawer {
 .settings-content .modal-form > .settings-mode-context,
 .settings-content .modal-form > .settings-section-heading,
 .settings-content .modal-form > .settings-action-card,
+.settings-content .modal-form > #lab-shared-models,
+.settings-content .modal-form > .ssh-connection-form > .form-group,
+.settings-content .modal-form > .lab-advanced > .form-group,
 .settings-content .modal-form > details {
   margin: 0;
   padding-top: 14px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--border);
+}
+
+.settings-content .modal-form > .lab-advanced > .form-group:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .settings-content .modal-form > :last-child {
@@ -8735,8 +8743,140 @@ body.light-theme .chat-drawer {
 .lab-guide-maintenance summary { cursor: pointer; }
 .lab-guide-maintenance pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 var(--font-mono); }
 
-.shared-model-add { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
-.shared-model-row { border: 1px solid var(--border-strong); border-radius: var(--radius-md); padding: 12px; margin: 10px 0; overflow-wrap: anywhere; }
-.shared-model-row p { margin: 6px 0; }
-.shared-model-row button { margin: 4px 8px 0 0; }
-.shared-model-row progress { width: min(70%, 300px); margin-right: 8px; }
+#lab-shared-models {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+#lab-shared-models > h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+#lab-shared-models .form-help {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+#lab-shared-models .form-help:empty {
+  display: none;
+}
+#lab-shared-models .error-message {
+  margin: 0;
+  color: var(--error);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.shared-model-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+.shared-model-add > .custom-select-picker {
+  width: 100%;
+  min-width: 0;
+}
+#lab-shared-models input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  outline: none;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+#lab-shared-models input:focus {
+  border-color: var(--accent-mid);
+  box-shadow: var(--shadow-glow), 0 0 0 2px rgba(74, 135, 181, 0.15);
+}
+#lab-shared-models input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.shared-model-add > .btn {
+  padding: 9px 14px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+#lab-shared-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+#lab-shared-model-list:empty {
+  display: none;
+}
+.shared-model-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  margin: 0;
+  background: var(--bg-elevated);
+  overflow-wrap: anywhere;
+}
+.shared-model-row > strong,
+.shared-model-row > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.shared-model-row > strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.shared-model-row > p {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.shared-model-row > progress {
+  flex: 1 1 180px;
+  width: min(70%, 300px);
+  max-width: 300px;
+  height: 8px;
+  margin: 2px 0;
+  accent-color: var(--control-accent);
+}
+.shared-model-row > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  margin-right: 4px;
+}
+.shared-model-row > button {
+  margin: 2px 0;
+  padding: 7px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+@media (max-width: 720px) {
+  .shared-model-add {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shared-model-add > .btn {
+    justify-self: flex-start;
+  }
+}

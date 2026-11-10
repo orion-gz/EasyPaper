@@ -184,13 +184,16 @@ async def check(identifier):
             response.raise_for_status()
             data = response.json()
         models = [m['id'] for m in data.get('data', [])] if value['engine'] == 'vllm' else [m['name'] for m in data.get('models', [])]
+        from services.shared_models import canonical_id
+        installed = {canonical_id(value['engine'], m) for m in models}
+        default_available = bool(value['model']) and canonical_id(value['engine'], value['model']) in installed
         verified = {}
         if value['model']:
-            if value['model'] not in models:
+            if not default_available:
                 raise HTTPException(502, 'The default model is not installed on the inference server.')
             from services.lab_inference import probe
             async with manager.lease(key):
                 verified = await probe(value)
-        return {'connected': True, 'models': models, 'default_available': value['model'] in models, **verified}
+        return {'connected': True, 'models': models, 'default_available': default_available, **verified}
     except (httpx.HTTPError, ValueError, KeyError, RuntimeError):
         raise HTTPException(502, 'Could not reach the inference service through the configured connection.')

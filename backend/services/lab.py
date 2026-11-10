@@ -179,7 +179,8 @@ async def inference_health():
             response.raise_for_status()
             data = response.json()
         models = [item['id'] for item in data.get('data', [])] if provider == 'vllm' else [item['name'] for item in data.get('models', [])]
-        available = selected['model'] in models
+        from services.shared_models import canonical_id
+        available = canonical_id(provider, selected['model']) in {canonical_id(provider, item) for item in models}
         return {'status': 'ok' if available else 'error', 'provider': provider,
                 'model_available': available, 'available_models': models}
     except (httpx.HTTPError, HTTPException, ValueError, RuntimeError, KeyError):

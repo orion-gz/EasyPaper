@@ -383,3 +383,71 @@ async def test_worker_terminal_event_does_not_publish_before_exit(environment,mo
     result=await finish(await models.add(identifier,'owner/repo'))
     assert result['status']=='Failed'
     assert servers.get(identifier)['models']==[]
+
+
+@pytest.mark.asyncio
+async def test_listing_probe_does_not_block_server_mutations_or_maintenance(environment, monkeypatch):
+    from services.ssh_connections import manager
+    client, _ = environment
+    empty_id = create(client)
+    calls = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class SlowTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            nonlocal calls
+            calls += 1
+            started.set()
+            await release.wait()
+            return httpx.Response(200, json={'models': [{'name': 'old:latest', 'size': 100}]})
+
+    monkeypatch.setattr(httpx, 'AsyncHTTPTransport', SlowTransport)
+    assert await models.listing(empty_id) == []
+    assert calls == 0
+
+    identifier = create(client, legacy=True)
+    probe_task = asyncio.create_task(models.listing(identifier))
+    await asyncio.wait_for(started.wait(), 5)
+    assert manager.active.get('inference:' + identifier, 0) == 0
+    saved = await servers.save(servers.ServerSettings(
+        name='Updated while polling', engine='ollama', url='http://engine:11434',
+        models=['old:latest'], model='old:latest',
+    ), identifier)
+    assert saved['name'] == 'Updated while polling'
+    async with manager.inference_maintenance():
+        assert (await models.listing(identifier))[0]['available'] is None
+    release.set()
+    listed = await probe_task
+    assert listed[0]['available'] is True
+
+
+@pytest.mark.asyncio
+async def test_legacy_untagged_ollama_model_passes_health_and_server_checks(environment, monkeypatch):
+    from services import lab, lab_inference
+    from services.lab_context import identity
+    client, _ = environment
+    server = await servers.save(servers.ServerSettings(
+        name='Legacy', engine='ollama', url='http://engine:11434',
+        models=['qwen3.5'], model='qwen3.5',
+    ))
+    monkeypatch.setattr(httpx, 'AsyncHTTPTransport', lambda: httpx.MockTransport(
+        lambda request: httpx.Response(200, json={'models': [{'name': 'qwen3.5:latest', 'size': 100}]})))
+    async def fake_probe(value):
+        return {'verified': True}
+    monkeypatch.setattr(lab_inference, 'probe', fake_probe)
+
+    checked = await servers.check(server['id'])
+    assert checked['connected'] is True and checked['default_available'] is True
+
+    response = client.post('/api/lab/inference/check')
+    assert response.status_code == 200
+    assert response.json()['default_available'] is True
+
+    monkeypatch.setattr(lab, 'settings', lambda: {'enabled': True})
+    token = identity.set('admin')
+    try:
+        health = await lab.inference_health()
+    finally:
+        identity.reset(token)
+    assert health['status'] == 'ok' and health['model_available'] is True

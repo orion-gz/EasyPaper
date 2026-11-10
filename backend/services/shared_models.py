@@ -208,6 +208,8 @@ def launch(record):
                 record.update(status='Cancelled', enabled=False, speed=None)
                 write(record)
                 raise
+            finally:
+                _tasks.pop(record['id'], None)
         task = asyncio.create_task(queued())
         _tasks[record['id']] = task
         task.add_done_callback(lambda _: _tasks.pop(record['id'], None))
@@ -314,6 +316,7 @@ async def action(server_id, identifier, operation):
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+            _tasks.pop(identifier, None)
         record = find(server_id, identifier)
         if record['status'] in ACTIVE:
             record.update(status='Cancelled', enabled=False)
@@ -356,17 +359,19 @@ async def listing(server_id):
     rows = records(server_id)
     server = servers.get(server_id)
     available = None
-    try:
-        headers = {'Authorization': 'Bearer ' + server['api_key']} if server.get('api_key') else {}
-        path = '/api/tags' if server['engine'] == 'ollama' else '/models'
-        async with client('inference:' + server_id, server, timeout=5, follow_redirects=False, trust_env=False) as connection:
-            response = await connection.get(server['url'].rstrip('/') + path, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-        available = [m['name'] for m in data.get('models', [])] if server['engine'] == 'ollama' else [m['id'] for m in data.get('data', [])]
-    except (httpx.HTTPError, HTTPException, ValueError, KeyError):
-        pass
-    return [{**r, 'available': canonical_id(server['engine'], r['model_id']) in {canonical_id(server['engine'], m) for m in available} if available is not None else None,
+    if rows and not manager.maintenance:
+        try:
+            headers = {'Authorization': 'Bearer ' + server['api_key']} if server.get('api_key') else {}
+            path = '/api/tags' if server['engine'] == 'ollama' else '/models'
+            async with client('inference:' + server_id, server, track_activity=False, timeout=5, follow_redirects=False, trust_env=False) as connection:
+                response = await connection.get(server['url'].rstrip('/') + path, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+            available = [m['name'] for m in data.get('models', [])] if server['engine'] == 'ollama' else [m['id'] for m in data.get('data', [])]
+        except (httpx.HTTPError, HTTPException, ValueError, KeyError):
+            pass
+    installed = {canonical_id(server['engine'], m) for m in available} if available is not None else None
+    return [{**r, 'available': canonical_id(server['engine'], r['model_id']) in installed if installed is not None else None,
              'percent': min(100, round(100 * r['completed'] / r['total'], 1)) if r.get('total') else None} for r in rows]
 
 

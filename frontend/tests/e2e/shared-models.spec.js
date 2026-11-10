@@ -123,3 +123,22 @@ test('file deletion requires maintenance and disabled sharing, then explicit con
   await expect(page.locator('#lab-shared-model-list')).toContainText('No shared models')
   expect(deleted).toBe(true)
 })
+
+test('engine toggle preserves current server models and keeps custom picker in sync', async ({ page }) => {
+  const { rows } = await setup(page)
+  rows.push({ id: 'job', model_id: 'qwen3.5:4b', engine: 'ollama', status: 'Completed', enabled: true, verified: true, available: true })
+  await expect(page.locator('#lab-shared-model-list')).toContainText('qwen3.5:4b')
+
+  await page.locator('#lab-model-recommendation').selectOption('qwen3.5:4b', { force: true })
+  await expect(page.locator('#lab-model-recommendation-picker-value')).toContainText('Qwen 3.5 4B')
+  await page.locator('#lab-model-id').fill('custom:tag')
+  await expect(page.locator('#lab-model-recommendation-picker-value')).toHaveText('Choose a recommended model or enter an ID')
+
+  await page.locator('#lab-engine').selectOption('vllm', { force: true })
+  await expect(page.locator('#lab-shared-models')).toContainText('Save the server first')
+  await page.locator('#lab-engine').selectOption('ollama', { force: true })
+  await expect(page.locator('#lab-shared-model-list')).toContainText('qwen3.5:4b')
+
+  const borderBottom = await page.locator('#lab-shared-models').evaluate(el => getComputedStyle(el).borderBottomStyle)
+  expect(borderBottom).toBe('solid')
+})
