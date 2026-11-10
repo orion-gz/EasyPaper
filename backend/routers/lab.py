@@ -5,6 +5,8 @@ import secrets
 import sqlite3
 import uuid
 
+import httpx
+
 from services.inference_servers import ServerSettings
 from services.ssh_connections import SSHSettings
 
@@ -321,7 +323,9 @@ async def shared_model_catalog(identifier: str, username: str = Depends(require_
 @router.get('/inference/servers/{identifier}/shared-models')
 async def shared_model_list(identifier: str, username: str = Depends(require_admin_user)):
     from services import shared_models
-    return {'models': await shared_models.listing(identifier)}
+    from services.shared_model_deletion import policy
+    from services.inference_servers import get
+    return {'models': await shared_models.listing(identifier), 'file_deletion': policy(get(identifier, False))}
 
 
 @router.post('/inference/servers/{identifier}/shared-models', status_code=202)
@@ -339,5 +343,7 @@ async def shared_model_action(identifier: str, model_id: str, data: SharedModelA
 @router.delete('/inference/servers/{identifier}/shared-models/{model_id}')
 async def shared_model_remove(identifier: str, model_id: str, delete_files: bool = False, username: str = Depends(require_admin_user)):
     from services import shared_models
-    await shared_models.remove(identifier, model_id, delete_files)
-    return {'deleted': True, 'files_deleted': False}
+    try:
+        return await shared_models.remove(identifier, model_id, delete_files)
+    except (httpx.HTTPError, ValueError, OSError, TimeoutError):
+        raise HTTPException(502, 'File deletion could not be verified. Check the isolated engine or cache; sharing remains disabled.')

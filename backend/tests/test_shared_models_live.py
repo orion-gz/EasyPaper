@@ -1,5 +1,6 @@
 """Opt-in real engine test. Point ONLY at a disposable, empty Ollama instance."""
 import asyncio
+import json
 import os
 
 import httpx
@@ -9,7 +10,7 @@ from test_lab_mode import environment
 
 
 @pytest.mark.asyncio
-async def test_live_ollama_download_verify_and_infer(environment):
+async def test_live_ollama_download_verify_and_infer(environment, monkeypatch):
     url = os.getenv('EASYPAPER_TEST_OLLAMA_URL')
     model = os.getenv('EASYPAPER_TEST_OLLAMA_MODEL')
     if not url or not model:
@@ -32,6 +33,13 @@ async def test_live_ollama_download_verify_and_infer(environment):
                 'stream':False,'keep_alive':0,'options':{'num_predict':1,'num_ctx':512}})
             response.raise_for_status()
             assert response.json().get('message') and response.json().get('done')
+            from services.shared_model_deletion import policy
+            await models.action(server['id'], record['id'], 'disable')
+            monkeypatch.setenv('EASYPAPER_MODEL_MAINTENANCE', json.dumps({server['id']: {
+                'isolated': True, 'destination': policy(servers.get(server['id']))['destination']}}))
+            deleted = await models.remove(server['id'], record['id'], delete_files=True)
+            assert deleted['files_deleted'] and not models.records(server['id'])
+            assert not (await connection.get(url+'/api/tags')).json()['models']
             print('REAL_OLLAMA',{'model':model,'bytes':result['total'],'download_verified':True,'inference_verified':True})
         finally:
             await models.stop()
