@@ -8475,17 +8475,6 @@ body.light-theme .chat-drawer {
 }
 #lab-status:empty { display: none; }
 #tab-lab .form-actions, #lab-personal-form .form-actions { flex-wrap: wrap; }
-#lab-models {
-  grid-row: 1 / span 2;
-  padding: 12px 16px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font: 13px/1.6 var(--font-mono);
-  resize: vertical;
-}
-#lab-models:focus { outline: 2px solid var(--accent-mid); outline-offset: 2px; }
 .lab-member-row {
   display: flex;
   align-items: center;
@@ -8509,7 +8498,6 @@ body.light-theme .chat-drawer {
   font: 12px/1.6 var(--font-mono);
 }
 @media (max-width: 720px) {
-  #lab-models { grid-row: auto; }
   #lab-status { margin-inline: 16px; }
 }
 
@@ -8746,3 +8734,9 @@ body.light-theme .chat-drawer {
 .lab-guide-maintenance { min-width: 0; }
 .lab-guide-maintenance summary { cursor: pointer; }
 .lab-guide-maintenance pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 var(--font-mono); }
+
+.shared-model-add { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
+.shared-model-row { border: 1px solid var(--border-strong); border-radius: var(--radius-md); padding: 12px; margin: 10px 0; overflow-wrap: anywhere; }
+.shared-model-row p { margin: 6px 0; }
+.shared-model-row button { margin: 4px 8px 0 0; }
+.shared-model-row progress { width: min(70%, 300px); margin-right: 8px; }

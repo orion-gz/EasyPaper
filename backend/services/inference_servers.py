@@ -111,6 +111,11 @@ async def save(data, identifier=None):
     key = 'inference:' + identifier
     previous = next((s for s in current['servers'] if s['id'] == identifier), {})
     manager.guard(key)
+    from services import shared_models
+    shared_models.guard(identifier)
+    managed = shared_models.records(identifier) if previous else []
+    if managed and data.engine != previous['engine']:
+        raise HTTPException(409, 'Remove shared models before changing engines.')
     try:
         credentials = secrets.get(key)
         if previous.get('legacy_credentials'):
@@ -122,6 +127,10 @@ async def save(data, identifier=None):
     credentials.update({k: v for k, v in data.credentials.model_dump().items() if v})
     secrets.put(key, credentials, data.save_credentials)
     server = dict(data.model_dump(exclude={'credentials'}), id=identifier)
+    if managed:
+        server['models'] = previous['models']
+        if server['model'] not in server['models']:
+            server['model'] = previous['model']
     current['servers'] = [server if s['id'] == identifier else s for s in current['servers']]
     if not any(s['id'] == identifier for s in current['servers']):
         current['servers'].append(server)
@@ -141,10 +150,13 @@ async def delete(identifier):
         raise HTTPException(409, 'Choose another default server before deleting this server.')
     key = 'inference:' + identifier
     manager.guard(key)
+    from services import shared_models
+    shared_models.guard(identifier)
     secrets.delete(key)
     data['servers'] = [s for s in data['servers'] if s['id'] != identifier]
     with closing(db.get_db()) as conn, conn:
         conn.execute('INSERT OR REPLACE INTO lab_configuration VALUES (?,?)', ('inference_servers', json.dumps(data)))
+        conn.execute('DELETE FROM shared_models WHERE server_id=?', (identifier,))
         if server.get('legacy_credentials'):
             conn.execute("DELETE FROM lab_configuration WHERE key='inference'")
     await manager.close(key)

@@ -1,3 +1,4 @@
+import { sharedModelManager } from './sharedModels.js'
 import { initializeLabGuide } from './labGuide.js'
 import { connectionEditor } from './sshConnectionForm.js'
 import { syncSelectValue } from './uiScale.js'
@@ -94,12 +95,74 @@ export async function initializeLabMode() {
   personalServer.className = 'form-select'
   personalServer.setAttribute('aria-label', t('settings:connectionInferenceServer'))
   document.querySelector('#lab-personal-form .settings-section-heading').after(settingsRow(personalServer, t('settings:connectionInferenceServer')))
+  function setDefaultModels(server = {}) {
+    const control = document.getElementById('lab-default-model')
+    const selected = control.value
+    const allowed = server.models || []
+    if (JSON.stringify([...control.options].map(option => option.value)) !== JSON.stringify(allowed)) {
+      control.replaceChildren(...allowed.map(model => new Option(model, model)))
+    }
+    const value = allowed.includes(selected) ? selected : server.model || ''
+    if (control.value !== value) syncSelectValue(control, value)
+  }
+  let modelRefresh = false
+  async function updateModels() {
+    if (modelRefresh) return
+    modelRefresh = true
+    try {
+      const listing = await api('/inference/servers')
+      servers = listing.servers
+      setDefaultModels(servers.find(s => s.id === serverSelect.value))
+      updatePersonalModels()
+    } finally { modelRefresh = false }
+  }
+  const modelManager = sharedModelManager({ api, container: document.getElementById('lab-shared-models'), report, changed: updateModels })
+  document.getElementById('lab-engine').addEventListener('change', () => { void modelManager.load() })
+  let personalTimer
+  const personalInput = document.getElementById('lab-personal-model')
+  const personalModels = document.createElement('select')
+  personalModels.id = 'lab-personal-shared-model'
+  personalModels.className = 'form-select'
+  personalModels.setAttribute('aria-label', t('settings:labDefaultModel'))
+  const personalModelContainer = document.createElement('div')
+  personalModelContainer.append(personalModels)
+  personalInput.after(personalModelContainer)
+  function personalModelControl() {
+    return ['ollama', 'vllm'].includes(providerSelect.value) ? personalModels : personalInput
+  }
+  function updatePersonalModels(preferredModel) {
+    const server = servers.find(s => s.id === personalServer.value)
+    const local = ['ollama', 'vllm'].includes(providerSelect.value)
+    personalInput.hidden = local
+    personalInput.disabled = local
+    personalModelContainer.hidden = !local
+    personalModels.disabled = !local
+    personalModels.required = local
+    document.querySelector('#lab-personal-form label[for="lab-personal-model"], #lab-personal-form label[for="lab-personal-shared-model"]').htmlFor = local ? personalModels.id : personalInput.id
+    if (local) {
+      const value = typeof preferredModel === 'string' ? preferredModel : personalModels.value
+      const allowed = server?.models || []
+      if (JSON.stringify([...personalModels.options].map(option => option.value)) !== JSON.stringify(allowed)) {
+        personalModels.replaceChildren(...allowed.map(model => new Option(model, model)))
+      }
+      const selected = allowed.includes(value) ? value : server?.model || ''
+      if (personalModels.value !== selected) syncSelectValue(personalModels, selected)
+    } else if (typeof preferredModel === 'string') personalInput.value = preferredModel
+  }
+  providerSelect.addEventListener('change', updatePersonalModels)
+  async function pollPersonalModels() {
+    clearTimeout(personalTimer)
+    try { await updateModels() } catch (error) { report(error) }
+    personalTimer = setTimeout(pollPersonalModels, 5000)
+  }
+  window.addEventListener('pagehide', () => { modelManager.stop(); clearTimeout(personalTimer) })
   function loadServer(server = {}) {
     name.value = server.name || ''
     syncSelectValue(document.getElementById('lab-engine'), server.engine || 'ollama')
     document.getElementById('lab-url').value = server.url || ''
-    document.getElementById('lab-models').value = (server.models || []).join('\n')
-    document.getElementById('lab-default-model').value = server.model || ''
+    setDefaultModels(server)
+    void modelManager.load(server)
+    syncSelectValue(document.getElementById('lab-default-model'), server.model || '')
     document.getElementById('lab-total-limit').value = server.max_concurrent || 2
     document.getElementById('lab-user-limit').value = server.per_user || 1
     document.getElementById('lab-api-key').value = ''
@@ -110,8 +173,8 @@ export async function initializeLabMode() {
     const server = servers.find(s => s.id === personalServer.value)
     if (server) {
       syncSelectValue(document.getElementById('lab-personal-provider'), server.engine)
-      document.getElementById('lab-personal-model').value = server.model
       updateProviderControls()
+      updatePersonalModels(server.model)
     }
   }
   for (const [label, action] of [
@@ -131,10 +194,12 @@ export async function initializeLabMode() {
   async function refresh(preferredId) {
     pendingRefreshes += 1
     personalForm.inert = true
+    form.inert = true
     try { await refreshSettings(preferredId) }
     finally {
       pendingRefreshes -= 1
       personalForm.inert = pendingRefreshes > 0
+      form.inert = pendingRefreshes > 0
     }
   }
   async function refreshSettings(preferredId) {
@@ -161,9 +226,10 @@ export async function initializeLabMode() {
     syncSelectValue(serverSelect, servers.some(s => s.id === previous) ? previous : defaultId || '')
     syncSelectValue(personalServer, personal.server_id || defaultId || '')
     syncSelectValue(document.getElementById('lab-personal-provider'), personal.provider || common.engine)
-    document.getElementById('lab-personal-model').value = personal.model || common.model
     updateProviderControls()
-    if (profile.role !== 'master') return
+    updatePersonalModels(personal.model || common.model)
+    void pollPersonalModels()
+    if (profile.role !== 'master') { modelManager.stop(); return }
     loadServer(servers.find(s => s.id === serverSelect.value))
     members.replaceChildren()
     for (const user of await api('/lab/users')) {
@@ -236,7 +302,7 @@ export async function initializeLabMode() {
         credentials: { ...connection.credentials, api_key: key.value },
         engine: document.getElementById('lab-engine').value,
         url: document.getElementById('lab-url').value,
-        models: document.getElementById('lab-models').value.split('\n').map(value => value.trim()).filter(Boolean),
+        models: servers.find(s => s.id === serverSelect.value)?.models || [],
         model: document.getElementById('lab-default-model').value.trim(),
         max_concurrent: Number(document.getElementById('lab-total-limit').value),
         per_user: Number(document.getElementById('lab-user-limit').value),
@@ -248,7 +314,7 @@ export async function initializeLabMode() {
     await api('/me/model-settings', 'PUT', {
       server_id: personalServer.value || null,
       provider: document.getElementById('lab-personal-provider').value,
-      model: document.getElementById('lab-personal-model').value.trim(),
+      model: personalModelControl().value.trim(),
     })
     await refresh()
   }))

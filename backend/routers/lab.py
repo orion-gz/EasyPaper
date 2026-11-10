@@ -302,3 +302,42 @@ async def test_server(identifier: str, username: str = Depends(require_admin_use
 async def ssh_host_key(data: 'SSHSettings', username: str = Depends(require_admin_user)):
     from services.ssh_connections import discover_host_key
     return await discover_host_key(data)
+
+
+class SharedModelInput(BaseModel):
+    model_id: str = Field(min_length=1, max_length=200)
+
+
+class SharedModelAction(BaseModel):
+    action: str = Field(pattern='^(retry|cancel|enable|disable)$')
+
+
+@router.get('/inference/servers/{identifier}/model-catalog')
+async def shared_model_catalog(identifier: str, username: str = Depends(require_admin_user)):
+    from services import shared_models
+    return await shared_models.catalog(identifier)
+
+
+@router.get('/inference/servers/{identifier}/shared-models')
+async def shared_model_list(identifier: str, username: str = Depends(require_admin_user)):
+    from services import shared_models
+    return {'models': await shared_models.listing(identifier)}
+
+
+@router.post('/inference/servers/{identifier}/shared-models', status_code=202)
+async def shared_model_add(identifier: str, data: SharedModelInput, username: str = Depends(require_admin_user)):
+    from services import shared_models
+    return await shared_models.add(identifier, data.model_id)
+
+
+@router.patch('/inference/servers/{identifier}/shared-models/{model_id}')
+async def shared_model_action(identifier: str, model_id: str, data: SharedModelAction, username: str = Depends(require_admin_user)):
+    from services import shared_models
+    return await shared_models.action(identifier, model_id, data.action)
+
+
+@router.delete('/inference/servers/{identifier}/shared-models/{model_id}')
+async def shared_model_remove(identifier: str, model_id: str, delete_files: bool = False, username: str = Depends(require_admin_user)):
+    from services import shared_models
+    await shared_models.remove(identifier, model_id, delete_files)
+    return {'deleted': True, 'files_deleted': False}
