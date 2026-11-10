@@ -15,6 +15,15 @@ class LabSecurityMiddleware:
         token = identity.set(None)
         try:
             request = Request(scope)
+            if scope.get('path', '').startswith('/api/'):
+                from services import lab
+                if lab.settings()['enabled']:
+                    from fastapi import HTTPException
+                    from services.lab_runtime import ensure_owner
+                    try:
+                        ensure_owner()
+                    except HTTPException as error:
+                        return await JSONResponse({'detail': error.detail}, status_code=error.status_code)(scope, receive, send)
             if scope.get('path', '').startswith('/api/') and request.method not in ('GET', 'HEAD', 'OPTIONS'):
                 origin = request.headers.get('origin')
                 # The Tauri proxy removes the local origin before forwarding.

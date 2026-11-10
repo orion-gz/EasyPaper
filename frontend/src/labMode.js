@@ -1,3 +1,4 @@
+import { resourceEditor } from './labResources.js'
 import { sharedModelManager } from './sharedModels.js'
 import { initializeLabGuide } from './labGuide.js'
 import { connectionEditor } from './sshConnectionForm.js'
@@ -64,6 +65,7 @@ export async function initializeLabMode() {
     await refresh()
   })
   document.querySelector('#lab-personal-form > .form-actions').append(resetPersonal)
+  let labEnabled = false
   let servers = []
   let defaultId = null
   const form = document.getElementById('lab-inference-form')
@@ -96,6 +98,7 @@ export async function initializeLabMode() {
   personalServer.className = 'form-select'
   personalServer.setAttribute('aria-label', t('settings:connectionInferenceServer'))
   document.querySelector('#lab-personal-form .settings-section-heading').after(settingsRow(personalServer, t('settings:connectionInferenceServer')))
+  const resources = resourceEditor(form, api, () => serverSelect.value)
   function setDefaultModels(server = {}) {
     const control = document.getElementById('lab-default-model')
     const selected = control.value
@@ -105,6 +108,7 @@ export async function initializeLabMode() {
     }
     const value = allowed.includes(selected) ? selected : (allowed.includes(server.model) ? server.model : allowed[0] || '')
     syncSelectValue(control, value)
+    resources.sync(allowed)
   }
   let modelRefresh = false
   async function updateModels() {
@@ -171,6 +175,8 @@ export async function initializeLabMode() {
     if (generation === personalGeneration) personalTimer = setTimeout(() => pollPersonalModels(generation), 5000)
   }
   function loadServer(server = {}) {
+    resources.load(server)
+    document.getElementById('lab-server-enabled').checked = server.enabled !== false
     name.value = server.name || ''
     syncSelectValue(document.getElementById('lab-engine'), server.engine || 'ollama')
     document.getElementById('lab-url').value = server.url || ''
@@ -220,6 +226,7 @@ export async function initializeLabMode() {
   async function refreshSettings(preferredId) {
     personalStatus.textContent = ''
     const profile = await api('/auth/me')
+    labEnabled = !!profile.lab_mode
     document.getElementById('lab-admin').hidden = profile.role !== 'master'
     status.textContent = `${profile.username} · ${(profile.lab_mode ? t('settings:labOn') : t('settings:labOff'))}`
     document.getElementById('lab-enabled').checked = profile.lab_mode
@@ -290,6 +297,7 @@ export async function initializeLabMode() {
     try { await api('/lab/settings', 'PUT', { enabled: document.getElementById('lab-enabled').checked, password: password.value }) }
     finally { password.value = '' }
     await refresh()
+    window.dispatchEvent(new Event('lab-mode-changed'))
   }))
   document.getElementById('lab-member-form').addEventListener('submit', run(async () => {
     const input = document.getElementById('lab-username')
@@ -313,7 +321,7 @@ export async function initializeLabMode() {
     try {
       const connection = editor.read()
       saved = await api('/inference/servers' + (serverSelect.value ? '/' + serverSelect.value : ''), serverSelect.value ? 'PUT' : 'POST', {
-        ...connection, name: name.value.trim(),
+        ...connection, lab_shared: labEnabled || (servers.find(server => server.id === serverSelect.value)?.lab_shared ?? !!serverSelect.value), memory_policy: resources.read(), name: name.value.trim(), enabled: document.getElementById('lab-server-enabled').checked,
         credentials: { ...connection.credentials, api_key: key.value },
         engine: document.getElementById('lab-engine').value,
         url: document.getElementById('lab-url').value,

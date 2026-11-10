@@ -5,6 +5,8 @@ for (const role of ['master', 'member']) {
   test(`Lab Mode displays ${role} controls on the connected server`, async ({ page }) => {
     await mockBaseRoutes(page)
     await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role, lab_mode: true } }))
+    await page.route('**/api/lab/models', route => route.fulfill({ json: { enabled: true, models: [] } }))
+    await page.route('**/api/lab/models/events', route => route.fulfill({ contentType: 'text/event-stream', body: ': heartbeat\n\n' }))
     await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', url: 'http://localhost:11434', models: ['test'], model: 'test' } }))
     await page.route('**/api/inference/servers', route => route.fulfill({ json: { servers: [{ id: 'gpu', name: 'GPU', engine: 'ollama', models: ['test'], model: 'test' }], default_id: 'gpu' } }))
     await page.route('**/api/me/model-settings', route => route.fulfill({ json: {} }))
@@ -41,32 +43,8 @@ for (const role of ['master', 'member']) {
     await expect(guide.locator('.lab-guide-controls button').nth(1)).toBeHidden()
     await page.keyboard.press('Escape')
     await expect(guide).not.toBeVisible()
-    await page.locator('#settings-nav-model').click()
-    await expect(page.locator('#tab-lab #lab-personal-form')).toHaveCount(0)
-    await expect(page.locator('#tab-model #lab-personal-form')).toBeVisible()
-    await page.locator('#lab-personal-form .lab-help-button').first().click()
-    await expect(page.locator('#lab-personal-provider-help')).toBeVisible()
-    await expect(page.locator('#lab-personal-form .lab-field-heading').first().locator('.lab-help-button')).toHaveCSS('width', '16px')
-    await page.locator('button[aria-controls="lab-personal-shared-model-picker-panel"]').click()
-    await page.keyboard.press('Escape')
-    await expect(page.locator('#lab-personal-provider-help')).toBeHidden()
-    await expect(page.locator('#lab-personal-form .lab-help-button').first()).toHaveAttribute('aria-expanded', 'false')
-    await page.locator('#lab-personal-form .lab-help-button').first().click()
-    await page.locator('#lab-personal-form .lab-help-button').last().click()
-    await expect(page.locator('#lab-personal-provider-help')).toBeHidden()
-    await expect(page.locator('#lab-personal-model-help')).toBeVisible()
-    await page.setViewportSize({ width: 390, height: 844 })
-    await page.keyboard.press('Escape')
-    await page.locator('#lab-personal-form .lab-help-button').last().click()
-    const popup = await page.locator('#lab-personal-model-help').boundingBox()
-    expect(popup.x).toBeGreaterThanOrEqual(0)
-    expect(popup.x + popup.width).toBeLessThanOrEqual(390)
-    await page.screenshot({ path: `/tmp/lab-settings-${role}.png` })
-    await page.keyboard.press('Escape')
-    await expect(page.locator('#lab-personal-model-help')).toBeHidden()
-    await page.locator('#settings-nav-lab').click()
+    await expect(page.locator('#lab-personal-form')).toBeHidden()
     await expect(page.locator('#lab-status')).toContainText('alice')
-    await expect(page.locator('#lab-personal-shared-model')).toHaveValue('test')
     if (role === 'master') {
       await expect(page.locator('#lab-admin')).toBeVisible()
       const enabled = await page.locator('#lab-enabled').isChecked()
@@ -107,9 +85,9 @@ test('switching server accounts archives browser drafts outside exported localSt
   expect(archived.easypaper_test_draft).toBe('Alice private draft')
 })
 
-test('personal CLI login polls instructions and stops after switching to a common engine', async ({ page }) => {
+test('normal mode personal CLI login polling stops after switching engine', async ({ page }) => {
   await mockBaseRoutes(page)
-  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'member', lab_mode: true } }))
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'member', lab_mode: false } }))
   await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', models: ['test'], model: 'test' } }))
   await page.route('**/api/me/model-settings', route => route.fulfill({ json: { provider: 'codex', model: 'test' } }))
   await page.route('**/api/me/providers/codex/login', route => route.fulfill({ json: { status: 'pending' } }))
@@ -134,9 +112,9 @@ test('personal CLI login polls instructions and stops after switching to a commo
   expect(polls).toBe(count)
 })
 
-test('member saves personal models in AI settings and sees errors there', async ({ page }) => {
+test('normal mode master saves personal models in AI settings and sees errors there', async ({ page }) => {
   await mockBaseRoutes(page)
-  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'member', lab_mode: true } }))
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'master', lab_mode: false } }))
   await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', model: 'test' } }))
   await page.route('**/api/inference/servers', route => route.fulfill({ json: { servers: [{ id: 'gpu', name: 'GPU', engine: 'ollama', models: ['test', 'my-model'], model: 'test' }], default_id: 'gpu' } }))
   let personal = {}

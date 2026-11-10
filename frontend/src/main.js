@@ -1,3 +1,4 @@
+import { initializeLabModels } from './labModels.js'
 import { activateAccountStorage } from './accountStorage.js'
 import { initializeLabMode } from './labMode.js'
 import { splitIntoSentences } from './sentenceBoundaries.js'
@@ -3417,6 +3418,7 @@ loginForm.addEventListener('submit', async (e) => {
     showToast('로그인 성공!', 'success')
     loginPassword.value = ''
     await checkAuthentication()
+    window.dispatchEvent(new Event('lab-mode-changed'))
   } catch (err) {
     showToast(err.message, 'error')
   }
@@ -3428,6 +3430,7 @@ globalLogoutBtn.addEventListener('click', async () => {
   if (!ok) return
   try {
     await logoutAPI()
+    window.dispatchEvent(new Event('lab-account-cleared'))
     showToast('로그아웃되었습니다.', 'success')
     showLogin()
   } catch (err) {
@@ -3639,6 +3642,9 @@ const PROVIDER_CONFIG = [
   }
 ]
 
+let labModelCatalog = { enabled: false, models: [] }
+window.addEventListener('lab-model-catalog', event => { labModelCatalog = event.detail })
+
 class ProviderModelPicker {
   constructor(containerEl, { compact = false, onChange } = {}) {
     if (!containerEl) {
@@ -3653,6 +3659,7 @@ class ProviderModelPicker {
     this._build()
     this._updateBtn()
     this._bindClose()
+    window.addEventListener('lab-model-catalog', () => { this._updateBtn(); this.container.classList.remove('open') })
   }
 
   _build() {
@@ -3683,6 +3690,29 @@ class ProviderModelPicker {
 
   _rebuildPanel() {
     this._panel.innerHTML = ''
+    if (labModelCatalog.enabled) {
+      const models = [
+        ...labModelCatalog.cliProviders.flatMap(provider => provider.models.map(model => ({ provider: provider.id, model: model.value, label: `${provider.label} · ${model.label}`, available: true }))),
+        ...labModelCatalog.models.map(model => ({ ...model, label: `${model.name} · ${model.model} — ${model.state}` })),
+      ]
+      for (const model of models) {
+        const button = document.createElement('button')
+        button.type = 'button'; button.className = 'picker-model-item'; button.textContent = model.label
+        button.disabled = !model.available
+        button.onclick = async () => {
+          try {
+            const response = await fetch('/api/me/model-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: model.provider, model: model.model, server_id: model.server_id || null }) })
+            if (!response.ok) throw new Error((await response.json()).detail)
+            labModelCatalog.preference = await response.json()
+            window.dispatchEvent(new Event('lab-mode-changed'))
+            this.container.classList.remove('open')
+            if (!model.server_id) showToast(t('settings:labLoginRequired'), 'info')
+          } catch (error) { showToast(error.message, 'error') }
+        }
+        this._panel.append(button)
+      }
+      return
+    }
 
     // API Key가 입력되었는지 확인 (비어있지 않은지 여부)
     const hasOpenAIKey = !!settingOpenAIKey.value.trim()
@@ -3880,6 +3910,10 @@ class ProviderModelPicker {
   }
 
   _updateBtn() {
+    if (labModelCatalog.enabled) {
+      this._btn.querySelector('.picker-label').textContent = labModelCatalog.preference?.model || t('settings:labChooseModel')
+      return
+    }
     const prov = PROVIDER_CONFIG.find(p => p.id === this._provider)
     const provIcon = prov ? prov.icon : '?'
     const provShort = prov ? (prov.label === 'Google Gemini' ? 'Gemini' : prov.label === 'Anthropic Claude' ? 'Claude' : prov.label.split(' ')[0]) : this._provider
@@ -19768,3 +19802,5 @@ initializeDataTransfer({ confirmImport: message => showCustomConfirm(message, {
   cancelText: t('common:legacy.ui.0701'),
   danger: false,
 }), beforeExport: flushBeforeDataTransfer })
+
+initializeLabModels(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'antigravity'].includes(provider.id)))

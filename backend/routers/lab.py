@@ -58,6 +58,8 @@ async def update_settings(data: ModeUpdate, username: str = Depends(require_admi
         raise HTTPException(409, 'Finish synchronization before changing Lab Mode.')
     from config import set_skip_login
     if data.enabled:
+        from services.lab_runtime import ensure_owner
+        ensure_owner()
         set_skip_login(False)
     with closing(db.get_db()) as conn, conn:
         conn.execute('UPDATE lab_settings SET enabled=? WHERE id=1', (data.enabled,))
@@ -159,6 +161,8 @@ async def inference_settings(username: str = Depends(get_current_user)):
     result = servers.get(with_secrets=False) if servers.state()['servers'] else lab.configuration()
     result.pop('api_key', None)
     if (lab.account(username) or {}).get('role') != 'master':
+        if not result.get('enabled', True) or not result.get('lab_shared', True):
+            return {'models': [], 'model': '', 'engine': result['engine']}
         result = {k: v for k, v in result.items() if k in ('id', 'name', 'engine', 'models', 'model')}
     return result
 
@@ -181,7 +185,7 @@ async def save_inference(data: InferenceSettings, username: str = Depends(requir
         raise HTTPException(400, 'The per-user limit cannot exceed the server limit.')
     key = value.pop('api_key')
     await servers.save(servers.ServerSettings(**{**existing, **value,
-        'name': existing.get('name', 'Default'), 'credentials': {'api_key': key}}), current['default_id'])
+        'name': existing.get('name', 'Default'), 'lab_shared': True, 'credentials': {'api_key': key}}), current['default_id'])
     return {'saved': True}
 
 
@@ -205,6 +209,8 @@ async def save_preferences(data: ModelPreference, username: str = Depends(get_cu
     import json
     from services import inference_servers as servers
     common = servers.get(data.server_id, with_secrets=False) if data.provider in ('ollama', 'vllm') and servers.state()['servers'] else lab.configuration(with_secrets=False)
+    if lab.settings()['enabled'] and data.provider in ('ollama', 'vllm') and (not common.get('enabled', True) or not common.get('lab_shared', True)):
+        raise HTTPException(409, 'This shared server is disabled.')
     if data.provider in ('ollama', 'vllm') and (data.provider != common['engine'] or data.model not in common['models']):
         raise HTTPException(400, 'Choose an allowed lab model.')
     if data.provider in ('ollama', 'vllm'):
@@ -262,7 +268,7 @@ async def list_servers(username: str = Depends(get_current_user)):
     admin = (lab.account(username) or {}).get('role') == 'master'
     value = servers.state()
     from services.ssh_connections import secrets
-    return {**value, 'servers': [servers.public(s, admin) for s in value['servers']],
+    return {**value, 'servers': [servers.public(s, admin) for s in value['servers'] if admin or (s.get('enabled', True) and s.get('lab_shared', True))],
             'credential_storage': secrets.availability() if admin else {'available': False}}
 
 
@@ -305,6 +311,88 @@ async def test_server(identifier: str, username: str = Depends(require_admin_use
 async def ssh_host_key(data: 'SSHSettings', username: str = Depends(require_admin_user)):
     from services.ssh_connections import discover_host_key
     return await discover_host_key(data)
+
+
+class LoginInput(BaseModel):
+    text: str = Field(min_length=1, max_length=4096)
+
+
+@router.post('/me/providers/{provider}/input')
+async def provider_input(provider: str, data: LoginInput, username: str = Depends(get_current_user)):
+    from services.lab_runner import send_input
+    return await send_input(username, provider, data.text)
+
+
+@router.get('/lab/models')
+async def model_catalog(username: str = Depends(get_current_user)):
+    from services.lab_models import snapshot
+    lab.require_access(username)
+    return await snapshot()
+
+
+@router.get('/lab/models/events')
+async def model_events(username: str = Depends(get_current_user)):
+    import asyncio
+    import json
+    from fastapi.responses import StreamingResponse
+    from services.lab_models import snapshot
+    async def events():
+        previous = None
+        while True:
+            lab.require_access(username)
+            value = await snapshot()
+            encoded = json.dumps(value, sort_keys=True)
+            if encoded != previous:
+                yield 'data: ' + encoded + '\n\n'
+                previous = encoded
+            else:
+                yield ': heartbeat\n\n'
+            await asyncio.sleep(3)
+    return StreamingResponse(events(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no'})
+
+
+@router.get('/lab/resources/{identifier}')
+async def resource_plan(identifier: str, username: str = Depends(require_admin_user)):
+    from services import inference_servers
+    from services.lab_resources import gpu_info, recommendations, MemoryPolicy
+    server = inference_servers.get(identifier, with_secrets=False)
+    gpu = await gpu_info(server)
+    policy = server.get('memory_policy')
+    pool = (policy or {}).get('gpu_pool')
+    available = next((g['free_bytes'] for g in gpu['gpus'] if g['id'] == pool), 0) if gpu['available'] else None
+    plan = recommendations(server, MemoryPolicy(**policy), available) if policy else None
+    return {'telemetry': gpu, 'plan': plan}
+
+
+class ModelUnload(BaseModel):
+    model: str = Field(min_length=1, max_length=200)
+
+
+@router.post('/lab/resources/{identifier}/unload')
+async def unload_model(identifier: str, data: ModelUnload, username: str = Depends(require_admin_user)):
+    from services import inference_servers
+    from services.ssh_connections import manager, client
+    server = inference_servers.get(identifier)
+    if server['engine'] != 'ollama':
+        raise HTTPException(409, 'vLLM memory lifecycle belongs to its serving process; stop it through the server operator.')
+    if data.model not in server['models']:
+        raise HTTPException(404, 'Model not registered.')
+    key = 'inference:' + identifier
+    from services.lab_resources import guard_related
+    guard_related(server)
+    headers = {'Authorization': 'Bearer ' + server['api_key']} if server.get('api_key') else {}
+    from services.lab_resources import maintenance
+    maintenance.add(identifier)
+    try:
+        async with manager.lease(key), client(key, server, timeout=30, follow_redirects=False, trust_env=False) as connection:
+            response = await connection.post(server['url'].rstrip('/') + '/api/generate',
+                headers=headers, json={'model': data.model, 'keep_alive': 0, 'stream': False})
+            if response.status_code != 200:
+                raise HTTPException(502, 'Model unload failed.')
+    finally:
+        maintenance.discard(identifier)
+    return {'unloaded': True}
 
 
 class SharedModelInput(BaseModel):

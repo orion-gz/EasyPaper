@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test'
 import { mockBaseRoutes } from './helpers.js'
 
-async function setup(page, role = 'master') {
+async function setup(page, role = 'master', lab_mode = true) {
   await mockBaseRoutes(page, { languageSettings: { ui_locale: 'en', default_source_language: 'auto', target_language: 'ko' } })
   const server = { id: 'gpu', name: 'Lab GPU', engine: 'ollama', url: 'http://gpu:11434', models: [], model: '', transport: 'https' }
   const rows = []
   const requests = []
   const maintenance = { allowed: false }
-  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: role, role, lab_mode: true } }))
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: role, role, lab_mode } }))
   await page.route('**/api/lab/users', route => route.fulfill({ json: [] }))
   await page.route('**/api/lab/inference', route => route.fulfill({ json: server }))
   await page.route('**/api/me/model-settings', route => route.fulfill({ json: {} }))
@@ -86,7 +86,7 @@ test('member model choices synchronize without management controls', async ({ pa
 })
 
 test('switching to personal CLI providers preserves a usable text input', async ({ page }) => {
-  await setup(page, 'member')
+  await setup(page, 'member', false)
   await page.locator('#settings-nav-model').click()
   await expect(page.locator('#lab-personal-form')).not.toHaveAttribute('inert', '')
   await page.locator('#lab-personal-provider').selectOption('codex', { force: true })
