@@ -8,6 +8,7 @@ for (const role of ['master', 'member']) {
     await page.route('**/api/lab/models', route => route.fulfill({ json: { enabled: true, models: [] } }))
     await page.route('**/api/lab/models/events', route => route.fulfill({ contentType: 'text/event-stream', body: ': heartbeat\n\n' }))
     await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', url: 'http://localhost:11434', models: ['test'], model: 'test' } }))
+    await page.route('**/api/inference/servers', route => route.fulfill({ json: { servers: [{ id: 'gpu', name: 'GPU', engine: 'ollama', models: ['test'], model: 'test' }], default_id: 'gpu' } }))
     await page.route('**/api/me/model-settings', route => route.fulfill({ json: {} }))
     await page.route('**/api/lab/users', route => route.fulfill({ json: [{ id: 'member-id', username: '<script>alert(1)</script>', role: 'member', active: true }] }))
     await gotoApp(page)
@@ -115,6 +116,7 @@ test('normal mode master saves personal models in AI settings and sees errors th
   await mockBaseRoutes(page)
   await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'master', lab_mode: false } }))
   await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', model: 'test' } }))
+  await page.route('**/api/inference/servers', route => route.fulfill({ json: { servers: [{ id: 'gpu', name: 'GPU', engine: 'ollama', models: ['test', 'my-model'], model: 'test' }], default_id: 'gpu' } }))
   let personal = {}
   let fail = false
   await page.route('**/api/me/model-settings', async route => {
@@ -126,13 +128,13 @@ test('normal mode master saves personal models in AI settings and sees errors th
   })
   await gotoApp(page)
   await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-model' } })))
-  await expect(page.locator('#lab-personal-model')).toHaveValue('test')
-  await page.locator('#lab-personal-model').fill('my-model')
+  await expect(page.locator('#lab-personal-shared-model')).toHaveValue('test')
+  await page.locator('#lab-personal-shared-model').selectOption('my-model', { force: true })
   await page.locator('#lab-personal-form button[type=submit]').click()
   await expect.poll(() => personal.model).toBe('my-model')
   await page.locator('#settings-nav-general').click()
   await page.locator('#settings-nav-model').click()
-  await expect(page.locator('#lab-personal-model')).toHaveValue('my-model')
+  await expect(page.locator('#lab-personal-shared-model')).toHaveValue('my-model')
   fail = true
   await page.locator('#lab-personal-form button[type=submit]').click()
   await expect(page.locator('#lab-personal-status')).toHaveText('Model unavailable')

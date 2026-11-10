@@ -5,6 +5,8 @@ import secrets
 import sqlite3
 import uuid
 
+import httpx
+
 from services.inference_servers import ServerSettings
 from services.ssh_connections import SSHSettings
 
@@ -250,7 +252,8 @@ async def check_inference(username: str = Depends(require_admin_user)):
             response.raise_for_status()
             data = response.json()
         models = [item['id'] for item in data.get('data', [])] if value['engine'] == 'vllm' else [item['name'] for item in data.get('models', [])]
-        if value['model'] not in models:
+        from services.shared_models import canonical_id
+        if canonical_id(value['engine'], value['model']) not in {canonical_id(value['engine'], item) for item in models}:
             raise HTTPException(502, 'The default model is not installed on the inference server.')
         from services.lab_inference import probe
         verified = await probe(value)
@@ -390,3 +393,46 @@ async def unload_model(identifier: str, data: ModelUnload, username: str = Depen
     finally:
         maintenance.discard(identifier)
     return {'unloaded': True}
+
+
+class SharedModelInput(BaseModel):
+    model_id: str = Field(min_length=1, max_length=200)
+
+
+class SharedModelAction(BaseModel):
+    action: str = Field(pattern='^(retry|cancel|enable|disable)$')
+
+
+@router.get('/inference/servers/{identifier}/model-catalog')
+async def shared_model_catalog(identifier: str, username: str = Depends(require_admin_user)):
+    from services import shared_models
+    return await shared_models.catalog(identifier)
+
+
+@router.get('/inference/servers/{identifier}/shared-models')
+async def shared_model_list(identifier: str, username: str = Depends(require_admin_user)):
+    from services import shared_models
+    from services.shared_model_deletion import policy
+    from services.inference_servers import get
+    return {'models': await shared_models.listing(identifier), 'file_deletion': policy(get(identifier, False))}
+
+
+@router.post('/inference/servers/{identifier}/shared-models', status_code=202)
+async def shared_model_add(identifier: str, data: SharedModelInput, username: str = Depends(require_admin_user)):
+    from services import shared_models
+    return await shared_models.add(identifier, data.model_id)
+
+
+@router.patch('/inference/servers/{identifier}/shared-models/{model_id}')
+async def shared_model_action(identifier: str, model_id: str, data: SharedModelAction, username: str = Depends(require_admin_user)):
+    from services import shared_models
+    return await shared_models.action(identifier, model_id, data.action)
+
+
+@router.delete('/inference/servers/{identifier}/shared-models/{model_id}')
+async def shared_model_remove(identifier: str, model_id: str, delete_files: bool = False, username: str = Depends(require_admin_user)):
+    from services import shared_models
+    try:
+        return await shared_models.remove(identifier, model_id, delete_files)
+    except (httpx.HTTPError, ValueError, OSError, TimeoutError):
+        raise HTTPException(502, 'File deletion could not be verified. Check the isolated engine or cache; sharing remains disabled.')

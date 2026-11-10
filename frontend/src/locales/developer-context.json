@@ -6793,5 +6793,105 @@
   },
   "settings:labMemoryPool": {
     "description": "Shared physical GPU identity used to aggregate reservations across inference servers."
+  },
+  "settings:sharedModelsTitle": {
+    "description": "Shared inference model management: Shared models",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsRecommend": {
+    "description": "Shared inference model management: Choose a recommended model or enter an ID",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsId": {
+    "description": "Shared inference model management: Model ID (name:tag or owner/model)",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsAdd": {
+    "description": "Shared inference model management: Add and download",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsVram": {
+    "description": "Shared inference model management: Estimated VRAM: {{size}} GB (context dependent)",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsEmpty": {
+    "description": "Shared inference model management: No shared models. Choose a recommendation or enter a model ID.",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsPending": {
+    "description": "Shared inference model management: Pending",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsDownloading": {
+    "description": "Shared inference model management: Downloading",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsVerifying": {
+    "description": "Shared inference model management: Verifying",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsCompleted": {
+    "description": "Shared inference model management: Completed",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsFailed": {
+    "description": "Shared inference model management: Failed",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsCancelled": {
+    "description": "Shared inference model management: Cancelled",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsEnabled": {
+    "description": "Shared inference model management: Sharing enabled",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsDisabled": {
+    "description": "Shared inference model management: Sharing disabled",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsUnknown": {
+    "description": "Shared inference model management: Serving availability unknown",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsAvailable": {
+    "description": "Shared inference model management: Available on the inference server",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsNotServing": {
+    "description": "Shared inference model management: Not currently served / installed",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsLegacy": {
+    "description": "Shared inference model management: Migrated setting; installation not yet verified",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsCancel": {
+    "description": "Shared inference model management: Cancel download",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsRetry": {
+    "description": "Shared inference model management: Retry / verify",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsRemove": {
+    "description": "Shared inference model management: Remove sharing (keep files)",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsRetained": {
+    "description": "Shared inference model management: Downloads continue when you leave this screen. Removing sharing keeps cached files. Downloading does not load a model into VRAM. Ollama progress covers discovered layers.",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsDeleteFiles": {
+    "description": "Shared model file maintenance: sharedModelsDeleteFiles",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsDeleteConfirm": {
+    "description": "Shared model file maintenance: sharedModelsDeleteConfirm",
+    "file": "src/sharedModels.js"
+  },
+  "settings:sharedModelsDeleteHelp": {
+    "description": "Shared model file maintenance: sharedModelsDeleteHelp",
+    "file": "src/sharedModels.js"
   }
 }

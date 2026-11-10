@@ -34,6 +34,9 @@ export async function mockBaseRoutes(page, {
   await page.route('**/api/**', async route => {
     const url = route.request().url()
 
+    if (/\/inference\/servers\/[^/]+\/(shared-models|model-catalog)$/.test(new URL(url).pathname)) {
+      return route.fulfill({ json: { models: [], notice: '' } })
+    }
     if (new URL(url).pathname === '/api/inference/servers') {
       return route.fulfill({ json: { servers: [], default_id: null } })
     }

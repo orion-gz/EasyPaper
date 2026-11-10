@@ -21,7 +21,7 @@ class ServerSettings(BaseModel):
     save_credentials: bool = False
     models: list[str] = Field(default_factory=list, max_length=100)
     model: str = Field(default='', max_length=200)
-    lab_shared: bool = False
+    lab_shared: bool = True
     enabled: bool = True
     memory_policy: MemoryPolicy | None = None
     max_concurrent: int = Field(default=2, ge=1, le=64)
@@ -118,6 +118,11 @@ async def save(data, identifier=None):
     if previous:
         guard_related(previous)
     guard_related(dict(data.model_dump(), id=identifier))
+    from services import shared_models
+    shared_models.guard(identifier)
+    managed = shared_models.records(identifier) if previous else []
+    if managed and data.engine != previous['engine']:
+        raise HTTPException(409, 'Remove shared models before changing engines.')
     try:
         credentials = secrets.get(key)
         if previous.get('legacy_credentials'):
@@ -129,11 +134,24 @@ async def save(data, identifier=None):
     credentials.update({k: v for k, v in data.credentials.model_dump().items() if v})
     secrets.put(key, credentials, data.save_credentials)
     server = dict(data.model_dump(exclude={'credentials'}), id=identifier)
+    if managed:
+        server['models'] = previous['models']
+        if server['model'] not in server['models']:
+            server['model'] = previous['model']
     current['servers'] = [server if s['id'] == identifier else s for s in current['servers']]
     if not any(s['id'] == identifier for s in current['servers']):
         current['servers'].append(server)
     current['default_id'] = current['default_id'] or identifier
-    write(current)
+    if managed and shared_models.destination(previous) != shared_models.destination(server):
+        # Atomically remove stale permissions and invalidate installation evidence.
+        server['models'], server['model'] = [], ''
+        with closing(db.get_db()) as conn, conn:
+            for record in managed:
+                record = shared_models.invalidated(record)
+                conn.execute('UPDATE shared_models SET value=? WHERE id=?', (json.dumps(record), record['id']))
+            conn.execute('INSERT OR REPLACE INTO lab_configuration VALUES (?,?)', ('inference_servers', json.dumps(current)))
+    else:
+        write(current)
     if previous.get('legacy_credentials'):
         with closing(db.get_db()) as conn, conn:
             conn.execute("DELETE FROM lab_configuration WHERE key='inference'")
@@ -150,6 +168,8 @@ async def delete(identifier):
     key = 'inference:' + identifier
     from services.lab_resources import guard_related
     guard_related(server)
+    from services import shared_models
+    shared_models.guard(identifier)
     secrets.delete(key)
     data['servers'] = [s for s in data['servers'] if s['id'] != identifier]
     if data['default_id'] == identifier:
@@ -157,6 +177,7 @@ async def delete(identifier):
         data['default_id'] = (candidates or data['servers'] or [{}])[0].get('id')
     with closing(db.get_db()) as conn, conn:
         conn.execute('INSERT OR REPLACE INTO lab_configuration VALUES (?,?)', ('inference_servers', json.dumps(data)))
+        conn.execute('DELETE FROM shared_models WHERE server_id=?', (identifier,))
         if server.get('legacy_credentials'):
             conn.execute("DELETE FROM lab_configuration WHERE key='inference'")
     await manager.close(key)
@@ -175,13 +196,16 @@ async def check(identifier):
             response.raise_for_status()
             data = response.json()
         models = [m['id'] for m in data.get('data', [])] if value['engine'] == 'vllm' else [m['name'] for m in data.get('models', [])]
+        from services.shared_models import canonical_id
+        installed = {canonical_id(value['engine'], m) for m in models}
+        default_available = bool(value['model']) and canonical_id(value['engine'], value['model']) in installed
         verified = {}
         if value['model']:
-            if value['model'] not in models:
+            if not default_available:
                 raise HTTPException(502, 'The default model is not installed on the inference server.')
             from services.lab_inference import probe
             async with manager.lease(key):
                 verified = await probe(value)
-        return {'connected': True, 'models': models, 'default_available': value['model'] in models, **verified}
+        return {'connected': True, 'models': models, 'default_available': default_available, **verified}
     except (httpx.HTTPError, ValueError, KeyError, RuntimeError):
         raise HTTPException(502, 'Could not reach the inference service through the configured connection.')

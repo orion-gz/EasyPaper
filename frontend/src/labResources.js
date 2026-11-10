@@ -2,15 +2,22 @@ import { t } from './i18n.js'
 
 export function resourceEditor(form, api, serverId) {
   const box = document.createElement('fieldset')
+  box.id = 'lab-memory-policy'
+  box.className = 'lab-memory-policy'
   const title = document.createElement('legend')
   title.textContent = t('settings:labMemoryPolicy')
   const enabled = document.createElement('input')
   enabled.type = 'checkbox'
   const enableLabel = document.createElement('label')
+  enableLabel.className = 'lab-memory-toggle'
   enableLabel.append(enabled, document.createTextNode(t('settings:labMemoryEnforce')))
   const fields = document.createElement('div')
+  fields.className = 'lab-memory-fields'
+  const grid = document.createElement('div')
+  grid.className = 'lab-memory-grid'
   function number(parent, label, value, min = 1, step = '1') {
     const row = document.createElement('label')
+    row.className = 'lab-memory-field'
     row.textContent = label
     const input = document.createElement('input')
     input.type = 'number'; input.min = String(min); input.step = step; input.value = String(value)
@@ -18,13 +25,15 @@ export function resourceEditor(form, api, serverId) {
     return input
   }
   const poolLabel = document.createElement('label')
+  poolLabel.className = 'lab-memory-field lab-memory-pool-field'
   poolLabel.textContent = t('settings:labMemoryPool')
   const pool = document.createElement('input')
   pool.type = 'text'; pool.maxLength = 200
-  poolLabel.append(pool); fields.append(poolLabel)
-  const budget = number(fields, t('settings:labMemoryBudget'), 16, 0.1, '0.1')
-  const maximum = number(fields, t('settings:labMemoryLoaded'), 1)
+  poolLabel.append(pool); grid.append(poolLabel)
+  const budget = number(grid, t('settings:labMemoryBudget'), 16, 0.1, '0.1')
+  const maximum = number(grid, t('settings:labMemoryLoaded'), 1)
   const rows = document.createElement('div')
+  rows.className = 'lab-memory-models'
   const output = document.createElement('pre')
   output.className = 'lab-auth-terminal'
   output.setAttribute('role', 'status')
@@ -33,6 +42,7 @@ export function resourceEditor(form, api, serverId) {
     rows.replaceChildren()
     for (const model of models) {
       const group = document.createElement('fieldset')
+      group.className = 'lab-memory-model-card'
       const legend = document.createElement('legend'); legend.textContent = model; group.append(legend)
       const spec = specifications[model] || {}
       const controls = {
@@ -67,18 +77,18 @@ export function resourceEditor(form, api, serverId) {
       output.textContent = `${gpu}\n${estimates}\n${plans}`
     } catch (error) { output.textContent = error.message }
   }
-  const note = document.createElement('p'); note.textContent = t('settings:labMemoryNote')
-  fields.append(rows, check, output)
+  const note = document.createElement('p'); note.className = 'form-help'; note.textContent = t('settings:labMemoryNote')
+  fields.append(grid, rows, check, output)
   box.append(title, enableLabel, note, fields)
   enabled.onchange = () => { fields.hidden = !enabled.checked }
   form.querySelector('.form-actions').before(box)
   const modelsInput = document.getElementById('lab-models')
-  modelsInput.addEventListener('change', () => {
+  modelsInput?.addEventListener('change', () => {
     specifications = Object.fromEntries([...rows.children].map(row => [row.dataset.model, row.read()]))
     render(modelsInput.value.split('\n').map(m => m.trim()).filter(Boolean))
   })
   return {
-    load(server) {
+    load(server = {}) {
       enabled.checked = server.lab_shared !== false || !!server.memory_policy
       pool.value = server.memory_policy?.gpu_pool || ''
       budget.value = server.memory_policy?.budget_gib || 16
@@ -86,6 +96,10 @@ export function resourceEditor(form, api, serverId) {
       specifications = server.memory_policy?.models || {}
       render(server.models || [])
       enabled.onchange(); output.textContent = ''
+    },
+    sync(models = []) {
+      specifications = { ...specifications, ...Object.fromEntries([...rows.children].map(row => [row.dataset.model, row.read()])) }
+      render(models)
     },
     read() {
       if (!enabled.checked) return null

@@ -1,4 +1,5 @@
 import { t, loadNamespaces } from './i18n.js'
+import { syncSelectValue } from './uiScale.js'
 
 async function request(path, method = 'GET', body) {
   const response = await fetch(`/api${path}`, {
@@ -58,7 +59,7 @@ export async function initializeLabModels(cliProviders) {
       shared.append(option)
     }
     select.append(shared)
-    select.value = valueOf(preference)
+    syncSelectValue(select, [...select.options].some(o => o.value === valueOf(preference)) ? valueOf(preference) : '')
     window.dispatchEvent(new CustomEvent('lab-model-catalog', { detail: { ...catalog, preference, cliProviders } }))
     select.dispatchEvent(new Event('optionschange'))
   }
@@ -77,6 +78,7 @@ export async function initializeLabModels(cliProviders) {
   })
   for (const provider of cliProviders) {
     const card = document.createElement('div')
+    card.className = 'lab-cli-card'
     const title = document.createElement('h4')
     title.textContent = provider.label
     const output = document.createElement('pre')
