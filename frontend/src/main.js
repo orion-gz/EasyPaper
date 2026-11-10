@@ -699,6 +699,7 @@ function activateSettingsCategory(paneId, { focus = false } = {}) {
   })
   if (focus) activeButton.focus()
   $('settings-modal')?.querySelector('.settings-content')?.scrollTo({ top: 0 })
+  document.dispatchEvent(new CustomEvent('easypaper:settings-category-changed', { detail: { category: activeButton.dataset.tab } }))
   if (activeButton.dataset.tab === 'tab-info') refreshSettingsAppInfo()
 }
 

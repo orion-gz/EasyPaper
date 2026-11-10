@@ -1,9 +1,20 @@
 import { mountLabScene } from './labGuideScenes.js'
 import { t } from './i18n.js'
 import { icon } from './icons.js'
+import { sshLauncher } from './labSshLauncher.js'
 import { defaultGuideParameters, validGuideParameters, installationScenes, connectionScenes } from './labGuideFlow.js'
 
 const labels = () => ({
+  labPublicIpField: t('settings:labPublicIpField'),
+  labDownloadSshUnix: t('settings:labDownloadSshUnix'),
+  labDownloadSshWindows: t('settings:labDownloadSshWindows'),
+  labDownloadSshHint: t('settings:labDownloadSshHint'),
+  labMaintenanceTitle: t('settings:labMaintenanceTitle'),
+  labMaintenanceNote: t('settings:labMaintenanceNote'),
+
+  labAutomatedInference: t('settings:labAutomatedInference'),
+  labAutomatedHttps: t('settings:labAutomatedHttps'),
+  labDiagnosticsNote: t('settings:labDiagnosticsNote'),
   labEngineInstallNote: t('settings:labEngineInstallNote'),
   labEngineBindDocker: t('settings:labEngineBindDocker'),
   labEngineBindSystemd: t('settings:labEngineBindSystemd'),
@@ -41,9 +52,6 @@ const labels = () => ({
   labCopiedCommand: t('settings:labCopiedCommand'),
   labCopyFailed: t('settings:labCopyFailed'),
   labInvalidParameters: t('settings:labInvalidParameters'),
-  labCloneNote: t('settings:labCloneNote'),
-  labToolsNote: t('settings:labToolsNote'),
-  labDockerData: t('settings:labDockerData'),
   labDockerRun: t('settings:labDockerRun'),
   labSystemdRun: t('settings:labSystemdRun'),
   labSshNote: t('settings:labSshNote'),
@@ -148,7 +156,7 @@ export function initializeLabGuide() {
   connect.setAttribute('aria-describedby', unlockHint.id)
   introduction.append(intro, open, connect, unlockHint)
   panel.prepend(introduction)
-  for (const input of panel.querySelectorAll('input, select, textarea')) {
+  for (const input of document.querySelectorAll('#tab-lab input, #tab-lab select, #tab-lab textarea, #lab-personal-form input, #lab-personal-form select')) {
     const key = `labHelp_${input.id.replace('lab-', '')}`
     const help = node('p', key)
     help.id = `${input.id}-help`
@@ -158,7 +166,7 @@ export function initializeLabGuide() {
     button.type = 'button'
     button.textContent = '?'
     button.className = 'lab-help-button'
-    const label = panel.querySelector(`label[for="${input.id}"]`)
+    const label = document.querySelector(`label[for="${input.id}"]`)
       || input.closest('label')?.querySelector('.toggle-switch-label')
     button.setAttribute('aria-label', `${label?.textContent || t('settings:labEnable')} ?`)
     button.setAttribute('aria-controls', help.id)
@@ -249,18 +257,19 @@ export function initializeLabGuide() {
   prerequisites.className = 'lab-guide-prerequisites'
   prerequisites.append(node('summary', 'labSceneTools'))
   const links = node('div')
-  for (const [name, href] of [
-    ['Git', 'https://git-scm.com/downloads/linux'],
-    ['Docker Compose', 'https://docs.docker.com/engine/install/'],
-    ['Caddy', 'https://caddyserver.com/docs/install'],
-    ['Ollama', 'https://docs.ollama.com/linux'],
-  ]) {
-    const link = node('a')
-    link.textContent = name
-    link.href = href
-    link.target = '_blank'
-    link.rel = 'noopener noreferrer'
-    links.append(link)
+  const renderPrerequisites = () => {
+    links.replaceChildren()
+    const resources = deployment === 'docker'
+      ? [['Docker Compose', 'https://docs.docker.com/engine/install/ubuntu/']]
+      : [['Node.js', 'https://nodejs.org/en/download'], ['Python', 'https://www.python.org/downloads/']]
+    for (const [name, href] of resources) {
+      const link = node('a')
+      link.textContent = name
+      link.href = href
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      links.append(link)
+    }
   }
   prerequisites.append(links)
   const demo = node('div')
@@ -403,7 +412,29 @@ export function initializeLabGuide() {
   copy.setAttribute('aria-label', t('settings:labCopyCommand'))
   copy.title = t('settings:labCopyCommand')
   snippet.append(code, copy)
-  commandArea.append(parameterFields, snippet, copyStatus)
+  const downloads = node('div')
+  downloads.className = 'lab-guide-choices'
+  for (const [platform, key] of [['unix', 'labDownloadSshUnix'], ['windows', 'labDownloadSshWindows']]) {
+    const download = button(key, () => {
+      const file = sshLauncher(parameters, platform)
+      const url = URL.createObjectURL(new Blob([file.content], { type: 'text/plain;charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = file.name
+      document.body.append(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    })
+    downloads.append(download)
+  }
+  const downloadHint = node('p', 'labDownloadSshHint')
+  const maintenance = node('details')
+  maintenance.className = 'lab-guide-maintenance'
+  maintenance.append(node('summary', 'labMaintenanceTitle'), node('p', 'labMaintenanceNote'))
+  const maintenanceCode = node('pre')
+  maintenance.append(maintenanceCode)
+  commandArea.append(parameterFields, snippet, copyStatus, downloads, downloadHint)
   const refreshScenes = () => {
     scenes = mode === 'install' ? installationScenes(deployment, method, parameters) : connectionScenes(completedMethod, parameters)
   }
@@ -416,11 +447,13 @@ export function initializeLabGuide() {
       code.textContent = current.copy || current.commands?.map(([command]) => command).join('\n') || ''
       snippet.hidden = !code.textContent
       copy.disabled = !validGuideParameters(parameters, scene.parameters || [])
+      downloads.hidden = downloadHint.hidden = !current.sshDownload
+      for (const download of downloads.querySelectorAll('button')) download.disabled = copy.disabled
       nextFrame.disabled = frame === scenes[step].length - 1 || copy.disabled
       next.disabled = frame < scenes[step].length - 1 || copy.disabled
       copyStatus.textContent = copy.disabled ? t('settings:labInvalidParameters') : ''
     }
-    const keys = { host: 'labHostField', user: 'labUserField', port: 'labPortField', localPort: 'labLocalPortField', domain: 'labDomainField', model: 'labEngineModelField' }
+    const keys = { host: 'labHostField', user: 'labUserField', port: 'labPortField', localPort: 'labLocalPortField', domain: 'labDomainField', model: 'labEngineModelField', publicIp: 'labPublicIpField' }
     for (const name of scene.parameters || []) {
       const label = node('label', keys[name])
       const input = node('input')
@@ -478,7 +511,7 @@ export function initializeLabGuide() {
       choices.append(choice)
     }
   }
-  body.append(stepHeader, description, choices, prerequisites, demo, commandArea, reference)
+  body.append(stepHeader, description, choices, prerequisites, demo, commandArea, maintenance, reference)
   const footer = node('div')
   footer.className = 'lab-guide-footer'
   const previous = button('labWizardPrevious', () => { step -= 1; renderStep() })
@@ -503,8 +536,14 @@ export function initializeLabGuide() {
     progress.textContent = `STEP ${step + 1} / ${scenes.length}`
     heading.textContent = t(`settings:${mode === 'install' ? steps[step].title : 'labConnectionGuide'}`)
     description.textContent = t(`settings:${mode === 'install' ? steps[step].text : 'labConnectIntro'}`)
+    if (mode === 'install' && step === 0) {
+      description.textContent += ` ${t(deployment === 'docker' ? 'settings:labDockerRun' : 'settings:labSystemdRun')}`
+      renderPrerequisites()
+    }
     prerequisites.hidden = mode !== 'install' || step !== 0
     renderChoices()
+    maintenance.hidden = mode !== 'install'
+    maintenanceCode.textContent = `sudo bash deploy/lab/diagnose.sh --deployment ${deployment}\nsudo bash deploy/lab/update.sh --deployment ${deployment}\nsudo bash deploy/lab/rollback.sh --deployment ${deployment} --snapshot SNAPSHOT_ID`
     previous.disabled = step === 0
     next.textContent = t(`settings:${step === scenes.length - 1 ? 'labWizardDone' : 'labWizardNext'}`)
     updateToggle()

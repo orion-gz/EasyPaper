@@ -1,5 +1,16 @@
 import { test, expect } from '@playwright/test'
 import { mockBaseRoutes } from './helpers.js'
+// Keep the mocked SSE connection open; fulfill() would immediately close it.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__labEvents = []
+    window.EventSource = class {
+      constructor(url) { this.url = url; window.__labEvents.push(this) }
+      close() { this.closed = true }
+    }
+  })
+})
+
 
 test('administrator selects and edits independent inference servers', async ({ page }) => {
   await mockBaseRoutes(page)
@@ -65,6 +76,7 @@ test('SSH editor restores custom pickers and permits memory-only recovery', asyn
   await expect(editor.locator('input[type=checkbox]')).not.toBeChecked()
   await page.locator('#lab-inference-form button[type=submit]').click()
   await expect.poll(() => saved?.save_credentials).toBe(false)
+  await page.locator('#settings-nav-model').click()
   await page.getByRole('button', { name: 'Use existing personal model settings' }).click()
   await expect.poll(() => reset).toBe(true)
 })

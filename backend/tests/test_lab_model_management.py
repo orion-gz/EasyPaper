@@ -84,7 +84,7 @@ async def test_observation_is_shared_by_concurrent_subscribers(environment, monk
 
 @pytest.mark.asyncio
 async def test_memory_reservations_block_overcommit_and_do_not_kill_running_work(monkeypatch):
-    policy = lab_resources.MemoryPolicy(budget_gib=2, max_loaded=1, models={
+    policy = lab_resources.MemoryPolicy(gpu_pool='GPU-test', budget_gib=2, max_loaded=1, models={
         name: {'parameters_billions': 1, 'context_tokens': 1, 'concurrency': 2} for name in ['a', 'b']})
     server = dict(id='memory-test', engine='ollama', url='https://remote.example', model='a', memory_policy=policy.model_dump())
     async def observe(_):
@@ -108,7 +108,7 @@ def test_estimate_includes_quantization_context_concurrency_and_measured_floor()
     assert lab_resources.ModelMemory(parameters_billions=7, weight_bits=8).estimate() > small.estimate()
     assert lab_resources.ModelMemory(parameters_billions=7, concurrency=4).estimate() > small.estimate()
     assert lab_resources.ModelMemory(parameters_billions=7, measured_gib=20).estimate() >= 20 * 2**30
-    policy = lab_resources.MemoryPolicy(budget_gib=1, models={'large': small})
+    policy = lab_resources.MemoryPolicy(gpu_pool='GPU-test', budget_gib=1, models={'large': small})
     assert lab_resources.recommendations({'models': ['large', 'unknown']}, policy)['suggestions'] == []
 
 
@@ -211,3 +211,103 @@ def test_lab_master_can_delete_last_shared_server(environment):
     assert client.delete('/api/inference/servers/' + server['id']).status_code == 200
     assert client.get('/api/lab/models').json()['models'] == []
     assert client.put('/api/me/model-settings', json={'provider': 'codex', 'model': 'test'}).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_lab_memory_policy_is_required_but_normal_mode_unchanged(environment):
+    client, _ = environment
+    server = register(client)
+    async with lab_resources.admission(server):
+        pass
+    enable(client)
+    with pytest.raises(HTTPException, match='memory policy'):
+        async with lab_resources.admission(server):
+            pytest.fail('Lab requests must not bypass memory admission')
+
+
+@pytest.mark.asyncio
+async def test_two_servers_share_one_gpu_budget_and_catalog_decision(environment, monkeypatch):
+    client, _ = environment
+    policy = lab_resources.MemoryPolicy(gpu_pool='GPU-shared', budget_gib=1, max_loaded=2,
+        models={'small': {'parameters_billions': 1, 'context_tokens': 1},
+                'large': {'parameters_billions': 1, 'context_tokens': 1}}).model_dump()
+    first = register(client, memory_policy=policy, url='https://gpu-one.example')
+    second = register(client, memory_policy=policy, url='https://gpu-two.example')
+    enable(client)
+    async def observe(_):
+        return {}, None
+    monkeypatch.setattr(lab_models, 'observe', observe)
+    lab_resources._states.clear(); lab_models._observers.clear()
+    async with lab_resources.admission(first):
+        with pytest.raises(HTTPException, match='pool budget'):
+            async with lab_resources.admission(second):
+                pytest.fail('Two endpoints must not overbook the same GPU')
+        model = next(m for m in (await lab_models.snapshot())['models'] if m['server_id'] == second['id'])
+        assert not model['available'] and 'pool budget' in model['detail']
+    async with lab_resources.admission(second):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_ollama_latest_alias_does_not_double_reserve(environment, monkeypatch):
+    client, _ = environment
+    policy = lab_resources.MemoryPolicy(gpu_pool='GPU-alias', budget_gib=1, max_loaded=1,
+        models={'small': {'parameters_billions': 1, 'context_tokens': 1, 'concurrency': 2}}).model_dump()
+    server = register(client, models=['small'], memory_policy=policy, url='https://gpu.example')
+    enable(client)
+    async def observe(_):
+        return {'small:latest': 600_000_000}, None
+    monkeypatch.setattr(lab_models, 'observe', observe)
+    lab_resources._states.clear(); lab_models._observers.clear()
+    model = (await lab_models.snapshot())['models'][0]
+    assert model['state'] == 'idle' and model['available'] and model['vram_bytes'] == 600_000_000
+    async with lab_resources.admission(server):
+        async with lab_resources.admission(server):
+            pass
+
+
+def test_single_process_guard_rejects_another_worker(environment):
+    import os
+    import subprocess
+    import sys
+    from services import lab_runtime
+    lab_runtime.ensure_owner()
+    script = "from services import db, lab_runtime; db.DB_PATH = " + repr(str(db.DB_PATH)) + "; lab_runtime.ensure_owner()"
+    environment_vars = dict(os.environ, PYTHONPATH=str(__import__('pathlib').Path(__file__).parents[1]))
+    result = subprocess.run([sys.executable, '-c', script], env=environment_vars, capture_output=True, text=True)
+    assert result.returncode != 0 and 'one backend worker' in result.stderr
+    lab_runtime.release_owner()
+    assert subprocess.run([sys.executable, '-c', script], env=environment_vars, capture_output=True).returncode == 0
+
+
+@pytest.mark.asyncio
+async def test_ssh_gpu_query_uses_fixed_command_and_not_jump_host(monkeypatch):
+    from types import SimpleNamespace
+    from services.ssh_connections import manager
+    commands = []
+    class Connection:
+        async def run(self, command, **kwargs):
+            commands.append(command)
+            return SimpleNamespace(stdout='GPU-abc, Test GPU, 24576, 16384\n')
+    async def port(key, server):
+        return 12345
+    monkeypatch.setattr(manager, 'port', port)
+    monkeypatch.setattr(manager, 'connections', {'inference:test': (Connection(), None, None)})
+    server = {'id': 'test', 'transport': 'ssh', 'url': 'http://localhost:11434'}
+    result = await lab_resources.gpu_info(server)
+    assert result['gpus'][0]['id'] == 'GPU-abc'
+    assert commands == ['nvidia-smi --query-gpu=uuid,name,memory.total,memory.free --format=csv,noheader,nounits']
+    result = await lab_resources.gpu_info(dict(server, url='http://another-host:11434'))
+    assert not result['available'] and len(commands) == 1
+
+
+def test_unload_through_alias_cannot_interrupt_other_server(environment):
+    from services.ssh_connections import manager
+    client, _ = environment
+    first = register(client)
+    alias = register(client)
+    manager.active['inference:' + first['id']] = 1
+    try:
+        assert client.post('/api/lab/resources/' + alias['id'] + '/unload', json={'model': 'small'}).status_code == 409
+    finally:
+        manager.active.pop('inference:' + first['id'])

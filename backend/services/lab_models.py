@@ -65,7 +65,13 @@ async def snapshot():
     enabled = lab.settings()['enabled']
     if not enabled:
         return {'enabled': False, 'models': []}
-    records = [s for s in inference_servers.state()['servers'] if s.get('enabled', True) and s.get('lab_shared', True)]
+    from services.lab_runtime import ensure_owner
+    ensure_owner()
+    from services.lab_resources import availability, model_key
+    all_records = inference_servers.state()['servers']
+    visible = [s for s in all_records if s.get('enabled', True) and s.get('lab_shared', True)]
+    pools = {(s.get('memory_policy') or {}).get('gpu_pool') for s in visible} - {None, ''}
+    records = [s for s in all_records if s in visible or (s.get('memory_policy') or {}).get('gpu_pool') in pools]
     state = _observers.setdefault(asyncio.get_running_loop(), {'lock': asyncio.Lock(), 'expires': 0})
     fingerprint = repr(records)
     async with state['lock']:
@@ -76,19 +82,30 @@ async def snapshot():
                 except Exception:
                     return {}, 'Provider status unavailable'
             state['values'] = await asyncio.gather(*(read(s) for s in records))
+            from services.lab_resources import gpu_info
+            state['gpu'] = {}
+            for server in records:
+                pool = (server.get('memory_policy') or {}).get('gpu_pool')
+                if pool and pool not in state['gpu']:
+                    state['gpu'][pool] = await gpu_info(server)
             state.update(fingerprint=fingerprint, expires=time.monotonic() + 3)
         observations = state['values']
     models = []
+    observed = dict(zip((r['id'] for r in records), observations))
     for server, (resident, error) in zip(records, observations):
+        if not server.get('enabled', True) or not server.get('lab_shared', True):
+            continue
+        resident = {model_key(server['engine'], name): size for name, size in resident.items()}
         for model in server['models']:
             key = (server['id'], model)
-            loaded = model in resident
+            loaded = model_key(server['engine'], model) in resident
+            allowed, reason = await availability(dict(server, model=model), records, observed, state.get('gpu', {}))
             status = ('error' if error or key in _errors else
                       'inferencing' if _active[key] and loaded else
                       'loading' if _active[key] else 'idle' if loaded else 'unloaded')
             models.append({'server_id': server['id'], 'provider': server['engine'], 'model': model,
-                           'name': server['name'], 'state': status, 'vram_bytes': resident.get(model),
+                           'name': server['name'], 'state': status, 'vram_bytes': resident.get(model_key(server['engine'], model)),
                            'active_requests': _active[key], 'queued_requests': _waiting[key],
-                           'available': not error and (loaded or server['engine'] == 'ollama'),
-                           'detail': error})
+                           'available': not error and allowed and (loaded or server['engine'] == 'ollama'),
+                           'detail': error or reason})
     return {'enabled': True, 'models': models}

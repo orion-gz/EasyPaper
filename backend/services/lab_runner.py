@@ -22,6 +22,9 @@ def client():
 
 async def stream(provider, prompt, model, session_id):
     username = identity.get()
+    if lab.settings()['enabled']:
+        from services.lab_runtime import ensure_owner
+        ensure_owner()
     user = lab.require_access(username)
     if not user or provider not in PROVIDERS:
         raise HTTPException(403, 'Unknown account or provider.')
@@ -41,6 +44,9 @@ async def stream(provider, prompt, model, session_id):
 
 
 async def operation(username, provider, action):
+    if lab.settings()['enabled']:
+        from services.lab_runtime import ensure_owner
+        ensure_owner()
     user = lab.require_access(username)
     if not user or provider not in PROVIDERS:
         raise HTTPException(404, 'Provider not found.')
@@ -60,6 +66,9 @@ async def cancel_account(identifier):
 
 
 async def send_input(username, provider, text):
+    if lab.settings()['enabled']:
+        from services.lab_runtime import ensure_owner
+        ensure_owner()
     user = lab.require_access(username)
     if not user or provider not in PROVIDERS:
         raise HTTPException(404, 'Provider not found.')

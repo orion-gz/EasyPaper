@@ -44,7 +44,9 @@ and the existing pinned runner image has no auth adapter. It reports
 agent as an authentication shell would violate the command restriction. A
 verified authentication-only adapter is still required to complete Antigravity
 login/logout support. Actual OAuth flows need validation with provisioned test
-accounts; automated tests use controlled runner responses.
+accounts. Automated tests include a real subprocess which accepts login input,
+plus controlled runner/provider responses. Failed logins no longer suppress a
+fresh authentication status command.
 
 References: [Codex commands](https://learn.chatgpt.com/docs/developer-commands),
 [Claude CLI](https://code.claude.com/docs/en/cli-reference),
@@ -73,8 +75,13 @@ GPU queue and use the runner's account/provider lock.
 
 ## Memory policy
 
-The master can enable an assigned budget and resident-model limit per inference
-server. Model estimates use parameter count, weight quantization, context length,
+Lab shared inference requires a saved memory policy and physical GPU pool ID.
+Without them, admission and the dropdown both report the model unavailable.
+Ordinary-mode requests without a memory policy retain their previous behavior.
+All servers on the same GPU must use the same GPU UUID as their pool ID.
+Reservations and resident allocations are aggregated across the pool; differing
+budgets/resident-model limits use the smallest configured values. Duplicate
+endpoint registrations and Ollama :latest aliases do not double-count allocations. Model estimates use parameter count, weight quantization, context length,
 KV bytes per token, concurrent sequences, and a 20% margin. A measured allocation
 acts as a lower bound. Ollama request context lengths are capped to the configured
 estimate. The UI supplies conservative starting inputs, not architecture detection:
@@ -87,26 +94,33 @@ its reservation. Model concurrency overflow waits in the shared queue. Idle Olla
 models can be explicitly unloaded by the master; server leases reject unloading
 while EasyPaper work is active or queued, and maintenance blocks new admission.
 
-Local NVIDIA telemetry uses fixed `nvidia-smi` arguments. Remote HTTP/SSH endpoints
-report telemetry unavailable rather than borrowing the app host's GPU information.
-Suggested combinations are bounded greedy plans under the saved budget and local
-free memory when available. They are estimates, not guaranteed optimal placements.
+Local NVIDIA telemetry and SSH-host telemetry use fixed `nvidia-smi` arguments.
+SSH queries reuse the verified connection and are permitted only when the
+inference URL is loopback on that host, preventing a jump host's GPU from being
+attributed to another server. Remote HTTP-only endpoints report telemetry
+unavailable. The pool UUID selects the exact GPU; free memory from a different
+GPU is never used to admit work. Suggested combinations are bounded greedy plans
+under the saved budget and selected GPU free memory when available. They are estimates, not guaranteed optimal placements.
 
 Operational limits:
 
-- Memory enforcement is opt-in; without a configured policy the provider manages
-  memory as before. Remote GPU telemetry and automatic architecture detection are
-  not implemented.
-- Budgets for endpoints on the same physical GPU must be assigned without overlap.
-  Reservations are per server; this is not a distributed GPU scheduler. Run one
-  EasyPaper backend worker for coherent counters, queues, and reservations.
+- Automatic architecture detection and HTTP-only remote GPU telemetry are not
+  implemented. Remote pool IDs must be provisioned correctly by the master.
+- Run one EasyPaper backend worker per database. An OS advisory lock rejects
+  duplicate Lab processes at startup/request time instead of permitting split
+  counters and reservations. This is not a distributed GPU scheduler.
 - vLLM process creation, allocation, sleep/wake, tensor parallel placement, and
   unloading remain operator-managed. The app does not call disruptive development
   control APIs. Configure vLLM context/concurrency and memory allocation to match
   the saved policy. [vLLM sleep lifecycle](https://docs.vllm.ai/en/latest/features/sleep_mode/).
-- Out-of-band inference, model aliases, external memory consumers, runtime overhead,
+- Out-of-band inference, nonstandard model aliases, external memory consumers, runtime overhead,
   and inaccurate estimates can invalidate available-memory assumptions. Dedicated
   serving endpoints and measured margins are required for reliable enforcement.
 - GPU/OAuth hardware integration and two real desktop clients were not exercised
   in this development environment. Tests cover mocked provider observations,
   concurrent admission, account boundaries, mode restoration, and browser input.
+
+The catalog uses the same pool admission calculation as inference. A lost SSE
+connection disables shared selections until fresh status arrives; malformed
+responses never switch the UI back to personal mode. Unloading or reconfiguring
+an idle server alias is blocked when related endpoint/pool work is active.

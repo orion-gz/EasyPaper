@@ -114,7 +114,10 @@ async def save(data, identifier=None):
     identifier = identifier or uuid.uuid4().hex
     key = 'inference:' + identifier
     previous = next((s for s in current['servers'] if s['id'] == identifier), {})
-    manager.guard(key)
+    from services.lab_resources import guard_related
+    if previous:
+        guard_related(previous)
+    guard_related(dict(data.model_dump(), id=identifier))
     try:
         credentials = secrets.get(key)
         if previous.get('legacy_credentials'):
@@ -145,7 +148,8 @@ async def delete(identifier):
     if data['default_id'] == identifier and not lab.settings()['enabled']:
         raise HTTPException(409, 'Choose another default server before deleting this server.')
     key = 'inference:' + identifier
-    manager.guard(key)
+    from services.lab_resources import guard_related
+    guard_related(server)
     secrets.delete(key)
     data['servers'] = [s for s in data['servers'] if s['id'] != identifier]
     if data['default_id'] == identifier:

@@ -1,5 +1,16 @@
 import { test, expect } from '@playwright/test'
 import { mockBaseRoutes, gotoApp } from './helpers.js'
+// Keep the mocked SSE connection open; fulfill() would immediately close it.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__labEvents = []
+    window.EventSource = class {
+      constructor(url) { this.url = url; window.__labEvents.push(this) }
+      close() { this.closed = true }
+    }
+  })
+})
+
 
 test('Lab selection excludes personal models and restores personal controls', async ({ page }) => {
   await mockBaseRoutes(page)
@@ -29,6 +40,10 @@ test('Lab selection excludes personal models and restores personal controls', as
   await select.selectOption(codex)
   await expect(page.locator('#lab-model-settings > p')).toContainText('로그인')
   expect(preference.provider).toBe('codex')
+  await page.evaluate(() => window.__labEvents.at(-1).onerror())
+  await expect(select.locator('option').filter({ hasText: 'shared-model' })).toBeDisabled()
+  await page.evaluate(models => window.__labEvents.at(-1).onmessage({ data: JSON.stringify({ enabled: true, models }) }), models)
+  await expect(select.locator('option').filter({ hasText: 'shared-model' })).toBeEnabled()
   enabled = false
   await page.evaluate(() => window.dispatchEvent(new Event('lab-mode-changed')))
   await expect(page.locator('#lab-model-settings')).toBeHidden()

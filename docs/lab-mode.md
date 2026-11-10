@@ -210,10 +210,31 @@ The completed installation and connection methods are remembered in this browser
 and server addresses are not stored by the guide. Changing an installation choice
 locks the connection guide until that path is reviewed again.
 
-The installation commands target a fresh **Ubuntu 24.04** server:
+The installation scripts target an **Ubuntu 24.04** server booted with systemd,
+with sudo privileges and internet access. Download this repository and open its
+EasyPaper folder first. Choose one application deployment (both use port 8000).
+The guide shows only the selected deployment's script and prerequisites:
 
-- Docker: clone the repository, install Docker Compose, prepare `lab-data`, then
-  run `sudo docker compose -f docker-compose.lab.yml up -d --build`.
+| Deployment | Run from the EasyPaper folder | Automation | Persistent data |
+| --- | --- | --- | --- |
+| Docker | `sudo bash deploy/lab/install-docker.sh` | Docker/Compose if absent, image build, data directories, container and health check | `lab-data` by default |
+| systemd | `sudo bash deploy/lab/install-systemd.sh` | Python/Node.js dependencies, app build, service user, boot service and health check | `/var/lib/easypaper` |
+
+`sudo bash deploy/lab/install.sh docker` and `sudo bash deploy/lab/install.sh systemd`
+are explicit aliases. Calling `install.sh` without a deployment prints usage and
+makes no changes. The scripts also work when invoked by absolute path from another
+directory. Ollama, HTTPS and optional personal CLI setup remain separate steps.
+
+- Docker: installs Ubuntu's `docker.io` and `docker-compose-v2` packages only when
+  Docker is absent. An existing Docker installation must already have Compose v2
+  and an accessible daemon; the script does not replace vendor-managed packages.
+  Compose reads `.env` in the project folder, including `LAB_DATA_DIR`,
+  `LAB_APP_UID` and `LAB_APP_GID` (default `1000:1000`). Put overrides there because
+  sudo may remove shell environment variables. The script changes ownership only
+  of the data directory and its `home` directory, never existing files recursively.
+  Existing data must be writable by the selected non-root UID/GID. Rerunning
+  rebuilds/recreates the app while preserving its data. Concurrent script runs are
+  blocked and success requires a healthy application container within 180 seconds.
 - systemd: clone the repository and run
   `sudo bash deploy/lab/install-systemd.sh`. The script installs dependencies,
   builds the app in `/opt/easypaper`, creates the service user and registers
@@ -231,34 +252,22 @@ Both deployment templates write logs inside their writable data directories:
 
 ### Shared Ollama setup
 
-The installation guide now includes Ollama installation, a private listener,
-service restart/response check, and model download. Each is a separate scene.
-The example model is `qwen3:4b`; enter another served model name if needed.
-GPU use requires a working GPU driver; verify acceleration on the actual server.
-
-For a **new** Ollama installation, run in the server terminal:
+The guide runs one script for the selected deployment. From the original project
+folder on the Ubuntu 24.04 server:
 
 ```sh
-LAB_OLLAMA_INSTALL="$(mktemp)" && curl -fsSL https://ollama.com/install.sh -o "$LAB_OLLAMA_INSTALL" && sh "$LAB_OLLAMA_INSTALL" && rm -f "$LAB_OLLAMA_INSTALL"
+sudo bash deploy/lab/install-inference.sh --deployment docker --model qwen3:4b
+# For a native application, choose --deployment systemd instead.
 ```
 
-Set the listener address for the chosen EasyPaper deployment:
-
-```sh
-# systemd application:
-LAB_OLLAMA_IP=127.0.0.1
-# Docker application (standard rootful Docker on Ubuntu): use this instead:
-LAB_OLLAMA_IP="$(sudo docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
-```
-
-Then configure the service and download the model:
-
-```sh
-test -n "$LAB_OLLAMA_IP" && sudo install -d /etc/systemd/system/ollama.service.d && printf '[Service]\nEnvironment="OLLAMA_HOST=%s:11434"\n' "$LAB_OLLAMA_IP" | sudo tee /etc/systemd/system/ollama.service.d/90-easypaper.conf
-sudo systemctl daemon-reload && sudo systemctl enable ollama && sudo systemctl restart ollama
-curl --fail --retry 20 --retry-connrefused --retry-delay 3 --max-time 5 "http://$LAB_OLLAMA_IP:11434/api/tags"
-OLLAMA_HOST="http://$LAB_OLLAMA_IP:11434" ollama pull qwen3:4b
-```
+This installs Ollama if absent, adds an EasyPaper-owned systemd drop-in, restarts
+it, downloads the model and performs one generated token from the application's
+network environment. Docker uses the host bridge; systemd uses loopback. Existing
+unmanaged `90-easypaper.conf` files are not overwritten: migrate them manually
+before using the installer. A failed check restores the previous managed drop-in.
+Downloaded binaries/models are retained on failure so the command can be retried.
+This does not install GPU drivers or configure a remote vLLM server. Verify GPU
+acceleration separately. The test can load the model into memory.
 
 For Docker, the host firewall must permit the app container to reach that bridge
 address. Keep port 11434 private. Custom `host-gateway` overrides or rootless
@@ -289,18 +298,98 @@ command before using the updated URL.
 For HTTPS, first use the private SSH tunnel to change the initial `admin / admin`
 password in Settings → Account. Register a domain, point its DNS A record to the
 server public IPv4, and allow/forward TCP ports 80 and 443 through the router and
-server/cloud firewalls. The guide installs Caddy and shows a reverse proxy to
-`127.0.0.1:8000`. Keep 8000 private. On hosts with existing Caddy sites, add the
-shown domain block to the existing configuration rather than replacing it.
-The HTTPS check fetches the page and prints its HTTP status; `HTTP 200` confirms
-a successful response:
+server/cloud firewalls. Run the generated command (replace the example addresses):
 
 ```sh
-curl --fail --show-error --silent --output /dev/null --write-out 'HTTP %{http_code}\n' https://lab.example.com
+sudo bash deploy/lab/install-https.sh --domain lab.example.com --public-ip 203.0.113.10
 ```
+
+The script checks that **all** DNS A/AAAA records match the supplied addresses;
+repeat `--public-ip` for additional IPv4/IPv6 addresses. It installs Caddy if
+missing, preserves existing Caddyfile content and imports a separate managed
+site. A domain already managed elsewhere is rejected. Caddy configuration is
+validated before reloading, then HTTPS hostname/trust and the new route are
+checked. Failed validation/certificate checks restore the previous configuration.
+Private backups are stored under `/var/backups/easypaper-https`. DNS registration,
+router/cloud firewall rules and administrator credentials are not changed by the
+script. The server must be able to reach its public HTTPS address for verification.
+
+### Installation diagnostics
+
+```sh
+sudo bash deploy/lab/diagnose.sh --deployment docker --model qwen3:4b
+sudo bash deploy/lab/diagnose.sh --deployment systemd --model qwen3:4b --domain lab.example.com --json
+```
+
+Checks cover the EasyPaper API, container health or service state, a temporary
+write probe using the application identity, private port binding, and optional
+model availability/HTTPS. The command reports all failed checks with actionable
+hints and exits nonzero if any fail. It does not install packages, change settings
+or print account information. No inference prompt is sent by diagnostics; the
+inference installer performs the actual one-token check.
+
+### Updates and recovery
+
+Run these from the **original Git checkout**, not `/opt/easypaper` (which has no
+Git metadata). Use `--project /path/to/EasyPaper` when invoking a copied script.
+The package dependencies from the original installation must still be available.
+
+```sh
+sudo bash deploy/lab/update.sh --deployment docker
+sudo bash deploy/lab/update.sh --deployment systemd --ref vYOUR_RELEASE
+# Replace the ID with the snapshot printed by update.sh:
+sudo bash deploy/lab/rollback.sh --deployment docker --snapshot 20261107T120000Z-0123abcd
+```
+
+Update fetches `origin`, resolves `--ref` (default `origin/main`) to a commit, and
+builds it separately without checking out or modifying your working tree. Local
+uncommitted edits are not deployed. Docker requires a local daemon and the
+supplied `/data` bind mount; systemd requires the supplied unit and no unmanaged
+service drop-ins. Custom installations must be migrated manually.
+
+The old Docker image or systemd application/runtime and service configuration are
+saved before activation. The app is then stopped briefly and the complete app
+data directory is archived, including SQLite WAL files, before any new process
+can migrate the database. The new version starts and must pass readiness checks.
+On failure, the previous application **and its data** are restored automatically.
+If backup fails before activation, the original service is restarted. If recovery
+also fails, the error identifies the retained snapshot for manual recovery.
+
+Snapshots live under `/var/backups/easypaper` with private permissions because
+they contain account data and configuration. They are never automatically deleted;
+allow space for the old image/runtime plus full data and retain an off-host backup.
+A manual rollback restores the pre-update data as well. Newer data is retained in
+a sibling `*.before-restore-*` directory, not merged into the older database.
+Keep that directory for manual recovery of work created after the snapshot.
+
+Systemd releases live in `/opt/easypaper-releases` and a managed service drop-in
+selects the active release. Docker's resolved active configuration is stored in
+`/var/lib/easypaper-deployment/docker.json`; use the update/rollback tools after the
+first update, not the fresh installer or the original Compose file. Docker recovery
+recreates the container to remount restored data. External inference model stores,
+HTTPS configuration, optional CLI runner homes and arbitrary custom mounts are
+not part of the app snapshot; back them up separately. These commands do not update
+GPU drivers, Ollama or the CLI runner. Operations and installers share locks.
+
+### SSH launchers
+
+The SSH scene offers **Linux/macOS** and **Windows** downloads using the current
+host, account and ports. Run `bash easypaper-connect.sh` on Linux/macOS or open
+`easypaper-connect.cmd` on Windows with OpenSSH installed. The launcher prints the
+browser URL, binds the local tunnel only to loopback, exits on forwarding failure
+and uses SSH keepalives. Password/key authentication and host-key verification
+remain in OpenSSH; downloaded files contain no password or private key. Keep the
+terminal open while using EasyPaper. Download a new launcher after changing host
+or ports. HTTPS connection scenes do not offer SSH files.
+
+The guide's maintenance section also shows deployment-specific diagnostic,
+update and rollback commands. All privileged operations execute only when the
+operator runs a script on the server; the browser never invokes sudo or Docker.
 
 Dependency references: [Docker on Ubuntu](https://docs.docker.com/engine/install/ubuntu/),
 [Caddy installation](https://caddyserver.com/docs/install), and
 [NodeSource Node.js packages](https://github.com/nodesource/distributions),
 [Ollama on Linux](https://docs.ollama.com/linux), and
 [Docker host networking](https://docs.docker.com/compose/how-tos/networking/).
+
+Implementation references: [Ollama Linux service configuration](https://docs.ollama.com/linux), [Ollama generation API](https://docs.ollama.com/api/generate), [Caddy import](https://caddyserver.com/docs/caddyfile/directives/import), and [Caddy validate/reload](https://caddyserver.com/docs/command-line).

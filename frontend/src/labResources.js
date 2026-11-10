@@ -17,6 +17,11 @@ export function resourceEditor(form, api, serverId) {
     row.append(input); parent.append(row)
     return input
   }
+  const poolLabel = document.createElement('label')
+  poolLabel.textContent = t('settings:labMemoryPool')
+  const pool = document.createElement('input')
+  pool.type = 'text'; pool.maxLength = 200
+  poolLabel.append(pool); fields.append(poolLabel)
   const budget = number(fields, t('settings:labMemoryBudget'), 16, 0.1, '0.1')
   const maximum = number(fields, t('settings:labMemoryLoaded'), 1)
   const rows = document.createElement('div')
@@ -56,7 +61,7 @@ export function resourceEditor(form, api, serverId) {
       if (!serverId()) throw new Error(t('settings:connectionSaveTheServerFirst'))
       const result = await api(`/lab/resources/${serverId()}`)
       const gib = bytes => (bytes / 2 ** 30).toFixed(2)
-      const gpu = result.telemetry.available ? result.telemetry.gpus.map(g => `${g.name}: ${gib(g.free_bytes)} / ${gib(g.total_bytes)} GiB`).join('\n') : t('settings:labMemoryTelemetryMissing')
+      const gpu = result.telemetry.available ? result.telemetry.gpus.map(g => `${g.name} (${g.id}): ${gib(g.free_bytes)} / ${gib(g.total_bytes)} GiB`).join('\n') : t('settings:labMemoryTelemetryMissing')
       const estimates = Object.entries(result.plan?.estimated_bytes || {}).map(([name, bytes]) => `${name}: ~${gib(bytes)} GiB`).join('\n')
       const plans = result.plan?.suggestions.map(names => names.join(' + ')).join('\n') || t('settings:labMemoryNoPlan')
       output.textContent = `${gpu}\n${estimates}\n${plans}`
@@ -74,7 +79,8 @@ export function resourceEditor(form, api, serverId) {
   })
   return {
     load(server) {
-      enabled.checked = !!server.memory_policy
+      enabled.checked = server.lab_shared !== false || !!server.memory_policy
+      pool.value = server.memory_policy?.gpu_pool || ''
       budget.value = server.memory_policy?.budget_gib || 16
       maximum.value = server.memory_policy?.max_loaded || 1
       specifications = server.memory_policy?.models || {}
@@ -83,7 +89,7 @@ export function resourceEditor(form, api, serverId) {
     },
     read() {
       if (!enabled.checked) return null
-      return { budget_gib: Number(budget.value), max_loaded: Number(maximum.value),
+      return { gpu_pool: pool.value.trim(), budget_gib: Number(budget.value), max_loaded: Number(maximum.value),
         models: Object.fromEntries([...rows.children].map(row => [row.dataset.model, row.read()])) }
     },
   }

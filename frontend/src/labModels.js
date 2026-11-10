@@ -53,6 +53,8 @@ export async function initializeLabModels(cliProviders) {
       const memory = model.vram_bytes == null ? '' : ` · ${(model.vram_bytes / 2 ** 30).toFixed(2)} GiB`
       const option = new Option(`${model.name} · ${model.model} — ${states[model.state]} · ${activity}${memory}`, valueOf(model))
       option.disabled = !model.available
+      option.title = model.detail || ''
+      if (!model.available && model.detail) option.textContent += ` — ${model.detail}`
       shared.append(option)
     }
     select.append(shared)
@@ -133,14 +135,21 @@ export async function initializeLabModels(cliProviders) {
       if (!catalog.enabled) { cards.forEach(stop => stop()); return }
       const [models, selected] = await Promise.all([request('/lab/models'), request('/me/model-settings')])
       if (current !== generation) return
+      if (typeof models.enabled !== 'boolean' || !Array.isArray(models.models)) throw new Error(t('settings:labStatusReconnecting'))
       catalog = models; preference = selected; render()
       events = new EventSource('/api/lab/models/events')
       events.onmessage = event => {
         if (current !== generation) return
-        catalog = JSON.parse(event.data); render()
+        const update = JSON.parse(event.data)
+        if (typeof update.enabled !== 'boolean' || !Array.isArray(update.models)) return
+        catalog = update; render()
         if (!catalog.enabled) { events.close(); cards.forEach(stop => stop()) }
       }
-      events.onerror = () => { status.textContent = t('settings:labStatusReconnecting') }
+      events.onerror = () => {
+        status.textContent = t('settings:labStatusReconnecting')
+        catalog.models = catalog.models.map(model => ({ ...model, available: false, detail: status.textContent }))
+        render()
+      }
     } catch (error) { status.textContent = error.message }
   }
   document.getElementById('settings-nav-model').addEventListener('click', refresh)

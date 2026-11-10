@@ -56,6 +56,8 @@ async def update_settings(data: ModeUpdate, username: str = Depends(require_admi
         raise HTTPException(409, 'Finish synchronization before changing Lab Mode.')
     from config import set_skip_login
     if data.enabled:
+        from services.lab_runtime import ensure_owner
+        ensure_owner()
         set_skip_login(False)
     with closing(db.get_db()) as conn, conn:
         conn.execute('UPDATE lab_settings SET enabled=? WHERE id=1', (data.enabled,))
@@ -354,7 +356,8 @@ async def resource_plan(identifier: str, username: str = Depends(require_admin_u
     server = inference_servers.get(identifier, with_secrets=False)
     gpu = await gpu_info(server)
     policy = server.get('memory_policy')
-    available = max((g['free_bytes'] for g in gpu['gpus']), default=None) if gpu['available'] else None
+    pool = (policy or {}).get('gpu_pool')
+    available = next((g['free_bytes'] for g in gpu['gpus'] if g['id'] == pool), 0) if gpu['available'] else None
     plan = recommendations(server, MemoryPolicy(**policy), available) if policy else None
     return {'telemetry': gpu, 'plan': plan}
 
@@ -373,7 +376,8 @@ async def unload_model(identifier: str, data: ModelUnload, username: str = Depen
     if data.model not in server['models']:
         raise HTTPException(404, 'Model not registered.')
     key = 'inference:' + identifier
-    manager.guard(key)
+    from services.lab_resources import guard_related
+    guard_related(server)
     headers = {'Authorization': 'Bearer ' + server['api_key']} if server.get('api_key') else {}
     from services.lab_resources import maintenance
     maintenance.add(identifier)

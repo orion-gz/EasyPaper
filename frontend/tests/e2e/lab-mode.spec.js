@@ -24,9 +24,9 @@ for (const role of ['master', 'member']) {
     await expect(guide).toBeVisible()
     await expect(guide.locator('.lab-guide-progress')).toHaveText('STEP 1 / 3')
     await expect(guide.locator('.lab-guide-footer button').first()).toBeDisabled()
-    await expect(guide.locator('.lab-demo-transcript')).toContainText('apt-get')
-    for (let i = 0; i < 4; i++) await nextScene.click()
-    await expect(guide.locator('.lab-demo-transcript')).toContainText('docker compose')
+    await expect(guide.locator('.lab-demo-transcript')).toContainText('install-docker.sh')
+    await nextScene.click()
+    await expect(guide.locator('.lab-demo-transcript')).toContainText('install-inference.sh')
     while (await nextScene.isEnabled()) await nextScene.click()
     await next.click()
     await expect(guide.locator('.lab-guide-progress')).toHaveText('STEP 2 / 3')
@@ -97,7 +97,7 @@ test('normal mode personal CLI login polling stops after switching engine', asyn
   })
   await gotoApp(page)
   await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-general' } })))
-  await page.locator('#settings-nav-lab').click()
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-model' } })))
   await page.locator('#lab-cli-login').click()
   await expect(page.locator('#lab-cli-output')).toContainText('TEST-CODE')
   await page.evaluate(() => {
@@ -109,4 +109,32 @@ test('normal mode personal CLI login polling stops after switching engine', asyn
   const count = polls
   await page.waitForTimeout(2200)
   expect(polls).toBe(count)
+})
+
+test('normal mode master saves personal models in AI settings and sees errors there', async ({ page }) => {
+  await mockBaseRoutes(page)
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'master', lab_mode: false } }))
+  await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', model: 'test' } }))
+  let personal = {}
+  let fail = false
+  await page.route('**/api/me/model-settings', async route => {
+    if (route.request().method() === 'PUT') {
+      if (fail) return route.fulfill({ status: 400, json: { detail: 'Model unavailable' } })
+      personal = route.request().postDataJSON()
+    }
+    await route.fulfill({ json: personal })
+  })
+  await gotoApp(page)
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-model' } })))
+  await expect(page.locator('#lab-personal-model')).toHaveValue('test')
+  await page.locator('#lab-personal-model').fill('my-model')
+  await page.locator('#lab-personal-form button[type=submit]').click()
+  await expect.poll(() => personal.model).toBe('my-model')
+  await page.locator('#settings-nav-general').click()
+  await page.locator('#settings-nav-model').click()
+  await expect(page.locator('#lab-personal-model')).toHaveValue('my-model')
+  fail = true
+  await page.locator('#lab-personal-form button[type=submit]').click()
+  await expect(page.locator('#lab-personal-status')).toHaveText('Model unavailable')
+  await expect(page.locator('#lab-personal-status')).toBeVisible()
 })

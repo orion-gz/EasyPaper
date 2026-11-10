@@ -105,6 +105,9 @@ def selection():
         return selected_server.get()
     from services import inference_servers
     enabled = settings()['enabled']
+    if enabled:
+        from services.lab_runtime import ensure_owner
+        ensure_owner()
     if not enabled and not inference_servers.state()['servers']:
         return None
     from services.lab_context import identity

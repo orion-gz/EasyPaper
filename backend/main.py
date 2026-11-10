@@ -67,6 +67,10 @@ async def lifespan(_app: FastAPI):
 
     init_db()
     init_usage_table()
+    from services import lab
+    if lab.settings()['enabled']:
+        from services.lab_runtime import ensure_owner
+        ensure_owner()
     from services.sync_transaction import recover_transactions
     await asyncio.to_thread(recover_transactions)
     if desktop_connections:
@@ -87,6 +91,8 @@ async def lifespan(_app: FastAPI):
             await desktop_connections.close()
         from services.ssh_connections import manager
         await manager.close()
+        from services.lab_runtime import release_owner
+        release_owner()
         recovery.cancel()
         with suppress(asyncio.CancelledError):
             await recovery

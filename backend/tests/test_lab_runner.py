@@ -100,3 +100,39 @@ async def test_auth_input_is_account_scoped_and_only_for_pending_login():
     with pytest.raises(HTTPException):
         await runner.provider_input(runner.LoginInput(account='a' * 32, provider='codex', text='late\n'))
     runner.logins.clear()
+
+
+@pytest.mark.asyncio
+async def test_failed_login_status_is_rechecked(monkeypatch):
+    monkeypatch.setattr(runner, 'settings', lambda data: ({}, {}, {'status': ['cli', 'status']}))
+    calls = []
+    async def execute(data, action, emit):
+        calls.append(action)
+        return 0
+    monkeypatch.setattr(runner, 'execute', execute)
+    key = ('f' * 32, 'codex')
+    runner.logins[key] = {'status': 'failed', 'output': 'previous failure'}
+    result = await runner.provider(runner.Operation(account=key[0], provider=key[1]))
+    assert result == {'status': 'connected'} and calls == ['status']
+    assert key not in runner.logins
+
+
+@pytest.mark.asyncio
+async def test_real_auth_process_accepts_input_and_clears_output(monkeypatch):
+    import asyncio
+    import sys
+    monkeypatch.setattr(runner, 'settings', lambda data: ({}, {}, {'login': ['cli', 'login']}))
+    script = "import sys; print('Open https://example.test/auth then enter code', flush=True); value = input(); sys.exit(0 if value == 'test-code' else 1)"
+    monkeypatch.setattr(runner, 'command', lambda *args: ([sys.executable, '-c', script], [sys.executable, '-c', 'pass']))
+    key = ('e' * 32, 'codex')
+    result = await runner.provider(runner.Operation(account=key[0], provider=key[1], action='login'))
+    assert result['status'] == 'pending'
+    async with asyncio.timeout(5):
+        while 'enter code' not in runner.logins[key]['output']:
+            await asyncio.sleep(0.01)
+        await runner.provider_input(runner.LoginInput(account=key[0], provider=key[1], text='test-code\n'))
+        await runner.logins[key]['task']
+    assert runner.logins[key]['status'] == 'connected'
+    assert runner.logins[key]['output'] == ''
+    assert 'stdin' not in runner.logins[key]
+    runner.logins.pop(key)

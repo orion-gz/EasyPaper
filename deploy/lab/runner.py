@@ -220,7 +220,7 @@ async def provider(data: Operation):
     key = (data.account, data.provider)
     if data.action == 'status' and key in logins:
         state = logins[key]
-        if state['status'] != 'connected':
+        if state['status'] == 'pending':
             return {'status': state['status'], 'instructions': state['output']}
         logins.pop(key, None)
     if data.action == 'logout' and key in logins:
