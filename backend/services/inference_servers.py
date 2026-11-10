@@ -135,7 +135,16 @@ async def save(data, identifier=None):
     if not any(s['id'] == identifier for s in current['servers']):
         current['servers'].append(server)
     current['default_id'] = current['default_id'] or identifier
-    write(current)
+    if managed and shared_models.destination(previous) != shared_models.destination(server):
+        # Atomically remove stale permissions and invalidate installation evidence.
+        server['models'], server['model'] = [], ''
+        with closing(db.get_db()) as conn, conn:
+            for record in managed:
+                record = shared_models.invalidated(record)
+                conn.execute('UPDATE shared_models SET value=? WHERE id=?', (json.dumps(record), record['id']))
+            conn.execute('INSERT OR REPLACE INTO lab_configuration VALUES (?,?)', ('inference_servers', json.dumps(current)))
+    else:
+        write(current)
     if previous.get('legacy_credentials'):
         with closing(db.get_db()) as conn, conn:
             conn.execute("DELETE FROM lab_configuration WHERE key='inference'")

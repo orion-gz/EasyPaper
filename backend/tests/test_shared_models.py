@@ -157,8 +157,10 @@ async def test_vllm_missing_target_and_runtime_filtered_catalog(environment, mon
         await models.add(identifier, 'Qwen/Qwen3.5-4B')
     assert not (await models.catalog(identifier))['models']
     async def capabilities(*args):
-        return {'version': 'test', 'architectures': ['Qwen3_5ForConditionalGeneration']}
+        return {'version': 'test', 'architectures': ['Qwen3_5ForConditionalGeneration'], 'cache_writable': True}
     monkeypatch.setattr(models, 'worker', capabilities)
+    monkeypatch.setenv('EASYPAPER_VLLM_TARGETS',json.dumps({identifier:{'python':sys.executable,'cache':'/tmp/cache','server_url':'http://engine:8000/v1'}}))
+    monkeypatch.setattr(models,'client',lambda *a,**kw:httpx.AsyncClient(transport=httpx.MockTransport(lambda r:httpx.Response(200,json={'version':'test'}))))
     catalog = await models.catalog(identifier)
     assert catalog['models']
     assert all(m['provider'] == 'Qwen' for m in catalog['models'])
@@ -210,12 +212,15 @@ def test_hf_worker_pins_revision_and_verifies_native_files(tmp_path, monkeypatch
     utils = ModuleType('huggingface_hub.utils')
     utils.tqdm = type('Progress', (), {})
     vllm = ModuleType('vllm')
-    vllm.ModelRegistry = SimpleNamespace(get_supported_archs=lambda:['Supported'])
+    vllm.ModelRegistry = SimpleNamespace(get_supported_archs=lambda:['Supported'],is_text_generation_model=lambda architectures:True)
+    vllm_config = ModuleType('vllm.config')
+    vllm_config.ModelConfig = lambda **kw:SimpleNamespace(quantization=None)
+    monkeypatch.setitem(sys.modules,'vllm.config',vllm_config)
     from contextlib import nullcontext
     safetensors = ModuleType('safetensors')
     safetensors.safe_open = lambda *a, **kw: nullcontext(SimpleNamespace(keys=lambda: ['a']))
     transformers = ModuleType('transformers')
-    transformers.AutoTokenizer = SimpleNamespace(from_pretrained=lambda *a, **kw: None)
+    transformers.AutoTokenizer = SimpleNamespace(from_pretrained=lambda *a, **kw: SimpleNamespace(apply_chat_template=lambda *a,**kw:'user: Hello'))
     monkeypatch.setitem(sys.modules,'safetensors',safetensors)
     monkeypatch.setitem(sys.modules,'transformers',transformers)
     for name, module in [('huggingface_hub',hub),('huggingface_hub.utils',utils),('vllm',vllm)]:
@@ -239,15 +244,18 @@ def test_hf_worker_pins_revision_and_verifies_native_files(tmp_path, monkeypatch
 async def test_vllm_job_persists_worker_progress_and_registers(environment, monkeypatch):
     client, _ = environment
     identifier = create(client, 'vllm')
-    monkeypatch.setenv('EASYPAPER_VLLM_TARGETS', json.dumps({identifier:{'python':sys.executable,'cache':'/tmp/cache'}}))
+    monkeypatch.setenv('EASYPAPER_VLLM_TARGETS', json.dumps({identifier:{'python':sys.executable,'cache':'/tmp/cache','server_url':'http://engine:8000/v1'}}))
     async def worker(server_id, action, model_id='', update=None):
-        assert server_id == identifier and action == 'download'
+        assert server_id == identifier
+        if action == 'capabilities': return {'version':'test','cache_writable':True}
+        assert action == 'download'
         for event in [dict(status='Downloading',total=200,completed=100),
                       dict(status='Verifying',total=200,completed=200),
                       dict(status='Completed',total=200,completed=200,revision='fixed')]:
             update(event)
         return event
     monkeypatch.setattr(models,'worker',worker)
+    monkeypatch.setattr(models,'client',lambda *a,**kw:httpx.AsyncClient(transport=httpx.MockTransport(lambda r:httpx.Response(200,json={'version':'test'}))))
     record = await models.add(identifier, 'Qwen/Qwen3.5-4B')
     result = await finish(record)
     assert result['revision'] == 'fixed' and result['verified']
@@ -273,3 +281,105 @@ async def test_worker_cancellation_terminates_subprocess(tmp_path, monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert processes[0].returncode is not None
+
+
+@pytest.mark.asyncio
+async def test_legacy_implicit_latest_keeps_identity_and_skips_duplicate_pull(environment, monkeypatch):
+    client, _ = environment
+    server = await servers.save(servers.ServerSettings(name='Legacy',engine='ollama',url='http://engine:11434',models=['qwen3.5'],model='qwen3.5'))
+    calls = []
+    def respond(request):
+        calls.append(request.url.path)
+        if request.url.path == '/api/tags':
+            return httpx.Response(200,json={'models':[{'name':'qwen3.5:latest','size':100}]})
+        assert request.url.path == '/api/show'
+        assert json.loads(request.content)['model'] == 'qwen3.5:latest'
+        return httpx.Response(200,json={'capabilities':['completion']})
+    monkeypatch.setattr(models,'client',lambda *a,**kw:httpx.AsyncClient(transport=httpx.MockTransport(respond)))
+    legacy = models.records(server['id'])[0]
+    assert (await models.add(server['id'],'qwen3.5:latest'))['id'] == legacy['id']
+    await models.action(server['id'],legacy['id'],'retry')
+    result = await finish(legacy)
+    assert result['status'] == 'Completed' and result['verified']
+    assert servers.get(server['id'])['models'] == ['qwen3.5']
+    assert servers.get(server['id'])['model'] == 'qwen3.5'
+    assert (await models.listing(server['id']))[0]['available']
+    assert '/api/pull' not in calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', ['url','ssh','name'])
+async def test_destination_change_invalidates_only_host_evidence(environment, monkeypatch, change):
+    client, _ = environment
+    identifier = create(client)
+    engine(monkeypatch,installed=True)
+    record = await models.add(identifier,'qwen3.5:4b')
+    await finish(record)
+    value = dict(name='Renamed',engine='ollama',url='http://engine:11434',models=['qwen3.5:4b'],model='qwen3.5:4b')
+    if change == 'url': value['url'] = 'http://other:11434'
+    if change == 'ssh': value.update(transport='ssh',ssh={'host':'other','username':'user'})
+    saved = await servers.save(servers.ServerSettings(**value),identifier)
+    current = models.find(identifier,record['id'])
+    if change == 'name':
+        assert current['verified'] and saved['models'] == ['qwen3.5:4b']
+    else:
+        assert not current['verified'] and current['status'] == 'Failed'
+        assert saved['models'] == [] and saved['model'] == ''
+        assert current['total'] is None
+        async def installed(record,server,update): update({'status':'Verifying','completed':100,'total':100})
+        monkeypatch.setattr(models,'ollama',installed)
+        retried = await models.add(identifier,'qwen3.5:4b')
+        assert retried['id'] == record['id']
+        assert (await finish(retried))['verified']
+        assert servers.get(identifier)['models'] == ['qwen3.5:4b']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('remote_version,status', [('different',200), ('test',404), ('test',200)])
+async def test_vllm_deployment_checks_serving_version_before_download(environment,monkeypatch,remote_version,status):
+    client,_ = environment
+    identifier = create(client,'vllm')
+    monkeypatch.setenv('EASYPAPER_VLLM_TARGETS',json.dumps({identifier:{'python':sys.executable,'cache':'/tmp/cache','server_url':'http://engine:8000/v1'}}))
+    actions=[]
+    async def worker(server_id,action,model_id='',update=None):
+        actions.append(action)
+        if action == 'capabilities': return {'version':'test','cache_writable':True}
+        return {'status':'Completed'}
+    monkeypatch.setattr(models,'worker',worker)
+    def respond(request):
+        assert request.url.path == '/version'
+        return httpx.Response(status,json={'version':remote_version})
+    monkeypatch.setattr(models,'client',lambda *a,**kw:httpx.AsyncClient(transport=httpx.MockTransport(respond)))
+    record=await models.add(identifier,'Qwen/Qwen3.5-4B')
+    result=await finish(record)
+    valid=remote_version=='test' and status==200
+    assert result['status']==('Completed' if valid else 'Failed')
+    assert ('download' in actions)==valid
+    assert bool(servers.get(identifier)['models'])==valid
+
+
+def test_vllm_target_binding_rejects_old_endpoint(environment,monkeypatch):
+    client,_=environment
+    identifier=create(client,'vllm')
+    monkeypatch.setenv('EASYPAPER_VLLM_TARGETS',json.dumps({identifier:{'python':sys.executable,'cache':'/tmp/cache','server_url':'http://old/v1'}}))
+    with pytest.raises(HTTPException,match='server_url'):
+        models.target(identifier)
+
+
+@pytest.mark.asyncio
+async def test_worker_terminal_event_does_not_publish_before_exit(environment,monkeypatch):
+    client,_=environment
+    identifier=create(client,'vllm')
+    monkeypatch.setattr(models,'target',lambda _: {})
+    async def validated(server): return {}
+    monkeypatch.setattr(models,'validate_deployment',validated)
+    async def worker(server_id,action,model_id='',update=None):
+        update({'status':'Completed','completed':100,'total':100})
+        row=models.records(identifier)[0]
+        assert row['status']=='Verifying' and not row['verified']
+        with pytest.raises(HTTPException): await models.action(identifier,row['id'],'enable')
+        raise ValueError('Worker exit failed')
+    monkeypatch.setattr(models,'worker',worker)
+    result=await finish(await models.add(identifier,'owner/repo'))
+    assert result['status']=='Failed'
+    assert servers.get(identifier)['models']==[]

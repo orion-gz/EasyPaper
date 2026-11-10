@@ -43,7 +43,7 @@ vLLM의 OpenAI 호환 HTTP API에는 일반적인 모델 다운로드·다중 �
 Lab 서버 환경 변수 예시:
 
 ```sh
-EASYPAPER_VLLM_TARGETS='{"SERVER_ID":{"python":"/opt/vllm/bin/python","cache":"/srv/huggingface/hub"}}'
+EASYPAPER_VLLM_TARGETS='{"SERVER_ID":{"server_url":"http://gpu:8000/v1","python":"/opt/vllm/bin/python","cache":"/srv/huggingface/hub"}}'
 ```
 
 `SERVER_ID`는 `/api/inference/servers`의 서버 ID다. Python과 캐시 경로는 Lab API 프로세스에서 접근 가능한 절대 경로여야 한다. 해당 Python 환경에는 실제 서빙과 같은 vLLM, Transformers, safetensors 및 `hf_hub_download(tqdm_class=...)`를 지원하는 huggingface_hub가 필요하다. HF 워커는 GPU 모델을 생성하지 않는다. 다운로드 진행률을 위해 워커에서 Xet 가속을 끄고 Hub의 HTTP 전송을 사용한다.
@@ -62,8 +62,26 @@ vLLM에도 같은 저장소를 `HF_HUB_CACHE=/srv/huggingface/hub` 또는 `--dow
 
 CPU 테스트는 Ollama 스트림, 오류/중단, 기존 설치 건너뛰기, 취소/재시도, 재시작 상태 복구, 이전 설정 유지, 오래된 설정 저장, Member 접근 거부, HF 파일/인덱스 검증과 워커 프로세스 종료를 검증한다. 브라우저 테스트는 추천/직접 입력, 화면 재진입, 진행률, 오류 문구의 안전한 출력, 재시도/취소, 활성화 변경과 Member 선택지 갱신을 검증한다.
 
-실제 Ollama/vLLM GPU 서버와 수십 GB 모델 다운로드는 이 개발 환경에서 실행하지 않았다. 운영 환경에서 캐시 마운트, 토큰, 디스크 여유, 실제 vLLM 버전·양자화·GPU 조합을 검증해야 한다. 아키텍처 지원과 파일 검증은 실제 추론 성공을 보장하지 않는다. 기존 `연결 확인`의 추론 검증을 사용한다.
+최초 구현에서는 실제 엔진 다운로드를 실행하지 않았다. 아래 보완 검증에서 Ollama 소형 모델 실검증을 추가했으며 vLLM/GPU 및 수십 GB 다운로드는 미검증이다. 운영 환경에서 캐시 마운트, 토큰, 디스크 여유, 실제 vLLM 버전·양자화·GPU 조합을 검증해야 한다. 아키텍처 지원과 파일 검증은 실제 추론 성공을 보장하지 않는다. 기존 `연결 확인`의 추론 검증을 사용한다.
 
 현재 기존 Lab 실행 구조와 동일하게 **하나의 API worker**에서 운영한다. 다중 API worker/다중 노드 작업 소유권과 자동 failover는 지원하지 않는다. 직접 입력은 Ollama의 기본 레지스트리 `name:tag`/`namespace/name:tag`와 HF `owner/model` 네이티브 safetensors 저장소를 지원하며, 사용자 지정 registry URL, GGUF-only HF 저장소, 임의 원격 Python 실행은 지원하지 않는다.
 
 검증 실행 결과: 관련 백엔드 테스트 38개 통과. 프론트엔드 번역 검증 및 프로덕션 빌드 통과. Chromium 테스트 11개 통과: 공유 모델 관리·기존 추론 서버·Lab 설정·CLI 전환 흐름을 포함한다.
+
+
+## 검토 후 보완 (2026-11-08)
+
+- Ollama `name`/`name:latest`를 동일 모델로 비교한다. 저장된 모델 ID와 개인 선호 설정은 다시 쓰지 않아 기존 권한을 유지한다. 설치 확인·재검증·중복 추가·사용 가능 표시 모두 같은 비교 규칙을 쓴다.
+- URL 또는 SSH 목적지가 바뀌면 모델 항목은 보존하고 설치 검증·바이트 진행률·공유 권한을 하나의 DB 트랜잭션에서 무효화한다. 다시 추가하거나 재시도하면 새 목적지에서 설치를 검증한다. 이름만 변경하면 영향을 주지 않는다.
+- `EASYPAPER_VLLM_TARGETS`에 `server_url`을 명시해야 한다. 원격 `/version`과 워커의 vLLM 버전이 일치해야 다운로드·추천을 허용한다. 프록시에서도 `/version`을 제공해야 한다. 워커는 캐시에 실제로 쓸 수 있는지 확인한다. 캐시가 원격 서빙 프로세스에 같은 볼륨으로 마운트되었는지는 운영자가 확인해야 한다.
+- 가중치 전송 전에 설치된 vLLM `ModelConfig`로 모델/양자화 설정을 확인하고 텍스트 생성 능력을 검사한다. 완료 시 실제 safetensors 헤더와 토크나이저 채팅 템플릿 렌더링까지 검증한다. 이 검사는 모델 가중치를 VRAM에 올리지 않으며 실제 GPU 커널 실행을 보장하지 않는다.
+- 자식 워커의 Completed 이벤트는 프로세스가 정상 종료될 때까지 Verifying으로 표시하여 중간 상태에서 활성화되지 않도록 한다.
+
+보완 검증: 관련 테스트 **50개 통과**. `test_shared_model_files.py`는 실제 CPU safetensors·토크나이저 파일을 사용한다. 별도 포트·빈 모델 저장소의 **Ollama 0.40.5**에서 테스트용 `smollm2:135m` 실제 다운로드, 설치 확인, 다운로드 직후 미로딩 확인, 1토큰 추론과 테스트 파일 정리까지 **1개 통합 테스트 통과**. 이 소형 모델은 검증용이며 추천 목록에 추가하지 않았다. 실제 vLLM/GPU 통합 검증은 아직 수행하지 못했다.
+
+```sh
+# 비어 있는 폐기 가능한 Ollama 인스턴스에서만 실행한다.
+EASYPAPER_TEST_OLLAMA_URL=http://127.0.0.1:11439 \
+EASYPAPER_TEST_OLLAMA_MODEL=smollm2:135m \
+python -m pytest backend/tests/test_shared_models_live.py -q -s
+```

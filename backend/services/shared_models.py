@@ -31,6 +31,26 @@ def write(record):
                      (record['id'], record['server_id'], record['model_id'], json.dumps(record)))
 
 
+def canonical_id(engine, value):
+    """Compare Ollama's implicit latest tag without rewriting saved preferences."""
+    value = value.strip()
+    return value + ':latest' if engine == 'ollama' and ':' not in value.rsplit('/', 1)[-1] else value
+
+
+def destination(server):
+    ssh = server.get('ssh') or {}
+    return (server['engine'], server['url'].rstrip('/'), server.get('transport', 'https'),
+            tuple(ssh.get(k) for k in ('host', 'port', 'username', 'host_key')) if server.get('transport') == 'ssh' else None)
+
+
+def invalidated(record):
+    """Preserve the model identity, but require verification on the new host."""
+    return {**record, 'status': 'Failed', 'verified': False, 'enabled': False,
+            'completed': 0, 'total': None, 'speed': None, 'revision': None,
+            'error': 'Inference destination changed. Retry to install or verify this model on the new server.',
+            'updated_at': time.time()}
+
+
 def records(server_id):
     migrate()
     server = servers.get(server_id, False)
@@ -64,9 +84,11 @@ def target(server_id):
         value = json.loads(os.environ.get('EASYPAPER_VLLM_TARGETS', '{}'))[server_id]
         if not Path(value['python']).is_absolute() or not Path(value['cache']).is_absolute():
             raise ValueError()
+        if value.get('server_url', '').rstrip('/') != servers.get(server_id, False)['url'].rstrip('/'):
+            raise ValueError()
         return value
     except (KeyError, ValueError, TypeError):
-        raise HTTPException(409, 'Configure EASYPAPER_VLLM_TARGETS with this server ID, its vLLM Python and shared Hugging Face cache on the Lab server.')
+        raise HTTPException(409, 'Configure EASYPAPER_VLLM_TARGETS with this server ID, its server_url, vLLM Python and shared Hugging Face cache on the Lab server.')
 
 
 async def worker(server_id, action, model_id='', update=None):
@@ -96,17 +118,38 @@ async def worker(server_id, action, model_id='', update=None):
                 await process.wait()
 
 
+async def validate_deployment(server):
+    """Do not substitute an unrelated local vLLM installation for the serving host."""
+    target(server['id'])
+    capabilities = await asyncio.wait_for(worker(server['id'], 'capabilities'), 60)
+    root = server['url'].rstrip('/')
+    root = root[:-3] if root.endswith('/v1') else root
+    headers = {'Authorization': 'Bearer ' + server['api_key']} if server.get('api_key') else {}
+    try:
+        async with client('inference:' + server['id'], server, timeout=15, trust_env=False, follow_redirects=False) as connection:
+            response = await connection.get(root + '/version', headers=headers)
+            response.raise_for_status()
+            actual = response.json().get('version')
+    except (httpx.HTTPError, ValueError):
+        raise ValueError('Cannot verify the vLLM server version. Expose /version through the configured connection.')
+    if not actual or actual != capabilities.get('version'):
+        raise ValueError('The serving vLLM version differs from the configured download environment. Use the same vLLM build.')
+    if not capabilities.get('cache_writable'):
+        raise ValueError('The configured shared Hugging Face cache is not writable.')
+    return capabilities
+
+
 async def catalog(server_id):
-    server = servers.get(server_id, False)
+    server = servers.get(server_id)
     result = [r for r in CATALOG if r['engine'] == server['engine']]
     if server['engine'] == 'ollama':
         return {'models': result, 'notice': ''}
     try:
-        capabilities = await asyncio.wait_for(worker(server_id, 'capabilities'), 45)
+        capabilities = await validate_deployment(server)
         return {'models': [r for r in result if r['architecture'] in capabilities['architectures']],
                 'notice': 'vLLM ' + capabilities['version']}
     except (HTTPException, ValueError, OSError, asyncio.TimeoutError) as exc:
-        return {'models': [], 'notice': exc.detail if isinstance(exc, HTTPException) else 'Cannot verify the installed vLLM. Configure its Python environment and shared cache.'}
+        return {'models': [], 'notice': exc.detail if isinstance(exc, HTTPException) else str(exc) if isinstance(exc, ValueError) else 'Cannot verify the installed vLLM. Configure its Python environment and shared cache.'}
 
 
 def model_id(engine, value):
@@ -135,8 +178,10 @@ async def add(server_id, value):
     server = servers.get(server_id)
     value = model_id(server['engine'], value)
     rows = records(server_id)
-    existing = next((r for r in rows if r['model_id'] == value), None)
+    existing = next((r for r in rows if canonical_id(server['engine'], r['model_id']) == value), None)
     if existing:
+        if existing['status'] in ('Failed', 'Cancelled'):
+            return await action(server_id, existing['id'], 'retry')
         return existing
     if len(rows) >= 100:
         raise HTTPException(409, 'A server can manage at most 100 models.')
@@ -173,10 +218,10 @@ async def ollama(record, server, update):
     async with client('inference:' + server['id'], server, timeout=httpx.Timeout(300, connect=15), follow_redirects=False, trust_env=False) as connection:
         response = await connection.get(root + '/api/tags', headers=headers)
         response.raise_for_status()
-        installed = next((m for m in response.json().get('models', []) if m['name'] == record['model_id']), None)
+        installed = next((m for m in response.json().get('models', []) if canonical_id('ollama', m['name']) == canonical_id('ollama', record['model_id'])), None)
         if not installed:
             layers = {}
-            async with connection.stream('POST', root + '/api/pull', headers=headers, json={'model': record['model_id'], 'stream': True}) as response:
+            async with connection.stream('POST', root + '/api/pull', headers=headers, json={'model': canonical_id('ollama', record['model_id']), 'stream': True}) as response:
                 response.raise_for_status()
                 success = False
                 async for line in response.aiter_lines():
@@ -203,7 +248,7 @@ async def ollama(record, server, update):
                 if not success:
                     raise ValueError('Ollama ended the download before reporting success. Retry to resume.')
         update({'status': 'Verifying'})
-        response = await connection.post(root + '/api/show', headers=headers, json={'model': record['model_id']})
+        response = await connection.post(root + '/api/show', headers=headers, json={'model': canonical_id('ollama', record['model_id'])})
         response.raise_for_status()
         shown = response.json()
         capabilities = shown.get('capabilities', [])
@@ -211,7 +256,7 @@ async def ollama(record, server, update):
             raise ValueError('This model does not support text completion.')
         response = await connection.get(root + '/api/tags', headers=headers)
         response.raise_for_status()
-        installed = next((m for m in response.json().get('models', []) if m['name'] == record['model_id']), None)
+        installed = next((m for m in response.json().get('models', []) if canonical_id('ollama', m['name']) == canonical_id('ollama', record['model_id'])), None)
         if not installed:
             raise ValueError('Ollama did not confirm the installed model.')
         update(dict(total=installed.get('size'), completed=installed.get('size', 0),
@@ -243,7 +288,10 @@ async def download(record):
             if server['engine'] == 'ollama':
                 await ollama(record, server, update)
             else:
-                result = await worker(server['id'], 'download', record['model_id'], update)
+                await validate_deployment(server)
+                def worker_update(values):
+                    update({**values, 'status': 'Verifying'} if values.get('status') == 'Completed' else values)
+                result = await worker(server['id'], 'download', record['model_id'], worker_update)
                 if result.get('status') != 'Completed':
                     raise ValueError('Model verification did not complete.')
             update(dict(status='Completed', verified=True, enabled=True, speed=None))
@@ -276,7 +324,7 @@ async def action(server_id, identifier, operation):
         sync_permissions(server_id)
         launch(record)
     elif operation in ('enable', 'disable'):
-        if record['status'] != 'Completed':
+        if record['status'] != 'Completed' or (not record.get('verified') and not record.get('legacy')):
             raise HTTPException(409, 'Wait for a verified download before enabling this model.')
         record['enabled'] = operation == 'enable'
         write(record)
@@ -314,7 +362,7 @@ async def listing(server_id):
         available = [m['name'] for m in data.get('models', [])] if server['engine'] == 'ollama' else [m['id'] for m in data.get('data', [])]
     except (httpx.HTTPError, HTTPException, ValueError, KeyError):
         pass
-    return [{**r, 'available': r['model_id'] in available if available is not None else None,
+    return [{**r, 'available': canonical_id(server['engine'], r['model_id']) in {canonical_id(server['engine'], m) for m in available} if available is not None else None,
              'percent': min(100, round(100 * r['completed'] / r['total'], 1)) if r.get('total') else None} for r in rows]
 
 
