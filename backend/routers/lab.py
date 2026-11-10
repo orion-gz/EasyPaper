@@ -246,7 +246,8 @@ async def check_inference(username: str = Depends(require_admin_user)):
             response.raise_for_status()
             data = response.json()
         models = [item['id'] for item in data.get('data', [])] if value['engine'] == 'vllm' else [item['name'] for item in data.get('models', [])]
-        if value['model'] not in models:
+        from services.shared_models import canonical_id
+        if canonical_id(value['engine'], value['model']) not in {canonical_id(value['engine'], item) for item in models}:
             raise HTTPException(502, 'The default model is not installed on the inference server.')
         from services.lab_inference import probe
         verified = await probe(value)

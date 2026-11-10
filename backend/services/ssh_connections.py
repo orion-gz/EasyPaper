@@ -241,9 +241,10 @@ class LeasedStream(httpx.AsyncByteStream):
 
 
 class TunnelTransport(httpx.AsyncBaseTransport):
-    def __init__(self, identifier, profile, maintenance=False):
+    def __init__(self, identifier, profile, maintenance=False, track_activity=True):
         self.identifier, self.profile = identifier, profile
         self.maintenance = maintenance
+        self.track_activity = track_activity
         self.transport = httpx.AsyncHTTPTransport()
 
     async def handle_async_request(self, request):
@@ -253,6 +254,8 @@ class TunnelTransport(httpx.AsyncBaseTransport):
         logical = httpx.URL(self.profile.get('logical_url', self.profile['url']))
         if (request.url.scheme, request.url.host, request.url.port) != (logical.scheme, logical.host, logical.port):
             raise httpx.ConnectError('Connection target does not match its SSH profile.', request=request)
+        if not self.track_activity:
+            return await self.forward(request, source)
         manager.active[self.identifier] = manager.active.get(self.identifier, 0) + 1
         try:
             response = await self.forward(request, source)
@@ -285,7 +288,7 @@ class TunnelTransport(httpx.AsyncBaseTransport):
         await self.transport.aclose()
 
 
-def client(identifier=None, profile=None, *, maintenance=False, **kwargs):
+def client(identifier=None, profile=None, *, maintenance=False, track_activity=True, **kwargs):
     if profile is None:
         from services import lab
         selected = lab.selection()
@@ -294,7 +297,7 @@ def client(identifier=None, profile=None, *, maintenance=False, **kwargs):
             identifier = 'inference:' + selected.get('id', 'default')
     if profile and (profile.get('transport') == 'ssh' or profile.get('api_key') or
                     (identifier and identifier.startswith('inference:'))):
-        kwargs['transport'] = TunnelTransport(identifier, profile, maintenance=maintenance)
+        kwargs['transport'] = TunnelTransport(identifier, profile, maintenance=maintenance, track_activity=track_activity)
         kwargs['trust_env'] = False
         kwargs['follow_redirects'] = False
     return httpx.AsyncClient(**kwargs)

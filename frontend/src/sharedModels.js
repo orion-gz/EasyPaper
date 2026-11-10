@@ -1,4 +1,5 @@
 import { t } from './i18n.js'
+import { syncSelectValue } from './uiScale.js'
 
 // Server tasks outlive this view; polling is only a read-only observer.
 export function sharedModelManager({ api, container, report, changed }) {
@@ -35,7 +36,7 @@ export function sharedModelManager({ api, container, report, changed }) {
     const model = catalog.find(m => m.model_id === select.value)
     details.textContent = model ? `${model.model_id} · ${model.quantization} · ${t('settings:sharedModelsVram', { size: model.estimated_vram_gb })}` : ''
   }
-  input.addEventListener('input', () => { select.value = ''; details.textContent = '' })
+  input.addEventListener('input', () => { syncSelectValue(select, ''); details.textContent = '' })
   async function perform(action) {
     add.disabled = true
     try { await action(); await changed(); await poll(generation) } catch (error) { report(error) }
@@ -44,7 +45,7 @@ export function sharedModelManager({ api, container, report, changed }) {
   add.onclick = () => {
     const id = serverId, value = input.value.trim()
     if (!id || !value) return
-    return perform(async () => { await api(root(id), 'POST', { model_id: value }); input.value = ''; select.value = '' })
+    return perform(async () => { await api(root(id), 'POST', { model_id: value }); input.value = ''; syncSelectValue(select, ''); details.textContent = '' })
   }
   function button(row, title, action) {
     const control = document.createElement('button')
@@ -143,6 +144,7 @@ export function sharedModelManager({ api, container, report, changed }) {
       add.disabled = !serverId; input.disabled = !serverId; select.disabled = !serverId
       input.value = ''; details.textContent = ''; list.replaceChildren(); lastRender = ''
       select.replaceChildren(new Option(t('settings:sharedModelsRecommend'), ''))
+      syncSelectValue(select, '')
       notice.textContent = serverId ? t('settings:sharedModelsRetained') : t('settings:connectionSaveTheServerFirst')
       if (!serverId) return
       void poll(version)
@@ -151,6 +153,7 @@ export function sharedModelManager({ api, container, report, changed }) {
         if (version !== generation) return
         catalog = result.models
         for (const model of catalog) select.add(new Option(`${model.name} · ${model.parameters} · ${model.provider} · ${model.engine}`, model.model_id))
+        syncSelectValue(select, select.value)
         if (result.notice) notice.textContent += ` ${result.notice}`
       } catch (error) { if (version === generation) report(error) }
     },
