@@ -1,9 +1,10 @@
 import json
 from contextlib import closing
 
+import httpx
 import pytest
 from test_lab_mode import environment
-from services import db, lab, inference_servers
+from services import db, lab, inference_servers, shared_models
 from services.ssh_connections import secrets
 from services.lab_context import identity
 
@@ -18,6 +19,32 @@ def spec(name='server'):
     return dict(name=name, engine='ollama', url='http://localhost:11434', models=['model'], model='model')
 
 
+async def reverify_changed_destination(server_id, namespace, monkeypatch):
+    record = shared_models.records(server_id)[0]
+    assert record['status'] == 'Failed'
+    assert not record['verified'] and not record['enabled']
+    assert inference_servers.get(server_id)['models'] == []
+    with pytest.raises(RuntimeError, match='allowed model'):
+        namespace()
+    calls = []
+
+    def installed(request):
+        calls.append(request.url.path)
+        if request.url.path == '/api/tags':
+            return httpx.Response(200, json={'models': [{'name': 'model:latest', 'size': 100}]})
+        assert request.url.path == '/api/show'
+        return httpx.Response(200, json={'capabilities': ['completion']})
+
+    monkeypatch.setattr(shared_models, 'client', lambda *args, **kwargs:
+        httpx.AsyncClient(transport=httpx.MockTransport(installed)))
+    await shared_models.action(server_id, record['id'], 'retry')
+    await shared_models._tasks[record['id']]
+    verified = shared_models.find(server_id, record['id'])
+    assert verified['verified'] and verified['enabled']
+    assert inference_servers.get(server_id)['models'] == ['model']
+    assert '/api/show' in calls and '/api/pull' not in calls
+
+
 def test_delete_legacy_removes_credentials(environment):
     client, _ = environment
     with closing(db.get_db()) as conn, conn:
@@ -30,10 +57,11 @@ def test_delete_legacy_removes_credentials(environment):
         assert conn.execute("SELECT value FROM lab_configuration WHERE key='inference'").fetchone() is None
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(('field', 'replacement'), [
     ('host', 'gpu-two'), ('port', 2222), ('username', 'other-user'), ('host_key', 'new-key'),
 ])
-def test_ssh_destination_change_invalidates_results(environment, field, replacement):
+async def test_ssh_destination_change_invalidates_results(environment, monkeypatch, field, replacement):
     client, master = environment
     value = {**spec(), 'transport': 'ssh', 'ssh': {'host': 'gpu-one', 'username': 'user', 'host_key': 'pinned'}}
     server = client.post('/api/inference/servers', json=value).json()
@@ -44,6 +72,7 @@ def test_ssh_destination_change_invalidates_results(environment, field, replacem
         old = namespace()
         value['ssh'][field] = replacement
         assert client.put('/api/inference/servers/' + server['id'], json=value).status_code == 200
+        await reverify_changed_destination(server['id'], namespace, monkeypatch)
         assert namespace() != old
     finally:
         identity.reset(token)
@@ -59,7 +88,8 @@ def test_deleting_other_server_preserves_legacy_credentials(environment):
     assert inference_servers.get('default')['api_key'] == 'old-secret'
 
 
-def test_cache_ignores_display_name_but_tracks_transport(environment):
+@pytest.mark.asyncio
+async def test_cache_ignores_display_name_but_tracks_transport(environment, monkeypatch):
     client, master = environment
     value = {**spec(), 'ssh': {'host': 'gpu', 'username': 'user', 'host_key': 'pinned'}}
     server = client.post('/api/inference/servers', json=value).json()
@@ -73,6 +103,7 @@ def test_cache_ignores_display_name_but_tracks_transport(environment):
         assert namespace() == old
         value['transport'] = 'ssh'
         assert client.put('/api/inference/servers/' + server['id'], json=value).status_code == 200
+        await reverify_changed_destination(server['id'], namespace, monkeypatch)
         assert namespace() != old
     finally:
         identity.reset(token)
