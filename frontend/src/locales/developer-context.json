@@ -6543,7 +6543,7 @@
     "description": "3. Prepare access"
   },
   "settings:labInstallIntro": {
-    "description": "On an Ubuntu 24.04 server booted with systemd, download the repository and open the EasyPaper project folder. Select your deployment environment and run its script with sudo. Internet access is required."
+    "description": "Download the repository to your server and open the EasyPaper project folder. Select your deployment environment and run its script with sudo. Internet access is required."
   },
   "settings:labMethodIntro": {
     "description": "Choose SSH if you have a lab server SSH account, or HTTPS to use a domain."
