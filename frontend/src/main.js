@@ -1,4 +1,5 @@
 import { decorateCodeBlocks, installCodeCopy, chatMessageText } from './chatCodeBlocks.js'
+import { installFieldFeedback } from './fieldFeedback.js'
 import { setStatusState } from './statusState.js'
 import { initializeLabModels } from './labModels.js'
 import { activateAccountStorage } from './accountStorage.js'
@@ -19830,3 +19831,4 @@ initializeLabMode(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'a
 initializeLabModels(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'antigravity'].includes(provider.id)))
 
 installCodeCopy(document)
+installFieldFeedback(document.getElementById('settings-modal'))
