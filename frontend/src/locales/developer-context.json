@@ -6914,5 +6914,26 @@
   },
   "library:row.actions": {
     "description": "Document actions"
+  },
+  "chat:code.label": {
+    "description": "Code"
+  },
+  "chat:code.copy": {
+    "description": "Copy code"
+  },
+  "chat:code.copied": {
+    "description": "Copied"
+  },
+  "chat:code.failed": {
+    "description": "Copy failed — retry"
+  },
+  "settings:field.required": {
+    "description": "Enter a value for this field."
+  },
+  "settings:field.port": {
+    "description": "Enter a whole port number from 1 to 65535."
+  },
+  "settings:field.correct": {
+    "description": "Check the highlighted fields."
   }
 }

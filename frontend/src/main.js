@@ -1,4 +1,6 @@
 import { enhanceLibraryRow } from './libraryRowMenu.js'
+import { decorateCodeBlocks, installCodeCopy, chatMessageText } from './chatCodeBlocks.js'
+import { installFieldFeedback } from './fieldFeedback.js'
 import { setStatusState } from './statusState.js'
 import { initializeLabModels } from './labModels.js'
 import { activateAccountStorage } from './accountStorage.js'
@@ -6740,7 +6742,7 @@ function appendCompareActionButtons(msgEl, role, content) {
   copyBtn.style.cursor = 'pointer'
   copyBtn.title = '텍스트 복사'
   copyBtn.addEventListener('click', () => {
-    const text = msgEl.querySelector('.message-bubble').textContent
+    const text = chatMessageText(msgEl.querySelector('.message-bubble'))
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => {
         showToast('텍스트가 복사되었습니다.', 'success')
@@ -7000,7 +7002,7 @@ function appendChatDrawerActionButtons(msgEl, role, content) {
   copyBtn.style.cursor = 'pointer'
   copyBtn.title = '텍스트 복사'
   copyBtn.addEventListener('click', () => {
-    const text = msgEl.querySelector('.message-bubble').textContent
+    const text = chatMessageText(msgEl.querySelector('.message-bubble'))
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => {
         showToast('텍스트가 복사되었습니다.', 'success')
@@ -15961,7 +15963,7 @@ function formatChatHtml(text, totalPages = state.totalPages) {
   })
 
   // sanitizer를 통과한 뒤 숫자로 검증한 단일·범위 페이지 근거만 링크한다.
-  return linkPageCitations(html, totalPages)
+  return decorateCodeBlocks(linkPageCitations(html, totalPages))
 }
 
 // 인용 이미지를 로컬/서버 어디서도 복원하지 못했을 때(<img onerror>에서 호출)
@@ -19829,3 +19831,6 @@ initializeDataTransfer({ confirmImport: message => showCustomConfirm(message, {
 
 initializeLabMode(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'antigravity'].includes(provider.id)))
 initializeLabModels(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'antigravity'].includes(provider.id)))
+
+installCodeCopy(document)
+installFieldFeedback(document.getElementById('settings-modal'))

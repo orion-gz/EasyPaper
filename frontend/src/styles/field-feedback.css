@@ -1,0 +1,9 @@
+
+.field-feedback { display: block; flex-basis: 100%; margin-top: 6px; color: var(--error); font-size: 12px; line-height: 1.5; }
+.field-feedback[hidden] { display: none; }
+#settings-modal [aria-invalid="true"], .ssh-connection-form [aria-invalid="true"] { border-color: var(--error) !important; }
+.settings-row > .field-feedback { grid-column: 2; }
+
+@media (max-width: 720px) {
+  .settings-row > .field-feedback { grid-column: 1; grid-row: auto; }
+}

@@ -9113,15 +9113,36 @@ body.light-theme .chat-drawer {
 
 /* Reference preview card uses the active reader theme. */
 .citation-tooltip, body.light-theme .citation-tooltip {
-  width: 380px; box-sizing: border-box; background: var(--bg-elevated);
+  width: 380px; box-sizing: border-box;
+  /* Composite translucent theme colors over an opaque base. */
+  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)),
+    linear-gradient(var(--bg-base), var(--bg-base)), #06050a;
   border-radius: var(--radius-lg); padding: 16px;
 }
 .citation-card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
-.citation-card-title { flex: 1; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.citation-card-title { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .citation-card-close {
-  flex-shrink: 0; width: 32px; height: 32px; border: 1px solid var(--border);
+  display: inline-flex; align-items: center; justify-content: center;
+  box-sizing: border-box; flex: 0 0 32px; width: 32px; height: 32px;
+  margin: 0; padding: 0; line-height: 1; border: 1px solid var(--border);
   border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary);
   font-size: 20px; cursor: pointer;
 }
 .citation-card-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .citation-tooltip-text { padding-bottom: 12px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+
+.chat-code-block { min-width: 0; margin: 16px 0; border: 1px solid var(--border-strong); border-radius: var(--radius-md); overflow: hidden; }
+.chat-code-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; background: var(--bg-base); color: var(--text-secondary); font-size: 12px; }
+.chat-code-copy { border: 1px solid var(--border-strong); border-radius: 6px; padding: 4px 8px; background: var(--bg-elevated); color: var(--text-primary); cursor: pointer; font: inherit; }
+.chat-code-copy:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.chat-code-block pre { margin: 0 !important; border: 0; border-radius: 0; overflow-x: auto; white-space: pre; padding: 14px; }
+.chat-message .message-bubble { min-width: 0; overflow-wrap: anywhere; line-height: 1.75; }
+.chat-message .message-bubble :is(h1,h2,h3,h4) { margin-top: 1.25em; margin-bottom: .6em; line-height: 1.4; }
+.chat-message .message-bubble table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.chat-message .message-bubble :is(th,td) { padding: 8px 12px; border: 1px solid var(--border); text-align: start; }
+.chat-message .message-bubble blockquote { margin: 12px 0; padding: 8px 14px; border-inline-start: 3px solid var(--border-strong); color: var(--text-secondary); }
+
+/* Keep code actions intact even with long language names and narrow panels. */
+.chat-code-header > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-code-copy { flex: 0 0 auto; white-space: nowrap; }
+.chat-message .message-bubble :is(th, td) { min-width: 8ch; overflow-wrap: normal; word-break: normal; }

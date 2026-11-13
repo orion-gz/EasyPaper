@@ -470,5 +470,8 @@
   "sharedModelsRetained": "화면을 닫아도 다운로드는 계속됩니다. 공유 해제 시 캐시 파일은 유지됩니다. 다운로드만으로 VRAM에 로딩하지 않습니다. Ollama 진행률은 확인된 레이어 기준입니다.",
   "sharedModelsDeleteFiles": "모델 파일 삭제",
   "sharedModelsDeleteConfirm": "서버에서 {{model}} 파일과 공유 항목을 삭제하시겠습니까? 되돌릴 수 없습니다.",
-  "sharedModelsDeleteHelp": "파일 삭제는 공유 비활성화 후, 운영자가 격리된 유지보수 서버를 설정한 경우에 가능합니다."
+  "sharedModelsDeleteHelp": "파일 삭제는 공유 비활성화 후, 운영자가 격리된 유지보수 서버를 설정한 경우에 가능합니다.",
+  "field.required": "이 항목을 입력해 주세요.",
+  "field.port": "포트 번호는 1~65535 사이의 정수로 입력해 주세요.",
+  "field.correct": "표시된 입력 항목을 확인해 주세요."
 }
