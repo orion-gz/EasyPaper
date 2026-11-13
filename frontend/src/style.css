@@ -8567,7 +8567,7 @@ body.light-theme .chat-drawer {
 }
 .lab-guide-body p,
 .lab-guide-body h3 { margin: 0; }
-.lab-guide-body h3 { font-size: 15px; font-weight: 600; line-height: 1.6; }
+.lab-guide-body h3 { font-size: 20px; font-weight: 700; line-height: 1.6; }
 .lab-guide-dialog p { color: var(--text-secondary); line-height: inherit; }
 .lab-guide-body .lab-guide-progress {
   color: var(--text-muted);
@@ -8710,10 +8710,10 @@ body.light-theme .chat-drawer {
   .lab-guide-dialog > .lab-guide-controls { gap: 6px; }
   .lab-guide-controls > .btn { flex: 0 0 36px; }
 }
-.lab-guide-body { gap: 10px; padding: 16px var(--lab-inset); }
+.lab-guide-body { gap: 24px; padding: 24px var(--lab-inset); }
 .lab-guide-step-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .lab-guide-step-header .lab-guide-progress { flex-shrink: 0; }
-.lab-guide-demo { gap: 8px; }
+.lab-guide-demo { gap: 16px; }
 .lab-guide-screen > .lab-scene-canvas { min-height: 220px; padding: 12px; }
 .lab-demo-transcript { height: 220px; }
 .lab-demo-settings { display: grid; grid-template-columns: 80px 1fr; gap: 16px; align-items: start; margin-top: 12px; }
@@ -8721,7 +8721,7 @@ body.light-theme .chat-drawer {
   .lab-demo-grid { grid-template-columns: 1fr 1fr; gap: 4px 10px; }
   .lab-demo-grid .lab-demo-field:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
   .lab-guide-step-header { align-items: baseline; }
-  .lab-guide-body h3 { font-size: 13px; }
+  .lab-guide-body h3 { font-size: 18px; }
 }
 .lab-guide-prerequisites p { margin-top: 12px; }
 .lab-guide-tunnel { display: block; padding: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -9097,3 +9097,16 @@ body.light-theme .chat-drawer {
     justify-self: flex-start;
   }
 }
+
+/* Keep instructions distinct from demonstrations and optional connection details. */
+.lab-guide-body > p { font-size: 15px; line-height: 1.75; }
+.lab-guide-demo > #lab-guide-scene-note { padding: 16px 20px; border-left: 4px solid var(--control-accent); border-radius: var(--radius-md); background: var(--control-accent-soft); color: var(--text-primary); font-size: 15px; font-weight: 600; line-height: 1.8; }
+.lab-guide-commands { gap: 16px; }
+.lab-guide-parameters { gap: 16px; }
+.lab-guide-parameters .form-group { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.lab-guide-parameters label { font-size: 14px; font-weight: 600; }
+.lab-guide-parameters input { min-height: 44px; padding: 10px 12px; font-size: 15px; }
+.lab-guide-parameters .lab-guide-field-hint { font-size: 12px; overflow-wrap: anywhere; }
+.lab-guide-advanced { grid-column: 1 / -1; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.lab-guide-advanced summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.lab-guide-advanced[open] > div { margin-top: 16px; }
