@@ -6909,6 +6909,18 @@
   "viewer:citationCard.close": {
     "description": "Accessible citationCard.close label in the citation-card UI."
   },
+  "chat:code.label": {
+    "description": "Code"
+  },
+  "chat:code.copy": {
+    "description": "Copy code"
+  },
+  "chat:code.copied": {
+    "description": "Copied"
+  },
+  "chat:code.failed": {
+    "description": "Copy failed — retry"
+  },
   "settings:field.required": {
     "description": "Enter a value for this field."
   },
