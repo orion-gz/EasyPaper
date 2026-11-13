@@ -275,14 +275,17 @@ test(`blur ${strength}px preserves sentence pixels with offscreen overflow at sc
   })
   await page.evaluate(strength => window.controller.applySettings({ enabled: true, blurStrength: strength, dimOpacity: 0, scale: 100 }), strength)
   await expect.poll(() => page.locator('.focus-mode-layer').evaluate(element => element.style.getPropertyValue('--focus-blur'))).toBe(`${strength}px`)
-  const screenshot = (await page.screenshot({ scale: 'css' })).toString('base64')
+  const screenshot = (await page.screenshot({ scale: 'device' })).toString('base64')
   const contrasts = await page.evaluate(async ({ screenshot, scale }) => {
     const image = new Image(); image.src = `data:image/png;base64,${screenshot}`; await image.decode()
     const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
     const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
+    // CSS screenshot downsampling aliases Retina stripe patterns.
+    const density = image.width / innerWidth
     const contrast = (x, y) => {
-      const data = ctx.getImageData(Math.round(x * scale), Math.round(y * scale), 32, 1).data
-      const samples = Array.from({ length: 32 }, (_, i) => data[i * 4])
+      const count = Math.round(32 * density)
+      const data = ctx.getImageData(Math.round(x * scale * density), Math.round(y * scale * density), count, 1).data
+      const samples = Array.from({ length: count }, (_, i) => data[i * 4])
       return Math.max(...samples) - Math.min(...samples)
     }
     return { source: contrast(220, 150), background: contrast(450, 175), viewerBackground: contrast(450, 285) }
@@ -546,25 +549,27 @@ test('real PDF hover reveals source and translation together and clears on viewe
   const sourceMask = await activeReader(page).locator('.focus-tint-hole').evaluateAll(elements => elements.map(e => ['x', 'y', 'width', 'height'].map(p => Number(e.getAttribute(p)))))
   // Compare actual PDF canvas and translation glyph pixels, not just geometry
   // or CSS declarations. Keep native layout/scroll positions fixed for both.
-  const focused = (await page.screenshot({ scale: 'css', path: test.info().outputPath('focused.png') })).toString('base64')
+  const focused = (await page.screenshot({ scale: 'device', path: test.info().outputPath('focused.png') })).toString('base64')
   await evaluateReader(page, () => {
     window.focusFilterStyles = Array.from(document.body.children).filter(e => e instanceof HTMLElement && e.style.filter).map(e => [e, e.style.filter, e.style.getPropertyPriority('filter')])
     for (const [element] of window.focusFilterStyles) element.style.setProperty('filter', 'none', 'important')
     document.querySelector('.focus-mode-layer').style.visibility = 'hidden'
   })
-  const original = (await page.screenshot({ scale: 'css', path: test.info().outputPath('original.png') })).toString('base64')
+  const original = (await page.screenshot({ scale: 'device', path: test.info().outputPath('original.png') })).toString('base64')
   await evaluateReader(page, () => {
     for (const [element, value, priority] of window.focusFilterStyles) element.style.setProperty('filter', value, priority)
     document.querySelector('.focus-mode-layer').style.visibility = ''
     delete window.focusFilterStyles
   })
   const boxes = [await source.boundingBox(), await translation.boundingBox()]
-  const differences = await evaluateReader(page, async ({ focused, original, boxes }) => {
+  const differences = await evaluateReader(page, async ({ focused, original, boxes, viewportWidth }) => {
+    let density = 1
     const pixels = async data => {
       const image = new Image(); image.src = `data:image/png;base64,${data}`; await image.decode()
       const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
       const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
-      return boxes.map(b => ctx.getImageData(Math.ceil(b.x), Math.ceil(b.y), Math.floor(b.width), Math.floor(b.height)).data)
+      density = image.width / viewportWidth
+      return boxes.map(b => ctx.getImageData(Math.ceil(b.x * density), Math.ceil(b.y * density), Math.floor(b.width * density), Math.floor(b.height * density)).data)
     }
     const a = await pixels(focused), b = await pixels(original)
     const sharpness = (data, width) => {
@@ -573,12 +578,13 @@ test('real PDF hover reveals source and translation together and clears on viewe
     }
     return a.map((data, box) => ({
       difference: data.reduce((sum, value, i) => sum + Math.abs(value - b[box][i]), 0) / data.length,
-      focused: sharpness(data, Math.floor(boxes[box].width)), original: sharpness(b[box], Math.floor(boxes[box].width)),
+      focused: sharpness(data, Math.floor(boxes[box].width * density)), original: sharpness(b[box], Math.floor(boxes[box].width * density)),
     }))
-  }, { focused, original, boxes })
+  }, { focused, original, boxes, viewportWidth: await page.evaluate(() => innerWidth) })
   // Compositing changes glyph antialiasing and, on macOS, PDF canvas colors.
   // Bound the color difference while requiring the original edge detail and
   // contrast: a blank or blurred sentence must still fail on every platform.
+  await test.info().attach('focus-pixel-metrics', { body: JSON.stringify(differences), contentType: 'application/json' })
   for (const result of differences) {
     expect(result.difference).toBeLessThan(15)
     expect(result.focused.edges).toBeGreaterThan(result.original.edges * 0.9)
@@ -615,7 +621,8 @@ test('real PDF hover reveals source and translation together and clears on viewe
     const range = document.querySelector('#setting-focus-scale')
     range.value = '100'; range.dispatchEvent(new Event('input', { bubbles: true }))
   })
-  await expect(activeReader(page).locator('.focus-mode-magnification')).toHaveCount(0)
+  await expect(activeReader(page).locator('.focus-mode-magnification:not(.focus-mode-native-copy)')).toHaveCount(0)
+  expect(await activeReader(page).locator('.focus-mode-native-copy').evaluateAll(groups => groups.every(group => group.focusTransform.scale === 1))).toBe(true)
   await translation.hover()
   // Native hover can scroll the pane by a fractional pixel in WebKit.
   await expect.poll(() => activeReader(page).locator('.focus-tint-hole').evaluateAll((elements, before) => {
@@ -796,3 +803,34 @@ test('viewer focus button and Shift+F toggle persisted focus without affecting t
   await page.keyboard.press('Shift+F')
   expect(await page.evaluate(() => localStorage.getItem('easypaper_focus_mode_enabled_research'))).toBe('false')
 })
+
+for (const density of [1, 2]) {
+  test(`native sentence copies preserve canvas pixels at density ${density}`, async ({ page }) => {
+    await page.setContent('<canvas width="256" height="128" style="position:absolute;left:100.25px;top:90.5px;width:101.3px;height:50.7px"></canvas>')
+    const result = await page.evaluate(async ({ moduleSource, density }) => {
+      const { createFocusMagnification } = await import(URL.createObjectURL(new Blob([moduleSource], { type: 'text/javascript' })))
+      const source = document.querySelector('canvas')
+      source.width *= density; source.height *= density
+      const context = source.getContext('2d')
+      const pixels = context.createImageData(source.width, source.height)
+      for (let i = 0; i < pixels.data.length; i += 4) {
+        pixels.data[i] = (i / 4) % 251; pixels.data[i + 1] = (i / 4) % 127
+        pixels.data[i + 2] = (i / 4) % 63; pixels.data[i + 3] = 255
+      }
+      context.putImageData(pixels, 0, 0)
+      const bounds = source.getBoundingClientRect()
+      const rect = { left: bounds.left + 7.25, top: bounds.top + 4.75, right: bounds.left + 78.8, bottom: bounds.top + 32.3 }
+      rect.width = rect.right - rect.left; rect.height = rect.bottom - rect.top
+      const pair = { sourceCanvas: source, sourceRects: [rect] }
+      const ordinary = createFocusMagnification(pair, [rect], 1)
+      const copies = createFocusMagnification(pair, [rect], 1, true)
+      const group = copies.find(node => node.dataset.kind === 'source')
+      document.body.append(...copies)
+      const canvas = group.querySelector('canvas')
+      const expected = context.getImageData(0, 0, source.width, source.height).data
+      const actual = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+      return { ordinary: ordinary.length, exact: actual.every((value, index) => value === expected[index]), scale: group.focusTransform.scale, inert: group.inert }
+    }, { moduleSource, density })
+    expect(result).toEqual({ ordinary: 0, exact: true, scale: 1, inert: true })
+  })
+}
