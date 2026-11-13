@@ -1,3 +1,4 @@
+import { setStatusState } from './statusState.js'
 import { initializeLabModels } from './labModels.js'
 import { activateAccountStorage } from './accountStorage.js'
 import { initializeLabMode } from './labMode.js'
@@ -8047,7 +8048,10 @@ async function renderLibrary() {
   if (libraryFilterRow) libraryFilterRow.style.display = 'flex'
   isLibrarySearchActive = false
 
-  libraryGrid.innerHTML = ''
+  const loadingState = document.createElement('div')
+  loadingState.className = 'lib-empty'
+  setStatusState(loadingState, t('common:status.loading'), 'loading', { skeleton: true })
+  libraryGrid.replaceChildren(loadingState)
   libraryCategoryFilters.innerHTML = ''
   updateLibraryCategoryFilterVisibility(false)
   try {
@@ -8146,7 +8150,10 @@ async function renderLibrary() {
   } catch (err) {
     if (!isCurrent()) return
     console.error(err)
-    libraryGrid.innerHTML = `<div class="lib-empty">${icon('alertTriangle', 24, 'aria-hidden="true"')}<p style="color:var(--error)">라이브러리 불러오기 실패</p></div>`
+    const errorState = document.createElement('div')
+    errorState.className = 'lib-empty'
+    setStatusState(errorState, t('common:status.libraryError'), 'error', { action: { label: t('common:briefing.retry'), run: renderLibrary } })
+    libraryGrid.replaceChildren(errorState)
   }
 }
 
@@ -9300,6 +9307,12 @@ function createEmptyState(variant = 'library') {
   el.innerHTML = `<div style="margin-bottom:16px;color:var(--text-muted)">${icon(c.iconName, 48)}</div>
     <p>${documentUiCopy(c.title, workspaceModeController.getMode())}</p>
     <p style="font-size:13px;color:var(--text-muted);margin-top:8px">${documentUiCopy(c.desc, workspaceModeController.getMode())}</p>`
+  if (variant === 'library') {
+    const button = document.createElement('button')
+    button.type = 'button'; button.className = 'status-action'; button.textContent = t('common:status.upload')
+    button.addEventListener('click', () => fileInput.click())
+    el.append(button)
+  }
   return el
 }
 

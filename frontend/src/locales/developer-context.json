@@ -6893,5 +6893,14 @@
   "settings:sharedModelsDeleteHelp": {
     "description": "Shared model file maintenance: sharedModelsDeleteHelp",
     "file": "src/sharedModels.js"
+  },
+  "common:status.libraryError": {
+    "description": "Accessible status.libraryError label in the status-ui UI."
+  },
+  "common:status.loading": {
+    "description": "Accessible status.loading label in the status-ui UI."
+  },
+  "common:status.upload": {
+    "description": "Accessible status.upload label in the status-ui UI."
   }
 }

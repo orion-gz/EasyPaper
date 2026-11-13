@@ -149,7 +149,7 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate, ac
       }
       const result = await searchWorkspaceAPI(query, mode(), controller.signal)
       if (token === revision && dialog.open) render([...(result.results || []), ...(!query ? available : [])])
-    } catch (error) { if (token === revision && error.name !== 'AbortError') { render([]); setStatusState(status, t('viewer:comfort.searchError'), 'error') } }
+    } catch (error) { if (token === revision && error.name !== 'AbortError') { render([]); setStatusState(status, t('viewer:comfort.searchError'), 'error', { action: { label: t('common:briefing.retry'), run: search } }) } }
   }
   function open() {
     if (shell.hidden || !readerFeatureEnabled('commandSearch')) return

@@ -1255,5 +1255,8 @@
   "legacy.documentCopy.particle5": "문서가",
   "legacy.documentCopy.legacy.ui.0173": "딥러닝 비전/레이아웃 AI - 문서 전체를 깨끗한 Markdown/LaTeX 수식으로 변환.",
   "legacy.documentCopy.legacy.ui.0113": "문서 이동 실패",
-  "legacy.documentCopy.chatEmpty": "문서 뷰어에서 AI 어시스턴트에게 질문을 시작해 보세요"
+  "legacy.documentCopy.chatEmpty": "문서 뷰어에서 AI 어시스턴트에게 질문을 시작해 보세요",
+  "status.libraryError": "라이브러리를 불러오지 못했습니다.",
+  "status.loading": "불러오는 중…",
+  "status.upload": "문서 업로드"
 }
