@@ -6908,5 +6908,14 @@
   },
   "viewer:citationCard.close": {
     "description": "Accessible citationCard.close label in the citation-card UI."
+  },
+  "settings:field.required": {
+    "description": "Enter a value for this field."
+  },
+  "settings:field.port": {
+    "description": "Enter a whole port number from 1 to 65535."
+  },
+  "settings:field.correct": {
+    "description": "Check the highlighted fields."
   }
 }
