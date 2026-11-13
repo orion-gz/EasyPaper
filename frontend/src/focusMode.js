@@ -104,11 +104,13 @@ const FOCUS_PREVIEW_SELECTOR = '.figure-preview-tooltip, .citation-tooltip'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 let filterId = 0
+function isWebKit(userAgent) {
+  return /AppleWebKit/.test(userAgent) && !/(?:Chrome|Chromium|Edg|OPR)\//.test(userAgent)
+}
 export function focusSvgCoordinateScale(zoom, userAgent) {
   // WebKit resolves SVG filter primitives on HTML in viewport pixels even
   // under CSS zoom; Blink/Gecko use the element's unzoomed CSS coordinates.
-  const webkit = /AppleWebKit/.test(userAgent) && !/(?:Chrome|Chromium|Edg|OPR)\//.test(userAgent)
-  return webkit ? 1 : zoom
+  return isWebKit(userAgent) ? 1 : zoom
 }
 function svgElement(name, attributes = {}) {
   const element = document.createElementNS(SVG_NS, name)
@@ -189,8 +191,8 @@ function sentenceBackground(element) {
 }
 
 // Magnify visual copies only; native PDF/text layout and selection stay intact.
-export function createFocusMagnification(pair, viewportRects, scale) {
-  if (scale <= 1) return []
+export function createFocusMagnification(pair, viewportRects, scale, preserveNative = false) {
+  if (scale <= 1 && !preserveNative) return []
   const groups = [], erasures = []
   const containment = element => {
     const bounds = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
@@ -234,6 +236,7 @@ export function createFocusMagnification(pair, viewportRects, scale) {
     const effectiveScale = Math.max(1, Math.min(scale, (limits.right - limits.left - insetX * 2) / width, (limits.bottom - limits.top - insetY * 2) / height))
     const group = document.createElement('div')
     group.className = 'focus-mode-magnification'; group.dataset.kind = kind; group.inert = true
+    if (preserveNative && scale === 1) group.classList.add('focus-mode-native-copy')
     const dx = Math.max(limits.left + insetX - (left - width * (effectiveScale - 1) / 2), Math.min(0, limits.right - insetX - (left + width * (effectiveScale + 1) / 2)))
     const dy = Math.max(limits.top + insetY - (top - height * (effectiveScale - 1) / 2), Math.min(0, limits.bottom - insetY - (top + height * (effectiveScale + 1) / 2)))
     Object.assign(group.style, { position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`, transform: `translate(${dx}px, ${dy}px) scale(${effectiveScale})`, transformOrigin: 'center' })
@@ -259,6 +262,7 @@ export function createFocusMagnification(pair, viewportRects, scale) {
   if (pair.sourceCanvas) {
     const source = pair.sourceCanvas, bounds = source.getBoundingClientRect()
     if (bounds.width && bounds.height) build(pair.sourceRects || [], (crop, rect) => {
+      if (preserveNative && scale === 1) return
       const canvas = document.createElement('canvas')
       const sx = source.width / bounds.width, sy = source.height / bounds.height
       canvas.width = Math.ceil(rect.width * sx); canvas.height = Math.ceil(rect.height * sy)
@@ -267,7 +271,19 @@ export function createFocusMagnification(pair, viewportRects, scale) {
       ctx.drawImage(source, (rect.left - bounds.left) * sx, (rect.top - bounds.top) * sy, rect.width * sx, rect.height * sy, 0, 0, canvas.width, canvas.height)
       Object.assign(canvas.style, { display: 'block', width: '100%', height: '100%', filter: getComputedStyle(source).filter })
       crop.append(canvas)
-    }, 'source', 'white', getComputedStyle(source).filter, source)
+    }, 'source', 'white', getComputedStyle(source).filter, source, preserveNative && scale === 1 ? (group, visible, left, top) => {
+      // Keep the full canvas transform/origin. Resampling each fractional crop
+      // independently changes glyph antialiasing even when its pixels match.
+      const canvas = document.createElement('canvas')
+      canvas.width = source.width; canvas.height = source.height
+      canvas.getContext('2d').drawImage(source, 0, 0)
+      Object.assign(canvas.style, { position: 'absolute', display: 'block', left: `${bounds.left - left}px`, top: `${bounds.top - top}px`, width: `${bounds.width}px`, height: `${bounds.height}px`, filter: getComputedStyle(source).filter })
+      const content = document.createElement('div')
+      const path = visible.map(rect => `M${rect.left - left} ${rect.top - top}h${rect.width}v${rect.height}h${-rect.width}Z`).join(' ')
+      Object.assign(content.style, { position: 'absolute', inset: '0', overflow: 'hidden', clipPath: `path("${path}")` })
+      content.append(canvas); group.append(content)
+      if (!group.focusTransform.dx && !group.focusTransform.dy) group.style.transform = 'none'
+    } : undefined)
   }
   const translationHosts = new Map()
   for (const element of pair.elements || []) {
@@ -547,7 +563,9 @@ export class FocusModeController {
       return
     }
     this.lastGeometry = geometry
-    const copies = createFocusMagnification(pair, rects, this.settings.scale / 100)
+    // WebKit rasterizes a filtered HTML subtree below Retina resolution.
+    // Reuse unfiltered visual copies at 100% so the sentence stays sharp.
+    const copies = createFocusMagnification(pair, rects, this.settings.scale / 100, isWebKit(navigator.userAgent))
     const erasures = copies.filter(element => element.classList.contains('focus-mode-erasure'))
     const groups = copies.filter(element => element.classList.contains('focus-mode-magnification'))
     this.positionPreviewAnchors(groups, pair)
