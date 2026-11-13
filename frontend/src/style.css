@@ -9134,3 +9134,5 @@ summary.outline-tree-line { cursor: pointer; }
 .outline-tree .outline-page-link { position: absolute; inset-inline-end: 2px; top: 4px; width: 36px; min-height: 28px; padding: 4px; text-align: center; }
 .outline-tree :is(summary,button):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .outline-tree [aria-current="location"] { background: var(--bg-hover); color: var(--text-primary); font-weight: 700; }
+
+.outline-tree .outline-page-link { justify-content: center; }

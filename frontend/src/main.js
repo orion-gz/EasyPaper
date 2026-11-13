@@ -19346,6 +19346,7 @@ async function loadPDFOutline() {
     outlineContent.innerHTML = ''
 
     if (chapterData.status === 'available') {
+      if (outline?.length) renderOutlineTree(outlineContent, outline, page => scrollToPage(viewerScrollContainer, page))
       const fullButton = document.createElement('button')
       fullButton.type = 'button'; fullButton.className = 'btn btn-secondary outline-full-summary-btn'
       fullButton.textContent = t('viewer:chapter.full')
