@@ -9110,3 +9110,18 @@ body.light-theme .chat-drawer {
 .lab-guide-advanced { grid-column: 1 / -1; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); }
 .lab-guide-advanced summary { cursor: pointer; font-size: 14px; font-weight: 600; }
 .lab-guide-advanced[open] > div { margin-top: 16px; }
+
+/* Reference preview card uses the active reader theme. */
+.citation-tooltip, body.light-theme .citation-tooltip {
+  width: 380px; box-sizing: border-box; background: var(--bg-elevated);
+  border-radius: var(--radius-lg); padding: 16px;
+}
+.citation-card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.citation-card-title { flex: 1; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.citation-card-close {
+  flex-shrink: 0; width: 32px; height: 32px; border: 1px solid var(--border);
+  border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary);
+  font-size: 20px; cursor: pointer;
+}
+.citation-card-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.citation-tooltip-text { padding-bottom: 12px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
