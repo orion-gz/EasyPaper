@@ -362,7 +362,7 @@
   "labInstallStep": "1. 다운로드 및 설치",
   "labMethodStep": "2. 접속 방법 선택",
   "labAccessStep": "3. 접속 준비",
-  "labInstallIntro": "systemd로 부팅한 Ubuntu 24.04 서버에 저장소를 내려받고 EasyPaper 프로젝트 폴더를 여세요. 설치 환경을 선택하고 해당 스크립트를 sudo로 실행하세요. 인터넷 연결이 필요합니다.",
+  "labInstallIntro": "서버에 저장소를 내려받고 EasyPaper 프로젝트 폴더를 여세요. 설치 환경을 선택하고 해당 스크립트를 sudo로 실행하세요. 인터넷 연결이 필요합니다.",
   "labMethodIntro": "랩 서버의 SSH 계정이 있다면 SSH를 선택하세요. 도메인으로 접속하려면 HTTPS를 선택하세요.",
   "labAccessIntro": "각 안내를 실행한 뒤 다음을 누르세요.",
   "labSshChoice": "SSH · 추천",

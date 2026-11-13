@@ -362,7 +362,7 @@
   "labInstallStep": "1. Download and install",
   "labMethodStep": "2. Choose a connection",
   "labAccessStep": "3. Prepare access",
-  "labInstallIntro": "On an Ubuntu 24.04 server booted with systemd, download the repository and open the EasyPaper project folder. Select your deployment environment and run its script with sudo. Internet access is required.",
+  "labInstallIntro": "Download the repository to your server and open the EasyPaper project folder. Select your deployment environment and run its script with sudo. Internet access is required.",
   "labMethodIntro": "Choose SSH if you have a lab server SSH account, or HTTPS to use a domain.",
   "labAccessIntro": "Complete each instruction, then select Next.",
   "labSshChoice": "SSH · Recommended",
