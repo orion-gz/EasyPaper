@@ -1,3 +1,4 @@
+import { enhanceLibraryRow } from './libraryRowMenu.js'
 import { setStatusState } from './statusState.js'
 import { initializeLabModels } from './labModels.js'
 import { activateAccountStorage } from './accountStorage.js'
@@ -10701,6 +10702,7 @@ function createDocListRow(doc) {
       ${d.ctaBtnHtml}
     </div>`
   wireDocItemEvents(row, doc, d.displayTitle)
+  enhanceLibraryRow(row)
   return row
 }
 

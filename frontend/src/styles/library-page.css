@@ -854,3 +854,9 @@ body.library-marquee-selecting { cursor:crosshair!important; }
 .folder-native-color input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
 .folder-native-color span { font-size:18px; line-height:1; }
 .folder-color-picker { align-items:center; }
+
+.doc-list-row:focus-within { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.doc-list-row .doc-list-title { min-width: 0; }
+.doc-list-row .doc-card-kebab-menu { min-width: 180px; background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-base); z-index: 20; }
+.doc-list-row .doc-card-kebab-menu .doc-card-kebab-item { display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 10px; min-height: 36px; padding: 8px 12px; }
+.doc-list-row .doc-card-kebab-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; background: var(--bg-hover); }
