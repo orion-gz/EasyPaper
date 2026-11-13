@@ -565,7 +565,6 @@ async function maybeShowOnboarding() {
 }
 
 // 탭 버튼 및 컨텐츠 영역
-initializeLabMode()
 
 const tabBtns           = document.querySelectorAll('.tab-btn')
 const tabPanes          = document.querySelectorAll('.tab-pane')
@@ -19803,4 +19802,5 @@ initializeDataTransfer({ confirmImport: message => showCustomConfirm(message, {
   danger: false,
 }), beforeExport: flushBeforeDataTransfer })
 
+initializeLabMode(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'antigravity'].includes(provider.id)))
 initializeLabModels(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'antigravity'].includes(provider.id)))
