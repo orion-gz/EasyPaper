@@ -99,7 +99,7 @@ jobs:
           - os: windows-latest
             name: windows
             args: ""
-          - os: macos-14
+          - os: macos-15
             name: macos-arm64
             args: ""
     runs-on: ${{ matrix.os }}

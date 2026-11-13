@@ -12,7 +12,7 @@ on:
 
 jobs:
   test-macos-webkit:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -43,7 +43,7 @@ jobs:
             name: linux
           - os: windows-latest
             name: windows
-          - os: macos-14
+          - os: macos-15
             name: macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
