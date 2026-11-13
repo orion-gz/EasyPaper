@@ -77,6 +77,6 @@ test('SSH editor restores custom pickers and permits memory-only recovery', asyn
   await page.locator('#lab-inference-form button[type=submit]').click()
   await expect.poll(() => saved?.save_credentials).toBe(false)
   await page.locator('#settings-nav-model').click()
-  await page.getByRole('button', { name: 'Use existing personal model settings' }).click()
-  await expect.poll(() => reset).toBe(true)
+  await expect(page.locator('#lab-personal-form')).toBeHidden()
+  expect(reset).toBe(false)
 })

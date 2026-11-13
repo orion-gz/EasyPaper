@@ -8748,7 +8748,7 @@ body.light-theme .chat-drawer {
 .lab-models-active #ollama-install-section { display: none !important; }
 .lab-auth-terminal { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .lab-auth-terminal:empty { display: none; }
-#lab-personal-form[hidden], #lab-personal-status[hidden],
+#lab-personal-form[hidden], #lab-personal-form [hidden], #lab-personal-status[hidden],
 #lab-model-settings[hidden], #lab-model-settings [hidden] { display: none !important; }
 #lab-model-settings {
   display: flex;

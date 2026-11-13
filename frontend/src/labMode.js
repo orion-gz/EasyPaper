@@ -152,14 +152,15 @@ export async function initializeLabMode(cliProviders = []) {
   personalModels.setAttribute('aria-label', t('settings:labDefaultModel'))
   const personalModelContainer = document.createElement('div')
   personalModelContainer.append(personalModels)
-  personalInput.after(personalModelContainer)
+  const personalInputContainer = personalInput.closest('.custom-select-picker') || personalInput
+  personalInputContainer.after(personalModelContainer)
   function personalModelControl() {
     return ['ollama', 'vllm'].includes(providerSelect.value) ? personalModels : personalInput
   }
   function updatePersonalModels(preferredModel) {
     const server = servers.find(s => s.id === personalServer.value)
     const local = ['ollama', 'vllm'].includes(providerSelect.value)
-    personalInput.hidden = local
+    personalInputContainer.hidden = local
     personalInput.disabled = local
     personalModelContainer.hidden = !local
     personalModels.disabled = !local

@@ -85,9 +85,9 @@ test('switching server accounts archives browser drafts outside exported localSt
   expect(archived.easypaper_test_draft).toBe('Alice private draft')
 })
 
-test('normal mode personal CLI login polling stops after switching engine', async ({ page }) => {
+test('Lab member personal CLI login polling stops after switching engine', async ({ page }) => {
   await mockBaseRoutes(page)
-  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'member', lab_mode: false } }))
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'member', lab_mode: true } }))
   await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', models: ['test'], model: 'test' } }))
   await page.route('**/api/me/model-settings', route => route.fulfill({ json: { provider: 'codex', model: 'test' } }))
   await page.route('**/api/me/providers/codex/login', route => route.fulfill({ json: { status: 'pending' } }))
@@ -112,9 +112,9 @@ test('normal mode personal CLI login polling stops after switching engine', asyn
   expect(polls).toBe(count)
 })
 
-test('normal mode master saves personal models in AI settings and sees errors there', async ({ page }) => {
+test('Lab member saves personal models in AI settings and sees errors there', async ({ page }) => {
   await mockBaseRoutes(page)
-  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'master', lab_mode: false } }))
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'member', lab_mode: true } }))
   await page.route('**/api/lab/inference', route => route.fulfill({ json: { engine: 'ollama', model: 'test' } }))
   await page.route('**/api/inference/servers', route => route.fulfill({ json: { servers: [{ id: 'gpu', name: 'GPU', engine: 'ollama', models: ['test', 'my-model'], model: 'test' }], default_id: 'gpu' } }))
   let personal = {}

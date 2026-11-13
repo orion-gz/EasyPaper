@@ -85,18 +85,24 @@ test('member model choices synchronize without management controls', async ({ pa
   await expect(page.locator('#lab-personal-shared-model option')).toHaveCount(0, { timeout: 10000 })
 })
 
-test('switching to personal CLI providers preserves a usable text input', async ({ page }) => {
-  await setup(page, 'member', false)
+test('switching personal providers keeps the CLI picker usable', async ({ page }) => {
+  await setup(page, 'member', true)
   await page.locator('#settings-nav-model').click()
-  await expect(page.locator('#lab-personal-form')).not.toHaveAttribute('inert', '')
+  await expect(page.locator('#lab-personal-form')).toBeVisible()
   await page.locator('#lab-personal-provider').selectOption('codex', { force: true })
-  await expect(page.locator('#lab-personal-model')).toBeVisible()
-  await page.locator('#lab-personal-model').fill('personal-model')
+  const models = page.locator('#lab-personal-model')
+  const picker = models.locator('..').locator('.provider-picker-btn')
+  await expect(picker).toBeVisible()
+  await picker.click()
+  await models.locator('..').getByRole('option').last().click()
+  const value = await models.inputValue()
   await page.locator('#lab-personal-provider').selectOption('ollama', { force: true })
-  await expect(page.locator('#lab-personal-model')).toBeHidden()
+  await expect(picker).toBeHidden()
+  await expect(page.locator('#lab-personal-shared-model').locator('..').locator('.provider-picker-btn')).toBeVisible()
   await page.locator('#lab-personal-provider').selectOption('codex', { force: true })
-  await expect(page.locator('#lab-personal-model')).toHaveValue('personal-model')
-  await expect(page.locator('#lab-personal-model')).toBeEditable()
+  await expect(models).toHaveValue(value)
+  await expect(picker).toBeVisible()
+  await expect(picker).toBeEnabled()
 })
 
 
