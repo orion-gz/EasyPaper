@@ -1,3 +1,4 @@
+import { installFieldFeedback } from './fieldFeedback.js'
 import { setStatusState } from './statusState.js'
 import { initializeLabModels } from './labModels.js'
 import { activateAccountStorage } from './accountStorage.js'
@@ -19827,3 +19828,5 @@ initializeDataTransfer({ confirmImport: message => showCustomConfirm(message, {
 
 initializeLabMode(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'antigravity'].includes(provider.id)))
 initializeLabModels(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'antigravity'].includes(provider.id)))
+
+installFieldFeedback(document.getElementById('settings-modal'))
