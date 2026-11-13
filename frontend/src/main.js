@@ -9501,7 +9501,7 @@ function wireDocItemEvents(container, doc, displayTitle) {
 
   const kebabBtn = container.querySelector('.doc-card-kebab-btn')
   const kebabMenu = container.querySelector('.doc-card-kebab-menu')
-  if (kebabBtn && kebabMenu) {
+  if (kebabBtn && kebabMenu && !container.classList.contains('doc-list-row')) {
     kebabBtn.addEventListener('click', (e) => {
       e.stopPropagation()
       const isHidden = kebabMenu.classList.contains('hidden')
@@ -9591,7 +9591,7 @@ function wireDocItemEvents(container, doc, displayTitle) {
   if (editBtn) {
     editBtn.addEventListener('click', (e) => {
       e.stopPropagation()
-      const titleEl = container.querySelector('.doc-card-title')
+      const titleEl = container.querySelector('.doc-card-title, .doc-list-title')
       const oldTitle = displayTitle
 
       const input = document.createElement('input')

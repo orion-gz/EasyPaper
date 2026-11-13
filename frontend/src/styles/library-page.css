@@ -857,6 +857,21 @@ body.library-marquee-selecting { cursor:crosshair!important; }
 
 .doc-list-row:focus-within { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .doc-list-row .doc-list-title { min-width: 0; }
-.doc-list-row .doc-card-kebab-menu { min-width: 180px; background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-base); z-index: 20; }
-.doc-list-row .doc-card-kebab-menu .doc-card-kebab-item { display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 10px; min-height: 36px; padding: 8px 12px; }
-.doc-list-row .doc-card-kebab-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; background: var(--bg-hover); }
+.library-row-action-menu { min-width: 180px; background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-base); z-index: 20; }
+.library-row-action-menu .doc-card-kebab-item { display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 10px; min-height: 36px; padding: 8px 12px; }
+.library-row-action-menu .doc-card-kebab-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; background: var(--bg-hover); }
+
+/* A viewport-positioned menu must escape the scrolling document list. */
+.library-row-action-menu {
+  position: fixed; bottom: auto; right: auto; z-index: 300;
+  max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px);
+  overflow-y: auto; animation: none;
+}
+.library-row-action-menu .doc-card-kebab-item { height: auto; white-space: normal; text-align: start; }
+
+@media (max-width: 720px) {
+  .doc-list-row { gap: 8px; padding-inline: 12px; }
+  .doc-list-row > .document-type-chip,
+  .doc-list-row > .doc-card-meta { display: none; }
+  .doc-list-row .doc-list-title { flex: 1 1 0; }
+}
