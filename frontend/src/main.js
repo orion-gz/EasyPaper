@@ -1,3 +1,4 @@
+import { decorateCodeBlocks, installCodeCopy } from './chatCodeBlocks.js'
 import { setStatusState } from './statusState.js'
 import { initializeLabModels } from './labModels.js'
 import { activateAccountStorage } from './accountStorage.js'
@@ -15959,7 +15960,7 @@ function formatChatHtml(text, totalPages = state.totalPages) {
   })
 
   // sanitizer를 통과한 뒤 숫자로 검증한 단일·범위 페이지 근거만 링크한다.
-  return linkPageCitations(html, totalPages)
+  return decorateCodeBlocks(linkPageCitations(html, totalPages))
 }
 
 // 인용 이미지를 로컬/서버 어디서도 복원하지 못했을 때(<img onerror>에서 호출)
@@ -19827,3 +19828,5 @@ initializeDataTransfer({ confirmImport: message => showCustomConfirm(message, {
 
 initializeLabMode(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'antigravity'].includes(provider.id)))
 initializeLabModels(PROVIDER_CONFIG.filter(provider => ['codex', 'claude_code', 'antigravity'].includes(provider.id)))
+
+installCodeCopy(document)

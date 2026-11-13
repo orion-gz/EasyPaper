@@ -25,5 +25,9 @@
   "memo.alreadyCreated": "This memo has already been created.",
   "memo.quoteHeading": "Quoted text",
   "memo.questionHeading": "Question",
-  "memo.answerHeading": "AI answer"
+  "memo.answerHeading": "AI answer",
+  "code.label": "Code",
+  "code.copy": "Copy code",
+  "code.copied": "Copied",
+  "code.failed": "Copy failed — retry"
 }
