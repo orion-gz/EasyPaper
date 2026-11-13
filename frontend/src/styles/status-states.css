@@ -140,3 +140,19 @@
 }
 .primer-error > svg { color: var(--warning); flex-shrink: 0; }
 .primer-error > p { margin: 0; }
+
+.status-inline { flex-wrap: wrap; }
+.status-action {
+  padding: 8px 14px; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md); background: var(--bg-elevated);
+  color: var(--text-primary); font: inherit; cursor: pointer;
+}
+.status-action:hover { background: var(--bg-hover); }
+.status-action:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.status-skeleton {
+  display: block; flex-basis: 100%; width: min(320px, 100%); height: 64px;
+  border-radius: var(--radius-md); background: var(--bg-hover);
+  animation: status-pulse 1.5s ease-in-out infinite;
+}
+@keyframes status-pulse { 50% { opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .status-skeleton { animation: none; } }

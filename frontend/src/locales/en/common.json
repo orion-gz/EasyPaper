@@ -1255,5 +1255,8 @@
   "legacy.documentCopy.particle5": "document",
   "legacy.documentCopy.legacy.ui.0173": "Deep Learning Vision/Layout AI - Transform your entire document into a clean Markdown/LaTeX formula.",
   "legacy.documentCopy.legacy.ui.0113": "Failed to move document",
-  "legacy.documentCopy.chatEmpty": "Start asking the AI assistant questions in the document viewer"
+  "legacy.documentCopy.chatEmpty": "Start asking the AI assistant questions in the document viewer",
+  "status.libraryError": "Could not load your library.",
+  "status.loading": "Loading…",
+  "status.upload": "Upload document"
 }
