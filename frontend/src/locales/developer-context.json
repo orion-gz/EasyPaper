@@ -6909,6 +6909,12 @@
   "viewer:citationCard.close": {
     "description": "Accessible citationCard.close label in the citation-card UI."
   },
+  "library:row.rename": {
+    "description": "Rename"
+  },
+  "library:row.actions": {
+    "description": "Document actions"
+  },
   "chat:code.label": {
     "description": "Code"
   },

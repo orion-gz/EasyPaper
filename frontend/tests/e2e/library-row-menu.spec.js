@@ -1,0 +1,43 @@
+import { test, expect } from '@playwright/test'
+import { mockBaseRoutes, gotoApp } from './helpers.js'
+
+for (const width of [390, 1280]) {
+  test(`row menu stays in viewport and renames document at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    const doc = { id: 'row-doc', filename: 'paper.pdf', metadata: { title: 'A very long document title for alignment validation' }, created_at: '2026-01-01T00:00:00Z', total_pages: 12, translated_pages: [] }
+    await mockBaseRoutes(page, { documents: [doc] })
+    await page.route('**/api/library/row-doc/title', r => { doc.metadata.title = r.request().postDataJSON().title; return r.fulfill({ json: { status: 'success', title: doc.metadata.title, metadata: doc.metadata } }) })
+    await gotoApp(page)
+    await page.locator('.sidebar-nav-item[data-page="library"]').click()
+    await page.getByRole('button', { name: '리스트 보기' }).click()
+    const row = page.locator('.doc-list-row[data-id="row-doc"]')
+    const trigger = row.locator('.doc-card-kebab-btn')
+    await expect(row.locator('.doc-list-title')).toBeVisible()
+    expect((await row.locator('.doc-list-title').boundingBox()).width).toBeGreaterThan(50)
+    await trigger.scrollIntoViewIfNeeded()
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await trigger.press('ArrowDown')
+    const menu = page.locator('.library-row-action-menu:visible')
+    await expect(menu).toBeVisible()
+    expect(await menu.evaluate(el => el.parentElement === document.body)).toBe(true)
+    const rect = await menu.boundingBox()
+    expect(rect.x).toBeGreaterThanOrEqual(0); expect(rect.y).toBeGreaterThanOrEqual(0)
+    expect(rect.x + rect.width).toBeLessThanOrEqual(width)
+    expect(rect.y + rect.height).toBeLessThanOrEqual(900)
+    await expect(menu.locator('.doc-edit-btn')).toBeFocused()
+    await page.screenshot({ path: testInfo.outputPath('library-row-menu.png'), fullPage: true })
+    await page.keyboard.press('Escape')
+    await expect(trigger).toBeFocused()
+    await trigger.click()
+    await page.locator('.library-row-action-menu:visible .doc-edit-btn').click()
+    const input = row.locator('.doc-list-title input')
+    await expect(input).toBeFocused()
+    await input.fill('Updated row title')
+    await input.press('Enter')
+    await expect(row.locator('.doc-list-title')).toHaveText('Updated row title')
+    await trigger.click()
+    await page.locator('#library-grid').dispatchEvent('scroll')
+    await expect(page.locator('.library-row-action-menu:visible')).toHaveCount(0)
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+}

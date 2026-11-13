@@ -64,5 +64,7 @@
   "article.memo": "Memo",
   "article.memoPrompt": "Memo text",
   "article.capture": "Capture section",
-  "batch.failure": "{{success}} completed, {{failed}} failed. Retry the selected items."
+  "batch.failure": "{{success}} completed, {{failed}} failed. Retry the selected items.",
+  "row.rename": "Rename",
+  "row.actions": "Document actions"
 }
