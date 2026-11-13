@@ -9113,13 +9113,18 @@ body.light-theme .chat-drawer {
 
 /* Reference preview card uses the active reader theme. */
 .citation-tooltip, body.light-theme .citation-tooltip {
-  width: 380px; box-sizing: border-box; background: var(--bg-elevated);
+  width: 380px; box-sizing: border-box;
+  /* Composite translucent theme colors over an opaque base. */
+  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)),
+    linear-gradient(var(--bg-base), var(--bg-base)), #06050a;
   border-radius: var(--radius-lg); padding: 16px;
 }
 .citation-card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
-.citation-card-title { flex: 1; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.citation-card-title { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .citation-card-close {
-  flex-shrink: 0; width: 32px; height: 32px; border: 1px solid var(--border);
+  display: inline-flex; align-items: center; justify-content: center;
+  box-sizing: border-box; flex: 0 0 32px; width: 32px; height: 32px;
+  margin: 0; padding: 0; line-height: 1; border: 1px solid var(--border);
   border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary);
   font-size: 20px; cursor: pointer;
 }
