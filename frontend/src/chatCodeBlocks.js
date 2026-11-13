@@ -9,6 +9,7 @@ export function decorateCodeBlocks(html) {
     const header = document.createElement('div'); header.className = 'chat-code-header'
     const language = document.createElement('span')
     language.textContent = [...code.classList].find(name => name.startsWith('language-'))?.slice(9) || t('chat:code.label')
+    language.title = language.textContent
     const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'chat-code-copy'; copy.textContent = t('chat:code.copy')
     header.append(language, copy); pre.replaceWith(wrapper); wrapper.append(header, pre)
   })
@@ -25,4 +26,11 @@ export function installCodeCopy(root) {
     catch { button.textContent = t('chat:code.failed') }
     finally { button.disabled = false }
   })
+}
+
+// Whole-message copy must not include code-toolbar labels.
+export function chatMessageText(bubble) {
+  const copy = bubble.cloneNode(true)
+  copy.querySelectorAll('.chat-code-header').forEach(header => header.remove())
+  return copy.textContent
 }

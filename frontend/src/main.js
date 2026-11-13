@@ -1,4 +1,4 @@
-import { decorateCodeBlocks, installCodeCopy } from './chatCodeBlocks.js'
+import { decorateCodeBlocks, installCodeCopy, chatMessageText } from './chatCodeBlocks.js'
 import { setStatusState } from './statusState.js'
 import { initializeLabModels } from './labModels.js'
 import { activateAccountStorage } from './accountStorage.js'
@@ -6740,7 +6740,7 @@ function appendCompareActionButtons(msgEl, role, content) {
   copyBtn.style.cursor = 'pointer'
   copyBtn.title = '텍스트 복사'
   copyBtn.addEventListener('click', () => {
-    const text = msgEl.querySelector('.message-bubble').textContent
+    const text = chatMessageText(msgEl.querySelector('.message-bubble'))
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => {
         showToast('텍스트가 복사되었습니다.', 'success')
@@ -7000,7 +7000,7 @@ function appendChatDrawerActionButtons(msgEl, role, content) {
   copyBtn.style.cursor = 'pointer'
   copyBtn.title = '텍스트 복사'
   copyBtn.addEventListener('click', () => {
-    const text = msgEl.querySelector('.message-bubble').textContent
+    const text = chatMessageText(msgEl.querySelector('.message-bubble'))
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => {
         showToast('텍스트가 복사되었습니다.', 'success')

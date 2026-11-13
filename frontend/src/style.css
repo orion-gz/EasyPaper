@@ -9136,3 +9136,8 @@ body.light-theme .chat-drawer {
 .chat-message .message-bubble table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
 .chat-message .message-bubble :is(th,td) { padding: 8px 12px; border: 1px solid var(--border); text-align: start; }
 .chat-message .message-bubble blockquote { margin: 12px 0; padding: 8px 14px; border-inline-start: 3px solid var(--border-strong); color: var(--text-secondary); }
+
+/* Keep code actions intact even with long language names and narrow panels. */
+.chat-code-header > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-code-copy { flex: 0 0 auto; white-space: nowrap; }
+.chat-message .message-bubble :is(th, td) { min-width: 8ch; overflow-wrap: normal; word-break: normal; }
