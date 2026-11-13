@@ -15536,6 +15536,7 @@ function getOrCreateCitationTooltip() {
   el.setAttribute('role', 'dialog')
   el.setAttribute('aria-label', t('viewer:a11y.citationTrigger', { references: '' }))
   el.innerHTML = `
+    <div class="citation-card-header"><strong class="citation-card-title"></strong><button type="button" class="citation-card-close">×</button></div>
     <div class="citation-tooltip-text"></div>
     <div class="citation-tooltip-analysis"></div>
     <div class="citation-tooltip-result hidden"></div>
@@ -15560,6 +15561,11 @@ function getOrCreateCitationTooltip() {
   el.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return
     event.preventDefault()
+    const trigger = citationTooltipBoxEl
+    hideCitationTooltip()
+    trigger?.focus()
+  })
+  el.querySelector('.citation-card-close').addEventListener('click', () => {
     const trigger = citationTooltipBoxEl
     hideCitationTooltip()
     trigger?.focus()
@@ -15654,6 +15660,10 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
 
   const tooltip = getOrCreateCitationTooltip()
   focusModeController?.registerPreview(tooltip, boxEl, hideCitationTooltip)
+  tooltip.querySelector('.citation-card-title').textContent = refKeys.length === 1
+    ? extractCitationTitle(refMap[refKeys[0]] || '') || t('viewer:citationCard.title')
+    : t('viewer:citationCard.title')
+  tooltip.querySelector('.citation-card-close').setAttribute('aria-label', t('viewer:citationCard.close'))
   tooltip.querySelector('.citation-tooltip-text').innerHTML = buildCitationTooltipHtml(refKeys, refMap)
   const resultEl = tooltip.querySelector('.citation-tooltip-result')
   resultEl.className = 'citation-tooltip-result hidden'
@@ -15676,7 +15686,7 @@ function showCitationTooltip(docId, refKeys, refMap, boxEl, { focus = false } = 
     citationTooltipReferences, getModeSetting('referenceAutoAnalysis', state.currentDocumentMode),
   )
   positionCitationTooltip()
-  if (focus) window.requestAnimationFrame(() => tooltip.querySelector('button:not([disabled]), a[href]')?.focus())
+  if (focus) window.requestAnimationFrame(() => tooltip.querySelector('.citation-tooltip-resolve-btn')?.focus())
 }
 
 function hideCitationTooltip() {

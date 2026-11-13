@@ -67,6 +67,10 @@ test('참고문헌 목록에 있는 번호의 본문 인용 표기만 클릭 가
   await markerBoxes.first().click()
   await expect(activeReader(page).locator('.citation-tooltip')).not.toHaveClass(/hidden/)
   await expect(activeReader(page).locator('.citation-tooltip-text')).toHaveText('Vaswani et al. Attention Is All You Need. 2017.')
+  await expect(activeReader(page).locator('.citation-card-title')).not.toBeEmpty()
+  await activeReader(page).locator('.citation-card-close').click()
+  await expect(activeReader(page).locator('.citation-tooltip')).toHaveClass(/hidden/)
+  await expect(markerBoxes.first()).toBeFocused()
 })
 
 test('툴팁에서 원문 링크 찾기를 누르면 결과 링크가 표시되고, 클릭하면 새 탭으로 열린다', async ({ page, context }) => {

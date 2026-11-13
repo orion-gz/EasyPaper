@@ -6893,5 +6893,11 @@
   "settings:sharedModelsDeleteHelp": {
     "description": "Shared model file maintenance: sharedModelsDeleteHelp",
     "file": "src/sharedModels.js"
+  },
+  "viewer:citationCard.title": {
+    "description": "Accessible citationCard.title label in the citation-card UI."
+  },
+  "viewer:citationCard.close": {
+    "description": "Accessible citationCard.close label in the citation-card UI."
   }
 }
