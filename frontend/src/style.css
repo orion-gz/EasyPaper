@@ -9125,3 +9125,12 @@ body.light-theme .chat-drawer {
 }
 .citation-card-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .citation-tooltip-text { padding-bottom: 12px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+
+.outline-tree ul { list-style: none; padding: 0; margin: 0; }
+.outline-tree ul ul { margin-inline-start: 12px; padding-inline-start: 8px; border-inline-start: 1px solid var(--border-strong); }
+.outline-tree-line { position: relative; padding: 8px 42px 8px 8px; min-height: 36px; box-sizing: border-box; color: var(--text-secondary); font-size: 12px; }
+summary.outline-tree-line { cursor: pointer; }
+.outline-tree-title { overflow-wrap: anywhere; line-height: 1.6; }
+.outline-tree .outline-page-link { position: absolute; inset-inline-end: 2px; top: 4px; width: 36px; min-height: 28px; padding: 4px; text-align: center; }
+.outline-tree :is(summary,button):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.outline-tree [aria-current="location"] { background: var(--bg-hover); color: var(--text-primary); font-weight: 700; }

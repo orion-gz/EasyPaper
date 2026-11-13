@@ -1,3 +1,4 @@
+import { renderOutlineTree } from './outlineTree.js'
 import { setStatusState } from './statusState.js'
 import { initializeLabModels } from './labModels.js'
 import { activateAccountStorage } from './accountStorage.js'
@@ -19411,15 +19412,9 @@ async function loadPDFOutline() {
     const infoMsg = document.createElement('div')
     infoMsg.style.cssText = 'font-size:11px; color:var(--text-muted); padding:4px 10px 12px; border-bottom:1px dashed var(--border); margin-bottom:8px; line-height:1.4;'
     infoMsg.innerHTML = `${icon('info', 12, 'style="vertical-align:-2px;margin-right:3px"')}${t('viewer:outline.noToc')} ${t('viewer:chapter.unavailable')}`
-    outlineContent.appendChild(infoMsg)
+    if (!outline?.length) outlineContent.appendChild(infoMsg)
     const flat = outline?.length ? outline : Array.from({ length: state.totalPages }, (_, index) => ({ title: t('viewer:pageLabel', { page: index + 1 }), pageNum: index + 1 }))
-    const renderTree = (items, depth = 0) => items.forEach(item => {
-      const button = document.createElement('button'); button.type = 'button'; button.className = `outline-item depth-${depth}`
-      button.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.title)}</span>`
-      if (item.pageNum) button.addEventListener('click', () => scrollToPage(viewerScrollContainer, item.pageNum))
-      outlineContent.appendChild(button); if (item.items?.length) renderTree(item.items, depth + 1)
-    })
-    renderTree(flat)
+    renderOutlineTree(outlineContent, flat, page => scrollToPage(viewerScrollContainer, page))
   } catch (err) {
     console.error('Outline load error:', err)
     outlineContent.innerHTML = '<div style="font-size:12px; color:var(--error); text-align:center; padding:20px;">목차 로드 실패</div>'

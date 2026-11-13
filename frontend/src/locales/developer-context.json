@@ -6908,5 +6908,8 @@
   },
   "viewer:citationCard.close": {
     "description": "Accessible citationCard.close label in the citation-card UI."
+  },
+  "viewer:outline.navigation": {
+    "description": "Document outline"
   }
 }
