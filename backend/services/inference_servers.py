@@ -203,9 +203,9 @@ async def check(identifier):
         if value['model']:
             if not default_available:
                 raise HTTPException(502, 'The default model is not installed on the inference server.')
-            from services.lab_inference import probe
+            from services.lab_inference import checked_probe
             async with manager.lease(key):
-                verified = await probe(value)
+                verified = await checked_probe(value)
         return {'connected': True, 'models': models, 'default_available': default_available, **verified}
     except (httpx.HTTPError, ValueError, KeyError, RuntimeError):
         raise HTTPException(502, 'Could not reach the inference service through the configured connection.')

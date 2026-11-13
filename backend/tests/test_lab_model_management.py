@@ -157,7 +157,7 @@ def test_personal_servers_never_enter_lab_catalog_or_selection(environment):
 
 @pytest.mark.asyncio
 async def test_model_memory_concurrency_waits_without_blocking_other_models(monkeypatch):
-    policy = {'engine': 'ollama', 'max_concurrent': 3, 'per_user': 2,
+    policy = {'engine': 'ollama', 'models': ['large', 'small'], 'max_concurrent': 3, 'per_user': 2,
               'memory_policy': {'models': {'large': {'concurrency': 1}}}}
     monkeypatch.setattr(lab, 'configuration', lambda: policy)
     monkeypatch.setattr(lab, 'settings', lambda: {'enabled': True})

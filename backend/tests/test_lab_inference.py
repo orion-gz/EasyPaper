@@ -32,3 +32,64 @@ async def test_vllm_without_cache_salt_is_rejected(monkeypatch):
     lab_inference._verified.clear()
     with pytest.raises(RuntimeError, match='cache_salt'):
         await lab_inference.require_cache_salt({'url': 'http://old-server/v1'})
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_budget_rejection_never_sends_completion(monkeypatch):
+    from contextlib import asynccontextmanager
+    from fastapi import HTTPException
+    from services import lab, lab_resources, inference_servers
+    from services.lab_context import selected_server
+    config = {'id': 'diagnostic', 'engine': 'ollama', 'model': 'm', 'models': ['m']}
+    monkeypatch.setattr(lab, 'settings', lambda: {'enabled': True})
+    monkeypatch.setattr(inference_servers, 'get', lambda *args, **kwargs: config)
+    @asynccontextmanager
+    async def denied(value):
+        assert value is config
+        raise HTTPException(409, 'GPU budget full')
+        yield
+    monkeypatch.setattr(lab_resources, 'admission', denied)
+    async def forbidden(value):
+        pytest.fail('Completion bypassed GPU admission')
+    monkeypatch.setattr(lab_inference, 'probe', forbidden)
+    previous = selected_server.get()
+    with pytest.raises(HTTPException, match='GPU budget full'):
+        await lab_inference.checked_probe(config)
+    assert selected_server.get() is previous
+    assert manager.active.get('inference:diagnostic', 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_waits_for_inference_slot_and_caps_context(monkeypatch):
+    import asyncio
+    import json
+    from contextlib import asynccontextmanager
+    from services import lab, lab_resources, lab_tasks, inference_servers
+    config = {'id': 'diagnostic', 'engine': 'ollama', 'url': 'http://engine',
+              'model': 'm', 'models': ['m'], 'max_concurrent': 1,
+              'memory_policy': {'models': {'m': {'context_tokens': 2048}}}}
+    monkeypatch.setattr(lab, 'settings', lambda: {'enabled': True})
+    monkeypatch.setattr(inference_servers, 'get', lambda *args, **kwargs: config)
+    reserved = False
+    @asynccontextmanager
+    async def memory(value):
+        nonlocal reserved
+        reserved = True
+        try:
+            yield
+        finally:
+            reserved = False
+    monkeypatch.setattr(lab_resources, 'admission', memory)
+    calls = []
+    def respond(request):
+        assert reserved
+        assert json.loads(request.content)['options'] == {'num_predict': 1, 'num_ctx': 2048}
+        calls.append(request)
+        return httpx.Response(200, json={'message': {'content': 'OK'}})
+    monkeypatch.setattr(httpx, 'AsyncHTTPTransport', lambda: httpx.MockTransport(respond))
+    async with lab_tasks.admission('alice', 'diagnostic', 'm'):
+        task = asyncio.create_task(lab_inference.checked_probe(config))
+        await asyncio.sleep(0)
+        assert not task.done() and not calls
+    assert (await asyncio.wait_for(task, 1))['inference_verified']
+    assert len(calls) == 1 and not reserved

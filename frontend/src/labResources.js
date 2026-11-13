@@ -38,9 +38,14 @@ export function resourceEditor(form, api, serverId) {
   output.className = 'lab-auth-terminal'
   output.setAttribute('role', 'status')
   let specifications = {}
-  function render(models) {
-    rows.replaceChildren()
+  function render(models, reset = false) {
+    if (reset) rows.replaceChildren()
+    const retained = new Map([...rows.children].map(row => [row.dataset.model, row]))
+    for (const [model, row] of retained) {
+      if (!models.includes(model)) row.remove()
+    }
     for (const model of models) {
+      if (retained.has(model)) continue
       const group = document.createElement('fieldset')
       group.className = 'lab-memory-model-card'
       const legend = document.createElement('legend'); legend.textContent = model; group.append(legend)
@@ -94,7 +99,7 @@ export function resourceEditor(form, api, serverId) {
       budget.value = server.memory_policy?.budget_gib || 16
       maximum.value = server.memory_policy?.max_loaded || 1
       specifications = server.memory_policy?.models || {}
-      render(server.models || [])
+      render(server.models || [], true)
       enabled.onchange(); output.textContent = ''
     },
     sync(models = []) {

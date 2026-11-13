@@ -34,6 +34,11 @@ async def admission(username, server_id=None, model=None):
                 common = inference_servers.get(server_id, with_secrets=False) if server_id else lab.configuration()
                 if lab.settings()['enabled'] and not common.get('enabled', True):
                     raise RuntimeError('This shared server is disabled.')
+                if lab.settings()['enabled'] and model is not None:
+                    from services.shared_models import canonical_id
+                    allowed = {canonical_id(common['engine'], value) for value in common.get('models', [])}
+                    if not common.get('lab_shared', True) or canonical_id(common['engine'], model) not in allowed:
+                        raise RuntimeError('This shared model is no longer allowed.')
                 maximum = common.get('max_concurrent') or (8 if common['engine'] == 'vllm' else 2)
                 per_user = common.get('per_user', 1)
                 specs = (common.get('memory_policy') or {}).get('models', {})

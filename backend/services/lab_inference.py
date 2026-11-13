@@ -59,6 +59,8 @@ async def probe(configuration):
         payload.update(max_tokens=1, cache_salt=secrets.token_hex(32))
     else:
         payload['options'] = {'num_predict': 1}
+    from services.lab_resources import constrain_payload
+    payload = constrain_payload(payload)
     async with connection_client('inference:' + configuration.get('id', 'default'), configuration, timeout=120, follow_redirects=False, trust_env=False) as client:
         response = await client.post(configuration['url'].rstrip('/') + path, headers=headers, json=payload)
         response.raise_for_status()
@@ -66,3 +68,20 @@ async def probe(configuration):
     if (vllm and not result.get('choices')) or (not vllm and 'message' not in result):
         raise RuntimeError('The server did not return a valid inference response.')
     return {'inference_verified': True, 'cache_salt_supported': True if vllm else None}
+
+
+async def checked_probe(configuration):
+    """Diagnostic completions consume the same queue and GPU budget as inference."""
+    from services.lab_context import identity, selected_server
+    from services.lab_tasks import admission
+    from services.lab_resources import admission as memory_admission
+    from services.lab_models import tracking
+    from services.ssh_connections import manager
+    token = selected_server.set(dict(configuration, provider=configuration['engine']))
+    try:
+        async with manager.lease('inference:' + configuration.get('id', 'default')):
+            async with admission(identity.get() or 'connection-check', configuration.get('id'), configuration['model']):
+                async with memory_admission(configuration), tracking(configuration):
+                    return await probe(configuration)
+    finally:
+        selected_server.reset(token)
