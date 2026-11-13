@@ -251,5 +251,6 @@
   "memoAlignment.pageLeft": "Align all memos on this page in the left margin",
   "memoAlignment.pageRight": "Align all memos on this page in the right margin",
   "citationCard.title": "References",
-  "citationCard.close": "Close reference preview"
+  "citationCard.close": "Close reference preview",
+  "outline.navigation": "Document outline"
 }
