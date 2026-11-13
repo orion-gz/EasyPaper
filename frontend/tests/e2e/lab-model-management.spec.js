@@ -29,7 +29,7 @@ test('Lab selection excludes personal models and restores personal controls', as
   await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-model' } })))
   await expect(page.locator('#lab-model-settings')).toBeVisible()
   await expect(page.locator('#setting-default-ai-provider')).toBeHidden()
-  await expect(page.locator('#lab-personal-form')).toBeHidden()
+  await expect(page.locator('#lab-personal-form')).toBeVisible()
   const select = page.locator('#lab-model-selection')
   await expect(select.locator('option')).not.toContainText(['qwen3.5:9b'])
   await expect(select).toContainText('Codex')
@@ -48,6 +48,7 @@ test('Lab selection excludes personal models and restores personal controls', as
   await page.evaluate(() => window.dispatchEvent(new Event('lab-mode-changed')))
   await expect(page.locator('#lab-model-settings')).toBeHidden()
   await expect(page.locator('#setting-default-ai-provider')).toBeVisible()
+  await expect(page.locator('#lab-personal-form')).toBeHidden()
 })
 
 test('authentication input reaches only the chosen provider', async ({ page }) => {
@@ -69,4 +70,46 @@ test('authentication input reaches only the chosen provider', async ({ page }) =
   await expect(card.locator('input')).toHaveValue('')
   await expect.poll(() => sent).toEqual({ text: 'private-code\n' })
   await expect(page.locator('#lab-model-settings')).not.toContainText('private-code')
+})
+
+for (const profile of [
+  { role: 'master', lab_mode: false },
+  { role: 'master', lab_mode: true },
+  { role: 'member', lab_mode: false },
+]) {
+  test(`personal model hidden for ${profile.role}, lab=${profile.lab_mode}`, async ({ page }) => {
+    await mockBaseRoutes(page)
+    await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'test', ...profile } }))
+    await gotoApp(page)
+    await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-model' } })))
+    await expect(page.locator('#lab-personal-form')).toBeHidden()
+  })
+}
+
+test('member selects CLI models from provider dropdowns', async ({ page }) => {
+  await mockBaseRoutes(page)
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { username: 'alice', role: 'member', lab_mode: true } }))
+  let preference = { provider: 'codex', model: '' }
+  await page.route('**/api/me/model-settings', route => {
+    if (route.request().method() === 'PUT') preference = route.request().postDataJSON()
+    return route.fulfill({ json: preference })
+  })
+  await gotoApp(page)
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('easypaper:open-settings', { detail: { category: 'tab-model' } })))
+  const form = page.locator('#lab-personal-form')
+  await expect(form).toBeVisible()
+  for (const provider of ['claude_code', 'codex', 'antigravity']) {
+    await page.locator('#lab-personal-provider').selectOption(provider)
+    const models = page.locator('select#lab-personal-model')
+    await expect(models).toBeVisible()
+    const value = await models.locator('option').last().getAttribute('value')
+    await models.selectOption(value)
+    await form.locator('button[type="submit"]').click()
+    await expect.poll(() => preference.model).toBe(value)
+    expect(preference.provider).toBe(provider)
+    expect(preference.server_id).toBeNull()
+    await expect(models).toHaveValue(value)
+  }
+  await page.evaluate(() => window.dispatchEvent(new Event('lab-account-cleared')))
+  await expect(form).toBeHidden()
 })

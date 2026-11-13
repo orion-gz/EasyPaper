@@ -1290,8 +1290,8 @@
 
       <!-- 모델 설정 탭 -->
       <div id="tab-model" class="tab-pane">
-        <p id="lab-personal-status" role="status" aria-live="polite"></p>
-        <form id="lab-personal-form" class="modal-form">
+        <p id="lab-personal-status" hidden role="status" aria-live="polite"></p>
+        <form id="lab-personal-form" class="modal-form" hidden>
           <div class="settings-section-heading"><strong data-i18n="settings:labPersonalSettings">Personal model</strong></div>
           <div class="form-group settings-row">
             <label for="lab-personal-provider" data-i18n="settings:labProvider">Personal provider</label>
@@ -1299,7 +1299,7 @@
           </div>
           <div class="form-group settings-row">
             <label for="lab-personal-model" data-i18n="settings:labDefaultModel">Model</label>
-            <input id="lab-personal-model" required>
+            <select id="lab-personal-model" class="form-select" required></select>
           </div>
           <div class="form-actions"><button class="btn btn-primary" type="submit" data-i18n="settings:labSave">Save</button></div>
           <div id="lab-cli-actions">

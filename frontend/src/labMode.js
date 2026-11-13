@@ -15,7 +15,7 @@ async function api(path, method = 'GET', body) {
   return result
 }
 
-export async function initializeLabMode() {
+export async function initializeLabMode(cliProviders = []) {
   await loadNamespaces(['settings'])
   initializeLabGuide()
   const status = document.getElementById('lab-status')
@@ -29,6 +29,7 @@ export async function initializeLabMode() {
   const output = document.getElementById('lab-cli-output')
   let loginGeneration = 0
   let loginTimer
+  let refreshGeneration = 0
   let personalGeneration = 0
   let personalTimer
   function cancelLoginPolling() {
@@ -129,6 +130,13 @@ export async function initializeLabMode() {
     modelManager.stop()
   }
   window.addEventListener('pagehide', cancelPolling)
+  window.addEventListener('lab-account-cleared', () => {
+    refreshGeneration += 1
+    personalForm.hidden = true
+    personalStatus.hidden = true
+    cancelPolling()
+  })
+  window.addEventListener('lab-mode-changed', () => run(() => refresh())())
   document.getElementById('close-settings-btn')?.addEventListener('click', cancelPolling)
   document.getElementById('settings-modal')?.addEventListener('click', event => {
     if (event.target.id === 'settings-modal') cancelPolling()
@@ -165,7 +173,13 @@ export async function initializeLabMode() {
       }
       const selected = allowed.includes(value) ? value : (allowed.includes(server?.model) ? server.model : allowed[0] || '')
       syncSelectValue(personalModels, selected)
-    } else if (typeof preferredModel === 'string') personalInput.value = preferredModel
+    } else {
+      const value = typeof preferredModel === 'string' ? preferredModel : personalInput.value
+      const models = cliProviders.find(provider => provider.id === providerSelect.value)?.models || []
+      personalInput.replaceChildren(...models.map(model => new Option(model.label, model.value)))
+      syncSelectValue(personalInput, models.some(model => model.value === value) ? value : models[0]?.value || '')
+    }
+    personalInput.dispatchEvent(new Event('optionschange'))
   }
   providerSelect.addEventListener('change', updatePersonalModels)
   async function pollPersonalModels(generation = ++personalGeneration) {
@@ -224,8 +238,16 @@ export async function initializeLabMode() {
     }
   }
   async function refreshSettings(preferredId) {
+    const generation = ++refreshGeneration
     personalStatus.textContent = ''
+    personalForm.hidden = true
+    personalStatus.hidden = true
+    cancelPolling()
     const profile = await api('/auth/me')
+    if (generation !== refreshGeneration) return
+    const showPersonal = !!profile.lab_mode && profile.role === 'member'
+    personalForm.hidden = !showPersonal
+    personalStatus.hidden = !showPersonal
     labEnabled = !!profile.lab_mode
     document.getElementById('lab-admin').hidden = profile.role !== 'master'
     status.textContent = `${profile.username} · ${(profile.lab_mode ? t('settings:labOn') : t('settings:labOff'))}`
@@ -235,6 +257,7 @@ export async function initializeLabMode() {
     const common = await api('/lab/inference')
     const personal = await api('/me/model-settings')
     const listing = await api('/inference/servers')
+    if (generation !== refreshGeneration) return
     editor.storage(listing.credential_storage)
     servers = listing.servers; defaultId = listing.default_id
     const previous = preferredId || serverSelect.value
@@ -250,7 +273,7 @@ export async function initializeLabMode() {
     syncSelectValue(document.getElementById('lab-personal-provider'), personal.provider || common.engine)
     updateProviderControls()
     updatePersonalModels(personal.model || common.model)
-    void pollPersonalModels()
+    if (showPersonal) void pollPersonalModels()
     if (profile.role !== 'master') { modelManager.stop(); return }
     loadServer(servers.find(s => s.id === serverSelect.value))
     members.replaceChildren()
@@ -335,7 +358,7 @@ export async function initializeLabMode() {
   }))
   document.getElementById('lab-personal-form').addEventListener('submit', run(async () => {
     await api('/me/model-settings', 'PUT', {
-      server_id: personalServer.value || null,
+      server_id: ['ollama', 'vllm'].includes(providerSelect.value) ? personalServer.value || null : null,
       provider: document.getElementById('lab-personal-provider').value,
       model: personalModelControl().value.trim(),
     })
