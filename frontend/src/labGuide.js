@@ -378,7 +378,7 @@ export function initializeLabGuide() {
     setPlaybackIcon(element, key)
   }
   controls.append(backFrame, toggle, replay, nextFrame, caption)
-  demo.append(node('p', 'labWizardDemo'), screen, sceneNote)
+  demo.append(sceneNote, node('p', 'labWizardDemo'), screen)
   const reference = node('a', 'labWizardDetails')
   reference.href = 'https://github.com/orion-gz/EasyPaper/blob/main/docs/lab-mode.md'
   reference.target = '_blank'
@@ -454,12 +454,22 @@ export function initializeLabGuide() {
       copyStatus.textContent = copy.disabled ? t('settings:labInvalidParameters') : ''
     }
     const keys = { host: 'labHostField', user: 'labUserField', port: 'labPortField', localPort: 'labLocalPortField', domain: 'labDomainField', model: 'labEngineModelField', publicIp: 'labPublicIpField' }
+    const advanced = node('details')
+    advanced.className = 'lab-guide-advanced'
+    advanced.append(node('summary', 'labAdvanced'))
+    const advancedFields = node('div')
+    advancedFields.className = 'lab-guide-parameters'
+    advanced.append(advancedFields)
+    const hasSshAddress = scene.parameters?.includes('host') && scene.parameters?.includes('user')
+    const hints = { host: 'researcher@192.168.1.100', port: '22', localPort: '18000', domain: 'lab.example.com', model: 'qwen3:4b', publicIp: '203.0.113.10' }
     for (const name of scene.parameters || []) {
+      if (hasSshAddress && name === 'user') continue
       const label = node('label', keys[name])
       const input = node('input')
       input.className = 'lab-guide-input'
       input.id = `lab-guide-param-${name}`
-      input.value = parameters[name]
+      input.value = hasSshAddress && name === 'host' ? `${parameters.user}@${parameters.host}` : parameters[name]
+      input.placeholder = hints[name] || parameters[name]
       input.readOnly = scene.readOnlyParameters?.includes(name) || false
       input.setAttribute('aria-describedby', sceneNote.id)
       input.type = name.toLowerCase().includes('port') ? 'number' : 'text'
@@ -468,7 +478,11 @@ export function initializeLabGuide() {
       input.spellcheck = false
       label.htmlFor = input.id
       input.oninput = () => {
-        parameters[name] = input.value.trim()
+        if (hasSshAddress && name === 'host') {
+          const parts = input.value.trim().split('@')
+          parameters.user = parts.length === 2 ? parts[0] : ''
+          parameters.host = parts.length === 2 ? parts[1] : ''
+        } else parameters[name] = input.value.trim()
         updateCode()
         // Keep the existing animation in sync without stealing input focus.
         stop()
@@ -482,8 +496,16 @@ export function initializeLabGuide() {
       const field = node('div')
       field.className = 'form-group'
       field.append(label, input)
-      parameterFields.append(field)
+      const hint = node('p')
+      hint.id = `${input.id}-hint`
+      hint.className = 'lab-guide-field-hint'
+      hint.textContent = input.placeholder
+      input.setAttribute('aria-describedby', `${sceneNote.id} ${hint.id}`)
+      field.append(hint)
+      if (name === 'port' || name === 'localPort') advancedFields.append(field)
+      else parameterFields.append(field)
     }
+    if (advancedFields.childElementCount) parameterFields.append(advanced)
     updateCode()
     commandArea.hidden = !scene.parameters?.length && snippet.hidden
   }
