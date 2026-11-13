@@ -3,3 +3,7 @@
 .field-feedback[hidden] { display: none; }
 #settings-modal [aria-invalid="true"], .ssh-connection-form [aria-invalid="true"] { border-color: var(--error) !important; }
 .settings-row > .field-feedback { grid-column: 2; }
+
+@media (max-width: 720px) {
+  .settings-row > .field-feedback { grid-column: 1; grid-row: auto; }
+}
