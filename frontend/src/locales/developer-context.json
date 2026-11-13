@@ -6902,5 +6902,11 @@
   },
   "common:status.upload": {
     "description": "Accessible status.upload label in the status-ui UI."
+  },
+  "viewer:citationCard.title": {
+    "description": "Accessible citationCard.title label in the citation-card UI."
+  },
+  "viewer:citationCard.close": {
+    "description": "Accessible citationCard.close label in the citation-card UI."
   }
 }
