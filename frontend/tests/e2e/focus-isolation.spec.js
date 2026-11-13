@@ -275,14 +275,17 @@ test(`blur ${strength}px preserves sentence pixels with offscreen overflow at sc
   })
   await page.evaluate(strength => window.controller.applySettings({ enabled: true, blurStrength: strength, dimOpacity: 0, scale: 100 }), strength)
   await expect.poll(() => page.locator('.focus-mode-layer').evaluate(element => element.style.getPropertyValue('--focus-blur'))).toBe(`${strength}px`)
-  const screenshot = (await page.screenshot({ scale: 'css' })).toString('base64')
+  const screenshot = (await page.screenshot({ scale: 'device' })).toString('base64')
   const contrasts = await page.evaluate(async ({ screenshot, scale }) => {
     const image = new Image(); image.src = `data:image/png;base64,${screenshot}`; await image.decode()
     const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
     const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
+    // CSS screenshot downsampling aliases Retina stripe patterns.
+    const density = image.width / innerWidth
     const contrast = (x, y) => {
-      const data = ctx.getImageData(Math.round(x * scale), Math.round(y * scale), 32, 1).data
-      const samples = Array.from({ length: 32 }, (_, i) => data[i * 4])
+      const count = Math.round(32 * density)
+      const data = ctx.getImageData(Math.round(x * scale * density), Math.round(y * scale * density), count, 1).data
+      const samples = Array.from({ length: count }, (_, i) => data[i * 4])
       return Math.max(...samples) - Math.min(...samples)
     }
     return { source: contrast(220, 150), background: contrast(450, 175), viewerBackground: contrast(450, 285) }
@@ -580,7 +583,8 @@ test('real PDF hover reveals source and translation together and clears on viewe
   // Bound the color difference while requiring the original edge detail and
   // contrast: a blank or blurred sentence must still fail on every platform.
   for (const result of differences) {
-    expect(result.difference).toBeLessThan(15)
+    // Bound color drift relative to the original range; preserve edge detail below.
+    expect(result.difference).toBeLessThan(result.original.contrast * 0.1)
     expect(result.focused.edges).toBeGreaterThan(result.original.edges * 0.9)
     expect(result.focused.contrast).toBeGreaterThan(result.original.contrast * 0.95)
   }

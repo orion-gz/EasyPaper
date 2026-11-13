@@ -25,5 +25,9 @@
   "memo.alreadyCreated": "이미 생성된 메모입니다.",
   "memo.quoteHeading": "인용 본문",
   "memo.questionHeading": "질문",
-  "memo.answerHeading": "AI 답변"
+  "memo.answerHeading": "AI 답변",
+  "code.label": "코드",
+  "code.copy": "코드 복사",
+  "code.copied": "복사됨",
+  "code.failed": "복사 실패 — 재시도"
 }

@@ -1,3 +1,4 @@
+import { setFieldFeedback } from './fieldFeedback.js'
 import { syncSelectValue } from './uiScale.js'
 import { t } from './i18n.js'
 import './styles/ssh-connection-form.css'
@@ -72,7 +73,20 @@ export function connectionEditor(parent, probe) {
   for (const name of ['host', 'port']) fields[name].addEventListener('input', () => { hostKey = ''; message.textContent = '' })
   fields.transport.addEventListener('change', visibility)
   fields.auth.addEventListener('change', visibility)
+  function validate(names) {
+    let first
+    for (const name of names) {
+      const input = fields[name]
+      const invalid = name === 'port' ? !Number.isInteger(Number(input.value)) || Number(input.value) < 1 || Number(input.value) > 65535 : !input.value.trim()
+      setFieldFeedback(input, invalid ? (name === 'port' ? t('settings:field.port') : t('settings:field.required')) : '')
+      if (invalid && !first) first = input
+    }
+    first?.focus()
+    return !first
+  }
+  for (const name of ['host', 'port', 'username']) fields[name].addEventListener('input', () => setFieldFeedback(fields[name]))
   button.onclick = async () => {
+    if (!validate(['host', 'port'])) return
     button.disabled = true
     try {
       const result = await probe(ssh())
@@ -93,6 +107,7 @@ export function connectionEditor(parent, probe) {
       fields.save_credentials.title = capability?.reason || ''
     },
     read() {
+      if (fields.transport.value === 'ssh' && !validate(['host', 'port', 'username'])) throw new Error(t('settings:field.correct'))
       if (fields.transport.value === 'ssh' && !hostKey) throw new Error(t('settings:connectionVerifyTheSshHostKeyFirst'))
       return { transport: fields.transport.value, ssh: fields.transport.value === 'ssh' ? ssh() : null,
         save_credentials: storageAvailable && fields.save_credentials.checked,
@@ -106,6 +121,7 @@ export function connectionEditor(parent, probe) {
       fields.save_credentials.checked = storageAvailable && !!profile.save_credentials
       hostKey = profile.ssh?.host_key || ''
       message.textContent = hostKey ? t('settings:connectionHostKeyConfirmed') : ''
+      Object.values(fields).forEach(input => setFieldFeedback(input))
       clear(); visibility()
     }, clear,
   }
