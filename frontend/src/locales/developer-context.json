@@ -1,4 +1,10 @@
 {
+  "viewer:preparation.running": {
+    "description": "Reader status shown while background PDF parsing runs; PDF reading remains available."
+  },
+  "viewer:preparation.failed": {
+    "description": "Reader status after background parsing fails; explains that PDF reading still works and refreshing retries."
+  },
   "settings:labInitialPassword": {
     "description": "Lab member management: labInitialPassword"
   },

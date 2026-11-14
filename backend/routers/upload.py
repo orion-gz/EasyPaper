@@ -404,7 +404,16 @@ async def get_pdf_path(session_id: str, current_user: str = Depends(get_current_
 
 @router.get("/pdf-text/{session_id}/{page_num}")
 async def get_pdf_text_layer(session_id: str, page_num: int,
-                             current_user: str = Depends(get_current_user)):
+                             current_user: str = Depends(get_current_user), nonblocking: bool = False):
+    if nonblocking and session_id not in sessions:
+        from services.ownership import require_owned_document
+        from services.document_preparation import start_preparation
+        document = require_owned_document(session_id, current_user)
+        if not 1 <= page_num <= document['total_pages']:
+            raise HTTPException(status_code=404, detail="Page not found")
+        preparation = start_preparation(document)
+        if preparation['status'] != 'ready':
+            return {'recovery': None, 'spans': [], 'preparation': preparation}
     session = await asyncio.to_thread(require_session_owner, session_id, current_user)
     page = next((item for item in session["pages"] if item["page_num"] == page_num), None)
     if page is None:

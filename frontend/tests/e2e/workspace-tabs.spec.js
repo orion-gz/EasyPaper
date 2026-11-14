@@ -33,6 +33,62 @@ async function open(page, id) {
   await page.evaluate(id => { location.hash = `#viewer?id=${id}` }, id)
   await expect(reader(page, id).locator('#document-find')).toBeVisible({ timeout: 20000 })
 }
+test('PDF reading remains available while analysis runs and after analysis fails', async ({ page }) => {
+  let status = 'running'
+  const analysisRequests = []
+  await setup(page, async () => {
+    await page.route('**/api/library/tab-a', route => route.fulfill({ json: {
+      ...documents[0], preparation: { status: 'running' },
+    } }))
+    await page.route('**/api/library/tab-a/preparation', route => route.fulfill({ json: { status } }))
+    await page.route('**/api/pdf-text/tab-a/*', route => route.fulfill({ json: {
+      recovery: null, spans: [], preparation: { status },
+    } }))
+    for (const resource of ['images', 'references', 'chapters']) {
+      await page.route(`**/api/library/tab-a/${resource}`, route => {
+        analysisRequests.push(resource)
+        return route.fulfill({ json: { images: [], references: {}, chapters: [] } })
+      })
+    }
+  })
+  await open(page, 'tab-a')
+  const frame = reader(page, 'tab-a')
+  await expect(frame.locator('canvas[data-rendered="true"]').first()).toBeVisible()
+  await expect(frame.locator('.textLayer').first()).toContainText('Sample PDF A')
+  await expect(frame.locator('#viewer-preparation-status')).toContainText('분석 준비 중')
+  expect(analysisRequests).toEqual([])
+  status = 'failed'
+  await expect(frame.locator('#viewer-preparation-status')).toContainText('분석 준비 실패')
+  await expect(frame.locator('canvas[data-rendered="true"]').first()).toBeVisible()
+  expect(analysisRequests).toEqual([])
+})
+
+test('analysis completion loads overlays and chapters without reopening the PDF', async ({ page }) => {
+  let status = 'running'
+  const requests = new Set()
+  await setup(page, async () => {
+    await page.route('**/api/library/tab-a', route => route.fulfill({ json: {
+      ...documents[0], preparation: { status: 'running' },
+    } }))
+    await page.route('**/api/library/tab-a/preparation', route => route.fulfill({ json: {
+      status, detected_source_language: 'en',
+    } }))
+    for (const resource of ['images', 'references', 'chapters']) {
+      await page.route(`**/api/library/tab-a/${resource}`, route => {
+        requests.add(resource)
+        return route.fulfill({ json: { images: [], references: {}, chapters: [] } })
+      })
+    }
+  })
+  await open(page, 'tab-a')
+  await expect(reader(page, 'tab-a').locator('#viewer-preparation-status')).toBeVisible()
+  expect([...requests]).toEqual([])
+  status = 'ready'
+  await expect.poll(() => [...requests].sort()).toEqual(['chapters', 'images', 'references'])
+  await expect(reader(page, 'tab-a').locator('#viewer-preparation-status')).toHaveCount(0)
+  await expect(reader(page, 'tab-a').locator('.textLayer').first()).toContainText('Sample PDF A')
+})
+
 test('common shell, document isolation, menu singleton, close and restore', async ({ page, browserName }) => {
   // Several PDF runtimes plus a reload can exceed the shared 30s budget
   // on macOS CI. Keep individual readiness assertions bounded as before.

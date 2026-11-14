@@ -1,4 +1,6 @@
 {
+  "preparation.running": "문서 분석 준비 중 · PDF는 바로 읽을 수 있습니다.",
+  "preparation.failed": "분석 준비 실패 · PDF는 읽을 수 있습니다. 새로고침하면 다시 시도합니다.",
   "translation.reset": "번역본 초기화",
   "translation.full": "문서 전체 번역",
   "translation.resetConfirm": "기존 번역본을 모두 삭제하시겠습니까?",

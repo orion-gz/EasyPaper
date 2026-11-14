@@ -525,7 +525,7 @@ async function _renderPage(wrapper, pageNum, generation, job) {
       let recovery
       if (textUrl) {
         try {
-          const response = await fetch(`${textUrl}/${pageNum}`, { signal: job.controller.signal })
+          const response = await fetch(`${textUrl}/${pageNum}?nonblocking=true`, { signal: job.controller.signal })
           if (!response.ok) throw new Error(`PDF text recovery: HTTP ${response.status}`)
           recovery = await response.json()
         } catch (error) {
@@ -719,7 +719,7 @@ export async function getPDFPageText(pageNumber, signal) {
   if (rendered) return rendered.items.map(item => item.str + (item.hasEOL ? ' ' : '')).join('')
   if (pdfTextUrl) {
     try {
-      const response = await fetch(`${pdfTextUrl}/${pageNumber}`, { signal })
+      const response = await fetch(`${pdfTextUrl}/${pageNumber}?nonblocking=true`, { signal })
       if (response.ok) {
         const recovered = await response.json()
         if (recovered.recovery && recovered.spans?.length) return recovered.spans.map(span => span.text + (span.hasEOL ? ' ' : '')).join('')

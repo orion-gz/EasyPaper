@@ -761,14 +761,20 @@ async def get_library_document(
     """특정 문서의 메타데이터와 번역 완료 페이지 목록을 반환합니다."""
     doc = get_document(doc_id, target_lang, style, ignore_math, ignore_table, ignore_refs)
     require_owned_document(doc_id, current_user, doc)
-    if doc.get("content_kind") != "html_article" or (
-        doc.get("source_language", "auto") == "auto" and doc.get("detected_source_language", "und") == "und"
-    ):
-        from routers.upload import ensure_session
-        if await asyncio.to_thread(ensure_session, doc_id):
-            doc = get_document(doc_id, target_lang, style, ignore_math, ignore_table, ignore_refs)
-            require_owned_document(doc_id, current_user, doc)
+    from services.document_preparation import start_preparation
+    doc['preparation'] = start_preparation(doc, retry=True)
     return doc
+
+
+@router.get("/library/{doc_id}/preparation")
+async def get_document_preparation(doc_id: str, current_user: str = Depends(get_current_user)):
+    doc = require_owned_document(doc_id, current_user)
+    from services.document_preparation import start_preparation
+    result = start_preparation(doc)
+    if result['status'] == 'ready':
+        result = {**result, 'detected_source_language': doc.get('detected_source_language', 'und'),
+                  'source_language_confidence': doc.get('source_language_confidence')}
+    return result
 
 
 @router.get("/library/{doc_id}/translation/{page_num}")
