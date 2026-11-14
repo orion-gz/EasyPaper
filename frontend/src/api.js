@@ -168,7 +168,9 @@ export async function uploadPDF(file, options, onProgress) {
     })
 
     xhr.addEventListener("load", async () => {
-      if (xhr.status === 202) {
+      if ([502, 503, 504].includes(xhr.status)) {
+        await recoverOrReject()
+      } else if (xhr.status === 202) {
         try {
           const accepted = JSON.parse(xhr.responseText)
           resolve(await waitForUpload(accepted.session_id || uploadId, onProgress))
@@ -188,7 +190,8 @@ export async function uploadPDF(file, options, onProgress) {
     const recoverOrReject = async () => {
       try {
         resolve(await waitForUpload(uploadId, onProgress))
-      } catch {
+      } catch (error) {
+        if (error.uploadTerminal) { reject(error); return }
         const recovered = await recoverCompletedUpload(uploadId, onProgress)
         if (recovered) resolve(recovered)
         else reject(new Error(errorMessage({ code: "network" })))

@@ -91,7 +91,9 @@ export function connectionEditor(parent, probe) {
     try {
       const result = await probe(ssh())
       if (window.confirm(t('settings:connectionConfirmFingerprint', { fingerprint: result.fingerprint }))) {
+        const changed = hostKey !== result.host_key
         hostKey = result.host_key
+        if (changed) root.dispatchEvent(new Event('change', { bubbles: true }))
         message.textContent = result.fingerprint
       }
     } catch (error) { message.textContent = error.message }

@@ -91,5 +91,6 @@ def test_offline_gateway_routes_locally_and_guards_documents(tmp_path):
         assert client.get('/api/test').json()['user'] == manager.local_user(TARGET)
         assert client.get('/api/test', headers={'Origin': 'https://evil.example'}).status_code == 403
         assert client.post('/api/upload').status_code == 409
+        assert client.post('/api/import-url', json={'url': 'https://example.com/paper.pdf'}).status_code == 409
         assert client.delete('/api/library/paper-a').status_code == 409
         assert client.put('/api/library/paper-a/title').status_code == 409
