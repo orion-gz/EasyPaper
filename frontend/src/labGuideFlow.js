@@ -47,6 +47,6 @@ export function installationScenes(deployment, method, values) {
 export function connectionScenes(method, values) {
   const scenes = []
   if (method === 'ssh') scenes.push({ kind: 'terminal', title: 'SSH', commands: [[tunnelCommand(values), ['✓']]], sshDownload: true, note: t('settings:labSshNote'), parameters: ['host', 'user', 'port', 'localPort'] })
-  scenes.push({ kind: 'connection', title: guideServerUrl(method, values), url: guideServerUrl(method, values), note: method === 'ssh' ? `${t('settings:labConnectNote')} ${t('settings:labConnectSshPortNote')}` : t('settings:labConnectNote'), parameters: method === 'https' ? ['domain'] : ['localPort'], readOnlyParameters: method === 'ssh' ? ['localPort'] : [], copy: guideServerUrl(method, values) })
+  scenes.push({ kind: 'connection', title: guideServerUrl(method, values), url: guideServerUrl(method, values), note: method === 'ssh' ? `${t('settings:labConnectNote')}\n\n${t('settings:labConnectSshPortNote')}` : t('settings:labConnectNote'), parameters: method === 'https' ? ['domain'] : ['localPort'], readOnlyParameters: method === 'ssh' ? ['localPort'] : [], copy: guideServerUrl(method, values) })
   return [scenes]
 }
