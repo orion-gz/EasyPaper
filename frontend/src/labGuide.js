@@ -559,7 +559,6 @@ export function initializeLabGuide() {
     heading.textContent = t(`settings:${mode === 'install' ? steps[step].title : 'labConnectionGuide'}`)
     description.textContent = t(`settings:${mode === 'install' ? steps[step].text : 'labConnectIntro'}`)
     if (mode === 'install' && step === 0) {
-      description.textContent += ` ${t(deployment === 'docker' ? 'settings:labDockerRun' : 'settings:labSystemdRun')}`
       renderPrerequisites()
     }
     prerequisites.hidden = mode !== 'install' || step !== 0

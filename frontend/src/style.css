@@ -9100,6 +9100,9 @@ body.light-theme .chat-drawer {
 
 /* Keep instructions distinct from demonstrations and optional connection details. */
 .lab-guide-body > p { font-size: 15px; line-height: 1.75; }
+.lab-guide-body > p,
+.lab-guide-demo > #lab-guide-scene-note,
+.lab-guide-commands > p { white-space: pre-line; overflow-wrap: anywhere; }
 .lab-guide-demo > #lab-guide-scene-note { padding: 16px 20px; border-left: 4px solid var(--control-accent); border-radius: var(--radius-md); background: var(--control-accent-soft); color: var(--text-primary); font-size: 15px; font-weight: 600; line-height: 1.8; }
 .lab-guide-commands { gap: 16px; }
 .lab-guide-parameters { gap: 16px; }
