@@ -190,7 +190,8 @@ export async function uploadPDF(file, options, onProgress) {
     const recoverOrReject = async () => {
       try {
         resolve(await waitForUpload(uploadId, onProgress))
-      } catch {
+      } catch (error) {
+        if (error.uploadTerminal) { reject(error); return }
         const recovered = await recoverCompletedUpload(uploadId, onProgress)
         if (recovered) resolve(recovered)
         else reject(new Error(errorMessage({ code: "network" })))

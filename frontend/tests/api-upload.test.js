@@ -178,3 +178,30 @@ test('URL import sends a recoverable id and restores a completed session after d
     Object.defineProperty(globalThis, "crypto", { configurable: true, value: originalCrypto })
   }
 })
+
+for (const status of [502, 503, 504]) for (const terminal of ['failed', 'partial_failed', 'cancelled']) {
+  test(`HTTP ${status} preserves terminal ${terminal} without session recovery`, async () => {
+    const originalXHR = globalThis.XMLHttpRequest
+    const originalFetch = globalThis.fetch
+    const calls = []
+    globalThis.XMLHttpRequest = MockXHR
+    MockXHR.instances = []
+    globalThis.fetch = async url => {
+      calls.push(url)
+      return new Response(JSON.stringify({ status: terminal, error_code: 'invalid_pdf' }))
+    }
+    try {
+      const pending = uploadPDF(new Blob(['pdf']), options)
+      const rejection = assert.rejects(pending, error => error.uploadTerminal === true)
+      const xhr = MockXHR.instances[0]
+      xhr.status = status
+      await xhr.emit('load')
+      await rejection
+      assert.equal(calls.length, 1)
+      assert.match(calls[0], /\/upload\/[^/]+\/status$/)
+    } finally {
+      globalThis.XMLHttpRequest = originalXHR
+      globalThis.fetch = originalFetch
+    }
+  })
+}

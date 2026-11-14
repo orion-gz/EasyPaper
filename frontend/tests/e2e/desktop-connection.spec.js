@@ -365,3 +365,32 @@ test('SSH connection confirms host key and submits password without persisting b
   expect(saves[0].credentials.password).toBe('test-password')
   expect(saves[0].save_credentials).toBe(false)
 })
+
+for (const approved of [true, false]) test(`SSH host key approval ${approved} controls unsaved connection guard`, async ({ page }) => {
+  const { saves } = await desktop(page, {
+    enabled: true, onboarded: true, server_url: 'http://127.0.0.1:8000',
+    sync: { action: 'merge', automatic: false },
+    connection: { transport: 'ssh', ssh: { host: 'server', port: 22, username: 'user', host_key: 'old-key' } },
+  })
+  let previews = 0
+  await page.route('**/desktop/ssh/host-key', route => route.fulfill({ json: { host_key: 'new-key', fingerprint: 'new-print' } }))
+  await page.route('**/desktop/sync/preview', route => {
+    previews++
+    return route.fulfill({ json: { action: 'merge', plan_id: 'preview', local_documents: 1, remote_documents: 1 } })
+  })
+  await page.goto(remoteOrigin + '/index.html')
+  await page.locator('.desktop-connection-badge').click()
+  const dialog = page.locator('.desktop-connection-dialog')
+  page.once('dialog', prompt => approved ? prompt.accept() : prompt.dismiss())
+  await dialog.getByRole('button', { name: '호스트 키 확인', exact: true }).click()
+  await expect(dialog.getByRole('button', { name: '호스트 키 확인', exact: true })).toBeEnabled()
+  await dialog.locator('[data-sync]').click()
+  if (approved) {
+    await expect(dialog.locator('[data-status]')).toHaveText('변경한 연결 설정을 적용하고 서버를 연 다음 동기화하세요.')
+    expect(saves).toHaveLength(0)
+    expect(previews).toBe(0)
+  } else {
+    await expect(dialog.locator('[data-preview]')).toBeVisible()
+    expect(previews).toBe(1)
+  }
+})
