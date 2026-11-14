@@ -99,3 +99,12 @@ for (const action of ['replace_local', 'replace_remote']) {
     assert.equal(node('[data-preview-warning]').textContent, 'desktop:offlineResolveHelp')
   })
 }
+
+ test('unsaved connection changes block synchronization before any request', async () => {
+  const status = { dataset: {} }
+  const context = vm.createContext({ t: key => key, fakeDialog: { querySelector: selector => selector === '[data-status]' ? status : { value: 'merge' } } })
+  vm.runInContext(source, context)
+  vm.runInContext(`dialog = fakeDialog; connectionDirty = true; connectionRequest = () => { throw Error('must not send') };`, context)
+  await context.prepareSync()
+  assert.equal(status.textContent, 'desktop:saveAddressFirst')
+})

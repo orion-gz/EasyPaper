@@ -91,6 +91,41 @@ test('connection loss recovers a completed server upload by id', async () => {
   }
 })
 
+for (const status of [502, 503, 504]) test(`HTTP ${status} recovers an accepted upload without resending`, async () => {
+  const originalXHR = globalThis.XMLHttpRequest
+  const originalCrypto = globalThis.crypto
+  const originalFetch = globalThis.fetch
+  const originalSetTimeout = globalThis.setTimeout
+  const uploadId = '123e4567-e89b-42d3-a456-426614174001'
+  Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { randomUUID: () => uploadId } })
+  globalThis.XMLHttpRequest = MockXHR
+  globalThis.setTimeout = handler => { handler(); return 0 }
+  globalThis.fetch = async url => {
+    assert.equal(url, `/api/upload/${uploadId}/status`)
+    return new Response(JSON.stringify({ status: "succeeded", result: {
+      session_id: uploadId, filename: "recovered.pdf", total_pages: 3, metadata: {},
+      document_mode: "research", document_type: "research_paper",
+    } }), { status: 200, headers: { "Content-Type": "application/json" } })
+  }
+  MockXHR.instances = []
+  try {
+    const phases = []
+    const promise = uploadPDF(new Blob(['pdf']), options, (percent, phase) => phases.push([percent, phase]))
+    MockXHR.instances[0].status = status
+    MockXHR.instances[0].responseText = 'Bad Gateway'
+    await MockXHR.instances[0].emit('load')
+    const result = await promise
+    assert.equal(result.session_id, uploadId)
+    assert.equal(result.filename, 'recovered.pdf')
+    assert.deepEqual(phases, [[100, "processing"]])
+  } finally {
+    globalThis.XMLHttpRequest = originalXHR
+    globalThis.fetch = originalFetch
+    globalThis.setTimeout = originalSetTimeout
+    Object.defineProperty(globalThis, 'crypto', { configurable: true, value: originalCrypto })
+  }
+})
+
 test('malformed success response rejects instead of leaving upload pending', async () => {
   const originalXHR = globalThis.XMLHttpRequest
   globalThis.XMLHttpRequest = MockXHR

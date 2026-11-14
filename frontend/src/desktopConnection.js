@@ -5,6 +5,7 @@ import './styles/desktop-connection.css'
 import { getModeSetting } from './modeSettings.js'
 import { applyTheme, loadThemes, selectedTheme } from './themes/themeEngine.js'
 
+let connectionDirty = false
 let sshEditor = null
 let connection = null
 let dialog = null
@@ -233,6 +234,9 @@ function makeDialog(onboarding = false) {
     dialog.querySelector('[data-transfer]').hidden = !remote || !connection.remote
   })
   sshEditor = connectionEditor(dialog.querySelector('.desktop-server-address'), data => connectionRequest('ssh/host-key', { method: 'POST', body: JSON.stringify(data) }))
+  for (const eventName of ['input', 'change']) dialog.addEventListener(eventName, event => {
+    if (event.target.closest('.desktop-server-address, [name=desktop-mode], [data-access-mode]')) connectionDirty = true
+  })
   dialog.addEventListener('close', () => sshEditor.clear())
   dialog.querySelector('form').addEventListener('submit', async event => {
     event.preventDefault()
@@ -255,7 +259,9 @@ function makeDialog(onboarding = false) {
     }
   })
   dialog.querySelector('[data-download]').addEventListener('click', async () => {
-    if (busy || !window.confirm(t('desktop:confirmDownload'))) return
+    if (busy) return
+    if (connectionDirty) { status(t('desktop:saveAddressFirst')); return }
+    if (!window.confirm(t('desktop:confirmDownload'))) return
     setBusy(true)
     status(t('desktop:downloading', { size: '0.0' }))
     try {
@@ -285,7 +291,7 @@ async function prepareSync(automatic = false) {
   if (!dialog) { makeDialog(); populate() }
   const action = automatic ? 'merge' : dialog.querySelector('[data-action]').value
   if (action === 'defer') return
-  if (dialog.querySelector('[data-url]').value.trim() !== connection.server_url) {
+  if (connectionDirty || dialog.querySelector('[data-url]').value.trim() !== connection.server_url) {
     status(t('desktop:saveAddressFirst'))
     return
   }
@@ -361,6 +367,7 @@ async function openSettings() {
 }
 
 function populate() {
+  connectionDirty = false
   dialog.querySelector(`[value=${connection.enabled ? 'remote' : 'local'}]`).checked = true
   dialog.querySelector('[data-access-mode]').value = connection.access_mode || 'server'
   sshEditor.load(connection.connection || {})

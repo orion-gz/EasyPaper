@@ -42,7 +42,7 @@
   "syncConflict": "Changes conflict. Automatic overwriting has stopped. Review both libraries, then retry or explicitly select which side should replace the other.",
   "syncCancelled": "Synchronization was not started. Both libraries are unchanged.",
   "syncResume": "An interrupted operation is waiting. Confirm to resume the same transfer without duplicates.",
-  "saveAddressFirst": "Save and open the new server address before synchronizing.",
+  "saveAddressFirst": "Apply the changed connection settings and open the server before synchronizing.",
   "reload": "Reload library",
   "workspace": "WORKSPACE",
   "modeLegend": "Library location",

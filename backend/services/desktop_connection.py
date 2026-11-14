@@ -117,7 +117,7 @@ class RemoteGateway:
                     return
                 path = scope['path']
                 document_change = (
-                    path in ('/api/upload', '/api/library/trash/empty')
+                    path in ('/api/upload', '/api/import-url', '/api/library/trash/empty')
                     or bool(re.fullmatch(r'/api/session/[^/]+', path))
                     or bool(re.fullmatch(r'/api/library/[^/]+(?:/(?:permanent|restore|title|tags|languages|processing-policy|reparse-preview)(?:/.*)?)?', path))
                     or path.startswith('/api/user-data/import')

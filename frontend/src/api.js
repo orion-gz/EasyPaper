@@ -168,7 +168,9 @@ export async function uploadPDF(file, options, onProgress) {
     })
 
     xhr.addEventListener("load", async () => {
-      if (xhr.status === 202) {
+      if ([502, 503, 504].includes(xhr.status)) {
+        await recoverOrReject()
+      } else if (xhr.status === 202) {
         try {
           const accepted = JSON.parse(xhr.responseText)
           resolve(await waitForUpload(accepted.session_id || uploadId, onProgress))
