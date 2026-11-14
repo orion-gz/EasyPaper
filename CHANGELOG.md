@@ -2,6 +2,24 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.6.1 - 2026-11-14
+
+### 한국어 (1.6.0 → 1.6.1)
+
+- Lab 설치·연결 가이드 및 환경별 설치·유지보수를 개선하고 SSH와 여러 추론 서버 연결을 지원
+- 공유 모델 다운로드·검증·삭제, 개인 모델·CLI 설정, Lab 가입 제한 및 멤버 비밀번호·계정 삭제 관리를 개선
+- 원격 라이브러리 로컬 캐시와 오프라인 동기화, 연결된 데스크톱 확인과 동기화 요청을 추가하고 계정 잠금·전송 검증·업로드 복구를 개선
+- 접을 수 있는 문서 목차와 참고문헌 미리보기 카드를 추가하고 이전 WebView 및 페이지 이동 후 PDF 렌더링을 수정
+- 라이브러리 메뉴, 채팅 코드·Markdown 표시, 설정 입력 피드백, 로딩·오류·빈 상태 UI를 개선하고 macOS CI 러너를 갱신
+
+### English (1.6.0 → 1.6.1)
+
+- Improved Lab setup and connection guides, deployment-specific installation and maintenance, with SSH and multiple inference server support.
+- Improved shared model downloads, validation and deletion, personal model and CLI settings, Lab admission controls, and member password and account deletion management.
+- Added remote library local caching, offline sync, connected desktop details and sync requests; improved account locking, transfer validation and upload recovery.
+- Added a collapsible document outline and reference preview cards; fixed PDF rendering in older WebViews and after page jumps.
+- Improved library menus, chat code and Markdown layout, inline settings feedback, loading, error and empty states; updated macOS CI runners.
+
 ## 1.6.0 - 2026-11-02
 
 ### 한국어 (1.5.6 → 1.6.0)
