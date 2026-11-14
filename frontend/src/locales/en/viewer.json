@@ -1,4 +1,6 @@
 {
+  "preparation.running": "Preparing analysis. You can read the PDF now.",
+  "preparation.failed": "Analysis unavailable. You can still read the PDF; refresh to retry.",
   "translation.reset": "Reset translations",
   "translation.full": "Translate entire document",
   "translation.resetConfirm": "Delete all existing translations?",

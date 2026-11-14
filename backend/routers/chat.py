@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 
 from routers.upload import sessions, ensure_session, require_session_owner
-from services.ownership import require_owned_documents
+from services.ownership import require_owned_document, require_owned_documents
 from services.llm_client import stream_chat, generate_suggested_questions
 from services.db import (
     db_save_chat_message,
@@ -528,6 +528,11 @@ async def get_compare_chat_sessions(current_user: str = Depends(get_current_user
 @router.get("/chat/{session_id}/history")
 async def get_chat_history(session_id: str, current_user: str = Depends(get_current_user)):
     """특정 문서의 이전 채팅 히스토리를 반환합니다."""
-    await asyncio.to_thread(require_session_owner, session_id, current_user)
+    owner = sessions.get(session_id)
+    if owner:
+        if owner.get('username') != current_user:
+            raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+    else:
+        require_owned_document(session_id, current_user)
     history = db_get_chat_history(session_id, include_revision=True)
     return {"history": history}
