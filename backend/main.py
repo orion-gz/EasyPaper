@@ -88,6 +88,8 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        from services.document_preparation import shutdown as stop_document_preparation
+        await stop_document_preparation()
         await shared_models.stop()
         if desktop_connections:
             await desktop_connections.close()

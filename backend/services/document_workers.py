@@ -21,11 +21,13 @@ def ensure_document_available(doc_id: str) -> None:
 
 
 def workers_for_document(doc_id: str) -> set[asyncio.Task]:
+    from services.document_preparation import workers_for_document as preparation_workers
     from services import translation_job, insight_job, easy_english, chapter_summaries, document_classification, parse_job, reparse
     from routers import primer
     from services.document_tasks import list_tasks
     ids = {task['id'] for task in list_tasks(doc_id)}
     workers = {translation_job._running_tasks.get(doc_id)}
+    workers.update(preparation_workers(doc_id))
     workers.update(task for (document, _), task in insight_job._running_tasks.items() if document == doc_id)
     workers.update(task for (document, _), task in easy_english._running.items() if document == doc_id)
     for registry in (chapter_summaries._running, document_classification._running, parse_job._running_parse_tasks):

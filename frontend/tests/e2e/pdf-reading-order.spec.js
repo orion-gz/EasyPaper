@@ -19,7 +19,7 @@ for (const rotation of [0, 90]) {
       await page.route('**/api/library/order/translation/1**', route => route.fulfill({ json: {
         translation: fixture.sentences.map(s => s.trans).join('\n\n'), sentences: fixture.sentences,
       } }))
-      await page.route('**/api/pdf-text/order/1', route => route.fulfill({ json: {
+      await page.route('**/api/pdf-text/order/1?nonblocking=true', route => route.fulfill({ json: {
         layout: { ...fixture.layout, needs_review: unresolved }, spans: [],
       } }))
       await gotoApp(page)

@@ -1,4 +1,5 @@
 import { renderOutlineTree } from './outlineTree.js'
+import { createAnnotationAnchor, resolveAnnotationAnchor } from './annotationAnchor.js'
 import { enhanceLibraryRow } from './libraryRowMenu.js'
 import { decorateCodeBlocks, installCodeCopy, chatMessageText } from './chatCodeBlocks.js'
 import { installFieldFeedback } from './fieldFeedback.js'
@@ -2480,6 +2481,7 @@ async function setZoom(newZoom) {
   if (!state.sessionId) { clearZoomPreviewTransform(); return }
   focusModeController?.scheduleRender()
   const memoFocus = document.activeElement?.closest('.floating-memo') ? document.activeElement : null
+  const memoSession = state.sessionId
   const detachedMemoCards = new Map()
   viewerScrollContainer.querySelectorAll('.page-pair').forEach(pair => {
     const pageNum = Number(pair.dataset.page)
@@ -2497,6 +2499,10 @@ async function setZoom(newZoom) {
     })
   } finally {
     for (const [pageNum, cards] of detachedMemoCards) {
+      if (state.sessionId !== memoSession) {
+        if (zoomPreservedMemoPages.get(pageNum) === memoSession) zoomPreservedMemoPages.delete(pageNum)
+        continue
+      }
       const wrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
       if (!wrapper) continue
       cards.forEach(card => wrapper.appendChild(card))
@@ -2506,6 +2512,7 @@ async function setZoom(newZoom) {
       }
     }
   }
+  if (state.sessionId !== memoSession) return
   if (memoFocus?.isConnected) memoFocus.focus({ preventScroll: true })
   const restoredAnchor = viewerScrollContainer.querySelector(`.page-pair[data-page="${anchorPage}"]`)
   if (restoredAnchor && Number.isFinite(anchorOffset)) {
@@ -11133,6 +11140,7 @@ if (viewerPrimerBtn) {
 async function loadDocumentImages(docId) {
   try {
     const imgRes = await fetchLibraryDocImages(docId)
+    if (state.currentDocId !== docId) return
     state.documentImages = imgRes.images || []
 
     // 이미 렌더링되어 있는 페이지들의 오버레이 레이어 갱신
@@ -11147,6 +11155,7 @@ async function loadDocumentImages(docId) {
       }
     })
   } catch (e) {
+    if (state.currentDocId !== docId) return
     console.warn("이미지 좌표 로드 실패:", e)
     state.documentImages = []
   }
@@ -11155,6 +11164,7 @@ async function loadDocumentImages(docId) {
 async function loadDocumentReferences(docId) {
   try {
     const refRes = await fetchLibraryReferences(docId)
+    if (state.currentDocId !== docId) return
     state.referenceMap = refRes.references || {}
     state.citationStyle = detectCitationStyle(state.referenceMap)
 
@@ -11167,9 +11177,59 @@ async function loadDocumentReferences(docId) {
       }
     })
   } catch (e) {
+    if (state.currentDocId !== docId) return
     console.warn("참고문헌 목록 로드 실패:", e)
     state.referenceMap = {}
     state.citationStyle = null
+  }
+}
+
+async function finishDocumentPreparation(doc, isCurrentOpen) {
+  let preparation = doc.preparation
+  const notice = document.createElement('span')
+  notice.id = 'viewer-preparation-status'
+  notice.className = 'processing-badge'
+  notice.setAttribute('role', 'status')
+  notice.dataset.i18n = 'viewer:preparation.running'
+  notice.textContent = t('viewer:preparation.running')
+  $('viewer-preparation-status')?.remove()
+  $('viewer-topbar').querySelector('.topbar-left').append(notice)
+  let failures = 0
+  try {
+    while (preparation.status === 'running') {
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      if (!isCurrentOpen()) return
+      try {
+        const response = await fetch(`/api/library/${encodeURIComponent(doc.id)}/preparation`)
+        if (!response.ok) throw new Error(`Document preparation: HTTP ${response.status}`)
+        preparation = await response.json()
+        failures = 0
+      } catch (error) {
+        if (++failures >= 3) throw error
+      }
+    }
+    if (!isCurrentOpen()) return
+    if (preparation.status !== 'ready') throw new Error('Document preparation failed')
+    state.detectedSourceLanguage = preparation.detected_source_language || state.detectedSourceLanguage
+    populateLanguageControls()
+    notice.remove()
+    void loadDocumentImages(doc.id)
+    void loadDocumentReferences(doc.id)
+    void loadPDFOutline()
+    // Do not interrupt an editor (including IME composition) to upgrade OCR.
+    while (document.activeElement?.closest('.floating-memo')) {
+      await new Promise(resolve => setTimeout(resolve, 150))
+      if (!isCurrentOpen()) return
+    }
+    // Upgrade native PDF selection to OCR/layout text after analysis completes.
+    if (isCurrentOpen()) await setZoom(state.zoom)
+  } catch (error) {
+    if (!isCurrentOpen()) return
+    console.warn('Document preparation:', error)
+    notice.dataset.i18n = 'viewer:preparation.failed'
+    notice.textContent = t('viewer:preparation.failed')
+  } finally {
+    if (!isCurrentOpen()) notice.remove()
   }
 }
 
@@ -11284,6 +11344,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
   if (focusModeController) focusModeController.performanceFallback = false
   const myOpenGeneration = ++documentOpenGeneration
   const isCurrentOpen = () => myOpenGeneration === documentOpenGeneration
+  $('viewer-preparation-status')?.remove()
   docOpeningId = doc.id
   try {
     if (doc.classification_status && doc.classification_status !== 'confirmed') {
@@ -11313,8 +11374,11 @@ async function openFromLibrary(doc, shouldPushState = true) {
     state.sessionId  = doc.id
     allMemosHidden = loadAllMemosHiddenState(doc.id)
     updateMemosHideAllBtnUI()
-    loadDocumentImages(doc.id)
-    loadDocumentReferences(doc.id)
+    const preparing = doc.content_kind !== 'html_article' && doc.preparation && doc.preparation.status !== 'ready'
+    if (!preparing) {
+      loadDocumentImages(doc.id)
+      loadDocumentReferences(doc.id)
+    }
     state.filename   = doc.filename
     state.currentDocId = doc.id
     state.currentDocMetadata = doc.metadata || {}
@@ -11339,7 +11403,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
       viewerPrimerBtn.classList.toggle('hidden', isResearchDocument && state.disablePrimer)
       viewerPrimerBtn.title = isResearchDocument ? '읽기 전 브리핑 다시 보기' : '문서 개요 보기'
     }
-    if (!state.disablePrimer && isResearchDocument) {
+    if (!state.disablePrimer && isResearchDocument && !preparing) {
       const meta = state.currentDocMetadata
       const alreadyShown = meta.primer_shown === true
       if (!alreadyShown) {
@@ -11452,16 +11516,13 @@ async function openFromLibrary(doc, shouldPushState = true) {
     // PDF가 로드된 뒤에만 가능한 두 작업(페이지 렌더링, 목차 조회)은 서로 무관하므로
     // 병렬로 실행한다 - 이전에는 순차 실행이라 두 작업 시간이 그대로 더해졌었다.
     notifyWorkspace('load-progress', { stage: 'rendering', percent: 70 })
-    await Promise.all([
-      (async () => {
-        await initScrollViewer()
-        if (!isCurrentOpen()) return
-        if (restorePage > 1) {
-          scrollToPage(viewerScrollContainer, restorePage, { instant: true })
-        }
-      })(),
-      loadPDFOutline(),
-    ])
+    void loadPDFOutline({ preparing })
+    await initScrollViewer()
+    if (!isCurrentOpen()) return
+    if (restorePage > 1) {
+      scrollToPage(viewerScrollContainer, restorePage, { instant: true })
+    }
+    if (preparing) void finishDocumentPreparation(doc, isCurrentOpen)
     if (!isCurrentOpen()) return
 
     // 채팅 기록 반영 (PDF 로딩과 병렬로 이미 완료됐을 가능성이 높음)
@@ -11664,6 +11725,7 @@ function applyAnnotationToRange(range, type, textLayerDiv, pageNum, color) {
     text,
     startOffset: offsets.startOffset,
     endOffset: offsets.endOffset,
+    textAnchor: createAnnotationAnchor(textLayerDiv.textContent || '', offsets.startOffset, offsets.endOffset),
     color: chosenColor,
     createdAt: new Date().toISOString()
   })
@@ -11707,7 +11769,15 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations, pageNum) {
 
   const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
   if (!vtm) return
+  const text = textLayerDiv.textContent || ''
+  let changed = false
   annotations.forEach(ann => {
+    const resolved = resolveAnnotationAnchor(text, ann)
+    if (!resolved) return
+    if (!ann.textAnchor || resolved.startOffset !== ann.startOffset || resolved.endOffset !== ann.endOffset) {
+      Object.assign(ann, resolved, { textAnchor: createAnnotationAnchor(text, resolved.startOffset, resolved.endOffset) })
+      changed = true
+    }
     const vtmRange = domOffsetsToVtmRange(textLayerDiv, vtm, ann.startOffset, ann.endOffset)
     if (!vtmRange) return
     const rects = getSentenceRects(vtmRange, vtm, textLayerDiv)
@@ -11728,6 +11798,11 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations, pageNum) {
       overlay.appendChild(box)
     })
   })
+  if (changed) {
+    const saved = loadAnnotations(state.sessionId)
+    saved[`page_${pageNum}`] = annotations
+    saveAnnotations(state.sessionId, saved)
+  }
   if (activeViewerAnnotationTarget?.page === pageNum) markViewerAnnotationTarget()
 }
 
@@ -13659,6 +13734,7 @@ function createAnnHoverTooltip() {
         // 같은 타입이면서 범위가 겹치는 것들만 삭제
         annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
           if (ann.type !== annType) return true
+          if (!resolveAnnotationAnchor(textLayerDiv.textContent || '', ann)) return true
           const isOverlapping = (ann.startOffset >= annStartOffset && ann.startOffset <= annEndOffset) ||
                                 (ann.endOffset   >= annStartOffset && ann.endOffset   <= annEndOffset)
           if (isOverlapping) removed.push(ann)
@@ -13698,6 +13774,7 @@ function createAnnHoverTooltip() {
               if (annotations[`page_${pageNum}`]) {
                 const removed = []
                 annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+                  if (!resolveAnnotationAnchor(textLayerDiv.textContent || '', ann)) return true
                   if (ann.type !== annType) return true
                   const isOverlapping = (ann.startOffset >= sentenceOffsets.startOffset && ann.startOffset <= sentenceOffsets.endOffset) ||
                                         (ann.endOffset   >= sentenceOffsets.startOffset && ann.endOffset   <= sentenceOffsets.endOffset)
@@ -13956,7 +14033,8 @@ function selectionOverlapsExistingAnnotation(range, textLayerDiv, pageNum) {
   const annotations = loadAnnotations(state.sessionId)
   const pageAnns = annotations[`page_${pageNum}`] || []
   const hasAnnotation = pageAnns.some(ann =>
-    ann.startOffset < offsets.endOffset && ann.endOffset > offsets.startOffset
+    resolveAnnotationAnchor(textLayerDiv.textContent || '', ann)
+    && ann.startOffset < offsets.endOffset && ann.endOffset > offsets.startOffset
   )
   if (hasAnnotation) return true
 
@@ -13982,6 +14060,7 @@ function clearAnnotationsInRange(range, textLayerDiv, pageNum) {
   const removedAnnotations = []
   if (annotations[`page_${pageNum}`]) {
     annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+      if (!resolveAnnotationAnchor(textLayerDiv.textContent || '', ann)) return true
       const hasOverlap = !(ann.endOffset <= offsets.startOffset || ann.startOffset >= offsets.endOffset)
       if (hasOverlap) removedAnnotations.push(ann)
       return !hasOverlap
@@ -19319,8 +19398,11 @@ window.addEventListener('hashchange', () => {
 })
 
 // ── 논문 목차(Outline) 제어 및 바인딩 ─────────────────
-async function loadPDFOutline() {
+async function loadPDFOutline({ preparing = false } = {}) {
   if (!outlineContent) return
+  const docId = state.sessionId
+  const generation = documentOpenGeneration
+  const isCurrent = () => state.sessionId === docId && documentOpenGeneration === generation
   outlineContent.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:20px;">목차 로드 중...</div>'
 
   const waitForSummary = async (chapter, button, result) => {
@@ -19345,8 +19427,10 @@ async function loadPDFOutline() {
   try {
     const [outline, chapterData] = await Promise.all([
       getPDFOutline(),
-      getDocumentChaptersAPI(state.sessionId).catch(() => ({ status: 'unavailable', chapters: [] })),
+      preparing ? Promise.resolve({ status: 'preparing', chapters: [] })
+        : getDocumentChaptersAPI(state.sessionId).catch(() => ({ status: 'unavailable', chapters: [] })),
     ])
+    if (!isCurrent()) return
     outlineContent.innerHTML = ''
 
     if (chapterData.status === 'available') {
@@ -19421,6 +19505,7 @@ async function loadPDFOutline() {
     const flat = outline?.length ? outline : Array.from({ length: state.totalPages }, (_, index) => ({ title: t('viewer:pageLabel', { page: index + 1 }), pageNum: index + 1 }))
     renderOutlineTree(outlineContent, flat, page => scrollToPage(viewerScrollContainer, page))
   } catch (err) {
+    if (!isCurrent()) return
     console.error('Outline load error:', err)
     outlineContent.innerHTML = '<div style="font-size:12px; color:var(--error); text-align:center; padding:20px;">목차 로드 실패</div>'
   }

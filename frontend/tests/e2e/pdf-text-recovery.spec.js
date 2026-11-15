@@ -22,7 +22,7 @@ async function openRecovered(page, pdf, spans, recovery = 'ocr', sources = [], t
     } }))
   }
   await page.route('**/api/library/recovered/pdf', route => route.fulfill({ contentType: 'application/pdf', body: pdf }))
-  await page.route('**/api/pdf-text/recovered/1', route => route.fulfill({ json: {
+  await page.route('**/api/pdf-text/recovered/1?nonblocking=true', route => route.fulfill({ json: {
     recovery, spans, error: recovery === 'failed' ? 'pdf_ocr_unavailable' : null,
   } }))
   await gotoApp(page)

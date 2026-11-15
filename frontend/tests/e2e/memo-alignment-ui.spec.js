@@ -173,7 +173,7 @@ for (const side of ['left', 'right']) {
     await memo.locator('.collapse-btn').click()
     await expect(memo).toHaveClass(/collapsed/)
     await page.route('**/api/library/doc-memo/clear-cache', route => route.fulfill({ json: { cleared_files: 1 } }))
-    await page.route('**/api/pdf-text/doc-memo/1', route => route.fulfill({ status: 500, json: { detail: 'Parser unavailable' } }))
+    await page.route('**/api/pdf-text/doc-memo/1?nonblocking=true', route => route.fulfill({ status: 500, json: { detail: 'Parser unavailable' } }))
     await reader.locator('#viewer-clear-cache-btn').evaluate(button => button.click())
     await reader.locator('.custom-confirm-btn.confirm-btn').click()
     await expect(memo).not.toHaveClass(/collapsed/, { timeout: 15000 })
