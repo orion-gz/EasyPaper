@@ -89,6 +89,88 @@ test('analysis completion loads overlays and chapters without reopening the PDF'
   await expect(reader(page, 'tab-a').locator('.textLayer').first()).toContainText('Sample PDF A')
 })
 
+test('OCR completion preserves memo editing and relocates highlights and underlines', async ({ page }) => {
+  let ready = false
+  const ocrText = 'OCR prefix Sample PDF A - page 1'
+  await setup(page, async () => {
+    await page.route('**/api/library/tab-a', route => route.fulfill({ json: {
+      ...documents[0], preparation: { status: 'running' },
+    } }))
+    await page.route('**/api/library/tab-a/preparation', route => route.fulfill({ json: {
+      status: ready ? 'ready' : 'running', detected_source_language: 'en',
+    } }))
+    await page.route('**/api/pdf-text/tab-a/*', route => route.fulfill({ json: ready ? {
+      recovery: 'ocr', spans: [{ text: ocrText, bbox: [72, 72, 430, 90] }],
+    } : { recovery: null, spans: [] } }))
+  })
+  await page.evaluate(() => {
+    localStorage.setItem('easypaper_hydrated_tab-a', '1')
+    localStorage.setItem('easypaper_memos_tab-a', JSON.stringify({ page_1: [{
+      id: 'editing-memo', pageNum: 1, sentenceIdx: 0, sentenceText: 'Sample PDF A - page 1',
+      content: 'Before editing', x: 10, y: 10,
+    }] }))
+    localStorage.setItem('easypaper_annotations_tab-a', JSON.stringify({ page_1: [
+      { id: 'highlight', type: 'highlight', text: 'Sample', startOffset: 0, endOffset: 6, color: '#eab308' },
+      { id: 'underline', type: 'underline', text: 'PDF', startOffset: 7, endOffset: 10, color: '#ef4444' },
+    ] }))
+  })
+  await open(page, 'tab-a')
+  const frame = reader(page, 'tab-a')
+  const memo = frame.locator('.floating-memo[data-id="editing-memo"]')
+  await expect(frame.locator('.pdf-annotation-highlight')).toHaveAttribute('data-start-offset', '0')
+  await memo.locator('.floating-memo-body').click()
+  const editor = memo.locator('textarea')
+  await editor.fill('편집 중인 메모 📚')
+  await editor.evaluate(el => { el.dataset.originalEditor = 'yes'; el.setSelectionRange(2, 4) })
+  ready = true
+  await expect(frame.locator('#viewer-preparation-status')).toHaveCount(0)
+  await expect(editor).toBeFocused()
+  await expect(editor).toHaveAttribute('data-original-editor', 'yes')
+  await expect(editor).toHaveValue('편집 중인 메모 📚')
+  expect(await editor.evaluate(el => [el.selectionStart, el.selectionEnd])).toEqual([2, 4])
+  // Finish editing before upgrading the text, so an IME session cannot be interrupted.
+  await editor.press('Control+Enter')
+  await frame.locator('#viewer-scroll-container').focus()
+  await expect(frame.locator('.textLayer[data-recovery="ocr"]').first()).toContainText(ocrText)
+  await expect(frame.locator('.pdf-annotation-highlight')).toHaveAttribute('data-start-offset', '11')
+  await expect(frame.locator('.pdf-annotation-underline')).toHaveAttribute('data-start-offset', '18')
+  await expect(memo.locator('.floating-memo-render')).toHaveText('편집 중인 메모 📚')
+  const annotations = await page.evaluate(() => JSON.parse(localStorage.getItem('easypaper_annotations_tab-a')).page_1)
+  expect(annotations.map(ann => ocrText.slice(ann.startOffset, ann.endOffset))).toEqual(['Sample', 'PDF'])
+  // Reloading starts from native text again, then returns to OCR without shifting annotations.
+  await page.reload()
+  await expect(reader(page, 'tab-a').locator('.pdf-annotation-highlight')).toHaveAttribute('data-start-offset', '11')
+  await expect(reader(page, 'tab-a').locator('.floating-memo-render')).toHaveText('편집 중인 메모 📚')
+})
+
+test('unmatched OCR annotations stay stored without marking unrelated text', async ({ page }) => {
+  let ready = false
+  await setup(page, async () => {
+    await page.route('**/api/library/tab-a', route => route.fulfill({ json: {
+      ...documents[0], preparation: { status: 'running' },
+    } }))
+    await page.route('**/api/library/tab-a/preparation', route => route.fulfill({ json: {
+      status: ready ? 'ready' : 'running',
+    } }))
+    await page.route('**/api/pdf-text/tab-a/*', route => route.fulfill({ json: ready ? {
+      recovery: 'ocr', spans: [{ text: 'Completely corrected OCR text', bbox: [72, 72, 430, 90] }],
+    } : { recovery: null } }))
+  })
+  await page.evaluate(() => {
+    localStorage.setItem('easypaper_hydrated_tab-a', '1')
+    localStorage.setItem('easypaper_annotations_tab-a', JSON.stringify({ page_1: [
+      { id: 'unmatched', type: 'highlight', text: 'Sample', startOffset: 0, endOffset: 6 },
+    ] }))
+  })
+  await open(page, 'tab-a')
+  const frame = reader(page, 'tab-a')
+  await expect(frame.locator('.pdf-annotation-highlight')).toHaveCount(1)
+  ready = true
+  await expect(frame.locator('.textLayer[data-recovery="ocr"]')).toContainText('Completely corrected OCR text')
+  await expect(frame.locator('.pdf-annotation-highlight')).toHaveCount(0)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('easypaper_annotations_tab-a')).page_1[0].text)).toBe('Sample')
+})
+
 test('common shell, document isolation, menu singleton, close and restore', async ({ page, browserName }) => {
   // Several PDF runtimes plus a reload can exceed the shared 30s budget
   // on macOS CI. Keep individual readiness assertions bounded as before.

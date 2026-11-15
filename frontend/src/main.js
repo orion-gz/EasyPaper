@@ -1,4 +1,5 @@
 import { renderOutlineTree } from './outlineTree.js'
+import { createAnnotationAnchor, resolveAnnotationAnchor } from './annotationAnchor.js'
 import { enhanceLibraryRow } from './libraryRowMenu.js'
 import { decorateCodeBlocks, installCodeCopy, chatMessageText } from './chatCodeBlocks.js'
 import { installFieldFeedback } from './fieldFeedback.js'
@@ -2480,6 +2481,7 @@ async function setZoom(newZoom) {
   if (!state.sessionId) { clearZoomPreviewTransform(); return }
   focusModeController?.scheduleRender()
   const memoFocus = document.activeElement?.closest('.floating-memo') ? document.activeElement : null
+  const memoSession = state.sessionId
   const detachedMemoCards = new Map()
   viewerScrollContainer.querySelectorAll('.page-pair').forEach(pair => {
     const pageNum = Number(pair.dataset.page)
@@ -2497,6 +2499,10 @@ async function setZoom(newZoom) {
     })
   } finally {
     for (const [pageNum, cards] of detachedMemoCards) {
+      if (state.sessionId !== memoSession) {
+        if (zoomPreservedMemoPages.get(pageNum) === memoSession) zoomPreservedMemoPages.delete(pageNum)
+        continue
+      }
       const wrapper = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
       if (!wrapper) continue
       cards.forEach(card => wrapper.appendChild(card))
@@ -2506,6 +2512,7 @@ async function setZoom(newZoom) {
       }
     }
   }
+  if (state.sessionId !== memoSession) return
   if (memoFocus?.isConnected) memoFocus.focus({ preventScroll: true })
   const restoredAnchor = viewerScrollContainer.querySelector(`.page-pair[data-page="${anchorPage}"]`)
   if (restoredAnchor && Number.isFinite(anchorOffset)) {
@@ -11206,12 +11213,16 @@ async function finishDocumentPreparation(doc, isCurrentOpen) {
     state.detectedSourceLanguage = preparation.detected_source_language || state.detectedSourceLanguage
     populateLanguageControls()
     notice.remove()
-    // Upgrade native PDF selection to OCR/layout text after analysis completes.
-    await reRenderAll(viewerScrollContainer, state.zoom, { onPageVisible: handleReaderPageVisible })
-    if (!isCurrentOpen()) return
     void loadDocumentImages(doc.id)
     void loadDocumentReferences(doc.id)
     void loadPDFOutline()
+    // Do not interrupt an editor (including IME composition) to upgrade OCR.
+    while (document.activeElement?.closest('.floating-memo')) {
+      await new Promise(resolve => setTimeout(resolve, 150))
+      if (!isCurrentOpen()) return
+    }
+    // Upgrade native PDF selection to OCR/layout text after analysis completes.
+    if (isCurrentOpen()) await setZoom(state.zoom)
   } catch (error) {
     if (!isCurrentOpen()) return
     console.warn('Document preparation:', error)
@@ -11714,6 +11725,7 @@ function applyAnnotationToRange(range, type, textLayerDiv, pageNum, color) {
     text,
     startOffset: offsets.startOffset,
     endOffset: offsets.endOffset,
+    textAnchor: createAnnotationAnchor(textLayerDiv.textContent || '', offsets.startOffset, offsets.endOffset),
     color: chosenColor,
     createdAt: new Date().toISOString()
   })
@@ -11757,7 +11769,15 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations, pageNum) {
 
   const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
   if (!vtm) return
+  const text = textLayerDiv.textContent || ''
+  let changed = false
   annotations.forEach(ann => {
+    const resolved = resolveAnnotationAnchor(text, ann)
+    if (!resolved) return
+    if (!ann.textAnchor || resolved.startOffset !== ann.startOffset || resolved.endOffset !== ann.endOffset) {
+      Object.assign(ann, resolved, { textAnchor: createAnnotationAnchor(text, resolved.startOffset, resolved.endOffset) })
+      changed = true
+    }
     const vtmRange = domOffsetsToVtmRange(textLayerDiv, vtm, ann.startOffset, ann.endOffset)
     if (!vtmRange) return
     const rects = getSentenceRects(vtmRange, vtm, textLayerDiv)
@@ -11778,6 +11798,11 @@ function applyAnnotationsFromOffsets(textLayerDiv, annotations, pageNum) {
       overlay.appendChild(box)
     })
   })
+  if (changed) {
+    const saved = loadAnnotations(state.sessionId)
+    saved[`page_${pageNum}`] = annotations
+    saveAnnotations(state.sessionId, saved)
+  }
   if (activeViewerAnnotationTarget?.page === pageNum) markViewerAnnotationTarget()
 }
 
@@ -13709,6 +13734,7 @@ function createAnnHoverTooltip() {
         // 같은 타입이면서 범위가 겹치는 것들만 삭제
         annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
           if (ann.type !== annType) return true
+          if (!resolveAnnotationAnchor(textLayerDiv.textContent || '', ann)) return true
           const isOverlapping = (ann.startOffset >= annStartOffset && ann.startOffset <= annEndOffset) ||
                                 (ann.endOffset   >= annStartOffset && ann.endOffset   <= annEndOffset)
           if (isOverlapping) removed.push(ann)
@@ -13748,6 +13774,7 @@ function createAnnHoverTooltip() {
               if (annotations[`page_${pageNum}`]) {
                 const removed = []
                 annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+                  if (!resolveAnnotationAnchor(textLayerDiv.textContent || '', ann)) return true
                   if (ann.type !== annType) return true
                   const isOverlapping = (ann.startOffset >= sentenceOffsets.startOffset && ann.startOffset <= sentenceOffsets.endOffset) ||
                                         (ann.endOffset   >= sentenceOffsets.startOffset && ann.endOffset   <= sentenceOffsets.endOffset)
@@ -14006,7 +14033,8 @@ function selectionOverlapsExistingAnnotation(range, textLayerDiv, pageNum) {
   const annotations = loadAnnotations(state.sessionId)
   const pageAnns = annotations[`page_${pageNum}`] || []
   const hasAnnotation = pageAnns.some(ann =>
-    ann.startOffset < offsets.endOffset && ann.endOffset > offsets.startOffset
+    resolveAnnotationAnchor(textLayerDiv.textContent || '', ann)
+    && ann.startOffset < offsets.endOffset && ann.endOffset > offsets.startOffset
   )
   if (hasAnnotation) return true
 
@@ -14032,6 +14060,7 @@ function clearAnnotationsInRange(range, textLayerDiv, pageNum) {
   const removedAnnotations = []
   if (annotations[`page_${pageNum}`]) {
     annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
+      if (!resolveAnnotationAnchor(textLayerDiv.textContent || '', ann)) return true
       const hasOverlap = !(ann.endOffset <= offsets.startOffset || ann.startOffset >= offsets.endOffset)
       if (hasOverlap) removedAnnotations.push(ann)
       return !hasOverlap
