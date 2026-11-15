@@ -81,7 +81,7 @@ test('Notes 하이라이트 클릭 시 뷰어의 저장 오프셋 위치를 강�
   await gotoApp(page)
   await page.evaluate(() => {
     localStorage.setItem('easypaper_annotations_doc-notes', JSON.stringify({
-      page_1: [{ type: 'highlight', text: 'sample', startOffset: 0, endOffset: 6, color: '#eab308', createdAt: '2026-01-02T00:00:00Z' }],
+      page_1: [{ type: 'highlight', text: 'Sample', startOffset: 0, endOffset: 6, color: '#eab308', createdAt: '2026-01-02T00:00:00Z' }],
     }))
   })
   await page.click('.sidebar-nav-item[data-page="notes"]')
@@ -90,5 +90,6 @@ test('Notes 하이라이트 클릭 시 뷰어의 저장 오프셋 위치를 강�
 
   await expect(activeReader(page).locator('#viewer-screen')).toHaveClass(/active/)
   await expect(activeReader(page).locator('.pdf-annotation-highlight[data-start-offset="0"][data-end-offset="6"]')).toHaveAttribute('data-viewer-note-jump-target', 'true', { timeout: 10_000 })
+  await expect(activeReader(page).locator('.pdf-annotation-highlight')).toHaveAttribute('data-annotation-text', 'Sample')
   await expect(activeReader(page).locator('#page-input')).toHaveValue('1')
 })
