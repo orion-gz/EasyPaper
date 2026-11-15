@@ -89,7 +89,8 @@ test('analysis completion loads overlays and chapters without reopening the PDF'
   await expect(reader(page, 'tab-a').locator('.textLayer').first()).toContainText('Sample PDF A')
 })
 
-test('OCR completion preserves memo editing and relocates highlights and underlines', async ({ page }) => {
+test('OCR completion preserves memo editing and relocates highlights and underlines', async ({ page, browserName }) => {
+  if (browserName === 'webkit') test.slow()
   let ready = false
   const ocrText = 'OCR prefix Sample PDF A - page 1'
   await setup(page, async () => {
@@ -139,6 +140,7 @@ test('OCR completion preserves memo editing and relocates highlights and underli
   expect(annotations.map(ann => ocrText.slice(ann.startOffset, ann.endOffset))).toEqual(['Sample', 'PDF'])
   // Reloading starts from native text again, then returns to OCR without shifting annotations.
   await page.reload()
+  await expect(reader(page, 'tab-a').locator('#document-find')).toBeVisible({ timeout: 20000 })
   await expect(reader(page, 'tab-a').locator('.pdf-annotation-highlight')).toHaveAttribute('data-start-offset', '11')
   await expect(reader(page, 'tab-a').locator('.floating-memo-render')).toHaveText('편집 중인 메모 📚')
 })
