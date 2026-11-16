@@ -5447,7 +5447,7 @@ async function checkTauriUpdate({ silent = false } = {}) {
         tauriUpdateVersionLine.textContent = `v${update.currentVersion} → v${update.version}`
       }
       if (tauriUpdateNotes) {
-        tauriUpdateNotes.textContent = update.body || '세부 변경 내역이 제공되지 않았습니다.'
+        tauriUpdateNotes.innerHTML = sanitizeMarkedHtml(marked.parse(update.body || '세부 변경 내역이 제공되지 않았습니다.'))
       }
       if (tauriUpdateNotesBox) tauriUpdateNotesBox.classList.remove('hidden')
       if (tauriUpdateInstallBtn) {
