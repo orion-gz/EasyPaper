@@ -34,6 +34,8 @@ import './style.css'
 import './styles/status-states.css'
 import { mountChatQuestionNav } from './chatQuestionNav.js'
 import { applyDesktopUpdate } from './desktopUpdate.js'
+import { renderReleaseNotes, installReleaseNotesLinks } from './releaseNotes.js'
+import './styles/release-notes.css'
 import { pageCoordinates } from './pdfCoordinates.js'
 import { mergePdfHighlightRects, mappedSentenceRange, sentenceCharParts, contiguousSentenceBounds } from './pdfSentenceGeometry.js'
 import './styles/shell.css'
@@ -5348,6 +5350,7 @@ const tauriUpdateStatus = $('tauri-update-status')
 const tauriUpdateNotesBox = $('tauri-update-notes-box')
 const tauriUpdateVersionLine = $('tauri-update-version-line')
 const tauriUpdateNotes = $('tauri-update-notes')
+installReleaseNotesLinks(tauriUpdateNotes, openExternalUrl)
 const settingTauriUpdateCheckInterval = $('setting-tauri-update-check-interval')
 
 let pendingTauriUpdate = null
@@ -5447,7 +5450,7 @@ async function checkTauriUpdate({ silent = false } = {}) {
         tauriUpdateVersionLine.textContent = `v${update.currentVersion} → v${update.version}`
       }
       if (tauriUpdateNotes) {
-        tauriUpdateNotes.textContent = update.body || '세부 변경 내역이 제공되지 않았습니다.'
+        renderReleaseNotes(tauriUpdateNotes, update.body)
       }
       if (tauriUpdateNotesBox) tauriUpdateNotesBox.classList.remove('hidden')
       if (tauriUpdateInstallBtn) {
@@ -5563,9 +5566,9 @@ function showTauriUpdateAvailableModal(update) {
     updateAvailableVersionLine.textContent = `v${update.currentVersion} → v${update.version}`
   }
   if (updateAvailableChangelog) {
-    updateAvailableChangelog.innerHTML = update.body
-      ? `<li style="font-size: 12.5px; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap;">${escapeHtml(update.body)}</li>`
-      : `<li style="font-size: 12.5px; color: var(--text-muted);">세부 변경 내역이 제공되지 않았습니다.</li>`
+    const notes = document.createElement('li')
+    renderReleaseNotes(notes, update.body)
+    updateAvailableChangelog.replaceChildren(notes)
   }
   if (updateAvailableProgressArea) updateAvailableProgressArea.classList.add('hidden')
   if (updateAvailableActions) updateAvailableActions.style.display = 'flex'
@@ -5664,6 +5667,7 @@ const updateAvailableModal = $('update-available-modal')
 const updateAvailableCloseBtn = $('update-available-close-btn')
 const updateAvailableVersionLine = $('update-available-version-line')
 const updateAvailableChangelog = $('update-available-changelog')
+installReleaseNotesLinks(updateAvailableChangelog, openExternalUrl)
 const updateAvailableProgressArea = $('update-available-progress-area')
 const updateAvailableStatus = $('update-available-status')
 const updateAvailableActions = $('update-available-actions')
