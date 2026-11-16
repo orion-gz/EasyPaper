@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.6.2 - 2026-11-16
+
+### 한국어 (1.6.1 → 1.6.2)
+
+- PDF를 열 때 OCR·문서 분석을 백그라운드에서 실행하여 분석 완료를 기다리지 않고 읽기를 시작하도록 개선
+- 분석 준비 상태를 표시하고 완료 후 OCR 텍스트·그림·참고문헌·목차를 갱신하며, 준비 실패 시에도 PDF 읽기를 유지
+- OCR 텍스트 전환 중 강조 표시·밑줄의 위치와 메모 편집을 보존하고, 문서 전환 시 이전 문서의 비동기 결과가 현재 뷰어에 반영되지 않도록 수정
+
+### English (1.6.1 → 1.6.2)
+
+- Open PDFs without waiting for OCR and document analysis by preparing analysis sessions in the background.
+- Show analysis preparation status and refresh OCR text, figures, references, and the outline when ready; keep PDFs readable if preparation fails.
+- Preserve highlight and underline positions and memo editing during OCR text upgrades; prevent stale asynchronous results from affecting the viewer after switching documents.
+
 ## 1.6.1 - 2026-11-14
 
 ### 한국어 (1.6.0 → 1.6.1)
