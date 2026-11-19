@@ -3501,17 +3501,6 @@ const PROVIDER_CONFIG = [
       { value: 'Gemini 3.8 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.8 Flash' },
       { value: 'Gemini 3.8 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.8 Flash' },
       { value: 'Gemini 3.8 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.8 Flash' },
-      // Gemini 3.7 Flash
-      { value: 'Gemini 3.7 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.7 Flash' },
-      { value: 'Gemini 3.7 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.7 Flash' },
-      { value: 'Gemini 3.7 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.7 Flash' },
-      // Gemini 3.6 Flash
-      { value: 'Gemini 3.6 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.6 Flash' },
-      { value: 'Gemini 3.6 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.6 Flash' },
-      { value: 'Gemini 3.6 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.6 Flash' },
-      // Gemini 3.1 Pro
-      { value: 'Gemini 3.1 Pro (Low)',  label: 'Pro · Low',  group: 'Gemini 3.1 Pro' },
-      { value: 'Gemini 3.1 Pro (High)', label: 'Pro · High', group: 'Gemini 3.1 Pro' },
       { value: 'Claude Sonnet 5.5 (Low)', label: 'Sonnet · Low', group: 'Claude Sonnet 5.5' },
       { value: 'Claude Sonnet 5.5 (Medium)', label: 'Sonnet · Medium', group: 'Claude Sonnet 5.5' },
       { value: 'Claude Sonnet 5.5 (High)', label: 'Sonnet · High', group: 'Claude Sonnet 5.5' },
