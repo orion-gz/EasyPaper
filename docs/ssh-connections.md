@@ -1,5 +1,7 @@
 # HTTP(S), SSH and multiple inference servers
 
+[한국어 가이드](ssh-connections.ko.md)
+
 In Settings → Lab Mode, an administrator can register several Ollama or vLLM
 servers, select a default server and allow models on each server. Members select
 a server and model in their personal settings. The same server registry also
