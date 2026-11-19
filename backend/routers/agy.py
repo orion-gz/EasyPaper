@@ -40,6 +40,13 @@ async def get_agy_models():
             line.strip() for line in stdout.decode("utf-8", errors="replace").splitlines()
             if line.strip() and not line.startswith("\r")
         ]
+        # https://antigravity.google/docs/models (retired November 18, 2026)
+        retired_prefixes = (
+            "gpt-oss-120b", "gpt-oss 120b",
+            "claude-opus-4-6", "claude opus 4.6",
+            "claude-sonnet-4-6", "claude sonnet 4.6",
+        )
+        models = [model for model in models if not model.casefold().startswith(retired_prefixes)]
         return {"ok": True, "models": models}
     except Exception as e:
         # fallback: 하드코딩된 목록 반환
@@ -66,7 +73,6 @@ async def get_agy_models():
                 "Claude Opus 5.5 (Low)",
                 "Claude Opus 5.5 (Medium)",
                 "Claude Opus 5.5 (High)",
-                "GPT-OSS 120B (Medium)",
             ],
             "fallback": True,
             "error": str(e)
