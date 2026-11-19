@@ -29,7 +29,7 @@ EasyPaper는 PDF를 AI로 번역하고, 읽고, 주석을 남기고, 문서 내�
 
 ## Lab Mode
 
-웹과 원격 연결 데스크톱에서 공유 EasyPaper 서버의 계정·문서·AI 서비스를 사용할 수 있습니다. 관리자는 멤버 계정과 공유 모델을 관리하고, SSH를 통해 추론 서버에 연결할 수 있습니다. [Lab Mode 설정 가이드](./docs/lab-mode.md)
+웹과 원격 연결 데스크톱에서 공유 EasyPaper 서버의 계정·문서·AI 서비스를 사용할 수 있습니다. 관리자는 멤버 계정과 공유 모델을 관리하고, SSH를 통해 추론 서버에 연결할 수 있습니다. [랩 모드 설정 가이드](./docs/lab-mode.ko.md) · [SSH 및 추론 서버 연결 가이드](./docs/ssh-connections.ko.md)
 
 ## 원격 서버 연결 및 동기화
 
