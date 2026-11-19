@@ -15,8 +15,7 @@
 EasyPaper is a web and desktop workspace for translating, reading, annotating, and discussing PDFs with AI. Use local Ollama, Gemini, Claude, OpenAI, or supported CLI providers including Antigravity, Claude Code, and Codex.
 
 <p align="center">
-  <img src="./image/dashboard_research_mode.png" alt="EasyPaper research mode dashboard" width="100%">
-  <sub>Research mode workspace</sub>
+  <img src="./image/main.png" alt="EasyPaper workspace" width="100%">
 </p>
 
 ## Two reading modes
@@ -28,25 +27,13 @@ EasyPaper is a web and desktop workspace for translating, reading, annotating, a
 
 Both modes currently accept PDF files. General document mode lets you use features appropriate to the purpose and type of each document.
 
-<details>
-<summary>More screenshots</summary>
+## Lab Mode
 
-<br>
+Use a shared EasyPaper server for accounts, documents, and AI services from the web or a connected desktop app. Administrators can manage member accounts and shared models and configure SSH connections to inference servers. [Lab Mode setup guide](./docs/lab-mode.md)
 
-| | |
-|---|---|
-| <img src="./image/dashboard_research_mode.png" alt="Research mode dashboard"> | <img src="./image/dashboard_doc_mode.png" alt="General document mode dashboard"> |
-| Research mode dashboard | General document mode dashboard |
-| <img src="./image/viewer_ai_assistant.png" alt="Viewer with AI assistant"> | <img src="./image/viewer_image_overlay.png" alt="Viewer image overlay"> |
-| Viewer and AI assistant | Figure and image reference overlay |
-| <img src="./image/viewer_memo.png" alt="Viewer memo"> | <img src="./image/viewer_ref_overlay.png" alt="Viewer reference overlay"> |
-| Annotations and floating memos | Citation reference overlay |
-| <img src="./image/library.png" alt="Document library"> | <img src="./image/ai_chats.png" alt="AI Chats"> |
-| Library | AI Chats |
-| <img src="./image/heatmap.png" alt="Research graph heatmap"> | <img src="./image/reading_history.png" alt="Reading records"> |
-| Research graph heatmap | Reading records |
+## Remote server connection and sync
 
-</details>
+Switch between local use and a remote EasyPaper server in the desktop app. Sync libraries in both directions and open locally cached remote documents offline. [Desktop remote server guide](./docs/desktop-remote-server.md)
 
 ## Features
 
@@ -56,6 +43,13 @@ Both modes currently accept PDF files. General document mode lets you use featur
 - Annotations, highlights, floating memos, and annotated PDF export
 - Reference, figure, table, and equation overlays for research PDFs
 - Native desktop apps for Windows, macOS, and Linux, plus a self-hosted web app
+
+### Other features
+
+- Background OCR and analysis, collapsible outline, return to the previous reading position, and focus reading
+- Reference preview cards and reading priorities, pinnable figure, table, and equation previews, and pinned PDF regions
+- Workspace search and command palette (`Ctrl/Cmd+K`), with document processing progress and retries in the task center
+- Markdown memos with margin alignment and ZIP backup and import for documents, translations, chats, annotations, and reading history
 
 ## Quick start
 
