@@ -1,5 +1,7 @@
 # Lab Mode
 
+[한국어 가이드](lab-mode.ko.md)
+
 Lab Mode runs on the shared EasyPaper server. A browser and a Tauri app connected
 through **Data → Server connection** use the same server accounts, documents and
 inference services. Tauri does not need to synchronize or download a library to
