@@ -26,6 +26,7 @@ def _get_config_dir() -> str:
 load_dotenv(os.path.join(_get_config_dir(), ".env"))
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+TRANS_SERVER_ID = os.getenv("TRANS_SERVER_ID", "")
 TRANS_PROVIDER = os.getenv("TRANS_PROVIDER", "ollama")
 TRANS_MODEL = os.getenv("TRANS_MODEL", "gemma4:e4b")
 CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "ollama")
@@ -253,10 +254,13 @@ def update_system_settings(
     library_provider: str = "",
     library_model: str = "",
     default_ai_provider: str = "",
-    default_ai_model: str = ""
+    default_ai_model: str = "",
 ):
     global OLLAMA_HOST, TRANS_PROVIDER, TRANS_MODEL, CHAT_PROVIDER, CHAT_MODEL, DEFAULT_AI_PROVIDER, DEFAULT_AI_MODEL, ANALYSIS_PROVIDER, ANALYSIS_MODEL, LIBRARY_PROVIDER, LIBRARY_MODEL, OPENAI_API_KEY, GEMINI_API_KEY, CLAUDE_API_KEY, OPENALEX_MAILTO, PDF_PARSER_ENGINE
 
+    global TRANS_SERVER_ID
+    if (trans_provider, trans_model) != (TRANS_PROVIDER, TRANS_MODEL):
+        TRANS_SERVER_ID = ""
     OLLAMA_HOST = ollama_host
     TRANS_PROVIDER = trans_provider
     TRANS_MODEL = trans_model
@@ -274,11 +278,11 @@ def update_system_settings(
     OPENALEX_MAILTO = openalex_mailto
     PDF_PARSER_ENGINE = pdf_parser_engine
 
-    env_path = os.path.join(_get_config_dir(), ".env")
     settings = {
         "OLLAMA_HOST": ollama_host,
         "TRANS_PROVIDER": trans_provider,
         "TRANS_MODEL": trans_model,
+        "TRANS_SERVER_ID": TRANS_SERVER_ID,
         "CHAT_PROVIDER": chat_provider,
         "CHAT_MODEL": chat_model,
         "DEFAULT_AI_PROVIDER": default_ai_provider,
@@ -294,6 +298,17 @@ def update_system_settings(
         "PDF_PARSER_ENGINE": pdf_parser_engine
     }
 
+    _write_settings(settings)
+
+
+def update_translation_settings(provider: str, model: str, server_id: str):
+    global TRANS_PROVIDER, TRANS_MODEL, TRANS_SERVER_ID
+    _write_settings({"TRANS_PROVIDER": provider, "TRANS_MODEL": model, "TRANS_SERVER_ID": server_id})
+    TRANS_PROVIDER, TRANS_MODEL, TRANS_SERVER_ID = provider, model, server_id
+
+
+def _write_settings(settings):
+    env_path = os.path.join(_get_config_dir(), ".env")
     if not os.path.exists(env_path):
         with open(env_path, "w", encoding="utf-8") as f:
             for k, v in settings.items():

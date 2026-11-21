@@ -731,7 +731,7 @@
   <div id="onboarding-modal" class="modal-overlay hidden">
     <div class="modal-content" style="max-width: 460px;">
       <div class="modal-header">
-        <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>AI 엔진 설정</h2>
+        <h2 id="onboarding-title" data-i18n="onboarding:title">번역 환경 설정</h2>
         <div class="onboarding-header-actions">
           <label class="onboarding-locale-label"><span data-i18n="onboarding:uiLanguage">화면 언어</span>
             <select id="onboarding-ui-locale" class="form-select"><option value="ko">한국어</option><option value="en">English</option></select>
@@ -741,110 +741,30 @@
       </div>
 
       <div style="padding: 24px; max-height: 70vh; overflow-y: auto;">
+        <progress id="onboarding-progress" max="4" value="1" aria-labelledby="onboarding-title"></progress>
         <div id="onboarding-purpose" class="hidden">
-          <h3 data-i18n="onboarding:purpose.heading">EasyPaper를 어떤 용도로 사용하시나요?</h3>
+          <h3 tabindex="-1" data-i18n="onboarding:purpose.heading">EasyPaper를 어떤 용도로 사용하시나요?</h3>
           <p class="onboarding-purpose-help" data-i18n="onboarding:purpose.help">기본 작업공간만 정하며 문서를 자동 분류하지 않습니다. 나중에 사이드바에서 언제든 변경할 수 있습니다.</p>
           <div class="onboarding-purpose-cards" role="radiogroup">
             <button type="button" data-purpose-mode="research" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.research">연구 논문 중심</strong><span data-i18n="onboarding:purpose.researchHelp">논문 번역, 읽기 전 브리핑, 논문 비교, Research Graph</span></button>
             <button type="button" data-purpose-mode="general" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.general">일반 문서 중심</strong><span data-i18n="onboarding:purpose.generalHelp">기술 문서, 책, 아티클, 보고서, 매뉴얼 번역과 문서 AI</span></button>
           </div>
+          <p id="onboarding-purpose-error" role="alert"></p>
           <div class="document-type-modal-actions"><button type="button" id="onboarding-purpose-next-btn" class="btn btn-primary" disabled data-i18n="onboarding:next">다음</button></div>
         </div>
 
-        <!-- 상태 1: 감지 중 -->
-        <div id="onboarding-detecting" style="display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 20px 0;">
-          <div class="spinner" style="width: 28px; height: 28px; border-width: 3px;"></div>
-          <p style="font-size: 13.5px; color: var(--text-secondary);" data-i18n="onboarding:detecting">설치된 AI 엔진을 확인하고 있어요...</p>
-        </div>
-
-        <!-- 상태 2: 감지된 엔진 목록 (선택 후 "다음"으로 진행) -->
-        <div id="onboarding-detected" class="hidden">
-          <p style="font-size: 13.5px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.6;">다음 AI 엔진이 감지되었습니다. 번역과 채팅에 사용할 엔진을 선택해주세요.</p>
-          <div id="onboarding-detected-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
-          <div style="text-align: right; margin-top: 14px;">
-            <button type="button" id="onboarding-next-btn" class="btn btn-primary" disabled style="padding: 9px 20px; font-size: 13px;">다음</button>
+        <section id="onboarding-guide" class="hidden" aria-labelledby="onboarding-question">
+          <h3 id="onboarding-question" tabindex="-1"></h3>
+          <div id="onboarding-fields"></div>
+          <p role="status" id="onboarding-feedback"></p>
+          <details id="onboarding-details" hidden><summary data-i18n="onboarding:logs">상세 로그</summary><pre></pre></details>
+          <div class="onboarding-actions">
+            <button id="onboarding-back-btn" class="btn btn-secondary" data-i18n="onboarding:back">← 뒤로</button>
+            <button id="onboarding-action" class="btn btn-primary"></button>
           </div>
-        </div>
-
-        <!-- 상태 3: 선택한 엔진의 모델 선택 -->
-        <div id="onboarding-model-select" class="hidden">
-          <button type="button" id="onboarding-back-btn" style="background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 0; margin-bottom: 10px; display: flex; align-items: center; gap: 4px;" data-i18n="onboarding:back">← 뒤로</button>
-          <p style="font-size: 13.5px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.6;"><strong id="onboarding-model-select-provider" style="color: var(--text-primary);"></strong>에서 사용할 모델을 선택해주세요.</p>
-
-          <div id="onboarding-model-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto;"></div>
-
-          <!-- Ollama 전용: 다른 모델을 새로 받고 싶을 때 -->
-          <div id="onboarding-model-pull-section" class="hidden" style="margin-top: 14px; padding: 12px 14px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md);">
-            <div style="font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">다른 모델 다운로드</div>
-            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
-              <button type="button" class="btn btn-secondary onboarding-pull-model-btn" data-model="qwen3.5:9b" style="padding: 5px 10px; font-size: 11.5px;">Qwen 3.5 9B</button>
-              <button type="button" class="btn btn-secondary onboarding-pull-model-btn" data-model="llama3.1:8b" style="padding: 5px 10px; font-size: 11.5px;">Llama 3.1 8B</button>
-              <button type="button" class="btn btn-secondary onboarding-pull-model-btn" data-model="gemma4:e4b" style="padding: 5px 10px; font-size: 11.5px;">Gemma 4 E4B</button>
-              <button type="button" class="btn btn-secondary onboarding-pull-model-btn" data-model="gemma4:12b" style="padding: 5px 10px; font-size: 11.5px;">Gemma 4 12B</button>
-              <button type="button" class="btn btn-secondary onboarding-pull-model-btn" data-model="qwen3.6:27b" style="padding: 5px 10px; font-size: 11.5px;">Qwen 3.6 27B</button>
-              <button type="button" class="btn btn-secondary onboarding-pull-model-btn" data-model="mistral-small3.2:24b" style="padding: 5px 10px; font-size: 11.5px;">Mistral Small 3.2 24B</button>
-              <button type="button" class="btn btn-secondary onboarding-pull-model-btn" data-model="phi4-reasoning:14b" style="padding: 5px 10px; font-size: 11.5px;">Phi-4 Reasoning 14B</button>
-              <button type="button" class="btn btn-secondary onboarding-pull-model-btn" data-model="deepseek-r1:8b" style="padding: 5px 10px; font-size: 11.5px;">DeepSeek R1 8B</button>
-            </div>
-            <div id="onboarding-pull-progress-area" class="hidden">
-              <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
-                <span id="onboarding-pull-status-text" style="color: var(--text-secondary);">대기 중...</span>
-                <span id="onboarding-pull-pct-text" style="font-weight: 700; color: var(--control-accent-text);">0%</span>
-              </div>
-              <div class="progress-bar-wrap" style="height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden;">
-                <div id="onboarding-pull-progress-bar" style="width: 0%; height: 100%; background: var(--control-accent); transition: width 0.2s;"></div>
-              </div>
-            </div>
-          </div>
-
-          <div style="text-align: right; margin-top: 14px;">
-            <button type="button" id="onboarding-confirm-btn" class="btn btn-primary" disabled style="padding: 9px 20px; font-size: 13px;" data-i18n="onboarding:confirm">확인</button>
-          </div>
-        </div>
-
-        <!-- 상태 4: 설치 안내 (이미 감지된 엔진은 목록에서 제외, 다른 엔진이 감지된 경우에도 표시) -->
-        <div id="onboarding-install" class="hidden">
-          <p id="onboarding-install-intro" style="font-size: 13.5px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.6;">사용 가능한 AI 엔진이 감지되지 않았습니다. 아래에서 하나를 설치해주세요.</p>
-
-          <div style="display: flex; flex-direction: column; gap: 10px;">
-            <div class="onboarding-install-row" data-provider="ollama">
-              <div class="onboarding-install-row-label">
-                <strong>Ollama</strong>
-                <span>로컬에서 무료로 실행되는 오픈소스 모델</span>
-              </div>
-              <button type="button" id="onboarding-install-ollama-btn" class="btn btn-primary" style="padding: 8px 16px; font-size: 12.5px; white-space: nowrap;">설치</button>
-            </div>
-            <div class="onboarding-install-row" data-provider="claude_code">
-              <div class="onboarding-install-row-label">
-                <strong>Claude Code</strong>
-                <span>Anthropic 계정 로그인 필요 (설치 후 터미널에서 <code>claude</code> 실행)</span>
-              </div>
-              <button type="button" id="onboarding-install-claude-code-btn" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12.5px; white-space: nowrap;">설치</button>
-            </div>
-            <div class="onboarding-install-row" data-provider="codex">
-              <div class="onboarding-install-row-label">
-                <strong>Codex</strong>
-                <span>OpenAI 계정 로그인 필요 (설치 후 터미널에서 <code>codex login</code> 실행)</span>
-              </div>
-              <button type="button" id="onboarding-install-codex-btn" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12.5px; white-space: nowrap;">설치</button>
-            </div>
-            <div class="onboarding-install-row" data-provider="antigravity">
-              <div class="onboarding-install-row-label">
-                <strong>Antigravity</strong>
-                <span>Google 계정 로그인 필요 (설치 후 터미널에서 <code>agy</code> 실행)</span>
-              </div>
-              <button type="button" id="onboarding-install-antigravity-btn" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12.5px; white-space: nowrap;">설치</button>
-            </div>
-          </div>
-
-          <div id="onboarding-install-progress-area" class="hidden" style="margin-top: 14px; background: var(--bg-elevated); border: 1px solid var(--border-strong); padding: 12px; border-radius: var(--radius-md);">
-            <div id="onboarding-install-status" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">설치 진행 중...</div>
-            <div id="onboarding-install-log" style="max-height: 140px; overflow-y: auto; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); white-space: pre-wrap; line-height: 1.5;"></div>
-          </div>
-        </div>
-
+        </section>
         <div style="text-align: center; margin-top: 18px;">
-          <button type="button" id="onboarding-skip-btn" style="background: none; border: none; color: var(--text-muted); font-size: 12.5px; cursor: pointer; text-decoration: underline;">나중에 설정하기</button>
+          <button type="button" data-i18n="onboarding:skip" id="onboarding-skip-btn" style="background: none; border: none; color: var(--text-muted); font-size: 12.5px; cursor: pointer; text-decoration: underline;">나중에 설정하기</button>
         </div>
       </div>
     </div>
@@ -994,6 +914,7 @@
 
       <!-- 일반 설정 탭 -->
       <div id="tab-general" class="tab-pane active">
+        <button id="restart-onboarding" class="btn btn-secondary" data-i18n="onboarding:restart">번역 환경 다시 설정</button>
         <form id="general-settings-form" class="modal-form">
           <div class="form-group">
             <label class="toggle-switch" for="setting-minimal-ui">
