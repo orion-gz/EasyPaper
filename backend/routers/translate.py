@@ -236,7 +236,11 @@ async def health_check():
     from services import lab
     if lab.settings()['enabled']:
         return await lab.inference_health()
-    """AI 제공자 및 상태를 확인합니다."""
+    import config
+    if config.TRANS_SERVER_ID:
+        from services.lab_context import translation_server
+        with translation_server():
+            return await lab.inference_health()
     from config import get_trans_provider, get_openai_api_key, get_gemini_api_key, get_claude_api_key, get_agy_path
     provider = get_trans_provider()
     

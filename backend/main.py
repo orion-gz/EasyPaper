@@ -72,6 +72,8 @@ async def lifespan(_app: FastAPI):
         from services.lab_runtime import ensure_owner
         ensure_owner()
     await shared_models.start()
+    from services import onboarding_vllm
+    await onboarding_vllm.restore()
     from services.sync_transaction import recover_transactions
     await asyncio.to_thread(recover_transactions)
     if desktop_connections:
@@ -90,6 +92,7 @@ async def lifespan(_app: FastAPI):
     finally:
         from services.document_preparation import shutdown as stop_document_preparation
         await stop_document_preparation()
+        await onboarding_vllm.shutdown()
         await shared_models.stop()
         if desktop_connections:
             await desktop_connections.close()

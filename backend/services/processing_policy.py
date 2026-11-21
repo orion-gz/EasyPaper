@@ -69,7 +69,13 @@ def provider_for_operation(operation: str) -> str:
 
 
 def processing_disclosure(provider: str, operation: str) -> dict:
-    local = provider_is_local(provider)
+    if operation in {"translate", "easy_english"}:
+        from services.lab_context import translation_server, selected_server
+        with translation_server():
+            server = selected_server.get()
+            local = provider_is_local(provider) and not (server and server.get("transport") == "ssh")
+    else:
+        local = provider_is_local(provider)
     return {
         "provider": provider,
         "local_processing": local,

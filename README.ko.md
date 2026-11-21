@@ -15,8 +15,7 @@
 EasyPaper는 PDF를 AI로 번역하고, 읽고, 주석을 남기고, 문서 내용을 바탕으로 대화할 수 있는 웹·데스크톱 워크스페이스입니다. 로컬 Ollama, Gemini, Claude, OpenAI와 Antigravity·Claude Code·Codex CLI를 지원합니다.
 
 <p align="center">
-  <img src="./image/dashboard_research_mode.png" alt="EasyPaper 연구 모드 대시보드" width="100%">
-  <sub>연구 모드 워크스페이스</sub>
+  <img src="./image/main.png" alt="EasyPaper 작업 공간" width="100%">
 </p>
 
 ## 두 가지 읽기 모드
@@ -28,25 +27,13 @@ EasyPaper는 PDF를 AI로 번역하고, 읽고, 주석을 남기고, 문서 내�
 
 현재 두 모드 모두 PDF를 입력으로 사용합니다. 일반 문서 모드에서는 문서 목적과 유형에 맞는 기능을 활용할 수 있습니다.
 
-<details>
-<summary>추가 스크린샷</summary>
+## Lab Mode
 
-<br>
+웹과 원격 연결 데스크톱에서 공유 EasyPaper 서버의 계정·문서·AI 서비스를 사용할 수 있습니다. 관리자는 멤버 계정과 공유 모델을 관리하고, SSH를 통해 추론 서버에 연결할 수 있습니다. [랩 모드 설정 가이드](./docs/lab-mode.ko.md) · [SSH 및 추론 서버 연결 가이드](./docs/ssh-connections.ko.md)
 
-| | |
-|---|---|
-| <img src="./image/dashboard_research_mode.png" alt="연구 모드 대시보드"> | <img src="./image/dashboard_doc_mode.png" alt="일반 문서 모드 대시보드"> |
-| 연구 모드 대시보드 | 일반 문서 모드 대시보드 |
-| <img src="./image/viewer_ai_assistant.png" alt="AI 어시스턴트가 열린 뷰어"> | <img src="./image/viewer_image_overlay.png" alt="이미지 참조 오버레이"> |
-| 뷰어와 AI 어시스턴트 | 그림·이미지 참조 오버레이 |
-| <img src="./image/viewer_memo.png" alt="뷰어 메모"> | <img src="./image/viewer_ref_overlay.png" alt="참고문헌 오버레이"> |
-| 주석과 플로팅 메모 | 인용 참고문헌 오버레이 |
-| <img src="./image/library.png" alt="문서 라이브러리"> | <img src="./image/ai_chats.png" alt="AI Chats"> |
-| 라이브러리 | AI Chats |
-| <img src="./image/heatmap.png" alt="연구 그래프 히트맵"> | <img src="./image/reading_history.png" alt="읽은 기록"> |
-| 연구 그래프 히트맵 | 읽은 기록 |
+## 원격 서버 연결 및 동기화
 
-</details>
+데스크톱 앱에서 로컬 사용과 원격 EasyPaper 서버 연결을 전환할 수 있습니다. 라이브러리를 양방향으로 동기화하고, 로컬에 캐시한 원격 문서를 오프라인에서 열 수 있습니다. [데스크톱 원격 서버 연결 가이드](./docs/desktop-remote-server.md)
 
 ## 주요 기능
 
@@ -56,6 +43,13 @@ EasyPaper는 PDF를 AI로 번역하고, 읽고, 주석을 남기고, 문서 내�
 - 하이라이트, 주석, 플로팅 메모, 주석 포함 PDF 내보내기
 - 연구 PDF의 인용·그림·표·수식 참조 오버레이
 - Windows, macOS, Linux용 네이티브 데스크톱 앱 및 자체 호스팅 웹 앱
+
+### 기타 기능
+
+- 백그라운드 OCR·문서 분석, 접을 수 있는 목차, 이전 읽기 위치 복귀 및 집중 읽기
+- 참고문헌 미리보기 카드와 읽기 우선순위, 그림·표·수식 미리보기 및 PDF 선택 영역 고정
+- 통합 검색과 명령 팔레트 (`Ctrl/Cmd+K`), 작업 센터에서 문서 처리 진행 확인 및 재시도
+- Markdown 메모와 여백 정렬, 문서·번역·채팅·주석·읽기 기록의 ZIP 백업 및 가져오기
 
 ## 빠른 시작
 

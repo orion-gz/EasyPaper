@@ -7007,5 +7007,158 @@
   },
   "settings:prompt.missing": {
     "description": "Translation prompt editor: Insert the source text before applying."
+  },
+  "onboarding:title": {
+    "description": "First-run translation setup. Translation setup"
+  },
+  "onboarding:location": {
+    "description": "First-run translation setup. Where would you like to translate?"
+  },
+  "onboarding:local": {
+    "description": "First-run translation setup. Set up an engine here"
+  },
+  "onboarding:localHelp": {
+    "description": "First-run translation setup. Install on the EasyPaper host. CLI tools send content to their provider."
+  },
+  "onboarding:remote": {
+    "description": "First-run translation setup. Connect a model server"
+  },
+  "onboarding:remoteHelp": {
+    "description": "First-run translation setup. Keep documents here and send text to the model server for translation."
+  },
+  "onboarding:team": {
+    "description": "First-run translation setup. Open your team's EasyPaper"
+  },
+  "onboarding:teamHelp": {
+    "description": "First-run translation setup. Sign in to your team's server to store and translate documents there."
+  },
+  "onboarding:tools": {
+    "description": "First-run translation setup. Which tool would you like to use?"
+  },
+  "onboarding:installed": {
+    "description": "First-run translation setup. Installed"
+  },
+  "onboarding:install": {
+    "description": "First-run translation setup. Install"
+  },
+  "onboarding:installing": {
+    "description": "First-run translation setup. Installing…"
+  },
+  "onboarding:start": {
+    "description": "First-run translation setup. Install and start"
+  },
+  "onboarding:gpu": {
+    "description": "First-run translation setup. Requires Linux and an NVIDIA GPU. Choose a model to install."
+  },
+  "onboarding:endpoint": {
+    "description": "First-run translation setup. Connect to your model server"
+  },
+  "onboarding:url": {
+    "description": "First-run translation setup. Server address"
+  },
+  "onboarding:key": {
+    "description": "First-run translation setup. API key (optional)"
+  },
+  "onboarding:check": {
+    "description": "First-run translation setup. Check connection"
+  },
+  "onboarding:model": {
+    "description": "First-run translation setup. Which model should translate your documents?"
+  },
+  "onboarding:empty": {
+    "description": "First-run translation setup. No models available."
+  },
+  "onboarding:download": {
+    "description": "First-run translation setup. Download model"
+  },
+  "onboarding:sample": {
+    "description": "First-run translation setup. Test a translation"
+  },
+  "onboarding:save": {
+    "description": "First-run translation setup. Use this model"
+  },
+  "onboarding:ready": {
+    "description": "First-run translation setup. Ready for your first document"
+  },
+  "onboarding:open": {
+    "description": "First-run translation setup. Open first document"
+  },
+  "onboarding:skip": {
+    "description": "First-run translation setup. Set up later"
+  },
+  "onboarding:restart": {
+    "description": "First-run translation setup. Run translation setup"
+  },
+  "onboarding:login": {
+    "description": "First-run translation setup. Sign in from your terminal, then test a translation to verify the connection."
+  },
+  "onboarding:logs": {
+    "description": "First-run translation setup. Details"
+  },
+  "onboarding:working": {
+    "description": "First-run translation setup. Checking…"
+  },
+  "onboarding:teamUrl": {
+    "description": "First-run translation setup. Enter the EasyPaper address provided by your team."
+  },
+  "onboarding:invalid": {
+    "description": "First-run translation setup. Enter a valid HTTP or HTTPS server address."
+  },
+  "onboarding:localOllama": {
+    "description": "First-run translation setup. Run models on the EasyPaper host"
+  },
+  "onboarding:cliHelp": {
+    "description": "First-run translation setup. Translate using your provider account"
+  },
+  "onboarding:service": {
+    "description": "First-run translation setup. Start Ollama and check again."
+  },
+  "onboarding:retry": {
+    "description": "First-run translation setup. Check again"
+  },
+  "onboarding:sampleEn": {
+    "description": "Source sentence for a translation preview."
+  },
+  "onboarding:sampleKo": {
+    "description": "Source sentence for a translation preview."
+  },
+  "onboarding:sessionKey": {
+    "description": "Explains session-only credential storage."
+  },
+  "desktop:remoteStatus": {
+    "description": "Remote desktop connection status. Remote server status"
+  },
+  "desktop:checking": {
+    "description": "Remote desktop connection status. Checking"
+  },
+  "desktop:unverified": {
+    "description": "Remote desktop connection status. Connection check failed"
+  },
+  "desktop:statusSummary": {
+    "description": "Remote desktop connection status. Connection: {{link}} · Sync: {{job}}"
+  },
+  "desktop:jobs.unknown": {
+    "description": "Remote desktop connection status. Unknown"
+  },
+  "desktop:jobs.idle": {
+    "description": "Remote desktop connection status. Idle"
+  },
+  "desktop:jobs.uploading": {
+    "description": "Remote desktop connection status. Uploading"
+  },
+  "desktop:jobs.downloading": {
+    "description": "Remote desktop connection status. Downloading"
+  },
+  "desktop:jobs.importing": {
+    "description": "Remote desktop connection status. Importing"
+  },
+  "desktop:jobs.completed": {
+    "description": "Remote desktop connection status. Completed"
+  },
+  "desktop:jobs.conflict": {
+    "description": "Remote desktop connection status. Conflict"
+  },
+  "desktop:jobs.failed": {
+    "description": "Remote desktop connection status. Failed"
   }
 }

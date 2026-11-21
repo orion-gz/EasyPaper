@@ -235,10 +235,36 @@ async def stream_translation(
     Ollama /api/chat 엔드포인트를 사용해 번역 결과를 스트리밍합니다.
     사용자의 요구에 따른 언어, 번역 스타일, 제외 요소 옵션에 맞춰 프롬프트를 동적으로 구성합니다.
     """
-    provider = get_trans_provider()
+    from services.lab_context import translation_server
+    with translation_server():
+        async for part in _stream_translation(text, target_lang, style, ignore_math, ignore_table,
+                ignore_refs, source_lang, doc_title, prev_context, session_id, page_num,
+                page_image_b64, document_mode, document_type):
+            yield part
+
+
+async def _stream_translation(
+    text: str,
+    target_lang: str = "ko",
+    style: str = "academic",
+    ignore_math: bool = False,
+    ignore_table: bool = True,
+    ignore_refs: bool = False,
+    source_lang: str = "auto",
+    doc_title: str = "",
+    prev_context: str = "",
+    session_id: str = None,
+    page_num: int = None,
+    page_image_b64: str = None,
+    document_mode: str = "research",
+    document_type: str = "research_paper",
+    provider_override: str = "",
+    model_override: str = "",
+) -> AsyncGenerator[str, None]:
+    provider = provider_override or get_trans_provider()
     from services.document_policy import build_translation_policy
     document_policy_rules = build_translation_policy(document_mode, document_type)
-    model = get_trans_model()
+    model = model_override or get_trans_model()
 
     # antigravity/claude code는 문서(session_id)당 세션(대화)이 실제로 이어지므로,
     # 매 페이지마다 문체·수식·표·참고문헌 처리 규칙 전체를 통째로 반복해서 보낼
@@ -443,7 +469,13 @@ async def stream_openai(messages: list, model: str, temperature: float = 0.5) ->
         scope = hashlib.sha256(json.dumps(messages, sort_keys=True).encode()).hexdigest()
         from services.lab_tasks import cache_scope
         document_scope = cache_scope.get() or (scope, 1)
-        payload['cache_salt'] = lab.cache_salt(identity.get(), *document_scope)
+        if not lab.settings()['enabled'] and not lab.account(identity.get()):
+            # Standalone installations can run without a lab account. A fresh salt
+            # keeps these requests isolated even when the local login is skipped.
+            import secrets
+            payload['cache_salt'] = secrets.token_hex(32)
+        else:
+            payload['cache_salt'] = lab.cache_salt(identity.get(), *document_scope)
 
     # GPT-6 reasoning models reject sampling parameters at their default effort.
     # https://developers.openai.com/api/docs/guides/latest-model
@@ -631,7 +663,13 @@ async def stream_claude(messages: list, model: str, temperature: float = 0.5) ->
     }
     # Current Claude models use adaptive thinking and default sampling settings.
     # https://platform.claude.com/docs/en/models/opus-5-5/migration-guide
-    if model in {"claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5", "claude-haiku-5-5"}:
+    if model in {
+        "claude-opus-5-5",
+        "claude-fable-5-2",
+        "claude-fable-5-1",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
+    }:
         payload.pop("temperature")
     if system_prompt:
         payload["system"] = system_prompt

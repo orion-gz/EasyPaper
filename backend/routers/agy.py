@@ -28,6 +28,12 @@ async def get_agy_models():
     """agy models 명령으로 실제 지원 모델 목록 반환"""
     from config import get_agy_path, get_agy_env, windows_safe_exec_args
     agy_path = get_agy_path()
+    # https://antigravity.google/docs/models
+    enterprise_only_prefixes = (
+        "gemini-3.7-flash", "gemini 3.7 flash",
+        "gemini-3.6-flash", "gemini 3.6 flash",
+        "gemini-3.1-pro", "gemini 3.1 pro",
+    )
     try:
         proc = await asyncio.create_subprocess_exec(
             *windows_safe_exec_args([agy_path, "models"]),
@@ -39,7 +45,15 @@ async def get_agy_models():
         models = [
             line.strip() for line in stdout.decode("utf-8", errors="replace").splitlines()
             if line.strip() and not line.startswith("\r")
+            and not line.strip().casefold().startswith(enterprise_only_prefixes)
         ]
+        # https://antigravity.google/docs/models (retired November 18, 2026)
+        retired_prefixes = (
+            "gpt-oss-120b", "gpt-oss 120b",
+            "claude-opus-4-6", "claude opus 4.6",
+            "claude-sonnet-4-6", "claude sonnet 4.6",
+        )
+        models = [model for model in models if not model.casefold().startswith(retired_prefixes)]
         return {"ok": True, "models": models}
     except Exception as e:
         # fallback: 하드코딩된 목록 반환
@@ -52,21 +66,12 @@ async def get_agy_models():
                 # https://antigravity.google/docs/cli/headless/ (2026-10-14)
                 "Gemini 4 Argon (Medium)",
                 "Gemini 4 Argon (High)",
-                "Gemini 3.7 Flash (Medium)",
-                "Gemini 3.7 Flash (High)",
-                "Gemini 3.7 Flash (Low)",
-                "Gemini 3.6 Flash (Medium)",
-                "Gemini 3.6 Flash (High)",
-                "Gemini 3.6 Flash (Low)",
-                "Gemini 3.1 Pro (Low)",
-                "Gemini 3.1 Pro (High)",
                 "Claude Sonnet 5.5 (Low)",
                 "Claude Sonnet 5.5 (Medium)",
                 "Claude Sonnet 5.5 (High)",
                 "Claude Opus 5.5 (Low)",
                 "Claude Opus 5.5 (Medium)",
                 "Claude Opus 5.5 (High)",
-                "GPT-OSS 120B (Medium)",
             ],
             "fallback": True,
             "error": str(e)

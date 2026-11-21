@@ -17,7 +17,7 @@ import { createReferenceAnalysisController, renderReferenceAnalysis } from './re
 import { fetchReferenceAnalysis, analyzeReference } from './library.js'
 import { installReaderPreferences, readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { initializeDataTransfer } from './dataTransfer.js'
-import { isRemoteDesktop, setBeforeServerDownload } from './desktopConnection.js'
+import { setBeforeServerDownload } from './desktopConnection.js'
 import { isMinimalUi, setMinimalUi, MINIMAL_UI_KEY } from './minimalUi.js'
 import './styles/minimal-ui.css'
 import { applyTheme, selectedTheme, loadThemes, saveThemes, THEME_STORAGE_KEY } from './themes/themeEngine.js'
@@ -554,9 +554,8 @@ const settingSkipLoginCheckbox = $('setting-skip-login-checkbox')
 // 첫 실행 온보딩은 완료하지 않은 사용자에게만 별도 청크로 로드한다.
 let onboardingController = null
 
-async function maybeShowOnboarding() {
-  if (isRemoteDesktop()) return
-  if (Number(localStorage.getItem(ONBOARDING_VERSION_KEY) || 0) >= CURRENT_ONBOARDING_VERSION) return
+async function maybeShowOnboarding(force = false) {
+  if (!force && (localStorage.getItem("easypaper_onboarding_seen") || Number(localStorage.getItem(ONBOARDING_VERSION_KEY) || 0) >= CURRENT_ONBOARDING_VERSION)) return
   if (!onboardingController) {
     const { createOnboarding } = await import('./onboarding.js')
     onboardingController = createOnboarding({
@@ -565,13 +564,18 @@ async function maybeShowOnboarding() {
       viewerTransPicker, settingDefaultAiPicker, settingTransPicker,
       chatSidebarPicker, settingChatPicker, settingAnalysisPicker, settingLibraryPicker,
       onWorkspaceSelected: async (mode) => {
-        await workspaceModeController.markOnboardingComplete(mode)
-        await patchWorkspaceSettingsAPI({ onboarding_version: CURRENT_ONBOARDING_VERSION, preferred_workspace_mode: mode })
+        await patchWorkspaceSettingsAPI({ preferred_workspace_mode: mode })
+        await workspaceModeController.setMode(mode, { persist: false })
       },
     })
   }
   onboardingController.maybeShowOnboarding()
 }
+
+$('restart-onboarding')?.addEventListener('click', () => {
+  closeOverlayModal(settingsModal)
+  maybeShowOnboarding(true)
+})
 
 // 탭 버튼 및 컨텐츠 영역
 
@@ -3480,66 +3484,78 @@ const PROVIDER_CONFIG = [
   {
     id: 'antigravity', label: 'Antigravity', icon: icon('zap', 13),
     models: [
+      // https://antigravity.google/docs/models and agy models (2026-11-19)
+      { value: 'gemini-4-neon-low', label: 'Neon · Low', group: 'Gemini 4 Neon' },
+      { value: 'gemini-4-neon-medium', label: 'Neon · Medium', group: 'Gemini 4 Neon' },
+      { value: 'gemini-4-neon-high', label: 'Neon · High', group: 'Gemini 4 Neon' },
+      { value: 'gemini-4-neon-xhigh', label: 'Neon · xHigh', group: 'Gemini 4 Neon' },
+      { value: 'gemini-4-carbon-low', label: 'Carbon · Low', group: 'Gemini 4 Carbon' },
+      { value: 'gemini-4-carbon-medium', label: 'Carbon · Medium', group: 'Gemini 4 Carbon' },
+      { value: 'gemini-4-carbon-high', label: 'Carbon · High', group: 'Gemini 4 Carbon' },
+      { value: 'gemini-4-argon-low', label: 'Argon · Low', group: 'Gemini 4 Argon' },
+      { value: 'gemini-4-argon-medium', label: 'Argon · Medium', group: 'Gemini 4 Argon' },
+      { value: 'gemini-4-argon-high', label: 'Argon · High', group: 'Gemini 4 Argon' },
+      { value: 'gemini-4-hydrogen-low', label: 'Hydrogen · Low', group: 'Gemini 4 Hydrogen' },
+      { value: 'gemini-4-hydrogen-medium', label: 'Hydrogen · Medium', group: 'Gemini 4 Hydrogen' },
+      { value: 'gemini-4-hydrogen-high', label: 'Hydrogen · High', group: 'Gemini 4 Hydrogen' },
+      { value: 'gemini-4-hydrogen-xhigh', label: 'Hydrogen · xHigh', group: 'Gemini 4 Hydrogen' },
+      { value: 'gemini-pro-orchestrator-neon', label: 'Orchestrator (Neon)', group: 'Orchestrator' },
+      { value: 'gemini-pro-orchestrator', label: 'Orchestrator (Carbon)', group: 'Orchestrator' },
+      { value: 'gemini-pro-orchestrator-g1-pro', label: 'Orchestrator (Argon)', group: 'Orchestrator' },
       // Gemini 3.8 Flash
       { value: 'Gemini 3.8 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.8 Flash' },
       { value: 'Gemini 3.8 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.8 Flash' },
       { value: 'Gemini 3.8 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.8 Flash' },
-      // Gemini 4 Argon (Ultra / Enterprise): verified 2026-10-14
-      // https://antigravity.google/docs/cli/headless/
-      { value: 'gemini-4-argon-medium', label: 'Argon · Medium', group: 'Gemini 4 Argon' },
-      { value: 'gemini-4-argon-high',   label: 'Argon · High',   group: 'Gemini 4 Argon' },
-      // Gemini 3.7 Flash
-      { value: 'Gemini 3.7 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.7 Flash' },
-      { value: 'Gemini 3.7 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.7 Flash' },
-      { value: 'Gemini 3.7 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.7 Flash' },
-      // Gemini 3.6 Flash
-      { value: 'Gemini 3.6 Flash (Low)',    label: 'Flash · Low',    group: 'Gemini 3.6 Flash' },
-      { value: 'Gemini 3.6 Flash (Medium)', label: 'Flash · Medium', group: 'Gemini 3.6 Flash' },
-      { value: 'Gemini 3.6 Flash (High)',   label: 'Flash · High',   group: 'Gemini 3.6 Flash' },
-      // Gemini 3.1 Pro
-      { value: 'Gemini 3.1 Pro (Low)',  label: 'Pro · Low',  group: 'Gemini 3.1 Pro' },
-      { value: 'Gemini 3.1 Pro (High)', label: 'Pro · High', group: 'Gemini 3.1 Pro' },
-      // Claude
       { value: 'Claude Sonnet 5.5 (Low)', label: 'Sonnet · Low', group: 'Claude Sonnet 5.5' },
       { value: 'Claude Sonnet 5.5 (Medium)', label: 'Sonnet · Medium', group: 'Claude Sonnet 5.5' },
       { value: 'Claude Sonnet 5.5 (High)', label: 'Sonnet · High', group: 'Claude Sonnet 5.5' },
+      { value: 'claude-sonnet-5-5-max', label: 'Sonnet · Max', group: 'Claude Sonnet 5.5' },
       { value: 'Claude Opus 5.5 (Low)', label: 'Opus · Low', group: 'Claude Opus 5.5' },
       { value: 'Claude Opus 5.5 (Medium)', label: 'Opus · Medium', group: 'Claude Opus 5.5' },
       { value: 'Claude Opus 5.5 (High)', label: 'Opus · High', group: 'Claude Opus 5.5' },
-      // GPT
-      { value: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B · Medium', group: 'GPT' },
+      { value: 'claude-opus-5-5-max', label: 'Opus · Max', group: 'Claude Opus 5.5' },
     ]
   },
   {
     id: 'claude_code', label: 'Claude Code', icon: icon('terminal', 13),
+    // https://code.claude.com/docs/en/model-config (2026-11-19)
     models: [
-      // Sonnet
-      { value: 'sonnet|low',    label: 'Sonnet · Low',    group: 'Sonnet 5' },
-      { value: 'sonnet|medium', label: 'Sonnet · Medium', group: 'Sonnet 5' },
-      { value: 'sonnet|high',   label: 'Sonnet · High',   group: 'Sonnet 5' },
-      { value: 'sonnet|xhigh',  label: 'Sonnet · xHigh',  group: 'Sonnet 5' },
-      { value: 'sonnet|max',    label: 'Sonnet · Max',    group: 'Sonnet 5' },
-      // Fable
-      { value: 'fable|low',    label: 'Fable · Low',    group: 'Fable 5.1' },
-      { value: 'fable|medium', label: 'Fable · Medium', group: 'Fable 5.1' },
-      { value: 'fable|high',   label: 'Fable · High',   group: 'Fable 5.1' },
-      { value: 'fable|xhigh',  label: 'Fable · xHigh',  group: 'Fable 5.1' },
-      { value: 'fable|max',    label: 'Fable · Max',    group: 'Fable 5.1' },
-      // Opus
-      { value: 'opus|low',    label: 'Opus · Low',    group: 'Opus 5.5' },
+      { value: 'sonnet|low', label: 'Sonnet · Low', group: 'Sonnet 5.5' },
+      { value: 'sonnet|medium', label: 'Sonnet · Medium', group: 'Sonnet 5.5' },
+      { value: 'sonnet|high', label: 'Sonnet · High', group: 'Sonnet 5.5' },
+      { value: 'sonnet|xhigh', label: 'Sonnet · xHigh', group: 'Sonnet 5.5' },
+      { value: 'sonnet|max', label: 'Sonnet · Max', group: 'Sonnet 5.5' },
+      { value: 'claude-fable-5-2|low', label: 'Fable · Low', group: 'Fable 5.2' },
+      { value: 'claude-fable-5-2|medium', label: 'Fable · Medium', group: 'Fable 5.2' },
+      { value: 'claude-fable-5-2|high', label: 'Fable · High', group: 'Fable 5.2' },
+      { value: 'claude-fable-5-2|xhigh', label: 'Fable · xHigh', group: 'Fable 5.2' },
+      { value: 'claude-fable-5-2|max', label: 'Fable · Max', group: 'Fable 5.2' },
+      { value: 'opus|low', label: 'Opus · Low', group: 'Opus 5.5' },
       { value: 'opus|medium', label: 'Opus · Medium', group: 'Opus 5.5' },
-      { value: 'opus|high',   label: 'Opus · High',   group: 'Opus 5.5' },
-      { value: 'opus|xhigh',  label: 'Opus · xHigh',  group: 'Opus 5.5' },
-      { value: 'opus|max',    label: 'Opus · Max',    group: 'Opus 5.5' },
-      // Haiku
-      { value: 'haiku', label: 'Haiku', group: 'Haiku 4.5' },
+      { value: 'opus|high', label: 'Opus · High', group: 'Opus 5.5' },
+      { value: 'opus|xhigh', label: 'Opus · xHigh', group: 'Opus 5.5' },
+      { value: 'opus|max', label: 'Opus · Max', group: 'Opus 5.5' },
+      { value: 'claude-haiku-5-5|low', label: 'Haiku · Low', group: 'Haiku 5.5' },
+      { value: 'claude-haiku-5-5|medium', label: 'Haiku · Medium', group: 'Haiku 5.5' },
+      { value: 'claude-haiku-5-5|high', label: 'Haiku · High', group: 'Haiku 5.5' },
+      { value: 'claude-haiku-5-5|xhigh', label: 'Haiku · xHigh', group: 'Haiku 5.5' },
+      { value: 'claude-haiku-5-5|max', label: 'Haiku · Max', group: 'Haiku 5.5' },
     ]
   },
   {
     id: 'codex', label: 'Codex', icon: icon('code', 13),
-    // ChatGPT sign-in availability verified 2026-10-14:
-    // https://learn.chatgpt.com/docs/models (GPT-5.5 retired 2026-10-14)
+    // https://help.openai.com/en/articles/20001275-chatgpt-work-and-codex (2026-11-19)
     models: [
+      { value: 'gpt-6.2-astra|low', label: 'GPT-6.2 Astra · Low', group: 'GPT-6.2 Astra' },
+      { value: 'gpt-6.2-astra|medium', label: 'GPT-6.2 Astra · Medium', group: 'GPT-6.2 Astra' },
+      { value: 'gpt-6.2-astra|high', label: 'GPT-6.2 Astra · High', group: 'GPT-6.2 Astra' },
+      { value: 'gpt-6.2-astra|xhigh', label: 'GPT-6.2 Astra · xHigh', group: 'GPT-6.2 Astra' },
+      { value: 'gpt-6.2-astra|max', label: 'GPT-6.2 Astra · Max', group: 'GPT-6.2 Astra' },
+      { value: 'gpt-6.2-sol|low', label: 'GPT-6.2 Sol · Low', group: 'GPT-6.2 Sol' },
+      { value: 'gpt-6.2-sol|medium', label: 'GPT-6.2 Sol · Medium', group: 'GPT-6.2 Sol' },
+      { value: 'gpt-6.2-sol|high', label: 'GPT-6.2 Sol · High', group: 'GPT-6.2 Sol' },
+      { value: 'gpt-6.2-sol|xhigh', label: 'GPT-6.2 Sol · xHigh', group: 'GPT-6.2 Sol' },
+      { value: 'gpt-6.2-sol|max', label: 'GPT-6.2 Sol · Max', group: 'GPT-6.2 Sol' },
       // GPT-6.1 Terra
       { value: 'gpt-6.1-terra|low',    label: 'Terra · Low',    group: 'GPT-6.1 Terra' },
       { value: 'gpt-6.1-terra|medium', label: 'Terra · Medium', group: 'GPT-6.1 Terra' },
@@ -3612,11 +3628,13 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'openai', label: 'OpenAI', icon: '✦',
-    // Text-generation API models verified 2026-10-14:
+    // Text-generation API models verified 2026-11-21:
     // https://developers.openai.com/api/docs/models
     // https://developers.openai.com/api/docs/deprecations
     // Excludes deprecated o3, GPT-4o and GPT-4o Mini aliases.
     models: [
+      { value: 'gpt-6.2-astra', label: 'GPT-6.2 Astra' },
+      { value: 'gpt-6.2-sol', label: 'GPT-6.2 Sol' },
       { value: 'gpt-6.1-terra', label: 'GPT-6.1 Terra' },
       { value: 'gpt-6.1-sol', label: 'GPT-6.1 Sol' },
       { value: 'gpt-6-astra', label: 'GPT-6 Astra' },
@@ -3632,10 +3650,11 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'claude', label: 'Anthropic Claude', icon: icon('cpu', 13),
-    // https://platform.claude.com/docs/en/models/overview (2026-10-14)
+    // https://platform.claude.com/docs/en/models/overview (2026-11-21)
     // https://platform.claude.com/docs/en/about-claude/model-deprecations
     models: [
       { value: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+      { value: 'claude-fable-5-2', label: 'Claude Fable 5.2' },
       { value: 'claude-fable-5-1', label: 'Claude Fable 5.1' },
       { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
       { value: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' }
@@ -3643,10 +3662,14 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'gemini', label: 'Google Gemini', icon: icon('star', 13),
-    // https://ai.google.dev/gemini-api/docs/models (2026-10-14)
-    // https://ai.google.dev/gemini-api/docs/deprecations
+    // https://aistudio.google.com/docs/models (2026-11-21)
+    // https://aistudio.google.com/docs/deprecations
     // Excludes Gemini 3.1 Flash-Lite (shutdown scheduled for 2027-05-07).
     models: [
+      { value: 'gemini-4-neon', label: 'Gemini 4 Neon' },
+      { value: 'gemini-4-carbon', label: 'Gemini 4 Carbon' },
+      { value: 'gemini-4-argon', label: 'Gemini 4 Argon' },
+      { value: 'gemini-4-hydrogen', label: 'Gemini 4 Hydrogen' },
       { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
       { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
       { value: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },

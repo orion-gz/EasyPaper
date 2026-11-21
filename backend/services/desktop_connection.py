@@ -108,7 +108,7 @@ class RemoteGateway:
                 return
             if (self.manager.offline(self.target) and options.get('offline_ready')
                     and (not scope['path'].startswith('/api/auth/') or scope['path'] == '/api/auth/check')
-                    and not scope['path'].startswith(('/api/lab/', '/api/inference/', '/api/me/'))):
+                    and not scope['path'].startswith(('/api/lab/', '/api/inference/', '/api/me/', '/api/user-data/devices/'))):
                 origin = request.headers.get('origin')
                 if (request.url.hostname != '127.0.0.1'
                         or (origin and origin != str(request.base_url).rstrip('/'))

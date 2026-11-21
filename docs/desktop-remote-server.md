@@ -1,8 +1,10 @@
 # 데스크톱 원격 서버 연결
 
+[랩 모드 설치 및 연결](lab-mode.ko.md) · [SSH 및 추론 서버 연결](ssh-connections.ko.md)
+
 데스크톱 앱의 첫 연결 화면에서 **이 컴퓨터에서 사용** 또는 **원격 서버에 연결**을 선택한다. 기존 설치를 업데이트한 경우에도 한 번 표시된다. 원격 연결에는 브라우저에서 사용하는 EasyPaper 주소(예: `https://paper.example.com`)를 입력하고, 연결 후 서버 계정으로 로그인한다. 하위 경로 배포 주소도 사용할 수 있다.
 
-**설정 → Data → 서버 연결**, 또는 화면 오른쪽 아래 **연결: 로컬 / 원격 서버** 버튼에서 연결을 켜고 끌 수 있다. 서버에 접속할 수 없거나 로그인하지 못한 상태에서도 연결 설정을 열고 로컬 모드로 돌아갈 수 있다. 연결 상태는 앱을 다시 실행해도 유지된다.
+**설정 → 데이터 → 서버 연결**, 또는 화면 오른쪽 아래 **연결: 로컬 / 원격 서버** 버튼에서 연결을 켜고 끌 수 있다. 서버에 접속할 수 없거나 로그인하지 못한 상태에서도 연결 설정을 열고 로컬 모드로 돌아갈 수 있다. 연결 상태는 앱을 다시 실행해도 유지된다.
 
 로컬 라이브러리·계정·AI 설정은 그대로 보관한다. 원격 모드의 문서 조회·편집·삭제·업로드는 연결된 서버에 적용되며, 로컬 모드로 돌아오면 기존 로컬 데이터를 사용한다. 서버별 브라우저 저장 공간과 로그인 세션도 분리된다. 앱 화면과 데스크톱 업데이트는 설치된 앱에서 제공하므로 서버와 앱은 호환되는 EasyPaper API 버전을 사용해야 한다.
 
@@ -70,37 +72,14 @@ npx playwright test --config playwright.webkit.config.js tests/e2e/desktop-conne
 
 이 검증은 OS별 Tauri 설치 패키지 실행, 실제 HTTPS 역방향 프록시 배포, 수 GiB 라이브러리의 성능 측정을 대신하지 않는다. 네트워크 회귀 테스트는 별도 HTTP 서버와 로컬 관리자를 사용하지만 저장소 fixture는 같은 테스트 프로세스에서 계정별로 격리한다.
 
+## 오프라인 문서 작업
 
-## Offline document access
+**설정 → 데이터 → 서버 연결**에서 **문서 다운로드 및 오프라인 사용**을 선택합니다. 기본값은 서버 직접 접속이며, 랩 모드 계정도 오프라인 옵션을 사용할 수 있습니다. 서버와 데스크톱 앱이 모두 `offline-user-data-v2`를 지원해야 합니다.
 
-In Settings → Data → Remote connection, select **Download documents and work offline**.
-The default remains direct server access. This option also works with a Lab account.
-The server and desktop client must both support offline user-data synchronization.
+처음 연결하면 서버와 계정별 라이브러리를 내려받은 뒤 앱을 다시 불러옵니다. 문서 원본 업로드·삭제 및 서지 정보 수정은 서버에서 처리합니다. 오프라인에서 수정한 읽기 위치와 최근 읽기 정보, 채팅과 첨부 파일, 메모, 주석, 폴더, 읽기 기록은 양방향으로 동기화됩니다. 변경되지 않은 문서 원본은 다시 내려받지 않습니다. 최초 다운로드에는 페이지와 이미지 추출 결과도 포함되므로 처음 준비할 때는 서버 파서가 필요하고, 다운로드한 문서를 다시 열 때는 해당 파서가 없어도 됩니다.
 
-The initial connection downloads a separate library for the server and account, then
-reloads the application. Documents are managed on the server; offline mode prevents
-original upload, deletion, and bibliographic metadata changes. Reading position
-and recent reading metadata remain editable and synchronize in both directions. Chats, chat attachments, notes,
-annotations, folders, and reading records are merged in both directions. Unchanged
-document files are omitted from subsequent downloads. The initial download also
-includes portable page and image extraction results, so clients do not need the
-server’s Marker/MinerU installation to reopen downloaded documents. Initial
-preparation requires the server parser to be available. Unchanged document files,
-extraction caches, and open sessions are preserved during user-data updates.
+앱이 열려 있고 화면에 표시되는 동안 30초마다, 그리고 연결이 복구될 때 동기화를 재시도합니다. 오프라인에서 수정한 내용은 연결이 끊기거나 앱을 재시작해도 보관됩니다. 충돌이 생기면 자동 동기화가 중단되고 충돌 패널이 표시됩니다. 어느 쪽의 사용자 데이터를 기준으로 대체할지 선택하고 미리보기를 확인한 뒤 적용합니다. 오프라인 모드에서 이 대체 작업은 사용자 데이터에만 적용됩니다.
 
-While the app is open and visible, synchronization retries every 30 seconds and
-on a browser online event. Local edits survive connection loss and application
-restart. Conflicting edits stop automatic synchronization and show the existing
-conflict panel; they are never silently overwritten. Select the local or server
-replacement policy, inspect the preview, and explicitly confirm to resolve a
-conflict. In offline mode replacement affects user data, not document originals. Server login and Lab management
-require connectivity; AI requests still require their configured provider.
+서버 로그인과 랩 모드 관리는 온라인 상태에서 할 수 있습니다. AI 요청을 보내려면 설정한 제공자에 연결할 수 있어야 합니다. 오프라인 옵션을 끄면 서버 직접 접속으로 돌아가며 다운로드한 라이브러리는 일반 로컬 라이브러리와 별도로 보관됩니다. 계정을 바꾸거나 서버 직접 접속으로 돌아가기 전에 로컬 변경 사항을 동기화합니다.
 
-Turning this option off restores direct server access. The downloaded library is
-retained separately from the normal local library. Finish synchronizing local edits
-before changing accounts or returning to server access.
-
-Logging out locks the offline library immediately, including while disconnected.
-The lock survives application restart. Unlocking requires signing in online as
-the same server account; a different account cannot open the previous cache.
-Both client and server must support the `offline-user-data-v2` capability.
+로그아웃하면 오프라인 상태에서도 해당 라이브러리가 즉시 잠깁니다. 잠금은 앱을 다시 실행해도 유지되며, 같은 서버 계정으로 온라인 로그인하면 해제됩니다.

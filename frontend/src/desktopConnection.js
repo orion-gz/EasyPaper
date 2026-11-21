@@ -25,6 +25,7 @@ export async function connectionRequest(path, options = {}) {
   return data
 }
 
+export function desktopServerUrl() { return connection?.server_url || '' }
 export function isRemoteDesktop() { return !!connection?.remote }
 export function setBeforeServerDownload(callback) { beforeDownload = callback }
 
@@ -356,12 +357,16 @@ async function startSync() {
   }
 }
 
-async function openSettings() {
+export async function openSettings({ remoteSetup = false } = {}) {
   if (!dialog) makeDialog()
   dialog.showModal()
   try {
     connection = await connectionRequest('connection')
     populate()
+    if (remoteSetup) {
+      dialog.querySelector('[value=remote]').click()
+      dialog.querySelector('[data-url]').focus()
+    }
     await pollDownload()
   } catch (error) { status(error.message) }
 }
@@ -416,7 +421,7 @@ export async function prepareDesktopConnection() {
     panel.showModal()
     return false
   }
-  if (!connection.onboarded || connection.error) {
+  if (connection.error) {
     makeDialog(true)
     populate()
     dialog.showModal()
@@ -452,7 +457,42 @@ export async function prepareDesktopConnection() {
     if (connection.remote) await prepareSync()
   })
   section.append(button, syncButton, help)
-  startDeviceHeartbeat()
+  if (connection.remote) {
+    const card = document.createElement('section')
+    card.className = 'desktop-connection-section settings-action-card'
+    const title = document.createElement('h3')
+    const address = document.createElement('p')
+    address.textContent = connection.server_url
+    const summary = document.createElement('p')
+    summary.setAttribute('role', 'status')
+    card.append(title, address, summary)
+    const jobLabels = {
+      idle: () => t('desktop:jobs.idle'),
+      uploading: () => t('desktop:jobs.uploading'),
+      downloading: () => t('desktop:jobs.downloading'),
+      importing: () => t('desktop:jobs.importing'),
+      completed: () => t('desktop:jobs.completed'),
+      conflict: () => t('desktop:jobs.conflict'),
+      failed: () => t('desktop:jobs.failed'),
+    }
+    let link = 'checking'
+    let job = 'unknown'
+    const render = () => {
+      title.textContent = t('desktop:remoteStatus')
+      summary.textContent = t('desktop:statusSummary', {
+        link: link === 'online' ? t('desktop:online') : link === 'unverified' ? t('desktop:unverified') : t('desktop:checking'),
+        job: jobLabels[job]?.() || t('desktop:jobs.unknown'),
+      })
+    }
+    render()
+    document.addEventListener('easypaper:locale-changed', render)
+    startDeviceHeartbeat((state, transfer) => {
+      link = state
+      job = transfer || 'unknown'
+      render()
+    })
+    document.querySelector('#tab-data-system .modal-form')?.prepend(card)
+  }
   document.querySelector('#tab-data-system .modal-form')?.prepend(section)
   makeDialog()
   populate()
@@ -484,7 +524,7 @@ async function deviceRequest(path = '', options = {}) {
   return data
 }
 
-function startDeviceHeartbeat() {
+function startDeviceHeartbeat(update) {
   let acknowledged = false
   let deviceId = localStorage.getItem('easypaper-device-id')
   if (!deviceId) {
@@ -492,13 +532,15 @@ function startDeviceHeartbeat() {
     localStorage.setItem('easypaper-device-id', deviceId)
   }
   const tick = async () => {
+    let job
     try {
       if (!connection.remote) return
-      const job = await connectionRequest('download')
+      job = await connectionRequest('download')
       const result = await deviceRequest('/' + deviceId, { method: 'PUT', body: JSON.stringify({
         name: navigator.platform || 'Desktop', status: job.status,
         action: connection.sync?.action, automatic: connection.sync?.automatic, acknowledged,
       }) })
+      update('online', job.status)
       acknowledged = false
       if (result.requested && !busy && !syncPreview && !dialog?.open && connection.sync?.action === 'merge') {
         // Remote requests open the existing preview; confirmation remains local.
@@ -506,7 +548,7 @@ function startDeviceHeartbeat() {
         await prepareSync()
         acknowledged = true
       }
-    } catch { /* Retry after login or connectivity recovers. */ }
+    } catch { update('unverified', job?.status) }
     finally { setTimeout(tick, 15000) }
   }
   tick()

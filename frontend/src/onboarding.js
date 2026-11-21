@@ -1,432 +1,354 @@
-import { CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY, WORKSPACE_PURPOSE_SELECTED_KEY } from "./documentModes.js"
-// 첫 실행 시 AI 엔진 자동 감지 / 설치 안내 온보딩 모달
-// main.js에서 분리됨 - DOM 참조 및 로직은 이 파일 안에서만 쓰인다.
-import {
-  getSystemSettingsAPI, fetchCliAvailability, getOllamaStatusAPI, saveSystemSettingsAPI,
+import { CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY, WORKSPACE_PURPOSE_SELECTED_KEY } from './documentModes.js'
+import { getLocale, t } from './i18n.js'
+import { desktopServerUrl, isRemoteDesktop, openSettings } from './desktopConnection.js'
+import { getSystemSettingsAPI, fetchCliAvailability, getOllamaStatusAPI,
   streamInstallOllamaAPI, streamInstallClaudeCodeAPI, streamInstallCodexAPI, streamInstallAntigravityAPI,
-  streamPullModelAPI,
-} from './api.js'
-export function createOnboarding({
-  openOverlayModal, closeOverlayModal, showToast, escapeHtml, providerConfig,
-  viewerTransPicker, settingDefaultAiPicker, settingTransPicker,
-  chatSidebarPicker, settingChatPicker, settingAnalysisPicker, settingLibraryPicker,
-  onWorkspaceSelected,
-}) {
-  const $ = (id) => document.getElementById(id)
+  streamPullModelAPI, patchWorkspaceSettingsAPI } from './api.js'
+import './styles/onboarding-guide.css'
 
-  const onboardingModal        = $('onboarding-modal')
-  const onboardingPurpose      = $("onboarding-purpose")
-  const onboardingPurposeNext = $("onboarding-purpose-next-btn")
-  const onboardingCloseBtn     = $('onboarding-close-btn')
-  const onboardingSkipBtn      = $('onboarding-skip-btn')
-  const onboardingDetecting    = $('onboarding-detecting')
-  const onboardingDetected     = $('onboarding-detected')
-  const onboardingDetectedList = $('onboarding-detected-list')
-  const onboardingNextBtn      = $('onboarding-next-btn')
-  const onboardingModelSelect  = $('onboarding-model-select')
-  const onboardingBackBtn      = $('onboarding-back-btn')
-  const onboardingModelSelectProvider = $('onboarding-model-select-provider')
-  const onboardingModelList    = $('onboarding-model-list')
-  const onboardingModelPullSection    = $('onboarding-model-pull-section')
-  const onboardingConfirmBtn   = $('onboarding-confirm-btn')
-  const onboardingInstall      = $('onboarding-install')
-  const onboardingInstallIntro = $('onboarding-install-intro')
-  const onboardingInstallOllamaBtn     = $('onboarding-install-ollama-btn')
-  const onboardingInstallClaudeCodeBtn = $('onboarding-install-claude-code-btn')
-  const onboardingInstallCodexBtn      = $('onboarding-install-codex-btn')
-  const onboardingInstallAntigravityBtn = $('onboarding-install-antigravity-btn')
-  const onboardingInstallProgressArea  = $('onboarding-install-progress-area')
-  const onboardingInstallStatus        = $('onboarding-install-status')
-  const onboardingInstallLog           = $('onboarding-install-log')
-  const onboardingPullProgressArea     = $('onboarding-pull-progress-area')
-  const onboardingPullStatusText       = $('onboarding-pull-status-text')
-  const onboardingPullPctText          = $('onboarding-pull-pct-text')
-  const onboardingPullProgressBar      = $('onboarding-pull-progress-bar')
+const installers = { ollama: streamInstallOllamaAPI, claude_code: streamInstallClaudeCodeAPI,
+  codex: streamInstallCodexAPI, antigravity: streamInstallAntigravityAPI }
+const names = { ollama: 'Ollama', vllm: 'vLLM', claude_code: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity' }
+const commands = { claude_code: 'claude auth login', codex: 'codex login', antigravity: 'agy' }
+const messages = {
+  location: () => t('onboarding:location'),
+  local: () => t('onboarding:local'),
+  localHelp: () => t('onboarding:localHelp'),
+  remote: () => t('onboarding:remote'),
+  remoteHelp: () => t('onboarding:remoteHelp'),
+  team: () => t('onboarding:team'),
+  teamHelp: () => t('onboarding:teamHelp'),
+  tools: () => t('onboarding:tools'),
+  installed: () => t('onboarding:installed'),
+  install: () => t('onboarding:install'),
+  installing: () => t('onboarding:installing'),
+  start: () => t('onboarding:start'),
+  gpu: () => t('onboarding:gpu'),
+  endpoint: () => t('onboarding:endpoint'),
+  url: () => t('onboarding:url'),
+  key: () => t('onboarding:key'),
+  check: () => t('onboarding:check'),
+  model: () => t('onboarding:model'),
+  empty: () => t('onboarding:empty'),
+  download: () => t('onboarding:download'),
+  sample: () => t('onboarding:sample'),
+  save: () => t('onboarding:save'),
+  ready: () => t('onboarding:ready'),
+  open: () => t('onboarding:open'),
+  login: () => t('onboarding:login'),
+  working: () => t('onboarding:working'),
+  teamUrl: () => t('onboarding:teamUrl'),
+  invalid: () => t('onboarding:invalid'),
+  localOllama: () => t('onboarding:localOllama'),
+  cliHelp: () => t('onboarding:cliHelp'),
+  service: () => t('onboarding:service'),
+  retry: () => t('onboarding:retry'),
+}
+const label = key => messages[key]()
 
-  const ONBOARDING_SEEN_KEY = 'easypaper_onboarding_seen'
-
-  function maybeShowOnboarding() {
-    if (!onboardingModal) return
-    openOnboarding()
-  }
-
-  // 감지 결과와 마법사 진행 상태(감지됨 선택 → 모델 선택 → 확인)를 함께 보관
-  const onboardingState = {
-    sys: null, cli: null, ollamaStatus: null,
-    detected: [], selectedDetectedIdx: null,
-    currentEntry: null, selectedModel: null, selectedPurpose: null,
-    step: 'purpose',
-  }
-
-  // 온보딩 4단계(감지 중 / 감지됨 선택 / 모델 선택 / 설치 안내) 중 하나로 전환.
-  // 감지됨·설치 섹션은 "모델 선택" 단계에서는 별도 화면처럼 숨겨 선택에 집중하게 함
-  function showOnboardingStep(step) {
-    onboardingState.step = step
-    if (onboardingPurpose) onboardingPurpose.classList.toggle("hidden", step !== "purpose")
-    onboardingDetecting.classList.toggle('hidden', step !== 'detecting')
-    onboardingDetected.classList.toggle('hidden', !(step === 'detected' && onboardingState.detected.length > 0))
-    if (onboardingModelSelect) onboardingModelSelect.classList.toggle('hidden', step !== 'model-select')
-    onboardingInstall.classList.toggle('hidden', step === 'purpose' || step === 'detecting' || step === 'model-select')
-  }
-
-  function openOnboarding() {
-    openOverlayModal(onboardingModal)
-    if (!localStorage.getItem(WORKSPACE_PURPOSE_SELECTED_KEY)) {
-      showOnboardingStep("purpose")
-    } else {
-      showOnboardingStep("detecting")
-      detectAndRenderOnboarding()
-    }
-  }
-
-  function closeOnboarding() {
-    closeOverlayModal(onboardingModal)
-    localStorage.setItem(ONBOARDING_SEEN_KEY, '1')
-  }
-
-  if (onboardingCloseBtn) onboardingCloseBtn.addEventListener('click', closeOnboarding)
-  if (onboardingSkipBtn) onboardingSkipBtn.addEventListener('click', closeOnboarding)
-  document.querySelectorAll("[data-purpose-mode]").forEach(button => {
-    button.addEventListener("click", () => {
-      onboardingState.selectedPurpose = button.dataset.purposeMode
-      document.querySelectorAll("[data-purpose-mode]").forEach(item => {
-        const selected = item === button
-        item.setAttribute("aria-checked", String(selected))
-      })
-      if (onboardingPurposeNext) onboardingPurposeNext.disabled = false
-    })
+async function request(path, body, method = 'POST') {
+  const response = await fetch('/api/' + path, body === undefined ? { cache: 'no-store' } : {
+    method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })
-  onboardingPurposeNext?.addEventListener("click", async () => {
-    if (!onboardingState.selectedPurpose) return
-    onboardingPurposeNext.disabled = true
-    try {
-      await onWorkspaceSelected?.(onboardingState.selectedPurpose)
-      localStorage.setItem(ONBOARDING_VERSION_KEY, String(CURRENT_ONBOARDING_VERSION))
-      localStorage.setItem(WORKSPACE_PURPOSE_SELECTED_KEY, '1')
-      showOnboardingStep("detecting")
-      detectAndRenderOnboarding()
-    } catch (error) {
-      onboardingPurposeNext.disabled = false
-      showToast(`워크스페이스 설정 저장 실패: ${error.message}`, "error")
-    }
-  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : response.statusText)
+  return data
+}
 
-  if (onboardingModal) {
-    onboardingModal.addEventListener('click', (e) => {
-      if (e.target === onboardingModal) closeOnboarding()
-    })
+export function createOnboarding({ openOverlayModal, closeOverlayModal, providerConfig,
+  viewerTransPicker, settingTransPicker, onWorkspaceSelected }) {
+  const $ = id => document.getElementById(id)
+  const modal = $('onboarding-modal'), guide = $('onboarding-guide'), purpose = $('onboarding-purpose')
+  const fields = $('onboarding-fields'), feedback = $('onboarding-feedback'), action = $('onboarding-action')
+  const back = $('onboarding-back-btn'), details = $('onboarding-details')
+  let step = '', selectedPurpose, provider = 'ollama', remoteEngine = 'ollama'
+  let sys, available = {}, remoteModels = [], server, savedId, model, verified, busy = false
+  let address = '', key = '', teamUrl = '', gpuModel = '', gpuModels = [], history = []
+
+  function close() {
+    localStorage.setItem('easypaper_onboarding_seen', '1')
+    localStorage.setItem(ONBOARDING_VERSION_KEY, String(CURRENT_ONBOARDING_VERSION))
+    patchWorkspaceSettingsAPI({ onboarding_version: CURRENT_ONBOARDING_VERSION }).catch(console.warn)
+    closeOverlayModal(modal)
   }
-
-  // 설치 버튼 하나를 "설치 가능" 또는 "✓ 설치됨" 상태로 표시.
-  // 방금 설치 액션이 성공해 이미 "설치됨" 표시 중인 버튼은, 재감지 결과가 아직 그 사실을
-  // 못 따라잡았더라도(예: Ollama 모델 감지 전) 되돌리지 않는다.
-  function setOnboardingRowInstalledState(btn, isInstalled) {
-    if (!btn) return
-    if (isInstalled) {
-      btn.disabled = true
-      btn.textContent = '✓ 설치됨'
-      btn.classList.add('onboarding-install-done')
-    } else if (!btn.classList.contains('onboarding-install-done')) {
-      btn.disabled = false
-      btn.textContent = '설치'
-    }
+  function node(tag, text) {
+    const el = document.createElement(tag)
+    if (text) el.textContent = text
+    return el
   }
-
-  async function detectAndRenderOnboarding() {
-    let sys, cli, ollamaStatus
-    try {
-      [sys, cli, ollamaStatus] = await Promise.all([
-        getSystemSettingsAPI(),
-        fetchCliAvailability().catch(() => ({ antigravity: false, claude_code: false, codex: false })),
-        getOllamaStatusAPI().catch(() => ({ installed: false })),
-      ])
-    } catch (err) {
-      console.warn('온보딩 감지 실패:', err)
-      closeOnboarding()
-      return
-    }
-
-    onboardingState.sys = sys
-    onboardingState.cli = cli
-    onboardingState.ollamaStatus = ollamaStatus
-
-    const detected = []
-    // Ollama는 바이너리만 설치되어 있어도(아직 모델이 없어도) 감지 목록에 넣어,
-    // "다음" 버튼으로 이어지는 모델 선택 단계에서 바로 모델을 받게 함
-    if (ollamaStatus.installed) {
-      const models = sys.available_models || []
-      detected.push({
-        provider: 'ollama',
-        label: 'Ollama (로컬)',
-        sub: models.length > 0 ? `${models[0]}${models.length > 1 ? ` 외 ${models.length - 1}개` : ''}` : '설치됨 · 모델 다운로드 필요',
-      })
-    }
-    if (cli.claude_code) {
-      detected.push({ provider: 'claude_code', label: 'Claude Code', sub: 'CLI 감지됨' })
-    }
-    if (cli.codex) {
-      detected.push({ provider: 'codex', label: 'Codex', sub: 'CLI 감지됨' })
-    }
-    if (cli.antigravity) {
-      detected.push({ provider: 'antigravity', label: 'Antigravity', sub: 'CLI 감지됨' })
-    }
-    if (sys.api_keys?.openai?.configured) {
-      detected.push({ provider: 'openai', label: 'OpenAI', sub: 'API 키 설정됨' })
-    }
-    if (sys.api_keys?.gemini?.configured) {
-      detected.push({ provider: 'gemini', label: 'Gemini', sub: 'API 키 설정됨' })
-    }
-    if (sys.api_keys?.claude?.configured) {
-      detected.push({ provider: 'claude', label: 'Anthropic Claude', sub: 'API 키 설정됨' })
-    }
-    onboardingState.detected = detected
-    onboardingState.selectedDetectedIdx = null
-    if (onboardingNextBtn) onboardingNextBtn.disabled = true
-
-    // 1. 감지된 엔진은 바로 저장하지 않고, 선택 → "다음"으로 모델 선택 단계로 이동
-    if (detected.length > 0) {
-      onboardingDetectedList.innerHTML = detected.map((d, i) => `
-        <button type="button" class="onboarding-detected-btn" data-idx="${i}">
-          <span>${escapeHtml(d.label)}</span>
-          <span class="onboarding-detected-sub">${escapeHtml(d.sub)}</span>
-        </button>
-      `).join('')
-      onboardingDetectedList.querySelectorAll('.onboarding-detected-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          onboardingDetectedList.querySelectorAll('.onboarding-detected-btn').forEach(b => b.classList.remove('selected'))
-          btn.classList.add('selected')
-          onboardingState.selectedDetectedIdx = Number(btn.dataset.idx)
-          if (onboardingNextBtn) onboardingNextBtn.disabled = false
-        })
-      })
-    }
-
-    // 2. 설치 목록에서는 이미 감지된 엔진의 행을 제거 - Ollama가 감지됐어도
-    //    Claude Code 등 다른 CLI는 여전히 추가로 설치할 수 있어야 함
-    if (onboardingInstallIntro) {
-      onboardingInstallIntro.textContent = detected.length > 0
-        ? '추가로 설치할 수 있는 AI 엔진입니다.'
-        : '사용 가능한 AI 엔진이 감지되지 않았습니다. 아래에서 하나를 설치해주세요.'
-    }
-    const detectedProviders = new Set(detected.map(d => d.provider))
-    onboardingInstall.querySelectorAll('.onboarding-install-row').forEach((row) => {
-      row.classList.toggle('hidden', detectedProviders.has(row.dataset.provider))
-    })
-    setOnboardingRowInstalledState(onboardingInstallOllamaBtn, !!ollamaStatus.installed)
-    setOnboardingRowInstalledState(onboardingInstallClaudeCodeBtn, !!cli.claude_code)
-    setOnboardingRowInstalledState(onboardingInstallCodexBtn, !!cli.codex)
-    setOnboardingRowInstalledState(onboardingInstallAntigravityBtn, !!cli.antigravity)
-
-    showOnboardingStep('detected')
+  function setAction(key, callback) {
+    action.hidden = !callback
+    action.textContent = key ? label(key) : ''
+    action.onclick = callback ? () => run(callback) : null
   }
-
-  // 새로 선택 가능해진 엔진 목록으로 시선을 유도 (스크롤 + 잠깐 테두리 강조)
-  function highlightOnboardingDetected() {
-    if (!onboardingDetected || onboardingDetected.classList.contains('hidden')) return
-    onboardingDetected.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    onboardingDetected.classList.add('onboarding-attention-pulse')
-    setTimeout(() => onboardingDetected.classList.remove('onboarding-attention-pulse'), 1600)
-  }
-
-  // "다음" 팝업: 선택한 프로바이더에서 사용할 모델을 고르는 단계.
-  // Ollama는 이미 받아둔 모델 목록 + 새 모델 다운로드 섹션을, 나머지 CLI/API 프로바이더는
-  // providerConfig에 정의된 모델 목록을 보여준다.
-  function renderModelSelectStep(entry) {
-    onboardingState.currentEntry = entry
-    onboardingState.selectedModel = null
-    if (onboardingConfirmBtn) onboardingConfirmBtn.disabled = true
-    if (onboardingModelSelectProvider) onboardingModelSelectProvider.textContent = entry.label
-
-    let models = []
-    if (entry.provider === 'ollama') {
-      models = (onboardingState.sys?.available_models || []).map(m => ({ value: m, label: m }))
-    } else {
-      const cfg = providerConfig.find(p => p.id === entry.provider)
-      models = cfg ? cfg.models : []
+  async function run(callback) {
+    if (busy) return
+    busy = true
+    fields.inert = true
+    action.disabled = back.disabled = true
+    feedback.textContent = label('working')
+    try { await callback() } catch (error) {
+      if (step === 'purpose') $('onboarding-purpose-error').textContent = error.message
+      else feedback.textContent = error.message
     }
-
-    if (onboardingModelList) {
-      if (models.length === 0) {
-        onboardingModelList.innerHTML = `<div style="font-size: 12.5px; color: var(--text-secondary); padding: 10px 2px; line-height: 1.6;">아직 다운로드된 모델이 없습니다. 아래에서 모델을 다운로드해주세요.</div>`
-      } else {
-        let lastGroup = null
-        onboardingModelList.innerHTML = models.map((m, i) => {
-          let groupHtml = ''
-          if (m.group && m.group !== lastGroup) {
-            lastGroup = m.group
-            groupHtml = `<div style="font-size: 11px; font-weight: 700; color: var(--text-tertiary); margin: ${i === 0 ? '0' : '10px'} 0 2px 2px;">${escapeHtml(m.group)}</div>`
-          }
-          return `${groupHtml}<button type="button" class="onboarding-detected-btn onboarding-model-btn" data-value="${escapeHtml(m.value)}"><span>${escapeHtml(m.label)}</span></button>`
-        }).join('')
-      }
-      onboardingModelList.querySelectorAll('.onboarding-model-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          onboardingModelList.querySelectorAll('.onboarding-model-btn').forEach(b => b.classList.remove('selected'))
-          btn.classList.add('selected')
-          onboardingState.selectedModel = btn.dataset.value
-          if (onboardingConfirmBtn) onboardingConfirmBtn.disabled = false
-        })
-      })
-      const firstBtn = onboardingModelList.querySelector('.onboarding-model-btn')
-      if (firstBtn) firstBtn.click()
-    }
-
-    if (onboardingModelPullSection) {
-      onboardingModelPullSection.classList.toggle('hidden', entry.provider !== 'ollama')
-    }
+    finally { busy = fields.inert = action.disabled = back.disabled = false }
   }
-
-  if (onboardingNextBtn) {
-    onboardingNextBtn.addEventListener('click', () => {
-      if (onboardingState.selectedDetectedIdx === null) return
-      const entry = onboardingState.detected[onboardingState.selectedDetectedIdx]
-      if (!entry) return
-      renderModelSelectStep(entry)
-      showOnboardingStep('model-select')
-    })
+  function card(title, help, callback) {
+    const button = node('button')
+    button.type = 'button'
+    button.className = 'onboarding-card'
+    button.append(node('strong', title))
+    if (help) button.append(node('small', help))
+    button.onclick = () => run(callback)
+    fields.append(button)
   }
-
-  if (onboardingBackBtn) {
-    onboardingBackBtn.addEventListener('click', () => {
-      showOnboardingStep('detected')
-    })
+  function input(title, type, value, change) {
+    const wrapper = node('label', label(title)), el = node('input')
+    el.className = 'form-input'
+    el.type = type
+    el.value = value
+    el.oninput = () => change(el.value)
+    wrapper.append(el)
+    fields.append(wrapper)
+    return el
   }
-
-  if (onboardingConfirmBtn) {
-    onboardingConfirmBtn.addEventListener('click', async () => {
-      const entry = onboardingState.currentEntry
-      const model = onboardingState.selectedModel
-      if (!entry || !model) return
-      const sys = onboardingState.sys
-      onboardingConfirmBtn.disabled = true
-      try {
-        await saveSystemSettingsAPI({
-          ollama_host: sys.ollama_host,
-          default_ai_provider: entry.provider,
-          default_ai_model: model,
-          trans_provider: entry.provider,
-          trans_model: model,
-          chat_provider: entry.provider,
-          chat_model: model,
-          analysis_provider: entry.provider,
-          analysis_model: model,
-          library_provider: entry.provider,
-          library_model: model,
-          openai_api_key: '',
-          gemini_api_key: '',
-          claude_api_key: '',
-        })
-        // sync compact pickers so the viewer/chat UI reflects the newly selected engine immediately
-        viewerTransPicker.setValue(entry.provider, model)
-        settingDefaultAiPicker.setValue(entry.provider, model)
-        settingTransPicker.setValue(entry.provider, model)
-        chatSidebarPicker.setValue(entry.provider, model)
-        settingChatPicker.setValue(entry.provider, model)
-        settingAnalysisPicker.setValue(entry.provider, model)
-        settingLibraryPicker.setValue(entry.provider, model)
-        showToast(`${entry.label}을(를) 기본 AI 엔진으로 설정했습니다.`, 'success')
-        closeOnboarding()
-      } catch (err) {
-        showToast(err.message || '설정 저장 실패', 'error')
-        onboardingConfirmBtn.disabled = false
-      }
-    })
+  function select(title, values, current, change) {
+    const wrapper = node('label', title), el = node('select')
+    el.className = 'form-select'
+    for (const [value, name] of values) el.add(new Option(name, value))
+    if (values.some(([value]) => value === current)) el.value = current
+    change(el.value)
+    el.onchange = () => change(el.value)
+    wrapper.append(el)
+    fields.append(wrapper)
   }
-
-  function wireOnboardingInstallBtn(btn, streamFn, label) {
-    if (!btn) return
-    const originalText = btn.textContent
-    btn.addEventListener('click', () => {
-      btn.disabled = true
-      btn.textContent = '설치 중...'
-      btn.classList.remove('onboarding-install-done')
-      onboardingInstallProgressArea.classList.remove('hidden')
-      onboardingInstallStatus.textContent = `${label} 설치 진행 중...`
-      onboardingInstallLog.textContent = ''
-
-      streamFn(
-        (data) => {
-          if (data.line) {
-            onboardingInstallLog.textContent += data.line + '\n'
-            onboardingInstallLog.scrollTop = onboardingInstallLog.scrollHeight
-          }
-        },
-        async () => {
-          // 버튼에 "설치됨" 상태를 영구적으로 남겨 완료 여부를 눈으로 바로 확인할 수 있게 함
-          // (예전에는 원래 텍스트로 바로 되돌려버려서 설치가 끝나도 아무 표시가 남지 않았음)
-          btn.textContent = '✓ 설치됨'
-          btn.classList.add('onboarding-install-done')
-          onboardingInstallStatus.textContent = label === 'Ollama'
-            ? 'Ollama 설치 완료! 위 목록에서 Ollama를 선택하고 "다음"을 눌러 모델을 다운로드해주세요.'
-            : `${label} 설치 완료! 터미널에서 로그인을 마치면 위에서 바로 선택할 수 있습니다.`
-          showToast(`${label} 설치가 완료되었습니다! 다음 단계를 확인해주세요.`, 'success')
-          // 방금 완료된 상태를 잠깐 보여준 뒤, 새로 감지된 엔진 선택 화면으로 시선을 유도
-          await new Promise(resolve => setTimeout(resolve, 900))
-          await detectAndRenderOnboarding()
-          highlightOnboardingDetected()
-        },
-        (err) => {
-          showToast(`${label} 설치 실패: ${err.message}`, 'error')
-          onboardingInstallStatus.textContent = err.message
-          btn.disabled = false
-          btn.textContent = originalText
+  function go(next) {
+    history.push(step)
+    render(next)
+  }
+  function showLog(line) {
+    details.hidden = false
+    details.querySelector('pre').textContent = line
+  }
+  function stream(start) {
+    return new Promise((resolve, reject) => {
+      let lines = []
+      start(data => {
+        if (data.line) {
+          lines.push(data.line)
+          lines = lines.slice(-40)
+          showLog(lines.join('\n'))
         }
-      )
+        feedback.textContent = data.total ? Math.round(100 * (data.completed || 0) / data.total) + '%' : data.status || label('installing')
+      }, resolve, reject)
     })
   }
-
-  wireOnboardingInstallBtn(onboardingInstallOllamaBtn, streamInstallOllamaAPI, 'Ollama')
-  wireOnboardingInstallBtn(onboardingInstallClaudeCodeBtn, streamInstallClaudeCodeAPI, 'Claude Code CLI')
-  wireOnboardingInstallBtn(onboardingInstallCodexBtn, streamInstallCodexAPI, 'Codex CLI')
-  wireOnboardingInstallBtn(onboardingInstallAntigravityBtn, streamInstallAntigravityAPI, 'Antigravity CLI')
-
-  // Ollama "다음 단계" 추천 모델 원클릭 다운로드
-  document.querySelectorAll('.onboarding-pull-model-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const modelName = btn.dataset.model
-      document.querySelectorAll('.onboarding-pull-model-btn').forEach(b => { b.disabled = true })
-      onboardingPullProgressArea.classList.remove('hidden')
-      onboardingPullStatusText.textContent = '다운로드 준비 중...'
-      onboardingPullPctText.textContent = '0%'
-      onboardingPullProgressBar.style.width = '0%'
-      showToast(`${modelName} 모델 다운로드를 시작합니다. 시간이 걸릴 수 있습니다.`, 'info')
-
-      streamPullModelAPI(
-        modelName,
-        (data) => {
-          if (data.status) onboardingPullStatusText.textContent = data.status
-          if (data.total && data.completed) {
-            const pct = Math.round((data.completed / data.total) * 100) || 0
-            onboardingPullProgressBar.style.width = `${pct}%`
-            onboardingPullPctText.textContent = `${pct}%`
-          }
-        },
-        async () => {
-          showToast(`${modelName} 모델 다운로드가 완료되었습니다!`, 'success')
-          document.querySelectorAll('.onboarding-pull-model-btn').forEach(b => { b.disabled = false })
-          onboardingPullProgressArea.classList.add('hidden')
-          const wasModelSelect = onboardingState.step === 'model-select'
-          await detectAndRenderOnboarding()
-          // 모델 선택 화면에서 다운로드한 경우, 감지됨 목록으로 돌아가지 않고
-          // 그 자리에서 방금 받은 모델이 바로 보이도록 모델 선택 화면을 유지/갱신
-          if (wasModelSelect) {
-            const entry = onboardingState.detected.find(d => d.provider === 'ollama')
-            if (entry) {
-              renderModelSelectStep(entry)
-              showOnboardingStep('model-select')
-            }
-          } else {
-            highlightOnboardingDetected()
-          }
-        },
-        (err) => {
-          showToast(`${modelName} 모델 다운로드 실패: ${err.message}`, 'error')
-          document.querySelectorAll('.onboarding-pull-model-btn').forEach(b => { b.disabled = false })
-          onboardingPullStatusText.textContent = err.message
-        }
-      )
+  async function detect() {
+    const [settings, cli, ollama] = await Promise.all([getSystemSettingsAPI(), fetchCliAvailability(), getOllamaStatusAPI()])
+    sys = settings
+    available = { ...cli, ollama: ollama.installed, running: ollama.running }
+  }
+  async function chooseTool(id) {
+    provider = id
+    server = savedId = model = null
+    if (id === 'vllm') {
+      const job = await request('settings/vllm')
+      gpuModels = job.models
+      gpuModel = job.model || gpuModels[0]
+      go('gpu')
+      if (['starting', 'installing', 'ready'].includes(job.status)) await watchGpu(job)
+    } else if (available[id] || !installers[id]) await prepareModels()
+    else go('install')
+  }
+  async function prepareModels() {
+    if (provider === 'ollama') {
+      if (!available.running) {
+        go('service')
+        return
+      }
+    }
+    if (['claude_code', 'codex'].includes(provider)) {
+      const auth = await request('settings/cli-login/' + provider)
+      if (!auth.connected) { go('login'); return }
+    }
+    go('model')
+  }
+  async function watchGpu(job) {
+    while (['installing', 'starting'].includes(job.status)) {
+      feedback.textContent = label('installing')
+      showLog(job.log.join('\n'))
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      job = await request('settings/vllm')
+    }
+    if (job.status !== 'ready') {
+      card('Ollama', label('localOllama'), () => chooseTool('ollama'))
+      card(label('remote'), label('remoteHelp'), () => go('endpoint'))
+      throw new Error(job.log.at(-1) || job.status)
+    }
+    await discover('vllm', job.url, '')
+  }
+  async function discover(engine, url, apiKey) {
+    const target = { name: new URL(url).host, engine, url, credentials: { api_key: apiKey },
+      save_credentials: false, lab_shared: false }
+    const result = await request('settings/discover-models', target)
+    if (!result.models.length) throw new Error(label('empty'))
+    target.save_credentials = Boolean(apiKey && result.credential_storage)
+    server = target
+    savedId = null
+    provider = engine === 'vllm' ? 'openai' : 'ollama'
+    remoteModels = result.models
+    model = remoteModels.includes(model) ? model : remoteModels[0]
+    go('model')
+  }
+  async function preview() {
+    const result = await request('settings/translation-preview', {
+      provider, model, server, target_lang: getLocale(),
     })
+    verified = result.translation
+    render('model')
+  }
+  async function save() {
+    if (server && !savedId) {
+      const result = await request('inference/servers', { ...server, models: remoteModels, model })
+      savedId = result.id
+    }
+    await request('settings/translation-model', { provider, model, server_id: savedId || '' }, 'PUT')
+    viewerTransPicker.setValue(provider, model)
+    settingTransPicker.setValue(provider, model)
+    key = ''
+    server = null
+    go('ready')
+  }
+  function render(next) {
+    step = next
+    purpose.classList.toggle('hidden', next !== 'purpose')
+    guide.classList.toggle('hidden', next === 'purpose')
+    $('onboarding-progress').value = next === 'purpose' ? 1 : next === 'location' ? 2 : ['model', 'ready'].includes(next) ? 4 : 3
+    if (next === 'purpose') { purpose.querySelector('h3').focus(); return }
+    fields.replaceChildren()
+    feedback.textContent = ''
+    details.hidden = true
+    setAction('', null)
+    back.hidden = !history.length || next === 'ready'
+    const titles = { login: 'login', tools: 'tools', install: 'install', gpu: 'gpu', service: 'service', endpoint: 'endpoint',
+      location: 'location', team: 'team', model: 'model', ready: 'ready' }
+    const heading = $('onboarding-question')
+    heading.textContent = next === 'install' ? names[provider] : label(titles[next])
+    requestAnimationFrame(() => heading.focus())
+    if (next === 'location') {
+      for (const id of ['local', 'remote', 'team']) card(label(id), label(id + 'Help'), async () => {
+        server = savedId = model = verified = null
+        if (id === 'local') {
+          sys = await getSystemSettingsAPI()
+          if (sys.read_only || sys.assigned_translation_model) { model = sys.trans_model; go('ready'); return }
+          await detect(); go('tools')
+        }
+        else if (id === 'remote') go('endpoint')
+        else go('team')
+      })
+    } else if (next === 'tools') {
+      for (const [id, name] of Object.entries(names)) card(name, available[id] ? label('installed') :
+        label(id === 'ollama' ? 'localOllama' : id === 'vllm' ? 'gpu' : 'cliHelp'), () => chooseTool(id))
+      for (const cfg of providerConfig.filter(p => sys.api_keys?.[p.id]?.configured)) card(cfg.label || cfg.id, '', () => chooseTool(cfg.id))
+    } else if (next === 'install') {
+      setAction('install', async () => { await stream(installers[provider]); await detect(); await prepareModels() })
+    } else if (next === 'login') {
+      fields.append(node('code', commands[provider]))
+      setAction('retry', async () => {
+        const auth = await request('settings/cli-login/' + provider)
+        if (auth.connected) go('model')
+        else feedback.textContent = label('login')
+      })
+    } else if (next === 'service') {
+      setAction('retry', async () => { await detect(); history.pop(); await prepareModels() })
+    } else if (next === 'gpu') {
+      select('vLLM', gpuModels.map(m => [m, m]), gpuModel, value => { gpuModel = value })
+      setAction('start', async () => {
+        render('gpu')
+        await watchGpu(await request('settings/vllm', { model: gpuModel }))
+      })
+    } else if (next === 'endpoint') {
+      select(label('tools'), [['ollama', 'Ollama'], ['vllm', 'vLLM']], remoteEngine, value => { remoteEngine = value })
+      const addressField = input('url', 'url', address, value => { address = value })
+      addressField.placeholder = remoteEngine === 'vllm' ? 'https://models.example.org/v1' : 'https://models.example.org'
+      input('key', 'password', key, value => { key = value })
+      setAction('check', () => discover(remoteEngine, address.trim(), key))
+    } else if (next === 'team') {
+      if (window.__TAURI_INTERNALS__) setAction('team', () => openSettings({ remoteSetup: true }))
+      else {
+        fields.append(node('p', label('teamUrl')))
+        input('url', 'url', teamUrl, value => { teamUrl = value })
+        setAction('team', () => {
+          const url = new URL(teamUrl)
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error(label('invalid'))
+          location.assign(url.href)
+        })
+      }
+    } else if (next === 'model') {
+      const cfg = providerConfig.find(p => p.id === provider)
+      const options = server ? remoteModels : provider === 'ollama' ? sys.available_models || [] : cfg?.models || []
+      if (server) fields.append(node('small', server.url))
+      if (server?.credentials.api_key && !server.save_credentials) fields.append(node('p', t('onboarding:sessionKey')))
+      fields.append(node('blockquote', getLocale() === 'en' ? t('onboarding:sampleKo') : t('onboarding:sampleEn')))
+      if (provider === 'antigravity') fields.append(node('p', label('login') + ' ' + commands[provider]))
+      select(names[server?.engine || provider] || provider, options.map(m => typeof m === 'string' ? [m, m] : [m.value, m.label]), model, value => {
+        if (model !== value) verified = null
+        model = value
+        if (model) setAction(verified ? 'save' : 'sample', verified ? save : preview)
+        feedback.textContent = verified || ''
+      })
+      if (!options.length) feedback.textContent = label('empty')
+      if (!server && provider === 'ollama') {
+        let download
+        select(label('download'), [['llama3.1:8b', 'Llama 3.1 8B · ≈4.9 GB'], ['gemma4:e4b', 'Gemma 4 E4B'], ['qwen3.5:9b', 'Qwen 3.5 9B'],
+          ['gemma4:12b', 'Gemma 4 12B'], ['qwen3.6:27b', 'Qwen 3.6 27B'], ['mistral-small3.2:24b', 'Mistral Small 3.2 24B'],
+          ['phi4-reasoning:14b', 'Phi-4 Reasoning 14B'], ['deepseek-r1:8b', 'DeepSeek R1 8B']], '', value => { download = value })
+        const downloadButton = node('button', label('download'))
+        downloadButton.type = 'button'
+        downloadButton.className = 'btn btn-secondary'
+        fields.append(downloadButton)
+        downloadButton.onclick = () => run(async () => {
+          await stream((progress, done, fail) => streamPullModelAPI(download, progress, done, fail))
+          sys = await getSystemSettingsAPI()
+          model = download
+          verified = null
+          render('model')
+        })
+      }
+    } else if (next === 'ready') {
+      fields.append(node('p', model || ''))
+      setAction('open', () => { close(); $('file-input').click() })
+    }
+  }
+  back.onclick = () => { verified = null; render(history.pop() || 'location') }
+  $('onboarding-close-btn').onclick = $('onboarding-skip-btn').onclick = close
+  const purposeNext = $('onboarding-purpose-next-btn')
+  for (const button of purpose.querySelectorAll('[data-purpose-mode]')) button.onclick = () => {
+    selectedPurpose = button.dataset.purposeMode
+    for (const item of purpose.querySelectorAll('[data-purpose-mode]')) item.setAttribute('aria-checked', String(item === button))
+    purposeNext.disabled = false
+  }
+  purposeNext.onclick = () => run(async () => {
+    await onWorkspaceSelected(selectedPurpose)
+    localStorage.setItem(WORKSPACE_PURPOSE_SELECTED_KEY, '1')
+    go('location')
   })
-
-  return { maybeShowOnboarding }
+  document.addEventListener('easypaper:locale-changed', () => { if (step && !busy) render(step) })
+  return { async maybeShowOnboarding() {
+    openOverlayModal(modal)
+    if (busy) return
+    server = savedId = verified = null
+    key = ''
+    history = []
+    const initial = localStorage.getItem(WORKSPACE_PURPOSE_SELECTED_KEY) ? 'location' : 'purpose'
+    render(initial)
+    if (isRemoteDesktop()) {
+      render('ready')
+      await run(async () => {
+        sys = await getSystemSettingsAPI()
+        model = new URL(desktopServerUrl() || location.href).host + ' · ' + sys.trans_model
+        render('ready')
+      })
+    }
+  } }
 }

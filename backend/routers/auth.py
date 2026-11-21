@@ -49,6 +49,7 @@ from config import (
     get_skip_login,
     set_skip_login,
 )
+from services.inference_servers import ServerSettings
 from services.llm_client import check_ollama_health
 import venv_manager
 
@@ -319,6 +320,7 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
     
     return {
         "ollama_host": get_ollama_host(),
+        "assigned_translation_model": bool(lab.selection()),
         "available_models": available_models,
         "trans_provider": get_trans_provider(),
         "trans_model": get_trans_model(),
@@ -390,6 +392,8 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
     gemini_api_key = "" if data.delete_gemini_api_key else (data.gemini_api_key.strip() or get_gemini_api_key())
     claude_api_key = "" if data.delete_claude_api_key else (data.claude_api_key.strip() or get_claude_api_key())
 
+    if not data.trans_model.isprintable() and data.trans_model:
+        raise HTTPException(400, "Invalid translation model name.")
     update_system_settings(
         ollama_host=data.ollama_host.strip(),
         trans_provider=trans_provider,
@@ -720,6 +724,7 @@ async def ollama_status(current_user: str = Depends(require_admin_user)):
     installed = bool(find_ollama_binary())
     return {
         "installed": installed,
+        "running": installed and (await check_ollama_health()).get("status") == "ok",
         "is_local": is_ollama_host_local(),
     }
 
@@ -1296,3 +1301,123 @@ async def preview_prompt(data: PromptPreviewRequest, current_user: str = Depends
         template=data.template,
     )
     return {"prompt": prompt}
+
+
+@router.get('/settings/vllm')
+async def onboarding_vllm_status(user: str = Depends(require_admin_user)):
+    from services.onboarding_vllm import snapshot
+    return snapshot()
+
+
+class SetupModel(BaseModel):
+    model: str
+
+
+@router.post('/settings/vllm')
+async def onboarding_install_vllm(data: SetupModel, user: str = Depends(require_admin_user)):
+    from services.onboarding_vllm import start
+    return await start(data.model)
+
+
+class TranslationSetup(SetupModel):
+    provider: str
+    server_id: str = ''
+
+
+@router.put('/settings/translation-model')
+async def onboarding_translation_settings(data: TranslationSetup, user: str = Depends(require_admin_user)):
+    from config import update_translation_settings
+    from services import lab, inference_servers
+    if lab.selection():
+        raise HTTPException(409, 'Use the model assigned in personal or lab settings.')
+    if data.provider not in ('ollama', 'openai', 'claude', 'gemini', 'claude_code', 'codex', 'antigravity'):
+        raise HTTPException(400, 'Unknown translation provider.')
+    if not data.model.strip() or not data.model.isprintable():
+        raise HTTPException(400, 'Invalid translation model.')
+    if data.server_id:
+        target = inference_servers.get(data.server_id, with_secrets=False)
+        provider = 'openai' if target['engine'] == 'vllm' else 'ollama'
+        if provider != data.provider or data.model not in target['models']:
+            raise HTTPException(400, 'Choose a model available on this server.')
+    update_translation_settings(data.provider, data.model, data.server_id)
+    return {'saved': True}
+
+
+class TranslationPreview(SetupModel):
+    provider: str
+    server: ServerSettings | None = None
+    target_lang: str = 'ko'
+
+
+@router.post('/settings/translation-preview')
+async def onboarding_preview(data: TranslationPreview, user: str = Depends(require_admin_user)):
+    from services.lab_context import selected_server
+    from services import lab
+    from services.llm_client import _stream_translation
+    if data.provider not in ('ollama', 'openai', 'claude', 'gemini', 'claude_code', 'codex', 'antigravity'):
+        raise HTTPException(400, 'Unknown translation provider.')
+    current = lab.selection()
+    if current:
+        raise HTTPException(409, 'Use the model assigned in personal or lab settings.')
+    if data.server:
+        expected = "openai" if data.server.engine == "vllm" else "ollama"
+        if expected != data.provider or data.server.transport != "https":
+            raise HTTPException(400, "Provider does not match the selected server.")
+        selection = dict(data.server.model_dump(exclude={"credentials", "model"}),
+                         provider=data.server.engine, model=data.model, api_key=data.server.credentials.api_key)
+    else:
+        selection = None
+    token = selected_server.set(selection)
+    try:
+        async with asyncio.timeout(150):
+            source = '이 문서는 연구 결과를 설명합니다.' if data.target_lang == 'en' else 'This paper presents the results.'
+            result = ''.join([part async for part in _stream_translation(source, target_lang=data.target_lang,
+                provider_override=data.provider, model_override=data.model)])
+        if not result.strip():
+            raise RuntimeError('Empty model response.')
+        return {'translation': result}
+    except (RuntimeError, TimeoutError, httpx.HTTPError) as exc:
+        raise HTTPException(502, str(exc)[:500] or 'Translation timed out.') from exc
+    finally:
+        selected_server.reset(token)
+
+
+
+
+@router.post('/settings/discover-models')
+async def onboarding_discover(data: ServerSettings, user: str = Depends(require_admin_user)):
+    path = '/models' if data.engine == 'vllm' else '/api/tags'
+    headers = {'Authorization': 'Bearer ' + data.credentials.api_key} if data.credentials.api_key else {}
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False) as client:
+            response = await client.get(data.url.rstrip('/') + path, headers=headers)
+            response.raise_for_status()
+            body = response.json()
+            models = [item['id'] for item in body['data']] if data.engine == 'vllm' else [item['name'] for item in body['models']]
+            if not all(isinstance(m, str) and m.strip() and m.isprintable() and len(m) <= 200 for m in models):
+                raise ValueError('Invalid model identifier.')
+            from services.ssh_connections import secrets
+            return {'models': models, 'credential_storage': secrets.availability()['available']}
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(502, 'Check the server address and credentials.') from exc
+
+
+@router.get('/settings/cli-login/{provider}')
+async def onboarding_cli_login(provider: str, user: str = Depends(require_admin_user)):
+    commands = {'claude_code': (get_claude_code_path(), 'auth', 'status'),
+                'codex': (get_codex_path(), 'login', 'status')}
+    if provider not in commands:
+        raise HTTPException(400, 'Unknown login status command.')
+    import shutil
+    command, *args = commands[provider]
+    executable = shutil.which(command) or shutil.which('claude' if provider == 'claude_code' else 'codex')
+    if not executable:
+        return {'connected': False}
+    process = await asyncio.create_subprocess_exec(executable, *args, stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+    try:
+        return {'connected': await asyncio.wait_for(process.wait(), 10) == 0}
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()

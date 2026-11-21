@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.6.3 - 2026-11-19
+
+### 한국어 (1.6.2 → 1.6.3)
+
+- CLI 설정에서 Antigravity, Claude Code, Codex 모델 선택 목록을 갱신
+- 데스크톱 설정에서 업데이트 릴리스 노트를 Markdown으로 표시
+- README를 최신화하고 Lab Mode와 SSH 연결의 한국어 가이드를 추가하여 한국어 README에 연결
+
+### English (1.6.2 → 1.6.3)
+
+- Update the Antigravity, Claude Code, and Codex model options in CLI settings.
+- Render update release notes as Markdown in desktop settings.
+- Update the README and add Korean guides for Lab Mode and SSH connections, with links from the Korean README.
+
 ## 1.6.2 - 2026-11-16
 
 ### 한국어 (1.6.1 → 1.6.2)
