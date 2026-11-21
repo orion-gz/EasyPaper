@@ -315,7 +315,6 @@ export function createOnboarding({
           openai_api_key: '',
           gemini_api_key: '',
           claude_api_key: '',
-          translation_prompt_template: sys.translation_prompt_template,
         })
         // sync compact pickers so the viewer/chat UI reflects the newly selected engine immediately
         viewerTransPicker.setValue(entry.provider, model)

@@ -37,7 +37,7 @@ export function initializeDataTransfer({ confirmImport, beforeExport = async () 
     pendingRestore.browser ??= prepareBrowserRestore(result.browser_data, result.id_map, pendingRestore.username, window.location.origin)
     restoreBrowserData(pendingRestore.browser)
     if (pendingRestore.system && Object.keys(result.system_settings || {}).length) {
-      await saveSystemSettingsAPI(result.system_settings)
+      await saveSystemSettingsAPI({ translation_prompt_editor: '', ...result.system_settings })
     }
     pendingRestore = null
     status.textContent = t('settings:dataTransfer.imported', { count: result.documents })

@@ -6944,5 +6944,68 @@
   },
   "settings:field.correct": {
     "description": "Check the highlighted fields."
+  },
+  "settings:prompt.title": {
+    "description": "Translation prompt editor: Translation prompt"
+  },
+  "settings:prompt.choose": {
+    "description": "Translation prompt editor: Choose translation instructions"
+  },
+  "settings:prompt.custom": {
+    "description": "Translation prompt editor: Custom instruction"
+  },
+  "settings:prompt.add": {
+    "description": "Translation prompt editor: Add"
+  },
+  "settings:prompt.simple": {
+    "description": "Translation prompt editor: Guided"
+  },
+  "settings:prompt.advanced": {
+    "description": "Translation prompt editor: Advanced"
+  },
+  "settings:prompt.insert": {
+    "description": "Translation prompt editor: Insert at cursor"
+  },
+  "settings:prompt.preview": {
+    "description": "Translation prompt editor: Preview"
+  },
+  "settings:prompt.apply": {
+    "description": "Translation prompt editor: Apply"
+  },
+  "settings:prompt.terms": {
+    "description": "Translation prompt editor: Include original terms"
+  },
+  "settings:prompt.abbreviations": {
+    "description": "Translation prompt editor: Expand abbreviations"
+  },
+  "settings:prompt.equations": {
+    "description": "Translation prompt editor: Keep equation notation"
+  },
+  "settings:prompt.update": {
+    "description": "Translation prompt editor: Edit instruction"
+  },
+  "settings:prompt.remove": {
+    "description": "Translation prompt editor: Remove"
+  },
+  "settings:prompt.text": {
+    "description": "Translation prompt editor: Source text"
+  },
+  "settings:prompt.target": {
+    "description": "Translation prompt editor: Target language"
+  },
+  "settings:prompt.language": {
+    "description": "Translation prompt editor: Language instruction"
+  },
+  "settings:prompt.style": {
+    "description": "Translation prompt editor: Style"
+  },
+  "settings:prompt.rules": {
+    "description": "Translation prompt editor: Rules"
+  },
+  "settings:prompt.context": {
+    "description": "Translation prompt editor: Context"
+  },
+  "settings:prompt.missing": {
+    "description": "Translation prompt editor: Insert the source text before applying."
   }
 }

@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from dotenv import load_dotenv
@@ -644,13 +645,16 @@ Translation and preservation rules:
 [Translation in {{TARGET_LANGUAGE_NAME}}]"""
 
 def get_translation_prompt_template() -> str:
+    record = _read_prompt_record()
+    if record:
+        return record["template"]
     if not os.path.exists(PROMPT_FILE):
         with open(PROMPT_FILE, "w", encoding="utf-8") as f:
             f.write(DEFAULT_PROMPT_TEMPLATE.strip())
         return DEFAULT_PROMPT_TEMPLATE.strip()
     with open(PROMPT_FILE, "r", encoding="utf-8") as f:
-        template = f.read().strip()
-    if template == LEGACY_DEFAULT_PROMPT_TEMPLATE.strip():
+        template = f.read()
+    if template.strip() == LEGACY_DEFAULT_PROMPT_TEMPLATE.strip():
         template = DEFAULT_PROMPT_TEMPLATE.strip()
         with open(PROMPT_FILE, "w", encoding="utf-8") as f:
             f.write(template)
@@ -661,7 +665,23 @@ def update_translation_prompt_template(new_template: str):
         # Fall back to default if empty
         template_to_save = DEFAULT_PROMPT_TEMPLATE.strip()
     else:
-        template_to_save = new_template.strip()
-    with open(PROMPT_FILE, "w", encoding="utf-8") as f:
-        f.write(template_to_save)
+        template_to_save = new_template
+    if template_to_save != get_translation_prompt_template():
+        save_prompt_editor(template_to_save, "")
 
+
+def _read_prompt_record():
+    try:
+        with open(PROMPT_FILE + ".json", encoding="utf-8") as stream:
+            return json.load(stream)
+    except FileNotFoundError:
+        return {}
+
+
+def get_translation_prompt_editor():
+    return _read_prompt_record().get("editor", "")
+
+
+def save_prompt_editor(template, editor):
+    from services.atomic_io import atomic_write_text
+    atomic_write_text(PROMPT_FILE + ".json", json.dumps({"template": template, "editor": editor}, ensure_ascii=False))

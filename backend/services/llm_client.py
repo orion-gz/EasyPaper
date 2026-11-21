@@ -13,6 +13,7 @@ from typing import AsyncGenerator
 from services.atomic_io import atomic_write_text
 from services.generation_errors import GenerationError
 from config import (
+    DEFAULT_PROMPT_TEMPLATE,
     get_ollama_host,
     get_trans_provider,
     get_trans_model,
@@ -136,6 +137,7 @@ def build_translation_prompt(
     doc_title: str = "",
     prev_context: str = "",
     short: bool = False,
+    template: str | None = None,
 ) -> str:
     """Build the provider-neutral English translation prompt."""
     from services.languages import language_name
@@ -185,14 +187,15 @@ def build_translation_prompt(
         context.append(f"Previous translated context (do not repeat it):\n\"\"\"\n{prev_context[-1000:]}\n\"\"\"")
     context_part = "\n[Context]\n" + "\n".join(context) if context else ""
 
-    if short:
+    if template is None:
+        template = get_translation_prompt_template()
+    if short and template.strip() == DEFAULT_PROMPT_TEMPLATE.strip():
         return (
             f"{language_instruction}\nMaintain all previously supplied rules.\n"
             + "\n".join(f"- {rule}" for rule in rules[-5:])
             + f"{context_part}\n\n[Source text]\n{text}\n\n[Translation]"
         )
 
-    template = get_translation_prompt_template()
     replacements = {
         "{{LANG_INSTRUCTION}}": language_instruction,
         "{{STYLE_INSTRUCTION}}": style_rules.get(style, style_rules["academic"]),

@@ -1,3 +1,4 @@
+import { createPromptEditor } from './promptEditor.js'
 import { renderOutlineTree } from './outlineTree.js'
 import { createAnnotationAnchor, resolveAnnotationAnchor } from './annotationAnchor.js'
 import { enhanceLibraryRow } from './libraryRowMenu.js'
@@ -4370,10 +4371,7 @@ async function refreshSystemSettings() {
     settingLibrarySameAsDefault.checked = sameAsDefault(sys.library_provider, sys.library_model)
     applyDefaultModelToChildren()
 
-    const promptTemplate = $('setting-prompt-template')
-    if (promptTemplate) {
-      promptTemplate.value = sys.translation_prompt_template || promptTemplate.value
-    }
+    promptEditor.load(sys)
     updateSettingsUIVisibility()
     renderOllamaInstalledModels()
     updateRecommendModelButtons()
@@ -4725,7 +4723,6 @@ async function changeProviderAndModel(type, newProvider, newModel) {
       gemini_api_key: '',
       claude_api_key: '',
       openalex_mailto: sys.openalex_mailto || '',
-      translation_prompt_template: sys.translation_prompt_template || '',
       pdf_parser_engine: sys.pdf_parser_engine || 'pymupdf'
     }
     await saveSystemSettingsAPI(payload)
@@ -5205,7 +5202,7 @@ settingToolbarAutoHide.addEventListener('change', () => {
 // 객체로 저장되므로, 저장 버튼 없이 두 탭의 어느 필드든 값이 바뀌면 즉시 이
 // 통합 함수로 전체 설정을 다시 저장한다. 모델이 아직 선택되지 않은 초기
 // 로딩 상태에서는 조용히 건너뛴다(에러 토스트 없이).
-async function autoSaveSystemSettings({ silent = false } = {}) {
+async function autoSaveSystemSettings({ silent = false, prompt = {} } = {}) {
   const { provider: defaultProvider, model: defaultModel } = settingDefaultAiPicker.getValue()
   let { provider: transProvider, model: transModel } = settingTransPicker.getValue()
   if (settingTransSameAsDefault && settingTransSameAsDefault.checked) {
@@ -5249,7 +5246,7 @@ async function autoSaveSystemSettings({ silent = false } = {}) {
     delete_gemini_api_key: settingGeminiKey?.dataset.deleteRequested === 'true',
     delete_claude_api_key: settingClaudeKey?.dataset.deleteRequested === 'true',
     openalex_mailto: settingOpenAlexMailto ? settingOpenAlexMailto.value.trim() : '',
-    translation_prompt_template: $('setting-prompt-template') ? $('setting-prompt-template').value : '',
+    ...prompt,
     pdf_parser_engine: pdfParserEngine
   }
 
@@ -5300,10 +5297,10 @@ modelSettingChildren.forEach(child => {
   if (child.checkbox) child.checkbox.addEventListener('change', () => autoSaveSystemSettings())
 })
 
-const settingPromptTemplate = $('setting-prompt-template')
-if (settingPromptTemplate) {
-  settingPromptTemplate.addEventListener('change', () => autoSaveSystemSettings())
-}
+const promptEditor = createPromptEditor($('setting-prompt-template'), t,
+  prompt => autoSaveSystemSettings({ prompt }),
+  () => ({ ...getTranslationOptions(settingsTranslationModeContext), documentMode: settingsTranslationModeContext,
+    documentType: state.currentDocumentType || 'research_paper' }))
 
 // 시스템 자동 업데이트: 확인(check)과 실행(run)을 분리한다 - 확인해서 새
 // 업데이트가 있을 때만 실행 버튼이 활성화되고, 확인 시 변경 로그를 함께
