@@ -78,5 +78,19 @@
   "accessServer": "Access server directly (default)",
   "accessOffline": "Download documents and work offline",
   "offlineHelp": "Downloads a separate local library. Chats, notes and reading data sync both ways on reconnection. Documents remain server-owned. First download requires a connection; reload after it completes.",
-  "offlineResolveHelp": "Conflict resolution replaces user data only: choose local or server data, review the preview, then confirm. Documents remain server-owned."
+  "offlineResolveHelp": "Conflict resolution replaces user data only: choose local or server data, review the preview, then confirm. Documents remain server-owned.",
+  "remoteStatus": "Remote server status",
+  "checking": "Checking",
+  "unverified": "Connection check failed",
+  "statusSummary": "Connection: {{link}} · Sync: {{job}}",
+  "jobs": {
+    "unknown": "Unknown",
+    "idle": "Idle",
+    "uploading": "Uploading",
+    "downloading": "Downloading",
+    "importing": "Importing",
+    "completed": "Completed",
+    "conflict": "Conflict",
+    "failed": "Failed"
+  }
 }

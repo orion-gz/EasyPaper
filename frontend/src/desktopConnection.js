@@ -452,7 +452,32 @@ export async function prepareDesktopConnection() {
     if (connection.remote) await prepareSync()
   })
   section.append(button, syncButton, help)
-  startDeviceHeartbeat()
+  if (connection.remote) {
+    const card = document.createElement('section')
+    card.className = 'desktop-connection-section settings-action-card'
+    const title = document.createElement('h3')
+    const address = document.createElement('p')
+    address.textContent = connection.server_url
+    const summary = document.createElement('p')
+    summary.setAttribute('role', 'status')
+    card.append(title, address, summary)
+    let link = 'checking'
+    let job = 'unknown'
+    const render = () => {
+      title.textContent = t('desktop:remoteStatus')
+      summary.textContent = t('desktop:statusSummary', {
+        link: t('desktop:' + link), job: t('desktop:jobs.' + job),
+      })
+    }
+    render()
+    document.addEventListener('easypaper:locale-changed', render)
+    startDeviceHeartbeat((state, transfer) => {
+      link = state
+      job = transfer || 'unknown'
+      render()
+    })
+    document.querySelector('#tab-data-system .modal-form')?.prepend(card)
+  }
   document.querySelector('#tab-data-system .modal-form')?.prepend(section)
   makeDialog()
   populate()
@@ -484,7 +509,7 @@ async function deviceRequest(path = '', options = {}) {
   return data
 }
 
-function startDeviceHeartbeat() {
+function startDeviceHeartbeat(update) {
   let acknowledged = false
   let deviceId = localStorage.getItem('easypaper-device-id')
   if (!deviceId) {
@@ -492,13 +517,15 @@ function startDeviceHeartbeat() {
     localStorage.setItem('easypaper-device-id', deviceId)
   }
   const tick = async () => {
+    let job
     try {
       if (!connection.remote) return
-      const job = await connectionRequest('download')
+      job = await connectionRequest('download')
       const result = await deviceRequest('/' + deviceId, { method: 'PUT', body: JSON.stringify({
         name: navigator.platform || 'Desktop', status: job.status,
         action: connection.sync?.action, automatic: connection.sync?.automatic, acknowledged,
       }) })
+      update('online', job.status)
       acknowledged = false
       if (result.requested && !busy && !syncPreview && !dialog?.open && connection.sync?.action === 'merge') {
         // Remote requests open the existing preview; confirmation remains local.
@@ -506,7 +533,7 @@ function startDeviceHeartbeat() {
         await prepareSync()
         acknowledged = true
       }
-    } catch { /* Retry after login or connectivity recovers. */ }
+    } catch { update('unverified', job?.status) }
     finally { setTimeout(tick, 15000) }
   }
   tick()
