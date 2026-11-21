@@ -2,6 +2,22 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.6.4 - 2026-11-21
+
+### 한국어 (1.6.3 → 1.6.4)
+
+- 첫 실행 시 번역 환경을 단계별로 설정하는 안내를 추가
+- 번역 설정에 지침 칩과 고급 프롬프트 편집 기능을 추가
+- 데스크톱 설정에 원격 서버 연결 및 라이브러리 동기화 상태를 표시
+- API 및 개인 CLI 모델 목록을 갱신하고 사용 중단되거나 기업 전용인 Antigravity 모델을 숨김
+
+### English (1.6.3 → 1.6.4)
+
+- Add a step-by-step guide for setting up translation on first launch.
+- Add translation instruction chips and an advanced prompt editor in settings.
+- Show remote server connection and library sync status in desktop settings.
+- Refresh API and personal CLI model lists and hide retired or enterprise-only Antigravity models.
+
 ## 1.6.3 - 2026-11-19
 
 ### 한국어 (1.6.2 → 1.6.3)
