@@ -26,3 +26,19 @@ def recovery_owner(document_id, pending_owner=None):
             yield bool(username)
     finally:
         identity.reset(token)
+
+
+@contextmanager
+def translation_server():
+    """Apply a translation-only endpoint without changing the account's other tools."""
+    import config
+    from services import inference_servers, lab
+    if not config.TRANS_SERVER_ID or lab.selection():
+        yield
+        return
+    server = inference_servers.get(config.TRANS_SERVER_ID)
+    token = selected_server.set(dict(server, provider=server['engine'], model=config.TRANS_MODEL))
+    try:
+        yield
+    finally:
+        selected_server.reset(token)

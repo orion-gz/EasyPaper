@@ -25,6 +25,7 @@ export async function connectionRequest(path, options = {}) {
   return data
 }
 
+export function desktopServerUrl() { return connection?.server_url || '' }
 export function isRemoteDesktop() { return !!connection?.remote }
 export function setBeforeServerDownload(callback) { beforeDownload = callback }
 
@@ -356,12 +357,16 @@ async function startSync() {
   }
 }
 
-async function openSettings() {
+export async function openSettings({ remoteSetup = false } = {}) {
   if (!dialog) makeDialog()
   dialog.showModal()
   try {
     connection = await connectionRequest('connection')
     populate()
+    if (remoteSetup) {
+      dialog.querySelector('[value=remote]').click()
+      dialog.querySelector('[data-url]').focus()
+    }
     await pollDownload()
   } catch (error) { status(error.message) }
 }
@@ -416,7 +421,7 @@ export async function prepareDesktopConnection() {
     panel.showModal()
     return false
   }
-  if (!connection.onboarded || connection.error) {
+  if (connection.error) {
     makeDialog(true)
     populate()
     dialog.showModal()

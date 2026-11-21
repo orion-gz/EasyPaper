@@ -140,7 +140,8 @@ async def stream_completion(prompt: str, provider: str, model: str, doc_id: str)
         async for token in getattr(llm, f"stream_{provider}")(messages, model=model, temperature=0.2):
             yield token
     elif provider == "ollama":
-        async with httpx.AsyncClient(timeout=120) as client:
+        from services.ssh_connections import client as connection_client
+        async with connection_client(timeout=120) as client:
             async with client.stream("POST", f"{get_ollama_host()}/api/chat", json={"model": model, "messages": messages, "stream": True}) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
@@ -187,7 +188,9 @@ def start_generation(doc_id: str, session: dict, page: dict, key: str, provider:
     existing = _running.get(identity)
     if existing is not None:
         return existing
-    task = asyncio.create_task(generate(doc_id, dict(session), page, key, provider, model))
+    from services.lab_context import translation_server
+    with translation_server():
+        task = asyncio.create_task(generate(doc_id, dict(session), page, key, provider, model))
     _running[identity] = task
     def finished(done):
         if _running.get(identity) is done:

@@ -16,7 +16,7 @@ import { createReferenceAnalysisController, renderReferenceAnalysis } from './re
 import { fetchReferenceAnalysis, analyzeReference } from './library.js'
 import { installReaderPreferences, readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { initializeDataTransfer } from './dataTransfer.js'
-import { isRemoteDesktop, setBeforeServerDownload } from './desktopConnection.js'
+import { setBeforeServerDownload } from './desktopConnection.js'
 import { isMinimalUi, setMinimalUi, MINIMAL_UI_KEY } from './minimalUi.js'
 import './styles/minimal-ui.css'
 import { applyTheme, selectedTheme, loadThemes, saveThemes, THEME_STORAGE_KEY } from './themes/themeEngine.js'
@@ -553,9 +553,8 @@ const settingSkipLoginCheckbox = $('setting-skip-login-checkbox')
 // 첫 실행 온보딩은 완료하지 않은 사용자에게만 별도 청크로 로드한다.
 let onboardingController = null
 
-async function maybeShowOnboarding() {
-  if (isRemoteDesktop()) return
-  if (Number(localStorage.getItem(ONBOARDING_VERSION_KEY) || 0) >= CURRENT_ONBOARDING_VERSION) return
+async function maybeShowOnboarding(force = false) {
+  if (!force && (localStorage.getItem("easypaper_onboarding_seen") || Number(localStorage.getItem(ONBOARDING_VERSION_KEY) || 0) >= CURRENT_ONBOARDING_VERSION)) return
   if (!onboardingController) {
     const { createOnboarding } = await import('./onboarding.js')
     onboardingController = createOnboarding({
@@ -564,13 +563,18 @@ async function maybeShowOnboarding() {
       viewerTransPicker, settingDefaultAiPicker, settingTransPicker,
       chatSidebarPicker, settingChatPicker, settingAnalysisPicker, settingLibraryPicker,
       onWorkspaceSelected: async (mode) => {
-        await workspaceModeController.markOnboardingComplete(mode)
-        await patchWorkspaceSettingsAPI({ onboarding_version: CURRENT_ONBOARDING_VERSION, preferred_workspace_mode: mode })
+        await patchWorkspaceSettingsAPI({ preferred_workspace_mode: mode })
+        await workspaceModeController.setMode(mode, { persist: false })
       },
     })
   }
   onboardingController.maybeShowOnboarding()
 }
+
+$('restart-onboarding')?.addEventListener('click', () => {
+  closeOverlayModal(settingsModal)
+  maybeShowOnboarding(true)
+})
 
 // 탭 버튼 및 컨텐츠 영역
 
