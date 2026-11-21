@@ -1231,3 +1231,13 @@ export async function searchWorkspaceAPI(query, mode, signal) {
   if (!response.ok) throw await apiError(response)
   return response.json()
 }
+
+export async function previewTranslationPrompt(settings) {
+  const res = await fetch(`${API_BASE}/settings/prompt-preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings)
+  })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}

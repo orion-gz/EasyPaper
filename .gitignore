@@ -391,3 +391,5 @@ backend/logs/
 
 # EasyPaper 데이터 백업 아카이브
 backups/
+
+/backend/translation_prompt.txt.json

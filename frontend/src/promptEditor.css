@@ -1,0 +1,9 @@
+.prompt-editor { min-width: 0; border: 0; padding: 0; margin: 0; color: var(--text-primary); }
+.prompt-editor legend { font-weight: 600; }
+.prompt-editor .prompt-row { display: flex; flex-wrap: wrap; gap: .45rem; margin: .65rem 0; }
+.prompt-editor button:not(.btn) { background: var(--bg-elevated); color: inherit; border: 1px solid var(--border-strong); border-radius: 1rem; padding: .35rem .8rem; cursor: pointer; }
+.prompt-editor button[aria-pressed=true] { border-color: var(--accent-mid); box-shadow: inset 0 0 0 1px var(--accent-mid); font-weight: 600; }
+.prompt-editor input, .prompt-editor textarea { background: var(--bg-elevated); color: inherit; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: .5rem; }
+.prompt-editor textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.prompt-editor pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow: auto; }
+.prompt-editor [hidden] { display: none; }

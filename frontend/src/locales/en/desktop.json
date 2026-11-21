@@ -83,14 +83,12 @@
   "checking": "Checking",
   "unverified": "Connection check failed",
   "statusSummary": "Connection: {{link}} · Sync: {{job}}",
-  "jobs": {
-    "unknown": "Unknown",
-    "idle": "Idle",
-    "uploading": "Uploading",
-    "downloading": "Downloading",
-    "importing": "Importing",
-    "completed": "Completed",
-    "conflict": "Conflict",
-    "failed": "Failed"
-  }
+  "jobs.unknown": "Unknown",
+  "jobs.idle": "Idle",
+  "jobs.uploading": "Uploading",
+  "jobs.downloading": "Downloading",
+  "jobs.importing": "Importing",
+  "jobs.completed": "Completed",
+  "jobs.conflict": "Conflict",
+  "jobs.failed": "Failed"
 }

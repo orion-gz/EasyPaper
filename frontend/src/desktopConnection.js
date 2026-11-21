@@ -466,12 +466,22 @@ export async function prepareDesktopConnection() {
     const summary = document.createElement('p')
     summary.setAttribute('role', 'status')
     card.append(title, address, summary)
+    const jobLabels = {
+      idle: () => t('desktop:jobs.idle'),
+      uploading: () => t('desktop:jobs.uploading'),
+      downloading: () => t('desktop:jobs.downloading'),
+      importing: () => t('desktop:jobs.importing'),
+      completed: () => t('desktop:jobs.completed'),
+      conflict: () => t('desktop:jobs.conflict'),
+      failed: () => t('desktop:jobs.failed'),
+    }
     let link = 'checking'
     let job = 'unknown'
     const render = () => {
       title.textContent = t('desktop:remoteStatus')
       summary.textContent = t('desktop:statusSummary', {
-        link: t('desktop:' + link), job: t('desktop:jobs.' + job),
+        link: link === 'online' ? t('desktop:online') : link === 'unverified' ? t('desktop:unverified') : t('desktop:checking'),
+        job: jobLabels[job]?.() || t('desktop:jobs.unknown'),
       })
     }
     render()

@@ -397,7 +397,7 @@ def import_archive(username, source, *, preserve_user_settings=False, sync_conte
 SYSTEM_KEYS = ('ollama_host', 'trans_provider', 'trans_model', 'chat_provider', 'chat_model',
                'default_ai_provider', 'default_ai_model', 'analysis_provider', 'analysis_model',
                'library_provider', 'library_model', 'openalex_mailto', 'pdf_parser_engine',
-               'translation_prompt_template')
+               'translation_prompt_template', 'translation_prompt_editor')
 DOC_STORAGE_PREFIXES = (
     'easypaper_annotations_', 'easypaper_memos_all_hidden_', 'easypaper_memos_',
     'easypaper_chat_quote_images_', 'easypaper_suggested_questions_',

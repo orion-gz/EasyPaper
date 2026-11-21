@@ -38,6 +38,7 @@ from config import (
     get_claude_api_key,
     get_openalex_mailto,
     get_pdf_parser_engine,
+    DEFAULT_PROMPT_TEMPLATE, get_translation_prompt_editor, save_prompt_editor,
     get_translation_prompt_template,
     update_translation_prompt_template,
     get_agy_path,
@@ -285,7 +286,8 @@ class SystemSettingsRequest(BaseModel):
     delete_gemini_api_key: bool = False
     delete_claude_api_key: bool = False
     openalex_mailto: str = ""
-    translation_prompt_template: str = ""
+    translation_prompt_template: str | None = None
+    translation_prompt_editor: str | None = None
     pdf_parser_engine: str = "pymupdf"
 
 def _masked_key_status(value: str) -> dict:
@@ -309,6 +311,8 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
             **{f'{name}_model': selected['model'] for name in ('trans', 'chat', 'default_ai', 'analysis', 'library')},
             'api_keys': {}, 'openalex_mailto': '',
             'translation_prompt_template': get_translation_prompt_template(),
+            'translation_prompt_editor': get_translation_prompt_editor(),
+            'default_prompt_template': DEFAULT_PROMPT_TEMPLATE,
             'pdf_parser_engine': get_pdf_parser_engine(), 'read_only': True,
         }
     health = await check_ollama_health()
@@ -335,6 +339,8 @@ async def get_system_settings(current_user: str = Depends(get_current_user)):
         },
         "openalex_mailto": get_openalex_mailto(),
         "translation_prompt_template": get_translation_prompt_template(),
+        "translation_prompt_editor": get_translation_prompt_editor(),
+        "default_prompt_template": DEFAULT_PROMPT_TEMPLATE,
         "pdf_parser_engine": get_pdf_parser_engine()
     }
 
@@ -408,7 +414,11 @@ async def save_system_settings(data: SystemSettingsRequest, current_user: str = 
     )
 
     # 고급 설정: 번역 프롬프트 템플릿 저장
-    update_translation_prompt_template(data.translation_prompt_template)
+    if data.translation_prompt_template is not None:
+        if data.translation_prompt_editor is None:
+            update_translation_prompt_template(data.translation_prompt_template)
+        else:
+            save_prompt_editor(data.translation_prompt_template or DEFAULT_PROMPT_TEMPLATE, data.translation_prompt_editor)
 
     if restart_needed:
         if venv_manager.is_packaged_desktop():
@@ -1267,6 +1277,30 @@ async def get_full_changelog(current_user: str = Depends(require_admin_user)):
         return {"version": version, "version_date": version_date, "content": f.read()}
 
 
+
+class PromptPreviewRequest(BaseModel):
+    template: str
+    sourceLang: str = "auto"
+    targetLang: str = "ko"
+    style: str = "academic"
+    ignoreMath: bool = False
+    ignoreTable: bool = True
+    ignoreRefs: bool = False
+    documentMode: str = "research"
+    documentType: str = "research_paper"
+
+
+@router.post("/settings/prompt-preview")
+async def preview_prompt(data: PromptPreviewRequest, current_user: str = Depends(get_current_user)):
+    from services.document_policy import build_translation_policy
+    from services.llm_client import build_translation_prompt
+    prompt = build_translation_prompt(
+        "The model reduced the error rate by 12%.", data.sourceLang, data.targetLang, data.style,
+        build_translation_policy(data.documentMode, data.documentType), ignore_math=data.ignoreMath,
+        ignore_table=data.ignoreTable, ignore_refs=data.ignoreRefs, doc_title="Model evaluation",
+        template=data.template,
+    )
+    return {"prompt": prompt}
 
 
 @router.get('/settings/vllm')

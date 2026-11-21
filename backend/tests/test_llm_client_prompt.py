@@ -89,3 +89,14 @@ async def test_reminder_page_uses_full_prompt_not_short_prompt(capture_antigravi
     prompt = capture_antigravity_prompt[0]
     assert "Maintain all previously supplied rules" not in prompt
     assert "Omit tables completely" in prompt
+
+
+@pytest.mark.asyncio
+async def test_custom_template_used_on_followup_pages(tmp_path, monkeypatch, capture_antigravity_prompt):
+    import config
+    monkeypatch.setattr(config, "PROMPT_FILE", str(tmp_path / "prompt.txt"))
+    template = "  Keep original terminology.\n{{TEXT}}  "
+    config.save_prompt_editor(template, '{"mode":"advanced"}')
+    await _drain(llm_client.stream_translation(text="Example", session_id="s", page_num=2))
+    assert capture_antigravity_prompt == ["  Keep original terminology.\nExample  "]
+    assert config.get_translation_prompt_editor() == '{"mode":"advanced"}'
