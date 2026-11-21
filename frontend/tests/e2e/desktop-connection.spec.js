@@ -4,17 +4,17 @@ import { mockBaseRoutes, activeReader, SAMPLE_PDF_A } from './helpers.js'
 const localOrigin = 'http://localhost:8934'
 const remoteOrigin = 'http://127.0.0.1:8934'
 
-async function desktop(page, initial = {}) {
-  await mockBaseRoutes(page)
-  await page.addInitScript(() => {
+async function desktop(page, initial = {}, { onboardingVersion = 1 } = {}) {
+  await mockBaseRoutes(page, { workspaceSettings: { onboarding_version: onboardingVersion } })
+  await page.addInitScript(version => {
     localStorage.setItem('easypaper_ui_locale', 'ko')
-    localStorage.setItem('easypaper_onboarding_version', '1')
+    localStorage.setItem('easypaper_onboarding_version', String(version))
     localStorage.setItem('easypaper_tauri_update_check_interval', 'never')
     window.__TAURI_INTERNALS__ = {
       metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
       invoke: async () => null,
     }
-  })
+  }, onboardingVersion)
   const state = { enabled: false, onboarded: false, server_url: '', ...initial }
   const saves = []
   await page.route('**/desktop/connection', async route => {
@@ -33,27 +33,25 @@ async function desktop(page, initial = {}) {
   return { state, saves }
 }
 
-test('onboarding asks for local or remote before loading library data', async ({ page }) => {
-  const { saves } = await desktop(page)
-  const calls = []
-  page.on('request', request => { if (request.url().includes('/api/')) calls.push(request.url()) })
+test('first-run translation guide opens desktop settings for a team server', async ({ page }) => {
+  const { saves } = await desktop(page, {}, { onboardingVersion: 0 })
   await page.goto('/index.html')
-  const dialog = page.getByRole('dialog')
+  await page.locator('[data-purpose-mode="research"]').click()
+  await page.locator('#onboarding-purpose-next-btn').click()
+  await page.locator('#onboarding-fields').getByRole('button', { name: /팀의 EasyPaper에 접속/ }).click()
+  await page.locator('#onboarding-action').click()
+  const dialog = page.locator('dialog.desktop-connection-dialog')
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByText('EasyPaper를 어디에서 사용할까요?')).toBeVisible()
-  await expect(dialog.locator('[value=local]')).toBeChecked()
-  await expect(dialog.locator('[data-url]')).toBeDisabled()
-  expect(calls).toEqual([])
-  await page.screenshot({ path: '/tmp/easypaper-desktop-onboarding.png' })
-  await dialog.locator('[data-apply]').click()
-  await expect(page.locator('.desktop-connection-badge')).toHaveText('연결: 로컬')
-  expect(saves[0].enabled).toBe(false)
+  await expect(dialog.locator('[value=remote]')).toBeChecked()
+  await expect(dialog.locator('[data-url]')).toBeFocused()
+  expect(saves).toEqual([])
 })
 
 test('remote selection isolates browser data and switching off restores local data', async ({ page }) => {
   await desktop(page)
   await page.goto('/index.html')
   await page.evaluate(() => localStorage.setItem('local-library-marker', 'preserve me'))
+  await page.locator('.desktop-connection-badge').click()
   const dialog = page.getByRole('dialog')
   await dialog.locator('[value=remote]').check()
   await dialog.locator('[data-url]').fill('https://papers.example.com')
@@ -348,13 +346,15 @@ test('SSH connection confirms host key and submits password without persisting b
   const { saves } = await desktop(page)
   await page.route('**/desktop/ssh/host-key', route => route.fulfill({ json: { host_key: 'ssh-ed25519 TEST', fingerprint: 'SHA256:verified' } }))
   await page.goto('/index.html')
+  await page.locator('.desktop-connection-badge').click()
   const dialog = page.getByRole('dialog')
   await dialog.locator('[value=remote]').check()
   await dialog.locator('[data-url]').fill('http://127.0.0.1:8000')
-  await dialog.getByRole('combobox', { name: /연결 방식/ }).selectOption('ssh')
+  await dialog.getByRole('button', { name: /연결 방식/ }).click()
+  await dialog.getByRole('option', { name: 'SSH', exact: true }).click()
   await dialog.getByLabel('호스트', { exact: true }).fill('gpu.example.com')
   await dialog.getByLabel('사용자명', { exact: true }).fill('researcher')
-  await dialog.getByLabel('비밀번호', { exact: true }).fill('test-password')
+  await dialog.locator('input[type=password]').and(dialog.getByLabel('비밀번호', { exact: true })).fill('test-password')
   page.once('dialog', confirmation => confirmation.accept())
   await dialog.getByRole('button', { name: '호스트 키 확인', exact: true }).click()
   await expect(dialog.getByText('SHA256:verified')).toBeVisible()
