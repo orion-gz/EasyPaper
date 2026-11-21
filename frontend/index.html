@@ -729,7 +729,7 @@
 
   <!-- 첫 실행 시 AI 엔진 자동 감지 / 설치 안내 모달 -->
   <div id="onboarding-modal" class="modal-overlay hidden">
-    <div class="modal-content" style="max-width: 460px;">
+    <div class="modal-content">
       <div class="modal-header">
         <h2 id="onboarding-title" data-i18n="onboarding:title">번역 환경 설정</h2>
         <div class="onboarding-header-actions">
@@ -740,17 +740,17 @@
         </div>
       </div>
 
-      <div style="padding: 24px; max-height: 70vh; overflow-y: auto;">
+      <div class="onboarding-body">
         <progress id="onboarding-progress" max="4" value="1" aria-labelledby="onboarding-title"></progress>
         <div id="onboarding-purpose" class="hidden">
           <h3 tabindex="-1" data-i18n="onboarding:purpose.heading">EasyPaper를 어떤 용도로 사용하시나요?</h3>
           <p class="onboarding-purpose-help" data-i18n="onboarding:purpose.help">기본 작업공간만 정하며 문서를 자동 분류하지 않습니다. 나중에 사이드바에서 언제든 변경할 수 있습니다.</p>
           <div class="onboarding-purpose-cards" role="radiogroup">
-            <button type="button" data-purpose-mode="research" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.research">연구 논문 중심</strong><span data-i18n="onboarding:purpose.researchHelp">논문 번역, 읽기 전 브리핑, 논문 비교, Research Graph</span></button>
-            <button type="button" data-purpose-mode="general" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.general">일반 문서 중심</strong><span data-i18n="onboarding:purpose.generalHelp">기술 문서, 책, 아티클, 보고서, 매뉴얼 번역과 문서 AI</span></button>
+            <button type="button" class="onboarding-card" data-purpose-mode="research" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.research">연구 논문 중심</strong><span data-i18n="onboarding:purpose.researchHelp">논문 번역, 읽기 전 브리핑, 논문 비교, Research Graph</span></button>
+            <button type="button" class="onboarding-card" data-purpose-mode="general" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.general">일반 문서 중심</strong><span data-i18n="onboarding:purpose.generalHelp">기술 문서, 책, 아티클, 보고서, 매뉴얼 번역과 문서 AI</span></button>
           </div>
           <p id="onboarding-purpose-error" role="alert"></p>
-          <div class="document-type-modal-actions"><button type="button" id="onboarding-purpose-next-btn" class="btn btn-primary" disabled data-i18n="onboarding:next">다음</button></div>
+          <div class="onboarding-actions"><button type="button" id="onboarding-purpose-next-btn" class="btn btn-primary" disabled data-i18n="onboarding:next">다음</button></div>
         </div>
 
         <section id="onboarding-guide" class="hidden" aria-labelledby="onboarding-question">
@@ -763,8 +763,8 @@
             <button id="onboarding-action" class="btn btn-primary"></button>
           </div>
         </section>
-        <div style="text-align: center; margin-top: 18px;">
-          <button type="button" data-i18n="onboarding:skip" id="onboarding-skip-btn" style="background: none; border: none; color: var(--text-muted); font-size: 12.5px; cursor: pointer; text-decoration: underline;">나중에 설정하기</button>
+        <div class="onboarding-footer">
+          <button type="button" data-i18n="onboarding:skip" id="onboarding-skip-btn">나중에 설정하기</button>
         </div>
       </div>
     </div>

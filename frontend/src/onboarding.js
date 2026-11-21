@@ -96,8 +96,9 @@ export function createOnboarding({ openOverlayModal, closeOverlayModal, provider
   function card(title, help, callback) {
     const button = node('button')
     button.type = 'button'
-    button.className = 'onboarding-detected-btn'
-    button.append(node('strong', title), node('small', help))
+    button.className = 'onboarding-card'
+    button.append(node('strong', title))
+    if (help) button.append(node('small', help))
     button.onclick = () => run(callback)
     fields.append(button)
   }
@@ -302,7 +303,11 @@ export function createOnboarding({ openOverlayModal, closeOverlayModal, provider
         select(label('download'), [['llama3.1:8b', 'Llama 3.1 8B · ≈4.9 GB'], ['gemma4:e4b', 'Gemma 4 E4B'], ['qwen3.5:9b', 'Qwen 3.5 9B'],
           ['gemma4:12b', 'Gemma 4 12B'], ['qwen3.6:27b', 'Qwen 3.6 27B'], ['mistral-small3.2:24b', 'Mistral Small 3.2 24B'],
           ['phi4-reasoning:14b', 'Phi-4 Reasoning 14B'], ['deepseek-r1:8b', 'DeepSeek R1 8B']], '', value => { download = value })
-        card(label('download'), 'Ollama', async () => {
+        const downloadButton = node('button', label('download'))
+        downloadButton.type = 'button'
+        downloadButton.className = 'btn btn-secondary'
+        fields.append(downloadButton)
+        downloadButton.onclick = () => run(async () => {
           await stream((progress, done, fail) => streamPullModelAPI(download, progress, done, fail))
           sys = await getSystemSettingsAPI()
           model = download
