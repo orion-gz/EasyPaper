@@ -3623,11 +3623,13 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'openai', label: 'OpenAI', icon: '✦',
-    // Text-generation API models verified 2026-10-14:
+    // Text-generation API models verified 2026-11-21:
     // https://developers.openai.com/api/docs/models
     // https://developers.openai.com/api/docs/deprecations
     // Excludes deprecated o3, GPT-4o and GPT-4o Mini aliases.
     models: [
+      { value: 'gpt-6.2-astra', label: 'GPT-6.2 Astra' },
+      { value: 'gpt-6.2-sol', label: 'GPT-6.2 Sol' },
       { value: 'gpt-6.1-terra', label: 'GPT-6.1 Terra' },
       { value: 'gpt-6.1-sol', label: 'GPT-6.1 Sol' },
       { value: 'gpt-6-astra', label: 'GPT-6 Astra' },
@@ -3643,10 +3645,11 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'claude', label: 'Anthropic Claude', icon: icon('cpu', 13),
-    // https://platform.claude.com/docs/en/models/overview (2026-10-14)
+    // https://platform.claude.com/docs/en/models/overview (2026-11-21)
     // https://platform.claude.com/docs/en/about-claude/model-deprecations
     models: [
       { value: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+      { value: 'claude-fable-5-2', label: 'Claude Fable 5.2' },
       { value: 'claude-fable-5-1', label: 'Claude Fable 5.1' },
       { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
       { value: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' }
@@ -3654,10 +3657,14 @@ const PROVIDER_CONFIG = [
   },
   {
     id: 'gemini', label: 'Google Gemini', icon: icon('star', 13),
-    // https://ai.google.dev/gemini-api/docs/models (2026-10-14)
-    // https://ai.google.dev/gemini-api/docs/deprecations
+    // https://aistudio.google.com/docs/models (2026-11-21)
+    // https://aistudio.google.com/docs/deprecations
     // Excludes Gemini 3.1 Flash-Lite (shutdown scheduled for 2027-05-07).
     models: [
+      { value: 'gemini-4-neon', label: 'Gemini 4 Neon' },
+      { value: 'gemini-4-carbon', label: 'Gemini 4 Carbon' },
+      { value: 'gemini-4-argon', label: 'Gemini 4 Argon' },
+      { value: 'gemini-4-hydrogen', label: 'Gemini 4 Hydrogen' },
       { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
       { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
       { value: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
