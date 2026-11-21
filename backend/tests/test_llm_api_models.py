@@ -10,6 +10,8 @@ from services import llm_client
 @pytest.mark.parametrize(
     ("provider", "model", "supports_temperature"),
     [
+        ("openai", "gpt-6.2-astra", False),
+        ("openai", "gpt-6.2-sol", False),
         ("openai", "gpt-6.1-terra", False),
         ("openai", "gpt-6.1-sol", False),
         ("openai", "gpt-6-astra", False),
@@ -17,6 +19,7 @@ from services import llm_client
         ("openai", "gpt-6-luna", False),
         ("openai", "gpt-4o", True),
         ("claude", "claude-opus-5-5", False),
+        ("claude", "claude-fable-5-2", False),
         ("claude", "claude-fable-5-1", False),
         ("claude", "claude-sonnet-5-5", False),
         ("claude", "claude-haiku-5-5", False),

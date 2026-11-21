@@ -628,7 +628,13 @@ async def stream_claude(messages: list, model: str, temperature: float = 0.5) ->
     }
     # Current Claude models use adaptive thinking and default sampling settings.
     # https://platform.claude.com/docs/en/models/opus-5-5/migration-guide
-    if model in {"claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5", "claude-haiku-5-5"}:
+    if model in {
+        "claude-opus-5-5",
+        "claude-fable-5-2",
+        "claude-fable-5-1",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
+    }:
         payload.pop("temperature")
     if system_prompt:
         payload["system"] = system_prompt
