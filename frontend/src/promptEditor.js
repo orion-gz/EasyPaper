@@ -4,7 +4,13 @@ import './promptEditor.css'
 const presets = {
   terms: 'Include the original term in parentheses after translated technical terms.',
   abbreviations: 'Expand abbreviations on first use.',
-  equations: 'Keep mathematical notation exactly as written.'
+  equations: 'Keep mathematical notation exactly as written.',
+  citations: 'Preserve citation markers and author-year references as written.',
+  units: 'Keep numerical values and measurement units unchanged.',
+  consistent: 'Use the same translation for repeated technical terms.',
+  hedging: 'Preserve distinctions between tentative findings and established claims.',
+  references: 'Retain figure and table numbers in cross-references.',
+  paragraphs: 'Preserve the paragraph breaks of the source text.'
 }
 const tokens = {
   text: 'TEXT', target: 'TARGET_LANGUAGE_NAME', language: 'LANG_INSTRUCTION',
@@ -20,6 +26,12 @@ export function createPromptEditor(root, t, save, options) {
     terms: () => t('settings:prompt.terms'),
     abbreviations: () => t('settings:prompt.abbreviations'),
     equations: () => t('settings:prompt.equations'),
+    citations: () => t('settings:prompt.citations'),
+    units: () => t('settings:prompt.units'),
+    consistent: () => t('settings:prompt.consistent'),
+    hedging: () => t('settings:prompt.hedging'),
+    references: () => t('settings:prompt.references'),
+    paragraphs: () => t('settings:prompt.paragraphs'),
     update: () => t('settings:prompt.update'),
     remove: () => t('settings:prompt.remove'),
     text: () => t('settings:prompt.text'),
@@ -64,9 +76,10 @@ export function createPromptEditor(root, t, save, options) {
     }
     for (const id of Object.keys(presets)) {
       const active = draft.selected.includes(id)
-      button(el('presets'), label(id), () => {
-        draft.selected = active ? draft.selected.filter(key => key !== id) : [...draft.selected, id]
-        render()
+      const preset = button(el('presets'), label(id), () => {
+        draft.selected = draft.selected.includes(id) ? draft.selected.filter(key => key !== id) : [...draft.selected, id]
+        invalidate()
+        preset.setAttribute('aria-pressed', String(draft.selected.includes(id)))
       }, active)
     }
     draft.custom.forEach((value, index) => {
@@ -79,7 +92,7 @@ export function createPromptEditor(root, t, save, options) {
         el('add').textContent = label('update')
       })
       edit.title = label('update')
-      button(chip, '×', () => {
+      button(chip, '', () => {
         draft.custom.splice(index, 1)
         resetInput()
         render()

@@ -7,3 +7,57 @@
 .prompt-editor textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .prompt-editor pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow: auto; }
 .prompt-editor [hidden] { display: none; }
+
+.prompt-editor [data-role="presets"] button {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  border-radius: 999px;
+}
+.prompt-editor [data-role="presets"] button::before { content: "+"; width: 1em; }
+.prompt-editor [data-role="presets"] button[aria-pressed=true] {
+  background: color-mix(in srgb, var(--accent-mid) 16%, var(--bg-elevated));
+}
+.prompt-editor [data-role="presets"] button[aria-pressed=true]::before { content: "✓"; }
+.prompt-editor button:focus-visible { outline: 2px solid var(--accent-mid); outline-offset: 2px; }
+.prompt-editor [data-role="custom"] > span {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-inline-end: .25rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 1rem;
+}
+.prompt-editor [data-role="custom"] button {
+  border: 0;
+  background: transparent;
+}
+.prompt-editor [data-role="custom"] button:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.prompt-editor [data-role="custom"] button:last-child {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border-radius: 50%;
+}
+.prompt-editor [data-role="custom"] button:last-child::before,
+.prompt-editor [data-role="custom"] button:last-child::after {
+  content: "";
+  grid-area: 1 / 1;
+  width: .7rem;
+  height: 1.5px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+.prompt-editor [data-role="custom"] button:last-child::after { transform: rotate(-45deg); }
+.prompt-editor [data-role="custom"] button:last-child:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}

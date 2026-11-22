@@ -6981,6 +6981,24 @@
   "settings:prompt.equations": {
     "description": "Translation prompt editor: Keep equation notation"
   },
+  "settings:prompt.citations": {
+    "description": "Translation prompt editor: Preserve citations"
+  },
+  "settings:prompt.units": {
+    "description": "Translation prompt editor: Keep units and values"
+  },
+  "settings:prompt.consistent": {
+    "description": "Translation prompt editor: Use consistent terms"
+  },
+  "settings:prompt.hedging": {
+    "description": "Translation prompt editor: Preserve uncertainty"
+  },
+  "settings:prompt.references": {
+    "description": "Translation prompt editor: Keep figure and table numbers"
+  },
+  "settings:prompt.paragraphs": {
+    "description": "Translation prompt editor: Preserve paragraph breaks"
+  },
   "settings:prompt.update": {
     "description": "Translation prompt editor: Edit instruction"
   },
