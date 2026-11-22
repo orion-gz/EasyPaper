@@ -275,7 +275,7 @@ async def upload_pdf(
                         detail=f"파일 크기가 {MAX_FILE_SIZE_MB}MB를 초과합니다."
                     )
                 await f.write(chunk)
-    except HTTPException:
+    except (HTTPException, OSError, asyncio.CancelledError):
         shutil.rmtree(session_dir, ignore_errors=True)
         raise
 

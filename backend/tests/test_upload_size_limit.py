@@ -209,3 +209,29 @@ def test_auto_translation_does_not_start_for_undetermined_source(test_client, is
     assert body["translation_skipped_reason"] == "unsupported_source_language"
     assert starts == []
     upload_module.sessions.pop(body["session_id"], None)
+
+
+def test_partial_write_failure_releases_id_for_retry(test_client, isolated_dirs, monkeypatch):
+    from aiofiles.threadpool.binary import AsyncBufferedIOBase
+    from services.rate_limiter import SlidingWindowRateLimiter
+    import pytest
+
+    monkeypatch.setattr(upload_module, 'enforce_rate_limit', SlidingWindowRateLimiter({'upload': (2, 3600)}).check)
+    upload_dir = isolated_dirs['upload_dir']
+    monkeypatch.setattr(upload_module, 'UPLOAD_DIR', str(upload_dir))
+    upload_id = str(uuid.uuid4())
+    url = f'/api/upload?translation_mode=scroll&upload_id={upload_id}'
+    files = {'file': ('retry.pdf', _minimal_pdf_bytes(), 'application/pdf')}
+    write = AsyncBufferedIOBase.write
+
+    async def partial_write(handle, data):
+        await write(handle, data[:4])
+        raise OSError('disk full')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(AsyncBufferedIOBase, 'write', partial_write)
+        with pytest.raises(OSError, match='disk full'):
+            test_client.post(url, files=files)
+
+    assert not (upload_dir / upload_id).exists()
+    assert _await_upload(test_client, test_client.post(url, files=files))['session_id'] == upload_id
