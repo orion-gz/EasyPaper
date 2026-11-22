@@ -11,14 +11,38 @@
 .prompt-editor [data-role="presets"] button {
   display: inline-flex;
   align-items: center;
-  gap: .45rem;
+  gap: .5rem;
+  padding: .35rem .8rem .35rem .4rem;
   border-radius: 999px;
+  font: 500 .85rem/1.4 var(--font-body);
+  box-shadow: var(--shadow-sm);
 }
-.prompt-editor [data-role="presets"] button::before { content: "+"; width: 1em; }
+.prompt-editor [data-role="presets"] button::before {
+  content: "+" / "";
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
+  font: 600 .95rem/1 system-ui;
+}
+.prompt-editor [data-role="presets"] button:hover {
+  border-color: var(--control-accent);
+  background: var(--bg-hover);
+}
 .prompt-editor [data-role="presets"] button[aria-pressed=true] {
-  background: color-mix(in srgb, var(--accent-mid) 16%, var(--bg-elevated));
+  border-color: var(--control-accent);
+  background: linear-gradient(110deg, var(--control-accent-soft), var(--bg-elevated));
+  color: var(--control-accent-text);
 }
-.prompt-editor [data-role="presets"] button[aria-pressed=true]::before { content: "✓"; }
+.prompt-editor [data-role="presets"] button[aria-pressed=true]::before {
+  content: "✓" / "";
+  background: var(--control-accent-text);
+  color: var(--bg-base);
+}
 .prompt-editor button:focus-visible { outline: 2px solid var(--accent-mid); outline-offset: 2px; }
 .prompt-editor [data-role="custom"] > span {
   display: inline-flex;
@@ -26,15 +50,18 @@
   max-width: 100%;
   box-sizing: border-box;
   padding-inline-end: .25rem;
-  background: var(--bg-elevated);
+  background: linear-gradient(110deg, var(--control-accent-soft), var(--bg-elevated));
   border: 1px solid var(--border-strong);
-  border-radius: 1rem;
+  border-inline-start: 3px solid var(--control-accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 .prompt-editor [data-role="custom"] button {
   border: 0;
   background: transparent;
 }
 .prompt-editor [data-role="custom"] button:first-child {
+  font: 500 .85rem/1.5 var(--font-body);
   min-width: 0;
   overflow-wrap: anywhere;
   text-align: start;
@@ -46,6 +73,8 @@
   width: 1.5rem;
   height: 1.5rem;
   padding: 0;
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
   border-radius: 50%;
 }
 .prompt-editor [data-role="custom"] button:last-child::before,
