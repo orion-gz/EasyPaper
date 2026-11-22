@@ -146,8 +146,11 @@ class RemoteGateway:
             target += '?' + request.url.query
         client = self.manager.connection_client(self.target, timeout=httpx.Timeout(600, connect=10), follow_redirects=False, trust_env=False)
         try:
+            headers = upstream_headers(request, self.target)
+            if 'content-length' in request.headers:
+                headers['content-length'] = request.headers['content-length']
             upstream = client.build_request(request.method, target,
-                                            headers=upstream_headers(request, self.target),
+                                            headers=headers,
                                             content=request.stream())
             response = await client.send(upstream, stream=True)
             if 300 <= response.status_code < 400 and response.status_code != 304:

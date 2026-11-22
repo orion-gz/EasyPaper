@@ -110,14 +110,21 @@ export async function cancelInsightJobAPI(sessionId, kind) {
 const uploadRecoveryDelays = [400, 800, 1600, 3200, 5000]
 const uploadPollInterval = 1000
 
-async function waitForUpload(uploadId, onProgress) {
+async function waitForUpload(uploadId, onProgress, accepted = false) {
   onProgress?.(100, "processing")
   let consecutiveNetworkErrors = 0
+  let delay = uploadPollInterval
   while (true) {
     try {
       const res = await fetch(`${API_BASE}/upload/${encodeURIComponent(uploadId)}/status`, { cache: "no-store" })
-      if (!res.ok) throw await apiError(res)
+      if (!res.ok) {
+        const error = await apiError(res)
+        error.uploadTerminal = accepted && res.status < 500 && ![408, 429].includes(res.status)
+        throw error
+      }
       const task = await res.json()
+      delay = uploadPollInterval
+      accepted = true
       consecutiveNetworkErrors = 0
       if (task.status === "succeeded" && task.result) return task.result
       if (["failed", "partial_failed", "cancelled"].includes(task.status)) {
@@ -128,10 +135,11 @@ async function waitForUpload(uploadId, onProgress) {
     } catch (error) {
       if (error.uploadTerminal) throw error
       consecutiveNetworkErrors += 1
-      if (consecutiveNetworkErrors >= 5) throw error
+      if (!accepted && consecutiveNetworkErrors >= 5) throw error
       onProgress?.(100, "verifying")
+      if (accepted) delay = Math.min(delay * 2, 30000)
     }
-    await new Promise(resolve => setTimeout(resolve, uploadPollInterval))
+    await new Promise(resolve => setTimeout(resolve, delay))
   }
 }
 
@@ -173,7 +181,7 @@ export async function uploadPDF(file, options, onProgress) {
       } else if (xhr.status === 202) {
         try {
           const accepted = JSON.parse(xhr.responseText)
-          resolve(await waitForUpload(accepted.session_id || uploadId, onProgress))
+          resolve(await waitForUpload(accepted.session_id || uploadId, onProgress, true))
         } catch (error) {
           reject(error)
         }
