@@ -1,5 +1,5 @@
 #onboarding-modal .modal-content {
-  width: min(460px, calc(100vw - 24px));
+  width: min(520px, calc(100vw - 24px));
   max-height: calc(100dvh - 24px);
   display: flex;
   flex-direction: column;
@@ -7,7 +7,27 @@
 
 #onboarding-modal .modal-header {
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
+  padding: 18px clamp(16px, 4vw, 24px);
+  background: linear-gradient(115deg, var(--control-accent-soft), transparent);
+}
+
+#onboarding-modal .onboarding-header-actions {
+  margin-inline-start: auto;
+}
+
+#onboarding-close-btn {
+  position: static;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+}
+
+#tab-general .settings-section-heading:has(#restart-onboarding) {
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .onboarding-body {
