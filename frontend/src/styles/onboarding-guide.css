@@ -26,6 +26,7 @@
 }
 
 #restart-onboarding {
+  margin-block-start: 14px;
   align-self: flex-end;
 }
 
