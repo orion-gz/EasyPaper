@@ -81,6 +81,26 @@ def mock_upstream(monkeypatch, handler):
                         lambda **kwargs: real_client(transport=transport, **kwargs))
 
 
+def test_proxy_preserves_multipart_upload_length(manager, monkeypatch):
+    pdf = b'%PDF-1.7 paper'
+
+    async def upstream(request):
+        if 'content-length' not in request.headers:
+            return httpx.Response(411, stream=httpx.ByteStream(b''))
+        body = await request.aread()
+        assert int(request.headers['content-length']) == len(body)
+        assert 'transfer-encoding' not in request.headers
+        boundary = request.headers['content-type'].split('boundary=')[1].encode()
+        assert body.endswith(b'--' + boundary + b'--\r\n')
+        assert pdf in body
+        return httpx.Response(202, stream=httpx.ByteStream(b'{}'))
+
+    mock_upstream(monkeypatch, upstream)
+    with TestClient(RemoteGateway(manager, TARGET), base_url='http://127.0.0.1:9000') as client:
+        result = client.post('/api/upload', files={'file': ('paper.pdf', pdf, 'application/pdf')})
+    assert result.status_code == 202
+
+
 def test_proxy_isolates_sessions_and_preserves_streams_and_ranges(manager, monkeypatch):
     calls = []
 

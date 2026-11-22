@@ -25,7 +25,7 @@ import uvicorn
 from services.atomic_io import atomic_write_text
 
 logger = logging.getLogger(__name__)
-REQUEST_HEADERS = ('accept', 'content-type', 'range', 'if-range', 'if-none-match', 'if-modified-since')
+REQUEST_HEADERS = ('accept', 'content-length', 'content-type', 'range', 'if-range', 'if-none-match', 'if-modified-since')
 RESPONSE_HEADERS = ('content-type', 'content-length', 'content-encoding', 'content-disposition',
                     'content-range', 'accept-ranges', 'etag', 'last-modified', 'retry-after')
 
