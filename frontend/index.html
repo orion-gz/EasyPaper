@@ -1504,10 +1504,11 @@
                 <p data-i18n="settings:prompt.choose">Choose translation instructions</p>
                 <div data-role="presets" class="prompt-row"></div>
                 <div data-role="custom" class="prompt-row"></div>
-                <label><span data-i18n="settings:prompt.custom">Custom instruction</span>
-                  <input data-role="input" type="text">
-                </label>
-                <button type="button" data-role="add" data-i18n="settings:prompt.add">Add</button>
+                <label for="prompt-custom-input" data-i18n="settings:prompt.custom">Custom instruction</label>
+                <div class="prompt-input-row">
+                  <input id="prompt-custom-input" data-role="input" type="text">
+                  <button type="button" data-role="add" class="btn btn-secondary" data-i18n="settings:prompt.add">Add</button>
+                </div>
               </section>
               <section data-role="advanced" hidden>
                 <p data-i18n="settings:prompt.insert">Insert at cursor</p>
