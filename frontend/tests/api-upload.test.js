@@ -205,3 +205,29 @@ for (const status of [502, 503, 504]) for (const terminal of ['failed', 'partial
     }
   })
 }
+
+test('accepted upload resumes polling the same ID after repeated outages', async t => {
+  const id = 'accepted-session'
+  let polls = 0
+  const paths = []
+  t.mock.method(globalThis, 'fetch', async url => {
+    paths.push(url)
+    polls++
+    if (polls <= 4) throw new TypeError('offline')
+    if (polls <= 7) return new Response('{}', { status: 503 })
+    return Response.json({ status: 'succeeded', result: { session_id: id } })
+  })
+  t.mock.method(globalThis, 'setTimeout', callback => callback())
+  const originalXHR = globalThis.XMLHttpRequest
+  globalThis.XMLHttpRequest = MockXHR
+  t.after(() => { globalThis.XMLHttpRequest = originalXHR })
+  MockXHR.instances = []
+  const upload = uploadPDF(new Blob(['pdf']), options)
+  const xhr = MockXHR.instances[0]
+  xhr.status = 202
+  xhr.responseText = JSON.stringify({ session_id: id })
+  xhr.emit('load')
+  assert.deepEqual(await upload, { session_id: id })
+  assert.deepEqual(paths, Array(8).fill('/api/upload/' + id + '/status'))
+  assert.equal(MockXHR.instances.length, 1)
+})
