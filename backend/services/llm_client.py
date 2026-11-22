@@ -138,6 +138,7 @@ def build_translation_prompt(
     prev_context: str = "",
     short: bool = False,
     template: str | None = None,
+    preview_locale: str = "en",
 ) -> str:
     """Build the provider-neutral English translation prompt."""
     from services.languages import language_name
@@ -196,9 +197,18 @@ def build_translation_prompt(
             + f"{context_part}\n\n[Source text]\n{text}\n\n[Translation]"
         )
 
+    if preview_locale == "ko":
+        from services.prompt_preview_ko import localize_parts
+        source_name, target_name, language_instruction, style_instruction, rules = localize_parts(
+            source_lang, target_lang, rules, style_rules.get(style, style_rules["academic"])
+        )
+        context_part = f"\n[문맥]\n문서 제목: {doc_title}" if doc_title else ""
+    else:
+        style_instruction = style_rules.get(style, style_rules["academic"])
+
     replacements = {
         "{{LANG_INSTRUCTION}}": language_instruction,
-        "{{STYLE_INSTRUCTION}}": style_rules.get(style, style_rules["academic"]),
+        "{{STYLE_INSTRUCTION}}": style_instruction,
         "{{RULES_TEXT}}": "\n".join(f"{index}. {rule}" for index, rule in enumerate(rules, 1)),
         "{{CONTEXT_PART}}": context_part,
         "{{TEXT}}": text,
