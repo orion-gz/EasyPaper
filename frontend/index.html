@@ -736,7 +736,7 @@
           <label class="onboarding-locale-label"><span data-i18n="onboarding:uiLanguage">화면 언어</span>
             <select id="onboarding-ui-locale" class="form-select"><option value="ko">한국어</option><option value="en">English</option></select>
           </label>
-          <button id="onboarding-close-btn" class="close-btn">&times;</button>
+          <button id="onboarding-close-btn" class="close-btn" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
         </div>
       </div>
 
@@ -914,7 +914,6 @@
 
       <!-- 일반 설정 탭 -->
       <div id="tab-general" class="tab-pane active">
-        <button id="restart-onboarding" class="btn btn-secondary" data-i18n="onboarding:restart">번역 환경 다시 설정</button>
         <form id="general-settings-form" class="modal-form">
           <div class="form-group">
             <label class="toggle-switch" for="setting-minimal-ui">
@@ -938,6 +937,7 @@
             </select>
             <small data-i18n="settings:uiScaleDescription">전체 인터페이스 크기를 조절합니다.</small>
           </div>
+          <button type="button" id="restart-onboarding" class="btn btn-secondary" data-i18n="onboarding:restart">번역 환경 다시 설정</button>
           <div class="form-group">
             <label for="setting-source-lang" data-i18n="settings:sourceLanguage">기본 원문 언어</label>
             <select id="setting-source-lang" class="form-select"></select>
