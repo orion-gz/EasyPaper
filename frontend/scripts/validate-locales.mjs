@@ -46,7 +46,7 @@ for (const namespaceFile of namespaces) {
   const namespace = namespaceFile.replace(/\.json$/, '')
   for (const key of Object.keys(resources.get(baseLocale+':'+namespace))) {
   const full = namespace+':'+key, pluralBase = full.replace(/_(zero|one|two|few|many|other)$/,'')
-  const dynamic = namespace === 'errors' || key.startsWith('legacy.') || (namespace === 'common' && key.startsWith('language.'))
+  const dynamic = (namespace === 'settings' && key.startsWith('prompt.line.')) || namespace === 'errors' || key.startsWith('legacy.') || (namespace === 'common' && key.startsWith('language.'))
   if (!dynamic && !references.has(full) && !references.has(pluralBase)) throw new Error('unused locale key '+full)
 }}
 const contexts = JSON.parse(readFileSync(join(localeRoot,'developer-context.json'),'utf8'))

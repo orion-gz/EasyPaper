@@ -3,7 +3,125 @@
 .prompt-editor .prompt-row { display: flex; flex-wrap: wrap; gap: .45rem; margin: .65rem 0; }
 .prompt-editor button:not(.btn) { background: var(--bg-elevated); color: inherit; border: 1px solid var(--border-strong); border-radius: 1rem; padding: .35rem .8rem; cursor: pointer; }
 .prompt-editor button[aria-pressed=true] { border-color: var(--accent-mid); box-shadow: inset 0 0 0 1px var(--accent-mid); font-weight: 600; }
-.prompt-editor input, .prompt-editor textarea { background: var(--bg-elevated); color: inherit; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: .5rem; }
-.prompt-editor textarea { width: 100%; box-sizing: border-box; resize: vertical; }
-.prompt-editor pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow: auto; }
+.prompt-editor .prompt-input-row {
+  display: flex;
+  align-items: stretch;
+  gap: .5rem;
+  margin-top: .4rem;
+}
+.prompt-input-row input { flex: 1; min-width: 0; }
+.prompt-editor :is([data-role="input"], [data-role="template"], [data-role="result"]) {
+  box-sizing: border-box;
+  padding: .75rem 1rem;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+}
+.prompt-editor [data-role="input"] { font: 400 .875rem/1.5 var(--font-body); }
+.prompt-editor :is([data-role="input"], [data-role="template"]):focus {
+  outline: 2px solid transparent;
+  border-color: var(--control-accent);
+  box-shadow: 0 0 0 3px var(--control-accent-soft);
+}
+.prompt-editor :is([data-role="template"], [data-role="result"]) {
+  display: block;
+  width: 100%;
+  padding: 1rem 1.125rem;
+  font: 400 .875rem/1.7 var(--font-mono);
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+.prompt-editor [data-role="template"] { min-height: 9rem; resize: vertical; }
+.prompt-editor [data-role="result"] {
+  max-height: 18rem;
+  margin: .75rem 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: var(--bg-surface);
+  border-inline-start: 3px solid var(--control-accent);
+}
 .prompt-editor [hidden] { display: none; }
+
+.prompt-editor [data-role="presets"] button {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .35rem .8rem .35rem .4rem;
+  border-radius: 999px;
+  font: 500 .85rem/1.4 var(--font-body);
+  box-shadow: var(--shadow-sm);
+}
+.prompt-editor [data-role="presets"] button::before {
+  content: "+" / "";
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
+  font: 600 .95rem/1 system-ui;
+}
+.prompt-editor [data-role="presets"] button:hover {
+  border-color: var(--control-accent);
+  background: var(--bg-hover);
+}
+.prompt-editor [data-role="presets"] button[aria-pressed=true] {
+  border-color: var(--control-accent);
+  background: linear-gradient(110deg, var(--control-accent-soft), var(--bg-elevated));
+  color: var(--control-accent-text);
+}
+.prompt-editor [data-role="presets"] button[aria-pressed=true]::before {
+  content: "✓" / "";
+  background: var(--control-accent-text);
+  color: var(--bg-base);
+}
+.prompt-editor button:focus-visible { outline: 2px solid var(--accent-mid); outline-offset: 2px; }
+.prompt-editor [data-role="custom"] > span {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-inline-end: .25rem;
+  background: linear-gradient(110deg, var(--control-accent-soft), var(--bg-elevated));
+  border: 1px solid var(--border-strong);
+  border-inline-start: 3px solid var(--control-accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.prompt-editor [data-role="custom"] button {
+  border: 0;
+  background: transparent;
+}
+.prompt-editor [data-role="custom"] button:first-child {
+  font: 500 .85rem/1.5 var(--font-body);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.prompt-editor [data-role="custom"] button:last-child {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
+  border-radius: 50%;
+}
+.prompt-editor [data-role="custom"] button:last-child::before,
+.prompt-editor [data-role="custom"] button:last-child::after {
+  content: "";
+  grid-area: 1 / 1;
+  width: .7rem;
+  height: 1.5px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+.prompt-editor [data-role="custom"] button:last-child::after { transform: rotate(-45deg); }
+.prompt-editor [data-role="custom"] button:last-child:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
