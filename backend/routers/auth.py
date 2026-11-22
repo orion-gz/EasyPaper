@@ -1279,6 +1279,7 @@ async def get_full_changelog(current_user: str = Depends(require_admin_user)):
 
 
 class PromptPreviewRequest(BaseModel):
+    uiLocale: str = "en"
     template: str
     sourceLang: str = "auto"
     targetLang: str = "ko"
@@ -1297,8 +1298,8 @@ async def preview_prompt(data: PromptPreviewRequest, current_user: str = Depends
     prompt = build_translation_prompt(
         "The model reduced the error rate by 12%.", data.sourceLang, data.targetLang, data.style,
         build_translation_policy(data.documentMode, data.documentType), ignore_math=data.ignoreMath,
-        ignore_table=data.ignoreTable, ignore_refs=data.ignoreRefs, doc_title="Model evaluation",
-        template=data.template,
+        ignore_table=data.ignoreTable, ignore_refs=data.ignoreRefs, doc_title="모델 평가" if data.uiLocale == "ko" else "Model evaluation",
+        template=data.template, preview_locale=data.uiLocale,
     )
     return {"prompt": prompt}
 

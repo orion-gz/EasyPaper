@@ -1,4 +1,61 @@
 {
+  "settings:prompt.line.intro": {
+    "description": "Editable translation prompt line (intro)"
+  },
+  "settings:prompt.line.source": {
+    "description": "Editable translation prompt line (source)"
+  },
+  "settings:prompt.line.target": {
+    "description": "Editable translation prompt line (target)"
+  },
+  "settings:prompt.line.style": {
+    "description": "Editable translation prompt line (style)"
+  },
+  "settings:prompt.line.rules": {
+    "description": "Editable translation prompt line (rules)"
+  },
+  "settings:prompt.line.complete": {
+    "description": "Editable translation prompt line (complete)"
+  },
+  "settings:prompt.line.context": {
+    "description": "Editable translation prompt line (context)"
+  },
+  "settings:prompt.line.custom": {
+    "description": "Editable translation prompt line (custom)"
+  },
+  "settings:prompt.line.sourceHeading": {
+    "description": "Editable translation prompt line (sourceHeading)"
+  },
+  "settings:prompt.line.targetHeading": {
+    "description": "Editable translation prompt line (targetHeading)"
+  },
+  "settings:prompt.line.terms": {
+    "description": "Editable translation prompt line (terms)"
+  },
+  "settings:prompt.line.abbreviations": {
+    "description": "Editable translation prompt line (abbreviations)"
+  },
+  "settings:prompt.line.equations": {
+    "description": "Editable translation prompt line (equations)"
+  },
+  "settings:prompt.line.citations": {
+    "description": "Editable translation prompt line (citations)"
+  },
+  "settings:prompt.line.units": {
+    "description": "Editable translation prompt line (units)"
+  },
+  "settings:prompt.line.consistent": {
+    "description": "Editable translation prompt line (consistent)"
+  },
+  "settings:prompt.line.hedging": {
+    "description": "Editable translation prompt line (hedging)"
+  },
+  "settings:prompt.line.references": {
+    "description": "Editable translation prompt line (references)"
+  },
+  "settings:prompt.line.paragraphs": {
+    "description": "Editable translation prompt line (paragraphs)"
+  },
   "viewer:preparation.running": {
     "description": "Reader status shown while background PDF parsing runs; PDF reading remains available."
   },

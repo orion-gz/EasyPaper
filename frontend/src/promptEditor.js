@@ -1,3 +1,5 @@
+import { getLocale } from './i18n.js'
+import { translatePromptLines } from './promptDisplay.js'
 import { previewTranslationPrompt } from './api.js'
 import './promptEditor.css'
 
@@ -53,11 +55,18 @@ export function createPromptEditor(root, t, save, options) {
     parent.append(node)
     return node
   }
-  function simpleTemplate() {
-    const lines = [...Object.keys(presets).filter(id => draft.selected.includes(id)).map(id => presets[id]), ...draft.custom]
-    return base.replace('{{RULES_TEXT}}', () => ['{{RULES_TEXT}}', ...lines.map(line => '- ' + line)].join('\n'))
+  function simpleTemplate(localized = false) {
+    const builtIn = Object.keys(presets).filter(id => draft.selected.includes(id)).map(id => '- ' + presets[id])
+    const display = text => localized ? translatePromptLines(text, true) : text
+    return display(base).replace('{{RULES_TEXT}}', () => [
+      '{{RULES_TEXT}}', ...builtIn.map(display), ...draft.custom.map(line => '- ' + line)
+    ].join('\n'))
   }
   const template = () => draft.mode === 'advanced' ? draft.advanced : simpleTemplate()
+  function displayTemplate() {
+    if (getLocale() !== 'ko') return template()
+    return draft.mode === 'simple' ? simpleTemplate(true) : translatePromptLines(draft.advanced, true)
+  }
   function invalidate() {
     revision++
     el('result').hidden = true
@@ -99,7 +108,7 @@ export function createPromptEditor(root, t, save, options) {
       }).setAttribute('aria-label', label('remove') + ' ' + value)
     })
     const field = el('template')
-    field.value = draft.advanced ?? ''
+    field.value = draft.mode === 'advanced' ? displayTemplate() : ''
     for (const [key, token] of Object.entries(tokens)) {
       button(el('tokens'), label(key), () => {
         field.setRangeText('{{' + token + '}}', field.selectionStart, field.selectionEnd, 'end')
@@ -128,13 +137,14 @@ export function createPromptEditor(root, t, save, options) {
     }
   }
   el('template').oninput = () => {
-    draft.advanced = el('template').value
+    const value = el('template').value
+    draft.advanced = getLocale() === 'ko' ? translatePromptLines(value, false) : value
     invalidate()
   }
   el('preview').onclick = async () => {
     const version = ++revision
     try {
-      const result = await previewTranslationPrompt({ ...options(), template: template() })
+      const result = await previewTranslationPrompt({ ...options(), uiLocale: getLocale(), template: displayTemplate() })
       if (revision !== version) return
       el('result').textContent = result.prompt
       el('result').hidden = false
@@ -156,6 +166,13 @@ export function createPromptEditor(root, t, save, options) {
       root.disabled = false
     }
   }
+  document.addEventListener('easypaper:locale-changed', () => {
+    if (!draft) return
+    const previewVisible = !el('result').hidden
+    render()
+    el('add').textContent = label(editing === -1 ? 'add' : 'update')
+    if (previewVisible) el('preview').click()
+  })
   return {
     load(sys) {
       const actual = sys.translation_prompt_template || sys.default_prompt_template
