@@ -25,9 +25,8 @@
   border-radius: 50%;
 }
 
-#tab-general .settings-section-heading:has(#restart-onboarding) {
-  align-items: center;
-  flex-wrap: wrap;
+#restart-onboarding {
+  align-self: flex-end;
 }
 
 .onboarding-body {
