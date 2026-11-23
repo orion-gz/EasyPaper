@@ -1766,6 +1766,13 @@ async function initScrollViewer() {
     } catch {}
   }
 
+  // Position scroll container to the user's restored/starting page BEFORE starting
+  // renderScrollView(), so the initial render priority targets the actual page the
+  // user is reading (+/- 15 pages around it) instead of rendering page 1 first!
+  if (state.currentPage > 1) {
+    scrollToPage(viewerScrollContainer, state.currentPage, { instant: true })
+  }
+
   await renderScrollView(viewerScrollContainer, state.zoom, { onPageVisible: handleReaderPageVisible })
   if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
 
@@ -1781,10 +1788,13 @@ async function initScrollViewer() {
   startJobPolling(state.sessionId)
 }
 
-async function prefetchCompletedTranslations(sessionId, generation) {
+async function prefetchCompletedTranslations(sessionId, generation, centerPage = state.currentPage || 1) {
   const revision = translationRevision
-  const pages = [...state.translatedPages].filter(p => Number.isInteger(p) && p >= 1 && p <= state.totalPages).sort((a, b) => a - b)
-  if (!pages.length || state.totalPages > 60) return
+  const radius = state.totalPages > 60 ? 15 : state.totalPages
+  const pages = [...state.translatedPages]
+    .filter(p => Number.isInteger(p) && p >= 1 && p <= state.totalPages && Math.abs(p - centerPage) <= radius)
+    .sort((a, b) => Math.abs(a - centerPage) - Math.abs(b - centerPage))
+  if (!pages.length) return
   for (const pageNum of pages) {
     if (generation !== scrollViewerGeneration || state.sessionId !== sessionId || revision !== translationRevision) return
     if (state.translationCache[pageNum]) continue
@@ -1848,29 +1858,30 @@ async function handleReaderPageVisible(pageNum) {
     scheduleVisiblePageTranslation(pageNum)
   }
 
-  // 비동기 다음 페이지 번역 프리페칭 및 미리 렌더링
-  const nextPage = pageNum + 1
-  if (nextPage <= state.totalPages && !state.translationCache[nextPage]) {
-    if (state.translatedPages.has(nextPage)) {
-      state.translationCache[nextPage] = '__fetching__'
+  // 비동기 주변 페이지(±5페이지) 번역 프리페칭 및 미리 렌더링
+  for (const delta of [1, -1, 2, -2, 3, -3, 4, -4, 5, -5]) {
+    const nearPage = pageNum + delta
+    if (nearPage < 1 || nearPage > state.totalPages || state.translationCache[nearPage]) continue
+    if (state.translatedPages.has(nearPage)) {
+      state.translationCache[nearPage] = '__fetching__'
       const currentSessionId = state.sessionId
       const opts = getTranslationOptions()
-      fetchLibraryTranslation(currentSessionId, nextPage, opts).then(res => {
+      fetchLibraryTranslation(currentSessionId, nearPage, opts).then(res => {
         if (state.sessionId === currentSessionId && revision === translationRevision) {
-          state.translationCache[nextPage] = res.translation
-          state.translationSentences[nextPage] = res.sentences || []
-          state.translationWarnings[nextPage] = res.warnings || []
-          renderTransContent(nextPage, res.translation, true)
+          state.translationCache[nearPage] = res.translation
+          state.translationSentences[nearPage] = res.sentences || []
+          state.translationWarnings[nearPage] = res.warnings || []
+          renderTransContent(nearPage, res.translation, true)
         }
-      }).catch(err => {
+      }).catch(() => {
         if (state.sessionId === currentSessionId && revision === translationRevision) {
-          delete state.translationCache[nextPage]
-          renderPageMemos(nextPage)
+          delete state.translationCache[nearPage]
+          renderPageMemos(nearPage)
         }
       })
-    } else if (getEffectiveTranslationMode() === 'scroll' && !isLongDocument()) {
+    } else if (delta === 1 && getEffectiveTranslationMode() === 'scroll' && !isLongDocument()) {
       // 다음 페이지도 미리 번역해둬 스크롤이 도착했을 때 바로 보이게 한다.
-      translatePage(nextPage)
+      translatePage(nearPage)
     }
   }
 }

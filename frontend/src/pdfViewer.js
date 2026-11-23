@@ -242,7 +242,8 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   }
 
   const isLargeDocument = numPages > 48
-  const maxRetainedPages = isLargeDocument ? 24 : numPages
+  const preRenderRadius = isLargeDocument ? 15 : numPages
+  const maxRetainedPages = isLargeDocument ? 40 : numPages
   const eagerRenderAll = !isLargeDocument
   let initialPageReadyResolve = null
   const initialPageReadyPromise = new Promise(resolve => {
@@ -281,20 +282,20 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   function trimPages() {
     const selection = window.getSelection()
     if (isLargeDocument) {
-      // Immediately cancel in-flight canvas renders for pages that have already scrolled
-      // out of the immediate viewport so the newly visible page never waits behind
-      // stale off-screen renders!
+      // Only cancel in-flight canvas renders if the user jumped far away (beyond the
+      // ±15 page pre-render window), so background pre-rendering around the current page
+      // completes without interruption!
       for (const job of jobs.values()) {
-        if (!job.canvasRendered && Math.abs(job.pageNum - renderPriorityPage) > 2) {
+        if (!job.canvasRendered && Math.abs(job.pageNum - renderPriorityPage) > preRenderRadius) {
           release(job)
         }
       }
       // In textbook-sized documents, strip heavy textLayer/overlay DOM (thousands of spans)
-      // from pages that are more than 2 pages away from the current reading position,
-      // while keeping their lightweight rendered <canvas> bitmap cached!
+      // from pages that are more than 3 pages away from the current reading position,
+      // while keeping their lightweight rendered <canvas> bitmap cached across ±15 pages!
       for (const job of jobs.values()) {
         if (!job.done || !job.textLayerMounted) continue
-        if (Math.abs(job.pageNum - renderPriorityPage) <= 2) continue
+        if (Math.abs(job.pageNum - renderPriorityPage) <= 3) continue
         if (job.wrapper.contains(document.activeElement)) continue
         if (selection?.rangeCount && !selection.isCollapsed && selection.getRangeAt(0).intersectsNode(job.wrapper)) continue
         const hasMemos = Boolean(job.wrapper.querySelector('.floating-memo'))
@@ -304,7 +305,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     }
     if (eagerRenderAll) return
     const candidates = [...jobs.values()]
-      .filter(job => !nearby.has(job.pageNum) && !job.wrapper.contains(document.activeElement) && !(
+      .filter(job => Math.abs(job.pageNum - renderPriorityPage) > preRenderRadius && !nearby.has(job.pageNum) && !job.wrapper.contains(document.activeElement) && !(
         selection?.rangeCount && !selection.isCollapsed
         && selection.getRangeAt(0).intersectsNode(job.wrapper)
       ))
@@ -335,7 +336,8 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         })[0]
         const wrapper = queue.get(pageNum)
         queue.delete(pageNum)
-        if ((!eagerRenderAll && !nearby.has(pageNum)) || jobs.has(pageNum)) continue
+        const withinPreRenderWindow = Math.abs(pageNum - renderPriorityPage) <= preRenderRadius
+        if ((!eagerRenderAll && !nearby.has(pageNum) && !withinPreRenderWindow) || jobs.has(pageNum)) continue
         const job = { wrapper, pageNum, controller: new AbortController(), cancelled: false, done: false, textLayerMounted: false }
         jobs.set(pageNum, job)
         active++
@@ -407,7 +409,24 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         }
       }
     } else {
-      for (const pageNum of queue.keys()) if (!nearby.has(pageNum)) queue.delete(pageNum)
+      // Pre-render ±preRenderRadius (±15 pages) outward from renderPriorityPage so
+      // scrolling up or down through a textbook finds pages already rendered!
+      const minPage = Math.max(1, renderPriorityPage - preRenderRadius)
+      const maxPage = Math.min(numPages, renderPriorityPage + preRenderRadius)
+      for (let pageNum = minPage; pageNum <= maxPage; pageNum++) {
+        nearby.add(pageNum)
+        if (!jobs.has(pageNum) && !queue.has(pageNum)) {
+          const target = renderTargets[pageNum - 1]
+          if (target) {
+            queue.set(pageNum, target.matches('.pdf-page-wrapper') ? target : target.querySelector('.pdf-page-wrapper'))
+          }
+        }
+      }
+      for (const pageNum of queue.keys()) {
+        if (!nearby.has(pageNum) && Math.abs(pageNum - renderPriorityPage) > preRenderRadius) {
+          queue.delete(pageNum)
+        }
+      }
     }
     trimPages()
     scheduleRender()
