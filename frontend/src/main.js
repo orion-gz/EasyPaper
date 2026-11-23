@@ -3863,25 +3863,19 @@ class ProviderModelPicker {
       group.appendChild(header)
 
       const models = prov.models.length > 0 ? prov.models : [{ value: '', label: '모델 없음' }]
-      let lastGroup = null
-      models.forEach(m => {
-        // group 속성이 있으면 새 그룹이 시작될 때 소제목 삽입 (claude_code effort 그룹핑)
-        if (m.group && m.group !== lastGroup) {
-          if (lastGroup !== null) {
-            const subDiv = document.createElement('div')
-            subDiv.style.cssText = 'height:1px;background:var(--border);margin:3px 8px;'
-            group.appendChild(subDiv)
-          }
-          const subHeader = document.createElement('div')
-          subHeader.style.cssText = 'padding:4px 10px 2px 10px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);opacity:0.7;'
-          subHeader.textContent = m.group
-          group.appendChild(subHeader)
-          lastGroup = m.group
-        }
+      const families = new Map()
+      for (const model of models) {
+        const key = model.group && model.label.includes(' · ') ? model.group : model.value
+        if (!families.has(key)) families.set(key, [])
+        families.get(key).push(model)
+      }
+      families.forEach(variants => {
+        const selected = variants.find(v => this._provider === prov.id && this._model === v.value)
+        const m = selected || variants.find(v => v.label.endsWith(' · Medium')) || variants[0]
         const item = document.createElement('div')
         item.className = 'picker-model-item' + (this._provider === prov.id && this._model === m.value ? ' selected' : '')
         item.style.position = 'relative'
-        item.textContent = m.label
+        item.textContent = variants.length > 1 ? m.group : m.label
         if (m.value) {
           item.addEventListener('click', async (e) => {
             e.stopPropagation()
@@ -3936,11 +3930,42 @@ class ProviderModelPicker {
             this._provider = prov.id
             this._model = m.value
             this._updateBtn()
-            this.container.classList.remove('open')
+            if (variants.length > 1) this._rebuildPanel()
+            else this.container.classList.remove('open')
             this.onChange(prov.id, m.value)
           })
         }
         group.appendChild(item)
+        if (selected && variants.length > 1) {
+          const control = document.createElement('label')
+          control.className = 'picker-effort'
+          const caption = document.createElement('span')
+          const slider = document.createElement('input')
+          slider.type = 'range'
+          slider.min = '0'
+          slider.max = String(variants.length - 1)
+          slider.value = String(variants.indexOf(selected))
+          const title = getLocale() === 'ko' ? '추론 강도' : 'Reasoning effort'
+          caption.className = 'picker-effort-caption'
+          const levelLabel = document.createElement('span')
+          levelLabel.className = 'picker-effort-level'
+          caption.append(title, levelLabel)
+          slider.setAttribute('aria-label', title)
+          const updateCaption = () => {
+            const level = variants[slider.valueAsNumber].label.split(' · ').pop()
+            levelLabel.textContent = level
+            slider.setAttribute('aria-valuetext', level)
+          }
+          updateCaption()
+          slider.addEventListener('input', updateCaption)
+          slider.addEventListener('change', () => {
+            this._model = variants[slider.valueAsNumber].value
+            this._updateBtn()
+            this.onChange(prov.id, this._model)
+          })
+          control.append(caption, slider)
+          group.appendChild(control)
+        }
       })
       this._panel.appendChild(group)
     })

@@ -3719,6 +3719,42 @@ body.light-theme .provider-picker-panel {
   font-size: 10px;
   color: var(--accent-mid);
 }
+.picker-effort {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 8px 16px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.picker-effort-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.picker-effort-level {
+  color: var(--accent-mid);
+  font-weight: 600;
+}
+.picker-effort input[type="range"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  accent-color: var(--accent-mid);
+}
+.picker-effort input:focus-visible {
+  outline: 2px solid var(--accent-mid);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
 .picker-divider {
   height: 1px;
   background: var(--border);
