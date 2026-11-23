@@ -1,4 +1,5 @@
 {
+  "reasoningEffort": "추론 강도",
   "prompt.line.intro": "문서 번역 전문가로서 다음 지침에 따라 번역하세요.",
   "prompt.line.source": "원문 언어: {{SOURCE_LANGUAGE_NAME}} ({{SOURCE_LANGUAGE_TAG}})",
   "prompt.line.target": "번역 언어: {{TARGET_LANGUAGE_NAME}} ({{TARGET_LANGUAGE_TAG}})",

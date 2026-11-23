@@ -38,7 +38,7 @@ import { applyDesktopUpdate } from './desktopUpdate.js'
 import { renderReleaseNotes, installReleaseNotesLinks } from './releaseNotes.js'
 import './styles/release-notes.css'
 import { pageCoordinates } from './pdfCoordinates.js'
-import { mergePdfHighlightRects, mappedSentenceRange, sentenceCharParts, contiguousSentenceBounds } from './pdfSentenceGeometry.js'
+import { mergePdfHighlightRects, mergePdfSentenceLineRects, mappedSentenceRange, sentenceCharParts, contiguousSentenceBounds } from './pdfSentenceGeometry.js'
 import './styles/shell.css'
 import './styles/library-page.css'
 import './styles/research-graph.css'
@@ -1503,11 +1503,11 @@ async function handleFiles(uploadItems, targetFolderId = null) {
   for (const uploaded of successes) {
     const { classification, result, rememberedTypeOptions } = uploaded
     const confirmedClassification = classification.classificationMethod === 'ai'
-      ? await requireClassificationConfirmation(result.session_id)
+      ? { document_mode: result.document_mode || classification.documentMode, document_type: result.document_type || classification.documentType }
       : { document_mode: classification.documentMode, document_type: classification.documentType }
     result.document_mode = confirmedClassification.document_mode
     result.document_type = confirmedClassification.document_type
-    result.classification_status = "confirmed"
+    result.classification_status = classification.classificationMethod === 'ai' ? 'pending' : 'confirmed'
     const title = result.metadata?.title || result.filename
     if (isLongDocument(result.total_pages) && getTranslationMode(result.document_mode) === 'auto') {
       showToast('50페이지 이상 문서는 전체 자동 번역 대신 보는 페이지부터 번역됩니다.', 'info')
@@ -1679,9 +1679,22 @@ function scheduleVisiblePageTranslation(pageNum) {
 
 // ── 스크롤 뷰어 초기화 ────────────────────────────
 let scrollViewerGeneration = 0
+const pagePairByNum = new Map()
+const pageWrapperByNum = new Map()
+
+function getCachedPageWrapper(pageNum) {
+  const cached = pageWrapperByNum.get(Number(pageNum))
+  if (cached && cached.isConnected) return cached
+  const found = viewerScrollContainer?.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`) || null
+  if (found) pageWrapperByNum.set(Number(pageNum), found)
+  return found
+}
+
 async function initScrollViewer() {
   easyEnglishController?.reset()
   viewerScrollContainer.innerHTML = ''
+  pagePairByNum.clear()
+  pageWrapperByNum.clear()
   visibleTranslationTimers.forEach(timer => clearTimeout(timer))
   visibleTranslationTimers.clear()
 
@@ -1700,7 +1713,7 @@ async function initScrollViewer() {
       analyticsScrollFrame = requestAnimationFrame(() => {
         analyticsScrollFrame = null
         if (state.currentPage) {
-          const curPageEl = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${state.currentPage}"]`)
+          const curPageEl = getCachedPageWrapper(state.currentPage)
           globalAnalyticsTracker.trackScroll(state.currentPage, curPageEl, viewerScrollContainer, true, false)
         }
       })
@@ -1729,22 +1742,95 @@ async function initScrollViewer() {
   const sessionId = state.sessionId
   const generation = ++scrollViewerGeneration
   const totalPages = state.totalPages
-  for (let start = 1; start <= totalPages; start += 16) {
+  const batchSize = totalPages > 64 ? 48 : 16
+  for (let start = 1; start <= totalPages; start += batchSize) {
     if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
     const fragment = document.createDocumentFragment()
-    for (let i = start; i < Math.min(start + 16, totalPages + 1); i++) {
-      fragment.appendChild(createPagePair(i))
+    for (let i = start; i < Math.min(start + batchSize, totalPages + 1); i++) {
+      const pairEl = createPagePair(i)
+      pagePairByNum.set(i, pairEl)
+      const wrapperEl = pairEl.querySelector('.pdf-page-wrapper')
+      if (wrapperEl) pageWrapperByNum.set(i, wrapperEl)
+      fragment.appendChild(pairEl)
     }
     viewerScrollContainer.appendChild(fragment)
-    if (start + 16 <= totalPages) await new Promise(resolve => setTimeout(resolve, 0))
+    if (start + batchSize <= totalPages) await new Promise(resolve => setTimeout(resolve, 0))
   }
   if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
+
+  // In document workspace tabs, pre-calculate the initial fit-to-width zoom BEFORE
+  // calling renderScrollView() the first time, so the document renders once at its
+  // final size instead of visibly painting at zoom=1.5 and immediately re-rendering.
+  if (isDocumentRuntime && viewerScrollContainer.clientWidth > 0) {
+    try {
+      const pageWidth = await getPDFPageWidth(state.currentPage || 1)
+      if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
+      if (pageWidth > 0) {
+        const scrollStyle = getComputedStyle(viewerScrollContainer)
+        const pair = viewerScrollContainer.querySelector('.page-pair')
+        const pairStyle = pair ? getComputedStyle(pair) : null
+        const translation = pair?.querySelector('.trans-page-block')
+        const parallel = translation && getComputedStyle(translation).display !== 'none' && pairStyle?.flexDirection !== 'column'
+        const horizontal = style => style ? ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0) : 0
+        const gap = parseFloat(pairStyle?.columnGap) || 18
+        const available = viewerScrollContainer.clientWidth - horizontal(scrollStyle) - horizontal(pairStyle) - 6 - (parallel ? gap : 0)
+        const fitZoom = Math.max(0.5, Math.min(3, available / (pageWidth * (parallel ? 2 : 1))))
+        if (Number.isFinite(fitZoom) && fitZoom > 0) {
+          previewZoom(fitZoom)
+          lastCommittedZoom = state.zoom
+        }
+      }
+    } catch {}
+  }
+
+  // Position scroll container to the user's restored/starting page BEFORE starting
+  // renderScrollView(), so the initial render priority targets the actual page the
+  // user is reading (+/- 15 pages around it) instead of rendering page 1 first!
+  if (state.currentPage > 1) {
+    scrollToPage(viewerScrollContainer, state.currentPage, { instant: true })
+  }
 
   await renderScrollView(viewerScrollContainer, state.zoom, { onPageVisible: handleReaderPageVisible })
   if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
 
+  // 이미 번역 완료된 페이지들은 첫 화면이 뜬 뒤 백그라운드에서 미리 로드해 두어,
+  // 위/아래로 스크롤할 때 번역 패널이 비어 있다가 뒤늦게 팝인되지 않게 한다.
+  setTimeout(() => {
+    if (generation === scrollViewerGeneration && state.sessionId === sessionId) {
+      void prefetchCompletedTranslations(sessionId, generation)
+    }
+  }, 120)
+
   // 백그라운드 잡 폴링 시작
   startJobPolling(state.sessionId)
+}
+
+async function prefetchCompletedTranslations(sessionId, generation, centerPage = state.currentPage || 1) {
+  const revision = translationRevision
+  const radius = state.totalPages > 60 ? 15 : state.totalPages
+  const pages = [...state.translatedPages]
+    .filter(p => Number.isInteger(p) && p >= 1 && p <= state.totalPages && Math.abs(p - centerPage) <= radius)
+    .sort((a, b) => Math.abs(a - centerPage) - Math.abs(b - centerPage))
+  if (!pages.length) return
+  for (const pageNum of pages) {
+    if (generation !== scrollViewerGeneration || state.sessionId !== sessionId || revision !== translationRevision) return
+    if (state.translationCache[pageNum]) continue
+    state.translationCache[pageNum] = '__fetching__'
+    try {
+      const opts = getTranslationOptions()
+      const res = await fetchLibraryTranslation(sessionId, pageNum, opts)
+      if (generation !== scrollViewerGeneration || state.sessionId !== sessionId || revision !== translationRevision) return
+      state.translationCache[pageNum] = res.translation
+      state.translationSentences[pageNum] = res.sentences || []
+      state.translationWarnings[pageNum] = res.warnings || []
+      renderTransContent(pageNum, res.translation, true)
+    } catch {
+      if (state.sessionId === sessionId && revision === translationRevision) {
+        delete state.translationCache[pageNum]
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 16))
+  }
 }
 
 // Keep translation loading and analytics active after fit/zoom rerenders.
@@ -1753,7 +1839,7 @@ async function handleReaderPageVisible(pageNum) {
   if (translationResetSession === state.sessionId) return
   updatePageDisplay(pageNum)
   globalAnalyticsTracker.setCurrentPage(pageNum)
-  const visiblePageEl = viewerScrollContainer.querySelector('.pdf-page-wrapper[data-page="' + pageNum + '"]')
+  const visiblePageEl = getCachedPageWrapper(pageNum)
   globalAnalyticsTracker.trackScroll(pageNum, visiblePageEl, viewerScrollContainer, true, false)
 
   // 페이지가 가시화되었을 때 번역 완료된 페이지인데 캐시가 없는 경우 레이지 로딩 적용
@@ -1789,29 +1875,30 @@ async function handleReaderPageVisible(pageNum) {
     scheduleVisiblePageTranslation(pageNum)
   }
 
-  // 비동기 다음 페이지 번역 프리페칭 및 미리 렌더링
-  const nextPage = pageNum + 1
-  if (nextPage <= state.totalPages && !state.translationCache[nextPage]) {
-    if (state.translatedPages.has(nextPage)) {
-      state.translationCache[nextPage] = '__fetching__'
+  // 비동기 주변 페이지(±5페이지) 번역 프리페칭 및 미리 렌더링
+  for (const delta of [1, -1, 2, -2, 3, -3, 4, -4, 5, -5]) {
+    const nearPage = pageNum + delta
+    if (nearPage < 1 || nearPage > state.totalPages || state.translationCache[nearPage]) continue
+    if (state.translatedPages.has(nearPage)) {
+      state.translationCache[nearPage] = '__fetching__'
       const currentSessionId = state.sessionId
       const opts = getTranslationOptions()
-      fetchLibraryTranslation(currentSessionId, nextPage, opts).then(res => {
+      fetchLibraryTranslation(currentSessionId, nearPage, opts).then(res => {
         if (state.sessionId === currentSessionId && revision === translationRevision) {
-          state.translationCache[nextPage] = res.translation
-          state.translationSentences[nextPage] = res.sentences || []
-          state.translationWarnings[nextPage] = res.warnings || []
-          renderTransContent(nextPage, res.translation, true)
+          state.translationCache[nearPage] = res.translation
+          state.translationSentences[nearPage] = res.sentences || []
+          state.translationWarnings[nearPage] = res.warnings || []
+          renderTransContent(nearPage, res.translation, true)
         }
-      }).catch(err => {
+      }).catch(() => {
         if (state.sessionId === currentSessionId && revision === translationRevision) {
-          delete state.translationCache[nextPage]
-          renderPageMemos(nextPage)
+          delete state.translationCache[nearPage]
+          renderPageMemos(nearPage)
         }
       })
-    } else if (getEffectiveTranslationMode() === 'scroll' && !isLongDocument()) {
+    } else if (delta === 1 && getEffectiveTranslationMode() === 'scroll' && !isLongDocument()) {
       // 다음 페이지도 미리 번역해둬 스크롤이 도착했을 때 바로 보이게 한다.
-      translatePage(nextPage)
+      translatePage(nearPage)
     }
   }
 }
@@ -1841,7 +1928,7 @@ function easyEnglish() {
       const bounds = canvas.getBoundingClientRect()
       const sx = bounds.width / Number.parseFloat(canvas.style.width)
       const sy = bounds.height / Number.parseFloat(canvas.style.height)
-      return sourceMappingRects(page, pair.source_mapping).map(rect => ({
+      return sourceMappingRects(page, pair.source_mapping, { mergeLines: true }).map(rect => ({
         left: bounds.left + rect.left * sx, top: bounds.top + rect.top * sy,
         width: rect.width * sx, height: rect.height * sy,
       }))
@@ -3730,7 +3817,6 @@ class ProviderModelPicker {
       this.onChange(this._provider, this._model)
     })
 
-
     this._btn.addEventListener('click', (e) => {
       e.stopPropagation()
       this._effort.open = false
@@ -3960,7 +4046,7 @@ class ProviderModelPicker {
   }
 
   _updateEffortCaption() {
-    const title = getLocale() === 'ko' ? '추론 강도' : 'Reasoning effort'
+    const title = t('settings:reasoningEffort')
     const level = this._variants[this._slider.valueAsNumber].label.split(' · ').pop()
     this._effortSummary.textContent = title + ' · ' + level
     this._slider.setAttribute('aria-label', title)
@@ -11238,25 +11324,48 @@ async function loadDocumentReferences(docId) {
   }
 }
 
-async function finishDocumentPreparation(doc, isCurrentOpen) {
+async function finishDocumentPreparation(doc, isCurrentOpen, { blocking = false } = {}) {
   let preparation = doc.preparation
   const notice = document.createElement('span')
   notice.id = 'viewer-preparation-status'
   notice.className = 'processing-badge'
   notice.setAttribute('role', 'status')
   notice.dataset.i18n = 'viewer:preparation.running'
-  notice.textContent = t('viewer:preparation.running')
+  const updateNoticeProgress = prep => {
+    const baseText = t('viewer:preparation.running')
+    if (Number.isFinite(prep?.percent)) {
+      const pageInfo = prep.total_pages > 0 && Number.isFinite(prep.current_page)
+        ? ` (${prep.current_page}/${prep.total_pages})`
+        : ''
+      notice.textContent = `${baseText} · ${Math.round(prep.percent)}%${pageInfo}`
+    } else {
+      notice.textContent = baseText
+    }
+    if (blocking && isCurrentOpen()) {
+      const rawPct = Number.isFinite(prep?.percent) ? prep.percent : 10
+      const mappedPct = 15 + Math.round((Math.max(0, Math.min(100, rawPct)) / 100) * 55)
+      notifyWorkspace('load-progress', {
+        stage: 'extracting',
+        percent: mappedPct,
+        current: prep?.current_page,
+        total: prep?.total_pages,
+      })
+    }
+  }
+  updateNoticeProgress(preparation)
   $('viewer-preparation-status')?.remove()
   $('viewer-topbar').querySelector('.topbar-left').append(notice)
   let failures = 0
   try {
     while (preparation.status === 'running') {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, blocking ? 600 : 1500))
       if (!isCurrentOpen()) return
       try {
         const response = await fetch(`/api/library/${encodeURIComponent(doc.id)}/preparation`)
         if (!response.ok) throw new Error(`Document preparation: HTTP ${response.status}`)
         preparation = await response.json()
+        doc.preparation = preparation
+        updateNoticeProgress(preparation)
         failures = 0
       } catch (error) {
         if (++failures >= 3) throw error
@@ -11269,14 +11378,16 @@ async function finishDocumentPreparation(doc, isCurrentOpen) {
     notice.remove()
     void loadDocumentImages(doc.id)
     void loadDocumentReferences(doc.id)
-    void loadPDFOutline()
-    // Do not interrupt an editor (including IME composition) to upgrade OCR.
-    while (document.activeElement?.closest('.floating-memo')) {
-      await new Promise(resolve => setTimeout(resolve, 150))
-      if (!isCurrentOpen()) return
+    if (!blocking) {
+      void loadPDFOutline()
+      // Do not interrupt an editor (including IME composition) to upgrade OCR.
+      while (document.activeElement?.closest('.floating-memo')) {
+        await new Promise(resolve => setTimeout(resolve, 150))
+        if (!isCurrentOpen()) return
+      }
+      // Upgrade native PDF selection to OCR/layout text after analysis completes.
+      if (isCurrentOpen()) await setZoom(state.zoom)
     }
-    // Upgrade native PDF selection to OCR/layout text after analysis completes.
-    if (isCurrentOpen()) await setZoom(state.zoom)
   } catch (error) {
     if (!isCurrentOpen()) return
     console.warn('Document preparation:', error)
@@ -11401,6 +11512,14 @@ async function openFromLibrary(doc, shouldPushState = true) {
   $('viewer-preparation-status')?.remove()
   docOpeningId = doc.id
   try {
+    const deferredExtraction = Boolean(doc.metadata?.extraction_deferred)
+    if (deferredExtraction && doc.content_kind !== 'html_article' && doc.preparation && doc.preparation.status !== 'ready') {
+      await finishDocumentPreparation(doc, isCurrentOpen, { blocking: true })
+      if (!isCurrentOpen()) return
+      if (doc.preparation?.status === 'ready' && doc.metadata) {
+        delete doc.metadata.extraction_deferred
+      }
+    }
     if (doc.classification_status && doc.classification_status !== 'confirmed') {
       const confirmed = await requireClassificationConfirmation(doc.id)
       doc.document_mode = confirmed.document_mode
@@ -14359,7 +14478,7 @@ function schedulePdfSelectionOverlay() {
           }
         }
       }
-      const boxes = mergePdfHighlightRects(rects);
+      const boxes = mergePdfSentenceLineRects(rects);
       if (boxes.length) {
         const overlay = getOrCreateOverlay(layer.closest('.pdf-page-wrapper'));
         clearOverlayBoxes(overlay, 'sentence-hover-box', 'sentence-equation-box');
@@ -17407,7 +17526,7 @@ function buildVirtualTextMap(container, pageNum) {
       return;
     }
 
-    spans.push({ el, left: leftVal, top: topVal, fontSize: fsVal, isLineNumber: false });
+    spans.push({ el, left: leftVal, top: topVal, width: rect.width, height: rect.height, fontSize: fsVal, isLineNumber: false });
   });
 
   // Finish geometry reads before changing any connected span's styles.
@@ -17526,7 +17645,10 @@ function buildVirtualTextMap(container, pageNum) {
       } else {
         const prevChar = fullText[fullText.length - 1];
         const nextChar = textNodes[0].nodeValue[0];
-        if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n') fullText += ' ';
+        const prevSpan = sortedSpans[i - 1];
+        const horizontalGap = !isNewLine && prevSpan ? spanInfo.left - (prevSpan.left + prevSpan.width) : Infinity;
+        const isTouchingInLine = !isNewLine && horizontalGap <= Math.max(fontSize, prevFontSize) * 0.2;
+        if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n' && !isTouchingInLine) fullText += ' ';
       }
     }
 
@@ -17610,27 +17732,55 @@ function findDisplayEquationsFromVTM(vtm) {
   return eqs;
 }
 
-// 문장 범위로부터 오버레이의 로컬 CSS 좌표 Rects 계산 (getClientRects 기반, 라인별 개별 상자)
+// 문장 범위로부터 오버레이의 로컬 CSS 좌표 Rects 계산 (스팬 바운딩 박스 기반 선형 보간으로
+// 페이지당 수천 번의 range.getClientRects() 동기 리플로우 병목을 제거)
 function sourceMappedRanges(sentences, vtm, container, pageNum) {
   const coordinates = pageCoordinates(container.closest('.pdf-page-inner') || container);
-  const glyphs = [];
+  const nodeGeometries = [];
   for (const nr of vtm.nodeRanges) {
-    for (let i = 0; i < nr.node.length; i++) {
-      const range = document.createRange();
-      range.setStart(nr.node, i);
-      range.setEnd(nr.node, i + 1);
-      for (const rect of range.getClientRects()) {
-        if (rect.width > 0 && rect.height > 0) glyphs.push({ index: nr.start + i, ...coordinates.rectToLocal(rect) });
-      }
+    const len = nr.node.length;
+    if (!len) continue;
+    let rect = nr.spanInfo && nr.spanInfo.width > 0 && nr.spanInfo.height > 0
+      ? { left: nr.spanInfo.left, top: nr.spanInfo.top, width: nr.spanInfo.width, height: nr.spanInfo.height }
+      : null;
+    if (!rect) {
+      const r = getNodeClientRect(nr.node);
+      if (r && r.width > 0 && r.height > 0) rect = coordinates.rectToLocal(r);
+    }
+    if (rect && rect.width > 0 && rect.height > 0) {
+      nodeGeometries.push({
+        start: nr.start,
+        len,
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        cy: rect.top + rect.height / 2,
+      });
     }
   }
   return sentences.map(sentence => {
     const mapping = sentence.source_mapping || { status: 'unresolved', segments: [] };
     const boxes = sourceMappingRects(pageNum, mapping);
-    const indices = glyphs.filter(g => boxes.some(b => {
-      const x = g.left + g.width / 2, y = g.top + g.height / 2;
-      return x >= b.left && x <= b.left + b.width && y >= b.top && y <= b.top + b.height;
-    })).map(g => g.index);
+    const indices = [];
+    if (boxes.length) {
+      for (const ng of nodeGeometries) {
+        const matchingBoxes = boxes.filter(b =>
+          ng.cy >= b.top &&
+          ng.cy <= b.top + b.height &&
+          ng.left + ng.width >= b.left &&
+          ng.left <= b.left + b.width
+        );
+        if (!matchingBoxes.length) continue;
+        const step = ng.width / ng.len;
+        for (let i = 0; i < ng.len; i++) {
+          const x = ng.left + (i + 0.5) * step;
+          if (matchingBoxes.some(b => x >= b.left && x <= b.left + b.width)) {
+            indices.push(ng.start + i);
+          }
+        }
+      }
+    }
     const parts = [];
     for (const index of [...new Set(indices)].sort((a, b) => a - b)) {
       if (parts.length && parts.at(-1).end === index) parts.at(-1).end++;
@@ -17644,7 +17794,7 @@ function sourceMappedRanges(sentences, vtm, container, pageNum) {
 function getSentenceRects(sentenceRange, vtm, containerEl) {
   if (sentenceRange.sourceMapping) {
     const pageNum = containerEl.closest('.pdf-page-wrapper')?.dataset.page;
-    return mergePdfHighlightRects(sourceMappingRects(pageNum, sentenceRange.sourceMapping));
+    return mergePdfSentenceLineRects(sourceMappingRects(pageNum, sentenceRange.sourceMapping));
   }
   const { nodeRanges } = vtm;
   const coordinates = pageCoordinates(containerEl.closest('.pdf-page-inner') || containerEl);
@@ -17674,7 +17824,7 @@ function getSentenceRects(sentenceRange, vtm, containerEl) {
     }
 
   }
-  return mergePdfHighlightRects(mergedRects);
+  return mergePdfSentenceLineRects(mergedRects);
 }
 
 // 오버레이 레이어에 하이라이트 상자를 드로잉
@@ -18230,7 +18380,10 @@ function findSentenceAtChar(charIdx, sentenceRanges) {
 
 // 마우스 위치로부터 대략적인 charIdx를 추정 (caretRangeFromPoint 또는 비율 계산 폴백)
 function estimateCharIdxFromPoint(x, y, vtm) {
-  // 방법 1: caretRangeFromPoint (Chrome/Edge)
+  // 방법 1: caretRangeFromPoint / caretPositionFromPoint
+  // 단, caretRangeFromPoint는 마우스 바로 아래가 아닌 인접 스팬이나 다른 줄의
+  // 텍스트 노드로 스냅될 수 있으므로, 반환된 노드의 실제 바운딩 박스 근처에
+  // 포인터가 있을 때만 신뢰한다.
   let node = null, offset = 0;
   if (document.caretRangeFromPoint) {
     const cr = document.caretRangeFromPoint(x, y);
@@ -18242,10 +18395,17 @@ function estimateCharIdxFromPoint(x, y, vtm) {
 
   if (node && node.nodeType === 3) {
     const nr = vtm.nodeRanges.find(r => r.node === node);
-    if (nr) return nr.start + offset;
+    if (nr) {
+      const rect = getNodeClientRect(nr.node);
+      if (!rect || (x >= rect.left - 8 && x <= rect.right + 8 && y >= rect.top - 6 && y <= rect.bottom + 6)) {
+        return nr.start + offset;
+      }
+    }
   }
 
-  // 방법 2: 마우스 근처 nodeRange에서 비율로 추정
+  // 방법 2: 마우스 근처 nodeRange(또는 같은 줄의 인접 스팬 사이 간격)에서 비율로 추정
+  let closestGapIdx = -1;
+  let closestGapDist = Infinity;
   for (const nr of vtm.nodeRanges) {
     try {
       const range = document.createRange();
@@ -18277,9 +18437,17 @@ function estimateCharIdxFromPoint(x, y, vtm) {
         if (best) return nr.start + best.offset + (x > rect.left + (best.left + best.width / 2) * rect.width ? 1 : 0);
         return nr.start;
       }
+      // 같은 줄 내 기호/수식 스팬 사이의 좁은 빈틈에 마우스가 위치한 경우
+      if (rect.width > 0 && rect.height > 0 && y >= rect.top - 4 && y <= rect.bottom + 4) {
+        const dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0;
+        if (dx <= Math.max(rect.height * 1.5, 18) && dx < closestGapDist) {
+          closestGapDist = dx;
+          closestGapIdx = x < rect.left ? nr.start : Math.max(nr.start, nr.end - 1);
+        }
+      }
     } catch(e) { /* no-op */ }
   }
-  return -1;
+  return closestGapIdx;
 }
 
 // DOM Range(사용자가 실제로 드래그해서 선택한 범위)의 시작/끝 지점을 VTM
@@ -18314,9 +18482,8 @@ function getVtmCharRangeFromSelection(range, vtm) {
 
 // 오버레이에 호버 하이라이트를 그리고 번역 문장에 클래스를 적용
 function applyHoverHighlight(pageNum, sentenceRange) {
-  if (!sentenceRange.isEquation) {
-    sentenceRange = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [], sentenceRange.sentenceIdx) || sentenceRange;
-  }
+  const wholeSentence = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [],
+    sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) || sentenceRange;
   const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
   if (!vtm) return;
 
@@ -18327,10 +18494,12 @@ function applyHoverHighlight(pageNum, sentenceRange) {
   if (!textLayer) return;
 
   const overlay = getOrCreateOverlay(pageWrapper);
-  clearOverlayBoxes(overlay, 'sentence-hover-box');
+  clearOverlayBoxes(overlay, 'sentence-hover-box', 'sentence-equation-box');
 
-  const rects = getSentenceRects(sentenceRange, vtm, textLayer);
-  const boxClass = sentenceRange.isEquation ? 'sentence-equation-box' : 'sentence-hover-box';
+  const rects = getSentenceRects(wholeSentence, vtm, textLayer);
+  const boxClass = sentenceRange.isEquation && wholeSentence.charStart === sentenceRange.charStart && wholeSentence.charEnd === sentenceRange.charEnd
+    ? 'sentence-equation-box'
+    : 'sentence-hover-box';
   renderSentenceOverlay(overlay, rects, boxClass);
 
   // 번역 패널 하이라이트 (trans-sentence DOM 방식은 유지)
@@ -18529,7 +18698,7 @@ function focusPairRects(ref) {
   }
   // Focus crops, blur openings and tint must share the same continuous source
   // lines as hover highlights. Keep viewport coordinates for the fixed layer.
-  const sourceLineRects = mergePdfHighlightRects(sourceRects).map(rect => ({
+  const sourceLineRects = mergePdfSentenceLineRects(sourceRects).map(rect => ({
     ...rect, right: rect.left + rect.width, bottom: rect.top + rect.height,
   }))
   return { sourceRange: sentenceRange, sourceRects: sourceLineRects, translationRects, sourceCanvas: viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${ref.pageNum}"] canvas`), elements: Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`)) }
@@ -18553,9 +18722,8 @@ function listFocusSentences() {
 focusModeController = new FocusModeController({ root: viewerScrollContainer, resolvePair: focusPairRects, listSentences: listFocusSentences, announce: key => announceA11y({ focusActive: t('viewer:a11y.focusActive'), focusPinned: t('viewer:a11y.focusPinned'), focusMoved: t('viewer:a11y.focusMoved') }[key]), notifyFallback: () => showToast(t('viewer:focus.performanceFallback'), 'info') })
 
 function startDwellSelection(pageNum, sentenceRange) {
-  if (!sentenceRange.isEquation) {
-    sentenceRange = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [], sentenceRange.sentenceIdx) || sentenceRange;
-  }
+  sentenceRange = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [],
+    sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) || sentenceRange;
   if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null }
 
   sentenceHoverTimer = setTimeout(() => {
@@ -18640,15 +18808,16 @@ if (viewerScrollContainer) {
     }
 
     const { pageNum, sentenceRange } = detected;
+    const hoverSentenceIdx = sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx;
     annSpan = findAnnotationOverlayAtPoint(pageNum, e.clientX, e.clientY);
     if (annSpan) showAnnHoverTooltipForSpan(annSpan);
-    const isSame = (currentHoverPage === pageNum && currentHoverSentenceIdx === sentenceRange.sentenceIdx);
+    const isSame = (currentHoverPage === pageNum && currentHoverSentenceIdx === hoverSentenceIdx);
 
     // 하이라이트/밑줄 span 위가 아니면서 해당 문장에 메모가 있는 경우 - 메모 전용 호버 툴팁 노출
     // (메모는 pointer-events:none 오버레이로 그려지므로 span hover로는 감지할 수 없어 문장 단위로 감지)
     // isSame일 때는 이미 같은 문장에 대해 처리했으므로 매 mousemove마다 다시 조회하지 않는다.
     if (!annSpan && !isSame) {
-      const sentenceIdx = sentenceRange.sentenceIdx >= 10000 ? (sentenceRange.originalSentenceIdx ?? 0) : sentenceRange.sentenceIdx;
+      const sentenceIdx = hoverSentenceIdx;
       const memo = lookupMemoForSentence(pageNum, sentenceIdx);
       if (memo) {
         showAnnHoverTooltipForMemoSentence(pageNum, sentenceRange, sentenceIdx, memo);
@@ -18669,16 +18838,14 @@ if (viewerScrollContainer) {
     }
 
     currentHoverPage = pageNum;
-    currentHoverSentenceIdx = sentenceRange.sentenceIdx;
+    currentHoverSentenceIdx = hoverSentenceIdx;
     focusModeController.focus(focusRef(pageNum, sentenceRange, detected.charIdx));
 
     applyHoverHighlight(pageNum, sentenceRange);
 
-    // 700ms 드웰 선택 (수식 제외, 뷰어 설정에서 꺼져있지 않은 경우에만)
+    // 700ms 드웰 선택 (뷰어 설정에서 꺼져있지 않은 경우에만)
     if (!annSpan && !state.hoverSelectionDisabled && !state.disableHoverTooltip) {
-      if (!sentenceRange.isEquation) {
-        startDwellSelection(pageNum, sentenceRange);
-      }
+      startDwellSelection(pageNum, sentenceRange);
     }
   });
 

@@ -22,6 +22,7 @@ from services.chunker import split_into_sentences, tag_source_text, parse_tagged
     ('最初です。\n 次です。', ['最初です。', '次です。']),
     ('Version 3.0 is ready. Next sentence.', ['Version 3.0 is ready.', 'Next sentence.']),
     ('Dr. Smith works here. Next sentence.', ['Dr. Smith works here.', 'Next sentence.']),
+    ('The threshold is p = 0.38 in our test. Next sentence.', ['The threshold is p = 0.38 in our test.', 'Next sentence.']),
 ])
 def test_sentence_boundaries(text, expected):
     assert split_into_sentences(text) == expected

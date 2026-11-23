@@ -22,6 +22,7 @@ for (const [text, expected] of [
   ['最初です。\n 次です。', ['最初です。', '次です。']],
   ['Version 3.0 is ready. Next sentence.', ['Version 3.0 is ready.', 'Next sentence.']],
   ['Dr. Smith works here. Next sentence.', ['Dr. Smith works here.', 'Next sentence.']],
+  ['The threshold is p = 0.38 in our test. Next sentence.', ['The threshold is p = 0.38 in our test.', 'Next sentence.']],
 ]) {
   test(`sentence boundaries preserve offsets: ${text}`, () => {
     const ranges = Array.from(split(text))

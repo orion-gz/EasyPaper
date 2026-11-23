@@ -1,4 +1,4 @@
-import { projectSourceRects, sourceMappingMatchesRevision } from './pdfSentenceGeometry.js'
+import { projectSourceRects, sourceMappingMatchesRevision, mergePdfSentenceLineRects } from './pdfSentenceGeometry.js'
 /**
  * PDF.js 기반 연속 스크롤 뷰어
  * - 모든 페이지를 세로로 쌓아 스크롤
@@ -19,6 +19,8 @@ let widestPageWidth = 0
 let pageDimensions = new Map()
 let pdfLoadingTask = null
 let pdfTextUrl = null
+const pdfTextRecoveryCache = new Map()
+const pdfNativeTextContentCache = new Map()
 const renderedTextLayers = new Map()
 let currentScale = 1.5
 let pageObserver = null
@@ -37,6 +39,33 @@ let lastScrollView = null
 // 현재 세대와 비교해서 다르면(그 사이 새로 renderScrollView가 호출됐다면)
 // 조용히 중단한다.
 let renderGeneration = 0
+let scrollSettleTimer = null
+let activeScrolling = false
+let scrollSettleListeners = new Set()
+
+function markScrollingActive() {
+  activeScrolling = true
+  if (scrollSettleTimer !== null) clearTimeout(scrollSettleTimer)
+  scrollSettleTimer = setTimeout(() => {
+    scrollSettleTimer = null
+    activeScrolling = false
+    const listeners = [...scrollSettleListeners]
+    scrollSettleListeners.clear()
+    for (const fn of listeners) fn()
+  }, 150)
+}
+
+function waitForScrollSettleOrImmediate(isUrgent, signal) {
+  if (isUrgent || !activeScrolling) return Promise.resolve()
+  return new Promise(resolve => {
+    const done = () => {
+      scrollSettleListeners.delete(done)
+      resolve()
+    }
+    scrollSettleListeners.add(done)
+    signal?.addEventListener('abort', done, { once: true })
+  })
+}
 
 // Desktop WebViews can lag behind browser releases. Use the matching
 // compatibility builds for both the main module and its worker.
@@ -83,6 +112,8 @@ export async function loadPDF(url, onProgress) {
   pageDimensions = new Map()
   const match = String(url).match(/\/api\/(?:pdf-file\/([^/?]+)|library\/([^/?]+)\/pdf)(?:\?|$)/)
   pdfTextUrl = match ? `/api/pdf-text/${match[1] || match[2]}` : null
+  pdfTextRecoveryCache.clear()
+  pdfNativeTextContentCache.clear()
   figureCropCache.clear()
   return pdfDoc.numPages
 }
@@ -214,16 +245,77 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     jobs.delete(job.pageNum)
   }
 
+  const isLargeDocument = numPages > 48
+  const preRenderRadius = isLargeDocument ? 15 : numPages
+  const maxRetainedPages = isLargeDocument ? 40 : numPages
+  const eagerRenderAll = !isLargeDocument
+  let initialPageReadyResolve = null
+  const initialPageReadyPromise = new Promise(resolve => {
+    initialPageReadyResolve = resolve
+  })
+  const markInitialPageReady = () => {
+    if (initialPageReadyResolve) {
+      const resolve = initialPageReadyResolve
+      initialPageReadyResolve = null
+      resolve()
+    }
+  }
+  setTimeout(markInitialPageReady, 1500)
+
+  function releaseTextLayerOnly(job) {
+    if (!job || !job.textLayerMounted) return
+    job.textLayer?.cancel()
+    job.textLayer = null
+    job.textLayerMounted = false
+    renderedTextLayers.delete(job.pageNum)
+    const inner = job.wrapper.querySelector('.pdf-page-inner')
+    if (inner) {
+      const tl = inner.querySelector('.textLayer')
+      if (tl) {
+        window.onTextLayerReleased?.(tl, job.pageNum)
+        tl.replaceChildren()
+        delete tl.dataset.segmented
+      }
+      inner.querySelector('.pdf-highlight-overlay')?.remove()
+      inner.querySelector('.pdf-image-overlay-layer')?.remove()
+      inner.querySelector('.pdf-citation-overlay-layer')?.remove()
+      inner.querySelector('.pdf-figure-ref-overlay-layer')?.remove()
+    }
+  }
+
   function trimPages() {
     const selection = window.getSelection()
+    if (isLargeDocument) {
+      // Only cancel in-flight canvas renders if the user jumped far away (beyond the
+      // ±15 page pre-render window), so background pre-rendering around the current page
+      // completes without interruption!
+      for (const job of jobs.values()) {
+        if (!job.canvasRendered && Math.abs(job.pageNum - renderPriorityPage) > preRenderRadius) {
+          release(job)
+        }
+      }
+      // In textbook-sized documents, strip heavy textLayer/overlay DOM (thousands of spans)
+      // from pages that are more than 3 pages away from the current reading position,
+      // while keeping their lightweight rendered <canvas> bitmap cached across ±15 pages!
+      for (const job of jobs.values()) {
+        if (!job.done || !job.textLayerMounted) continue
+        if (Math.abs(job.pageNum - renderPriorityPage) <= 3) continue
+        if (job.wrapper.contains(document.activeElement)) continue
+        if (selection?.rangeCount && !selection.isCollapsed && selection.getRangeAt(0).intersectsNode(job.wrapper)) continue
+        const hasMemos = Boolean(job.wrapper.querySelector('.floating-memo'))
+        if (hasMemos) continue
+        releaseTextLayerOnly(job)
+      }
+    }
+    if (eagerRenderAll) return
     const candidates = [...jobs.values()]
-      .filter(job => !nearby.has(job.pageNum) && !job.wrapper.contains(document.activeElement) && !(
+      .filter(job => Math.abs(job.pageNum - renderPriorityPage) > preRenderRadius && !nearby.has(job.pageNum) && !job.wrapper.contains(document.activeElement) && !(
         selection?.rangeCount && !selection.isCollapsed
         && selection.getRangeAt(0).intersectsNode(job.wrapper)
       ))
-      .sort((a, b) => Math.abs(b.pageNum - currentPage) - Math.abs(a.pageNum - currentPage))
+      .sort((a, b) => Math.abs(b.pageNum - renderPriorityPage) - Math.abs(a.pageNum - renderPriorityPage))
     for (const job of candidates) {
-      if (jobs.size <= 8 && job.done) continue
+      if (jobs.size <= maxRetainedPages && job.done) continue
       release(job)
     }
   }
@@ -231,18 +323,36 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   function scheduleRender() {
     if (pumpTimer !== null || !isCurrent()) return
     // Yield between pages, leaving input/scroll events a chance to run.
+    const maxConcurrent = isLargeDocument ? 3 : 2
     pumpTimer = setTimeout(() => {
       pumpTimer = null
       if (!isCurrent()) return
-      while (active < 2 && queue.size) {
-        const pageNum = [...queue.keys()].sort((a, b) => Math.abs(a - renderPriorityPage) - Math.abs(b - renderPriorityPage))[0]
+      while (active < maxConcurrent && queue.size) {
+        const pageNum = [...queue.keys()].sort((a, b) => {
+          const aNear = nearby.has(a) ? 0 : 1
+          const bNear = nearby.has(b) ? 0 : 1
+          if (aNear !== bNear) return aNear - bNear
+          const da = Math.abs(a - renderPriorityPage)
+          const db = Math.abs(b - renderPriorityPage)
+          if (da !== db) return da - db
+          // Prefer forward reading direction (+1 before -1)
+          return (a >= renderPriorityPage ? 0 : 1) - (b >= renderPriorityPage ? 0 : 1)
+        })[0]
         const wrapper = queue.get(pageNum)
         queue.delete(pageNum)
-        if (!nearby.has(pageNum) || jobs.has(pageNum)) continue
-        const job = { wrapper, pageNum, controller: new AbortController(), cancelled: false, done: false }
+        const withinPreRenderWindow = Math.abs(pageNum - renderPriorityPage) <= preRenderRadius
+        if ((!eagerRenderAll && !nearby.has(pageNum) && !withinPreRenderWindow) || jobs.has(pageNum)) continue
+        const job = { wrapper, pageNum, controller: new AbortController(), cancelled: false, done: false, textLayerMounted: false }
         jobs.set(pageNum, job)
         active++
-        _renderPage(wrapper, pageNum, myGeneration, job).finally(() => {
+        _renderPage(wrapper, pageNum, myGeneration, job, {
+          isLargeDocument,
+          isPriorityPage: () => Math.abs(pageNum - renderPriorityPage) <= 3,
+          isImmediateVisiblePage: () => Math.abs(pageNum - renderPriorityPage) <= 1,
+          onCanvasReady: () => {
+            if (Math.abs(pageNum - renderPriorityPage) <= 1) markInitialPageReady()
+          },
+        }).finally(() => {
           active--
           job.done = true
           if (job.cancelled) job.page?.cleanup()
@@ -262,8 +372,8 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     if (!isCurrent() || !renderTargets.length) return
     const viewport = container.getBoundingClientRect()
     if (!viewport.height) return
-    const top = viewport.top - 600
-    const bottom = viewport.bottom + 600
+    const top = viewport.top - 2400
+    const bottom = viewport.bottom + 2400
     let low = 0
     let high = renderTargets.length
     while (low < high) {
@@ -280,16 +390,62 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
       if (firstVisible === null && rect.bottom > viewport.top && rect.top < viewport.bottom) firstVisible = Number(target.dataset.page)
       const pageNum = Number(target.dataset.page)
       next.add(pageNum)
-      if (!jobs.has(pageNum)) queue.set(pageNum, target.matches('.pdf-page-wrapper') ? target : target.querySelector('.pdf-page-wrapper'))
+      if (!jobs.has(pageNum)) {
+        queue.set(pageNum, target.matches('.pdf-page-wrapper') ? target : target.querySelector('.pdf-page-wrapper'))
+      } else if (isLargeDocument) {
+        const existingJob = jobs.get(pageNum)
+        if (existingJob && existingJob.done && Math.abs(pageNum - (firstVisible ?? currentPage)) <= 1) {
+          if (existingJob.needsHiResUpgrade && !existingJob.upgradingHiRes) {
+            existingJob.upgradingHiRes = true
+            _upgradeDeferredHiResCanvas(existingJob, myGeneration).finally(() => {
+              existingJob.upgradingHiRes = false
+            })
+          }
+          if (!existingJob.textLayerMounted && !existingJob.mountingTextLayer) {
+            existingJob.mountingTextLayer = true
+            _mountDeferredTextLayer(existingJob, myGeneration).finally(() => {
+              existingJob.mountingTextLayer = false
+            })
+          }
+        }
+      }
     }
     renderPriorityPage = firstVisible ?? currentPage
     nearby.clear()
     next.forEach(pageNum => nearby.add(pageNum))
-    for (const pageNum of queue.keys()) if (!nearby.has(pageNum)) queue.delete(pageNum)
+    if (eagerRenderAll) {
+      for (let i = 0; i < renderTargets.length; i++) {
+        const target = renderTargets[i]
+        const pageNum = Number(target.dataset.page)
+        if (!jobs.has(pageNum) && !queue.has(pageNum)) {
+          queue.set(pageNum, target.matches('.pdf-page-wrapper') ? target : target.querySelector('.pdf-page-wrapper'))
+        }
+      }
+    } else {
+      // Pre-render ±preRenderRadius (±15 pages) outward from renderPriorityPage so
+      // scrolling up or down through a textbook finds pages already rendered!
+      const minPage = Math.max(1, renderPriorityPage - preRenderRadius)
+      const maxPage = Math.min(numPages, renderPriorityPage + preRenderRadius)
+      for (let pageNum = minPage; pageNum <= maxPage; pageNum++) {
+        nearby.add(pageNum)
+        if (!jobs.has(pageNum) && !queue.has(pageNum)) {
+          const target = renderTargets[pageNum - 1]
+          if (target) {
+            queue.set(pageNum, target.matches('.pdf-page-wrapper') ? target : target.querySelector('.pdf-page-wrapper'))
+          }
+        }
+      }
+      for (const pageNum of queue.keys()) {
+        if (!nearby.has(pageNum) && Math.abs(pageNum - renderPriorityPage) > preRenderRadius) {
+          queue.delete(pageNum)
+        }
+      }
+    }
     trimPages()
     scheduleRender()
   }
   function requestReconcile() {
+    markScrollingActive()
     if (reconcileFrame === null && isCurrent()) reconcileFrame = requestAnimationFrame(reconcileRenderWindow)
   }
 
@@ -313,18 +469,19 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   }
 
   // Reserve each page's real dimensions before restoring a saved position.
-  // This keeps the scroll geometry stable while nearby pages are lazy-rendered.
+  // For textbook-sized documents (>32 pages), sample the first 8 pages immediately
+  // and reuse the primary page dimensions so opening a 600-page book does not
+  // block on 600 sequential worker getPage() calls.
   const renderingDoc = pdfDoc
   let viewports
   try {
-    // Keep exact geometry (including mixed page sizes) for saved positions, but
-    // do not flood the worker with hundreds of requests or repeat them on zoom.
     const dimensions = pageDimensions
     viewports = []
-    for (let start = 1; start <= numPages; start += 16) {
+    const sampleLimit = numPages > 32 ? Math.min(8, numPages) : numPages
+    for (let start = 1; start <= sampleLimit; start += 16) {
       if (!isCurrent()) return
       let requested = false
-      const batch = await Promise.all(Array.from({ length: Math.min(16, numPages - start + 1) }, async (_, index) => {
+      const batch = await Promise.all(Array.from({ length: Math.min(16, sampleLimit - start + 1) }, async (_, index) => {
         const pageNum = start + index
         if (!dimensions.has(pageNum)) {
           requested = true
@@ -336,7 +493,14 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         return { width: width * zoom, height: height * zoom }
       }))
       viewports.push(...batch)
-      if (requested && start + 16 <= numPages) await new Promise(resolve => setTimeout(resolve, 0))
+      if (requested && start + 16 <= sampleLimit) await new Promise(resolve => setTimeout(resolve, 0))
+    }
+    if (numPages > sampleLimit) {
+      const fallbackDim = dimensions.get(1) || { width: 595, height: 841 }
+      for (let pageNum = sampleLimit + 1; pageNum <= numPages; pageNum++) {
+        const dim = dimensions.get(pageNum) || fallbackDim
+        viewports.push({ width: dim.width * zoom, height: dim.height * zoom })
+      }
     }
   } catch (error) {
     if (!isCurrent()) return
@@ -389,7 +553,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   if (pageVisibilityObserver) { pageVisibilityObserver.disconnect(); pageVisibilityObserver = null }
   visiblePageHeights = {}
 
-  // ─── IntersectionObserver (페이지 렌더링용: 미리 600px 앞서 로딩) ───
+  // ─── IntersectionObserver (페이지 렌더링용: 미리 2400px 앞서 로딩) ───
   pageObserver = new IntersectionObserver((entries) => {
     if (!isCurrent()) return
     entries.forEach(entry => {
@@ -399,21 +563,23 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         if (!jobs.has(pageNum)) queue.set(pageNum, entry.target.matches('.pdf-page-wrapper') ? entry.target : entry.target.querySelector('.pdf-page-wrapper'))
       } else {
         nearby.delete(pageNum)
-        queue.delete(pageNum)
-        // A retained bitmap may not have a job in this generation yet.
-        if (!jobs.has(pageNum)) {
-          entry.target.querySelectorAll('.pdf-page-inner canvas').forEach(canvas => {
-            canvas.width = 0
-            canvas.height = 0
-            canvas.remove()
-          })
+        if (!eagerRenderAll) {
+          queue.delete(pageNum)
+          // A retained bitmap may not have a job in this generation yet.
+          if (!jobs.has(pageNum)) {
+            entry.target.querySelectorAll('.pdf-page-inner canvas').forEach(canvas => {
+              canvas.width = 0
+              canvas.height = 0
+              canvas.remove()
+            })
+          }
         }
       }
     })
     reconcileRenderWindow()
   }, {
     root: container,
-    rootMargin: '600px 0px',  // 미리 600px 앞서 렌더링
+    rootMargin: '2400px 0px',
     threshold: 0.01,
   })
 
@@ -437,7 +603,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     let currentPageTop = Infinity
     for (const page of Object.keys(visiblePageHeights)) {
       const pageNum = Number(page)
-      const element = container.querySelector(`.page-pair[data-page="${pageNum}"]`) || container.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+      const element = renderTargets[pageNum - 1]
       if (!element) continue
       const rect = element.getBoundingClientRect()
       if (rect.bottom <= viewportTop || rect.top >= currentPageTop) continue
@@ -453,7 +619,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   }, {
     root: container,
     rootMargin: '0px 0px',
-    threshold: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], // 정밀한 노출 비율 판정
+    threshold: [0.0, 0.25, 0.5],
   })
 
   renderTargets = Array.from(wrappers, wrapper => wrapper.closest('.page-pair') || wrapper)
@@ -467,19 +633,129 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     pageObserver.observe(w.closest('.page-pair') || w)
     pageVisibilityObserver.observe(w.closest('.page-pair') || w)
   })
+  await initialPageReadyPromise
 }
 
-async function _renderPage(wrapper, pageNum, generation, job) {
+async function _mountDeferredTextLayer(job, generation) {
+  const stale = () => generation !== renderGeneration || job.cancelled
+  if (stale() || job.textLayerMounted || !job.page || !job.viewport || !job.textLayerDiv) return
+  const { pageNum, page, viewport, textLayerDiv, wrapper } = job
+  const inner = wrapper.querySelector('.pdf-page-inner')
+  if (!inner) return
+  const textUrl = pdfTextUrl
+  try {
+    let textContent
+    let recovery
+    if (textUrl) {
+      if (pdfTextRecoveryCache.has(pageNum)) {
+        recovery = pdfTextRecoveryCache.get(pageNum)
+      } else {
+        try {
+          const response = await fetch(`${textUrl}/${pageNum}?nonblocking=true`, { signal: job.controller.signal })
+          if (!response.ok) throw new Error(`PDF text recovery: HTTP ${response.status}`)
+          recovery = await response.json()
+          if (recovery && !recovery.pending) {
+            pdfTextRecoveryCache.set(pageNum, recovery)
+          }
+        } catch (error) {
+          if (stale()) return
+          console.warn(`PDF text recovery p.${pageNum}; using native text:`, error)
+          textLayerDiv.dataset.recoveryError = 'parser_unavailable'
+        }
+        if (stale()) return
+      }
+    }
+    textLayerDiv.dataset.sourceRevision = recovery?.layout?.layout_revision || recovery?.layout?.source_revision || ''
+    if (recovery?.layout?.needs_review) {
+      const notice = document.createElement('div')
+      notice.className = 'pdf-text-recovery-notice'
+      notice.setAttribute('role', 'status')
+      notice.textContent = t('errors:pdf_reading_order_review')
+      inner.appendChild(notice)
+    }
+    if (recovery?.recovery) {
+      textContent = recoveredTextContent(recovery.spans || [], viewport)
+      textLayerDiv.dataset.recovery = recovery.recovery
+      if (recovery.error) {
+        textLayerDiv.dataset.recoveryError = recovery.error
+        const notice = document.createElement('div')
+        notice.className = 'pdf-text-recovery-notice'
+        notice.setAttribute('role', 'status')
+        notice.textContent = t(`errors:${recovery.error}`)
+        inner.appendChild(notice)
+      }
+    } else if (pdfNativeTextContentCache.has(pageNum)) {
+      textContent = pdfNativeTextContentCache.get(pageNum)
+    } else {
+      try {
+        textContent = await page.getTextContent()
+      } catch (error) {
+        console.warn('getTextContent failed, trying streamTextContent:', error)
+        textContent = await collectTextContent(page.streamTextContent())
+      }
+      if (textContent) pdfNativeTextContentCache.set(pageNum, textContent)
+    }
+    if (stale()) return
+    const textLayer = new pdfjsLib.TextLayer({
+      textContentSource: textContent,
+      container: textLayerDiv,
+      viewport,
+    })
+    job.textLayer = textLayer
+    await textLayer.render()
+    textLayerDiv.style.width = `${viewport.rawDims.pageWidth * viewport.scale * viewport.userUnit}px`
+    textLayerDiv.style.height = `${viewport.rawDims.pageHeight * viewport.scale * viewport.userUnit}px`
+    if (stale()) return
+    alignTextLayer(textLayer, textContent, viewport, textLayerDiv)
+    job.textLayerMounted = true
+    renderedTextLayers.set(pageNum, { textLayer, textContent, viewport, container: textLayerDiv, generation })
+
+    if (!stale() && window.onTextLayerRendered) {
+      window.onTextLayerRendered(textLayerDiv, pageNum)
+    }
+  } catch (e) {
+    if (stale()) return
+    console.warn(`TextLayer p.${pageNum}:`, e.message)
+  }
+}
+
+async function _upgradeDeferredHiResCanvas(job, generation) {
+  const stale = () => generation !== renderGeneration || job.cancelled
+  if (stale() || !job.needsHiResUpgrade || !job.renderCanvasAtScale || !job.dpr) return
+  const inner = job.wrapper?.querySelector('.pdf-page-inner')
+  if (!inner) return
+  try {
+    const hiResCanvas = document.createElement('canvas')
+    const hiOk = await job.renderCanvasAtScale(hiResCanvas, job.dpr)
+    if (!hiOk || stale()) {
+      hiResCanvas.width = 0
+      hiResCanvas.height = 0
+      return
+    }
+    hiResCanvas.dataset.rendered = 'true'
+    const currentCanvas = inner.querySelector('canvas[data-rendered]')
+    if (currentCanvas && currentCanvas.parentNode === inner) {
+      inner.replaceChild(hiResCanvas, currentCanvas)
+      currentCanvas.width = 0
+      currentCanvas.height = 0
+    }
+    job.needsHiResUpgrade = false
+  } catch {}
+}
+
+async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument = false, isPriorityPage = () => true, isImmediateVisiblePage = () => true, onCanvasReady } = {}) {
   const stale = () => generation !== renderGeneration || job.cancelled
   if (stale()) return
   const inner = wrapper.querySelector('.pdf-page-inner')
   // Paint offscreen; the previous bitmap remains visible until replacement.
   try {
-    const textUrl = pdfTextUrl
     const page = await pdfDoc.getPage(pageNum)
     if (stale()) return
     job.page = page
+    const baseViewport = page.getViewport({ scale: 1 })
+    pageDimensions.set(pageNum, { width: baseViewport.width, height: baseViewport.height })
     const viewport = page.getViewport({ scale: currentScale })
+    job.viewport = viewport
     const dpr = window.devicePixelRatio || 1
 
     // 캔버스
@@ -489,9 +765,6 @@ async function _renderPage(wrapper, pageNum, generation, job) {
     canvas.style.width  = `${viewport.width}px`
     canvas.style.height = `${viewport.height}px`
 
-    const ctx = canvas.getContext('2d')
-    ctx.scale(dpr, dpr)
-
     // 텍스트 레이어 (드래그 선택)
     const textLayerDiv = document.createElement('div')
     textLayerDiv.className = 'textLayer'
@@ -499,6 +772,7 @@ async function _renderPage(wrapper, pageNum, generation, job) {
     textLayerDiv.style.height = `${viewport.height}px`
     textLayerDiv.style.setProperty('--scale-factor', viewport.scale)
     textLayerDiv.style.setProperty('--user-unit', viewport.userUnit)
+    job.textLayerDiv = textLayerDiv
 
     inner.style.width = `${viewport.width}px`
     inner.style.height = `${viewport.height}px`
@@ -510,85 +784,76 @@ async function _renderPage(wrapper, pageNum, generation, job) {
       transBlock.style.height = `${Math.floor(viewport.height)}px`
     }
 
-    // 캔버스 렌더링 (먼저 실행)
-    job.renderTask = page.render({ canvasContext: ctx, viewport })
-    await job.renderTask.promise
-    if (stale()) { canvas.width = 0; canvas.height = 0; return }
+    // 캔버스 렌더링: 전공서적 등 대형 문서에서는 1x 해상도(픽셀 수 1/4, 약 4배 빠른 속도)로
+    // 먼저 즉시 화면에 띄워 빈 페이지 대기 시간을 없애고, 스크롤이 멈춘 뒤 현재 보고 있는
+    // 페이지일 때만 Retina(dpr) 고해상도로 조용히 업그레이드한다 (네이티브 PDF 뷰어 2단계 타일링 원리).
+    const renderCanvasAtScale = async (targetCanvas, pixelRatio) => {
+      targetCanvas.width = Math.floor(viewport.width * pixelRatio)
+      targetCanvas.height = Math.floor(viewport.height * pixelRatio)
+      targetCanvas.style.width = `${viewport.width}px`
+      targetCanvas.style.height = `${viewport.height}px`
+
+      let renderedOffscreen = false
+      if (typeof OffscreenCanvas === 'function') {
+        try {
+          const offscreen = new OffscreenCanvas(targetCanvas.width, targetCanvas.height)
+          const offCtx = offscreen.getContext('2d')
+          if (offCtx) {
+            offCtx.scale(pixelRatio, pixelRatio)
+            job.renderTask = page.render({ canvasContext: offCtx, viewport })
+            await job.renderTask.promise
+            if (stale()) return false
+            const bitmap = offscreen.transferToImageBitmap()
+            const bitmapCtx = targetCanvas.getContext('bitmaprenderer')
+            if (bitmapCtx) {
+              bitmapCtx.transferFromImageBitmap(bitmap)
+              renderedOffscreen = true
+            } else {
+              targetCanvas.getContext('2d').drawImage(bitmap, 0, 0)
+              bitmap.close?.()
+              renderedOffscreen = true
+            }
+          }
+        } catch {
+          renderedOffscreen = false
+        }
+      }
+      if (!renderedOffscreen) {
+        const ctx = targetCanvas.getContext('2d')
+        ctx.scale(pixelRatio, pixelRatio)
+        job.renderTask = page.render({ canvasContext: ctx, viewport })
+        await job.renderTask.promise
+      }
+      return !stale()
+    }
+
+    const useTwoStagePreview = isLargeDocument && dpr > 1.15
+    const firstPassRatio = useTwoStagePreview ? 1 : dpr
+    job.renderCanvasAtScale = renderCanvasAtScale
+    job.dpr = dpr
+    job.needsHiResUpgrade = useTwoStagePreview
+    const firstOk = await renderCanvasAtScale(canvas, firstPassRatio)
+    if (!firstOk || stale()) { canvas.width = 0; canvas.height = 0; return }
+
     canvas.dataset.rendered = 'true'
+    job.canvasRendered = true
     window.onTextLayerReleased?.(inner.querySelector('.textLayer'), pageNum)
     inner.querySelectorAll('canvas').forEach(previous => { previous.width = 0; previous.height = 0 })
     inner.replaceChildren(canvas, textLayerDiv)
+    onCanvasReady?.()
 
-    // 텍스트 레이어 렌더링
-    try {
-      let textContent
-      let recovery
-      if (textUrl) {
-        try {
-          const response = await fetch(`${textUrl}/${pageNum}?nonblocking=true`, { signal: job.controller.signal })
-          if (!response.ok) throw new Error(`PDF text recovery: HTTP ${response.status}`)
-          recovery = await response.json()
-        } catch (error) {
-          if (stale()) return
-          // Parser failures must not remove native PDF selection, hover or the
-          // memo lanes created by onTextLayerRendered.
-          console.warn(`PDF text recovery p.${pageNum}; using native text:`, error)
-          textLayerDiv.dataset.recoveryError = 'parser_unavailable'
-        }
+    // 전공서적 등 대형 문서(>48p)에서는 ±15페이지 전체는 1x 해상도로 초고속 프리렌더링만 해두고,
+    // 스크롤이 멈춘 뒤 현재 실제로 눈앞에 보이는 페이지(±1p)만 Retina(dpr) 고해상도 업그레이드하고
+    // 주변 페이지(±3p)에만 텍스트 레이어를 마운트한다.
+    if (isLargeDocument) {
+      await waitForScrollSettleOrImmediate(false, job.controller.signal)
+      if (stale() || !isPriorityPage()) return
+      if (useTwoStagePreview && isImmediateVisiblePage()) {
+        await _upgradeDeferredHiResCanvas(job, generation)
         if (stale()) return
       }
-      textLayerDiv.dataset.sourceRevision = recovery?.layout?.layout_revision || recovery?.layout?.source_revision || ''
-      if (recovery?.layout?.needs_review) {
-        const notice = document.createElement('div')
-        notice.className = 'pdf-text-recovery-notice'
-        notice.setAttribute('role', 'status')
-        notice.textContent = t('errors:pdf_reading_order_review')
-        inner.appendChild(notice)
-      }
-      if (recovery?.recovery) {
-        textContent = recoveredTextContent(recovery.spans || [], viewport)
-        textLayerDiv.dataset.recovery = recovery.recovery
-        if (recovery.error) {
-          textLayerDiv.dataset.recoveryError = recovery.error
-          const notice = document.createElement('div')
-          notice.className = 'pdf-text-recovery-notice'
-          notice.setAttribute('role', 'status')
-          notice.textContent = t(`errors:${recovery.error}`)
-          inner.appendChild(notice)
-        }
-      } else {
-        try {
-          textContent = await page.getTextContent()
-        } catch (error) {
-          console.warn('getTextContent failed, trying streamTextContent:', error)
-          textContent = await collectTextContent(page.streamTextContent())
-        }
-      }
-      if (stale()) return
-      const textLayer = new pdfjsLib.TextLayer({
-        textContentSource: textContent,
-        container: textLayerDiv,
-        viewport,
-      })
-      job.textLayer = textLayer
-      await textLayer.render()
-      // Our canvas keeps fractional CSS dimensions rather than PDFViewer's
-      // rounded page sizes. Restore exact, unrotated layer dimensions after
-      // TextLayer sets its viewer-specific round()/--scale-round-* expressions.
-      textLayerDiv.style.width = `${viewport.rawDims.pageWidth * viewport.scale * viewport.userUnit}px`
-      textLayerDiv.style.height = `${viewport.rawDims.pageHeight * viewport.scale * viewport.userUnit}px`
-      if (stale()) return
-      alignTextLayer(textLayer, textContent, viewport, textLayerDiv)
-      renderedTextLayers.set(pageNum, { textLayer, textContent, viewport, container: textLayerDiv, generation })
-
-      // 텍스트 레이어 렌더 완료 콜백 호출
-      if (!stale() && window.onTextLayerRendered) {
-        window.onTextLayerRendered(textLayerDiv, pageNum)
-      }
-    } catch (e) {
-      if (stale()) return
-      console.warn(`TextLayer p.${pageNum}:`, e.message)
     }
+    await _mountDeferredTextLayer(job, generation)
 
   } catch (e) {
     if (stale()) return
@@ -674,10 +939,11 @@ export async function getPDFOutline() {
   }
 }
 
-export function sourceMappingRects(pageNum, mapping) {
+export function sourceMappingRects(pageNum, mapping, { mergeLines = false } = {}) {
   const layer = renderedTextLayers.get(Number(pageNum))
   if (!layer || !sourceMappingMatchesRevision(mapping, layer.container.dataset.sourceRevision)) return []
-  return projectSourceRects(mapping, layer.viewport)
+  const rects = projectSourceRects(mapping, layer.viewport)
+  return mergeLines ? mergePdfSentenceLineRects(rects) : rects
 }
 
 
