@@ -3719,26 +3719,22 @@ body.light-theme .provider-picker-panel {
   font-size: 10px;
   color: var(--accent-mid);
 }
+.provider-picker:has(> .picker-effort) {
+  flex-direction: column;
+}
 .picker-effort {
-  display: grid;
-  gap: 4px;
-  margin: 4px 0 8px 16px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  margin-top: 4px;
+  padding: 2px 8px;
   color: var(--text-secondary);
   font-size: 12px;
 }
-.picker-effort-caption {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
+.picker-effort summary {
+  padding: 4px 0;
+  cursor: pointer;
 }
-.picker-effort-level {
+.picker-effort summary:hover,
+.picker-effort[open] summary {
   color: var(--accent-mid);
-  font-weight: 600;
 }
 .picker-effort input[type="range"] {
   box-sizing: border-box;

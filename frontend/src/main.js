@@ -3713,9 +3713,25 @@ class ProviderModelPicker {
 
     c.appendChild(this._btn)
     c.appendChild(this._panel)
+    this._effort = document.createElement('details')
+    this._effort.className = 'picker-effort'
+    this._effortSummary = document.createElement('summary')
+    this._slider = document.createElement('input')
+    this._slider.type = 'range'
+    this._slider.min = '0'
+    this._effort.append(this._effortSummary, this._slider)
+    c.append(this._effort)
+    this._effortSummary.addEventListener('click', () => c.classList.remove('open'))
+    this._slider.addEventListener('input', () => this._updateEffortCaption())
+    this._slider.addEventListener('change', () => {
+      this._model = this._variants[this._slider.valueAsNumber].value
+      this.onChange(this._provider, this._model)
+    })
+
 
     this._btn.addEventListener('click', (e) => {
       e.stopPropagation()
+      this._effort.open = false
       const isOpen = c.classList.contains('open')
       document.querySelectorAll('.provider-picker.open').forEach(p => p.classList.remove('open'))
       if (!isOpen) {
@@ -3930,48 +3946,27 @@ class ProviderModelPicker {
             this._provider = prov.id
             this._model = m.value
             this._updateBtn()
-            if (variants.length > 1) this._rebuildPanel()
-            else this.container.classList.remove('open')
+            this.container.classList.remove('open')
             this.onChange(prov.id, m.value)
           })
         }
         group.appendChild(item)
-        if (selected && variants.length > 1) {
-          const control = document.createElement('label')
-          control.className = 'picker-effort'
-          const caption = document.createElement('span')
-          const slider = document.createElement('input')
-          slider.type = 'range'
-          slider.min = '0'
-          slider.max = String(variants.length - 1)
-          slider.value = String(variants.indexOf(selected))
-          const title = getLocale() === 'ko' ? '추론 강도' : 'Reasoning effort'
-          caption.className = 'picker-effort-caption'
-          const levelLabel = document.createElement('span')
-          levelLabel.className = 'picker-effort-level'
-          caption.append(title, levelLabel)
-          slider.setAttribute('aria-label', title)
-          const updateCaption = () => {
-            const level = variants[slider.valueAsNumber].label.split(' · ').pop()
-            levelLabel.textContent = level
-            slider.setAttribute('aria-valuetext', level)
-          }
-          updateCaption()
-          slider.addEventListener('input', updateCaption)
-          slider.addEventListener('change', () => {
-            this._model = variants[slider.valueAsNumber].value
-            this._updateBtn()
-            this.onChange(prov.id, this._model)
-          })
-          control.append(caption, slider)
-          group.appendChild(control)
-        }
+
       })
       this._panel.appendChild(group)
     })
   }
 
+  _updateEffortCaption() {
+    const title = getLocale() === 'ko' ? '추론 강도' : 'Reasoning effort'
+    const level = this._variants[this._slider.valueAsNumber].label.split(' · ').pop()
+    this._effortSummary.textContent = title + ' · ' + level
+    this._slider.setAttribute('aria-label', title)
+    this._slider.setAttribute('aria-valuetext', level)
+  }
+
   _updateBtn() {
+    this._effort.hidden = true
     if (labModelCatalog.enabled) {
       this._btn.querySelector('.picker-label').textContent = labModelCatalog.preference?.model || t('settings:labChooseModel')
       return
@@ -3984,6 +3979,14 @@ class ProviderModelPicker {
       const found = prov.models.find(m => m.value === this._model)
       if (found) {
         modelLabel = found.label.replace(' (설치됨)', '').replace(' (미설치 - 클릭 시 다운로드)', '')
+        if (found.group && found.label.includes(' · ')) {
+          this._variants = prov.models.filter(model => model.group === found.group)
+          this._slider.max = String(this._variants.length - 1)
+          this._slider.value = String(this._variants.indexOf(found))
+          this._effort.hidden = false
+          this._updateEffortCaption()
+          modelLabel = found.group
+        }
       }
     }
     this._btn.querySelector('.picker-icon').innerHTML = provIcon
