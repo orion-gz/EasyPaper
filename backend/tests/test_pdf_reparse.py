@@ -571,12 +571,12 @@ def test_cache_reset_adopts_settings_for_text_and_all_regions(
     ]
 
     def parse(path, selected, **kwargs):
-        calls.append(selected)
+        calls.append((selected, kwargs.get("text_only", False)))
         return {
             "parser_engine": selected,
             "parser_version": isolated_dirs["db"].db_get_document(doc_id)["parser_version"],
             "pages": [{"page_num": 1, "text": "New parser text", "blocks": [], "parser_engine": selected}],
-            "images": regions,
+            "images": [] if kwargs.get("text_only") else regions,
         }
 
     monkeypatch.setattr(reparse, "parse_document_isolated", parse)
@@ -590,16 +590,16 @@ def test_cache_reset_adopts_settings_for_text_and_all_regions(
         response = test_client.get(f"/api/library/{doc_id}/images")
         assert response.status_code == 200
         assert response.json()["images"] == regions
-        assert calls == [engine]
+        assert calls == [(engine, True), (engine, False)]
 
         # Images may be requested before text/session restoration.
         assert test_client.post(f"/api/library/{doc_id}/clear-cache").status_code == 200
         response = test_client.get(f"/api/library/{doc_id}/images")
         assert response.status_code == 200
         assert response.json()["images"] == regions
-        assert calls == [engine, engine]
+        assert calls == [(engine, True), (engine, False), (engine, False)]
         assert ensure_session(doc_id)
-        assert calls == [engine, engine]
+        assert calls == [(engine, True), (engine, False), (engine, False)]
     finally:
         sessions.pop(doc_id, None)
 

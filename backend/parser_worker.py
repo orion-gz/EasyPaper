@@ -15,6 +15,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine", required=True, choices=("pymupdf", "pdfplumber", "marker", "mineru"))
     parser.add_argument("--output", required=True)
     parser.add_argument("--legacy-layout", action="store_true")
+    parser.add_argument("--images-only", action="store_true")
+    parser.add_argument("--text-only", action="store_true")
     args = parser.parse_args(argv)
     from venv_manager import is_packaged_desktop, _activate_packaged_parser
     if is_packaged_desktop():
@@ -22,13 +24,18 @@ def main(argv: list[str] | None = None) -> int:
     from services.pdf_diagnostics import diagnose_pages, parser_version, pdf_fingerprint
     from services.pdf_parser import extract_pages, extract_pdf_images
 
+    if args.images_only:
+        images = extract_pdf_images(args.pdf, engine=args.engine)
+        atomic_write_text(args.output, json.dumps(images))
+        return 0
+
     pages = extract_pages(args.pdf, engine=args.engine, normalize_layout=not args.legacy_layout)
     actual_engines = {str(page.get("parser_engine") or "") for page in pages}
     if not pages or actual_engines != {args.engine}:
         actual = ", ".join(sorted(actual_engines)) or "no output"
         raise RuntimeError(f"{args.engine} parser unavailable; worker returned {actual}")
 
-    images = extract_pdf_images(args.pdf, engine=args.engine)
+    images = [] if args.text_only else extract_pdf_images(args.pdf, engine=args.engine)
     version = parser_version(args.engine)
     payload = {
         "pdf_fingerprint": pdf_fingerprint(args.pdf),

@@ -45,9 +45,9 @@ test('PDF reading remains available while analysis runs and after analysis fails
       recovery: null, spans: [], preparation: { status },
     } }))
     for (const resource of ['images', 'references', 'chapters']) {
-      await page.route(`**/api/library/tab-a/${resource}`, route => {
+      await page.route(`**/api/library/tab-a/${resource}${resource === "images" ? "?**" : ""}`, route => {
         analysisRequests.push(resource)
-        return route.fulfill({ json: { images: [], references: {}, chapters: [] } })
+        return route.fulfill({ json: { start: 1, end: 1, images: [], references: {}, chapters: [] } })
       })
     }
   })
@@ -56,11 +56,11 @@ test('PDF reading remains available while analysis runs and after analysis fails
   await expect(frame.locator('canvas[data-rendered="true"]').first()).toBeVisible()
   await expect(frame.locator('.textLayer').first()).toContainText('Sample PDF A')
   await expect(frame.locator('#viewer-preparation-status')).toContainText('분석 준비 중')
-  expect(analysisRequests).toEqual([])
+  expect(analysisRequests.filter(resource => resource !== "images")).toEqual([])
   status = 'failed'
   await expect(frame.locator('#viewer-preparation-status')).toContainText('분석 준비 실패')
   await expect(frame.locator('canvas[data-rendered="true"]').first()).toBeVisible()
-  expect(analysisRequests).toEqual([])
+  expect(analysisRequests.filter(resource => resource !== "images")).toEqual([])
 })
 
 test('analysis completion loads overlays and chapters without reopening the PDF', async ({ page }) => {
@@ -74,15 +74,15 @@ test('analysis completion loads overlays and chapters without reopening the PDF'
       status, detected_source_language: 'en',
     } }))
     for (const resource of ['images', 'references', 'chapters']) {
-      await page.route(`**/api/library/tab-a/${resource}`, route => {
+      await page.route(`**/api/library/tab-a/${resource}${resource === "images" ? "?**" : ""}`, route => {
         requests.add(resource)
-        return route.fulfill({ json: { images: [], references: {}, chapters: [] } })
+        return route.fulfill({ json: { start: 1, end: 1, images: [], references: {}, chapters: [] } })
       })
     }
   })
   await open(page, 'tab-a')
   await expect(reader(page, 'tab-a').locator('#viewer-preparation-status')).toBeVisible()
-  expect([...requests]).toEqual([])
+  expect([...requests].filter(resource => resource !== "images")).toEqual([])
   status = 'ready'
   await expect.poll(() => [...requests].sort()).toEqual(['chapters', 'images', 'references'])
   await expect(reader(page, 'tab-a').locator('#viewer-preparation-status')).toHaveCount(0)

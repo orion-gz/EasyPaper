@@ -10,7 +10,7 @@ vm.runInContext(source.slice(source.indexOf('const ROMAN_NUMERAL_SRC'), source.i
 function references(text) {
   context.text = text
   return JSON.parse(vm.runInContext(`JSON.stringify(Array.from(text.matchAll(FIGURE_TABLE_REF_RE), match => ({
-    text: match[0], labels: parseFigureTableNumberList(match[2]).map(n => normalizeFigureTableKind(match[1]) + ' ' + n)
+    text: match[0], labels: parseFigureTableNumberList(match[2], match[1]).map(n => normalizeFigureTableKind(match[1]) + ' ' + n)
   })))`, context))
 }
 
@@ -38,6 +38,16 @@ test('integer, roman and subfigure references retain existing behavior', () => {
 })
 
 for (const [text, labels] of [
+  ['Fig 1-2', ['Figure 1-2']],
+  ['Figure 1‑2(a)', ['Figure 1-2']],
+  ['Fig. 1–2', ['Figure 1-2']],
+  ['Fig. A−2', ['Figure A-2']],
+  ['그림 1．2', ['Figure 1.2']],
+  ['그림 1_2', ['Figure 1_2']],
+  ['Fig 1:2', ['Figure 1:2']],
+  ['Fig. 1-2, 1-3', ['Figure 1-2', 'Figure 1-3']],
+  ['Figs. 1:2 and 1:3', ['Figure 1:2', 'Figure 1:3']],
+  ['Figs. 1–3', ['Figure 1', 'Figure 2', 'Figure 3']],
   ['FIGURE 4.18', ['Figure 4.18']],
   ['fig.\u00a04.18', ['Figure 4.18']],
   ['Figs. 2 and 3', ['Figure 2', 'Figure 3']],
@@ -58,6 +68,6 @@ for (const [text, labels] of [
   })
 }
 
-for (const text of ['Figure IVX', 'Figure Introduction', 'Figure 2nd', 'Figure 4.18th', 'Tablet A.1', 'Fig. S1st']) {
+for (const text of ['Figure IVX', 'Figure Introduction', 'Figure 2nd', 'Figure 4.18th', 'Tablet A.1', 'Fig. S1st', 'Fig 1-2nd']) {
   test(`does not link a partial identifier: ${text}`, () => assert.deepEqual(references(text), []))
 }

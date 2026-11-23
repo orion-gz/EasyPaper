@@ -209,7 +209,7 @@ def clear_all_pages_cache() -> "tuple[int, int]":
 
 _IMAGES_CACHE_SUFFIX = "_images_extract.json"
 # Invalidate labels extracted before chapter-qualified figure numbers were supported.
-_IMAGES_LABEL_VERSION = 3
+IMAGES_LABEL_VERSION = 5
 
 
 def _images_cache_path(doc_id: str, content_revision: int = 1) -> str:
@@ -235,7 +235,7 @@ def get_cached_images(doc_id: str, pdf_path: str, engine: str | None = None,
             data = json.load(f)
         if (
             data.get("cache_schema_version") != PAGES_CACHE_SCHEMA_VERSION
-            or data.get("images_label_version") != _IMAGES_LABEL_VERSION
+            or data.get("images_label_version") != IMAGES_LABEL_VERSION
             or int(data.get("content_revision") or 1) != revision
             or data.get("pdf_fingerprint") != pdf_fingerprint(pdf_path)
             or data.get("parser_engine") != expected_engine
@@ -261,7 +261,7 @@ def save_images_cache(doc_id: str, pdf_path: str, images: list, engine: str | No
             actual_version = version
         atomic_write_text(_images_cache_path(doc_id, revision), json.dumps({
             "cache_schema_version": PAGES_CACHE_SCHEMA_VERSION,
-            "images_label_version": _IMAGES_LABEL_VERSION,
+            "images_label_version": IMAGES_LABEL_VERSION,
             "content_revision": revision,
             "pdf_fingerprint": pdf_fingerprint(pdf_path),
             "parser_engine": actual_engine,
@@ -326,7 +326,7 @@ def clear_stale_parser_caches(doc_id: str, keep_revision: int) -> None:
         path = os.path.join(CACHE_DIR, fname)
         if (
             fname.startswith(prefix)
-            and fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX))
+            and fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX, "_caption_pages.json"))
             and path not in keep
         ):
             try:
@@ -393,7 +393,7 @@ def clear_document_cache(doc_id: str) -> "tuple[int, int]":
     for fname in os.listdir(CACHE_DIR):
         if not (
             fname.startswith(prefix)
-            and fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX))
+            and fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX, "_caption_pages.json"))
         ):
             continue
         path = os.path.join(CACHE_DIR, fname)

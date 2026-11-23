@@ -98,6 +98,12 @@
   "settings:figureOverlayClick": {
     "description": "Mode-specific Figure/Table/Equation preview enablement and hover or click activation preference."
   },
+  "viewer:figurePreview.searching": {
+    "description": "Reader notification while resolving an uncached figure reference."
+  },
+  "viewer:figurePreview.notFound": {
+    "description": "Reader notification when a figure label cannot be matched."
+  },
   "viewer:figurePreview.pin": {
     "description": "Figure/Table/Equation preview toolbar: pin the floating preview. Movement supports dragging or arrow keys."
   },

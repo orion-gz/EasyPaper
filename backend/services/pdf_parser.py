@@ -1219,13 +1219,13 @@ _ROMAN_NUMERAL_RE = r"(?=[MDCLXVI])M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:
 # "Table N"으로 시작하는 문장(번호 뒤에 소문자 동사가 곧장 이어짐)은 캡션이
 # 아니므로 걸러내야 한다. re.IGNORECASE가 걸린 상태에서도 이 판별만은
 # 대소문자를 구분해야 하므로 (?-i:...)로 지역 범위에서 대소문자 구분을 켠다.
-_CAPTION_FOLLOW_RE = r"(?=\s*(?:[:.\-–—*|]|$|(?-i:[A-Z0-9])))"
+_CAPTION_FOLLOW_RE = r"(?=\s*(?:[:.\-–—*|♦]|$|(?-i:[A-Z0-9])))"
 # Keep appendix identifiers distinct from subfigure suffixes and Roman numerals.
-_CAPTION_NUMBER_RE = rf"(?:(?:[A-Z]\.?)?\d+(?:\.\d+)*|{_ROMAN_NUMERAL_RE}(?![A-Z]))"
+_CAPTION_NUMBER_RE = rf"(?:(?:[A-Z][.．\-‐‑–—−:_]?)?\d+(?:[.．\-‐‑–—−:_]\d+)*|{_ROMAN_NUMERAL_RE}(?![A-Z]))"
 _CAPTION_SUBFIG_RE = r"(?:[A-Z](?![A-Z0-9]|\.\d)|\s*\(\s*[A-Z](?:\s*[-–—,]\s*[A-Z])*\s*\))"
 _CAPTION_RE = re.compile(
-    rf"^\s*(Fig(?:ure)?|Tab(?:le)?)\.?\s*({_CAPTION_NUMBER_RE})(?!\.\d)"
-    rf"(?:{_CAPTION_SUBFIG_RE})?(?![A-Z0-9]|\.\d){_CAPTION_FOLLOW_RE}", re.IGNORECASE
+    rf"^\s*(Fig(?:ure)?|그림|Tab(?:le)?)[.．]?\s*({_CAPTION_NUMBER_RE})(?![.．‐‑–—−:_-]\d)"
+    rf"(?:{_CAPTION_SUBFIG_RE})?(?![A-Z0-9]|[.．‐‑–—−:_-]\d){_CAPTION_FOLLOW_RE}", re.IGNORECASE
 )
 # 수식 번호: 줄 끝에 "(3)"처럼 소괄호 숫자(또는 로마 숫자)만 단독으로 오는 경우만
 # 인정한다. 인용 연도("...(2020)")와 헷갈리지 않도록 자릿수를 1~3자리로 제한한다
@@ -1351,14 +1351,18 @@ def _marker_find_caption_text(block) -> Optional[str]:
     return None
 
 
+def _normalize_caption_number(number: str) -> str:
+    return re.sub("[‐‑–—−]", "-", number.upper()).replace("．", ".")
+
+
 def _match_label_from_caption_text(caption_text: Optional[str]) -> "tuple[Optional[str], Optional[str]]":
     if not caption_text:
         return None, None
     m = _CAPTION_RE.match(re.sub(r"\*+", "", caption_text))
     if not m or not m.group(2):
         return None, None
-    kind = "Figure" if m.group(1).lower().startswith("fig") else "Table"
-    return f"{kind} {m.group(2).upper()}", caption_text[:600]
+    kind = "Figure" if m.group(1).lower() in {"fig", "figure", "그림"} else "Table"
+    return f"{kind} " + _normalize_caption_number(m.group(2)), caption_text[:600]
 
 
 def _marker_page_regions(page_json) -> List[Dict[str, Any]]:
@@ -1387,12 +1391,12 @@ def _marker_page_regions(page_json) -> List[Dict[str, Any]]:
             label, caption = _match_label_from_caption_text(_marker_find_caption_text(block))
             pct = to_percent(block.bbox)
             if pct["width"] >= 2 and pct["height"] >= 2:
-                regions.append({**pct, "label": label, "caption": caption})
+                regions.append({**pct, "label": label, "caption": caption, "_figure": bt != "TableGroup"})
             return
         if bt in _MARKER_LEAF_REGION_TYPES:
             pct = to_percent(block.bbox)
             if pct["width"] >= 2 and pct["height"] >= 2:
-                regions.append({**pct, "label": None, "caption": None})
+                regions.append({**pct, "label": None, "caption": None, "_figure": bt != "Table"})
             return
         if bt == "Equation":
             eq_text = re.sub(r"\*+", "", _marker_html_to_text(block.html))
@@ -1492,7 +1496,7 @@ def _mineru_page_regions(content_list: tuple) -> Dict[int, List[Dict[str, Any]]]
         page_idx = item.get("page_idx", 0)
         regions_by_page.setdefault(page_idx, []).append({
             "left": left, "top": top, "width": width, "height": height,
-            "label": label, "caption": caption,
+            "label": label, "caption": caption, "_figure": t in ("image", "chart"),
         })
     return regions_by_page
 
@@ -1550,11 +1554,11 @@ def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
             # 비어 있으면 실제 캡션이 아니므로 명시적으로 걸러낸다.
             if not m or not m.group(2):
                 continue
-            kind = "Figure" if m.group(1).lower().startswith("fig") else "Table"
+            kind = "Figure" if m.group(1).lower() in {"fig", "figure", "그림"} else "Table"
             # 로마 숫자는 대소문자 상관없이 매칭되지만("fig. iv"도 허용), 프론트엔드의
             # 본문 참조 매칭과 항상 같은 대문자 표기로 라벨을 맞춰야 한다(대문자
             # 로마 숫자가 관례이므로 digit은 그대로 두고 로마 숫자만 사실상 영향받음).
-            number = m.group(2).upper()
+            number = _normalize_caption_number(m.group(2))
             caption_lines = lines[i:]
             caption_text = " ".join(t for t in line_texts[i:] if t).strip()
             # bbox는 매칭된 첫 줄이 아니라, caption_text와 마찬가지로 블록 끝까지
@@ -2156,6 +2160,42 @@ def _has_caption_between(y0: float, y1: float, captions: List[Dict[str, Any]]) -
     return False
 
 
+def _attach_pdf_figure_captions(pdf_path, regions):
+    """Recover missing engine captions from adjacent PDF text on the same page."""
+    pending = {}
+    known_labels = {}
+    for region in regions:
+        is_figure = region.pop("_figure", False)
+        number = region["page"]
+        if region.get("label"):
+            known_labels.setdefault(number, set()).add(region["label"])
+        elif is_figure:
+            pending.setdefault(number, []).append(region)
+    if not pending:
+        return regions
+    with fitz.open(pdf_path) as doc:
+        for number, figures in pending.items():
+            page = doc[number - 1]
+            used = known_labels.get(number, set())
+            captions = [cap for cap in _find_page_captions(page)
+                        if cap["label"].startswith("Figure ") and cap["label"] not in used]
+            candidates = []
+            for figure in figures:
+                x, y = figure["left"], figure["top"]
+                rect = fitz.Rect(x, y, x + figure["width"], y + figure["height"])
+                rect *= fitz.Matrix(page.rect.width / 100, page.rect.height / 100)
+                rect *= page.derotation_matrix
+                for cap in captions:
+                    match = _match_caption_for_rect(rect, [cap])
+                    if match["label"]:
+                        candidates.append((match["dist"], figure, cap))
+            for _, figure, cap in sorted(candidates, key=lambda candidate: candidate[0]):
+                if not figure["label"] and cap["label"] not in used:
+                    figure.update(label=cap["label"], caption=cap["text"])
+                    used.add(cap["label"])
+    return regions
+
+
 def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 테이블(Table)의 영역 정보를 추출합니다.
@@ -2183,7 +2223,7 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
             for idx, page_json in enumerate(json_output.children):
                 for region in _marker_page_regions(page_json):
                     images_data.append({"page": idx + 1, **region})
-            return images_data
+            return _attach_pdf_figure_captions(pdf_path, images_data)
         except Exception as e:
             raise RuntimeError(f"Marker 레이아웃 추출 실패: {e}") from e
     elif engine == "mineru":
@@ -2194,7 +2234,7 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
             for page_idx, regions in regions_by_page.items():
                 for region in regions:
                     images_data.append({"page": page_idx + 1, **region})
-            return images_data
+            return _attach_pdf_figure_captions(pdf_path, images_data)
         except Exception as e:
             raise RuntimeError(f"MinerU 레이아웃 추출 실패: {e}") from e
 
