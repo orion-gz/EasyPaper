@@ -2187,6 +2187,22 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
 
 
 def _extract_pdf_images_from_doc(doc, pdf_path: str, engine: str) -> List[Dict[str, Any]]:
+    # Open pdfplumber once instead of once per page (O(n^2) on long documents).
+    pl_pdf = None
+    if engine == "pdfplumber":
+        try:
+            import pdfplumber
+            pl_pdf = pdfplumber.open(pdf_path)
+        except Exception:
+            pl_pdf = None
+    try:
+        return _extract_pdf_images_impl(doc, pdf_path, engine, pl_pdf)
+    finally:
+        if pl_pdf is not None:
+            pl_pdf.close()
+
+
+def _extract_pdf_images_impl(doc, pdf_path: str, engine: str, pl_pdf) -> List[Dict[str, Any]]:
     images_data = []
 
     # ── 1단계: 모든 페이지의 캡션과 후보 사각형을 먼저 수집 ──
@@ -2203,15 +2219,14 @@ def _extract_pdf_images_from_doc(doc, pdf_path: str, engine: str) -> List[Dict[s
         raw_rects = []
 
         # pdfplumber 엔진인 경우 표(Table) 영역 추적 추가
-        if engine == "pdfplumber":
+        if pl_pdf is not None:
             try:
-                import pdfplumber
-                with pdfplumber.open(pdf_path) as pl_pdf:
-                    if page_num < len(pl_pdf.pages):
-                        pl_page = pl_pdf.pages[page_num]
-                        for tbl in pl_page.find_tables():
-                            bbox = tbl.bbox # (x0, top, x1, bottom)
-                            raw_rects.append([bbox[0], bbox[1], bbox[2], bbox[3]])
+                if page_num < len(pl_pdf.pages):
+                    pl_page = pl_pdf.pages[page_num]
+                    for tbl in pl_page.find_tables():
+                        bbox = tbl.bbox # (x0, top, x1, bottom)
+                        raw_rects.append([bbox[0], bbox[1], bbox[2], bbox[3]])
+                    pl_page.close()
             except Exception:
                 pass
 
