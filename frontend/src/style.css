@@ -720,6 +720,12 @@ body.toolbar-hidden .panels {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+body.macos-native-pdf-split .pdf-page-inner {
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+}
+
 /* 다크 모드일 때 PDF 원문 페이지 색상 반전 (눈 보호)
    네이티브 PDFKit 래스터라이저가 다크모드 픽셀로 직접 구운 캔버스(data-native-dark="true")는
    WebKit의 실시간 CSS filter 셰이더 비용을 피하기 위해 filter를 적용하지 않고,
