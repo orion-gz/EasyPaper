@@ -30,7 +30,7 @@ async function openDocument(page, trigger = 'hover') {
   await page.route('**/api/library/preview/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(2,
     () => 'BT /F1 16 Tf 50 600 Td (See Figure 1, Table 1, and Eq. 1.) Tj ET') }))
   await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
-  await page.route('**/api/library/preview/images', route => route.fulfill({ json: { images:
+  await page.route('**/api/library/preview/images?**', route => route.fulfill({ json: { start: 1, end: 2, images:
     ['Figure 1', 'Table 1', 'Equation 1'].map(label => ({ page: 2, label, left: 10, top: 20, width: 30, height: 20 }))
   } }))
   await gotoApp(page)
@@ -152,4 +152,38 @@ test('unpin restores a collapsed preview and supports repinning and dismissal', 
   await pinned.locator('.figure-preview-pin').click()
   await reader.locator('#viewer-scroll-container').dispatchEvent('pointerdown')
   await expect(transient).toHaveCount(0)
+})
+
+test('bookmark overlay appears before neighboring pages finish', async ({ page }) => {
+  const doc = { id: 'book', filename: 'Book.pdf', total_pages: 40,
+    metadata: { title: 'Book', last_page: 20 }, translated_pages: [] }
+  await mockBaseRoutes(page, { documents: [doc] })
+  await page.route('**/api/library/book/pdf', route => route.fulfill({
+    contentType: 'application/pdf', body: multipagePdf(40),
+  }))
+  let releaseNeighbors
+  const neighbors = new Promise(resolve => { releaseNeighbors = resolve })
+  const requests = []
+  await page.route('**/api/library/book/images?**', async route => {
+    const query = new URL(route.request().url()).searchParams
+    const center = Number(query.get('page'))
+    const single = query.get('single') === 'true'
+    requests.push([center, single])
+    if (!single) await neighbors
+    await route.fulfill({ json: {
+      start: single ? center : Math.max(1, center - 15),
+      end: single ? center : Math.min(40, center + 15),
+      images: [{ page: center, left: 10, top: 10, width: 30, height: 20 }],
+    } })
+  })
+  await gotoApp(page)
+  await page.evaluate(() => { location.hash = '#viewer?id=book' })
+  try {
+    const wrapper = activeReader(page).locator('.pdf-page-wrapper[data-page="20"]')
+    await expect(wrapper.locator('.pdf-figure-overlay')).toHaveCount(1)
+    await expect.poll(() => requests).toContainEqual([20, false])
+    expect(requests[0]).toEqual([20, true])
+  } finally {
+    releaseNeighbors()
+  }
 })

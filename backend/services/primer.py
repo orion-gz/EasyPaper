@@ -139,8 +139,14 @@ def _pick_primary_figure(doc_id: str, pdf_path: str) -> Optional[dict]:
     try:
         images = get_cached_images(doc_id, pdf_path)
         if images is None:
-            images = extract_pdf_images(pdf_path)
-            save_images_cache(doc_id, pdf_path, images)
+            from services.db import db_get_document
+            doc = db_get_document(doc_id)
+            if doc:
+                from services.image_window import load_image_window
+                images = load_image_window(doc_id, doc, pdf_path, 1)["images"]
+            else:
+                images = extract_pdf_images(pdf_path)
+                save_images_cache(doc_id, pdf_path, images)
     except Exception as e:
         print(f"[primer] Figure 추출 실패: {e}")
         return None

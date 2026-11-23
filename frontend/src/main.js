@@ -1291,6 +1291,7 @@ function showCompareScreen() {
 }
 
 function resetState() {
+  resetImageWindow()
   clearPinnedCaptures()
   clearFigurePreviews()
   focusModeController?.clear()
@@ -1551,7 +1552,9 @@ async function handleFiles(uploadItems, targetFolderId = null) {
       state.detectedSourceLanguage = result.detected_source_language || 'und'
       state.currentDocumentMode = result.document_mode || 'research'
       state.easyEnglishRevision = result.content_revision || 1
-      loadDocumentImages(result.session_id)
+      state.currentDocId = result.session_id
+      resetImageWindow()
+      loadDocumentImages(result.session_id, 1)
       state.filename = result.filename
       state.totalPages = result.total_pages
       state.title = title
@@ -2334,6 +2337,7 @@ function renderTransContent(pageNum, text, cached = false) {
 function updatePageDisplay(pageNum) {
   if (pageNum === state.currentPage) return
   state.currentPage = pageNum
+  if (imageWindow) loadDocumentImages(state.currentDocId, pageNum)
   easyEnglishController?.schedule()
   pageInput.value = pageNum
   scheduleSaveLastReadPage(pageNum)
@@ -11277,11 +11281,41 @@ if (viewerPrimerBtn) {
   })
 }
 
-async function loadDocumentImages(docId) {
+let imageWindow = null
+
+function resetImageWindow() {
+  clearTimeout(imageWindow?.timer)
+  imageWindow = null
+  state.documentImages = []
+}
+
+function loadDocumentImages(docId, page = state.currentPage) {
+  if (!docId || state.currentDocId !== docId) return
+  imageWindow ??= { loaded: new Set(), pending: new Set() }
+  const windowState = imageWindow
+  windowState.target = page
+  clearTimeout(windowState.timer)
+  const margin = 4
+  const covered = windowState.loaded.has(Math.max(1, page - margin))
+    && windowState.loaded.has(Math.min(state.totalPages || page, page + margin))
+    && windowState.loaded.has(page)
+  if (covered || windowState.pending.size >= 2) return
+  if ([...windowState.pending].some(center => Math.abs(center - page) <= 15)) return
+  windowState.timer = setTimeout(() => fetchImageWindow(docId, page, windowState), 180)
+}
+
+async function fetchImageWindow(docId, page, windowState) {
+  windowState.pending.add(page)
+  const single = !windowState.loaded.has(page)
+  let succeeded = false
   try {
-    const imgRes = await fetchLibraryDocImages(docId)
-    if (state.currentDocId !== docId) return
-    state.documentImages = imgRes.images || []
+    const imgRes = await fetchLibraryDocImages(docId, page, single)
+    if (imageWindow !== windowState || state.currentDocId !== docId) return
+    succeeded = true
+    const { start = 1, end = state.totalPages, images } = imgRes
+    for (let n = start; n <= end; n++) windowState.loaded.add(n)
+    state.documentImages = state.documentImages.filter(img => img.page < start || img.page > end)
+      .concat(images)
 
     // 이미 렌더링되어 있는 페이지들의 오버레이 레이어 갱신
     document.querySelectorAll('.textLayer').forEach(textLayerDiv => {
@@ -11297,7 +11331,11 @@ async function loadDocumentImages(docId) {
   } catch (e) {
     if (state.currentDocId !== docId) return
     console.warn("이미지 좌표 로드 실패:", e)
-    state.documentImages = []
+  } finally {
+    windowState.pending.delete(page)
+    if (imageWindow === windowState && (windowState.target !== page || (single && succeeded))) {
+      loadDocumentImages(docId, windowState.target)
+    }
   }
 }
 
@@ -11513,7 +11551,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
   docOpeningId = doc.id
   try {
     const deferredExtraction = Boolean(doc.metadata?.extraction_deferred)
-    if (deferredExtraction && doc.content_kind !== 'html_article' && doc.preparation && doc.preparation.status !== 'ready') {
+    if (deferredExtraction && !["marker", "mineru"].includes(doc.parser_engine) && doc.content_kind !== 'html_article' && doc.preparation && doc.preparation.status !== 'ready') {
       await finishDocumentPreparation(doc, isCurrentOpen, { blocking: true })
       if (!isCurrentOpen()) return
       if (doc.preparation?.status === 'ready' && doc.metadata) {
@@ -11549,10 +11587,10 @@ async function openFromLibrary(doc, shouldPushState = true) {
     updateMemosHideAllBtnUI()
     const preparing = doc.content_kind !== 'html_article' && doc.preparation && doc.preparation.status !== 'ready'
     if (!preparing) {
-      loadDocumentImages(doc.id)
       loadDocumentReferences(doc.id)
     }
     state.filename   = doc.filename
+    resetImageWindow()
     state.currentDocId = doc.id
     state.currentDocMetadata = doc.metadata || {}
     state.currentDocumentMode = doc.document_mode || "research"
@@ -11682,6 +11720,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
       : 1
     pageInput.value = restorePage
     state.currentPage = restorePage
+    if (doc.content_kind !== "html_article") loadDocumentImages(doc.id, restorePage)
 
     showViewer()
     hideOutlineSidebar()

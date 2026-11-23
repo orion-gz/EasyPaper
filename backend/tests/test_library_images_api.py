@@ -42,3 +42,39 @@ def test_get_images_other_users_document_returns_404(test_client, isolated_dirs)
     _create_doc(isolated_dirs, doc_id="doc-other", username="otheruser")
     res = test_client.get("/api/library/doc-other/images")
     assert res.status_code == 404
+
+
+def test_window_extracts_only_missing_pages(test_client, isolated_dirs, tmp_path, monkeypatch):
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    import fitz
+    from services import image_window
+
+    _create_doc(isolated_dirs)
+    pdf_path = tmp_path / "book.pdf"
+    with fitz.open() as source:
+        for n in range(1, 51):
+            source.new_page().insert_text((20, 40), str(n))
+        source.save(pdf_path)
+    monkeypatch.setattr("routers.library.get_pdf_path", lambda _: str(pdf_path))
+    monkeypatch.setattr(image_window, "CACHE_DIR", str(tmp_path))
+    calls = []
+
+    def run(command, **kwargs):
+        with fitz.open(command[command.index("--pdf") + 1]) as subset:
+            pages = [int(p.get_text().strip()) for p in subset]
+        calls.append(pages)
+        output = Path(command[command.index("--output") + 1])
+        output.write_text(json.dumps([{"page": i} for i in range(1, len(pages) + 1)]))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(image_window.subprocess, "run", run)
+    url = "/api/library/doc-1/images?page="
+    assert test_client.get(url + "22&single=true").json()["images"] == [{"page": 22}]
+    data = test_client.get(url + "22").json()
+    assert data["images"] == [{"page": n} for n in range(7, 38)]
+    assert test_client.get(url + "22").json() == data
+    assert test_client.get(url + "24").json()["end"] == 39
+    assert calls == [[22], [*range(7, 22), *range(23, 38)], [38, 39]]

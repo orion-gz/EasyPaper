@@ -1016,7 +1016,7 @@ async def clear_library_document_cache(doc_id: str, current_user: str = Depends(
 
 
 @router.get("/library/{doc_id}/images")
-async def get_library_document_images(doc_id: str, current_user: str = Depends(get_current_user)):
+async def get_library_document_images(doc_id: str, current_user: str = Depends(get_current_user), page: int | None = None, single: bool = False):
     """특정 문서의 모든 페이지에서 이미지/Figure 좌표 정보(백분율) 목록을 반환합니다.
 
     find_tables()/get_drawings() 등을 페이지마다 두 차례 훑는 무거운 연산이라,
@@ -1030,7 +1030,13 @@ async def get_library_document_images(doc_id: str, current_user: str = Depends(g
     if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
 
+    if page is not None and page < 1:
+        raise HTTPException(status_code=422, detail="Invalid page")
     try:
+        if page is not None:
+            import asyncio
+            from services.image_window import load_image_window
+            return await asyncio.to_thread(load_image_window, doc_id, doc, pdf_path, page, single=single)
         return {"images": await _load_document_images(doc_id, doc, pdf_path)}
     except Exception as e:
         import logging

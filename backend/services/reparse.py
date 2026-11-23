@@ -172,7 +172,7 @@ async def reset_document_parser_cache(doc_id: str, engine: str, version: str, se
         return result
 
 
-def load_document_parse(doc_id: str, doc: dict, pdf_path: str) -> dict:
+def load_document_parse(doc_id: str, doc: dict, pdf_path: str, *, text_only=False) -> dict:
     """Share one extraction and both disk caches between text and region requests."""
     from services.cache import (
         get_cached_pages, get_cached_images, save_pages_cache, save_images_cache,
@@ -189,12 +189,12 @@ def load_document_parse(doc_id: str, doc: dict, pdf_path: str) -> dict:
                    else doc.get("parser_version"))
         revision = int(doc.get("content_revision") or 1)
         pages = get_cached_pages(doc_id, pdf_path, engine, version, revision)
-        images = get_cached_images(doc_id, pdf_path, engine, version, revision)
-        if pages is not None and images is not None:
+        images = None if text_only else get_cached_images(doc_id, pdf_path, engine, version, revision)
+        if pages is not None and (text_only or images is not None):
             return {"pages": pages, "images": images,
                     "parser_engine": engine, "parser_version": version}
         payload = parse_document_isolated(
-            pdf_path, engine,
+            pdf_path, engine, **({"text_only": True} if text_only else {}),
             normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")),
         )
         actual_version = payload["parser_version"]
@@ -210,15 +210,16 @@ def load_document_parse(doc_id: str, doc: dict, pdf_path: str) -> dict:
         # first caller only needs regions. Waiting callers recheck these caches.
         save_pages_cache(doc_id, pdf_path, payload["pages"], engine, version,
                          content_revision=revision, strict=True)
-        save_images_cache(doc_id, pdf_path, payload.get("images") or [], engine, version,
-                          content_revision=revision, strict=True)
+        if not text_only:
+            save_images_cache(doc_id, pdf_path, payload.get("images") or [], engine, version,
+                              content_revision=revision, strict=True)
         return payload
 
 
 def load_document_pages(doc_id: str, doc: dict, pdf_path: str) -> list[dict]:
     """Use the same managed engine for every consumer, including background jobs."""
     if doc.get("parser_engine") in {"marker", "mineru"}:
-        return load_document_parse(doc_id, doc, pdf_path)["pages"]
+        return load_document_parse(doc_id, doc, pdf_path, text_only=True)["pages"]
     from services.cache import get_cached_pages, save_pages_cache
     engine = doc.get("parser_engine") or "pymupdf"
     version = doc.get("parser_version")
@@ -252,7 +253,7 @@ def validate_parser_runtime(engine: str) -> dict:
     return payload
 
 
-def parse_document_isolated(pdf_path: str, engine: str, *, normalize_layout: bool = True) -> dict:
+def parse_document_isolated(pdf_path: str, engine: str, *, normalize_layout: bool = True, text_only=False) -> dict:
     """Run an applied advanced parser in its managed environment without changing globals."""
     import subprocess
     import tempfile
@@ -260,6 +261,8 @@ def parse_document_isolated(pdf_path: str, engine: str, *, normalize_layout: boo
     with tempfile.TemporaryDirectory(prefix="easypaper-parser-") as temp_dir:
         output_path = os.path.join(temp_dir, "result.json")
         command, env = _worker_command(engine, pdf_path, output_path)
+        if text_only:
+            command.append("--text-only")
         if not normalize_layout:
             command.append("--legacy-layout")
         result = subprocess.run(

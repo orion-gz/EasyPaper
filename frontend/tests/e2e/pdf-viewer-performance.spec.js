@@ -140,7 +140,7 @@ test('dense page overlays batch layout and page hover keeps reading geometry sta
   await page.route('**/api/library/dense/pdf', route => route.fulfill({ contentType: 'application/pdf', body: pdf }))
   await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
   await page.route('**/api/library/dense/references', route => route.fulfill({ json: { references: { '1': 'Example reference.' } } }))
-  await page.route('**/api/library/dense/images', route => route.fulfill({ json: { images: [
+  await page.route('**/api/library/dense/images?**', route => route.fulfill({ json: { start: 1, end: 4, images: [
     { page: 1, label: 'Figure 1', left: 75, top: 90, width: 10, height: 5 },
   ] } }))
   await gotoApp(page)

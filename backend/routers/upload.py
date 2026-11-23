@@ -72,7 +72,7 @@ def _restore_session(session_id: str) -> bool:
                 from services.document_preparation import update_progress
                 update_progress(session_id, "extracting", 15, 0, doc.get("total_pages") or 0, int(doc.get("content_revision") or 1))
                 from services.reparse import load_document_parse
-                payload = load_document_parse(session_id, doc, pdf_path)
+                payload = load_document_parse(session_id, doc, pdf_path, text_only=True)
                 pages = payload["pages"]
                 parser_version = payload["parser_version"]
                 update_progress(session_id, "layout", 75, len(pages), len(pages), int(doc.get("content_revision") or 1))
