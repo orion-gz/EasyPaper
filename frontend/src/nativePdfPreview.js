@@ -42,16 +42,13 @@ function getViewportRect(container) {
   return { x, y, width, height }
 }
 
-function toHostBytes(hostWin, bytes) {
+function toHostArrayBuffer(hostWin, bytes) {
+  const HostArrayBuffer = hostWin?.ArrayBuffer || ArrayBuffer
   const HostUint8Array = hostWin?.Uint8Array || Uint8Array
-  if (!bytes || !bytes.byteLength) return new HostUint8Array(0)
-  if (bytes instanceof HostUint8Array) return bytes
-  if (bytes.buffer instanceof (hostWin?.ArrayBuffer || ArrayBuffer)) {
-    return new HostUint8Array(bytes.buffer, bytes.byteOffset || 0, bytes.byteLength)
-  }
+  if (!bytes || !bytes.byteLength) return new HostArrayBuffer(0)
   const copy = new HostUint8Array(bytes.byteLength)
-  copy.set(bytes)
-  return copy
+  copy.set(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes))
+  return copy.buffer
 }
 
 async function update(rect, bytes, close = false) {
@@ -59,12 +56,14 @@ async function update(rect, bytes, close = false) {
   const invoke = hostWin?.__TAURI_INTERNALS__?.invoke
     ? (cmd, args, options) => hostWin.__TAURI_INTERNALS__.invoke(cmd, args, options)
     : (await import('@tauri-apps/api/core')).invoke
+  const jsByteLength = bytes?.byteLength || 0
   const headers = {
     'x-left': String(rect.x), 'x-top': String(rect.y),
     'x-width': String(rect.width), 'x-height': String(rect.height),
+    'x-js-bytes': String(jsByteLength),
   }
   if (close) headers['x-close'] = '1'
-  const payload = toHostBytes(hostWin, bytes)
+  const payload = toHostArrayBuffer(hostWin, bytes)
   const task = queue.then(() => invoke('native_pdf', payload, { headers }))
   queue = task.catch(() => {})
   return task
@@ -73,8 +72,7 @@ async function update(rect, bytes, close = false) {
 export async function mountNativePdf(container, document, current) {
   const mountId = ++activeMountId
   const isLatest = () => mountId === activeMountId && current()
-  const needsBytes = mountedDocument !== document
-  const bytes = needsBytes ? await document.getData() : null
+  const bytes = await document.getData()
   if (!isLatest()) return null
   const rect = () => getViewportRect(container)
   await update(rect(), bytes)
@@ -82,7 +80,7 @@ export async function mountNativePdf(container, document, current) {
   if (!isLatest()) return null
   container.dataset.nativePdf = 'mounted'
   const observer = new ResizeObserver(() => {
-    if (isLatest()) update(rect(), null).catch(console.error)
+    if (isLatest() && mountedDocument === document) update(rect(), null).catch(console.error)
   })
   observer.observe(container)
   return () => {

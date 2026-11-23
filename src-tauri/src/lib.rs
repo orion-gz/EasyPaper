@@ -222,9 +222,15 @@ async fn native_pdf(window: tauri::WebviewWindow, request: tauri::ipc::Request<'
         };
         let rect = [number("x-left")?, number("x-top")?, number("x-width")?, number("x-height")?];
         let close = headers.contains_key("x-close");
-        let bytes = match request.body() {
-            tauri::ipc::InvokeBody::Raw(data) => data.clone(),
-            _ => Vec::new(),
+        let js_bytes = headers.get("x-js-bytes").and_then(|v| v.to_str().ok()).unwrap_or("?");
+        let (body_kind, bytes) = match request.body() {
+            tauri::ipc::InvokeBody::Raw(data) => ("raw", data.clone()),
+            tauri::ipc::InvokeBody::Json(val) => {
+                let parsed = val.as_array().map(|arr| {
+                    arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>()
+                }).unwrap_or_default();
+                ("json", parsed)
+            }
         };
         let byte_len = bytes.len();
         let (send, receive) = std::sync::mpsc::channel();
@@ -235,8 +241,8 @@ async fn native_pdf(window: tauri::WebviewWindow, request: tauri::ipc::Request<'
         }).map_err(|e| e.to_string())?;
         let ok = receive.recv().unwrap_or(false);
         log::info!(
-            "[native_pdf] close={} bytes={} rect=({:.1}, {:.1}, {:.1}x{:.1}) -> ok={}",
-            close, byte_len, rect[0], rect[1], rect[2], rect[3], ok
+            "[native_pdf] close={} body={} js_bytes={} rust_bytes={} rect=({:.1}, {:.1}, {:.1}x{:.1}) -> ok={}",
+            close, body_kind, js_bytes, byte_len, rect[0], rect[1], rect[2], rect[3], ok
         );
         if ok { return Ok(()); }
     }

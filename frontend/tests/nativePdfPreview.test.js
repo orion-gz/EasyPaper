@@ -11,7 +11,15 @@ test('getTauriHostWindow resolves Tauri internals from parent/top window when ru
 test('mountNativePdf invokes top-level Tauri IPC with host Uint8Array and iframe-offset coordinates', async () => {
   const calls = []
   class HostArrayBuffer extends ArrayBuffer {}
-  class HostUint8Array extends Uint8Array {}
+  class HostUint8Array extends Uint8Array {
+    constructor(arg) {
+      if (typeof arg === 'number') {
+        super(new HostArrayBuffer(arg))
+      } else {
+        super(arg)
+      }
+    }
+  }
 
   const hostWin = {
     Uint8Array: HostUint8Array,
@@ -60,13 +68,14 @@ test('mountNativePdf invokes top-level Tauri IPC with host Uint8Array and iframe
     assert.equal(container.dataset.nativePdf, 'mounted')
     assert.equal(calls.length, 1)
     assert.equal(calls[0].cmd, 'native_pdf')
-    assert.ok(calls[0].payload instanceof HostUint8Array)
-    assert.deepEqual([...calls[0].payload], [0x25, 0x50, 0x44, 0x46])
+    assert.ok(calls[0].payload instanceof HostArrayBuffer)
+    assert.deepEqual([...new Uint8Array(calls[0].payload)], [0x25, 0x50, 0x44, 0x46])
     assert.deepEqual(calls[0].options.headers, {
       'x-left': '80',
       'x-top': '78',
       'x-width': '500',
       'x-height': '700',
+      'x-js-bytes': '4',
     })
 
     resizeCallback?.()
