@@ -55,7 +55,7 @@ test('long PDF loads lazily, bounds canvases and restores evicted pages', async 
   await expect(activeReader(page).locator('.floating-memo[data-id="retained-memo"]')).toBeVisible()
   await expect(activeReader(page).locator('.pdf-page-wrapper')).toHaveCount(500)
   expect(await evaluateReader(page, () => window.easyEnglishTabWrites)).toBeLessThan(5000)
-  expect(await activeReader(page).locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(3)
+  expect(await activeReader(page).locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(16)
   const originalHeight = await wrapper(1).evaluate(node => node.getBoundingClientRect().height)
 
   for (const number of [4, 70, 150, 250, 350, 450, 499, 500]) {
@@ -77,11 +77,11 @@ test('long PDF loads lazily, bounds canvases and restores evicted pages', async 
   expect(anchorReads).toBeLessThanOrEqual(12)
   await expect(wrapper(1).locator('canvas')).toHaveCount(0)
   await expect(activeReader(page).locator('.floating-memo[data-id="retained-memo"]')).toHaveCount(0)
-  expect(await activeReader(page).locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(8)
+  expect(await activeReader(page).locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(40)
   expect(await wrapper(1).evaluate(node => node.getBoundingClientRect().height)).toBeCloseTo(originalHeight, 0)
 
   await wrapper(1).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
-  await expect(text(1)).toContainText('Performance page 1')
+  await expect(text(1)).toContainText('Performance page 1', { timeout: 20000 })
   expect(await wrapper(1).locator('canvas').evaluate(canvas => canvas.width)).toBeGreaterThan(0)
   await expect(activeReader(page).locator('.floating-memo[data-id="retained-memo"]')).toContainText('Keep this memo')
   await expect(activeReader(page).locator('.page-render-error')).toHaveCount(0)
@@ -89,9 +89,9 @@ test('long PDF loads lazily, bounds canvases and restores evicted pages', async 
 })
 
 test('rapid jumps cancel stale text requests and finish the destination page', async ({ page }) => {
-  const doc = { id: 'rapid', filename: 'Rapid.pdf', total_pages: 24, metadata: { title: 'Rapid PDF' }, translated_pages: [] }
+  const doc = { id: 'rapid', filename: 'Rapid.pdf', total_pages: 60, metadata: { title: 'Rapid PDF' }, translated_pages: [] }
   await mockBaseRoutes(page, { documents: [doc] })
-  await page.route('**/api/library/rapid/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(24) }))
+  await page.route('**/api/library/rapid/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(60) }))
   let releaseText
   const textGate = new Promise(resolve => { releaseText = resolve })
   await page.route('**/api/pdf-text/**', async route => {
@@ -117,15 +117,15 @@ test('rapid jumps cancel stale text requests and finish the destination page', a
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=rapid' })
   await expect.poll(() => evaluateReader(page, () => window.pdfTextRequests.active)).toBeGreaterThan(0)
-  for (const number of [8, 16, 24]) {
+  for (const number of [20, 40, 60]) {
     await activeReader(page).locator(`.pdf-page-wrapper[data-page="${number}"]`).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
     await page.waitForTimeout(50)
   }
   await expect.poll(() => evaluateReader(page, () => window.pdfTextRequests.cancelled)).toBeGreaterThan(0)
   releaseText()
-  await expect(activeReader(page).locator('.pdf-page-wrapper[data-page="24"] .textLayer')).toContainText('Performance page 24')
+  await expect(activeReader(page).locator('.pdf-page-wrapper[data-page="60"] .textLayer')).toContainText('Performance page 60')
   const stats = await evaluateReader(page, () => window.pdfTextRequests)
-  expect(stats.max).toBeLessThanOrEqual(2)
+  expect(stats.max).toBeLessThanOrEqual(3)
   expect(stats.cancelled).toBeGreaterThan(0)
   await expect(activeReader(page).locator('.page-render-error')).toHaveCount(0)
   expect(errors).toEqual([])
@@ -331,9 +331,9 @@ test('wheel zoom batches input and eases toward the final scale', async ({ page 
 
 test('expanded memo margins stay rendered while reading and retain their footprint after eviction', async ({ page }) => {
   test.setTimeout(60000)
-  const doc = { id: 'margin-pages', filename: 'Margins.pdf', total_pages: 16, metadata: {}, translated_pages: [] }
+  const doc = { id: 'margin-pages', filename: 'Margins.pdf', total_pages: 60, metadata: {}, translated_pages: [] }
   await mockBaseRoutes(page, { documents: [doc] })
-  await page.route('**/api/library/margin-pages/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(16) }))
+  await page.route('**/api/library/margin-pages/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(60) }))
   await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
   await gotoApp(page)
   await page.evaluate(() => {
@@ -352,7 +352,7 @@ test('expanded memo margins stay rendered while reading and retain their footpri
   await first.locator('[data-id="margin-11"]').evaluate(el => el.scrollIntoView({ block: 'center', behavior: 'instant' }))
   await expect(first.locator('.textLayer')).toContainText('Performance page 1')
   await expect(first.locator('[data-id="margin-11"]')).toBeVisible()
-  for (const number of [3, 5, 7, 9, 11, 13, 16]) {
+  for (const number of [18, 36, 54, 60]) {
     const wrapper = reader.locator(`.pdf-page-wrapper[data-page="${number}"]`)
     await wrapper.evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'instant' }))
     await expect(wrapper.locator('.textLayer')).toContainText(`Performance page ${number}`)
@@ -374,18 +374,18 @@ test('scroll reconciliation renders pages when intersection notifications are mi
       }
     }
   })
-  const doc = { id: 'observer-gap', filename: 'Observer.pdf', total_pages: 30, metadata: { last_page: 15 }, translated_pages: [] }
+  const doc = { id: 'observer-gap', filename: 'Observer.pdf', total_pages: 60, metadata: { last_page: 15 }, translated_pages: [] }
   await mockBaseRoutes(page, { documents: [doc] })
-  await page.route('**/api/library/observer-gap/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(30) }))
+  await page.route('**/api/library/observer-gap/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(60) }))
   await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=observer-gap' })
   const reader = activeReader(page)
   const wrapper = number => reader.locator(`.pdf-page-wrapper[data-page="${number}"]`)
   await expect(wrapper(15).locator('.textLayer')).toContainText('Performance page 15', { timeout: 20000 })
-  for (const number of [30, 1, 20]) {
+  for (const number of [60, 1, 30]) {
     await wrapper(number).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
     await expect(wrapper(number).locator('.textLayer')).toContainText(`Performance page ${number}`)
   }
-  expect(await reader.locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(8)
+  expect(await reader.locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(40)
 })

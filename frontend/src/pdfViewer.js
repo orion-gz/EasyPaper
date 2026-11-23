@@ -888,6 +888,10 @@ export async function reRenderAll(container, newZoom, callbacks) {
   await renderScrollView(container, newZoom, { ...callbacks, preserveCanvas: true })
 }
 
+export function clearPdfTextRecoveryCache() {
+  pdfTextRecoveryCache.clear()
+}
+
 export function setScale(s) { currentScale = s }
 export function getScale()  { return currentScale }
 export function getTotalPages() { return pdfDoc ? pdfDoc.numPages : 0 }

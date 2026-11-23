@@ -210,7 +210,7 @@ def load_document_parse(doc_id: str, doc: dict, pdf_path: str, *, text_only=Fals
         # first caller only needs regions. Waiting callers recheck these caches.
         save_pages_cache(doc_id, pdf_path, payload["pages"], engine, version,
                          content_revision=revision, strict=True)
-        if not text_only:
+        if not text_only or payload.get("images"):
             save_images_cache(doc_id, pdf_path, payload.get("images") or [], engine, version,
                               content_revision=revision, strict=True)
         return payload

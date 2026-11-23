@@ -77,7 +77,7 @@ async def test_upload_defers_isolated_parser_until_document_is_opened(isolated_d
 
     calls = []
 
-    def fake_isolated(path, selected, *, normalize_layout=True):
+    def fake_isolated(path, selected, *, normalize_layout=True, text_only=False):
         calls.append(selected)
         return {
             "parser_engine": selected,

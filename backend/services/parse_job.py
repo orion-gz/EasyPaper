@@ -111,6 +111,9 @@ async def finalize_deferred_document(doc_id: str) -> None:
             cached = get_cached_images(doc_id, pdf_path, engine, version) if engine in {"marker", "mineru"} else None
             if cached is not None:
                 images = cached
+            elif engine in {"marker", "mineru"}:
+                from services.reparse import load_document_parse
+                images = (await asyncio.to_thread(load_document_parse, doc_id, doc, pdf_path)).get("images") or []
             else:
                 images = await asyncio.to_thread(extract_pdf_images, pdf_path, engine)
                 save_images_cache(doc_id, pdf_path, images, engine, version, strict=True)
