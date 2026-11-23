@@ -9160,3 +9160,16 @@ summary.outline-tree-line { cursor: pointer; }
 .chat-code-header > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-code-copy { flex: 0 0 auto; white-space: nowrap; }
 .chat-message .message-bubble :is(th, td) { min-width: 8ch; overflow-wrap: normal; word-break: normal; }
+
+.picker-effort {
+  display: grid;
+  gap: 4px;
+  padding: 4px 12px 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.picker-effort input {
+  width: 100%;
+  accent-color: var(--control-accent);
+}
