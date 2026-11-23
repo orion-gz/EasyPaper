@@ -52,7 +52,7 @@ import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, 
 import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
 import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
-import { sourceMappingRects, refreshTextLayerGeometry, loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
+import { sourceMappingRects, refreshTextLayerGeometry, loadPDF, renderScrollView, scrollToPage, reRenderAll, clearPdfTextRecoveryCache, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { invalidateLibraryGetCache, fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, resolveFigureReference, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
 import { icon } from './icons.js'
@@ -11424,7 +11424,10 @@ async function finishDocumentPreparation(doc, isCurrentOpen, { blocking = false 
         if (!isCurrentOpen()) return
       }
       // Upgrade native PDF selection to OCR/layout text after analysis completes.
-      if (isCurrentOpen()) await setZoom(state.zoom)
+      if (isCurrentOpen()) {
+        clearPdfTextRecoveryCache()
+        await setZoom(state.zoom)
+      }
     }
   } catch (error) {
     if (!isCurrentOpen()) return
