@@ -1,4 +1,4 @@
-import { projectSourceRects, sourceMappingMatchesRevision } from './pdfSentenceGeometry.js'
+import { projectSourceRects, sourceMappingMatchesRevision, mergePdfSentenceLineRects } from './pdfSentenceGeometry.js'
 /**
  * PDF.js 기반 연속 스크롤 뷰어
  * - 모든 페이지를 세로로 쌓아 스크롤
@@ -939,10 +939,11 @@ export async function getPDFOutline() {
   }
 }
 
-export function sourceMappingRects(pageNum, mapping) {
+export function sourceMappingRects(pageNum, mapping, { mergeLines = false } = {}) {
   const layer = renderedTextLayers.get(Number(pageNum))
   if (!layer || !sourceMappingMatchesRevision(mapping, layer.container.dataset.sourceRevision)) return []
-  return projectSourceRects(mapping, layer.viewport)
+  const rects = projectSourceRects(mapping, layer.viewport)
+  return mergeLines ? mergePdfSentenceLineRects(rects) : rects
 }
 
 

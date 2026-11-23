@@ -38,7 +38,7 @@ import { applyDesktopUpdate } from './desktopUpdate.js'
 import { renderReleaseNotes, installReleaseNotesLinks } from './releaseNotes.js'
 import './styles/release-notes.css'
 import { pageCoordinates } from './pdfCoordinates.js'
-import { mergePdfHighlightRects, mappedSentenceRange, sentenceCharParts, contiguousSentenceBounds } from './pdfSentenceGeometry.js'
+import { mergePdfHighlightRects, mergePdfSentenceLineRects, mappedSentenceRange, sentenceCharParts, contiguousSentenceBounds } from './pdfSentenceGeometry.js'
 import './styles/shell.css'
 import './styles/library-page.css'
 import './styles/research-graph.css'
@@ -1928,7 +1928,7 @@ function easyEnglish() {
       const bounds = canvas.getBoundingClientRect()
       const sx = bounds.width / Number.parseFloat(canvas.style.width)
       const sy = bounds.height / Number.parseFloat(canvas.style.height)
-      return sourceMappingRects(page, pair.source_mapping).map(rect => ({
+      return sourceMappingRects(page, pair.source_mapping, { mergeLines: true }).map(rect => ({
         left: bounds.left + rect.left * sx, top: bounds.top + rect.top * sy,
         width: rect.width * sx, height: rect.height * sy,
       }))
@@ -14474,7 +14474,7 @@ function schedulePdfSelectionOverlay() {
           }
         }
       }
-      const boxes = mergePdfHighlightRects(rects);
+      const boxes = mergePdfSentenceLineRects(rects);
       if (boxes.length) {
         const overlay = getOrCreateOverlay(layer.closest('.pdf-page-wrapper'));
         clearOverlayBoxes(overlay, 'sentence-hover-box', 'sentence-equation-box');
@@ -17641,7 +17641,10 @@ function buildVirtualTextMap(container, pageNum) {
       } else {
         const prevChar = fullText[fullText.length - 1];
         const nextChar = textNodes[0].nodeValue[0];
-        if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n') fullText += ' ';
+        const prevSpan = sortedSpans[i - 1];
+        const horizontalGap = !isNewLine && prevSpan ? spanInfo.left - (prevSpan.left + prevSpan.width) : Infinity;
+        const isTouchingInLine = !isNewLine && horizontalGap <= Math.max(fontSize, prevFontSize) * 0.2;
+        if (prevChar !== ' ' && nextChar !== ' ' && prevChar !== '\n' && !isTouchingInLine) fullText += ' ';
       }
     }
 
@@ -17787,7 +17790,7 @@ function sourceMappedRanges(sentences, vtm, container, pageNum) {
 function getSentenceRects(sentenceRange, vtm, containerEl) {
   if (sentenceRange.sourceMapping) {
     const pageNum = containerEl.closest('.pdf-page-wrapper')?.dataset.page;
-    return mergePdfHighlightRects(sourceMappingRects(pageNum, sentenceRange.sourceMapping));
+    return mergePdfSentenceLineRects(sourceMappingRects(pageNum, sentenceRange.sourceMapping));
   }
   const { nodeRanges } = vtm;
   const coordinates = pageCoordinates(containerEl.closest('.pdf-page-inner') || containerEl);
@@ -17817,7 +17820,7 @@ function getSentenceRects(sentenceRange, vtm, containerEl) {
     }
 
   }
-  return mergePdfHighlightRects(mergedRects);
+  return mergePdfSentenceLineRects(mergedRects);
 }
 
 // 오버레이 레이어에 하이라이트 상자를 드로잉
@@ -18373,7 +18376,10 @@ function findSentenceAtChar(charIdx, sentenceRanges) {
 
 // 마우스 위치로부터 대략적인 charIdx를 추정 (caretRangeFromPoint 또는 비율 계산 폴백)
 function estimateCharIdxFromPoint(x, y, vtm) {
-  // 방법 1: caretRangeFromPoint (Chrome/Edge)
+  // 방법 1: caretRangeFromPoint / caretPositionFromPoint
+  // 단, caretRangeFromPoint는 마우스 바로 아래가 아닌 인접 스팬이나 다른 줄의
+  // 텍스트 노드로 스냅될 수 있으므로, 반환된 노드의 실제 바운딩 박스 근처에
+  // 포인터가 있을 때만 신뢰한다.
   let node = null, offset = 0;
   if (document.caretRangeFromPoint) {
     const cr = document.caretRangeFromPoint(x, y);
@@ -18385,10 +18391,17 @@ function estimateCharIdxFromPoint(x, y, vtm) {
 
   if (node && node.nodeType === 3) {
     const nr = vtm.nodeRanges.find(r => r.node === node);
-    if (nr) return nr.start + offset;
+    if (nr) {
+      const rect = getNodeClientRect(nr.node);
+      if (!rect || (x >= rect.left - 8 && x <= rect.right + 8 && y >= rect.top - 6 && y <= rect.bottom + 6)) {
+        return nr.start + offset;
+      }
+    }
   }
 
-  // 방법 2: 마우스 근처 nodeRange에서 비율로 추정
+  // 방법 2: 마우스 근처 nodeRange(또는 같은 줄의 인접 스팬 사이 간격)에서 비율로 추정
+  let closestGapIdx = -1;
+  let closestGapDist = Infinity;
   for (const nr of vtm.nodeRanges) {
     try {
       const range = document.createRange();
@@ -18420,9 +18433,17 @@ function estimateCharIdxFromPoint(x, y, vtm) {
         if (best) return nr.start + best.offset + (x > rect.left + (best.left + best.width / 2) * rect.width ? 1 : 0);
         return nr.start;
       }
+      // 같은 줄 내 기호/수식 스팬 사이의 좁은 빈틈에 마우스가 위치한 경우
+      if (rect.width > 0 && rect.height > 0 && y >= rect.top - 4 && y <= rect.bottom + 4) {
+        const dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0;
+        if (dx <= Math.max(rect.height * 1.5, 18) && dx < closestGapDist) {
+          closestGapDist = dx;
+          closestGapIdx = x < rect.left ? nr.start : Math.max(nr.start, nr.end - 1);
+        }
+      }
     } catch(e) { /* no-op */ }
   }
-  return -1;
+  return closestGapIdx;
 }
 
 // DOM Range(사용자가 실제로 드래그해서 선택한 범위)의 시작/끝 지점을 VTM
@@ -18457,9 +18478,8 @@ function getVtmCharRangeFromSelection(range, vtm) {
 
 // 오버레이에 호버 하이라이트를 그리고 번역 문장에 클래스를 적용
 function applyHoverHighlight(pageNum, sentenceRange) {
-  if (!sentenceRange.isEquation) {
-    sentenceRange = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [], sentenceRange.sentenceIdx) || sentenceRange;
-  }
+  const wholeSentence = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [],
+    sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) || sentenceRange;
   const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum];
   if (!vtm) return;
 
@@ -18470,10 +18490,12 @@ function applyHoverHighlight(pageNum, sentenceRange) {
   if (!textLayer) return;
 
   const overlay = getOrCreateOverlay(pageWrapper);
-  clearOverlayBoxes(overlay, 'sentence-hover-box');
+  clearOverlayBoxes(overlay, 'sentence-hover-box', 'sentence-equation-box');
 
-  const rects = getSentenceRects(sentenceRange, vtm, textLayer);
-  const boxClass = sentenceRange.isEquation ? 'sentence-equation-box' : 'sentence-hover-box';
+  const rects = getSentenceRects(wholeSentence, vtm, textLayer);
+  const boxClass = sentenceRange.isEquation && wholeSentence.charStart === sentenceRange.charStart && wholeSentence.charEnd === sentenceRange.charEnd
+    ? 'sentence-equation-box'
+    : 'sentence-hover-box';
   renderSentenceOverlay(overlay, rects, boxClass);
 
   // 번역 패널 하이라이트 (trans-sentence DOM 방식은 유지)
@@ -18672,7 +18694,7 @@ function focusPairRects(ref) {
   }
   // Focus crops, blur openings and tint must share the same continuous source
   // lines as hover highlights. Keep viewport coordinates for the fixed layer.
-  const sourceLineRects = mergePdfHighlightRects(sourceRects).map(rect => ({
+  const sourceLineRects = mergePdfSentenceLineRects(sourceRects).map(rect => ({
     ...rect, right: rect.left + rect.width, bottom: rect.top + rect.height,
   }))
   return { sourceRange: sentenceRange, sourceRects: sourceLineRects, translationRects, sourceCanvas: viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${ref.pageNum}"] canvas`), elements: Array.from(viewerScrollContainer.querySelectorAll(`.trans-sentence[data-page="${ref.pageNum}"][data-sentence-idx="${idx}"]`)) }
@@ -18696,9 +18718,8 @@ function listFocusSentences() {
 focusModeController = new FocusModeController({ root: viewerScrollContainer, resolvePair: focusPairRects, listSentences: listFocusSentences, announce: key => announceA11y({ focusActive: t('viewer:a11y.focusActive'), focusPinned: t('viewer:a11y.focusPinned'), focusMoved: t('viewer:a11y.focusMoved') }[key]), notifyFallback: () => showToast(t('viewer:focus.performanceFallback'), 'info') })
 
 function startDwellSelection(pageNum, sentenceRange) {
-  if (!sentenceRange.isEquation) {
-    sentenceRange = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [], sentenceRange.sentenceIdx) || sentenceRange;
-  }
+  sentenceRange = mappedSentenceRange(state.pdfPageSentences?.[pageNum] || [],
+    sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx) || sentenceRange;
   if (sentenceHoverTimer) { clearTimeout(sentenceHoverTimer); sentenceHoverTimer = null }
 
   sentenceHoverTimer = setTimeout(() => {
@@ -18783,15 +18804,16 @@ if (viewerScrollContainer) {
     }
 
     const { pageNum, sentenceRange } = detected;
+    const hoverSentenceIdx = sentenceRange.originalSentenceIdx ?? sentenceRange.sentenceIdx;
     annSpan = findAnnotationOverlayAtPoint(pageNum, e.clientX, e.clientY);
     if (annSpan) showAnnHoverTooltipForSpan(annSpan);
-    const isSame = (currentHoverPage === pageNum && currentHoverSentenceIdx === sentenceRange.sentenceIdx);
+    const isSame = (currentHoverPage === pageNum && currentHoverSentenceIdx === hoverSentenceIdx);
 
     // 하이라이트/밑줄 span 위가 아니면서 해당 문장에 메모가 있는 경우 - 메모 전용 호버 툴팁 노출
     // (메모는 pointer-events:none 오버레이로 그려지므로 span hover로는 감지할 수 없어 문장 단위로 감지)
     // isSame일 때는 이미 같은 문장에 대해 처리했으므로 매 mousemove마다 다시 조회하지 않는다.
     if (!annSpan && !isSame) {
-      const sentenceIdx = sentenceRange.sentenceIdx >= 10000 ? (sentenceRange.originalSentenceIdx ?? 0) : sentenceRange.sentenceIdx;
+      const sentenceIdx = hoverSentenceIdx;
       const memo = lookupMemoForSentence(pageNum, sentenceIdx);
       if (memo) {
         showAnnHoverTooltipForMemoSentence(pageNum, sentenceRange, sentenceIdx, memo);
@@ -18812,16 +18834,14 @@ if (viewerScrollContainer) {
     }
 
     currentHoverPage = pageNum;
-    currentHoverSentenceIdx = sentenceRange.sentenceIdx;
+    currentHoverSentenceIdx = hoverSentenceIdx;
     focusModeController.focus(focusRef(pageNum, sentenceRange, detected.charIdx));
 
     applyHoverHighlight(pageNum, sentenceRange);
 
-    // 700ms 드웰 선택 (수식 제외, 뷰어 설정에서 꺼져있지 않은 경우에만)
+    // 700ms 드웰 선택 (뷰어 설정에서 꺼져있지 않은 경우에만)
     if (!annSpan && !state.hoverSelectionDisabled && !state.disableHoverTooltip) {
-      if (!sentenceRange.isEquation) {
-        startDwellSelection(pageNum, sentenceRange);
-      }
+      startDwellSelection(pageNum, sentenceRange);
     }
   });
 

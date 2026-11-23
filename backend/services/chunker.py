@@ -157,6 +157,10 @@ def split_into_sentences(text: str) -> List[str]:
             if is_period and not whitespace and re.match(r'[a-z]', next_char) and re.search(r'[A-Za-z]$', para[:punc_index]):
                 continue
 
+            # 수식 연산자가 바로 뒤따르는 경우 문장을 끊지 않음
+            if is_period and re.match(r'[=<>+\u2212\u22c5*/\u00d7\u00f7^_]', next_char):
+                continue
+
             sentence_text = para[last_index:punc_index + len(punc)]
             if sentence_text.strip():
                 sentence_ranges.append(sentence_text.strip())

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import vm from 'node:vm'
-import { normalizePdfText, mergePdfHighlightRects, mappedSentenceRange } from '../src/pdfSentenceGeometry.js'
+import { normalizePdfText, mergePdfHighlightRects, mergePdfSentenceLineRects, mappedSentenceRange } from '../src/pdfSentenceGeometry.js'
 
 import { alignSentencesToText as align } from '../src/sentenceAlignment.js'
 
@@ -46,12 +46,14 @@ test('OCR baseline variation and RTL gaps retain only evidenced pixels', () => {
   const rects = [{ left: 40, top: 12, width: 10, height: 12 },
     { left: 10, top: 10, width: 10, height: 16 }, { left: 25, top: 13, width: 10, height: 11 }]
   assert.deepEqual(mergePdfHighlightRects(rects), [rects[1], rects[0], rects[2]])
+  assert.deepEqual(mergePdfSentenceLineRects(rects), [{ left: 10, top: 10, width: 40, height: 16 }])
 })
 
 test('separate lines and column gutters stay separate', () => {
   const rects = [{ left: 10, top: 10, width: 30, height: 12 },
     { left: 100, top: 10, width: 30, height: 12 }, { left: 10, top: 28, width: 30, height: 12 }]
   assert.equal(mergePdfHighlightRects(rects).length, 3)
+  assert.equal(mergePdfSentenceLineRects(rects).length, 3)
 })
 
 test('translation maps all fragments around a displayed equation', () => {

@@ -43,6 +43,54 @@ export function mergePdfHighlightRects(rects) {
   return result.sort((a, b) => a.top - b.top || a.left - b.left)
 }
 
+// Merge glyph/symbol/subscript spans belonging to the same sentence line into
+// one continuous line box without bridging multi-column gutters.
+export function mergePdfSentenceLineRects(rects) {
+  const valid = []
+  for (const rect of rects || []) {
+    const width = (rect.right ?? rect.left + rect.width) - rect.left
+    const height = (rect.bottom ?? rect.top + rect.height) - rect.top
+    if ([rect.left, rect.top, width, height].every(Number.isFinite) && width > 0 && height > 0) {
+      valid.push({ left: rect.left, top: rect.top, width, height })
+    }
+  }
+  const lines = []
+  for (const r of valid.sort((a, b) => a.top - b.top || a.left - b.left)) {
+    const rBottom = r.top + r.height
+    const rCenter = r.top + r.height / 2
+    const line = lines.find(line => {
+      const overlap = Math.min(line.bottom, rBottom) - Math.max(line.top, r.top)
+      return overlap >= Math.min(line.height, r.height) * 0.35
+        || Math.abs(line.center - rCenter) <= Math.max(line.height, r.height) * 0.6
+    })
+    if (line) {
+      line.rects.push(r)
+      line.top = Math.min(line.top, r.top)
+      line.bottom = Math.max(line.bottom, rBottom)
+      line.height = line.bottom - line.top
+      line.center = (line.top + line.bottom) / 2
+    } else {
+      lines.push({ top: r.top, bottom: rBottom, height: r.height, center: rCenter, rects: [r] })
+    }
+  }
+  return lines.flatMap(line => {
+    const boxes = []
+    for (const r of line.rects.sort((a, b) => a.left - b.left)) {
+      const last = boxes.at(-1)
+      if (last && r.left - (last.left + last.width) <= Math.max(last.height, r.height) * 1.5) {
+        const right = Math.max(last.left + last.width, r.left + r.width)
+        const bottom = Math.max(last.top + last.height, r.top + r.height)
+        last.top = Math.min(last.top, r.top)
+        last.width = right - last.left
+        last.height = bottom - last.top
+      } else {
+        boxes.push({ left: r.left, top: r.top, width: r.width, height: r.height })
+      }
+    }
+    return boxes
+  })
+}
+
 export function sentenceCharParts(range) {
   const parts = range.charParts ?? [{ start: range.charStart, end: range.charEnd }]
   const result = []
