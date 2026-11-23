@@ -37,33 +37,6 @@ let lastScrollView = null
 // 현재 세대와 비교해서 다르면(그 사이 새로 renderScrollView가 호출됐다면)
 // 조용히 중단한다.
 let renderGeneration = 0
-let activeScrollUntil = 0
-let scrollIdleTimer = null
-let scrollIdleWaiters = new Set()
-
-function notifyViewerScrolled() {
-  activeScrollUntil = performance.now() + 180
-  if (scrollIdleTimer !== null) clearTimeout(scrollIdleTimer)
-  scrollIdleTimer = setTimeout(() => {
-    scrollIdleTimer = null
-    if (performance.now() < activeScrollUntil) return
-    const waiters = [...scrollIdleWaiters]
-    scrollIdleWaiters.clear()
-    for (const resolve of waiters) resolve()
-  }, 190)
-}
-
-function waitForScrollIdle(signal) {
-  if (performance.now() >= activeScrollUntil) return Promise.resolve()
-  return new Promise(resolve => {
-    const done = () => {
-      scrollIdleWaiters.delete(done)
-      resolve()
-    }
-    scrollIdleWaiters.add(done)
-    signal?.addEventListener('abort', done, { once: true })
-  })
-}
 
 // Desktop WebViews can lag behind browser releases. Use the matching
 // compatibility builds for both the main module and its worker.
@@ -241,7 +214,11 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     jobs.delete(job.pageNum)
   }
 
+  const maxRetainedPages = numPages <= 48 ? numPages : 24
+  const eagerRenderAll = numPages <= 48
+
   function trimPages() {
+    if (eagerRenderAll) return
     const selection = window.getSelection()
     const candidates = [...jobs.values()]
       .filter(job => !nearby.has(job.pageNum) && !job.wrapper.contains(document.activeElement) && !(
@@ -250,7 +227,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
       ))
       .sort((a, b) => Math.abs(b.pageNum - currentPage) - Math.abs(a.pageNum - currentPage))
     for (const job of candidates) {
-      if (jobs.size <= 8 && job.done) continue
+      if (jobs.size <= maxRetainedPages && job.done) continue
       release(job)
     }
   }
@@ -262,10 +239,15 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
       pumpTimer = null
       if (!isCurrent()) return
       while (active < 2 && queue.size) {
-        const pageNum = [...queue.keys()].sort((a, b) => Math.abs(a - renderPriorityPage) - Math.abs(b - renderPriorityPage))[0]
+        const pageNum = [...queue.keys()].sort((a, b) => {
+          const aNear = nearby.has(a) ? 0 : 1
+          const bNear = nearby.has(b) ? 0 : 1
+          if (aNear !== bNear) return aNear - bNear
+          return Math.abs(a - renderPriorityPage) - Math.abs(b - renderPriorityPage)
+        })[0]
         const wrapper = queue.get(pageNum)
         queue.delete(pageNum)
-        if (!nearby.has(pageNum) || jobs.has(pageNum)) continue
+        if ((!eagerRenderAll && !nearby.has(pageNum)) || jobs.has(pageNum)) continue
         const job = { wrapper, pageNum, controller: new AbortController(), cancelled: false, done: false }
         jobs.set(pageNum, job)
         active++
@@ -289,8 +271,8 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     if (!isCurrent() || !renderTargets.length) return
     const viewport = container.getBoundingClientRect()
     if (!viewport.height) return
-    const top = viewport.top - 600
-    const bottom = viewport.bottom + 600
+    const top = viewport.top - 2400
+    const bottom = viewport.bottom + 2400
     let low = 0
     let high = renderTargets.length
     while (low < high) {
@@ -312,15 +294,22 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     renderPriorityPage = firstVisible ?? currentPage
     nearby.clear()
     next.forEach(pageNum => nearby.add(pageNum))
-    for (const pageNum of queue.keys()) if (!nearby.has(pageNum)) queue.delete(pageNum)
+    if (eagerRenderAll) {
+      for (let i = 0; i < renderTargets.length; i++) {
+        const target = renderTargets[i]
+        const pageNum = Number(target.dataset.page)
+        if (!jobs.has(pageNum) && !queue.has(pageNum)) {
+          queue.set(pageNum, target.matches('.pdf-page-wrapper') ? target : target.querySelector('.pdf-page-wrapper'))
+        }
+      }
+    } else {
+      for (const pageNum of queue.keys()) if (!nearby.has(pageNum)) queue.delete(pageNum)
+    }
     trimPages()
     scheduleRender()
   }
   function requestReconcile() {
     if (reconcileFrame === null && isCurrent()) reconcileFrame = requestAnimationFrame(reconcileRenderWindow)
-  }
-  function onContainerScroll() {
-    notifyViewerScrolled()
   }
 
   disposeScrollView = (preserveCanvas = false) => {
@@ -328,7 +317,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     pageVisibilityObserver?.disconnect()
     clearTimeout(pumpTimer)
     cancelAnimationFrame(reconcileFrame)
-    container.removeEventListener('scroll', onContainerScroll)
+    container.removeEventListener('scroll', requestReconcile)
     resizeObserver?.disconnect()
     queue.clear()
     for (const job of jobs.values()) release(job, preserveCanvas)
@@ -419,7 +408,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   if (pageVisibilityObserver) { pageVisibilityObserver.disconnect(); pageVisibilityObserver = null }
   visiblePageHeights = {}
 
-  // ─── IntersectionObserver (페이지 렌더링용: 미리 600px 앞서 로딩) ───
+  // ─── IntersectionObserver (페이지 렌더링용: 미리 2400px 앞서 로딩) ───
   pageObserver = new IntersectionObserver((entries) => {
     if (!isCurrent()) return
     entries.forEach(entry => {
@@ -429,21 +418,23 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         if (!jobs.has(pageNum)) queue.set(pageNum, entry.target.matches('.pdf-page-wrapper') ? entry.target : entry.target.querySelector('.pdf-page-wrapper'))
       } else {
         nearby.delete(pageNum)
-        queue.delete(pageNum)
-        // A retained bitmap may not have a job in this generation yet.
-        if (!jobs.has(pageNum)) {
-          entry.target.querySelectorAll('.pdf-page-inner canvas').forEach(canvas => {
-            canvas.width = 0
-            canvas.height = 0
-            canvas.remove()
-          })
+        if (!eagerRenderAll) {
+          queue.delete(pageNum)
+          // A retained bitmap may not have a job in this generation yet.
+          if (!jobs.has(pageNum)) {
+            entry.target.querySelectorAll('.pdf-page-inner canvas').forEach(canvas => {
+              canvas.width = 0
+              canvas.height = 0
+              canvas.remove()
+            })
+          }
         }
       }
     })
     reconcileRenderWindow()
   }, {
     root: container,
-    rootMargin: '600px 0px',  // 미리 600px 앞서 렌더링
+    rootMargin: '2400px 0px',
     threshold: 0.01,
   })
 
@@ -487,7 +478,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   })
 
   renderTargets = Array.from(wrappers, wrapper => wrapper.closest('.page-pair') || wrapper)
-  container.addEventListener('scroll', onContainerScroll, { passive: true })
+  container.addEventListener('scroll', requestReconcile, { passive: true })
   resizeObserver = new ResizeObserver(requestReconcile)
   resizeObserver.observe(container)
   requestReconcile()
@@ -548,12 +539,6 @@ async function _renderPage(wrapper, pageNum, generation, job) {
     window.onTextLayerReleased?.(inner.querySelector('.textLayer'), pageNum)
     inner.querySelectorAll('canvas').forEach(previous => { previous.width = 0; previous.height = 0 })
     inner.replaceChildren(canvas, textLayerDiv)
-
-    // 스크롤이 한창 진행 중일 때는 캔버스 비트맵만 먼저 표시해 60~120fps 스크롤을
-    // 유지하고, 수천 개의 스팬 DOM 생성 + alignTextLayer + 문장 분할(onTextLayerRendered)은
-    // 스크롤이 멈춘 직후에 마운트한다.
-    await waitForScrollIdle(job.controller.signal)
-    if (stale()) return
 
     // 텍스트 레이어 렌더링
     try {

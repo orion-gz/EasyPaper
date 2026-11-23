@@ -1743,8 +1743,37 @@ async function initScrollViewer() {
   await renderScrollView(viewerScrollContainer, state.zoom, { onPageVisible: handleReaderPageVisible })
   if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
 
+  // 이미 번역 완료된 페이지들은 스크롤이 도착할 때까지 기다리지 않고 백그라운드에서
+  // 미리 로드해 두어, 위/아래로 스크롤할 때 번역 패널이 비어 있다가 뒤늦게 팝인되지 않게 한다.
+  void prefetchCompletedTranslations(sessionId, generation)
+
   // 백그라운드 잡 폴링 시작
   startJobPolling(state.sessionId)
+}
+
+async function prefetchCompletedTranslations(sessionId, generation) {
+  const revision = translationRevision
+  const pages = [...state.translatedPages].filter(p => Number.isInteger(p) && p >= 1 && p <= state.totalPages).sort((a, b) => a - b)
+  if (!pages.length || state.totalPages > 60) return
+  for (const pageNum of pages) {
+    if (generation !== scrollViewerGeneration || state.sessionId !== sessionId || revision !== translationRevision) return
+    if (state.translationCache[pageNum]) continue
+    state.translationCache[pageNum] = '__fetching__'
+    try {
+      const opts = getTranslationOptions()
+      const res = await fetchLibraryTranslation(sessionId, pageNum, opts)
+      if (generation !== scrollViewerGeneration || state.sessionId !== sessionId || revision !== translationRevision) return
+      state.translationCache[pageNum] = res.translation
+      state.translationSentences[pageNum] = res.sentences || []
+      state.translationWarnings[pageNum] = res.warnings || []
+      renderTransContent(pageNum, res.translation, true)
+    } catch {
+      if (state.sessionId === sessionId && revision === translationRevision) {
+        delete state.translationCache[pageNum]
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 16))
+  }
 }
 
 // Keep translation loading and analytics active after fit/zoom rerenders.
