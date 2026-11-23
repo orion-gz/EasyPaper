@@ -1,5 +1,7 @@
 // Serialize mount and teardown when switching documents or tabs.
 let queue = Promise.resolve()
+let activeMountId = 0
+let mountedDocument = null
 
 export function getTauriHostWindow(win = window) {
   if (win?.__TAURI_INTERNALS__?.invoke) return win
@@ -69,19 +71,28 @@ async function update(rect, bytes, close = false) {
 }
 
 export async function mountNativePdf(container, document, current) {
-  const bytes = await document.getData()
-  if (!current()) return null
+  const mountId = ++activeMountId
+  const isLatest = () => mountId === activeMountId && current()
+  const needsBytes = mountedDocument !== document
+  const bytes = needsBytes ? await document.getData() : null
+  if (!isLatest()) return null
   const rect = () => getViewportRect(container)
   await update(rect(), bytes)
+  mountedDocument = document
+  if (!isLatest()) return null
   container.dataset.nativePdf = 'mounted'
   const observer = new ResizeObserver(() => {
-    if (current()) update(rect(), null).catch(console.error)
+    if (isLatest()) update(rect(), null).catch(console.error)
   })
   observer.observe(container)
   return () => {
     observer.disconnect()
+    // Only close the native PDFView if no newer mountNativePdf call has superseded us.
+    if (mountId !== activeMountId) return Promise.resolve()
+    mountedDocument = null
     delete container.dataset.nativePdf
     return update(rect(), null, true)
   }
 }
+
 

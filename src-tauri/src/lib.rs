@@ -226,13 +226,19 @@ async fn native_pdf(window: tauri::WebviewWindow, request: tauri::ipc::Request<'
             tauri::ipc::InvokeBody::Raw(data) => data.clone(),
             _ => Vec::new(),
         };
+        let byte_len = bytes.len();
         let (send, receive) = std::sync::mpsc::channel();
         window.with_webview(move |webview| {
             let ok = unsafe { ep_pdf_update(webview.inner().cast(), bytes.as_ptr(), bytes.len(),
                 rect[0], rect[1], rect[2], rect[3], close) };
             let _ = send.send(ok);
         }).map_err(|e| e.to_string())?;
-        if receive.recv().unwrap_or(false) { return Ok(()); }
+        let ok = receive.recv().unwrap_or(false);
+        log::info!(
+            "[native_pdf] close={} bytes={} rect=({:.1}, {:.1}, {:.1}x{:.1}) -> ok={}",
+            close, byte_len, rect[0], rect[1], rect[2], rect[3], ok
+        );
+        if ok { return Ok(()); }
     }
     #[cfg(not(target_os = "macos"))]
     let _ = (window, request);

@@ -78,6 +78,25 @@ test('mountNativePdf invokes top-level Tauri IPC with host Uint8Array and iframe
     assert.equal(container.dataset.nativePdf, undefined)
     assert.equal(calls.length, 3)
     assert.equal(calls[2].options.headers['x-close'], '1')
+
+    // A stale dispose from an older renderScrollView generation must not send x-close
+    // after a newer mountNativePdf call (e.g. triggered by Fit Width) has superseded it.
+    let resolveFirstData
+    const slowDoc = {
+      getData: () => new Promise(resolve => { resolveFirstData = resolve }),
+    }
+    let firstActive = true
+    const firstMountPromise = mountNativePdf(container, slowDoc, () => firstActive)
+    firstActive = false
+    const secondDispose = await mountNativePdf(container, pdfDoc, () => true)
+    resolveFirstData(new Uint8Array([0x25, 0x50, 0x44, 0x46]))
+    const firstDispose = await firstMountPromise
+    assert.equal(firstDispose, null)
+    assert.equal(container.dataset.nativePdf, 'mounted')
+    const closeCalls = calls.filter(c => c.options.headers['x-close'] === '1')
+    assert.equal(closeCalls.length, 1)
+    await secondDispose()
+    assert.equal(calls.filter(c => c.options.headers['x-close'] === '1').length, 2)
   } finally {
     globalThis.window = originalWindow
     globalThis.ResizeObserver = originalResizeObserver
