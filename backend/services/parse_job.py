@@ -14,7 +14,7 @@ LONG_DOCUMENT_PAGE_THRESHOLD = 50
 # metadata flag: the PDF is stored but its text/layout extraction is deferred
 # until the document is first opened (see finalize_deferred_document).
 EXTRACTION_DEFERRED = "extraction_deferred"
-_DEFERRABLE_ENGINES = {"pymupdf", "pdfplumber"}
+_DEFERRABLE_ENGINES = {"pymupdf", "pdfplumber", "marker", "mineru"}
 _finalize_locks: dict[str, asyncio.Lock] = {}
 _running_parse_tasks: dict[str, asyncio.Task] = {}
 
@@ -102,13 +102,17 @@ async def finalize_deferred_document(doc_id: str) -> None:
         engine = session.get("parser_engine") or "pymupdf"
         version = session.get("parser_version")
 
-        from services.cache import save_images_cache
+        from services.cache import get_cached_images, save_images_cache
         from services.pdf_diagnostics import diagnose_pages
         from services.pdf_parser import extract_pdf_images
         images = []
         try:
-            images = await asyncio.to_thread(extract_pdf_images, pdf_path, engine)
-            save_images_cache(doc_id, pdf_path, images, engine, version, strict=True)
+            cached = get_cached_images(doc_id, pdf_path, engine, version) if engine in {"marker", "mineru"} else None
+            if cached is not None:
+                images = cached
+            else:
+                images = await asyncio.to_thread(extract_pdf_images, pdf_path, engine)
+                save_images_cache(doc_id, pdf_path, images, engine, version, strict=True)
         except Exception:
             images = []
         report = diagnose_pages(pages, images, engine, version)
