@@ -1729,23 +1729,53 @@ async function initScrollViewer() {
   const sessionId = state.sessionId
   const generation = ++scrollViewerGeneration
   const totalPages = state.totalPages
-  for (let start = 1; start <= totalPages; start += 16) {
+  const batchSize = totalPages > 64 ? 48 : 16
+  for (let start = 1; start <= totalPages; start += batchSize) {
     if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
     const fragment = document.createDocumentFragment()
-    for (let i = start; i < Math.min(start + 16, totalPages + 1); i++) {
+    for (let i = start; i < Math.min(start + batchSize, totalPages + 1); i++) {
       fragment.appendChild(createPagePair(i))
     }
     viewerScrollContainer.appendChild(fragment)
-    if (start + 16 <= totalPages) await new Promise(resolve => setTimeout(resolve, 0))
+    if (start + batchSize <= totalPages) await new Promise(resolve => setTimeout(resolve, 0))
   }
   if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
+
+  // In document workspace tabs, pre-calculate the initial fit-to-width zoom BEFORE
+  // calling renderScrollView() the first time, so the document renders once at its
+  // final size instead of visibly painting at zoom=1.5 and immediately re-rendering.
+  if (isDocumentRuntime && viewerScrollContainer.clientWidth > 0) {
+    try {
+      const pageWidth = await getPDFPageWidth(state.currentPage || 1)
+      if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
+      if (pageWidth > 0) {
+        const scrollStyle = getComputedStyle(viewerScrollContainer)
+        const pair = viewerScrollContainer.querySelector('.page-pair')
+        const pairStyle = pair ? getComputedStyle(pair) : null
+        const translation = pair?.querySelector('.trans-page-block')
+        const parallel = translation && getComputedStyle(translation).display !== 'none' && pairStyle?.flexDirection !== 'column'
+        const horizontal = style => style ? ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0) : 0
+        const gap = parseFloat(pairStyle?.columnGap) || 18
+        const available = viewerScrollContainer.clientWidth - horizontal(scrollStyle) - horizontal(pairStyle) - 6 - (parallel ? gap : 0)
+        const fitZoom = Math.max(0.5, Math.min(3, available / (pageWidth * (parallel ? 2 : 1))))
+        if (Number.isFinite(fitZoom) && fitZoom > 0) {
+          previewZoom(fitZoom)
+          lastCommittedZoom = state.zoom
+        }
+      }
+    } catch {}
+  }
 
   await renderScrollView(viewerScrollContainer, state.zoom, { onPageVisible: handleReaderPageVisible })
   if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
 
-  // 이미 번역 완료된 페이지들은 스크롤이 도착할 때까지 기다리지 않고 백그라운드에서
-  // 미리 로드해 두어, 위/아래로 스크롤할 때 번역 패널이 비어 있다가 뒤늦게 팝인되지 않게 한다.
-  void prefetchCompletedTranslations(sessionId, generation)
+  // 이미 번역 완료된 페이지들은 첫 화면이 뜬 뒤 백그라운드에서 미리 로드해 두어,
+  // 위/아래로 스크롤할 때 번역 패널이 비어 있다가 뒤늦게 팝인되지 않게 한다.
+  setTimeout(() => {
+    if (generation === scrollViewerGeneration && state.sessionId === sessionId) {
+      void prefetchCompletedTranslations(sessionId, generation)
+    }
+  }, 120)
 
   // 백그라운드 잡 폴링 시작
   startJobPolling(state.sessionId)
