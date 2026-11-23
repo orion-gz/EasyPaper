@@ -1,4 +1,7 @@
 {
+  "settings:reasoningEffort": {
+    "description": "Label for the reasoning effort slider in model settings."
+  },
   "settings:prompt.line.intro": {
     "description": "Editable translation prompt line (intro)"
   },

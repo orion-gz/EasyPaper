@@ -3945,7 +3945,7 @@ class ProviderModelPicker {
           slider.min = '0'
           slider.max = String(variants.length - 1)
           slider.value = String(variants.indexOf(selected))
-          const title = getLocale() === 'ko' ? '추론 강도' : 'Reasoning effort'
+          const title = t('settings:reasoningEffort')
           caption.className = 'picker-effort-caption'
           const levelLabel = document.createElement('span')
           levelLabel.className = 'picker-effort-level'
