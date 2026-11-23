@@ -11,7 +11,7 @@ import fitz
 
 from config import CACHE_DIR
 from services.atomic_io import atomic_write_text
-from services.cache import get_cached_images
+from services.cache import IMAGES_LABEL_VERSION, get_cached_images
 from services.reparse import _worker_command, document_parse_lock
 
 
@@ -21,7 +21,7 @@ def load_image_window(doc_id, doc, pdf_path, page, *, single=False):
     revision = int(doc.get("content_revision") or 1)
     stat = os.stat(pdf_path)
     identity = hashlib.sha256(str((doc_id, engine, version, revision, stat.st_mtime_ns,
-                                   stat.st_size)).encode()).hexdigest()
+                                   stat.st_size, IMAGES_LABEL_VERSION)).encode()).hexdigest()
 
     def cache_path(n):
         return Path(CACHE_DIR) / f"{doc_id}_{identity}_{n}_images_extract.json"

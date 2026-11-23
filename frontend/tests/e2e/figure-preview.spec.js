@@ -23,15 +23,15 @@ function multipagePdf(count, contentForPage) {
 }
 
 
-async function openDocument(page, trigger = 'hover') {
+async function openDocument(page, trigger = 'hover', labels = ['Figure 1', 'Table 1', 'Equation 1']) {
   const doc = { id: 'preview', filename: 'Preview.pdf', total_pages: 2, metadata: { title: 'Preview' }, translated_pages: [] }
   await mockBaseRoutes(page, { documents: [doc] })
   await page.addInitScript(trigger => localStorage.setItem('easypaper_figure_overlay_trigger_research', trigger), trigger)
   await page.route('**/api/library/preview/pdf', route => route.fulfill({ contentType: 'application/pdf', body: multipagePdf(2,
-    () => 'BT /F1 16 Tf 50 600 Td (See Figure 1, Table 1, and Eq. 1.) Tj ET') }))
+    () => `BT /F1 16 Tf 50 600 Td (See ${labels.join(', ')}.) Tj ET`) }))
   await page.route('**/api/pdf-text/**', route => route.fulfill({ json: { recovery: null } }))
   await page.route('**/api/library/preview/images?**', route => route.fulfill({ json: { start: 1, end: 2, images:
-    ['Figure 1', 'Table 1', 'Equation 1'].map(label => ({ page: 2, label, left: 10, top: 20, width: 30, height: 20 }))
+    labels.map(label => ({ page: 2, label, left: 10, top: 20, width: 30, height: 20 }))
   } }))
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=preview' })
@@ -185,5 +185,17 @@ test('bookmark overlay appears before neighboring pages finish', async ({ page }
     expect(requests[0]).toEqual([20, true])
   } finally {
     releaseNeighbors()
+  }
+})
+
+
+test('chapter figure clicks open the exact label when Figure 1 also exists', async ({ page }) => {
+  const labels = ['Figure 1', 'Figure 1.1', 'Figure 1.2']
+  const { reader, markers } = await openDocument(page, 'click', labels)
+  for (const index of [1, 2]) {
+    await markers.nth(index).click()
+    const preview = reader.locator('.figure-preview-tooltip:not(.hidden)')
+    await expect(preview.locator('.figure-preview-drag')).toHaveText(labels[index])
+    await preview.locator('.figure-preview-close').click()
   }
 })
