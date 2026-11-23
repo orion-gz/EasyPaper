@@ -19,7 +19,6 @@
     "opener:default",
     "allow-kill-backend-sidecar",
     "allow-backend-startup-error",
-    "allow-native-pdf",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",

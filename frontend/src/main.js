@@ -53,7 +53,6 @@ import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
 import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
 import { sourceMappingRects, refreshTextLayerGeometry, loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { clearNativePdfSelection, syncNativePdfAnnotations } from './nativePdfPreview.js'
 import { invalidateLibraryGetCache, fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
 import { icon } from './icons.js'
@@ -1743,8 +1742,6 @@ async function initScrollViewer() {
 
   await renderScrollView(viewerScrollContainer, state.zoom, { onPageVisible: handleReaderPageVisible })
   if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
-  syncNativePdfAnnotations(loadAnnotations(state.sessionId), loadMemos(state.sessionId))
-  redrawAllPageMemos()
 
   // 백그라운드 잡 폴링 시작
   startJobPolling(state.sessionId)
@@ -11723,9 +11720,6 @@ function saveAnnotations(sessionId, annotations) {
   recordLocalResourceChange('annotations', sessionId, annotations)
   document.dispatchEvent(new CustomEvent('easypaper:resources-changed'))
   scheduleAnnotationSync(sessionId)
-  if (sessionId === state.sessionId) {
-    syncNativePdfAnnotations(annotations, loadMemos(sessionId))
-  }
 }
 
 // textLayer 내 텍스트 전체에 대한 선택 위치(Character Offset) 구하기
@@ -12135,9 +12129,6 @@ function saveMemos(sessionId, memos) {
   recordLocalResourceChange('memos', sessionId, memos)
   document.dispatchEvent(new CustomEvent('easypaper:resources-changed'))
   scheduleAnnotationSync(sessionId)
-  if (sessionId === state.sessionId) {
-    syncNativePdfAnnotations(loadAnnotations(sessionId), memos)
-  }
 }
 
 // ── 하이라이트/밑줄/메모 삭제 실행취소(Ctrl+Z) ──────────────────────
@@ -13532,38 +13523,9 @@ function createSelectionMenu() {
     const selection = window.getSelection()
     const hasActiveSelection = selection && !selection.isCollapsed && selection.rangeCount > 0
 
-      // ── 케이스 1: 드웰(700ms hover) 선택 상태 ──
+    // ── 케이스 1: 드웰(700ms hover) 선택 상태 ──
     if (!hasActiveSelection && state.hoverSelectedPageNum != null && state.hoverSelectedSentenceIdx != null) {
       createFloatingMemoForSentence(state.hoverSelectedPageNum, state.hoverSelectedSentenceIdx)
-      hideSelectionMenu()
-      return
-    }
-
-    // ── 케이스 1-b: macOS 네이티브 PDFView 텍스트 선택 상태 ──
-    if (!hasActiveSelection && state.nativePdfSelection && state.nativePdfSelection.text) {
-      const { page, text, startOffset, endOffset } = state.nativePdfSelection
-      const pageNum = Number(page) || state.currentPage || 1
-      const allMemosObj = loadMemos(state.sessionId)
-      if (!allMemosObj[`page_${pageNum}`]) allMemosObj[`page_${pageNum}`] = []
-      const newMemo = {
-        id: `memo_${Date.now()}`,
-        pageNum,
-        sentenceIdx: 0,
-        sentenceText: text.trim(),
-        charStart: startOffset,
-        charEnd: endOffset,
-        content: '',
-        createdAt: new Date().toISOString(),
-        x: 68,
-        y: 12,
-        alignment: 'right',
-      }
-      allMemosObj[`page_${pageNum}`].push(newMemo)
-      saveMemos(state.sessionId, allMemosObj)
-      globalAnalyticsTracker.trackInteraction('memo', pageNum)
-      renderPageMemos(pageNum)
-      state.nativePdfSelection = null
-      clearNativePdfSelection()
       hideSelectionMenu()
       return
     }
@@ -13628,14 +13590,6 @@ function createSelectionMenu() {
       sourcePage = pageWrapper ? Number.parseInt(pageWrapper.dataset.page, 10) : null
       const vtm = Number.isInteger(sourcePage) ? state.virtualTextMaps?.[sourcePage] : null
       quoteRange = vtm ? getVtmCharRangeFromSelection(range, vtm) : null
-    } else if (state.nativePdfSelection && state.nativePdfSelection.text) {
-      text = state.nativePdfSelection.text.trim()
-      sourcePage = Number(state.nativePdfSelection.page) || state.currentPage
-      quoteRange = (state.nativePdfSelection.startOffset != null && state.nativePdfSelection.endOffset != null)
-        ? { charStart: state.nativePdfSelection.startOffset, charEnd: state.nativePdfSelection.endOffset }
-        : null
-      state.nativePdfSelection = null
-      clearNativePdfSelection()
     } else if (state.hoverSelectedRange && state.hoverSelectedPageNum != null) {
       const vtm = state.virtualTextMaps && state.virtualTextMaps[state.hoverSelectedPageNum]
       text = vtm ? vtm.fullText.substring(state.hoverSelectedRange.charStart, state.hoverSelectedRange.charEnd).trim() : ""
@@ -14009,42 +13963,6 @@ function hideAnnHoverTooltipWithDelay() {
 }
 
 function handleAnnotate(type, color) {
-  if (state.nativePdfSelection && state.nativePdfSelection.text) {
-    const { page, text, startOffset, endOffset } = state.nativePdfSelection
-    const pageNum = Number(page) || state.currentPage || 1
-    const annotations = loadAnnotations(state.sessionId)
-    if (!annotations[`page_${pageNum}`]) annotations[`page_${pageNum}`] = []
-    if (type === 'clear') {
-      const trimmed = text.trim()
-      annotations[`page_${pageNum}`] = annotations[`page_${pageNum}`].filter(ann => {
-        if (startOffset != null && endOffset != null && ann.startOffset != null && ann.endOffset != null) {
-          return ann.endOffset <= startOffset || ann.startOffset >= endOffset
-        }
-        return !(ann.text && (ann.text.includes(trimmed) || trimmed.includes(ann.text)))
-      })
-      saveAnnotations(state.sessionId, annotations)
-      showToast('선택 영역의 표시가 삭제되었습니다 ✓', 'success')
-    } else {
-      const chosenColor = color || (type === 'highlight' ? state.activeHighlightColor : state.activeUnderlineColor)
-      annotations[`page_${pageNum}`].push({
-        type,
-        text: text.trim(),
-        startOffset,
-        endOffset,
-        textAnchor: { exact: text.trim(), prefix: '', suffix: '' },
-        color: chosenColor,
-        createdAt: new Date().toISOString(),
-      })
-      saveAnnotations(state.sessionId, annotations)
-      globalAnalyticsTracker.trackInteraction(type, pageNum)
-      showToast(type === 'highlight' ? '하이라이트가 추가되었습니다 ✓' : '밑줄이 추가되었습니다 ✓', 'success')
-    }
-    state.nativePdfSelection = null
-    clearNativePdfSelection()
-    hideSelectionMenu()
-    return
-  }
-
   const selection = window.getSelection();
   const hasActiveSelection = selection && !selection.isCollapsed && selection.rangeCount > 0;
 
@@ -14318,32 +14236,6 @@ function hideSelectionMenuWithDelay() {
 }
 
 // 통합 텍스트 선택 종료 감지 리스너
-window.addEventListener('easypaper:native-pdf-mounted', () => {
-  if (!state.sessionId) return
-  syncNativePdfAnnotations(loadAnnotations(state.sessionId), loadMemos(state.sessionId))
-  redrawAllPageMemos()
-})
-
-window.addEventListener('easypaper:native-pdf-selection', (event) => {
-  const detail = event.detail
-  if (!detail || !detail.text || !detail.text.trim()) {
-    state.nativePdfSelection = null
-    hideSelectionMenu()
-    return
-  }
-  state.nativePdfSelection = detail
-  const pageNum = Number(detail.page) || state.currentPage || 1
-  const pageAnns = loadAnnotations(state.sessionId)[`page_${pageNum}`] || []
-  const trimmed = detail.text.trim()
-  const hasExisting = pageAnns.some(ann => {
-    if (detail.startOffset != null && detail.endOffset != null && ann.startOffset != null && ann.endOffset != null) {
-      return ann.startOffset < detail.endOffset && ann.endOffset > detail.startOffset
-    }
-    return Boolean(ann.text && (ann.text.includes(trimmed) || trimmed.includes(ann.text)))
-  })
-  showSelectionMenu(detail.rect || { left: 200, top: 200, bottom: 224, width: 120, height: 24 }, true, hasExisting)
-})
-
 document.addEventListener('mouseup', (e) => {
   if (viewerScrollContainer) {
     viewerScrollContainer.classList.remove('selection-dragging');
@@ -17510,7 +17402,7 @@ function buildVirtualTextMap(container, pageNum) {
       return;
     }
 
-    spans.push({ el, left: leftVal, top: topVal, fontSize: fsVal, isLineNumber: false });
+    spans.push({ el, left: leftVal, top: topVal, width: rect.width, height: rect.height, fontSize: fsVal, isLineNumber: false });
   });
 
   // Finish geometry reads before changing any connected span's styles.
@@ -17713,27 +17605,55 @@ function findDisplayEquationsFromVTM(vtm) {
   return eqs;
 }
 
-// 문장 범위로부터 오버레이의 로컬 CSS 좌표 Rects 계산 (getClientRects 기반, 라인별 개별 상자)
+// 문장 범위로부터 오버레이의 로컬 CSS 좌표 Rects 계산 (스팬 바운딩 박스 기반 선형 보간으로
+// 페이지당 수천 번의 range.getClientRects() 동기 리플로우 병목을 제거)
 function sourceMappedRanges(sentences, vtm, container, pageNum) {
   const coordinates = pageCoordinates(container.closest('.pdf-page-inner') || container);
-  const glyphs = [];
+  const nodeGeometries = [];
   for (const nr of vtm.nodeRanges) {
-    for (let i = 0; i < nr.node.length; i++) {
-      const range = document.createRange();
-      range.setStart(nr.node, i);
-      range.setEnd(nr.node, i + 1);
-      for (const rect of range.getClientRects()) {
-        if (rect.width > 0 && rect.height > 0) glyphs.push({ index: nr.start + i, ...coordinates.rectToLocal(rect) });
-      }
+    const len = nr.node.length;
+    if (!len) continue;
+    let rect = nr.spanInfo && nr.spanInfo.width > 0 && nr.spanInfo.height > 0
+      ? { left: nr.spanInfo.left, top: nr.spanInfo.top, width: nr.spanInfo.width, height: nr.spanInfo.height }
+      : null;
+    if (!rect) {
+      const r = getNodeClientRect(nr.node);
+      if (r && r.width > 0 && r.height > 0) rect = coordinates.rectToLocal(r);
+    }
+    if (rect && rect.width > 0 && rect.height > 0) {
+      nodeGeometries.push({
+        start: nr.start,
+        len,
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        cy: rect.top + rect.height / 2,
+      });
     }
   }
   return sentences.map(sentence => {
     const mapping = sentence.source_mapping || { status: 'unresolved', segments: [] };
     const boxes = sourceMappingRects(pageNum, mapping);
-    const indices = glyphs.filter(g => boxes.some(b => {
-      const x = g.left + g.width / 2, y = g.top + g.height / 2;
-      return x >= b.left && x <= b.left + b.width && y >= b.top && y <= b.top + b.height;
-    })).map(g => g.index);
+    const indices = [];
+    if (boxes.length) {
+      for (const ng of nodeGeometries) {
+        const matchingBoxes = boxes.filter(b =>
+          ng.cy >= b.top &&
+          ng.cy <= b.top + b.height &&
+          ng.left + ng.width >= b.left &&
+          ng.left <= b.left + b.width
+        );
+        if (!matchingBoxes.length) continue;
+        const step = ng.width / ng.len;
+        for (let i = 0; i < ng.len; i++) {
+          const x = ng.left + (i + 0.5) * step;
+          if (matchingBoxes.some(b => x >= b.left && x <= b.left + b.width)) {
+            indices.push(ng.start + i);
+          }
+        }
+      }
+    }
     const parts = [];
     for (const index of [...new Set(indices)].sort((a, b) => a - b)) {
       if (parts.length && parts.at(-1).end === index) parts.at(-1).end++;

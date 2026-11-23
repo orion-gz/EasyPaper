@@ -8,7 +8,6 @@ import { projectSourceRects, sourceMappingMatchesRevision } from './pdfSentenceG
 
 import { alignTextLayer, collectTextContent, recoveredTextContent } from './pdfTextLayer.js'
 import { pdfResources } from './pdfResources.js'
-import { goToNativePdfPage, isMacNativePdfAvailable, mountNativePdf } from './nativePdfPreview.js'
 import { t } from './i18n.js'
 
 import './pdfCompatibility.js'
@@ -39,20 +38,19 @@ let lastScrollView = null
 // 조용히 중단한다.
 let renderGeneration = 0
 let activeScrollUntil = 0
-let scrollIdleWaiters = new Set()
 let scrollIdleTimer = null
+let scrollIdleWaiters = new Set()
 
 function notifyViewerScrolled() {
-  activeScrollUntil = performance.now() + 140
+  activeScrollUntil = performance.now() + 180
   if (scrollIdleTimer !== null) clearTimeout(scrollIdleTimer)
   scrollIdleTimer = setTimeout(() => {
     scrollIdleTimer = null
-    const now = performance.now()
-    if (now < activeScrollUntil) return
+    if (performance.now() < activeScrollUntil) return
     const waiters = [...scrollIdleWaiters]
     scrollIdleWaiters.clear()
-    waiters.forEach(resolve => resolve())
-  }, 150)
+    for (const resolve of waiters) resolve()
+  }, 190)
 }
 
 function waitForScrollIdle(signal) {
@@ -319,8 +317,10 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     scheduleRender()
   }
   function requestReconcile() {
-    notifyViewerScrolled()
     if (reconcileFrame === null && isCurrent()) reconcileFrame = requestAnimationFrame(reconcileRenderWindow)
+  }
+  function onContainerScroll() {
+    notifyViewerScrolled()
   }
 
   disposeScrollView = (preserveCanvas = false) => {
@@ -328,7 +328,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     pageVisibilityObserver?.disconnect()
     clearTimeout(pumpTimer)
     cancelAnimationFrame(reconcileFrame)
-    container.removeEventListener('scroll', requestReconcile)
+    container.removeEventListener('scroll', onContainerScroll)
     resizeObserver?.disconnect()
     queue.clear()
     for (const job of jobs.values()) release(job, preserveCanvas)
@@ -416,84 +416,6 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     if (transBlock) transBlock.style.height = `${Math.floor(height)}px`
   })
 
-  if (isMacNativePdfAvailable()) {
-    const current = () => myGeneration === renderGeneration && !suspended
-    try {
-      let syncingFromNative = false
-      const dispose = await mountNativePdf(container, pdfDoc, current, {
-        onNativePageChange(pageNum, { fromScroll = false } = {}) {
-          if (!current()) return
-          currentPage = pageNum
-          if (pageNum !== lastNotifiedPage) {
-            lastNotifiedPage = pageNum
-            onPageVisible?.(pageNum)
-          }
-          if (!fromScroll) {
-            const el = container.querySelector(`.page-pair[data-page="${pageNum}"]`) || container.querySelector(`[data-page="${pageNum}"]`)
-            if (el) {
-              syncingFromNative = true
-              el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              setTimeout(() => { syncingFromNative = false }, 350)
-            }
-          }
-        },
-        onNativeSelectionChange(selectionPayload) {
-          if (!current()) return
-          window.dispatchEvent(new CustomEvent('easypaper:native-pdf-selection', { detail: selectionPayload }))
-        },
-      })
-      if (!current()) { await dispose?.(); return }
-      if (dispose) {
-        if (pageVisibilityObserver) { pageVisibilityObserver.disconnect(); pageVisibilityObserver = null }
-        visiblePageHeights = {}
-        pageVisibilityObserver = new IntersectionObserver((entries) => {
-          if (!isCurrent()) return
-          entries.forEach(entry => {
-            const pageNum = parseInt(entry.target.dataset.page)
-            if (entry.isIntersecting) {
-              visiblePageHeights[pageNum] = entry.intersectionRect.height
-            } else {
-              delete visiblePageHeights[pageNum]
-            }
-          })
-          const viewportTop = container.getBoundingClientRect().top
-          let currentPageNum = -1
-          let currentPageTop = Infinity
-          for (const page of Object.keys(visiblePageHeights)) {
-            const pageNum = Number(page)
-            const element = container.querySelector(`.page-pair[data-page="${pageNum}"]`) || container.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
-            if (!element) continue
-            const rect = element.getBoundingClientRect()
-            if (rect.bottom <= viewportTop || rect.top >= currentPageTop) continue
-            currentPageTop = rect.top
-            currentPageNum = pageNum
-          }
-          if (currentPageNum !== -1 && currentPageNum !== lastNotifiedPage) {
-            currentPage = currentPageNum
-            lastNotifiedPage = currentPageNum
-            onPageVisible?.(currentPageNum)
-          }
-        }, {
-          root: container,
-          rootMargin: '0px 0px',
-          threshold: [0.0, 0.1, 0.25, 0.5, 0.75, 1.0],
-        })
-        wrappers.forEach(w => pageVisibilityObserver.observe(w.closest('.page-pair') || w))
-        disposeScrollView = () => {
-          pageVisibilityObserver?.disconnect()
-          pageVisibilityObserver = null
-          dispose().catch(console.error)
-          disposeScrollView = () => {}
-        }
-        return
-      }
-    } catch (error) {
-      if (!current()) return
-      container.dataset.nativePdf = 'failed'
-      console.warn('PDFKit preview unavailable', error)
-    }
-  }
-
   if (pageVisibilityObserver) { pageVisibilityObserver.disconnect(); pageVisibilityObserver = null }
   visiblePageHeights = {}
 
@@ -561,11 +483,11 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   }, {
     root: container,
     rootMargin: '0px 0px',
-    threshold: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], // 정밀한 노출 비율 판정
+    threshold: [0.0, 0.25, 0.5],
   })
 
   renderTargets = Array.from(wrappers, wrapper => wrapper.closest('.page-pair') || wrapper)
-  container.addEventListener('scroll', requestReconcile, { passive: true })
+  container.addEventListener('scroll', onContainerScroll, { passive: true })
   resizeObserver = new ResizeObserver(requestReconcile)
   resizeObserver.observe(container)
   requestReconcile()
@@ -626,6 +548,12 @@ async function _renderPage(wrapper, pageNum, generation, job) {
     window.onTextLayerReleased?.(inner.querySelector('.textLayer'), pageNum)
     inner.querySelectorAll('canvas').forEach(previous => { previous.width = 0; previous.height = 0 })
     inner.replaceChildren(canvas, textLayerDiv)
+
+    // 스크롤이 한창 진행 중일 때는 캔버스 비트맵만 먼저 표시해 60~120fps 스크롤을
+    // 유지하고, 수천 개의 스팬 DOM 생성 + alignTextLayer + 문장 분할(onTextLayerRendered)은
+    // 스크롤이 멈춘 직후에 마운트한다.
+    await waitForScrollIdle(job.controller.signal)
+    if (stale()) return
 
     // 텍스트 레이어 렌더링
     try {
@@ -721,7 +649,6 @@ export function refreshTextLayerGeometry(onUpdated) {
 
 /** 특정 페이지 wrapper로 스크롤 */
 export function scrollToPage(container, pageNum, { instant = false } = {}) {
-  goToNativePdfPage(Number(pageNum))
   const el = container.querySelector(`[data-page="${pageNum}"]`)
   if (el) el.scrollIntoView({ behavior: instant ? 'instant' : 'smooth', block: 'start' })
 }

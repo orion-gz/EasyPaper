@@ -207,115 +207,6 @@ fn die_msg(context: &str) -> ! {
     std::process::exit(1);
 }
 
-#[tauri::command]
-async fn native_pdf(window: tauri::WebviewWindow, request: tauri::ipc::Request<'_>) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        extern "C" {
-            fn ep_pdf_update(
-                view: *mut std::ffi::c_void,
-                bytes: *const u8,
-                count: usize,
-                x: f64,
-                y: f64,
-                width: f64,
-                height: f64,
-                close: bool,
-                hidden: bool,
-                target_page: i32,
-                scroll_ratio: f64,
-                action: *const std::ffi::c_char,
-            ) -> bool;
-        }
-        let headers = request.headers();
-        let number = |key: &str| -> f64 {
-            headers
-                .get(key)
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.parse::<f64>().ok())
-                .filter(|v| v.is_finite())
-                .unwrap_or(0.0)
-        };
-        let rect = [
-            number("x-left"),
-            number("x-top"),
-            number("x-width"),
-            number("x-height"),
-        ];
-        let close = headers.contains_key("x-close");
-        let hidden = headers
-            .get("x-hidden")
-            .and_then(|v| v.to_str().ok())
-            .map(|v| v == "1" || v == "true")
-            .unwrap_or(false);
-        let target_page = headers
-            .get("x-page")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.parse::<i32>().ok())
-            .unwrap_or(0);
-        let scroll_ratio = headers
-            .get("x-scroll-ratio")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.parse::<f64>().ok())
-            .filter(|v| v.is_finite())
-            .unwrap_or(-1.0);
-        let action_str = headers
-            .get("x-action")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("update")
-            .to_string();
-        let c_action = std::ffi::CString::new(action_str.clone()).map_err(|e| e.to_string())?;
-        let bytes = match request.body() {
-            tauri::ipc::InvokeBody::Raw(data) => data.clone(),
-            tauri::ipc::InvokeBody::Json(val) => {
-                if let Some(arr) = val.as_array() {
-                    arr.iter()
-                        .filter_map(|v| v.as_u64().map(|n| n as u8))
-                        .collect::<Vec<u8>>()
-                } else if val.is_object() {
-                    serde_json::to_vec(val).unwrap_or_default()
-                } else {
-                    Vec::new()
-                }
-            }
-        };
-        let byte_len = bytes.len();
-        let (send, receive) = std::sync::mpsc::channel();
-        window
-            .with_webview(move |webview| {
-                let ok = unsafe {
-                    ep_pdf_update(
-                        webview.inner().cast(),
-                        bytes.as_ptr(),
-                        bytes.len(),
-                        rect[0],
-                        rect[1],
-                        rect[2],
-                        rect[3],
-                        close,
-                        hidden,
-                        target_page,
-                        scroll_ratio,
-                        c_action.as_ptr(),
-                    )
-                };
-                let _ = send.send(ok);
-            })
-            .map_err(|e| e.to_string())?;
-        let ok = receive.recv().unwrap_or(false);
-        log::info!(
-            "[native_pdf] action={} close={} hidden={} page={} bytes={} rect=({:.1}, {:.1}, {:.1}x{:.1}) -> ok={}",
-            action_str, close, hidden, target_page, byte_len, rect[0], rect[1], rect[2], rect[3], ok
-        );
-        if ok {
-            return Ok(());
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = (window, request);
-    Err("Native PDF view unavailable".into())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -325,7 +216,6 @@ pub fn run() {
         .manage(SidecarState(Mutex::new(None)))
         .manage(StartupState::default())
         .invoke_handler(tauri::generate_handler![
-            native_pdf,
             kill_backend_sidecar,
             backend_startup_error
         ])
