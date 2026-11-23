@@ -85,6 +85,9 @@ export function splitIntoSentences(fullText) {
       // Preserve internal dotted abbreviations and domains.
       if (isPeriod && !whitespace && /^[a-z]/.test(nextChar) && /[A-Za-z]$/.test(paraText.slice(0, puncIndex))) continue;
 
+      // 수식/등식 중간의 점이나 연산자 앞에서는 문장을 끊지 않음 (예: "x = 0.38 + y", "a. = b")
+      if (isPeriod && /^[=<>+\u2212\u22c5*/\u00d7\u00f7^_]/.test(nextChar)) continue;
+
       const sentenceText = paraText.substring(lastSentenceIndex, puncIndex + punc.length);
       if (sentenceText.trim()) {
         sentenceRanges.push({

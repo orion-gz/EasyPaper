@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import vm from 'node:vm'
 import { alignSentencesToText as align } from '../src/sentenceAlignment.js'
-import { mergePdfHighlightRects, projectSourceRects, mappedSentenceRange, sentenceCharParts, contiguousSentenceBounds } from '../src/pdfSentenceGeometry.js'
+import { mergePdfHighlightRects, mergePdfSentenceLineRects, projectSourceRects, mappedSentenceRange, sentenceCharParts, contiguousSentenceBounds } from '../src/pdfSentenceGeometry.js'
 import { createFocusBackdropRects } from '../src/focusMode.js'
 
 for (const [full, sources] of [
@@ -92,21 +92,30 @@ const coordinates = () => ({ rectToLocal: r => r })
 const container = { closest: () => ({ dataset: { page: '1' } }) }
 
 test('sourceMappedRanges excludes a PDF.js character between source glyphs', () => {
+  const getNodeClientRect = node => {
+    const r = fakeDocument.createRange()
+    r.setStart(node, 0)
+    r.setEnd(node, node.length)
+    return r.getClientRects()[0]
+  }
   const map = loadFunction('sourceMappedRanges', 'function getSentenceRects(', {
-    document: fakeDocument, pageCoordinates: coordinates, sourceMappingRects: () => projectSourceRects(mapping, viewport),
+    document: fakeDocument, getNodeClientRect, pageCoordinates: coordinates, sourceMappingRects: () => projectSourceRects(mapping, viewport),
   })
   const result = map([{ src: 'AC', source_mapping: mapping }], { nodeRanges: [{ node: { length: 3 }, start: 0, end: 3 }] }, container, 1)
   assert.deepEqual(JSON.parse(JSON.stringify(result[0].charParts)), [{ start: 0, end: 1 }, { start: 2, end: 3 }])
 })
 
-test('hover and active highlight DOM ranges do not span a sentence fragment gap', () => {
+test('hover and active highlight DOM ranges merge symbol-split spans on a line without spanning distant gaps', () => {
   const getRects = loadFunction('getSentenceRects', '// 오버레이 레이어에 하이라이트', {
-    document: fakeDocument, pageCoordinates: coordinates, mergePdfHighlightRects, sentenceCharParts,
+    document: fakeDocument, pageCoordinates: coordinates, mergePdfHighlightRects, mergePdfSentenceLineRects, sentenceCharParts,
   })
-  const rects = getRects({ charStart: 0, charEnd: 3, charParts: [{ start: 0, end: 1 }, { start: 2, end: 3 }] },
-    { nodeRanges: [{ node: { length: 3 }, start: 0, end: 3 }] }, container)
-  assert.ok(!rects.some(r => inside(r, 15, 5)))
+  const rects = getRects({ charStart: 0, charEnd: 6, charParts: [{ start: 0, end: 1 }, { start: 5, end: 6 }] },
+    { nodeRanges: [{ node: { length: 6 }, start: 0, end: 6 }] }, container)
+  assert.ok(!rects.some(r => inside(r, 25, 5)))
   assert.equal(rects.length, 2)
+  const sameLineRects = getRects({ charStart: 0, charEnd: 3, charParts: [{ start: 0, end: 1 }, { start: 2, end: 3 }] },
+    { nodeRanges: [{ node: { length: 3 }, start: 0, end: 3 }] }, container)
+  assert.equal(sameLineRects.length, 1)
 })
 
 test('opening and closing quotation marks remain within the selected sentence', () => {
