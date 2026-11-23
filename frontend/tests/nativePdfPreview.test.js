@@ -1,14 +1,24 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { getTauriHostWindow, mountNativePdf } from '../src/nativePdfPreview.js'
+import {
+  ensureNativePdfDocument,
+  getTauriHostWindow,
+  isMacNativePdfAvailable,
+  renderNativePdfPageToCanvas,
+} from '../src/nativePdfPreview.js'
 
-test('getTauriHostWindow resolves Tauri internals from parent/top window when running inside document iframe', () => {
+test('getTauriHostWindow and isMacNativePdfAvailable detect macOS Tauri host across document iframe', () => {
   const hostWin = { __TAURI_INTERNALS__: { invoke: () => {} } }
-  const iframeWin = { top: hostWin, parent: hostWin }
+  const iframeWin = {
+    top: hostWin,
+    parent: hostWin,
+    navigator: { platform: 'MacIntel', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)' },
+  }
   assert.equal(getTauriHostWindow(iframeWin), hostWin)
+  assert.equal(isMacNativePdfAvailable(iframeWin), true)
 })
 
-test('mountNativePdf invokes top-level Tauri IPC with host Uint8Array and iframe-offset coordinates', async () => {
+test('ensureNativePdfDocument loads document once and renderNativePdfPageToCanvas draws native PNG onto canvas', async () => {
   const calls = []
   class HostArrayBuffer extends ArrayBuffer {}
   class HostUint8Array extends Uint8Array {
@@ -21,93 +31,90 @@ test('mountNativePdf invokes top-level Tauri IPC with host Uint8Array and iframe
     }
   }
 
+  const fakePng = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
   const hostWin = {
     Uint8Array: HostUint8Array,
     ArrayBuffer: HostArrayBuffer,
     __TAURI_INTERNALS__: {
       invoke: async (cmd, payload, options) => {
         calls.push({ cmd, payload, options })
+        if (options?.headers?.['x-action'] === 'render') {
+          return fakePng
+        }
+        return new Uint8Array(0)
       },
     },
-  }
-
-  const frameEl = {
-    ownerDocument: { defaultView: hostWin },
-    getBoundingClientRect: () => ({ x: 60, y: 48, width: 1200, height: 800 }),
   }
 
   const iframeWin = {
     top: hostWin,
     parent: hostWin,
-    frameElement: frameEl,
-    innerWidth: 1200,
-    innerHeight: 800,
+    navigator: { platform: 'MacIntel' },
   }
 
   const originalWindow = globalThis.window
-  const originalResizeObserver = globalThis.ResizeObserver
-  let resizeCallback = null
+  const originalCreateImageBitmap = globalThis.createImageBitmap
   globalThis.window = iframeWin
-  globalThis.ResizeObserver = class {
-    constructor(cb) { resizeCallback = cb }
-    observe() {}
-    disconnect() {}
+  let closedBitmap = false
+  globalThis.createImageBitmap = async (blob) => {
+    assert.equal(blob.type, 'image/png')
+    return {
+      width: 1200,
+      height: 1600,
+      close() { closedBitmap = true },
+    }
   }
 
   try {
-    const container = {
-      dataset: {},
-      ownerDocument: { defaultView: iframeWin },
-      getBoundingClientRect: () => ({ x: 20, y: 30, width: 500, height: 700 }),
-    }
+    let getDataCalls = 0
     const pdfDoc = {
-      getData: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+      fingerprints: ['doc-fingerprint-1'],
+      getData: async () => {
+        getDataCalls++
+        return new Uint8Array([0x25, 0x50, 0x44, 0x46])
+      },
     }
 
-    const dispose = await mountNativePdf(container, pdfDoc, () => true)
-    assert.equal(container.dataset.nativePdf, 'mounted')
+    const docKey1 = await ensureNativePdfDocument(pdfDoc)
+    const docKey2 = await ensureNativePdfDocument(pdfDoc)
+    assert.equal(docKey1, 'doc-fingerprint-1')
+    assert.equal(docKey2, 'doc-fingerprint-1')
+    assert.equal(getDataCalls, 1)
     assert.equal(calls.length, 1)
-    assert.equal(calls[0].cmd, 'native_pdf')
+    assert.equal(calls[0].options.headers['x-action'], 'load')
     assert.ok(calls[0].payload instanceof HostArrayBuffer)
-    assert.deepEqual([...new Uint8Array(calls[0].payload)], [0x25, 0x50, 0x44, 0x46])
-    assert.deepEqual(calls[0].options.headers, {
-      'x-left': '80',
-      'x-top': '78',
-      'x-width': '500',
-      'x-height': '700',
-      'x-js-bytes': '4',
-    })
 
-    resizeCallback?.()
-    await new Promise(resolve => setTimeout(resolve, 0))
-    assert.equal(calls.length, 2)
-    assert.equal(calls[1].payload.byteLength, 0)
-
-    await dispose()
-    assert.equal(container.dataset.nativePdf, undefined)
-    assert.equal(calls.length, 3)
-    assert.equal(calls[2].options.headers['x-close'], '1')
-
-    // A stale dispose from an older renderScrollView generation must not send x-close
-    // after a newer mountNativePdf call (e.g. triggered by Fit Width) has superseded it.
-    let resolveFirstData
-    const slowDoc = {
-      getData: () => new Promise(resolve => { resolveFirstData = resolve }),
+    let drawn = false
+    const canvas = {
+      width: 1200,
+      height: 1600,
+      dataset: {},
+      getContext: () => ({
+        save() {},
+        setTransform() {},
+        clearRect() {},
+        drawImage() { drawn = true },
+        restore() {},
+      }),
     }
-    let firstActive = true
-    const firstMountPromise = mountNativePdf(container, slowDoc, () => firstActive)
-    firstActive = false
-    const secondDispose = await mountNativePdf(container, pdfDoc, () => true)
-    resolveFirstData(new Uint8Array([0x25, 0x50, 0x44, 0x46]))
-    const firstDispose = await firstMountPromise
-    assert.equal(firstDispose, null)
-    assert.equal(container.dataset.nativePdf, 'mounted')
-    const closeCalls = calls.filter(c => c.options.headers['x-close'] === '1')
-    assert.equal(closeCalls.length, 1)
-    await secondDispose()
-    assert.equal(calls.filter(c => c.options.headers['x-close'] === '1').length, 2)
+
+    const ok = await renderNativePdfPageToCanvas(pdfDoc, 3, canvas, 1200, 1600, { darkMode: true })
+    assert.equal(ok, true)
+    assert.equal(drawn, true)
+    assert.equal(closedBitmap, true)
+    assert.equal(canvas.dataset.nativeRendered, 'true')
+    assert.equal(canvas.dataset.nativeDark, 'true')
+    assert.equal(calls.length, 2)
+    assert.deepEqual(calls[1].options.headers, {
+      'x-action': 'render',
+      'x-doc-key': 'doc-fingerprint-1',
+      'x-page': '3',
+      'x-width': '1200',
+      'x-height': '1600',
+      'x-dark': '1',
+    })
   } finally {
     globalThis.window = originalWindow
-    globalThis.ResizeObserver = originalResizeObserver
+    globalThis.createImageBitmap = originalCreateImageBitmap
   }
 })

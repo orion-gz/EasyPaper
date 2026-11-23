@@ -3,7 +3,9 @@ fn main() {
     println!("cargo:rerun-if-changed=src/pdf_view.m");
     cc::Build::new().file("src/pdf_view.m").flag("-fobjc-arc").compile("ep_pdf_view");
     println!("cargo:rustc-link-lib=framework=PDFKit");
-    println!("cargo:rustc-link-lib=framework=WebKit");
+    println!("cargo:rustc-link-lib=framework=AppKit");
+    println!("cargo:rustc-link-lib=framework=CoreGraphics");
+    println!("cargo:rustc-link-lib=framework=ImageIO");
   }
   // lib.rs의 kill_backend_sidecar처럼 앱이 직접 정의한 커맨드는 tauri_build::build()의
   // 기본 설정만으로는 ACL 권한이 전혀 생성되지 않아, capabilities에 아무리 추가해도

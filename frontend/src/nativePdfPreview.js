@@ -1,7 +1,9 @@
-// Serialize mount and teardown when switching documents or tabs.
-let queue = Promise.resolve()
-let activeMountId = 0
-let mountedDocument = null
+// macOS native PDFKit page rasterizer via Tauri IPC.
+// Keeps EasyPaper's DOM/translation/annotation/memo layout intact while offloading
+// PDF page rasterization (and dark-mode pixel inversion) to macOS PDFKit + CoreGraphics.
+
+const loadedDocuments = new WeakMap()
+let nextDocId = 1
 
 export function getTauriHostWindow(win = window) {
   if (win?.__TAURI_INTERNALS__?.invoke) return win
@@ -14,32 +16,13 @@ export function getTauriHostWindow(win = window) {
   return null
 }
 
-function getViewportRect(container) {
-  const local = container.getBoundingClientRect()
-  let x = local.x
-  let y = local.y
-  let width = local.width
-  let height = local.height
-
-  // Document tabs run inside an iframe (.workspace-document-frame) that may also
-  // have CSS zoom applied. Map the container rect into the top-level WKWebView's
-  // coordinate space so PDFView.frame aligns with the visible container.
-  try {
-    let currentWin = container.ownerDocument?.defaultView || window
-    while (currentWin && currentWin.frameElement) {
-      const frameEl = currentWin.frameElement
-      const frameRect = frameEl.getBoundingClientRect()
-      const scaleX = currentWin.innerWidth ? frameRect.width / currentWin.innerWidth : 1
-      const scaleY = currentWin.innerHeight ? frameRect.height / currentWin.innerHeight : 1
-      x = frameRect.x + x * scaleX
-      y = frameRect.y + y * scaleY
-      width *= scaleX
-      height *= scaleY
-      currentWin = frameEl.ownerDocument?.defaultView
-    }
-  } catch {}
-
-  return { x, y, width, height }
+export function isMacNativePdfAvailable(win = window) {
+  const nav = win?.navigator || globalThis.navigator
+  return Boolean(
+    getTauriHostWindow(win) &&
+    nav &&
+    (/Mac/.test(nav.platform || '') || /Macintosh|Mac OS X/.test(nav.userAgent || ''))
+  )
 }
 
 function toHostArrayBuffer(hostWin, bytes) {
@@ -51,46 +34,123 @@ function toHostArrayBuffer(hostWin, bytes) {
   return copy.buffer
 }
 
-async function update(rect, bytes, close = false) {
+async function tauriInvoke(cmd, payload, options) {
   const hostWin = getTauriHostWindow()
-  const invoke = hostWin?.__TAURI_INTERNALS__?.invoke
-    ? (cmd, args, options) => hostWin.__TAURI_INTERNALS__.invoke(cmd, args, options)
-    : (await import('@tauri-apps/api/core')).invoke
-  const jsByteLength = bytes?.byteLength || 0
-  const headers = {
-    'x-left': String(rect.x), 'x-top': String(rect.y),
-    'x-width': String(rect.width), 'x-height': String(rect.height),
-    'x-js-bytes': String(jsByteLength),
+  if (hostWin?.__TAURI_INTERNALS__?.invoke) {
+    return hostWin.__TAURI_INTERNALS__.invoke(cmd, payload, options)
   }
-  if (close) headers['x-close'] = '1'
-  const payload = toHostArrayBuffer(hostWin, bytes)
-  const task = queue.then(() => invoke('native_pdf', payload, { headers }))
-  queue = task.catch(() => {})
-  return task
+  const { invoke } = await import('@tauri-apps/api/core')
+  return invoke(cmd, payload, options)
 }
 
-export async function mountNativePdf(container, document, current) {
-  const mountId = ++activeMountId
-  const isLatest = () => mountId === activeMountId && current()
-  const bytes = await document.getData()
-  if (!isLatest()) return null
-  const rect = () => getViewportRect(container)
-  await update(rect(), bytes)
-  mountedDocument = document
-  if (!isLatest()) return null
-  container.dataset.nativePdf = 'mounted'
-  const observer = new ResizeObserver(() => {
-    if (isLatest() && mountedDocument === document) update(rect(), null).catch(console.error)
-  })
-  observer.observe(container)
-  return () => {
-    observer.disconnect()
-    // Only close the native PDFView if no newer mountNativePdf call has superseded us.
-    if (mountId !== activeMountId) return Promise.resolve()
-    mountedDocument = null
-    delete container.dataset.nativePdf
-    return update(rect(), null, true)
+export async function ensureNativePdfDocument(pdfDoc) {
+  if (!pdfDoc) throw new Error('No PDF document')
+  let state = loadedDocuments.get(pdfDoc)
+  if (state?.promise) return state.promise
+
+  const docKey = pdfDoc.fingerprints?.[0] || `ep_doc_${nextDocId++}`
+  const promise = (async () => {
+    const hostWin = getTauriHostWindow()
+    const bytes = await pdfDoc.getData()
+    const payload = toHostArrayBuffer(hostWin, bytes)
+    await tauriInvoke('native_pdf', payload, {
+      headers: {
+        'x-action': 'load',
+        'x-doc-key': String(docKey),
+      },
+    })
+    return docKey
+  })()
+
+  state = { docKey, promise }
+  loadedDocuments.set(pdfDoc, state)
+  try {
+    return await promise
+  } catch (err) {
+    loadedDocuments.delete(pdfDoc)
+    throw err
   }
 }
+
+function toUint8Array(raw) {
+  if (!raw) return null
+  if (raw instanceof Uint8Array) return raw
+  if (raw instanceof ArrayBuffer || (raw.byteLength !== undefined && raw.slice)) {
+    return new Uint8Array(raw)
+  }
+  if (ArrayBuffer.isView(raw)) {
+    return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
+  }
+  if (Array.isArray(raw)) {
+    return new Uint8Array(raw)
+  }
+  return null
+}
+
+export async function renderNativePdfPageToCanvas(pdfDoc, pageNum, canvas, pixelWidth, pixelHeight, { darkMode = false, signal } = {}) {
+  const docKey = await ensureNativePdfDocument(pdfDoc)
+  if (signal?.aborted) return false
+  const hostWin = getTauriHostWindow()
+  const emptyPayload = toHostArrayBuffer(hostWin, null)
+  const w = Math.max(1, Math.min(4096, Math.floor(pixelWidth)))
+  const h = Math.max(1, Math.min(4096, Math.floor(pixelHeight)))
+  const raw = await tauriInvoke('native_pdf', emptyPayload, {
+    headers: {
+      'x-action': 'render',
+      'x-doc-key': String(docKey),
+      'x-page': String(pageNum),
+      'x-width': String(w),
+      'x-height': String(h),
+      'x-dark': darkMode ? '1' : '0',
+    },
+  })
+  if (signal?.aborted) return false
+  const pngBytes = toUint8Array(raw)
+  if (!pngBytes || !pngBytes.byteLength) {
+    throw new Error('Empty PNG response from native_pdf')
+  }
+
+  const blob = new Blob([pngBytes], { type: 'image/png' })
+  if (typeof createImageBitmap === 'function') {
+    const bitmap = await createImageBitmap(blob)
+    try {
+      if (signal?.aborted) return false
+      const ctx = canvas.getContext('2d')
+      ctx.save()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      ctx.restore()
+    } finally {
+      bitmap.close?.()
+    }
+  } else {
+    const url = URL.createObjectURL(blob)
+    try {
+      const img = new Image()
+      img.decoding = 'async'
+      img.src = url
+      await img.decode()
+      if (signal?.aborted) return false
+      const ctx = canvas.getContext('2d')
+      ctx.save()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      ctx.restore()
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  }
+
+  canvas.dataset.nativeRendered = 'true'
+  if (darkMode) {
+    canvas.dataset.nativeDark = 'true'
+  } else {
+    delete canvas.dataset.nativeDark
+  }
+  return true
+}
+
 
 

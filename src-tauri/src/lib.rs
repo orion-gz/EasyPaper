@@ -208,46 +208,124 @@ fn die_msg(context: &str) -> ! {
 }
 
 #[tauri::command]
-async fn native_pdf(window: tauri::WebviewWindow, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+async fn native_pdf(request: tauri::ipc::Request<'_>) -> Result<tauri::ipc::Response, String> {
     #[cfg(target_os = "macos")]
     {
         extern "C" {
-            fn ep_pdf_update(view: *mut std::ffi::c_void, bytes: *const u8, count: usize,
-                x: f64, y: f64, width: f64, height: f64, close: bool) -> bool;
+            fn ep_pdf_load_document(
+                doc_key: *const std::ffi::c_char,
+                bytes: *const u8,
+                count: usize,
+            ) -> bool;
+            fn ep_pdf_render_page(
+                doc_key: *const std::ffi::c_char,
+                page_number: usize,
+                pixel_width: usize,
+                pixel_height: usize,
+                dark_mode: bool,
+                out_len: *mut usize,
+            ) -> *mut u8;
+            fn ep_pdf_free_buffer(buffer: *mut u8);
         }
+
         let headers = request.headers();
-        let number = |key: &str| -> Result<f64, String> {
-            headers.get(key).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<f64>().ok())
-                .filter(|v| v.is_finite()).ok_or_else(|| format!("Invalid {key}"))
-        };
-        let rect = [number("x-left")?, number("x-top")?, number("x-width")?, number("x-height")?];
-        let close = headers.contains_key("x-close");
-        let js_bytes = headers.get("x-js-bytes").and_then(|v| v.to_str().ok()).unwrap_or("?");
-        let (body_kind, bytes) = match request.body() {
-            tauri::ipc::InvokeBody::Raw(data) => ("raw", data.clone()),
-            tauri::ipc::InvokeBody::Json(val) => {
-                let parsed = val.as_array().map(|arr| {
-                    arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>()
-                }).unwrap_or_default();
-                ("json", parsed)
+        let action = headers
+            .get("x-action")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("load")
+            .to_string();
+        let doc_key = headers
+            .get("x-doc-key")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("default")
+            .to_string();
+        let c_doc_key = std::ffi::CString::new(doc_key.clone()).map_err(|e| e.to_string())?;
+
+        if action == "render" {
+            let usize_header = |key: &str| -> Result<usize, String> {
+                headers
+                    .get(key)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .filter(|&v| v > 0)
+                    .ok_or_else(|| format!("Invalid {key}"))
+            };
+            let page_num = usize_header("x-page")?;
+            let width = usize_header("x-width")?.min(4096);
+            let height = usize_header("x-height")?.min(4096);
+            let dark_mode = headers
+                .get("x-dark")
+                .and_then(|v| v.to_str().ok())
+                .map(|v| v == "1" || v == "true")
+                .unwrap_or(false);
+
+            let png_bytes = tauri::async_runtime::spawn_blocking(move || {
+                let mut out_len: usize = 0;
+                let ptr = unsafe {
+                    ep_pdf_render_page(
+                        c_doc_key.as_ptr(),
+                        page_num,
+                        width,
+                        height,
+                        dark_mode,
+                        &mut out_len,
+                    )
+                };
+                if ptr.is_null() || out_len == 0 {
+                    if !ptr.is_null() {
+                        unsafe { ep_pdf_free_buffer(ptr) };
+                    }
+                    return None;
+                }
+                let slice = unsafe { std::slice::from_raw_parts(ptr, out_len) };
+                let vec = slice.to_vec();
+                unsafe { ep_pdf_free_buffer(ptr) };
+                Some(vec)
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+
+            if let Some(data) = png_bytes {
+                log::info!(
+                    "[native_pdf] render doc={} page={} size={}x{} -> png_bytes={}",
+                    doc_key, page_num, width, height, data.len()
+                );
+                return Ok(tauri::ipc::Response::new(data));
             }
+            log::warn!(
+                "[native_pdf] render failed doc={} page={} size={}x{}",
+                doc_key, page_num, width, height
+            );
+            return Err("Native PDF page render failed".into());
+        }
+
+        let bytes = match request.body() {
+            tauri::ipc::InvokeBody::Raw(data) => data.clone(),
+            tauri::ipc::InvokeBody::Json(val) => val
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_u64().map(|n| n as u8))
+                        .collect::<Vec<u8>>()
+                })
+                .unwrap_or_default(),
         };
         let byte_len = bytes.len();
-        let (send, receive) = std::sync::mpsc::channel();
-        window.with_webview(move |webview| {
-            let ok = unsafe { ep_pdf_update(webview.inner().cast(), bytes.as_ptr(), bytes.len(),
-                rect[0], rect[1], rect[2], rect[3], close) };
-            let _ = send.send(ok);
-        }).map_err(|e| e.to_string())?;
-        let ok = receive.recv().unwrap_or(false);
+        let ok = tauri::async_runtime::spawn_blocking(move || unsafe {
+            ep_pdf_load_document(c_doc_key.as_ptr(), bytes.as_ptr(), bytes.len())
+        })
+        .await
+        .map_err(|e| e.to_string())?;
         log::info!(
-            "[native_pdf] close={} body={} js_bytes={} rust_bytes={} rect=({:.1}, {:.1}, {:.1}x{:.1}) -> ok={}",
-            close, body_kind, js_bytes, byte_len, rect[0], rect[1], rect[2], rect[3], ok
+            "[native_pdf] load doc={} bytes={} -> ok={}",
+            doc_key, byte_len, ok
         );
-        if ok { return Ok(()); }
+        if ok {
+            return Ok(tauri::ipc::Response::new(Vec::<u8>::new()));
+        }
     }
     #[cfg(not(target_os = "macos"))]
-    let _ = (window, request);
+    let _ = request;
     Err("Native PDF view unavailable".into())
 }
 

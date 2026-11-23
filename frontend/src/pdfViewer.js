@@ -8,6 +8,7 @@ import { projectSourceRects, sourceMappingMatchesRevision } from './pdfSentenceG
 
 import { alignTextLayer, collectTextContent, recoveredTextContent } from './pdfTextLayer.js'
 import { pdfResources } from './pdfResources.js'
+import { isMacNativePdfAvailable, renderNativePdfPageToCanvas } from './nativePdfPreview.js'
 import { t } from './i18n.js'
 
 import './pdfCompatibility.js'
@@ -37,6 +38,34 @@ let lastScrollView = null
 // 현재 세대와 비교해서 다르면(그 사이 새로 renderScrollView가 호출됐다면)
 // 조용히 중단한다.
 let renderGeneration = 0
+let activeScrollUntil = 0
+let scrollIdleWaiters = new Set()
+let scrollIdleTimer = null
+
+function notifyViewerScrolled() {
+  activeScrollUntil = performance.now() + 140
+  if (scrollIdleTimer !== null) clearTimeout(scrollIdleTimer)
+  scrollIdleTimer = setTimeout(() => {
+    scrollIdleTimer = null
+    const now = performance.now()
+    if (now < activeScrollUntil) return
+    const waiters = [...scrollIdleWaiters]
+    scrollIdleWaiters.clear()
+    waiters.forEach(resolve => resolve())
+  }, 150)
+}
+
+function waitForScrollIdle(signal) {
+  if (performance.now() >= activeScrollUntil) return Promise.resolve()
+  return new Promise(resolve => {
+    const done = () => {
+      scrollIdleWaiters.delete(done)
+      resolve()
+    }
+    scrollIdleWaiters.add(done)
+    signal?.addEventListener('abort', done, { once: true })
+  })
+}
 
 // Desktop WebViews can lag behind browser releases. Use the matching
 // compatibility builds for both the main module and its worker.
@@ -176,28 +205,6 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   renderGeneration++
   const myGeneration = renderGeneration
 
-  const hasTauriInternals = Boolean(
-    window.__TAURI_INTERNALS__ ||
-    (() => { try { return window.top?.__TAURI_INTERNALS__ || window.parent?.__TAURI_INTERNALS__ } catch { return null } })()
-  )
-  if (import.meta.env.VITE_MACOS_PDFKIT_PREVIEW === '1' &&
-      hasTauriInternals && /Mac/.test(navigator.platform)) {
-    const current = () => myGeneration === renderGeneration && !suspended
-    try {
-      const { mountNativePdf } = await import('./nativePdfPreview.js')
-      const dispose = await mountNativePdf(container, pdfDoc, current)
-      if (!current()) { await dispose?.(); return }
-      if (dispose) {
-        disposeScrollView = () => { dispose().catch(console.error); disposeScrollView = () => {} }
-        return
-      }
-    } catch (error) {
-      if (!current()) return
-      container.dataset.nativePdf = 'failed'
-      console.warn('PDFKit preview unavailable', error)
-    }
-  }
-
   if (pageObserver) { pageObserver.disconnect(); pageObserver = null }
 
   const numPages = pdfDoc.numPages
@@ -312,6 +319,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     scheduleRender()
   }
   function requestReconcile() {
+    notifyViewerScrolled()
     if (reconcileFrame === null && isCurrent()) reconcileFrame = requestAnimationFrame(reconcileRenderWindow)
   }
 
@@ -532,14 +540,40 @@ async function _renderPage(wrapper, pageNum, generation, job) {
       transBlock.style.height = `${Math.floor(viewport.height)}px`
     }
 
-    // 캔버스 렌더링 (먼저 실행)
-    job.renderTask = page.render({ canvasContext: ctx, viewport })
-    await job.renderTask.promise
+    // 캔버스 렌더링 (먼저 실행: macOS Tauri 환경에서는 네이티브 PDFKit + CoreGraphics 래스터라이저 우선 사용)
+    let renderedViaNativePdfKit = false
+    if (isMacNativePdfAvailable()) {
+      try {
+        const isDarkTheme = typeof document !== 'undefined' && !document.body.classList.contains('light-theme')
+        renderedViaNativePdfKit = await renderNativePdfPageToCanvas(
+          pdfDoc,
+          pageNum,
+          canvas,
+          canvas.width,
+          canvas.height,
+          { darkMode: isDarkTheme, signal: job.controller.signal }
+        )
+      } catch (nativeErr) {
+        if (stale()) { canvas.width = 0; canvas.height = 0; return }
+        console.warn(`Native PDFKit rasterizer fallback p.${pageNum}:`, nativeErr)
+      }
+    }
+    if (!renderedViaNativePdfKit) {
+      job.renderTask = page.render({ canvasContext: ctx, viewport })
+      await job.renderTask.promise
+    }
     if (stale()) { canvas.width = 0; canvas.height = 0; return }
     canvas.dataset.rendered = 'true'
     window.onTextLayerReleased?.(inner.querySelector('.textLayer'), pageNum)
     inner.querySelectorAll('canvas').forEach(previous => { previous.width = 0; previous.height = 0 })
     inner.replaceChildren(canvas, textLayerDiv)
+
+    // 스크롤 도중에는 무거운 텍스트 레이어 DOM 생성 및 강제 레이아웃(alignTextLayer / 문장 분할)을
+    // 잠시 미뤄 60~120fps 스크롤 프레임을 유지하고, 스크롤이 멈춘 직후 즉시 마운트한다.
+    if (renderedViaNativePdfKit) {
+      await waitForScrollIdle(job.controller.signal)
+      if (stale()) return
+    }
 
     // 텍스트 레이어 렌더링
     try {
