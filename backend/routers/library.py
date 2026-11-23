@@ -1044,6 +1044,18 @@ async def get_library_document_images(doc_id: str, current_user: str = Depends(g
         raise HTTPException(status_code=500, detail=f"이미지 좌표 추출 실패: {str(e)}")
 
 
+@router.get("/library/{doc_id}/figure-reference")
+async def resolve_figure_reference(doc_id: str, label: str = Query(min_length=1, max_length=80),
+                                   page: int = Query(ge=1), current_user: str = Depends(get_current_user)):
+    from services.image_window import resolve_figure
+    doc = require_owned_document(doc_id, current_user)
+    path = get_pdf_path(doc_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="PDF not found")
+    image = await asyncio.to_thread(resolve_figure, doc_id, doc, path, label, page)
+    return {"image": image}
+
+
 @router.get("/library/{doc_id}/figure-image/{index}")
 async def get_library_figure_image(doc_id: str, index: int, current_user: str = Depends(get_current_user)):
     """지식 그래프의 Figure/Table 노드 상세보기에서 실제 그림/표 영역을 PNG로

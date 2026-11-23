@@ -53,7 +53,7 @@ import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
 import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
 import { sourceMappingRects, refreshTextLayerGeometry, loadPDF, renderScrollView, scrollToPage, reRenderAll, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
-import { invalidateLibraryGetCache, fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
+import { invalidateLibraryGetCache, fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, resolveFigureReference, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
 import { icon } from './icons.js'
 import { formatTranslationHtml, applyKatexToElement, linkPageCitations } from './textFormat.js'
@@ -15215,9 +15215,11 @@ function renderCitationOverlayLayer(textLayerDiv, pageNum) {
 const ROMAN_NUMERAL_SRC = '(?=[MDCLXVI])M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})'
 
 // Preserve chapter and appendix numbers (4.18, S1, A.1) as complete labels.
-const FIGURE_TABLE_NUM_SRC = `(?:(?:[A-Z]\\.?)?\\d+(?:\\.\\d+)*|${ROMAN_NUMERAL_SRC}(?![a-zA-Z]))`
+const FIGURE_TABLE_NUM_SRC = `(?:(?:[A-Z][.‐‑–—−:_-]?)?\\d+(?:[.:_]\\d+)*|${ROMAN_NUMERAL_SRC}(?![a-zA-Z]))`
 // 숫자 본체 하나: "(1)"처럼 괄호로 감싼 형태(Equation 표기에 흔함) 또는 맨 숫자.
-const FIGURE_TABLE_NUM_CORE_SRC = `(?:\\(\\s*${FIGURE_TABLE_NUM_SRC}\\s*\\)|${FIGURE_TABLE_NUM_SRC})`
+const CHAPTER_FIGURE_NUM_SRC = `(?:[A-Z][.．‐‑–—−:_-]?)?\\d+(?:[.．‐‑–—−:_-]\\d+)*`
+const FIGURE_REF_NUMBER_SRC = `(?:${CHAPTER_FIGURE_NUM_SRC}|${ROMAN_NUMERAL_SRC}(?![A-Z]))`
+const FIGURE_TABLE_NUM_CORE_SRC = `(?:\\(\\s*${FIGURE_REF_NUMBER_SRC}\\s*\\)|${FIGURE_REF_NUMBER_SRC})`
 // Subfigure 접미사: 숫자 바로 뒤에 공백 없이 붙는 글자 하나("Fig. 2f", "Figure 5B")
 // 또는 괄호로 묶인 글자 목록("Fig. 4(a,b,c)", "Fig. 2(a)"). 뒤에 글자/숫자가 더
 // 이어지면("Fig. 2nd"의 "nd") 서수 등 참조와 무관한 단어의 일부일 수 있으므로
@@ -15248,14 +15250,14 @@ const FIGURE_TABLE_CONT_ITEM_SRC =
 // 엔진이 Tabs? 같은 더 짧은 대안으로 백트래킹하기 때문). \b를 두면 "Tab"과 그
 // 다음 글자 사이에 실제 단어 경계가 없는 이상 이 대안 자체가 거부된다.
 const FIGURE_TABLE_REF_RE = new RegExp(
-  `\\b(Figures?|Figs?|Tables?|Tabs?|Equations?|Eqns?|Eqs?)\\b\\.?\\s*` +
-  `(${FIGURE_TABLE_NUM_ITEM_SRC}(?:${FIGURE_TABLE_CONT_ITEM_SRC})*)`,
-  'gi'
+  `(?<![\\p{L}\\p{N}])(Figures?\\b|Figs?\\b|그림|Tables?\\b|Tabs?\\b|Equations?\\b|Eqns?\\b|Eqs?\\b)[.．]?\\s*` +
+  `(${FIGURE_TABLE_NUM_ITEM_SRC}(?:${FIGURE_TABLE_CONT_ITEM_SRC})*)(?![.．‐‑–—−:_-]\\d|[A-Z0-9])`,
+  'giu'
 )
 
 function normalizeFigureTableKind(keyword) {
   const kw = keyword.toLowerCase()
-  if (kw.startsWith('fig')) return 'Figure'
+  if (/^(?:fig|그림)/.test(kw)) return 'Figure'
   if (kw.startsWith('tab')) return 'Table'
   return 'Equation'
 }
@@ -15270,10 +15272,10 @@ function normalizeFigureTableKind(keyword) {
 // - 공백이 있는 연결어(", "/" and "/" & ") 뒤에 오는 숫자는 새로운 대상이다.
 // - 대시로 이어진 순수 아라비아 숫자 두 개("3-5")는 그 사이 숫자를 모두 포함하는
 //   범위로 펼친다(로마 숫자 범위는 흔치 않아 지원하지 않음).
-function parseFigureTableNumberList(payload) {
+function parseFigureTableNumberList(payload, keyword) {
   const numbers = []
   let i = 0
-  const s = payload
+  const s = payload.replace(/[‐‑−]/g, '-').replace(/．/g, '.')
 
   function matchHere(re) {
     re.lastIndex = i
@@ -15281,7 +15283,9 @@ function parseFigureTableNumberList(payload) {
     return (m && m.index === i) ? m : null
   }
 
-  const numCoreRe = new RegExp(`\\(?\\s*(${FIGURE_TABLE_NUM_SRC})\\s*\\)?`, 'iy')
+  const singularFigure = /^(?:fig|figure|그림)$/i.test(keyword)
+  const numberSource = singularFigure ? FIGURE_REF_NUMBER_SRC : FIGURE_TABLE_NUM_SRC
+  const numCoreRe = new RegExp(`\\(?\\s*(${numberSource})\\s*\\)?`, 'iy')
   const subfigSkipRe = new RegExp(FIGURE_TABLE_SUBFIG_SUFFIX_SRC, 'iy')
   const tightConnRe = new RegExp(FIGURE_TABLE_TIGHT_CONNECTOR_SRC, 'y')
   const looseConnRe = new RegExp(`\\s*(?:([-–—])|,|and|&)\\s*`, 'iy')
@@ -15292,7 +15296,7 @@ function parseFigureTableNumberList(payload) {
     if (!m) return null
     i += m[0].length
     const raw = m[1]
-    const value = raw.toUpperCase()
+    const value = raw.toUpperCase().replace(/[–—]/g, '-')
     const isRoman = !/\d/.test(value)
     const sm = matchHere(subfigSkipRe) // subfigure 접미사는 건너뛰기만 함
     if (sm) i += sm[0].length
@@ -15359,7 +15363,7 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
   if (state.disableFigureOverlay) return
 
   const images = state.documentImages || []
-  if (images.length === 0) return
+  const docId = state.currentDocId
 
   const vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
   if (!vtm || !vtm.fullText) return
@@ -15372,11 +15376,12 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
     // 빈 문자열로 매칭될 수 있다 - 이런 경우는 실제 참조 표기가 아니므로 건너뛴다.
     if (!match[2]) continue
     const kind = normalizeFigureTableKind(match[1])
-    const numbers = parseFigureTableNumberList(match[2])
+    const numbers = parseFigureTableNumberList(match[2], match[1])
+    const labels = numbers.map(n => `${kind} ${n}`)
     const targets = numbers
       .map(n => images.find(img => img.label === `${kind} ${n}`))
       .filter(Boolean)
-    if (targets.length === 0) continue
+    if (!labels.length || (!targets.length && (kind !== 'Figure' || !docId))) continue
 
     const rects = getSentenceRects({ charStart: match.index, charEnd: match.index + match[0].length }, vtm, textLayerDiv)
     rects.forEach(r => {
@@ -15391,35 +15396,68 @@ function renderFigureRefOverlayLayer(textLayerDiv, pageNum) {
       box.setAttribute('role', 'button')
       box.setAttribute('aria-haspopup', 'dialog')
       box.setAttribute('aria-expanded', 'false')
-      box.setAttribute('aria-label', t('viewer:a11y.figureTrigger', { label: targets.map(target => target.label).join(', ') }))
+      box.setAttribute('aria-label', t('viewer:a11y.figureTrigger', { label: labels.join(', ') }))
       box.addEventListener('mouseenter', () => {
-        if (state.figureOverlayTrigger === 'hover') showFigurePreviewTooltip(targets, box)
+        if (targets.length === labels.length && state.figureOverlayTrigger === 'hover') showFigurePreviewTooltip(targets, box)
       })
       box.addEventListener('mouseleave', scheduleFigurePreviewTooltipHide)
       box.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault(); event.stopPropagation()
-          showFigurePreviewTooltip(targets, box, { focus: true })
+          activate(event, true)
         } else if (event.key === 'Escape') {
           event.preventDefault(); hideFigurePreviewTooltip(); box.focus()
         }
       })
       // 클릭 모드에서는 미리보기를 열고, 호버 모드에서는 첫 대상의 원문으로 이동한다.
       // 툴팁 안에서는 각 항목을 클릭해 개별 원문으로 이동할 수 있다.
-      box.addEventListener('click', (e) => {
+      box.addEventListener('click', event => activate(event, false))
+      async function activate(e, keyboard) {
         e.preventDefault()
         e.stopPropagation()
         window.getSelection().removeAllRanges()
         const interactionType = kind === 'Table' ? 'tableClick' : (kind === 'Equation' ? 'equationClick' : 'figureClick')
         globalAnalyticsTracker.trackInteraction(interactionType, pageNum)
-        if (state.figureOverlayTrigger === 'click') {
-          showFigurePreviewTooltip(targets, box, { focus: true })
+        let resolved = targets
+        if (kind === 'Figure' && targets.length < labels.length) {
+          if (box.hasAttribute('aria-busy')) return
+          box.setAttribute('aria-busy', 'true')
+          showToast(t('viewer:figurePreview.searching', { label: labels.join(', ') }))
+          try {
+            resolved = []
+            for (const label of labels) {
+              const image = state.documentImages.find(item => item.label === label)
+                || await resolveFigureReference(docId, label, pageNum)
+              if (state.currentDocId !== docId) return
+              if (image) {
+                resolved.push(image)
+                if (!state.documentImages.some(item => item.label === label && item.page === image.page)) {
+                  state.documentImages.push(image)
+                }
+              }
+            }
+            if (!resolved.length) {
+              showToast(t('viewer:figurePreview.notFound', { label: labels.join(', ') }), 'warning')
+              return
+            }
+          } catch (error) {
+            if (state.currentDocId === docId) showToast(error.message, 'error')
+            return
+          } finally {
+            box.removeAttribute('aria-busy')
+          }
+        }
+        if (keyboard || state.figureOverlayTrigger === 'click') {
+          const anchor = box.isConnected ? box : pageWrapper.querySelector(
+            `.figure-ref-marker-box[data-focus-start="${box.dataset.focusStart}"][data-focus-end="${box.dataset.focusEnd}"]`
+          )
+          if (anchor) showFigurePreviewTooltip(resolved, anchor, { focus: true })
         } else {
           hideFigurePreviewTooltip()
           window.__easypaperDocument?.rememberReference()
-          scrollToPage(viewerScrollContainer, targets[0].page)
+          scrollToPage(viewerScrollContainer, resolved[0].page)
         }
-      })
+      }
       markers.appendChild(box)
     })
   }

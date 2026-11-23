@@ -82,3 +82,18 @@ def test_unlabelled_engine_figures_recover_adjacent_textbook_captions(tmp_path):
         doc.save(path)
     assert [r["label"] for r in _attach_pdf_figure_captions(path, regions)] == [
         "Figure 1.1", "Figure 1.2"]
+
+
+@pytest.mark.parametrize("caption,label", [
+    ("Fig 1-2: Diagram", "Figure 1-2"),
+    ("Fig. 1‑2(a): Panel", "Figure 1-2"),
+    ("Fig. 1–2: Diagram", "Figure 1-2"),
+    ("Fig. A−2: Appendix", "Figure A-2"),
+    ("그림 1．2 ♦ 구성도", "Figure 1.2"),
+    ("그림 1_2: 구성도", "Figure 1_2"),
+    ("Fig 1:2: Diagram", "Figure 1:2"),
+    ("Fig 1-2nd", None),
+])
+def test_textbook_caption_notation(caption, label):
+    from services.pdf_parser import _match_label_from_caption_text
+    assert _match_label_from_caption_text(caption)[0] == label
