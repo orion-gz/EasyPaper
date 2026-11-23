@@ -288,6 +288,7 @@ async def upload_pdf(
     from config import get_pdf_parser_engine
     parse_options = {
         "parser_engine": get_pdf_parser_engine(),
+        "defer_extraction": True,
         "filename": file.filename,
         "file_size_mb": file_size_mb,
         "username": current_user,
@@ -321,6 +322,20 @@ async def upload_pdf(
     )
 
 
+def require_session_or_deferred(session_id: str, current_user: str) -> dict:
+    """Session view that never forces extraction of a not-yet-opened upload."""
+    from services.db import db_get_document
+    from services.parse_job import EXTRACTION_DEFERRED
+    doc = None if session_id in sessions else db_get_document(session_id)
+    if doc and doc.get("username") == current_user and (doc.get("metadata") or {}).get(EXTRACTION_DEFERRED):
+        return {
+            **doc,
+            "metadata": {k: v for k, v in doc["metadata"].items() if k != EXTRACTION_DEFERRED},
+            "classification_status": doc.get("classification_status", "confirmed"),
+        }
+    return require_session_owner(session_id, current_user)
+
+
 @router.get("/upload/{session_id}/status")
 async def get_upload_status(session_id: str, current_user: str = Depends(get_current_user)):
     """Return durable parse state even before the document row exists."""
@@ -335,7 +350,7 @@ async def get_upload_status(session_id: str, current_user: str = Depends(get_cur
         "status": task["status"], "error_code": task.get("last_error_code"),
     }
     if task["status"] == "succeeded":
-        session = await asyncio.to_thread(require_session_owner, session_id, current_user)
+        session = await asyncio.to_thread(require_session_or_deferred, session_id, current_user)
         response["result"] = {
             "session_id": session_id, "filename": session["filename"],
             "total_pages": session["total_pages"],
@@ -355,7 +370,7 @@ async def get_upload_status(session_id: str, current_user: str = Depends(get_cur
 @router.get("/session/{session_id}")
 async def get_session(session_id: str, current_user: str = Depends(get_current_user)):
     """세션 정보를 반환합니다."""
-    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
+    session = await asyncio.to_thread(require_session_or_deferred, session_id, current_user)
     return {
         "session_id": session_id,
         "filename": session["filename"],

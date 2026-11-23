@@ -11,6 +11,11 @@ from config import UPLOAD_DIR
 from services.document_tasks import get_task, update_task
 
 LONG_DOCUMENT_PAGE_THRESHOLD = 50
+# metadata flag: the PDF is stored but its text/layout extraction is deferred
+# until the document is first opened (see finalize_deferred_document).
+EXTRACTION_DEFERRED = "extraction_deferred"
+_DEFERRABLE_ENGINES = {"pymupdf", "pdfplumber"}
+_finalize_locks: dict[str, asyncio.Lock] = {}
 _running_parse_tasks: dict[str, asyncio.Task] = {}
 
 
@@ -22,6 +27,127 @@ def _source_path(doc_id: str, configured_path: str | None, upload_root: str) -> 
     if not os.path.isfile(actual):
         raise FileNotFoundError("parse_source_missing")
     return actual
+
+
+def _should_defer_extraction(options: dict, engine: str, doc_id: str) -> bool:
+    """Fast upload path: only AI classification (needs page text) stays eager."""
+    if not options.get("defer_extraction") or engine not in _DEFERRABLE_ENGINES:
+        return False
+    if options.get("classification_method", "ai") == "ai":
+        return False
+    from services.library import get_document
+    return get_document(doc_id) is None
+
+
+async def _store_upload_only(task_id, doc_id, pdf_path, options, engine, metadata_reader) -> dict:
+    """Persist the PDF and light metadata; extraction happens on first open."""
+    from services.library import save_document
+    from services.pdf_diagnostics import parser_version
+    from services.pdf_layout import RULE_VERSION
+    try:
+        metadata = dict(await asyncio.to_thread(metadata_reader, pdf_path))
+        total_pages = int(metadata.get("total_pages") or 0)
+        metadata["layout_rule_version"] = RULE_VERSION
+        metadata[EXTRACTION_DEFERRED] = True
+        source_lang = options.get("source_lang", "auto")
+        target_lang = options.get("target_lang", "ko")
+        save_document(
+            doc_id, options.get("filename") or "document.pdf", pdf_path,
+            total_pages, metadata, username=options.get("username", "admin"),
+            document_mode=options.get("document_mode", "research"),
+            document_type=options.get("document_type", "research_paper"),
+            source_language=source_lang, detected_source_language="und",
+            source_language_confidence=None, preferred_target_language=target_lang,
+            content_revision=1, parser_engine=engine,
+            parser_version=parser_version(engine), classification_status="confirmed",
+        )
+    except asyncio.CancelledError:
+        update_task(task_id, status="cancelled", cancel_requested=True)
+        raise
+    except Exception:
+        update_task(task_id, status="failed", last_error_code="invalid_pdf")
+        raise
+    update_task(task_id, status="succeeded", last_error_code=None)
+    return {
+        "session_id": doc_id,
+        "filename": options.get("filename") or "document.pdf",
+        "total_pages": total_pages,
+        "file_size_mb": float(options.get("file_size_mb") or 0),
+        "metadata": {k: v for k, v in metadata.items() if k != EXTRACTION_DEFERRED},
+        "document_mode": options.get("document_mode", "research"),
+        "document_type": options.get("document_type", "research_paper"),
+        "classification_status": "confirmed",
+        "source_language": source_lang,
+        "detected_source_language": "und",
+        "source_language_confidence": None,
+        "preferred_target_language": target_lang,
+        "translation_skipped_reason": None,
+    }
+
+
+async def finalize_deferred_document(doc_id: str) -> None:
+    """Finish what the upload skipped once the session pages are available.
+
+    Idempotent: a no-op unless the document still carries the deferred flag.
+    """
+    from routers.upload import sessions
+    from services.db import db_finalize_document_parse, db_get_document, get_db
+    lock = _finalize_locks.setdefault(doc_id, asyncio.Lock())
+    async with lock:
+        doc = db_get_document(doc_id)
+        session = sessions.get(doc_id)
+        if not doc or not session or not (doc.get("metadata") or {}).get(EXTRACTION_DEFERRED):
+            return
+        pages, pdf_path = session["pages"], session["pdf_path"]
+        engine = session.get("parser_engine") or "pymupdf"
+        version = session.get("parser_version")
+
+        from services.cache import save_images_cache
+        from services.pdf_diagnostics import diagnose_pages
+        from services.pdf_parser import extract_pdf_images
+        images = []
+        try:
+            images = await asyncio.to_thread(extract_pdf_images, pdf_path, engine)
+            save_images_cache(doc_id, pdf_path, images, engine, version, strict=True)
+        except Exception:
+            images = []
+        report = diagnose_pages(pages, images, engine, version)
+        with get_db() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO parsing_diagnostics
+                   (doc_id, content_revision, parser_engine, parser_version, report, created_at)
+                   VALUES (?, 1, ?, ?, ?, ?)""",
+                (doc_id, engine, version, json.dumps(report, ensure_ascii=False),
+                 datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+
+        from services.languages import detect_document_language
+        detection = detect_document_language(pages)
+        source_lang = session.get("source_language", "auto")
+        target_lang = session.get("preferred_target_language") or "ko"
+        detected = str(detection["language"])
+        resolved = source_lang if source_lang != "auto" else detected
+        reason = None
+        if source_lang == "auto" and not detection["supported"]:
+            reason = "unsupported_source_language"
+        elif resolved == target_lang:
+            reason = "same_source_and_target_language"
+        metadata = {k: v for k, v in doc["metadata"].items() if k != EXTRACTION_DEFERRED}
+        db_finalize_document_parse(
+            doc_id, len(pages), metadata, detected,
+            float(detection["confidence"]), engine, version,
+        )
+        session.update(
+            metadata=metadata, total_pages=len(pages), detected_source_language=detected,
+            source_language_confidence=detection["confidence"], translation_skipped_reason=reason,
+        )
+        from services.observability import record_document_mode_event
+        record_document_mode_event(
+            doc.get("username", "admin"), "upload", doc.get("document_mode", "research"),
+            doc.get("document_type", "research_paper"), numeric_value=len(pages), status="indexed",
+        )
+        start_processing_after_classification(doc_id, sessions)
 
 
 async def execute_parse_task(
@@ -66,6 +192,8 @@ async def execute_parse_task(
     from config import get_pdf_parser_engine
     selected_engine = options.get("parser_engine") or get_pdf_parser_engine()
     from services.pdf_parser import extract_pages
+    # An injected extractor means the caller wants its pages right away.
+    default_extractor = page_extractor is extract_pages
     if page_extractor is extract_pages:
         from functools import partial
         page_extractor = partial(extract_pages, engine=selected_engine)
@@ -75,6 +203,8 @@ async def execute_parse_task(
         task_id, status="running", last_error_code=None,
         next_retry_at=None, increment_attempt=True,
     )
+    if default_extractor and _should_defer_extraction(options, selected_engine, doc_id):
+        return await _store_upload_only(task_id, doc_id, pdf_path, options, selected_engine, metadata_reader)
     try:
         if selected_engine in {"marker", "mineru"}:
             from services.reparse import parse_document_isolated

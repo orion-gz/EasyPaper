@@ -64,6 +64,11 @@ def test_upload_accepts_file_within_size_limit(test_client, isolated_dirs, monke
 
     body = _await_upload(test_client, res)
     assert body["filename"] == "small.pdf"
+    # Text extraction is deferred until the document is opened.
+    from services.db import db_get_document
+    assert body["session_id"] not in upload_module.sessions
+    assert db_get_document(body["session_id"])["filename"] == "small.pdf"
+    assert upload_module.ensure_session(body["session_id"])
     assert body["session_id"] in upload_module.sessions
 
 
@@ -153,7 +158,8 @@ def test_manual_upload_skips_ai_classification(test_client, isolated_dirs, monke
 
     body = _await_upload(test_client, response)
     from services.document_tasks import latest_task
-    assert upload_module.sessions[body["session_id"]]["classification_status"] == "confirmed"
+    from services.db import db_get_document
+    assert db_get_document(body["session_id"])["classification_status"] == "confirmed"
     assert latest_task(body["session_id"], "classification") is None
 
 
@@ -206,6 +212,7 @@ def test_auto_translation_does_not_start_for_undetermined_source(test_client, is
     )
     body = _await_upload(test_client, response)
     assert body["detected_source_language"] == "und"
-    assert body["translation_skipped_reason"] == "unsupported_source_language"
+    # Language support is only known after the deferred extraction runs.
+    assert body["translation_skipped_reason"] is None
     assert starts == []
     upload_module.sessions.pop(body["session_id"], None)

@@ -13,7 +13,9 @@ def _key(document: dict) -> tuple[str, str, int]:
 def preparation_status(document: dict) -> dict:
     from routers.upload import sessions
     session = sessions.get(document['id'])
-    if session and int(session.get('content_revision') or 1) == _key(document)[2]:
+    from services.parse_job import EXTRACTION_DEFERRED
+    deferred = bool((document.get('metadata') or {}).get(EXTRACTION_DEFERRED))
+    if session and not deferred and int(session.get('content_revision') or 1) == _key(document)[2]:
         return {'status': 'ready'}
     task = _tasks.get(_key(document))
     if task is None:
@@ -38,6 +40,8 @@ def start_preparation(document: dict, *, retry: bool = False) -> dict:
         from routers.upload import ensure_session
         try:
             if await asyncio.to_thread(ensure_session, document['id']):
+                from services.parse_job import finalize_deferred_document
+                await finalize_deferred_document(document['id'])
                 return {'status': 'ready'}
         except Exception:
             logging.getLogger(__name__).exception('Document preparation failed: %s', document['id'])
