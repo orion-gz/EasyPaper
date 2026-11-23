@@ -66,3 +66,34 @@ def test_caption_variants_use_reference_labels(text, label):
 def test_caption_does_not_accept_partial_identifiers(text):
     from services.pdf_parser import _match_label_from_caption_text
     assert _match_label_from_caption_text(text)[0] is None
+
+
+def test_unlabelled_engine_figures_recover_adjacent_textbook_captions(tmp_path):
+    from services.pdf_parser import _attach_pdf_figure_captions
+
+    path = tmp_path / "chapter.pdf"
+    regions = []
+    with fitz.open() as doc:
+        for page_num, label in enumerate(("Figure 1.1", "Figure 1.2"), 1):
+            page = doc.new_page(width=500, height=500)
+            page.insert_htmlbox(fitz.Rect(40, 169, 400, 210), label + "  ♦  Textbook diagram")
+            regions.append(dict(page=page_num, left=5, top=10, width=70, height=24,
+                                label=None, caption=None, _figure=True))
+        doc.save(path)
+    assert [r["label"] for r in _attach_pdf_figure_captions(path, regions)] == [
+        "Figure 1.1", "Figure 1.2"]
+
+
+@pytest.mark.parametrize("caption,label", [
+    ("Fig 1-2: Diagram", "Figure 1-2"),
+    ("Fig. 1‑2(a): Panel", "Figure 1-2"),
+    ("Fig. 1–2: Diagram", "Figure 1-2"),
+    ("Fig. A−2: Appendix", "Figure A-2"),
+    ("그림 1．2 ♦ 구성도", "Figure 1.2"),
+    ("그림 1_2: 구성도", "Figure 1_2"),
+    ("Fig 1:2: Diagram", "Figure 1:2"),
+    ("Fig 1-2nd", None),
+])
+def test_textbook_caption_notation(caption, label):
+    from services.pdf_parser import _match_label_from_caption_text
+    assert _match_label_from_caption_text(caption)[0] == label

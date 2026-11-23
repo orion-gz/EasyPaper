@@ -78,3 +78,40 @@ def test_window_extracts_only_missing_pages(test_client, isolated_dirs, tmp_path
     assert test_client.get(url + "22").json() == data
     assert test_client.get(url + "24").json()["end"] == 39
     assert calls == [[22], [*range(7, 22), *range(23, 38)], [38, 39]]
+
+
+def test_resolve_figure_uses_caption_not_body_reference(test_client, isolated_dirs, tmp_path, monkeypatch):
+    import fitz
+    from services import image_window
+
+    _create_doc(isolated_dirs)
+    path = tmp_path / "book.pdf"
+    with fitz.open() as pdf:
+        for line in ("See Fig 1-2 below.", "Figure 1: Other", "Fig 1-2: Target"):
+            pdf.new_page().insert_text((60, 100), line)
+        pdf.save(path)
+    monkeypatch.setattr("routers.library.get_pdf_path", lambda _: str(path))
+    monkeypatch.setattr(image_window, "CACHE_DIR", str(tmp_path))
+    parsed = []
+
+    def load_page(doc_id, doc, pdf_path, page, *, single):
+        assert single
+        parsed.append(page)
+        return {"images": [{"page": page, "label": "Figure 1-2"}]}
+
+    monkeypatch.setattr(image_window, "load_image_window", load_page)
+    url = "/api/library/doc-1/figure-reference"
+    response = test_client.get(url, params={"label": "Figure 1-2", "page": 1})
+    assert response.json() == {"image": {"label": "Figure 1-2", "page": 3}}
+    absent = test_client.get(url, params={"label": "Figure 1-3", "page": 1})
+    assert absent.json() == {"image": None}
+    assert parsed == [3]
+
+    monkeypatch.setattr(image_window, "get_cached_pages", lambda *args: [
+        {"page_num": 2, "text": "그림 A‑3: OCR caption"}])
+    def load_ocr_page(doc_id, doc, pdf_path, page, *, single):
+        assert single and page == 2
+        return {"images": [{"page": page, "label": "Figure A-3"}]}
+    monkeypatch.setattr(image_window, "load_image_window", load_ocr_page)
+    response = test_client.get(url, params={"label": "Figure A-3", "page": 1})
+    assert response.json()["image"] == {"page": 2, "label": "Figure A-3"}

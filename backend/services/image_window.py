@@ -11,17 +11,24 @@ import fitz
 
 from config import CACHE_DIR
 from services.atomic_io import atomic_write_text
-from services.cache import get_cached_images
+from services.cache import IMAGES_LABEL_VERSION, get_cached_images, get_cached_pages
 from services.reparse import _worker_command, document_parse_lock
+
+
+def _cache_identity(doc_id, doc, pdf_path):
+    engine = doc.get("parser_engine") or "pymupdf"
+    version = doc.get("parser_version")
+    revision = int(doc.get("content_revision") or 1)
+    stat = os.stat(pdf_path)
+    parts = (doc_id, engine, version, revision, stat.st_mtime_ns, stat.st_size, IMAGES_LABEL_VERSION)
+    return hashlib.sha256(str(parts).encode()).hexdigest()
 
 
 def load_image_window(doc_id, doc, pdf_path, page, *, single=False):
     engine = doc.get("parser_engine") or "pymupdf"
     version = doc.get("parser_version")
     revision = int(doc.get("content_revision") or 1)
-    stat = os.stat(pdf_path)
-    identity = hashlib.sha256(str((doc_id, engine, version, revision, stat.st_mtime_ns,
-                                   stat.st_size)).encode()).hexdigest()
+    identity = _cache_identity(doc_id, doc, pdf_path)
 
     def cache_path(n):
         return Path(CACHE_DIR) / f"{doc_id}_{identity}_{n}_images_extract.json"
@@ -61,3 +68,51 @@ def load_image_window(doc_id, doc, pdf_path, page, *, single=False):
             for n in range(start, end + 1):
                 images.extend(json.loads(cache_path(n).read_text()))
     return {"start": start, "end": end, "images": images}
+
+
+def resolve_figure(doc_id, doc, pdf_path, label, source_page):
+    """Try existing region caches before searching caption lines in the PDF."""
+    from services.pdf_parser import _match_label_from_caption_text
+
+    identity = _cache_identity(doc_id, doc, pdf_path)
+    root = Path(CACHE_DIR)
+    complete = get_cached_images(doc_id, pdf_path, doc.get("parser_engine"),
+                                 doc.get("parser_version"), doc.get("content_revision"))
+    matches = [item for item in complete or [] if item.get("label") == label]
+    for path in root.glob(f"{doc_id}_{identity}_*_images_extract.json"):
+        try:
+            matches.extend(item for item in json.loads(path.read_text()) if item.get("label") == label)
+        except (FileNotFoundError, ValueError):
+            continue
+    if matches:
+        return min(matches, key=lambda item: abs(item["page"] - source_page))
+
+    index_path = root / f"{doc_id}_{identity}_caption_pages.json"
+    with document_parse_lock("caption-pages-" + identity):
+        if index_path.exists():
+            index = json.loads(index_path.read_text())
+        else:
+            index = {}
+            with fitz.open(pdf_path) as pdf:
+                for page in pdf:
+                    for line in page.get_text().splitlines():
+                        key, _ = _match_label_from_caption_text(line)
+                        if key and key.startswith("Figure "):
+                            pages = index.setdefault(key, [])
+                            if not pages or pages[-1] != page.number + 1:
+                                pages.append(page.number + 1)
+            atomic_write_text(str(index_path), json.dumps(index))
+    candidates = index.get(label, [])
+    if not candidates:
+        pages = get_cached_pages(doc_id, pdf_path, doc.get("parser_engine"),
+                                 doc.get("parser_version"), doc.get("content_revision"))
+        for page in pages or []:
+            lines = (page.get("text") or "").splitlines()
+            if any(_match_label_from_caption_text(line)[0] == label for line in lines):
+                candidates.append(page["page_num"])
+    for number in sorted(candidates, key=lambda n: abs(n - source_page)):
+        window = load_image_window(doc_id, doc, pdf_path, number, single=True)
+        for item in window["images"]:
+            if item.get("label") == label:
+                return item
+    return None
