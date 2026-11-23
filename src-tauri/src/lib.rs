@@ -223,6 +223,7 @@ async fn native_pdf(window: tauri::WebviewWindow, request: tauri::ipc::Request<'
                 close: bool,
                 hidden: bool,
                 target_page: i32,
+                scroll_ratio: f64,
                 action: *const std::ffi::c_char,
             ) -> bool;
         }
@@ -252,6 +253,12 @@ async fn native_pdf(window: tauri::WebviewWindow, request: tauri::ipc::Request<'
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.parse::<i32>().ok())
             .unwrap_or(0);
+        let scroll_ratio = headers
+            .get("x-scroll-ratio")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| v.is_finite())
+            .unwrap_or(-1.0);
         let action_str = headers
             .get("x-action")
             .and_then(|v| v.to_str().ok())
@@ -288,6 +295,7 @@ async fn native_pdf(window: tauri::WebviewWindow, request: tauri::ipc::Request<'
                         close,
                         hidden,
                         target_page,
+                        scroll_ratio,
                         c_action.as_ptr(),
                     )
                 };

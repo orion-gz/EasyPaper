@@ -421,18 +421,20 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     try {
       let syncingFromNative = false
       const dispose = await mountNativePdf(container, pdfDoc, current, {
-        onNativePageChange(pageNum) {
+        onNativePageChange(pageNum, { fromScroll = false } = {}) {
           if (!current()) return
           currentPage = pageNum
           if (pageNum !== lastNotifiedPage) {
             lastNotifiedPage = pageNum
             onPageVisible?.(pageNum)
           }
-          const el = container.querySelector(`.page-pair[data-page="${pageNum}"]`) || container.querySelector(`[data-page="${pageNum}"]`)
-          if (el) {
-            syncingFromNative = true
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            setTimeout(() => { syncingFromNative = false }, 350)
+          if (!fromScroll) {
+            const el = container.querySelector(`.page-pair[data-page="${pageNum}"]`) || container.querySelector(`[data-page="${pageNum}"]`)
+            if (el) {
+              syncingFromNative = true
+              el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              setTimeout(() => { syncingFromNative = false }, 350)
+            }
           }
         },
         onNativeSelectionChange(selectionPayload) {
@@ -470,9 +472,6 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
             currentPage = currentPageNum
             lastNotifiedPage = currentPageNum
             onPageVisible?.(currentPageNum)
-            if (!syncingFromNative) {
-              goToNativePdfPage(currentPageNum)
-            }
           }
         }, {
           root: container,

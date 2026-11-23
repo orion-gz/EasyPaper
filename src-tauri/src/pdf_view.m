@@ -8,10 +8,66 @@
 static char viewKey;
 static char observerKey;
 
+@interface EPNativePdfView : PDFView
+@property (nonatomic, weak) WKWebView *hostWebView;
+@property (nonatomic, copy) NSArray<NSValue *> *interactiveWebRects;
+@end
+
+static NSView *ep_original_wk_hittest(NSView *self, SEL _cmd, NSPoint point);
+static IMP g_orig_wk_hittest = NULL;
+
+static NSView *ep_swizzled_wk_hittest(NSView *self, SEL _cmd, NSPoint point) {
+    if ([self isKindOfClass:[WKWebView class]]) {
+        WKWebView *web = (WKWebView *)self;
+        EPNativePdfView *pdfView = objc_getAssociatedObject(web, &viewKey);
+        if (pdfView && !pdfView.hidden) {
+            // Convert point from web.superview coordinates into web.bounds coordinates
+            NSPoint localPt = [web convertPoint:point fromView:web.superview];
+            if (NSPointInRect(localPt, pdfView.frame)) {
+                double topLeftX = localPt.x;
+                double topLeftY = web.isFlipped ? localPt.y : (NSHeight(web.bounds) - localPt.y);
+                NSPoint webPt = NSMakePoint(topLeftX, topLeftY);
+                BOOL overWebUI = NO;
+                for (NSValue *val in pdfView.interactiveWebRects) {
+                    if (NSPointInRect(webPt, val.rectValue)) {
+                        overWebUI = YES;
+                        break;
+                    }
+                }
+                if (!overWebUI) {
+                    NSView *hit = [pdfView hitTest:localPt];
+                    if (hit) return hit;
+                }
+            }
+        }
+    }
+    if (g_orig_wk_hittest) {
+        return ((NSView *(*)(id, SEL, NSPoint))g_orig_wk_hittest)(self, _cmd, point);
+    }
+    return nil;
+}
+
+static void ep_install_wk_hittest_hook(WKWebView *web) {
+    if (!web) return;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        Class cls = [web class];
+        Method m = class_getInstanceMethod(cls, @selector(hitTest:));
+        if (m) {
+            g_orig_wk_hittest = method_setImplementation(m, (IMP)ep_swizzled_wk_hittest);
+        }
+    });
+}
+
+@implementation EPNativePdfView
+@end
+
 @interface EPNativePdfObserver : NSObject
 @property (nonatomic, weak) WKWebView *webView;
-@property (nonatomic, weak) PDFView *pdfView;
+@property (nonatomic, weak) EPNativePdfView *pdfView;
+@property (nonatomic, weak) NSScrollView *scrollView;
 @property (nonatomic, assign) NSInteger lastReportedPage;
+@property (nonatomic, assign) BOOL suppressScrollReport;
 @end
 
 @implementation EPNativePdfObserver
@@ -24,16 +80,94 @@ static char observerKey;
     if (!jsonData || error) return;
     NSString *json = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
     if (!json) return;
+    // Dispatch to both top window and the active workspace document iframe so events
+    // always reach the document runtime regardless of iframe isolation.
     NSString *js = [NSString stringWithFormat:
-        @"if (window.__easypaperNativePdfDispatch) { window.__easypaperNativePdfDispatch(%@); }",
+        @"(function(ev){"
+         "  if (window.__easypaperNativePdfDispatch) window.__easypaperNativePdfDispatch(ev);"
+         "  var frames = document.querySelectorAll('.workspace-document-frame:not([hidden])');"
+         "  for (var i = 0; i < frames.length; i++) {"
+         "    try {"
+         "      var cw = frames[i].contentWindow;"
+         "      if (cw && cw.__easypaperNativePdfDispatch) cw.__easypaperNativePdfDispatch(ev);"
+         "    } catch (e) {}"
+         "  }"
+         "})(%@);",
         json];
     dispatch_async(dispatch_get_main_queue(), ^{
         [web evaluateJavaScript:js completionHandler:nil];
     });
 }
 
+- (NSScrollView *)findInternalScrollView:(NSView *)root {
+    if ([root isKindOfClass:[NSScrollView class]]) {
+        return (NSScrollView *)root;
+    }
+    for (NSView *sub in root.subviews) {
+        NSScrollView *found = [self findInternalScrollView:sub];
+        if (found) return found;
+    }
+    return nil;
+}
+
+- (void)attachScrollNotifications {
+    if (!self.pdfView) return;
+    NSScrollView *sv = [self findInternalScrollView:self.pdfView];
+    if (!sv || sv == self.scrollView) return;
+    if (self.scrollView && self.scrollView.contentView) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                        name:NSViewBoundsDidChangeNotification
+                                                      object:self.scrollView.contentView];
+    }
+    self.scrollView = sv;
+    NSClipView *clip = sv.contentView;
+    if (clip) {
+        [clip setPostsBoundsChangedNotifications:YES];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(scrollBoundsChanged:)
+                                                     name:NSViewBoundsDidChangeNotification
+                                                   object:clip];
+    }
+}
+
+- (void)scrollBoundsChanged:(NSNotification *)notification {
+    if (self.suppressScrollReport) return;
+    EPNativePdfView *view = self.pdfView;
+    NSScrollView *sv = self.scrollView;
+    if (!view || !sv || !view.document || !sv.documentView) return;
+
+    NSRect docRect = sv.documentView.bounds;
+    NSRect visibleRect = sv.contentView.documentVisibleRect;
+    CGFloat maxScroll = docRect.size.height - visibleRect.size.height;
+    double ratio = 0.0;
+    if (maxScroll > 1.0) {
+        if (sv.documentView.isFlipped) {
+            ratio = visibleRect.origin.y / maxScroll;
+        } else {
+            ratio = (docRect.size.height - visibleRect.origin.y - visibleRect.size.height) / maxScroll;
+        }
+        if (ratio < 0.0) ratio = 0.0;
+        if (ratio > 1.0) ratio = 1.0;
+    }
+
+    NSInteger pageNum = self.lastReportedPage > 0 ? self.lastReportedPage : 1;
+    if (view.currentPage) {
+        NSUInteger idx = [view.document indexForPage:view.currentPage];
+        if (idx != NSNotFound) {
+            pageNum = (NSInteger)idx + 1;
+            self.lastReportedPage = pageNum;
+        }
+    }
+
+    [self emitEvent:@{
+        @"type": @"scroll",
+        @"ratio": @(ratio),
+        @"page": @(pageNum),
+    }];
+}
+
 - (void)pageChanged:(NSNotification *)notification {
-    PDFView *view = self.pdfView;
+    EPNativePdfView *view = self.pdfView;
     if (!view || !view.document || !view.currentPage) return;
     NSUInteger idx = [view.document indexForPage:view.currentPage];
     if (idx == NSNotFound) return;
@@ -47,11 +181,12 @@ static char observerKey;
 }
 
 - (void)selectionChanged:(NSNotification *)notification {
-    PDFView *view = self.pdfView;
+    EPNativePdfView *view = self.pdfView;
     WKWebView *web = self.webView;
     if (!view || !web || !view.document) return;
     PDFSelection *sel = view.currentSelection;
-    NSString *text = [sel.string stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *rawText = sel.string ?: @"";
+    NSString *text = [rawText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (!sel || !text || text.length == 0 || sel.pages.count == 0) {
         [self emitEvent:@{ @"type": @"selection", @"empty": @YES }];
         return;
@@ -60,13 +195,21 @@ static char observerKey;
     NSUInteger pageIdx = [view.document indexForPage:page];
     if (pageIdx == NSNotFound) return;
 
-    NSRect pageBounds = [sel boundsForPage:page];
+    NSArray<PDFSelection *> *lines = [sel selectionsByLine];
+    PDFSelection *firstLine = (lines && lines.count > 0) ? lines.firstObject : sel;
+    NSRect pageBounds = [firstLine boundsForPage:page];
+    if (NSIsEmptyRect(pageBounds) || pageBounds.size.width <= 0) {
+        pageBounds = [sel boundsForPage:page];
+    }
     NSRect viewRect = [view convertRect:pageBounds fromPage:page];
     NSRect webRect = [web convertRect:viewRect fromView:view];
     double topY = web.isFlipped ? webRect.origin.y : (NSHeight(web.bounds) - webRect.origin.y - webRect.size.height);
 
     NSString *pageText = page.string ?: @"";
-    NSRange charRange = [pageText rangeOfString:sel.string];
+    NSRange charRange = [pageText rangeOfString:rawText];
+    if (charRange.location == NSNotFound && text.length > 0) {
+        charRange = [pageText rangeOfString:text];
+    }
     NSInteger startOffset = (charRange.location != NSNotFound) ? (NSInteger)charRange.location : -1;
     NSInteger endOffset = (charRange.location != NSNotFound) ? (NSInteger)(charRange.location + charRange.length) : -1;
 
@@ -74,14 +217,14 @@ static char observerKey;
         @"type": @"selection",
         @"empty": @NO,
         @"page": @(pageIdx + 1),
-        @"text": sel.string ?: @"",
+        @"text": rawText,
         @"startOffset": @(startOffset),
         @"endOffset": @(endOffset),
         @"rect": @{
             @"left": @(webRect.origin.x),
             @"top": @(topY),
-            @"width": @(webRect.size.width),
-            @"height": @(webRect.size.height),
+            @"width": @(MAX(24.0, webRect.size.width)),
+            @"height": @(MAX(16.0, webRect.size.height)),
         },
     }];
 }
@@ -105,11 +248,28 @@ static NSColor *ep_color_from_hex(NSString *hex, CGFloat alpha) {
     return [NSColor colorWithSRGBRed:r green:g blue:b alpha:alpha];
 }
 
-static void ep_apply_annotations_json(PDFView *view, const unsigned char *json_bytes, size_t json_len) {
-    if (!view || !view.document || !json_bytes || json_len == 0) return;
+static void ep_apply_payload_json(EPNativePdfView *view, const unsigned char *json_bytes, size_t json_len, bool sync_annotations) {
+    if (!view || !json_bytes || json_len == 0) return;
     NSData *data = [NSData dataWithBytes:json_bytes length:json_len];
     NSDictionary *root = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
     if (![root isKindOfClass:[NSDictionary class]]) return;
+
+    if ([root[@"overlayRects"] isKindOfClass:[NSArray class]]) {
+        NSMutableArray<NSValue *> *rects = [NSMutableArray array];
+        for (NSDictionary *r in root[@"overlayRects"]) {
+            if (![r isKindOfClass:[NSDictionary class]]) continue;
+            double rx = [r[@"x"] respondsToSelector:@selector(doubleValue)] ? [r[@"x"] doubleValue] : 0.0;
+            double ry = [r[@"y"] respondsToSelector:@selector(doubleValue)] ? [r[@"y"] doubleValue] : 0.0;
+            double rw = [r[@"width"] respondsToSelector:@selector(doubleValue)] ? [r[@"width"] doubleValue] : 0.0;
+            double rh = [r[@"height"] respondsToSelector:@selector(doubleValue)] ? [r[@"height"] doubleValue] : 0.0;
+            if (rw > 0 && rh > 0) {
+                [rects addObject:[NSValue valueWithRect:NSMakeRect(rx, ry, rw, rh)]];
+            }
+        }
+        view.interactiveWebRects = rects;
+    }
+
+    if (!sync_annotations || !view.document) return;
 
     PDFDocument *doc = view.document;
     for (NSUInteger i = 0; i < doc.pageCount; i++) {
@@ -203,8 +363,8 @@ static void ep_apply_annotations_json(PDFView *view, const unsigned char *json_b
 
 bool ep_pdf_update(WKWebView *web, const unsigned char *bytes, size_t count,
                    double x, double y, double width, double height,
-                   bool close, bool hidden, int target_page, const char *action) {
-    PDFView *view = objc_getAssociatedObject(web, &viewKey);
+                   bool close, bool hidden, int target_page, double scroll_ratio, const char *action) {
+    EPNativePdfView *view = objc_getAssociatedObject(web, &viewKey);
     EPNativePdfObserver *observer = objc_getAssociatedObject(web, &observerKey);
 
     if (close) {
@@ -220,7 +380,12 @@ bool ep_pdf_update(WKWebView *web, const unsigned char *bytes, size_t count,
     NSString *act = action ? [NSString stringWithUTF8String:action] : @"update";
     if ([act isEqualToString:@"annotations"]) {
         if (!view) return false;
-        ep_apply_annotations_json(view, bytes, count);
+        ep_apply_payload_json(view, bytes, count, true);
+        return true;
+    }
+    if ([act isEqualToString:@"overlays"]) {
+        if (!view) return false;
+        ep_apply_payload_json(view, bytes, count, false);
         return true;
     }
     if ([act isEqualToString:@"clear_selection"]) {
@@ -228,15 +393,26 @@ bool ep_pdf_update(WKWebView *web, const unsigned char *bytes, size_t count,
         return true;
     }
 
-    if (count > 0 && ![act isEqualToString:@"annotations"]) {
+    if (count > 0 && [act isEqualToString:@"load"]) {
         PDFDocument *document = [[PDFDocument alloc] initWithData:[NSData dataWithBytes:bytes length:count]];
         if (!document || document.isLocked) return false;
         if (!view) {
-            view = [[PDFView alloc] initWithFrame:NSZeroRect];
+            ep_install_wk_hittest_hook(web);
+            view = [[EPNativePdfView alloc] initWithFrame:NSZeroRect];
+            view.hostWebView = web;
             view.displayMode = kPDFDisplaySinglePageContinuous;
             view.displaysPageBreaks = YES;
             view.autoScales = YES;
-            [web addSubview:view];
+            view.wantsLayer = YES;
+            @try {
+                [web setValue:@NO forKey:@"drawsBackground"];
+            } @catch (NSException *exception) {}
+            NSView *firstSub = web.subviews.firstObject;
+            if (firstSub) {
+                [web addSubview:view positioned:NSWindowBelow relativeTo:firstSub];
+            } else {
+                [web addSubview:view];
+            }
             objc_setAssociatedObject(web, &viewKey, view, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
             observer = [[EPNativePdfObserver alloc] init];
@@ -255,14 +431,34 @@ bool ep_pdf_update(WKWebView *web, const unsigned char *bytes, size_t count,
         }
         view.document = document;
         view.autoScales = YES;
+        [observer attachScrollNotifications];
+    } else if (count > 0 && [act isEqualToString:@"update"]) {
+        ep_apply_payload_json(view, bytes, count, false);
     }
 
     if (!view) return false;
+    [observer attachScrollNotifications];
     view.hidden = hidden || width <= 4.0 || height <= 4.0;
     if (!view.hidden) {
         view.frame = NSMakeRect(x, web.isFlipped ? y : NSHeight(web.bounds) - y - height, width, height);
     }
-    if (target_page > 0 && view.document && (NSUInteger)target_page <= view.document.pageCount) {
+    if (scroll_ratio >= 0.0 && scroll_ratio <= 1.0 && observer && observer.scrollView && observer.scrollView.documentView) {
+        NSScrollView *sv = observer.scrollView;
+        NSRect docRect = sv.documentView.bounds;
+        NSRect visRect = sv.contentView.documentVisibleRect;
+        CGFloat maxScroll = docRect.size.height - visRect.size.height;
+        if (maxScroll > 1.0) {
+            CGFloat targetY = sv.documentView.isFlipped
+                ? (scroll_ratio * maxScroll)
+                : (docRect.size.height - visRect.size.height - scroll_ratio * maxScroll);
+            if (fabs(visRect.origin.y - targetY) > 2.0) {
+                observer.suppressScrollReport = YES;
+                [sv.contentView scrollToPoint:NSMakePoint(visRect.origin.x, targetY)];
+                [sv reflectScrolledClipView:sv.contentView];
+                observer.suppressScrollReport = NO;
+            }
+        }
+    } else if (target_page > 0 && view.document && (NSUInteger)target_page <= view.document.pageCount) {
         PDFPage *page = [view.document pageAtIndex:(NSUInteger)(target_page - 1)];
         if (page && view.currentPage != page) {
             if (observer) observer.lastReportedPage = target_page;
@@ -271,6 +467,7 @@ bool ep_pdf_update(WKWebView *web, const unsigned char *bytes, size_t count,
     }
     return true;
 }
+
 
 
 

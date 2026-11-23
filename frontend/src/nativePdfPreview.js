@@ -141,19 +141,51 @@ export function computePdfColumnViewportRect(container) {
   return mapLocalRectToHost({ x: left, y: top, width, height }, win)
 }
 
-function hasBlockingOverlayOpen(container) {
+const OVERLAY_SELECTORS = [
+  '.page-memo-toolbar',
+  '#floating-scroll-nav',
+  '#selection-menu:not(.hidden)',
+  '#ann-hover-tooltip:not(.hidden)',
+  '.floating-memo',
+  '.document-search:not([hidden])',
+  '.capture-overlay',
+  'dialog[open]',
+  '.modal-overlay:not(.hidden)',
+  '#outline-sidebar:not(.hidden)',
+  '#chat-sidebar:not(.hidden)',
+].join(', ')
+
+export function collectInteractiveOverlayRects(container) {
   const doc = container.ownerDocument || document
-  if (doc.body?.dataset?.workspaceInactive === 'true' || doc.hidden) return true
-  if (doc.querySelector('dialog[open], .modal-overlay:not(.hidden), #selection-menu:not(.hidden), #ann-hover-tooltip:not(.hidden), .document-search:not([hidden])')) {
-    return true
-  }
+  const win = doc.defaultView || window
+  const rects = []
   try {
-    const hostDoc = getTauriHostWindow(doc.defaultView || window)?.document
-    if (hostDoc && hostDoc !== doc) {
-      if (hostDoc.querySelector('dialog[open], .modal-overlay:not(.hidden)')) return true
+    const nodes = doc.querySelectorAll?.(OVERLAY_SELECTORS) || []
+    for (const node of nodes) {
+      const style = win.getComputedStyle?.(node)
+      if (style && (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')) continue
+      const r = node.getBoundingClientRect?.()
+      if (!r || r.width <= 1 || r.height <= 1) continue
+      if (r.bottom < 0 || r.top > (win.innerHeight || 2000)) continue
+      rects.push(mapLocalRectToHost(r, win))
+    }
+    const hostWin = getTauriHostWindow(win)
+    if (hostWin && hostWin !== win && hostWin.document) {
+      const hostModals = hostWin.document.querySelectorAll?.('dialog[open], .modal-overlay:not(.hidden)') || []
+      for (const modal of hostModals) {
+        const r = modal.getBoundingClientRect?.()
+        if (r && r.width > 1 && r.height > 1) {
+          rects.push({ x: r.left, y: r.top, width: r.width, height: r.height })
+        }
+      }
     }
   } catch {}
-  return false
+  return rects
+}
+
+function isTabInactive(container) {
+  const doc = container.ownerDocument || document
+  return doc.body?.dataset?.workspaceInactive === 'true' || Boolean(doc.hidden)
 }
 
 async function sendNativePdfCommand(options = {}) {
@@ -173,6 +205,9 @@ async function sendNativePdfCommand(options = {}) {
   if (options.close) headers['x-close'] = '1'
   if (options.hidden) headers['x-hidden'] = '1'
   if (options.page) headers['x-page'] = String(options.page)
+  if (typeof options.scrollRatio === 'number' && Number.isFinite(options.scrollRatio)) {
+    headers['x-scroll-ratio'] = String(options.scrollRatio)
+  }
 
   const payload = toHostArrayBuffer(hostWin, options.bytes)
   const task = queue.then(() => invoke('native_pdf', payload, { headers }))
@@ -212,11 +247,19 @@ export async function mountNativePdf(container, pdfDoc, current, callbacks = {})
   const hostWin = getTauriHostWindow(win)
 
   const rect = () => computePdfColumnViewportRect(container)
-  const isHidden = () => hasBlockingOverlayOpen(container)
+  const isHidden = () => isTabInactive(container)
+  const encodeOverlays = () => {
+    try {
+      return new TextEncoder().encode(JSON.stringify({ overlayRects: collectInteractiveOverlayRects(container) }))
+    } catch {
+      return null
+    }
+  }
 
   await sendNativePdfCommand({
+    action: bytes ? 'load' : 'update',
     rect: rect(),
-    bytes,
+    bytes: bytes || encodeOverlays(),
     hidden: isHidden(),
   })
   mountedDocument = pdfDoc
@@ -224,21 +267,46 @@ export async function mountNativePdf(container, pdfDoc, current, callbacks = {})
 
   container.dataset.nativePdf = 'mounted'
   doc.body?.classList.add('macos-native-pdf-split')
+  try {
+    hostWin?.document?.body?.classList?.add('macos-native-pdf-underlay')
+  } catch {}
 
-  const refreshLayout = () => {
+  let syncingScrollFromNative = false
+  let syncingScrollTimer = null
+
+  const refreshLayout = (extra = {}) => {
     if (!isLatest() || mountedDocument !== pdfDoc) return
     sendNativePdfCommand({
+      action: 'update',
       rect: rect(),
+      bytes: encodeOverlays(),
       hidden: isHidden(),
+      ...extra,
     }).catch(console.error)
   }
 
-  // Register event bridge on top-level host window so Objective-C evaluateJavaScript
-  // reaches the active document tab iframe.
+  // Register event bridge on top-level host window AND iframe window so Objective-C
+  // evaluateJavaScript reaches the active document tab iframe immediately.
   const handleNativeEvent = (event) => {
     if (!isLatest() || !event) return
-    if (event.type === 'page' && Number.isInteger(event.page)) {
-      callbacks.onNativePageChange?.(event.page)
+    if (event.type === 'scroll') {
+      if (typeof event.ratio === 'number' && Number.isFinite(event.ratio)) {
+        const maxWebScroll = Math.max(0, container.scrollHeight - container.clientHeight)
+        if (maxWebScroll > 0) {
+          const targetTop = event.ratio * maxWebScroll
+          if (Math.abs(container.scrollTop - targetTop) > 1.5) {
+            syncingScrollFromNative = true
+            if (syncingScrollTimer) clearTimeout(syncingScrollTimer)
+            container.scrollTop = targetTop
+            syncingScrollTimer = setTimeout(() => { syncingScrollFromNative = false }, 120)
+          }
+        }
+      }
+      if (Number.isInteger(event.page)) {
+        callbacks.onNativePageChange?.(event.page, { fromScroll: true })
+      }
+    } else if (event.type === 'page' && Number.isInteger(event.page)) {
+      callbacks.onNativePageChange?.(event.page, { fromScroll: false })
     } else if (event.type === 'selection') {
       if (event.empty) {
         callbacks.onNativeSelectionChange?.(null)
@@ -252,6 +320,7 @@ export async function mountNativePdf(container, pdfDoc, current, callbacks = {})
           rect: localRect,
         })
       }
+      setTimeout(() => refreshLayout(), 20)
     }
   }
 
@@ -260,22 +329,34 @@ export async function mountNativePdf(container, pdfDoc, current, callbacks = {})
   }
   win.__easypaperNativePdfDispatch = handleNativeEvent
 
-  const resizeObserver = new ResizeObserver(refreshLayout)
+  // Push initial interactive overlay hit-test rects right after load
+  refreshLayout()
+
+  const resizeObserver = new ResizeObserver(() => refreshLayout())
   resizeObserver.observe(container)
   const firstPair = container.querySelector('.page-pair')
   if (firstPair) resizeObserver.observe(firstPair)
 
-  const mutationObserver = new MutationObserver(refreshLayout)
+  const mutationObserver = new MutationObserver(() => refreshLayout())
   if (doc.body) {
     mutationObserver.observe(doc.body, {
       attributes: true,
+      childList: true,
       subtree: true,
       attributeFilter: ['class', 'hidden', 'open', 'style', 'data-workspace-inactive'],
     })
   }
-  const onScroll = () => refreshLayout()
+  const onScroll = () => {
+    if (syncingScrollFromNative) {
+      refreshLayout()
+      return
+    }
+    const maxWebScroll = Math.max(0, container.scrollHeight - container.clientHeight)
+    const ratio = maxWebScroll > 0 ? Math.max(0, Math.min(1, container.scrollTop / maxWebScroll)) : 0
+    refreshLayout({ scrollRatio: ratio })
+  }
   container.addEventListener('scroll', onScroll, { passive: true })
-  win.addEventListener('resize', refreshLayout)
+  win.addEventListener('resize', () => refreshLayout())
 
   const controller = {
     goToPage(pageNum) {

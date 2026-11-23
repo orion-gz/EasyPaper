@@ -720,10 +720,34 @@ body.toolbar-hidden .panels {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+body.macos-native-pdf-underlay,
+body.macos-native-pdf-underlay #tab-workspace,
+body.macos-native-pdf-underlay #workspace-tab-panel,
+body.macos-native-pdf-underlay .workspace-document-frame,
+body.macos-native-pdf-split,
+body.macos-native-pdf-split #viewer-screen,
+body.macos-native-pdf-split .viewer-scroll-container,
+body.macos-native-pdf-split .page-pair,
+body.macos-native-pdf-split .pdf-page-wrapper,
 body.macos-native-pdf-split .pdf-page-inner {
-  background: transparent;
-  box-shadow: none;
-  border-color: transparent;
+  background: transparent !important;
+}
+
+body.macos-native-pdf-split .page-pair,
+body.macos-native-pdf-split .pdf-page-wrapper,
+body.macos-native-pdf-split .pdf-page-inner {
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+body.macos-native-pdf-split .page-memo-toolbar {
+  position: relative;
+  z-index: 25;
+  background: var(--bg-elevated);
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 다크 모드일 때 PDF 원문 페이지 색상 반전 (눈 보호)
