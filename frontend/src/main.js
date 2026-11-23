@@ -1503,11 +1503,11 @@ async function handleFiles(uploadItems, targetFolderId = null) {
   for (const uploaded of successes) {
     const { classification, result, rememberedTypeOptions } = uploaded
     const confirmedClassification = classification.classificationMethod === 'ai'
-      ? await requireClassificationConfirmation(result.session_id)
+      ? { document_mode: result.document_mode || classification.documentMode, document_type: result.document_type || classification.documentType }
       : { document_mode: classification.documentMode, document_type: classification.documentType }
     result.document_mode = confirmedClassification.document_mode
     result.document_type = confirmedClassification.document_type
-    result.classification_status = "confirmed"
+    result.classification_status = classification.classificationMethod === 'ai' ? 'pending' : 'confirmed'
     const title = result.metadata?.title || result.filename
     if (isLongDocument(result.total_pages) && getTranslationMode(result.document_mode) === 'auto') {
       showToast('50페이지 이상 문서는 전체 자동 번역 대신 보는 페이지부터 번역됩니다.', 'info')
@@ -11320,25 +11320,48 @@ async function loadDocumentReferences(docId) {
   }
 }
 
-async function finishDocumentPreparation(doc, isCurrentOpen) {
+async function finishDocumentPreparation(doc, isCurrentOpen, { blocking = false } = {}) {
   let preparation = doc.preparation
   const notice = document.createElement('span')
   notice.id = 'viewer-preparation-status'
   notice.className = 'processing-badge'
   notice.setAttribute('role', 'status')
   notice.dataset.i18n = 'viewer:preparation.running'
-  notice.textContent = t('viewer:preparation.running')
+  const updateNoticeProgress = prep => {
+    const baseText = t('viewer:preparation.running')
+    if (Number.isFinite(prep?.percent)) {
+      const pageInfo = prep.total_pages > 0 && Number.isFinite(prep.current_page)
+        ? ` (${prep.current_page}/${prep.total_pages})`
+        : ''
+      notice.textContent = `${baseText} · ${Math.round(prep.percent)}%${pageInfo}`
+    } else {
+      notice.textContent = baseText
+    }
+    if (blocking && isCurrentOpen()) {
+      const rawPct = Number.isFinite(prep?.percent) ? prep.percent : 10
+      const mappedPct = 15 + Math.round((Math.max(0, Math.min(100, rawPct)) / 100) * 55)
+      notifyWorkspace('load-progress', {
+        stage: 'extracting',
+        percent: mappedPct,
+        current: prep?.current_page,
+        total: prep?.total_pages,
+      })
+    }
+  }
+  updateNoticeProgress(preparation)
   $('viewer-preparation-status')?.remove()
   $('viewer-topbar').querySelector('.topbar-left').append(notice)
   let failures = 0
   try {
     while (preparation.status === 'running') {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, blocking ? 600 : 1500))
       if (!isCurrentOpen()) return
       try {
         const response = await fetch(`/api/library/${encodeURIComponent(doc.id)}/preparation`)
         if (!response.ok) throw new Error(`Document preparation: HTTP ${response.status}`)
         preparation = await response.json()
+        doc.preparation = preparation
+        updateNoticeProgress(preparation)
         failures = 0
       } catch (error) {
         if (++failures >= 3) throw error
@@ -11351,14 +11374,16 @@ async function finishDocumentPreparation(doc, isCurrentOpen) {
     notice.remove()
     void loadDocumentImages(doc.id)
     void loadDocumentReferences(doc.id)
-    void loadPDFOutline()
-    // Do not interrupt an editor (including IME composition) to upgrade OCR.
-    while (document.activeElement?.closest('.floating-memo')) {
-      await new Promise(resolve => setTimeout(resolve, 150))
-      if (!isCurrentOpen()) return
+    if (!blocking) {
+      void loadPDFOutline()
+      // Do not interrupt an editor (including IME composition) to upgrade OCR.
+      while (document.activeElement?.closest('.floating-memo')) {
+        await new Promise(resolve => setTimeout(resolve, 150))
+        if (!isCurrentOpen()) return
+      }
+      // Upgrade native PDF selection to OCR/layout text after analysis completes.
+      if (isCurrentOpen()) await setZoom(state.zoom)
     }
-    // Upgrade native PDF selection to OCR/layout text after analysis completes.
-    if (isCurrentOpen()) await setZoom(state.zoom)
   } catch (error) {
     if (!isCurrentOpen()) return
     console.warn('Document preparation:', error)
@@ -11483,6 +11508,14 @@ async function openFromLibrary(doc, shouldPushState = true) {
   $('viewer-preparation-status')?.remove()
   docOpeningId = doc.id
   try {
+    const deferredExtraction = Boolean(doc.metadata?.extraction_deferred)
+    if (deferredExtraction && doc.content_kind !== 'html_article' && doc.preparation && doc.preparation.status !== 'ready') {
+      await finishDocumentPreparation(doc, isCurrentOpen, { blocking: true })
+      if (!isCurrentOpen()) return
+      if (doc.preparation?.status === 'ready' && doc.metadata) {
+        delete doc.metadata.extraction_deferred
+      }
+    }
     if (doc.classification_status && doc.classification_status !== 'confirmed') {
       const confirmed = await requireClassificationConfirmation(doc.id)
       doc.document_mode = confirmed.document_mode

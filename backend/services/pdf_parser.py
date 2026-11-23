@@ -6,7 +6,13 @@ from functools import lru_cache
 from typing import List, Dict, Any, Optional, Tuple
 
 
-def extract_pages(pdf_path: str, engine: Optional[str] = None, *, normalize_layout: bool = True) -> List[Dict[str, Any]]:
+def extract_pages(
+    pdf_path: str,
+    engine: Optional[str] = None,
+    *,
+    normalize_layout: bool = True,
+    on_progress: Optional[Any] = None,
+) -> List[Dict[str, Any]]:
     """
     PDF에서 페이지별 텍스트 블록을 추출합니다.
     선택된 엔진(pymupdf, pdfplumber, marker, mineru)에 따라 파싱을 수행합니다.
@@ -20,10 +26,15 @@ def extract_pages(pdf_path: str, engine: Optional[str] = None, *, normalize_layo
 
     engine = (engine or "pymupdf").lower().strip()
 
-    extract = {"pdfplumber": _extract_pages_pdfplumber, "marker": _extract_pages_marker,
-               "mineru": _extract_pages_mineru}.get(engine, _extract_pages_pymupdf)
     from services.pdf_layout import normalize_document
-    pages = extract(pdf_path)
+    if engine == "pdfplumber":
+        pages = _extract_pages_pdfplumber(pdf_path, on_progress=on_progress)
+    elif engine == "marker":
+        pages = _extract_pages_marker(pdf_path)
+    elif engine == "mineru":
+        pages = _extract_pages_mineru(pdf_path)
+    else:
+        pages = _extract_pages_pymupdf(pdf_path, on_progress=on_progress)
     if not normalize_layout:
         for page in pages:
             page.pop("_layout_native", None)
@@ -31,45 +42,51 @@ def extract_pages(pdf_path: str, engine: Optional[str] = None, *, normalize_layo
                 page["blocks"] = [b for b in page["blocks"] if b.get("role") != "footnote" and b.get("include_in_translation", True)]
                 page["text"] = clean_text_for_translation("\n\n".join(b["text"] for b in page["blocks"]))
         return pages
-    return normalize_document(pages, pdf_path)
+    return normalize_document(pages, pdf_path, on_progress=on_progress)
 
 
-def _extract_pages_pymupdf(pdf_path: str) -> List[Dict[str, Any]]:
+def _extract_pages_pymupdf(pdf_path: str, *, on_progress: Optional[Any] = None) -> List[Dict[str, Any]]:
     doc = fitz.open(pdf_path)
     try:
         pages = []
         recovery_context = {}
+        total = len(doc)
 
-        for page_num in range(len(doc)):
+        for page_num in range(total):
             page = doc[page_num]
             page_data = _extract_page(page, page_num + 1, recovery_context)
             page_data["parser_engine"] = "pymupdf"
             pages.append(page_data)
+            if on_progress is not None:
+                on_progress("extracting", page_num + 1, total)
 
         return pages
     finally:
         doc.close()
 
 
-def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
+def _extract_pages_pdfplumber(pdf_path: str, *, on_progress: Optional[Any] = None) -> List[Dict[str, Any]]:
     try:
         import pdfplumber
     except ImportError:
         import logging
         logging.warning("pdfplumber가 설치되어 있지 않아 PyMuPDF 파서로 폴백합니다.")
-        return _extract_pages_pymupdf(pdf_path)
+        return _extract_pages_pymupdf(pdf_path, on_progress=on_progress)
 
     try:
         pages = []
         from services.pdf_text_recovery import needs_text_recovery
         recovery_context = {}
         with pdfplumber.open(pdf_path) as pdf, fitz.open(pdf_path) as source:
+            total = len(pdf.pages)
             for idx, p in enumerate(pdf.pages):
                 page_num = idx + 1
                 if needs_text_recovery(source[idx]):
                     recovered = _extract_page(source[idx], page_num, recovery_context)
                     recovered["parser_engine"] = "pdfplumber"
                     pages.append(recovered)
+                    if on_progress is not None:
+                        on_progress("extracting", page_num, total)
                     continue
                 text = p.extract_text() or ""
                 blocks = []
@@ -85,11 +102,13 @@ def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
                     "blocks": blocks,
                     "parser_engine": "pdfplumber"
                 })
-        return pages if pages else _extract_pages_pymupdf(pdf_path)
+                if on_progress is not None:
+                    on_progress("extracting", page_num, total)
+        return pages if pages else _extract_pages_pymupdf(pdf_path, on_progress=on_progress)
     except Exception as e:
         import logging
         logging.warning(f"pdfplumber 파싱 중 오류 발생 ({e}). PyMuPDF로 폴백합니다.")
-        return _extract_pages_pymupdf(pdf_path)
+        return _extract_pages_pymupdf(pdf_path, on_progress=on_progress)
 
 
 def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:
@@ -1478,6 +1497,24 @@ def _mineru_page_regions(content_list: tuple) -> Dict[int, List[Dict[str, Any]]]
     return regions_by_page
 
 
+_dict_cache: tuple = (None, None, None)  # doc, page number, blocks (swapped atomically)
+
+
+def _page_dict_blocks(page: "fitz.Page") -> list:
+    """get_text("dict") blocks, reused when the same page is read repeatedly.
+
+    Callers must treat the result as read-only.
+    """
+    doc = page.parent
+    global _dict_cache
+    cached = _dict_cache
+    if cached[0] is doc and cached[1] == page.number:
+        return cached[2]
+    blocks = page.get_text("dict")["blocks"]
+    _dict_cache = (doc, page.number, blocks)
+    return blocks
+
+
 def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
     """
     페이지에서 "Figure 1", "Table 2" 처럼 캡션으로 시작하는 줄을 찾아
@@ -1495,7 +1532,7 @@ def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
     실패하므로, 매칭 전용으로 별표를 제거한 버전을 따로 만들어 사용한다.
     """
     captions = []
-    blocks = page.get_text("dict")["blocks"]
+    blocks = _page_dict_blocks(page)
     for b in blocks:
         lines = b.get("lines")
         if not lines:
@@ -1828,7 +1865,7 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
     """
     page_width = page.rect.width
     page_height = page.rect.height
-    blocks = page.get_text("dict")["blocks"]
+    blocks = _page_dict_blocks(page)
 
     all_lines = []  # (x0, y0, x1, y1) - 페이지 내 모든 텍스트 줄
     line_texts: Dict[tuple, str] = {}  # bbox -> 그 줄의 텍스트 (산문 판별용)
@@ -2169,6 +2206,22 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
 
 
 def _extract_pdf_images_from_doc(doc, pdf_path: str, engine: str) -> List[Dict[str, Any]]:
+    # Open pdfplumber once instead of once per page (O(n^2) on long documents).
+    pl_pdf = None
+    if engine == "pdfplumber":
+        try:
+            import pdfplumber
+            pl_pdf = pdfplumber.open(pdf_path)
+        except Exception:
+            pl_pdf = None
+    try:
+        return _extract_pdf_images_impl(doc, pdf_path, engine, pl_pdf)
+    finally:
+        if pl_pdf is not None:
+            pl_pdf.close()
+
+
+def _extract_pdf_images_impl(doc, pdf_path: str, engine: str, pl_pdf) -> List[Dict[str, Any]]:
     images_data = []
 
     # ── 1단계: 모든 페이지의 캡션과 후보 사각형을 먼저 수집 ──
@@ -2185,15 +2238,14 @@ def _extract_pdf_images_from_doc(doc, pdf_path: str, engine: str) -> List[Dict[s
         raw_rects = []
 
         # pdfplumber 엔진인 경우 표(Table) 영역 추적 추가
-        if engine == "pdfplumber":
+        if pl_pdf is not None:
             try:
-                import pdfplumber
-                with pdfplumber.open(pdf_path) as pl_pdf:
-                    if page_num < len(pl_pdf.pages):
-                        pl_page = pl_pdf.pages[page_num]
-                        for tbl in pl_page.find_tables():
-                            bbox = tbl.bbox # (x0, top, x1, bottom)
-                            raw_rects.append([bbox[0], bbox[1], bbox[2], bbox[3]])
+                if page_num < len(pl_pdf.pages):
+                    pl_page = pl_pdf.pages[page_num]
+                    for tbl in pl_page.find_tables():
+                        bbox = tbl.bbox # (x0, top, x1, bottom)
+                        raw_rects.append([bbox[0], bbox[1], bbox[2], bbox[3]])
+                    pl_page.close()
             except Exception:
                 pass
 
@@ -2211,15 +2263,10 @@ def _extract_pdf_images_from_doc(doc, pdf_path: str, engine: str) -> List[Dict[s
                 
         # 2-1. 내장 테이블 Finder 감지
         try:
-            finder = page.find_tables()
-            if finder and finder.tables:
-                for table in finder.tables:
-                    bbox = table.bbox
-                    x0, y0, x1, y1 = bbox
-                    w = x1 - x0
-                    h = y1 - y0
-                    if w >= 15 and h >= 15:
-                        raw_rects.append([x0, y0, x1, y1])
+            from services.pdf_tables import page_table_bboxes
+            for x0, y0, x1, y1 in page_table_bboxes(page, pdf_path):
+                if x1 - x0 >= 15 and y1 - y0 >= 15:
+                    raw_rects.append([x0, y0, x1, y1])
         except Exception:
             pass
 

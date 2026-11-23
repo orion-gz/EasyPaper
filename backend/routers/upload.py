@@ -69,13 +69,33 @@ def _restore_session(session_id: str) -> bool:
                 parser_engine = "readability"
                 parser_version = str(doc.get("content_schema_version") or 1)
             elif parser_engine in {"marker", "mineru"}:
+                from services.document_preparation import update_progress
+                update_progress(session_id, "extracting", 15, 0, doc.get("total_pages") or 0, int(doc.get("content_revision") or 1))
                 from services.reparse import load_document_parse
                 payload = load_document_parse(session_id, doc, pdf_path)
                 pages = payload["pages"]
                 parser_version = payload["parser_version"]
+                update_progress(session_id, "layout", 75, len(pages), len(pages), int(doc.get("content_revision") or 1))
             else:
-                pages = extract_pages(pdf_path, engine=parser_engine,
-                                      normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
+                from services.document_preparation import update_progress
+                revision = int(doc.get("content_revision") or 1)
+
+                def _report_progress(phase: str, current: int, total: int) -> None:
+                    ratio = (current / total) if total > 0 else 1.0
+                    pct = 5 + int(ratio * 25) if phase == "extracting" else 30 + int(ratio * 45)
+                    update_progress(session_id, phase, pct, current, total, revision)
+
+                try:
+                    pages = extract_pages(
+                        pdf_path, engine=parser_engine,
+                        normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")),
+                        on_progress=_report_progress,
+                    )
+                except TypeError:
+                    pages = extract_pages(
+                        pdf_path, engine=parser_engine,
+                        normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")),
+                    )
                 from services.pdf_diagnostics import parser_version as resolve_parser_version
                 parser_version = resolve_parser_version(parser_engine)
             if parser_engine not in {"marker", "mineru"}:
@@ -288,6 +308,7 @@ async def upload_pdf(
     from config import get_pdf_parser_engine
     parse_options = {
         "parser_engine": get_pdf_parser_engine(),
+        "defer_extraction": True,
         "filename": file.filename,
         "file_size_mb": file_size_mb,
         "username": current_user,
@@ -321,6 +342,20 @@ async def upload_pdf(
     )
 
 
+def require_session_or_deferred(session_id: str, current_user: str) -> dict:
+    """Session view that never forces extraction of a not-yet-opened upload."""
+    from services.db import db_get_document
+    from services.parse_job import EXTRACTION_DEFERRED
+    doc = None if session_id in sessions else db_get_document(session_id)
+    if doc and doc.get("username") == current_user and (doc.get("metadata") or {}).get(EXTRACTION_DEFERRED):
+        return {
+            **doc,
+            "metadata": {k: v for k, v in doc["metadata"].items() if k != EXTRACTION_DEFERRED},
+            "classification_status": doc.get("classification_status", "confirmed"),
+        }
+    return require_session_owner(session_id, current_user)
+
+
 @router.get("/upload/{session_id}/status")
 async def get_upload_status(session_id: str, current_user: str = Depends(get_current_user)):
     """Return durable parse state even before the document row exists."""
@@ -335,7 +370,7 @@ async def get_upload_status(session_id: str, current_user: str = Depends(get_cur
         "status": task["status"], "error_code": task.get("last_error_code"),
     }
     if task["status"] == "succeeded":
-        session = await asyncio.to_thread(require_session_owner, session_id, current_user)
+        session = await asyncio.to_thread(require_session_or_deferred, session_id, current_user)
         response["result"] = {
             "session_id": session_id, "filename": session["filename"],
             "total_pages": session["total_pages"],
@@ -355,7 +390,7 @@ async def get_upload_status(session_id: str, current_user: str = Depends(get_cur
 @router.get("/session/{session_id}")
 async def get_session(session_id: str, current_user: str = Depends(get_current_user)):
     """세션 정보를 반환합니다."""
-    session = await asyncio.to_thread(require_session_owner, session_id, current_user)
+    session = await asyncio.to_thread(require_session_or_deferred, session_id, current_user)
     return {
         "session_id": session_id,
         "filename": session["filename"],

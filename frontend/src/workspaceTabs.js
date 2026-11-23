@@ -57,10 +57,13 @@ export function createWorkspaceTabs(adapter) {
       preparing: t('navigation:loadProgress.preparing'),
       metadata: t('navigation:loadProgress.metadata'),
       loading: t('navigation:loadProgress.loading'),
+      extracting: progress.total > 0
+        ? t('navigation:loadProgress.extractingPages', { current: progress.current || 0, total: progress.total })
+        : t('navigation:loadProgress.extracting'),
       rendering: t('navigation:loadProgress.rendering'),
       restoring: t('navigation:loadProgress.restoring'),
     }
-    loadingText.textContent = labels[progress.stage]
+    loadingText.textContent = progress.detail || labels[progress.stage]
     percentage.textContent = `${progress.percent}%`
     bar.value = progress.percent
   }
@@ -552,9 +555,15 @@ export function createWorkspaceTabs(adapter) {
       record.store.update(id, { title: record.frame.title })
     }
     if (type === 'load-progress') {
-      const stages = ['preparing', 'metadata', 'loading', 'rendering', 'restoring']
+      const stages = ['preparing', 'metadata', 'loading', 'extracting', 'rendering', 'restoring']
       if (stages.includes(payload?.stage) && Number.isFinite(payload.percent)) {
-        record.progress = { stage: payload.stage, percent: Math.max(record.progress?.percent || 0, Math.min(99, Math.round(payload.percent))) }
+        record.progress = {
+          stage: payload.stage,
+          percent: Math.max(record.progress?.percent || 0, Math.min(99, Math.round(payload.percent))),
+          current: payload.current,
+          total: payload.total,
+          detail: payload.detail,
+        }
         if (record.store === store && id === visibleId) renderLoading(record)
       }
     }

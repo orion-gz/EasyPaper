@@ -65,6 +65,8 @@
   "loadProgress.preparing": "Preparing viewer",
   "loadProgress.metadata": "Checking document information",
   "loadProgress.loading": "Loading and decoding PDF",
+  "loadProgress.extracting": "Extracting PDF text and layout",
+  "loadProgress.extractingPages": "Extracting PDF text and layout ({{current}}/{{total}} pages)",
   "loadProgress.rendering": "Rendering pages",
   "loadProgress.restoring": "Restoring reading position and layout"
 }

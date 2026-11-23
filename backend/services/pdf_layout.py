@@ -37,7 +37,6 @@ def native_blocks(page, raw=None):
     raw = raw or page.get_text("rawdict", flags=0)
     # Some producers put multiple columns into one PDF text block. Separate
     # disconnected horizontal line intervals before assigning stable IDs.
-    raw = copy.deepcopy(raw)
     expanded = []
     for block in raw.get("blocks", []):
         lines = block.get("lines", [])
@@ -400,12 +399,13 @@ def validate_ai_order(answer, blocks):
     return result
 
 
-def normalize_document(pages, pdf_path):
+def normalize_document(pages, pdf_path, *, on_progress=None):
     import fitz
     from services.pdf_diagnostics import pdf_fingerprint
     from services.pdf_layout_vision import resolver_for_page
     revision = pdf_fingerprint(pdf_path)
     result = []
+    total = len(pages)
     from collections import Counter
     with fitz.open(pdf_path) as doc:
         margin_counts = Counter()
@@ -415,20 +415,18 @@ def normalize_document(pages, pdf_path):
             margins = source.get_text("blocks")
             margin_counts.update(set(normalized(b[4])[0] for b in margins
                                      if b[6] == 0 and (b[1] < rect.height * .07 or b[3] > rect.height * .93)))
-        for page in pages:
+        for index, page in enumerate(pages, start=1):
             source = doc[page["page_num"] - 1]
             native = page.get("_layout_native") or native_blocks(source)
-            page = copy.deepcopy(page)
-            page.pop("_layout_native", None)
+            # normalize_page deep-copies; a shallow copy is enough here.
+            page = {k: v for k, v in page.items() if k != "_layout_native"}
             # PyMuPDF boxes are always unrotated, including rotated/cropped PDFs.
             rect = source.rect * source.derotation_matrix
             from services.pdf_parser import _find_page_equations, _find_vector_figure_rects
             regions = [(item["bbox"], "equation", f"equation-{index}") for index, item in enumerate(_find_page_equations(source))]
-            try:
-                regions.extend((list(table.bbox), "table", f"table-{index}") for index, table in enumerate(source.find_tables().tables))
-            except Exception:
-                # Table detection is optional geometric evidence; never drop text.
-                pass
+            # Table detection is optional geometric evidence; never drop text.
+            from services.pdf_tables import page_table_bboxes
+            regions.extend((box, "table", f"table-{index}") for index, box in enumerate(page_table_bboxes(source, pdf_path)))
             objects = list(regions)
             if not page.get("text_recovery"):
                 figures = [item["bbox"] for item in source.get_image_info()] + _find_vector_figure_rects(source)
@@ -462,6 +460,8 @@ def normalize_document(pages, pdf_path):
                         block["role"] = "footnote"
             resolve = resolver_for_page(pdf_path, page["page_num"], revision)
             result.append(normalize_page(page, native, rect.width, rect.height, revision, resolve))
+            if on_progress is not None:
+                on_progress("layout", index, total)
     return result
 
 
