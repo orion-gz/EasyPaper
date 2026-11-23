@@ -131,9 +131,20 @@ class DocumentClassificationConfirmation(BaseModel):
 
 @router.get("/library/{doc_id}/classification")
 async def get_document_classification(doc_id: str, current_user: str = Depends(get_current_user)):
-    from services.document_classification import classification_payload
+    from services.document_classification import classification_payload, start_classification_task
+    from services.document_preparation import start_preparation
+    from services.document_tasks import latest_task
     from services.ownership import require_owned_document
-    return classification_payload(require_owned_document(doc_id, current_user))
+    from services.parse_job import EXTRACTION_DEFERRED
+    from routers.upload import sessions
+    doc = require_owned_document(doc_id, current_user)
+    if doc.get("classification_status") == "pending":
+        if (doc.get("metadata") or {}).get(EXTRACTION_DEFERRED):
+            start_preparation(doc, retry=True)
+        elif doc_id in sessions and latest_task(doc_id, "classification") is None:
+            title = (doc.get("metadata") or {}).get("title") or doc.get("filename", "document.pdf")
+            start_classification_task(doc_id, title, sessions[doc_id]["pages"])
+    return classification_payload(doc)
 
 
 @router.post("/library/{doc_id}/classification/confirm")
@@ -151,10 +162,11 @@ async def confirm_document_classification(doc_id: str, body: DocumentClassificat
         return {"status": "confirmed", "document_mode": doc["document_mode"], "document_type": doc["document_type"]}
     if not await asyncio.to_thread(ensure_session, doc_id):
         raise HTTPException(status_code=409, detail="문서 원문을 복원할 수 없습니다.")
+    from services.parse_job import finalize_deferred_document, start_processing_after_classification
+    await finalize_deferred_document(doc_id)
     db_update_document_classification(doc_id, body.document_mode, body.document_type, MODE_SCHEMA_VERSION)
     sessions[doc_id]["document_mode"] = body.document_mode
     sessions[doc_id]["document_type"] = body.document_type
     sessions[doc_id]["classification_status"] = "confirmed"
-    from services.parse_job import start_processing_after_classification
     start_processing_after_classification(doc_id, sessions)
     return {"status": "confirmed", "document_mode": body.document_mode, "document_type": body.document_type}

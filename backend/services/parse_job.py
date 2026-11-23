@@ -30,10 +30,8 @@ def _source_path(doc_id: str, configured_path: str | None, upload_root: str) -> 
 
 
 def _should_defer_extraction(options: dict, engine: str, doc_id: str) -> bool:
-    """Fast upload path: only AI classification (needs page text) stays eager."""
+    """Fast upload path: store PDF and defer text/layout extraction to first open."""
     if not options.get("defer_extraction") or engine not in _DEFERRABLE_ENGINES:
-        return False
-    if options.get("classification_method", "ai") == "ai":
         return False
     from services.library import get_document
     return get_document(doc_id) is None
@@ -44,6 +42,7 @@ async def _store_upload_only(task_id, doc_id, pdf_path, options, engine, metadat
     from services.library import save_document
     from services.pdf_diagnostics import parser_version
     from services.pdf_layout import RULE_VERSION
+    classification_status = "pending" if options.get("classification_method", "ai") == "ai" else "confirmed"
     try:
         metadata = dict(await asyncio.to_thread(metadata_reader, pdf_path))
         total_pages = int(metadata.get("total_pages") or 0)
@@ -59,7 +58,7 @@ async def _store_upload_only(task_id, doc_id, pdf_path, options, engine, metadat
             source_language=source_lang, detected_source_language="und",
             source_language_confidence=None, preferred_target_language=target_lang,
             content_revision=1, parser_engine=engine,
-            parser_version=parser_version(engine), classification_status="confirmed",
+            parser_version=parser_version(engine), classification_status=classification_status,
         )
     except asyncio.CancelledError:
         update_task(task_id, status="cancelled", cancel_requested=True)
@@ -76,7 +75,7 @@ async def _store_upload_only(task_id, doc_id, pdf_path, options, engine, metadat
         "metadata": {k: v for k, v in metadata.items() if k != EXTRACTION_DEFERRED},
         "document_mode": options.get("document_mode", "research"),
         "document_type": options.get("document_type", "research_paper"),
-        "classification_status": "confirmed",
+        "classification_status": classification_status,
         "source_language": source_lang,
         "detected_source_language": "und",
         "source_language_confidence": None,
@@ -92,6 +91,7 @@ async def finalize_deferred_document(doc_id: str) -> None:
     """
     from routers.upload import sessions
     from services.db import db_finalize_document_parse, db_get_document, get_db
+    from services.document_preparation import update_progress
     lock = _finalize_locks.setdefault(doc_id, asyncio.Lock())
     async with lock:
         doc = db_get_document(doc_id)
@@ -102,6 +102,7 @@ async def finalize_deferred_document(doc_id: str) -> None:
         engine = session.get("parser_engine") or "pymupdf"
         version = session.get("parser_version")
 
+        update_progress(doc_id, "images", 80, len(pages), len(pages))
         from services.cache import get_cached_images, save_images_cache
         from services.pdf_diagnostics import diagnose_pages
         from services.pdf_parser import extract_pdf_images
@@ -115,6 +116,7 @@ async def finalize_deferred_document(doc_id: str) -> None:
                 save_images_cache(doc_id, pdf_path, images, engine, version, strict=True)
         except Exception:
             images = []
+        update_progress(doc_id, "finalizing", 95, len(pages), len(pages))
         report = diagnose_pages(pages, images, engine, version)
         with get_db() as conn:
             conn.execute(
@@ -151,7 +153,13 @@ async def finalize_deferred_document(doc_id: str) -> None:
             doc.get("username", "admin"), "upload", doc.get("document_mode", "research"),
             doc.get("document_type", "research_paper"), numeric_value=len(pages), status="indexed",
         )
-        start_processing_after_classification(doc_id, sessions)
+        if doc.get("classification_status") == "pending":
+            from services.document_classification import start_classification_task
+            start_classification_task(
+                doc_id, metadata.get("title") or doc.get("filename", "document.pdf"), pages,
+            )
+        else:
+            start_processing_after_classification(doc_id, sessions)
 
 
 async def execute_parse_task(

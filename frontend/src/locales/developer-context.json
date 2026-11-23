@@ -5900,6 +5900,12 @@
   "navigation:loadProgress.loading": {
     "description": "Document viewer opening progress: Loading and decoding PDF"
   },
+  "navigation:loadProgress.extracting": {
+    "description": "Document viewer opening progress: Extracting PDF text and layout"
+  },
+  "navigation:loadProgress.extractingPages": {
+    "description": "Document viewer opening progress with page counter: Extracting PDF text and layout (current/total pages)"
+  },
   "navigation:loadProgress.rendering": {
     "description": "Document viewer opening progress: Rendering pages"
   },

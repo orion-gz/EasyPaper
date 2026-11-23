@@ -6,7 +6,13 @@ from functools import lru_cache
 from typing import List, Dict, Any, Optional, Tuple
 
 
-def extract_pages(pdf_path: str, engine: Optional[str] = None, *, normalize_layout: bool = True) -> List[Dict[str, Any]]:
+def extract_pages(
+    pdf_path: str,
+    engine: Optional[str] = None,
+    *,
+    normalize_layout: bool = True,
+    on_progress: Optional[Any] = None,
+) -> List[Dict[str, Any]]:
     """
     PDF에서 페이지별 텍스트 블록을 추출합니다.
     선택된 엔진(pymupdf, pdfplumber, marker, mineru)에 따라 파싱을 수행합니다.
@@ -20,10 +26,15 @@ def extract_pages(pdf_path: str, engine: Optional[str] = None, *, normalize_layo
 
     engine = (engine or "pymupdf").lower().strip()
 
-    extract = {"pdfplumber": _extract_pages_pdfplumber, "marker": _extract_pages_marker,
-               "mineru": _extract_pages_mineru}.get(engine, _extract_pages_pymupdf)
     from services.pdf_layout import normalize_document
-    pages = extract(pdf_path)
+    if engine == "pdfplumber":
+        pages = _extract_pages_pdfplumber(pdf_path, on_progress=on_progress)
+    elif engine == "marker":
+        pages = _extract_pages_marker(pdf_path)
+    elif engine == "mineru":
+        pages = _extract_pages_mineru(pdf_path)
+    else:
+        pages = _extract_pages_pymupdf(pdf_path, on_progress=on_progress)
     if not normalize_layout:
         for page in pages:
             page.pop("_layout_native", None)
@@ -31,45 +42,51 @@ def extract_pages(pdf_path: str, engine: Optional[str] = None, *, normalize_layo
                 page["blocks"] = [b for b in page["blocks"] if b.get("role") != "footnote" and b.get("include_in_translation", True)]
                 page["text"] = clean_text_for_translation("\n\n".join(b["text"] for b in page["blocks"]))
         return pages
-    return normalize_document(pages, pdf_path)
+    return normalize_document(pages, pdf_path, on_progress=on_progress)
 
 
-def _extract_pages_pymupdf(pdf_path: str) -> List[Dict[str, Any]]:
+def _extract_pages_pymupdf(pdf_path: str, *, on_progress: Optional[Any] = None) -> List[Dict[str, Any]]:
     doc = fitz.open(pdf_path)
     try:
         pages = []
         recovery_context = {}
+        total = len(doc)
 
-        for page_num in range(len(doc)):
+        for page_num in range(total):
             page = doc[page_num]
             page_data = _extract_page(page, page_num + 1, recovery_context)
             page_data["parser_engine"] = "pymupdf"
             pages.append(page_data)
+            if on_progress is not None:
+                on_progress("extracting", page_num + 1, total)
 
         return pages
     finally:
         doc.close()
 
 
-def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
+def _extract_pages_pdfplumber(pdf_path: str, *, on_progress: Optional[Any] = None) -> List[Dict[str, Any]]:
     try:
         import pdfplumber
     except ImportError:
         import logging
         logging.warning("pdfplumber가 설치되어 있지 않아 PyMuPDF 파서로 폴백합니다.")
-        return _extract_pages_pymupdf(pdf_path)
+        return _extract_pages_pymupdf(pdf_path, on_progress=on_progress)
 
     try:
         pages = []
         from services.pdf_text_recovery import needs_text_recovery
         recovery_context = {}
         with pdfplumber.open(pdf_path) as pdf, fitz.open(pdf_path) as source:
+            total = len(pdf.pages)
             for idx, p in enumerate(pdf.pages):
                 page_num = idx + 1
                 if needs_text_recovery(source[idx]):
                     recovered = _extract_page(source[idx], page_num, recovery_context)
                     recovered["parser_engine"] = "pdfplumber"
                     pages.append(recovered)
+                    if on_progress is not None:
+                        on_progress("extracting", page_num, total)
                     continue
                 text = p.extract_text() or ""
                 blocks = []
@@ -85,11 +102,13 @@ def _extract_pages_pdfplumber(pdf_path: str) -> List[Dict[str, Any]]:
                     "blocks": blocks,
                     "parser_engine": "pdfplumber"
                 })
-        return pages if pages else _extract_pages_pymupdf(pdf_path)
+                if on_progress is not None:
+                    on_progress("extracting", page_num, total)
+        return pages if pages else _extract_pages_pymupdf(pdf_path, on_progress=on_progress)
     except Exception as e:
         import logging
         logging.warning(f"pdfplumber 파싱 중 오류 발생 ({e}). PyMuPDF로 폴백합니다.")
-        return _extract_pages_pymupdf(pdf_path)
+        return _extract_pages_pymupdf(pdf_path, on_progress=on_progress)
 
 
 def _extract_pages_marker(pdf_path: str) -> List[Dict[str, Any]]:

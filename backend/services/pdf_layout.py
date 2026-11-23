@@ -399,12 +399,13 @@ def validate_ai_order(answer, blocks):
     return result
 
 
-def normalize_document(pages, pdf_path):
+def normalize_document(pages, pdf_path, *, on_progress=None):
     import fitz
     from services.pdf_diagnostics import pdf_fingerprint
     from services.pdf_layout_vision import resolver_for_page
     revision = pdf_fingerprint(pdf_path)
     result = []
+    total = len(pages)
     from collections import Counter
     with fitz.open(pdf_path) as doc:
         margin_counts = Counter()
@@ -414,7 +415,7 @@ def normalize_document(pages, pdf_path):
             margins = source.get_text("blocks")
             margin_counts.update(set(normalized(b[4])[0] for b in margins
                                      if b[6] == 0 and (b[1] < rect.height * .07 or b[3] > rect.height * .93)))
-        for page in pages:
+        for index, page in enumerate(pages, start=1):
             source = doc[page["page_num"] - 1]
             native = page.get("_layout_native") or native_blocks(source)
             # normalize_page deep-copies; a shallow copy is enough here.
@@ -459,6 +460,8 @@ def normalize_document(pages, pdf_path):
                         block["role"] = "footnote"
             resolve = resolver_for_page(pdf_path, page["page_num"], revision)
             result.append(normalize_page(page, native, rect.width, rect.height, revision, resolve))
+            if on_progress is not None:
+                on_progress("layout", index, total)
     return result
 
 

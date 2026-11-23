@@ -141,7 +141,8 @@ def test_auto_ai_jobs_wait_for_classification_confirmation(test_client, isolated
 
     body = _await_upload(test_client, res)
     assert events == []
-    assert upload_module.sessions[body["session_id"]]["classification_status"] == "pending"
+    from services.db import db_get_document
+    assert db_get_document(body["session_id"])["classification_status"] == "pending"
 
 
 def test_manual_upload_skips_ai_classification(test_client, isolated_dirs, monkeypatch):

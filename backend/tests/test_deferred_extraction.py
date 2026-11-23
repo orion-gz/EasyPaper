@@ -1,3 +1,4 @@
+import asyncio
 import fitz
 import pytest
 
@@ -117,4 +118,59 @@ async def test_upload_defers_isolated_parser_until_document_is_opened(isolated_d
     assert document["detected_source_language"] == "en"
     assert cache.get_cached_images(doc_id, upload.sessions[doc_id]["pdf_path"], engine, f"{engine}-1.0")
     assert started == [doc_id]
+
+
+@pytest.mark.asyncio
+async def test_ai_classification_upload_is_deferred_and_reports_progress_on_open(isolated_dirs, monkeypatch):
+    from routers import upload
+    from services import document_classification, document_preparation, parse_job, pdf_parser
+    from services.db import db_get_document
+    from services.document_tasks import create_task, get_task, latest_task
+
+    doc_id = "deferred-ai-classify"
+    source_dir = isolated_dirs["upload_dir"] / doc_id
+    source_dir.mkdir()
+    _make_pdf(source_dir / "document.pdf", pages=3)
+    monkeypatch.setattr(upload, "sessions", {})
+    monkeypatch.setattr(document_preparation, "_tasks", {})
+    monkeypatch.setattr(document_preparation, "_progress", {})
+    monkeypatch.setattr(parse_job, "UPLOAD_DIR", str(isolated_dirs["upload_dir"]))
+
+    classify_calls = []
+    monkeypatch.setattr(
+        document_classification, "start_classification_task",
+        lambda doc, title, pages, **kw: classify_calls.append((doc, len(pages))),
+    )
+    real_extract = pdf_parser.extract_pages
+    monkeypatch.setattr(pdf_parser, "extract_pages",
+                        lambda *a, **k: pytest.fail("extraction ran during AI-classified upload"))
+
+    task = create_task(doc_id, "parse", {
+        "filename": "ai.pdf", "username": "testuser", "document_mode": "research",
+        "document_type": "research_paper", "source_lang": "en", "target_lang": "ko",
+        "classification_method": "ai", "defer_extraction": True, "parser_engine": "pymupdf",
+    })
+    result = await parse_job.execute_parse_task(
+        task["id"], upload.sessions, upload_root=str(isolated_dirs["upload_dir"]),
+        metadata_reader=pdf_parser.get_pdf_metadata, page_extractor=pdf_parser.extract_pages,
+    )
+    assert get_task(task["id"])["status"] == "succeeded"
+    assert result["classification_status"] == "pending"
+    assert classify_calls == []
+    assert latest_task(doc_id, "classification") is None
+    doc = db_get_document(doc_id)
+    assert doc["classification_status"] == "pending"
+    assert doc["metadata"][parse_job.EXTRACTION_DEFERRED] is True
+
+    monkeypatch.setattr(pdf_parser, "extract_pages", real_extract)
+    status = document_preparation.start_preparation(doc)
+    assert status["status"] == "running"
+    assert "percent" in status
+    await asyncio.gather(*document_preparation._tasks.values())
+
+    ready = document_preparation.preparation_status(db_get_document(doc_id))
+    assert ready["status"] == "ready"
+    assert ready["percent"] == 100
+    assert classify_calls == [(doc_id, 3)]
+
 

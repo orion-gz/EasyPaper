@@ -65,6 +65,8 @@
   "loadProgress.preparing": "뷰어 준비 중",
   "loadProgress.metadata": "문서 정보 확인 중",
   "loadProgress.loading": "PDF 로딩 및 구조 해석 중",
+  "loadProgress.extracting": "PDF 텍스트 및 레이아웃 추출 중",
+  "loadProgress.extractingPages": "PDF 텍스트 및 레이아웃 추출 중 ({{current}}/{{total}} 페이지)",
   "loadProgress.rendering": "페이지 렌더링 중",
   "loadProgress.restoring": "읽기 위치 및 화면 복원 중"
 }

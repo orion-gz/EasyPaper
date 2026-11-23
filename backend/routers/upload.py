@@ -69,13 +69,33 @@ def _restore_session(session_id: str) -> bool:
                 parser_engine = "readability"
                 parser_version = str(doc.get("content_schema_version") or 1)
             elif parser_engine in {"marker", "mineru"}:
+                from services.document_preparation import update_progress
+                update_progress(session_id, "extracting", 15, 0, doc.get("total_pages") or 0, int(doc.get("content_revision") or 1))
                 from services.reparse import load_document_parse
                 payload = load_document_parse(session_id, doc, pdf_path)
                 pages = payload["pages"]
                 parser_version = payload["parser_version"]
+                update_progress(session_id, "layout", 75, len(pages), len(pages), int(doc.get("content_revision") or 1))
             else:
-                pages = extract_pages(pdf_path, engine=parser_engine,
-                                      normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")))
+                from services.document_preparation import update_progress
+                revision = int(doc.get("content_revision") or 1)
+
+                def _report_progress(phase: str, current: int, total: int) -> None:
+                    ratio = (current / total) if total > 0 else 1.0
+                    pct = 5 + int(ratio * 25) if phase == "extracting" else 30 + int(ratio * 45)
+                    update_progress(session_id, phase, pct, current, total, revision)
+
+                try:
+                    pages = extract_pages(
+                        pdf_path, engine=parser_engine,
+                        normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")),
+                        on_progress=_report_progress,
+                    )
+                except TypeError:
+                    pages = extract_pages(
+                        pdf_path, engine=parser_engine,
+                        normalize_layout=bool((doc.get("metadata") or {}).get("layout_rule_version")),
+                    )
                 from services.pdf_diagnostics import parser_version as resolve_parser_version
                 parser_version = resolve_parser_version(parser_engine)
             if parser_engine not in {"marker", "mineru"}:
