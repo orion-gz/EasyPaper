@@ -1,4 +1,5 @@
 {
+  "reasoningEffort": "Reasoning effort",
   "prompt.line.intro": "You are a professional document translator.",
   "prompt.line.source": "Source language: {{SOURCE_LANGUAGE_NAME}} ({{SOURCE_LANGUAGE_TAG}})",
   "prompt.line.target": "Target language: {{TARGET_LANGUAGE_NAME}} ({{TARGET_LANGUAGE_TAG}})",

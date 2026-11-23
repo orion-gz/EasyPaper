@@ -1679,9 +1679,22 @@ function scheduleVisiblePageTranslation(pageNum) {
 
 // ── 스크롤 뷰어 초기화 ────────────────────────────
 let scrollViewerGeneration = 0
+const pagePairByNum = new Map()
+const pageWrapperByNum = new Map()
+
+function getCachedPageWrapper(pageNum) {
+  const cached = pageWrapperByNum.get(Number(pageNum))
+  if (cached && cached.isConnected) return cached
+  const found = viewerScrollContainer?.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`) || null
+  if (found) pageWrapperByNum.set(Number(pageNum), found)
+  return found
+}
+
 async function initScrollViewer() {
   easyEnglishController?.reset()
   viewerScrollContainer.innerHTML = ''
+  pagePairByNum.clear()
+  pageWrapperByNum.clear()
   visibleTranslationTimers.forEach(timer => clearTimeout(timer))
   visibleTranslationTimers.clear()
 
@@ -1700,7 +1713,7 @@ async function initScrollViewer() {
       analyticsScrollFrame = requestAnimationFrame(() => {
         analyticsScrollFrame = null
         if (state.currentPage) {
-          const curPageEl = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${state.currentPage}"]`)
+          const curPageEl = getCachedPageWrapper(state.currentPage)
           globalAnalyticsTracker.trackScroll(state.currentPage, curPageEl, viewerScrollContainer, true, false)
         }
       })
@@ -1729,22 +1742,95 @@ async function initScrollViewer() {
   const sessionId = state.sessionId
   const generation = ++scrollViewerGeneration
   const totalPages = state.totalPages
-  for (let start = 1; start <= totalPages; start += 16) {
+  const batchSize = totalPages > 64 ? 48 : 16
+  for (let start = 1; start <= totalPages; start += batchSize) {
     if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
     const fragment = document.createDocumentFragment()
-    for (let i = start; i < Math.min(start + 16, totalPages + 1); i++) {
-      fragment.appendChild(createPagePair(i))
+    for (let i = start; i < Math.min(start + batchSize, totalPages + 1); i++) {
+      const pairEl = createPagePair(i)
+      pagePairByNum.set(i, pairEl)
+      const wrapperEl = pairEl.querySelector('.pdf-page-wrapper')
+      if (wrapperEl) pageWrapperByNum.set(i, wrapperEl)
+      fragment.appendChild(pairEl)
     }
     viewerScrollContainer.appendChild(fragment)
-    if (start + 16 <= totalPages) await new Promise(resolve => setTimeout(resolve, 0))
+    if (start + batchSize <= totalPages) await new Promise(resolve => setTimeout(resolve, 0))
   }
   if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
+
+  // In document workspace tabs, pre-calculate the initial fit-to-width zoom BEFORE
+  // calling renderScrollView() the first time, so the document renders once at its
+  // final size instead of visibly painting at zoom=1.5 and immediately re-rendering.
+  if (isDocumentRuntime && viewerScrollContainer.clientWidth > 0) {
+    try {
+      const pageWidth = await getPDFPageWidth(state.currentPage || 1)
+      if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
+      if (pageWidth > 0) {
+        const scrollStyle = getComputedStyle(viewerScrollContainer)
+        const pair = viewerScrollContainer.querySelector('.page-pair')
+        const pairStyle = pair ? getComputedStyle(pair) : null
+        const translation = pair?.querySelector('.trans-page-block')
+        const parallel = translation && getComputedStyle(translation).display !== 'none' && pairStyle?.flexDirection !== 'column'
+        const horizontal = style => style ? ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0) : 0
+        const gap = parseFloat(pairStyle?.columnGap) || 18
+        const available = viewerScrollContainer.clientWidth - horizontal(scrollStyle) - horizontal(pairStyle) - 6 - (parallel ? gap : 0)
+        const fitZoom = Math.max(0.5, Math.min(3, available / (pageWidth * (parallel ? 2 : 1))))
+        if (Number.isFinite(fitZoom) && fitZoom > 0) {
+          previewZoom(fitZoom)
+          lastCommittedZoom = state.zoom
+        }
+      }
+    } catch {}
+  }
+
+  // Position scroll container to the user's restored/starting page BEFORE starting
+  // renderScrollView(), so the initial render priority targets the actual page the
+  // user is reading (+/- 15 pages around it) instead of rendering page 1 first!
+  if (state.currentPage > 1) {
+    scrollToPage(viewerScrollContainer, state.currentPage, { instant: true })
+  }
 
   await renderScrollView(viewerScrollContainer, state.zoom, { onPageVisible: handleReaderPageVisible })
   if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
 
+  // 이미 번역 완료된 페이지들은 첫 화면이 뜬 뒤 백그라운드에서 미리 로드해 두어,
+  // 위/아래로 스크롤할 때 번역 패널이 비어 있다가 뒤늦게 팝인되지 않게 한다.
+  setTimeout(() => {
+    if (generation === scrollViewerGeneration && state.sessionId === sessionId) {
+      void prefetchCompletedTranslations(sessionId, generation)
+    }
+  }, 120)
+
   // 백그라운드 잡 폴링 시작
   startJobPolling(state.sessionId)
+}
+
+async function prefetchCompletedTranslations(sessionId, generation, centerPage = state.currentPage || 1) {
+  const revision = translationRevision
+  const radius = state.totalPages > 60 ? 15 : state.totalPages
+  const pages = [...state.translatedPages]
+    .filter(p => Number.isInteger(p) && p >= 1 && p <= state.totalPages && Math.abs(p - centerPage) <= radius)
+    .sort((a, b) => Math.abs(a - centerPage) - Math.abs(b - centerPage))
+  if (!pages.length) return
+  for (const pageNum of pages) {
+    if (generation !== scrollViewerGeneration || state.sessionId !== sessionId || revision !== translationRevision) return
+    if (state.translationCache[pageNum]) continue
+    state.translationCache[pageNum] = '__fetching__'
+    try {
+      const opts = getTranslationOptions()
+      const res = await fetchLibraryTranslation(sessionId, pageNum, opts)
+      if (generation !== scrollViewerGeneration || state.sessionId !== sessionId || revision !== translationRevision) return
+      state.translationCache[pageNum] = res.translation
+      state.translationSentences[pageNum] = res.sentences || []
+      state.translationWarnings[pageNum] = res.warnings || []
+      renderTransContent(pageNum, res.translation, true)
+    } catch {
+      if (state.sessionId === sessionId && revision === translationRevision) {
+        delete state.translationCache[pageNum]
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 16))
+  }
 }
 
 // Keep translation loading and analytics active after fit/zoom rerenders.
@@ -1753,7 +1839,7 @@ async function handleReaderPageVisible(pageNum) {
   if (translationResetSession === state.sessionId) return
   updatePageDisplay(pageNum)
   globalAnalyticsTracker.setCurrentPage(pageNum)
-  const visiblePageEl = viewerScrollContainer.querySelector('.pdf-page-wrapper[data-page="' + pageNum + '"]')
+  const visiblePageEl = getCachedPageWrapper(pageNum)
   globalAnalyticsTracker.trackScroll(pageNum, visiblePageEl, viewerScrollContainer, true, false)
 
   // 페이지가 가시화되었을 때 번역 완료된 페이지인데 캐시가 없는 경우 레이지 로딩 적용
@@ -1789,29 +1875,30 @@ async function handleReaderPageVisible(pageNum) {
     scheduleVisiblePageTranslation(pageNum)
   }
 
-  // 비동기 다음 페이지 번역 프리페칭 및 미리 렌더링
-  const nextPage = pageNum + 1
-  if (nextPage <= state.totalPages && !state.translationCache[nextPage]) {
-    if (state.translatedPages.has(nextPage)) {
-      state.translationCache[nextPage] = '__fetching__'
+  // 비동기 주변 페이지(±5페이지) 번역 프리페칭 및 미리 렌더링
+  for (const delta of [1, -1, 2, -2, 3, -3, 4, -4, 5, -5]) {
+    const nearPage = pageNum + delta
+    if (nearPage < 1 || nearPage > state.totalPages || state.translationCache[nearPage]) continue
+    if (state.translatedPages.has(nearPage)) {
+      state.translationCache[nearPage] = '__fetching__'
       const currentSessionId = state.sessionId
       const opts = getTranslationOptions()
-      fetchLibraryTranslation(currentSessionId, nextPage, opts).then(res => {
+      fetchLibraryTranslation(currentSessionId, nearPage, opts).then(res => {
         if (state.sessionId === currentSessionId && revision === translationRevision) {
-          state.translationCache[nextPage] = res.translation
-          state.translationSentences[nextPage] = res.sentences || []
-          state.translationWarnings[nextPage] = res.warnings || []
-          renderTransContent(nextPage, res.translation, true)
+          state.translationCache[nearPage] = res.translation
+          state.translationSentences[nearPage] = res.sentences || []
+          state.translationWarnings[nearPage] = res.warnings || []
+          renderTransContent(nearPage, res.translation, true)
         }
-      }).catch(err => {
+      }).catch(() => {
         if (state.sessionId === currentSessionId && revision === translationRevision) {
-          delete state.translationCache[nextPage]
-          renderPageMemos(nextPage)
+          delete state.translationCache[nearPage]
+          renderPageMemos(nearPage)
         }
       })
-    } else if (getEffectiveTranslationMode() === 'scroll' && !isLongDocument()) {
+    } else if (delta === 1 && getEffectiveTranslationMode() === 'scroll' && !isLongDocument()) {
       // 다음 페이지도 미리 번역해둬 스크롤이 도착했을 때 바로 보이게 한다.
-      translatePage(nextPage)
+      translatePage(nearPage)
     }
   }
 }
@@ -3945,7 +4032,7 @@ class ProviderModelPicker {
           slider.min = '0'
           slider.max = String(variants.length - 1)
           slider.value = String(variants.indexOf(selected))
-          const title = getLocale() === 'ko' ? '추론 강도' : 'Reasoning effort'
+          const title = t('settings:reasoningEffort')
           caption.className = 'picker-effort-caption'
           const levelLabel = document.createElement('span')
           levelLabel.className = 'picker-effort-level'
@@ -17402,7 +17489,7 @@ function buildVirtualTextMap(container, pageNum) {
       return;
     }
 
-    spans.push({ el, left: leftVal, top: topVal, fontSize: fsVal, isLineNumber: false });
+    spans.push({ el, left: leftVal, top: topVal, width: rect.width, height: rect.height, fontSize: fsVal, isLineNumber: false });
   });
 
   // Finish geometry reads before changing any connected span's styles.
@@ -17605,27 +17692,55 @@ function findDisplayEquationsFromVTM(vtm) {
   return eqs;
 }
 
-// 문장 범위로부터 오버레이의 로컬 CSS 좌표 Rects 계산 (getClientRects 기반, 라인별 개별 상자)
+// 문장 범위로부터 오버레이의 로컬 CSS 좌표 Rects 계산 (스팬 바운딩 박스 기반 선형 보간으로
+// 페이지당 수천 번의 range.getClientRects() 동기 리플로우 병목을 제거)
 function sourceMappedRanges(sentences, vtm, container, pageNum) {
   const coordinates = pageCoordinates(container.closest('.pdf-page-inner') || container);
-  const glyphs = [];
+  const nodeGeometries = [];
   for (const nr of vtm.nodeRanges) {
-    for (let i = 0; i < nr.node.length; i++) {
-      const range = document.createRange();
-      range.setStart(nr.node, i);
-      range.setEnd(nr.node, i + 1);
-      for (const rect of range.getClientRects()) {
-        if (rect.width > 0 && rect.height > 0) glyphs.push({ index: nr.start + i, ...coordinates.rectToLocal(rect) });
-      }
+    const len = nr.node.length;
+    if (!len) continue;
+    let rect = nr.spanInfo && nr.spanInfo.width > 0 && nr.spanInfo.height > 0
+      ? { left: nr.spanInfo.left, top: nr.spanInfo.top, width: nr.spanInfo.width, height: nr.spanInfo.height }
+      : null;
+    if (!rect) {
+      const r = getNodeClientRect(nr.node);
+      if (r && r.width > 0 && r.height > 0) rect = coordinates.rectToLocal(r);
+    }
+    if (rect && rect.width > 0 && rect.height > 0) {
+      nodeGeometries.push({
+        start: nr.start,
+        len,
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        cy: rect.top + rect.height / 2,
+      });
     }
   }
   return sentences.map(sentence => {
     const mapping = sentence.source_mapping || { status: 'unresolved', segments: [] };
     const boxes = sourceMappingRects(pageNum, mapping);
-    const indices = glyphs.filter(g => boxes.some(b => {
-      const x = g.left + g.width / 2, y = g.top + g.height / 2;
-      return x >= b.left && x <= b.left + b.width && y >= b.top && y <= b.top + b.height;
-    })).map(g => g.index);
+    const indices = [];
+    if (boxes.length) {
+      for (const ng of nodeGeometries) {
+        const matchingBoxes = boxes.filter(b =>
+          ng.cy >= b.top &&
+          ng.cy <= b.top + b.height &&
+          ng.left + ng.width >= b.left &&
+          ng.left <= b.left + b.width
+        );
+        if (!matchingBoxes.length) continue;
+        const step = ng.width / ng.len;
+        for (let i = 0; i < ng.len; i++) {
+          const x = ng.left + (i + 0.5) * step;
+          if (matchingBoxes.some(b => x >= b.left && x <= b.left + b.width)) {
+            indices.push(ng.start + i);
+          }
+        }
+      }
+    }
     const parts = [];
     for (const index of [...new Set(indices)].sort((a, b) => a - b)) {
       if (parts.length && parts.at(-1).end === index) parts.at(-1).end++;
