@@ -3946,10 +3946,14 @@ class ProviderModelPicker {
           slider.max = String(variants.length - 1)
           slider.value = String(variants.indexOf(selected))
           const title = getLocale() === 'ko' ? '추론 강도' : 'Reasoning effort'
+          caption.className = 'picker-effort-caption'
+          const levelLabel = document.createElement('span')
+          levelLabel.className = 'picker-effort-level'
+          caption.append(title, levelLabel)
           slider.setAttribute('aria-label', title)
           const updateCaption = () => {
             const level = variants[slider.valueAsNumber].label.split(' · ').pop()
-            caption.textContent = title + ' · ' + level
+            levelLabel.textContent = level
             slider.setAttribute('aria-valuetext', level)
           }
           updateCaption()
