@@ -207,6 +207,38 @@ fn die_msg(context: &str) -> ! {
     std::process::exit(1);
 }
 
+#[tauri::command]
+async fn native_pdf(window: tauri::WebviewWindow, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        extern "C" {
+            fn ep_pdf_update(view: *mut std::ffi::c_void, bytes: *const u8, count: usize,
+                x: f64, y: f64, width: f64, height: f64, close: bool) -> bool;
+        }
+        let headers = request.headers();
+        let number = |key: &str| -> Result<f64, String> {
+            headers.get(key).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<f64>().ok())
+                .filter(|v| v.is_finite()).ok_or_else(|| format!("Invalid {key}"))
+        };
+        let rect = [number("x-left")?, number("x-top")?, number("x-width")?, number("x-height")?];
+        let close = headers.contains_key("x-close");
+        let bytes = match request.body() {
+            tauri::ipc::InvokeBody::Raw(data) => data.clone(),
+            _ => Vec::new(),
+        };
+        let (send, receive) = std::sync::mpsc::channel();
+        window.with_webview(move |webview| {
+            let ok = unsafe { ep_pdf_update(webview.inner().cast(), bytes.as_ptr(), bytes.len(),
+                rect[0], rect[1], rect[2], rect[3], close) };
+            let _ = send.send(ok);
+        }).map_err(|e| e.to_string())?;
+        if receive.recv().unwrap_or(false) { return Ok(()); }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (window, request);
+    Err("Native PDF view unavailable".into())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -216,6 +248,7 @@ pub fn run() {
         .manage(SidecarState(Mutex::new(None)))
         .manage(StartupState::default())
         .invoke_handler(tauri::generate_handler![
+            native_pdf,
             kill_backend_sidecar,
             backend_startup_error
         ])

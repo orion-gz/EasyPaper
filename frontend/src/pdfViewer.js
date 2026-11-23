@@ -176,6 +176,23 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   renderGeneration++
   const myGeneration = renderGeneration
 
+  if (import.meta.env.VITE_MACOS_PDFKIT_PREVIEW === '1' &&
+      window.__TAURI_INTERNALS__ && /Mac/.test(navigator.platform)) {
+    const current = () => myGeneration === renderGeneration && !suspended
+    try {
+      const { mountNativePdf } = await import('./nativePdfPreview.js')
+      const dispose = await mountNativePdf(container, pdfDoc, current)
+      if (!current()) { await dispose?.(); return }
+      if (dispose) {
+        disposeScrollView = () => { dispose().catch(console.error); disposeScrollView = () => {} }
+        return
+      }
+    } catch (error) {
+      if (!current()) return
+      console.warn('PDFKit preview unavailable', error)
+    }
+  }
+
   if (pageObserver) { pageObserver.disconnect(); pageObserver = null }
 
   const numPages = pdfDoc.numPages

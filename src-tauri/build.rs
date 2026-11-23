@@ -1,4 +1,10 @@
 fn main() {
+  if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+    println!("cargo:rerun-if-changed=src/pdf_view.m");
+    cc::Build::new().file("src/pdf_view.m").flag("-fobjc-arc").compile("ep_pdf_view");
+    println!("cargo:rustc-link-lib=framework=PDFKit");
+    println!("cargo:rustc-link-lib=framework=WebKit");
+  }
   // lib.rs의 kill_backend_sidecar처럼 앱이 직접 정의한 커맨드는 tauri_build::build()의
   // 기본 설정만으로는 ACL 권한이 전혀 생성되지 않아, capabilities에 아무리 추가해도
   // "not allowed by ACL"로 항상 막힌다(실제로 이 문제로 업데이트 설치 시 sidecar 종료
@@ -10,6 +16,7 @@ fn main() {
       .app_manifest(tauri_build::AppManifest::new().commands(&[
         "kill_backend_sidecar",
         "backend_startup_error",
+        "native_pdf",
       ])),
   )
   .expect("failed to run tauri-build");
