@@ -37,7 +37,6 @@ def native_blocks(page, raw=None):
     raw = raw or page.get_text("rawdict", flags=0)
     # Some producers put multiple columns into one PDF text block. Separate
     # disconnected horizontal line intervals before assigning stable IDs.
-    raw = copy.deepcopy(raw)
     expanded = []
     for block in raw.get("blocks", []):
         lines = block.get("lines", [])
@@ -418,17 +417,15 @@ def normalize_document(pages, pdf_path):
         for page in pages:
             source = doc[page["page_num"] - 1]
             native = page.get("_layout_native") or native_blocks(source)
-            page = copy.deepcopy(page)
-            page.pop("_layout_native", None)
+            # normalize_page deep-copies; a shallow copy is enough here.
+            page = {k: v for k, v in page.items() if k != "_layout_native"}
             # PyMuPDF boxes are always unrotated, including rotated/cropped PDFs.
             rect = source.rect * source.derotation_matrix
             from services.pdf_parser import _find_page_equations, _find_vector_figure_rects
             regions = [(item["bbox"], "equation", f"equation-{index}") for index, item in enumerate(_find_page_equations(source))]
-            try:
-                regions.extend((list(table.bbox), "table", f"table-{index}") for index, table in enumerate(source.find_tables().tables))
-            except Exception:
-                # Table detection is optional geometric evidence; never drop text.
-                pass
+            # Table detection is optional geometric evidence; never drop text.
+            from services.pdf_tables import page_table_bboxes
+            regions.extend((box, "table", f"table-{index}") for index, box in enumerate(page_table_bboxes(source, pdf_path)))
             objects = list(regions)
             if not page.get("text_recovery"):
                 figures = [item["bbox"] for item in source.get_image_info()] + _find_vector_figure_rects(source)

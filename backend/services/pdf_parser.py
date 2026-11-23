@@ -1478,6 +1478,24 @@ def _mineru_page_regions(content_list: tuple) -> Dict[int, List[Dict[str, Any]]]
     return regions_by_page
 
 
+_dict_cache: tuple = (None, None, None)  # doc, page number, blocks (swapped atomically)
+
+
+def _page_dict_blocks(page: "fitz.Page") -> list:
+    """get_text("dict") blocks, reused when the same page is read repeatedly.
+
+    Callers must treat the result as read-only.
+    """
+    doc = page.parent
+    global _dict_cache
+    cached = _dict_cache
+    if cached[0] is doc and cached[1] == page.number:
+        return cached[2]
+    blocks = page.get_text("dict")["blocks"]
+    _dict_cache = (doc, page.number, blocks)
+    return blocks
+
+
 def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
     """
     페이지에서 "Figure 1", "Table 2" 처럼 캡션으로 시작하는 줄을 찾아
@@ -1495,7 +1513,7 @@ def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
     실패하므로, 매칭 전용으로 별표를 제거한 버전을 따로 만들어 사용한다.
     """
     captions = []
-    blocks = page.get_text("dict")["blocks"]
+    blocks = _page_dict_blocks(page)
     for b in blocks:
         lines = b.get("lines")
         if not lines:
@@ -1828,7 +1846,7 @@ def _find_page_equations(page: "fitz.Page") -> List[Dict[str, Any]]:
     """
     page_width = page.rect.width
     page_height = page.rect.height
-    blocks = page.get_text("dict")["blocks"]
+    blocks = _page_dict_blocks(page)
 
     all_lines = []  # (x0, y0, x1, y1) - 페이지 내 모든 텍스트 줄
     line_texts: Dict[tuple, str] = {}  # bbox -> 그 줄의 텍스트 (산문 판별용)
@@ -2211,15 +2229,10 @@ def _extract_pdf_images_from_doc(doc, pdf_path: str, engine: str) -> List[Dict[s
                 
         # 2-1. 내장 테이블 Finder 감지
         try:
-            finder = page.find_tables()
-            if finder and finder.tables:
-                for table in finder.tables:
-                    bbox = table.bbox
-                    x0, y0, x1, y1 = bbox
-                    w = x1 - x0
-                    h = y1 - y0
-                    if w >= 15 and h >= 15:
-                        raw_rects.append([x0, y0, x1, y1])
+            from services.pdf_tables import page_table_bboxes
+            for x0, y0, x1, y1 in page_table_bboxes(page, pdf_path):
+                if x1 - x0 >= 15 and y1 - y0 >= 15:
+                    raw_rects.append([x0, y0, x1, y1])
         except Exception:
             pass
 
