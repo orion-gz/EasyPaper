@@ -2,6 +2,24 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.6.5 - 2026-11-23
+
+### 한국어 (1.6.4 → 1.6.5)
+
+- 읽는 페이지 주변의 그림 오버레이를 지연 추출하고, 캡션에서 교재 그림 번호를 복구하며 클릭 시 온디맨드로 그림을 찾도록 개선
+- 업로드 시점의 PDF 텍스트·Marker·MinerU 추출을 첫 문서 열기 시점으로 지연하고, AI 분류를 분리해 뷰어 로딩 화면에 추출 진행 상태를 표시
+- Tauri 데스크탑 뷰어 스크롤과 대형 문서 렌더링 성능을 개선하고, 문장 강조 박스를 통합해 기호·소수점 분리 현상을 수정
+- 모델 추론 강도(reasoning effort) 슬라이더를 추가하고 추론 팝오버·모델 메뉴 정렬, 번역 프롬프트 칩, 다국어 프롬프트 표시 및 번역 설정 레이아웃을 개선
+- Windows 원격 업로드의 Content-Length 처리, 업로드 ID 정리, 폴링 재개를 수정하고 한국어 README를 기본으로 연결
+
+### English (1.6.4 → 1.6.5)
+
+- Load figure overlays lazily around the active reading page, recover textbook figure labels from captions, and resolve textbook figures on demand when clicked.
+- Defer PDF text and Marker/MinerU extraction from upload to first document open, separate AI classification from upload, and report extraction progress in the viewer loading screen.
+- Improve Tauri desktop viewer scrolling and large-document rendering performance, and unify sentence highlight boxes to prevent symbol or decimal splits.
+- Add a model reasoning effort slider, align the reasoning popover and model menu, and refine translation prompt chips, localized prompt displays, and translation setup layout.
+- Fix Windows remote upload content-length handling, upload ID cleanup, and polling resume, and make the Korean README default with a link to the English README.
+
 ## 1.6.4 - 2026-11-21
 
 ### 한국어 (1.6.3 → 1.6.4)
