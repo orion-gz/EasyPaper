@@ -19,6 +19,8 @@ let widestPageWidth = 0
 let pageDimensions = new Map()
 let pdfLoadingTask = null
 let pdfTextUrl = null
+const pdfTextRecoveryCache = new Map()
+const pdfNativeTextContentCache = new Map()
 const renderedTextLayers = new Map()
 let currentScale = 1.5
 let pageObserver = null
@@ -110,6 +112,8 @@ export async function loadPDF(url, onProgress) {
   pageDimensions = new Map()
   const match = String(url).match(/\/api\/(?:pdf-file\/([^/?]+)|library\/([^/?]+)\/pdf)(?:\?|$)/)
   pdfTextUrl = match ? `/api/pdf-text/${match[1] || match[2]}` : null
+  pdfTextRecoveryCache.clear()
+  pdfNativeTextContentCache.clear()
   figureCropCache.clear()
   return pdfDoc.numPages
 }
@@ -343,7 +347,8 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         active++
         _renderPage(wrapper, pageNum, myGeneration, job, {
           isLargeDocument,
-          isPriorityPage: () => Math.abs(pageNum - renderPriorityPage) <= 2,
+          isPriorityPage: () => Math.abs(pageNum - renderPriorityPage) <= 3,
+          isImmediateVisiblePage: () => Math.abs(pageNum - renderPriorityPage) <= 1,
           onCanvasReady: () => {
             if (Math.abs(pageNum - renderPriorityPage) <= 1) markInitialPageReady()
           },
@@ -389,11 +394,19 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         queue.set(pageNum, target.matches('.pdf-page-wrapper') ? target : target.querySelector('.pdf-page-wrapper'))
       } else if (isLargeDocument) {
         const existingJob = jobs.get(pageNum)
-        if (existingJob && existingJob.done && !existingJob.textLayerMounted && Math.abs(pageNum - (firstVisible ?? currentPage)) <= 1 && ! existingJob.mountingTextLayer) {
-          existingJob.mountingTextLayer = true
-          _mountDeferredTextLayer(existingJob, myGeneration).finally(() => {
-            existingJob.mountingTextLayer = false
-          })
+        if (existingJob && existingJob.done && Math.abs(pageNum - (firstVisible ?? currentPage)) <= 1) {
+          if (existingJob.needsHiResUpgrade && !existingJob.upgradingHiRes) {
+            existingJob.upgradingHiRes = true
+            _upgradeDeferredHiResCanvas(existingJob, myGeneration).finally(() => {
+              existingJob.upgradingHiRes = false
+            })
+          }
+          if (!existingJob.textLayerMounted && !existingJob.mountingTextLayer) {
+            existingJob.mountingTextLayer = true
+            _mountDeferredTextLayer(existingJob, myGeneration).finally(() => {
+              existingJob.mountingTextLayer = false
+            })
+          }
         }
       }
     }
@@ -590,7 +603,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     let currentPageTop = Infinity
     for (const page of Object.keys(visiblePageHeights)) {
       const pageNum = Number(page)
-      const element = container.querySelector(`.page-pair[data-page="${pageNum}"]`) || container.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+      const element = renderTargets[pageNum - 1]
       if (!element) continue
       const rect = element.getBoundingClientRect()
       if (rect.bottom <= viewportTop || rect.top >= currentPageTop) continue
@@ -634,16 +647,23 @@ async function _mountDeferredTextLayer(job, generation) {
     let textContent
     let recovery
     if (textUrl) {
-      try {
-        const response = await fetch(`${textUrl}/${pageNum}?nonblocking=true`, { signal: job.controller.signal })
-        if (!response.ok) throw new Error(`PDF text recovery: HTTP ${response.status}`)
-        recovery = await response.json()
-      } catch (error) {
+      if (pdfTextRecoveryCache.has(pageNum)) {
+        recovery = pdfTextRecoveryCache.get(pageNum)
+      } else {
+        try {
+          const response = await fetch(`${textUrl}/${pageNum}?nonblocking=true`, { signal: job.controller.signal })
+          if (!response.ok) throw new Error(`PDF text recovery: HTTP ${response.status}`)
+          recovery = await response.json()
+          if (recovery && !recovery.pending) {
+            pdfTextRecoveryCache.set(pageNum, recovery)
+          }
+        } catch (error) {
+          if (stale()) return
+          console.warn(`PDF text recovery p.${pageNum}; using native text:`, error)
+          textLayerDiv.dataset.recoveryError = 'parser_unavailable'
+        }
         if (stale()) return
-        console.warn(`PDF text recovery p.${pageNum}; using native text:`, error)
-        textLayerDiv.dataset.recoveryError = 'parser_unavailable'
       }
-      if (stale()) return
     }
     textLayerDiv.dataset.sourceRevision = recovery?.layout?.layout_revision || recovery?.layout?.source_revision || ''
     if (recovery?.layout?.needs_review) {
@@ -664,6 +684,8 @@ async function _mountDeferredTextLayer(job, generation) {
         notice.textContent = t(`errors:${recovery.error}`)
         inner.appendChild(notice)
       }
+    } else if (pdfNativeTextContentCache.has(pageNum)) {
+      textContent = pdfNativeTextContentCache.get(pageNum)
     } else {
       try {
         textContent = await page.getTextContent()
@@ -671,6 +693,7 @@ async function _mountDeferredTextLayer(job, generation) {
         console.warn('getTextContent failed, trying streamTextContent:', error)
         textContent = await collectTextContent(page.streamTextContent())
       }
+      if (textContent) pdfNativeTextContentCache.set(pageNum, textContent)
     }
     if (stale()) return
     const textLayer = new pdfjsLib.TextLayer({
@@ -696,7 +719,31 @@ async function _mountDeferredTextLayer(job, generation) {
   }
 }
 
-async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument = false, isPriorityPage = () => true, onCanvasReady } = {}) {
+async function _upgradeDeferredHiResCanvas(job, generation) {
+  const stale = () => generation !== renderGeneration || job.cancelled
+  if (stale() || !job.needsHiResUpgrade || !job.renderCanvasAtScale || !job.dpr) return
+  const inner = job.wrapper?.querySelector('.pdf-page-inner')
+  if (!inner) return
+  try {
+    const hiResCanvas = document.createElement('canvas')
+    const hiOk = await job.renderCanvasAtScale(hiResCanvas, job.dpr)
+    if (!hiOk || stale()) {
+      hiResCanvas.width = 0
+      hiResCanvas.height = 0
+      return
+    }
+    hiResCanvas.dataset.rendered = 'true'
+    const currentCanvas = inner.querySelector('canvas[data-rendered]')
+    if (currentCanvas && currentCanvas.parentNode === inner) {
+      inner.replaceChild(hiResCanvas, currentCanvas)
+      currentCanvas.width = 0
+      currentCanvas.height = 0
+    }
+    job.needsHiResUpgrade = false
+  } catch {}
+}
+
+async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument = false, isPriorityPage = () => true, isImmediateVisiblePage = () => true, onCanvasReady } = {}) {
   const stale = () => generation !== renderGeneration || job.cancelled
   if (stale()) return
   const inner = wrapper.querySelector('.pdf-page-inner')
@@ -782,6 +829,9 @@ async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument 
 
     const useTwoStagePreview = isLargeDocument && dpr > 1.15
     const firstPassRatio = useTwoStagePreview ? 1 : dpr
+    job.renderCanvasAtScale = renderCanvasAtScale
+    job.dpr = dpr
+    job.needsHiResUpgrade = useTwoStagePreview
     const firstOk = await renderCanvasAtScale(canvas, firstPassRatio)
     if (!firstOk || stale()) { canvas.width = 0; canvas.height = 0; return }
 
@@ -792,22 +842,15 @@ async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument 
     inner.replaceChildren(canvas, textLayerDiv)
     onCanvasReady?.()
 
-    // 전공서적 등 대형 문서(>48p)에서는 스크롤 도중 스쳐 지나가는 페이지에 수천 개의
-    // textLayer span과 문장 분할 오버레이를 즉시 생성하지 않고, 스크롤이 멈춘 뒤에도
-    // 현재 보고 있는 페이지(±2페이지)에 머물러 있을 때만 고해상도 업그레이드 + 텍스트 레이어를 마운트한다.
+    // 전공서적 등 대형 문서(>48p)에서는 ±15페이지 전체는 1x 해상도로 초고속 프리렌더링만 해두고,
+    // 스크롤이 멈춘 뒤 현재 실제로 눈앞에 보이는 페이지(±1p)만 Retina(dpr) 고해상도 업그레이드하고
+    // 주변 페이지(±3p)에만 텍스트 레이어를 마운트한다.
     if (isLargeDocument) {
       await waitForScrollSettleOrImmediate(false, job.controller.signal)
       if (stale() || !isPriorityPage()) return
-      if (useTwoStagePreview) {
-        const hiResCanvas = document.createElement('canvas')
-        const hiOk = await renderCanvasAtScale(hiResCanvas, dpr)
-        if (!hiOk || stale()) { hiResCanvas.width = 0; hiResCanvas.height = 0; return }
-        hiResCanvas.dataset.rendered = 'true'
-        if (canvas.parentNode === inner) {
-          inner.replaceChild(hiResCanvas, canvas)
-          canvas.width = 0
-          canvas.height = 0
-        }
+      if (useTwoStagePreview && isImmediateVisiblePage()) {
+        await _upgradeDeferredHiResCanvas(job, generation)
+        if (stale()) return
       }
     }
     await _mountDeferredTextLayer(job, generation)

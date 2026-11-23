@@ -1679,9 +1679,22 @@ function scheduleVisiblePageTranslation(pageNum) {
 
 // ── 스크롤 뷰어 초기화 ────────────────────────────
 let scrollViewerGeneration = 0
+const pagePairByNum = new Map()
+const pageWrapperByNum = new Map()
+
+function getCachedPageWrapper(pageNum) {
+  const cached = pageWrapperByNum.get(Number(pageNum))
+  if (cached && cached.isConnected) return cached
+  const found = viewerScrollContainer?.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`) || null
+  if (found) pageWrapperByNum.set(Number(pageNum), found)
+  return found
+}
+
 async function initScrollViewer() {
   easyEnglishController?.reset()
   viewerScrollContainer.innerHTML = ''
+  pagePairByNum.clear()
+  pageWrapperByNum.clear()
   visibleTranslationTimers.forEach(timer => clearTimeout(timer))
   visibleTranslationTimers.clear()
 
@@ -1700,7 +1713,7 @@ async function initScrollViewer() {
       analyticsScrollFrame = requestAnimationFrame(() => {
         analyticsScrollFrame = null
         if (state.currentPage) {
-          const curPageEl = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${state.currentPage}"]`)
+          const curPageEl = getCachedPageWrapper(state.currentPage)
           globalAnalyticsTracker.trackScroll(state.currentPage, curPageEl, viewerScrollContainer, true, false)
         }
       })
@@ -1734,7 +1747,11 @@ async function initScrollViewer() {
     if (generation !== scrollViewerGeneration || state.sessionId !== sessionId) return
     const fragment = document.createDocumentFragment()
     for (let i = start; i < Math.min(start + batchSize, totalPages + 1); i++) {
-      fragment.appendChild(createPagePair(i))
+      const pairEl = createPagePair(i)
+      pagePairByNum.set(i, pairEl)
+      const wrapperEl = pairEl.querySelector('.pdf-page-wrapper')
+      if (wrapperEl) pageWrapperByNum.set(i, wrapperEl)
+      fragment.appendChild(pairEl)
     }
     viewerScrollContainer.appendChild(fragment)
     if (start + batchSize <= totalPages) await new Promise(resolve => setTimeout(resolve, 0))
@@ -1822,7 +1839,7 @@ async function handleReaderPageVisible(pageNum) {
   if (translationResetSession === state.sessionId) return
   updatePageDisplay(pageNum)
   globalAnalyticsTracker.setCurrentPage(pageNum)
-  const visiblePageEl = viewerScrollContainer.querySelector('.pdf-page-wrapper[data-page="' + pageNum + '"]')
+  const visiblePageEl = getCachedPageWrapper(pageNum)
   globalAnalyticsTracker.trackScroll(pageNum, visiblePageEl, viewerScrollContainer, true, false)
 
   // 페이지가 가시화되었을 때 번역 완료된 페이지인데 캐시가 없는 경우 레이지 로딩 적용
