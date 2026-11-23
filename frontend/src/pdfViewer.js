@@ -281,6 +281,14 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   function trimPages() {
     const selection = window.getSelection()
     if (isLargeDocument) {
+      // Immediately cancel in-flight canvas renders for pages that have already scrolled
+      // out of the immediate viewport so the newly visible page never waits behind
+      // stale off-screen renders!
+      for (const job of jobs.values()) {
+        if (!job.canvasRendered && Math.abs(job.pageNum - renderPriorityPage) > 2) {
+          release(job)
+        }
+      }
       // In textbook-sized documents, strip heavy textLayer/overlay DOM (thousands of spans)
       // from pages that are more than 2 pages away from the current reading position,
       // while keeping their lightweight rendered <canvas> bitmap cached!
@@ -300,7 +308,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         selection?.rangeCount && !selection.isCollapsed
         && selection.getRangeAt(0).intersectsNode(job.wrapper)
       ))
-      .sort((a, b) => Math.abs(b.pageNum - currentPage) - Math.abs(a.pageNum - currentPage))
+      .sort((a, b) => Math.abs(b.pageNum - renderPriorityPage) - Math.abs(a.pageNum - renderPriorityPage))
     for (const job of candidates) {
       if (jobs.size <= maxRetainedPages && job.done) continue
       release(job)
@@ -310,15 +318,20 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   function scheduleRender() {
     if (pumpTimer !== null || !isCurrent()) return
     // Yield between pages, leaving input/scroll events a chance to run.
+    const maxConcurrent = isLargeDocument ? 3 : 2
     pumpTimer = setTimeout(() => {
       pumpTimer = null
       if (!isCurrent()) return
-      while (active < 2 && queue.size) {
+      while (active < maxConcurrent && queue.size) {
         const pageNum = [...queue.keys()].sort((a, b) => {
           const aNear = nearby.has(a) ? 0 : 1
           const bNear = nearby.has(b) ? 0 : 1
           if (aNear !== bNear) return aNear - bNear
-          return Math.abs(a - renderPriorityPage) - Math.abs(b - renderPriorityPage)
+          const da = Math.abs(a - renderPriorityPage)
+          const db = Math.abs(b - renderPriorityPage)
+          if (da !== db) return da - db
+          // Prefer forward reading direction (+1 before -1)
+          return (a >= renderPriorityPage ? 0 : 1) - (b >= renderPriorityPage ? 0 : 1)
         })[0]
         const wrapper = queue.get(pageNum)
         queue.delete(pageNum)
@@ -705,41 +718,56 @@ async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument 
       transBlock.style.height = `${Math.floor(viewport.height)}px`
     }
 
-    // 캔버스 렌더링: OffscreenCanvas가 지원되는 환경에서는 오프스크린 버퍼에 먼저 그린 뒤
-    // ImageBitmap으로 한 번에 전송하여 DOM 연결 캔버스의 리페인트 비용을 최소화한다.
-    let renderedOffscreen = false
-    if (typeof OffscreenCanvas === 'function') {
-      try {
-        const offscreen = new OffscreenCanvas(canvas.width, canvas.height)
-        const offCtx = offscreen.getContext('2d')
-        if (offCtx) {
-          offCtx.scale(dpr, dpr)
-          job.renderTask = page.render({ canvasContext: offCtx, viewport })
-          await job.renderTask.promise
-          if (stale()) return
-          const bitmap = offscreen.transferToImageBitmap()
-          const bitmapCtx = canvas.getContext('bitmaprenderer')
-          if (bitmapCtx) {
-            bitmapCtx.transferFromImageBitmap(bitmap)
-            renderedOffscreen = true
-          } else {
-            canvas.getContext('2d').drawImage(bitmap, 0, 0)
-            bitmap.close?.()
-            renderedOffscreen = true
+    // 캔버스 렌더링: 전공서적 등 대형 문서에서는 1x 해상도(픽셀 수 1/4, 약 4배 빠른 속도)로
+    // 먼저 즉시 화면에 띄워 빈 페이지 대기 시간을 없애고, 스크롤이 멈춘 뒤 현재 보고 있는
+    // 페이지일 때만 Retina(dpr) 고해상도로 조용히 업그레이드한다 (네이티브 PDF 뷰어 2단계 타일링 원리).
+    const renderCanvasAtScale = async (targetCanvas, pixelRatio) => {
+      targetCanvas.width = Math.floor(viewport.width * pixelRatio)
+      targetCanvas.height = Math.floor(viewport.height * pixelRatio)
+      targetCanvas.style.width = `${viewport.width}px`
+      targetCanvas.style.height = `${viewport.height}px`
+
+      let renderedOffscreen = false
+      if (typeof OffscreenCanvas === 'function') {
+        try {
+          const offscreen = new OffscreenCanvas(targetCanvas.width, targetCanvas.height)
+          const offCtx = offscreen.getContext('2d')
+          if (offCtx) {
+            offCtx.scale(pixelRatio, pixelRatio)
+            job.renderTask = page.render({ canvasContext: offCtx, viewport })
+            await job.renderTask.promise
+            if (stale()) return false
+            const bitmap = offscreen.transferToImageBitmap()
+            const bitmapCtx = targetCanvas.getContext('bitmaprenderer')
+            if (bitmapCtx) {
+              bitmapCtx.transferFromImageBitmap(bitmap)
+              renderedOffscreen = true
+            } else {
+              targetCanvas.getContext('2d').drawImage(bitmap, 0, 0)
+              bitmap.close?.()
+              renderedOffscreen = true
+            }
           }
+        } catch {
+          renderedOffscreen = false
         }
-      } catch {
-        renderedOffscreen = false
       }
+      if (!renderedOffscreen) {
+        const ctx = targetCanvas.getContext('2d')
+        ctx.scale(pixelRatio, pixelRatio)
+        job.renderTask = page.render({ canvasContext: ctx, viewport })
+        await job.renderTask.promise
+      }
+      return !stale()
     }
-    if (!renderedOffscreen) {
-      const ctx = canvas.getContext('2d')
-      ctx.scale(dpr, dpr)
-      job.renderTask = page.render({ canvasContext: ctx, viewport })
-      await job.renderTask.promise
-    }
-    if (stale()) { canvas.width = 0; canvas.height = 0; return }
+
+    const useTwoStagePreview = isLargeDocument && dpr > 1.15
+    const firstPassRatio = useTwoStagePreview ? 1 : dpr
+    const firstOk = await renderCanvasAtScale(canvas, firstPassRatio)
+    if (!firstOk || stale()) { canvas.width = 0; canvas.height = 0; return }
+
     canvas.dataset.rendered = 'true'
+    job.canvasRendered = true
     window.onTextLayerReleased?.(inner.querySelector('.textLayer'), pageNum)
     inner.querySelectorAll('canvas').forEach(previous => { previous.width = 0; previous.height = 0 })
     inner.replaceChildren(canvas, textLayerDiv)
@@ -747,10 +775,21 @@ async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument 
 
     // 전공서적 등 대형 문서(>48p)에서는 스크롤 도중 스쳐 지나가는 페이지에 수천 개의
     // textLayer span과 문장 분할 오버레이를 즉시 생성하지 않고, 스크롤이 멈춘 뒤에도
-    // 현재 보고 있는 페이지(±2페이지)에 머물러 있을 때만 마운트한다 (네이티브 PDF 뷰어 방식).
+    // 현재 보고 있는 페이지(±2페이지)에 머물러 있을 때만 고해상도 업그레이드 + 텍스트 레이어를 마운트한다.
     if (isLargeDocument) {
       await waitForScrollSettleOrImmediate(false, job.controller.signal)
       if (stale() || !isPriorityPage()) return
+      if (useTwoStagePreview) {
+        const hiResCanvas = document.createElement('canvas')
+        const hiOk = await renderCanvasAtScale(hiResCanvas, dpr)
+        if (!hiOk || stale()) { hiResCanvas.width = 0; hiResCanvas.height = 0; return }
+        hiResCanvas.dataset.rendered = 'true'
+        if (canvas.parentNode === inner) {
+          inner.replaceChild(hiResCanvas, canvas)
+          canvas.width = 0
+          canvas.height = 0
+        }
+      }
     }
     await _mountDeferredTextLayer(job, generation)
 
