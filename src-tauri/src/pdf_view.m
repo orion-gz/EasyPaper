@@ -1,6 +1,7 @@
 #import <PDFKit/PDFKit.h>
 #import <WebKit/WebKit.h>
 #import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -11,55 +12,80 @@ static char observerKey;
 @interface EPNativePdfView : PDFView
 @property (nonatomic, weak) WKWebView *hostWebView;
 @property (nonatomic, copy) NSArray<NSValue *> *interactiveWebRects;
+- (void)updateOverlayCutoutMask;
 @end
 
-static NSView *ep_original_wk_hittest(NSView *self, SEL _cmd, NSPoint point);
-static IMP g_orig_wk_hittest = NULL;
+@implementation EPNativePdfView
 
-static NSView *ep_swizzled_wk_hittest(NSView *self, SEL _cmd, NSPoint point) {
-    if ([self isKindOfClass:[WKWebView class]]) {
-        WKWebView *web = (WKWebView *)self;
-        EPNativePdfView *pdfView = objc_getAssociatedObject(web, &viewKey);
-        if (pdfView && !pdfView.hidden) {
-            // Convert point from web.superview coordinates into web.bounds coordinates
-            NSPoint localPt = [web convertPoint:point fromView:web.superview];
-            if (NSPointInRect(localPt, pdfView.frame)) {
-                double topLeftX = localPt.x;
-                double topLeftY = web.isFlipped ? localPt.y : (NSHeight(web.bounds) - localPt.y);
-                NSPoint webPt = NSMakePoint(topLeftX, topLeftY);
-                BOOL overWebUI = NO;
-                for (NSValue *val in pdfView.interactiveWebRects) {
-                    if (NSPointInRect(webPt, val.rectValue)) {
-                        overWebUI = YES;
-                        break;
-                    }
-                }
-                if (!overWebUI) {
-                    NSView *hit = [pdfView hitTest:localPt];
-                    if (hit) return hit;
-                }
+- (NSView *)hitTest:(NSPoint)point {
+    // point is in superview (WKWebView) coordinate system.
+    if (self.hidden || !NSPointInRect(point, self.frame)) {
+        return nil;
+    }
+    WKWebView *web = self.hostWebView;
+    if (web && self.interactiveWebRects.count > 0) {
+        double topLeftX = point.x;
+        double topLeftY = web.isFlipped ? point.y : (NSHeight(web.bounds) - point.y);
+        NSPoint webPt = NSMakePoint(topLeftX, topLeftY);
+        for (NSValue *val in self.interactiveWebRects) {
+            if (NSPointInRect(webPt, val.rectValue)) {
+                // Pass clicks/drags through to WKWebView for floating toolbars, selection menus,
+                // memo alignment buttons, floating memo cards, and modals.
+                return nil;
             }
         }
     }
-    if (g_orig_wk_hittest) {
-        return ((NSView *(*)(id, SEL, NSPoint))g_orig_wk_hittest)(self, _cmd, point);
+    return [super hitTest:point];
+}
+
+- (void)setFrame:(NSRect)frame {
+    [super setFrame:frame];
+    [self updateOverlayCutoutMask];
+}
+
+- (void)updateOverlayCutoutMask {
+    if (!self.layer) {
+        self.wantsLayer = YES;
     }
-    return nil;
-}
+    WKWebView *web = self.hostWebView;
+    if (!web || self.interactiveWebRects.count == 0 || NSIsEmptyRect(self.bounds)) {
+        self.layer.mask = nil;
+        return;
+    }
 
-static void ep_install_wk_hittest_hook(WKWebView *web) {
-    if (!web) return;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        Class cls = [web class];
-        Method m = class_getInstanceMethod(cls, @selector(hitTest:));
-        if (m) {
-            g_orig_wk_hittest = method_setImplementation(m, (IMP)ep_swizzled_wk_hittest);
+    CGMutablePathRef path = CGPathCreateMutable();
+    CGPathAddRect(path, NULL, NSRectToCGRect(self.bounds));
+    BOOL hasCutout = NO;
+
+    for (NSValue *val in self.interactiveWebRects) {
+        NSRect topLeftRect = val.rectValue;
+        // Convert top-left web coordinates to WKWebView coordinates
+        double wy = web.isFlipped
+            ? topLeftRect.origin.y
+            : (NSHeight(web.bounds) - topLeftRect.origin.y - topLeftRect.size.height);
+        NSRect webRect = NSMakeRect(topLeftRect.origin.x, wy, topLeftRect.size.width, topLeftRect.size.height);
+        NSRect localRect = [self convertRect:webRect fromView:web];
+        NSRect clipped = NSIntersectionRect(localRect, self.bounds);
+        if (!NSIsEmptyRect(clipped) && clipped.size.width > 1.0 && clipped.size.height > 1.0) {
+            CGPathAddRect(path, NULL, NSRectToCGRect(clipped));
+            hasCutout = YES;
         }
-    });
+    }
+
+    if (!hasCutout) {
+        CGPathRelease(path);
+        self.layer.mask = nil;
+        return;
+    }
+
+    CAShapeLayer *maskLayer = [CAShapeLayer layer];
+    maskLayer.frame = NSRectToCGRect(self.bounds);
+    maskLayer.fillRule = kCAFillRuleEvenOdd;
+    maskLayer.path = path;
+    CGPathRelease(path);
+    self.layer.mask = maskLayer;
 }
 
-@implementation EPNativePdfView
 @end
 
 @interface EPNativePdfObserver : NSObject
@@ -267,6 +293,7 @@ static void ep_apply_payload_json(EPNativePdfView *view, const unsigned char *js
             }
         }
         view.interactiveWebRects = rects;
+        [view updateOverlayCutoutMask];
     }
 
     if (!sync_annotations || !view.document) return;
@@ -397,22 +424,13 @@ bool ep_pdf_update(WKWebView *web, const unsigned char *bytes, size_t count,
         PDFDocument *document = [[PDFDocument alloc] initWithData:[NSData dataWithBytes:bytes length:count]];
         if (!document || document.isLocked) return false;
         if (!view) {
-            ep_install_wk_hittest_hook(web);
             view = [[EPNativePdfView alloc] initWithFrame:NSZeroRect];
             view.hostWebView = web;
             view.displayMode = kPDFDisplaySinglePageContinuous;
             view.displaysPageBreaks = YES;
             view.autoScales = YES;
             view.wantsLayer = YES;
-            @try {
-                [web setValue:@NO forKey:@"drawsBackground"];
-            } @catch (NSException *exception) {}
-            NSView *firstSub = web.subviews.firstObject;
-            if (firstSub) {
-                [web addSubview:view positioned:NSWindowBelow relativeTo:firstSub];
-            } else {
-                [web addSubview:view];
-            }
+            [web addSubview:view];
             objc_setAssociatedObject(web, &viewKey, view, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
             observer = [[EPNativePdfObserver alloc] init];

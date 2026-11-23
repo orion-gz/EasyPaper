@@ -720,22 +720,8 @@ body.toolbar-hidden .panels {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-body.macos-native-pdf-underlay,
-body.macos-native-pdf-underlay #tab-workspace,
-body.macos-native-pdf-underlay #workspace-tab-panel,
-body.macos-native-pdf-underlay .workspace-document-frame,
-body.macos-native-pdf-split,
-body.macos-native-pdf-split #viewer-screen,
-body.macos-native-pdf-split .viewer-scroll-container,
-body.macos-native-pdf-split .page-pair,
-body.macos-native-pdf-split .pdf-page-wrapper,
 body.macos-native-pdf-split .pdf-page-inner {
   background: transparent !important;
-}
-
-body.macos-native-pdf-split .page-pair,
-body.macos-native-pdf-split .pdf-page-wrapper,
-body.macos-native-pdf-split .pdf-page-inner {
   box-shadow: none !important;
   border-color: transparent !important;
 }

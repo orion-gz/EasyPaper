@@ -347,13 +347,9 @@ export async function mountNativePdf(container, pdfDoc, current, callbacks = {})
     })
   }
   const onScroll = () => {
-    if (syncingScrollFromNative) {
-      refreshLayout()
-      return
-    }
-    const maxWebScroll = Math.max(0, container.scrollHeight - container.clientHeight)
-    const ratio = maxWebScroll > 0 ? Math.max(0, Math.min(1, container.scrollTop / maxWebScroll)) : 0
-    refreshLayout({ scrollRatio: ratio })
+    // Always update overlay cutout rects during scrolling so memo alignment buttons
+    // stay uncovered while moving, without fighting native PDFView's own scroll position.
+    refreshLayout()
   }
   container.addEventListener('scroll', onScroll, { passive: true })
   win.addEventListener('resize', () => refreshLayout())
