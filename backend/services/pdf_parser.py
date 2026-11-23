@@ -1221,11 +1221,11 @@ _ROMAN_NUMERAL_RE = r"(?=[MDCLXVI])M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:
 # 대소문자를 구분해야 하므로 (?-i:...)로 지역 범위에서 대소문자 구분을 켠다.
 _CAPTION_FOLLOW_RE = r"(?=\s*(?:[:.\-–—*|♦]|$|(?-i:[A-Z0-9])))"
 # Keep appendix identifiers distinct from subfigure suffixes and Roman numerals.
-_CAPTION_NUMBER_RE = rf"(?:(?:[A-Z]\.?)?\d+(?:\.\d+)*|{_ROMAN_NUMERAL_RE}(?![A-Z]))"
+_CAPTION_NUMBER_RE = rf"(?:(?:[A-Z][.．\-‐‑–—−:_]?)?\d+(?:[.．\-‐‑–—−:_]\d+)*|{_ROMAN_NUMERAL_RE}(?![A-Z]))"
 _CAPTION_SUBFIG_RE = r"(?:[A-Z](?![A-Z0-9]|\.\d)|\s*\(\s*[A-Z](?:\s*[-–—,]\s*[A-Z])*\s*\))"
 _CAPTION_RE = re.compile(
-    rf"^\s*(Fig(?:ure)?|Tab(?:le)?)\.?\s*({_CAPTION_NUMBER_RE})(?!\.\d)"
-    rf"(?:{_CAPTION_SUBFIG_RE})?(?![A-Z0-9]|\.\d){_CAPTION_FOLLOW_RE}", re.IGNORECASE
+    rf"^\s*(Fig(?:ure)?|그림|Tab(?:le)?)[.．]?\s*({_CAPTION_NUMBER_RE})(?![.．‐‑–—−:_-]\d)"
+    rf"(?:{_CAPTION_SUBFIG_RE})?(?![A-Z0-9]|[.．‐‑–—−:_-]\d){_CAPTION_FOLLOW_RE}", re.IGNORECASE
 )
 # 수식 번호: 줄 끝에 "(3)"처럼 소괄호 숫자(또는 로마 숫자)만 단독으로 오는 경우만
 # 인정한다. 인용 연도("...(2020)")와 헷갈리지 않도록 자릿수를 1~3자리로 제한한다
@@ -1351,14 +1351,18 @@ def _marker_find_caption_text(block) -> Optional[str]:
     return None
 
 
+def _normalize_caption_number(number: str) -> str:
+    return re.sub("[‐‑–—−]", "-", number.upper()).replace("．", ".")
+
+
 def _match_label_from_caption_text(caption_text: Optional[str]) -> "tuple[Optional[str], Optional[str]]":
     if not caption_text:
         return None, None
     m = _CAPTION_RE.match(re.sub(r"\*+", "", caption_text))
     if not m or not m.group(2):
         return None, None
-    kind = "Figure" if m.group(1).lower().startswith("fig") else "Table"
-    return f"{kind} {m.group(2).upper()}", caption_text[:600]
+    kind = "Figure" if m.group(1).lower() in {"fig", "figure", "그림"} else "Table"
+    return f"{kind} " + _normalize_caption_number(m.group(2)), caption_text[:600]
 
 
 def _marker_page_regions(page_json) -> List[Dict[str, Any]]:
@@ -1550,11 +1554,11 @@ def _find_page_captions(page: "fitz.Page") -> List[Dict[str, Any]]:
             # 비어 있으면 실제 캡션이 아니므로 명시적으로 걸러낸다.
             if not m or not m.group(2):
                 continue
-            kind = "Figure" if m.group(1).lower().startswith("fig") else "Table"
+            kind = "Figure" if m.group(1).lower() in {"fig", "figure", "그림"} else "Table"
             # 로마 숫자는 대소문자 상관없이 매칭되지만("fig. iv"도 허용), 프론트엔드의
             # 본문 참조 매칭과 항상 같은 대문자 표기로 라벨을 맞춰야 한다(대문자
             # 로마 숫자가 관례이므로 digit은 그대로 두고 로마 숫자만 사실상 영향받음).
-            number = m.group(2).upper()
+            number = _normalize_caption_number(m.group(2))
             caption_lines = lines[i:]
             caption_text = " ".join(t for t in line_texts[i:] if t).strip()
             # bbox는 매칭된 첫 줄이 아니라, caption_text와 마찬가지로 블록 끝까지

@@ -209,7 +209,7 @@ def clear_all_pages_cache() -> "tuple[int, int]":
 
 _IMAGES_CACHE_SUFFIX = "_images_extract.json"
 # Invalidate labels extracted before chapter-qualified figure numbers were supported.
-IMAGES_LABEL_VERSION = 4
+IMAGES_LABEL_VERSION = 5
 
 
 def _images_cache_path(doc_id: str, content_revision: int = 1) -> str:
@@ -326,7 +326,7 @@ def clear_stale_parser_caches(doc_id: str, keep_revision: int) -> None:
         path = os.path.join(CACHE_DIR, fname)
         if (
             fname.startswith(prefix)
-            and fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX))
+            and fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX, "_caption_pages.json"))
             and path not in keep
         ):
             try:
@@ -393,7 +393,7 @@ def clear_document_cache(doc_id: str) -> "tuple[int, int]":
     for fname in os.listdir(CACHE_DIR):
         if not (
             fname.startswith(prefix)
-            and fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX))
+            and fname.endswith((_PAGES_CACHE_SUFFIX, _IMAGES_CACHE_SUFFIX, "_caption_pages.json"))
         ):
             continue
         path = os.path.join(CACHE_DIR, fname)
