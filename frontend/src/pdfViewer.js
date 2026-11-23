@@ -176,8 +176,12 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   renderGeneration++
   const myGeneration = renderGeneration
 
+  const hasTauriInternals = Boolean(
+    window.__TAURI_INTERNALS__ ||
+    (() => { try { return window.top?.__TAURI_INTERNALS__ || window.parent?.__TAURI_INTERNALS__ } catch { return null } })()
+  )
   if (import.meta.env.VITE_MACOS_PDFKIT_PREVIEW === '1' &&
-      window.__TAURI_INTERNALS__ && /Mac/.test(navigator.platform)) {
+      hasTauriInternals && /Mac/.test(navigator.platform)) {
     const current = () => myGeneration === renderGeneration && !suspended
     try {
       const { mountNativePdf } = await import('./nativePdfPreview.js')
@@ -189,6 +193,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
       }
     } catch (error) {
       if (!current()) return
+      container.dataset.nativePdf = 'failed'
       console.warn('PDFKit preview unavailable', error)
     }
   }
