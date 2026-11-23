@@ -3711,8 +3711,10 @@ class ProviderModelPicker {
     this._panel = document.createElement('div')
     this._panel.className = 'provider-picker-panel'
 
-    c.appendChild(this._btn)
-    c.appendChild(this._panel)
+    const dropdown = document.createElement('div')
+    dropdown.className = 'provider-model-dropdown'
+    dropdown.append(this._btn, this._panel)
+    c.append(dropdown)
     this._effort = document.createElement('details')
     this._effort.className = 'picker-effort'
     this._effortSummary = document.createElement('summary')

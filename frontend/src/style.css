@@ -3722,6 +3722,10 @@ body.light-theme .provider-picker-panel {
 .provider-picker:has(> .picker-effort) {
   flex-direction: column;
 }
+.provider-model-dropdown {
+  position: relative;
+  min-width: 0;
+}
 .picker-effort {
   margin-top: 4px;
   padding: 2px 8px;
@@ -4977,6 +4981,12 @@ body:not(.toolbar-pos-left):not(.toolbar-pos-right):has(.chat-sidebar:not(.hidde
   color: var(--text-muted);
   font-weight: 500;
   white-space: nowrap;
+}
+.kebab-menu-row:has(> #viewer-trans-provider) > .kebab-menu-label {
+  align-self: start;
+  display: flex;
+  align-items: center;
+  height: 32px;
 }
 .kebab-translation-grid .provider-picker {
   width: 100%;
