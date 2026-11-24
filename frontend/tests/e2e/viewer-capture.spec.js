@@ -129,7 +129,9 @@ test('failed image encoding releases capture mode and allows retry', async ({ pa
   await openPDF(page)
   await evaluateReader(page, () => {
     const original = HTMLCanvasElement.prototype.toBlob
-    HTMLCanvasElement.prototype.toBlob = function (callback) {
+    HTMLCanvasElement.prototype.toBlob = function (callback, type, ...args) {
+      // The PDF page cache also encodes canvases in the background.
+      if (this.isConnected || type !== 'image/png') return original.call(this, callback, type, ...args)
       HTMLCanvasElement.prototype.toBlob = original
       callback(null)
     }
@@ -151,9 +153,10 @@ test('document switches clear captures and discard pending images', async ({ pag
   await expect(activeReader(page).locator('.capture-overlay')).toHaveCount(1)
   await evaluateReader(page, () => {
     const original = HTMLCanvasElement.prototype.toBlob
-    HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
+    HTMLCanvasElement.prototype.toBlob = function (callback, type, ...args) {
+      if (this.isConnected || type !== 'image/png') return original.call(this, callback, type, ...args)
       HTMLCanvasElement.prototype.toBlob = original
-      original.call(this, blob => { window.finishCapture = () => callback(blob) }, ...args)
+      original.call(this, blob => { window.finishCapture = () => callback(blob) }, type, ...args)
     }
   })
   await selectArea(page)
@@ -265,9 +268,10 @@ test('capture exposes busy state and raises the selected panel', async ({ page }
   await openPDF(page)
   await evaluateReader(page, () => {
     const original = HTMLCanvasElement.prototype.toBlob
-    HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
+    HTMLCanvasElement.prototype.toBlob = function (callback, type, ...args) {
+      if (this.isConnected || type !== 'image/png') return original.call(this, callback, type, ...args)
       HTMLCanvasElement.prototype.toBlob = original
-      original.call(this, blob => { window.finishCapture = () => callback(blob) }, ...args)
+      original.call(this, blob => { window.finishCapture = () => callback(blob) }, type, ...args)
     }
   })
   await selectArea(page)

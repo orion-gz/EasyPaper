@@ -13,7 +13,7 @@ const lines = [
   { text: 'Second paragraph stays aligned after zoom changes.', width: 300 },
 ]
 
-async function openDocument(page, mode, scale) {
+async function openDocument(page, mode, scale, pdfBytes = pdf) {
   const errors = []
   page.on('pageerror', e => errors.push(e.message))
   page.on('console', m => { if (m.type() === 'warning' || m.type() === 'error') errors.push(m.text()) })
@@ -23,7 +23,7 @@ async function openDocument(page, mode, scale) {
     contentType: route.request().url().includes('.js') && !route.request().url().includes('.css') ? 'text/javascript' : 'text/css', body: '',
   }))
   await mockBaseRoutes(page, { documents: [document] })
-  await page.route('**/api/library/geometry/pdf', route => route.fulfill({ contentType: 'application/pdf', body: pdf }))
+  await page.route('**/api/library/geometry/pdf', route => route.fulfill({ contentType: 'application/pdf', body: pdfBytes }))
   await page.addInitScript(scale => { localStorage.setItem('easypaper_ui_scale', String(scale)) }, scale)
   await gotoApp(page)
   await page.evaluate(() => { location.hash = '#viewer?id=geometry' })
@@ -155,11 +155,8 @@ test.describe('selection lifecycle', () => {
   })
 
   test('rotated CropBox and UserUnit keep native text over the PDF canvas', async ({ page }) => {
-    await openDocument(page, 'general', 0.8)
     const rotated = fs.readFileSync(new URL('./fixtures/text-geometry-rotated.pdf', import.meta.url))
-    await page.route('**/api/library/geometry/pdf', route => route.fulfill({ contentType: 'application/pdf', body: rotated }))
-    await page.reload()
-    await waitForReaderReady(page)
+    await openDocument(page, 'general', 0.8, rotated)
     await expect(activeReader(page).locator('.textLayer[data-segmented="true"]')).toBeVisible({ timeout: 15_000 })
     const span = activeReader(page).locator('.textLayer span').filter({ hasText: lines[0].text }).first()
     const metrics = await span.evaluate(el => {
