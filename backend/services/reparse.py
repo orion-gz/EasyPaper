@@ -210,9 +210,7 @@ def load_document_parse(doc_id: str, doc: dict, pdf_path: str, *, text_only=Fals
         # first caller only needs regions. Waiting callers recheck these caches.
         save_pages_cache(doc_id, pdf_path, payload["pages"], engine, version,
                          content_revision=revision, strict=True)
-        from services.parse_job import LONG_DOCUMENT_PAGE_THRESHOLD
-        short_isolated = engine in {"marker", "mineru"} and len(payload["pages"]) <= LONG_DOCUMENT_PAGE_THRESHOLD
-        if not text_only or payload.get("images") or (short_isolated and isinstance(payload.get("images"), list)):
+        if not text_only or payload.get("images") or payload.get("images_extracted"):
             save_images_cache(doc_id, pdf_path, payload.get("images") or [], engine, version,
                               content_revision=revision, strict=True)
         return payload
