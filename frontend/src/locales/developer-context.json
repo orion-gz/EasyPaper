@@ -7274,5 +7274,23 @@
   },
   "settings:pageBitmapCache.clearFailed": {
     "description": "Error toast shown when clearing the browser IndexedDB PDF page render cache fails."
+  },
+  "viewer:extractDot.idle": {
+    "description": "Viewer image extraction indicator when no job is active."
+  },
+  "viewer:extractDot.runningSingle": {
+    "description": "Viewer image extraction progress for a single page."
+  },
+  "viewer:extractDot.runningRange": {
+    "description": "Viewer image extraction progress within a page range."
+  },
+  "viewer:extractDot.stoppingSingle": {
+    "description": "Viewer status while extraction for a single page is stopping."
+  },
+  "viewer:extractDot.stoppingRange": {
+    "description": "Viewer status while extraction for a page range is stopping."
+  },
+  "viewer:extractDot.error": {
+    "description": "Viewer image extraction failure with the page and last progress percentage."
   }
 }
