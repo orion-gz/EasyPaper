@@ -256,5 +256,11 @@
   "memoAlignment.pageRight": "Align all memos on this page in the right margin",
   "citationCard.title": "References",
   "citationCard.close": "Close reference preview",
-  "outline.navigation": "Document outline"
+  "outline.navigation": "Document outline",
+  "extractDot.idle": "No active image extraction",
+  "extractDot.runningSingle": "Extracting images · Page {{page}} ({{percent}}%)",
+  "extractDot.runningRange": "Extracting images · Page {{page}} of {{start}}–{{end}} ({{percent}}%)",
+  "extractDot.stoppingSingle": "Stopping extraction · Page {{page}} ({{percent}}%)",
+  "extractDot.stoppingRange": "Stopping extraction · Page {{page}} of {{start}}–{{end}} ({{percent}}%)",
+  "extractDot.error": "Image extraction error · Page {{page}} ({{percent}}%)"
 }

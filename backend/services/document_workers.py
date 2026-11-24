@@ -45,6 +45,8 @@ def cancel_document_now(doc_id: str, *, deleted: bool = False) -> set[asyncio.Ta
     if deleted:
         from services.db import DB_PATH
         _deleted.add((DB_PATH, doc_id))
+    from services.image_window import cancel_window_jobs
+    cancel_window_jobs(doc_id)
     from services.document_tasks import list_tasks, request_cancel
     workers = workers_for_document(doc_id)
     for task in list_tasks(doc_id):

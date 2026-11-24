@@ -35,7 +35,11 @@ def main(argv: list[str] | None = None) -> int:
         actual = ", ".join(sorted(actual_engines)) or "no output"
         raise RuntimeError(f"{args.engine} parser unavailable; worker returned {actual}")
 
-    images = [] if args.text_only else extract_pdf_images(args.pdf, engine=args.engine)
+    from services.parse_job import LONG_DOCUMENT_PAGE_THRESHOLD
+    include_images = not args.text_only or (
+        args.engine in ("marker", "mineru") and len(pages) <= LONG_DOCUMENT_PAGE_THRESHOLD
+    )
+    images = extract_pdf_images(args.pdf, engine=args.engine) if include_images else []
     version = parser_version(args.engine)
     payload = {
         "pdf_fingerprint": pdf_fingerprint(args.pdf),

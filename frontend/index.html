@@ -551,6 +551,20 @@
             </button>
           </div>
         </div>
+
+        <!-- macOS 우측 상단 인디케이터 스타일의 이미지 추출 작업 상태 Dot -->
+        <div id="image-extract-indicator" class="extract-status-indicator" data-state="idle" role="status" aria-live="polite" tabindex="0">
+          <span class="extract-status-dot" aria-hidden="true"></span>
+          <div id="image-extract-tooltip" class="extract-status-tooltip" role="tooltip">
+            <div class="extract-tooltip-header">
+              <span id="image-extract-tooltip-dot" class="extract-tooltip-dot" aria-hidden="true"></span>
+              <span id="image-extract-tooltip-text" class="extract-tooltip-text" data-i18n-skip>이미지 추출 작업 없음</span>
+            </div>
+            <div id="image-extract-tooltip-bar-wrap" class="extract-tooltip-bar-wrap hidden">
+              <div id="image-extract-tooltip-bar" class="extract-tooltip-bar" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 

@@ -180,12 +180,20 @@ test('bookmark overlay appears before neighboring pages finish', async ({ page }
   await page.evaluate(() => { location.hash = '#viewer?id=book' })
   try {
     const wrapper = activeReader(page).locator('.pdf-page-wrapper[data-page="20"]')
+    const indicator = activeReader(page).locator('#image-extract-indicator')
     await expect(wrapper.locator('.pdf-figure-overlay')).toHaveCount(1)
     await expect.poll(() => requests).toContainEqual([20, false])
     expect(requests[0]).toEqual([20, true])
+    // In-progress extraction shows green dot with page and percent in tooltip
+    await expect(indicator).toHaveAttribute('data-state', 'running')
+    await indicator.hover()
+    await expect(indicator.locator('#image-extract-tooltip')).toBeVisible()
+    await expect(indicator.locator('#image-extract-tooltip-text')).toContainText('20')
+    await expect(indicator.locator('#image-extract-tooltip-text')).toContainText('%')
   } finally {
     releaseNeighbors()
   }
+  await expect(activeReader(page).locator('#image-extract-indicator')).toHaveAttribute('data-state', 'idle')
 })
 
 
