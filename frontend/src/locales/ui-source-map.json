@@ -1204,5 +1204,6 @@
   "번역 환경 설정": "onboarding:title",
   "상세 로그": "onboarding:logs",
   "나중에 설정": "onboarding:skip",
-  "번역 환경 다시 설정": "onboarding:restart"
+  "번역 환경 다시 설정": "onboarding:restart",
+  "이미지 추출 작업 없음": "viewer:extractDot.idle"
 }
