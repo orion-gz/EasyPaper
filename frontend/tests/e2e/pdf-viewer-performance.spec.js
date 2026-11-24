@@ -25,7 +25,7 @@ function multipagePdf(count, contentForPage) {
   return Buffer.from(pdf)
 }
 
-test('long PDF loads lazily, bounds canvases and restores evicted pages', async ({ page }) => {
+test('long PDF loads lazily, bounds canvases and retains rendered pages', async ({ page }) => {
   test.setTimeout(180000)
   await page.addInitScript(() => {
     window.easyEnglishTabWrites = 0
@@ -75,9 +75,13 @@ test('long PDF loads lazily, bounds canvases and restores evicted pages', async 
     finally { Element.prototype.getBoundingClientRect = original }
   })
   expect(anchorReads).toBeLessThanOrEqual(12)
-  await expect(wrapper(1).locator('canvas')).toHaveCount(0)
-  await expect(activeReader(page).locator('.floating-memo[data-id="retained-memo"]')).toHaveCount(0)
-  expect(await activeReader(page).locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(40)
+  const retainedCanvas = wrapper(1).locator('canvas[data-rendered]')
+  await expect(retainedCanvas).toHaveCount(1)
+  await expect.poll(() => retainedCanvas.evaluate(canvas => canvas.width)).toBe(
+    await retainedCanvas.evaluate(canvas => Math.floor(parseFloat(canvas.style.width))),
+  )
+  await expect(activeReader(page).locator('.floating-memo[data-id="retained-memo"]')).toHaveCount(1)
+  expect(await activeReader(page).locator('.pdf-page-wrapper canvas').count()).toBeLessThanOrEqual(250)
   expect(await wrapper(1).evaluate(node => node.getBoundingClientRect().height)).toBeCloseTo(originalHeight, 0)
 
   await wrapper(1).evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }))
@@ -329,7 +333,7 @@ test('wheel zoom batches input and eases toward the final scale', async ({ page 
   })).toBe(0)
 })
 
-test('expanded memo margins stay rendered while reading and retain their footprint after eviction', async ({ page }) => {
+test('expanded memo margins retain their footprint while scrolling away and back', async ({ page }) => {
   test.setTimeout(60000)
   const doc = { id: 'margin-pages', filename: 'Margins.pdf', total_pages: 60, metadata: {}, translated_pages: [] }
   await mockBaseRoutes(page, { documents: [doc] })
@@ -357,7 +361,7 @@ test('expanded memo margins stay rendered while reading and retain their footpri
     await wrapper.evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'instant' }))
     await expect(wrapper.locator('.textLayer')).toContainText(`Performance page ${number}`)
   }
-  await expect(first.locator('canvas')).toHaveCount(0)
+  await expect(first.locator('canvas[data-rendered]')).toHaveCount(1)
   expect(await first.evaluate(el => el.offsetHeight)).toBe(height)
   await first.evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'instant' }))
   await expect(first.locator('.memo-margin-left .floating-memo')).toHaveCount(12)
