@@ -402,9 +402,22 @@ export async function clearDocumentPageCache(docId) {
 }
 
 export async function clearAllPageCaches() {
+  const previousStats = await getPageCacheStats()
   l1Cache.clear()
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const keysToRemove = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith(DIMS_STORAGE_PREFIX)) {
+          keysToRemove.push(key)
+        }
+      }
+      for (const key of keysToRemove) localStorage.removeItem(key)
+    } catch {}
+  }
   const db = await openCacheDB()
-  if (!db) return
+  if (!db) return previousStats
   await new Promise(resolve => {
     try {
       const tx = db.transaction(STORE_NAME, 'readwrite')
@@ -414,6 +427,55 @@ export async function clearAllPageCaches() {
       tx.onabort = () => resolve()
     } catch {
       resolve()
+    }
+  })
+  return previousStats
+}
+
+export async function getPageCacheStats() {
+  const db = await openCacheDB()
+  if (!db) {
+    let l1Bytes = 0
+    const docs = new Set()
+    for (const entry of l1Cache.values()) {
+      l1Bytes += Number(entry.sizeBytes) || Number(entry.blob?.size) || 0
+      if (entry.docId) docs.add(entry.docId)
+    }
+    return {
+      totalBytes: l1Bytes,
+      maxBytes: MAX_CACHE_BYTES,
+      pageCount: l1Cache.size,
+      docCount: docs.size,
+    }
+  }
+  return new Promise(resolve => {
+    try {
+      const tx = db.transaction(STORE_NAME, 'readonly')
+      const store = tx.objectStore(STORE_NAME)
+      let totalBytes = 0
+      let pageCount = 0
+      const docs = new Set()
+      const req = store.openCursor()
+      req.onsuccess = event => {
+        const cursor = event.target.result
+        if (cursor) {
+          const val = cursor.value
+          totalBytes += Number(val.sizeBytes) || Number(val.blob?.size) || 0
+          pageCount++
+          if (val.docId) docs.add(val.docId)
+          cursor.continue()
+        } else {
+          resolve({
+            totalBytes,
+            maxBytes: MAX_CACHE_BYTES,
+            pageCount,
+            docCount: docs.size,
+          })
+        }
+      }
+      req.onerror = () => resolve({ totalBytes: 0, maxBytes: MAX_CACHE_BYTES, pageCount: 0, docCount: 0 })
+    } catch {
+      resolve({ totalBytes: 0, maxBytes: MAX_CACHE_BYTES, pageCount: 0, docCount: 0 })
     }
   })
 }

@@ -520,5 +520,13 @@
   "sharedModelsDeleteHelp": "File deletion requires disabled sharing and an isolated maintenance server configured by the operator.",
   "field.required": "Enter a value for this field.",
   "field.port": "Enter a whole port number from 1 to 65535.",
-  "field.correct": "Check the highlighted fields."
+  "field.correct": "Check the highlighted fields.",
+  "pageBitmapCache.label": "PDF page render cache (IndexedDB)",
+  "pageBitmapCache.usage": "{{usedMb}} MB / {{maxMb}} MB ({{docs}} docs · {{pages}} pages)",
+  "pageBitmapCache.clearBtn": "Clear browser PDF page render cache",
+  "pageBitmapCache.confirmTitle": "Clear PDF page render cache",
+  "pageBitmapCache.confirmMessage": "Delete all cached PDF page bitmaps and page dimensions stored in browser IndexedDB?\nYour documents, highlights, and memos are not affected, and pages will be cached again automatically when opened.",
+  "pageBitmapCache.confirmAction": "Clear",
+  "pageBitmapCache.clearedToast": "Cleared {{pages}} cached PDF pages ({{freedMb}} MB freed).",
+  "pageBitmapCache.clearFailed": "Failed to clear PDF page render cache."
 }

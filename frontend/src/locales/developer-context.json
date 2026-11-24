@@ -7250,5 +7250,29 @@
   },
   "desktop:jobs.failed": {
     "description": "Remote desktop connection status. Failed"
+  },
+  "settings:pageBitmapCache.label": {
+    "description": "Label for the IndexedDB PDF page render bitmap cache status row in Settings > Data."
+  },
+  "settings:pageBitmapCache.usage": {
+    "description": "Formatted usage summary for the IndexedDB PDF page render bitmap cache."
+  },
+  "settings:pageBitmapCache.clearBtn": {
+    "description": "Button label to clear the browser IndexedDB PDF page render cache in Settings > Data."
+  },
+  "settings:pageBitmapCache.confirmTitle": {
+    "description": "Confirmation dialog title when clearing the browser IndexedDB PDF page render cache."
+  },
+  "settings:pageBitmapCache.confirmMessage": {
+    "description": "Confirmation dialog message when clearing the browser IndexedDB PDF page render cache."
+  },
+  "settings:pageBitmapCache.confirmAction": {
+    "description": "Confirmation action button label when clearing the browser IndexedDB PDF page render cache."
+  },
+  "settings:pageBitmapCache.clearedToast": {
+    "description": "Toast shown after clearing the browser IndexedDB PDF page render cache."
+  },
+  "settings:pageBitmapCache.clearFailed": {
+    "description": "Error toast shown when clearing the browser IndexedDB PDF page render cache fails."
   }
 }

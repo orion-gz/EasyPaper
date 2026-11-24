@@ -53,6 +53,7 @@ import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
 import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
 import { sourceMappingRects, refreshTextLayerGeometry, loadPDF, renderScrollView, scrollToPage, reRenderAll, clearPdfTextRecoveryCache, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
+import { getPageCacheStats, clearAllPageCaches } from './pdfPageCache.js'
 import { invalidateLibraryGetCache, fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, resolveFigureReference, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
 import { ensureLocalResourceIds, hasPendingAnnotationSync, recordLocalResourceChange, syncDocumentAnnotations } from './annotationSync.js'
 import { icon } from './icons.js'
@@ -713,6 +714,7 @@ function activateSettingsCategory(paneId, { focus = false } = {}) {
   $('settings-modal')?.querySelector('.settings-content')?.scrollTo({ top: 0 })
   document.dispatchEvent(new CustomEvent('easypaper:settings-category-changed', { detail: { category: activeButton.dataset.tab } }))
   if (activeButton.dataset.tab === 'tab-info') refreshSettingsAppInfo()
+  if (activeButton.dataset.tab === 'tab-data-system') void refreshPageBitmapCacheStatus()
 }
 
 initializeSettingsInformationArchitecture()
@@ -782,6 +784,8 @@ for (const id of ['document-source-lang', 'document-target-lang']) {
 const viewerTopbar = $('viewer-topbar')
 const clearCacheBtn       = $('clear-cache-btn')
 const clearPagesCacheBtn  = $('clear-pages-cache-btn')
+const clearPageBitmapCacheBtn = $('clear-page-bitmap-cache-btn')
+const pageBitmapCacheStatus = $('page-bitmap-cache-status')
 
 const settingOllamaHost    = $('setting-ollama-host')
 const settingOpenAIKey     = $('setting-openai-key')
@@ -6056,10 +6060,57 @@ async function checkPostUpdateNoticeOnce() {
   }
 }
 
+async function refreshPageBitmapCacheStatus() {
+  if (!pageBitmapCacheStatus) return
+  try {
+    const stats = await getPageCacheStats()
+    const usedMb = ((stats.totalBytes || 0) / (1024 * 1024)).toFixed(1)
+    const maxMb = Math.round((stats.maxBytes || 150 * 1024 * 1024) / (1024 * 1024))
+    pageBitmapCacheStatus.textContent = t('settings:pageBitmapCache.usage', {
+      usedMb,
+      maxMb,
+      pages: stats.pageCount || 0,
+      docs: stats.docCount || 0,
+    })
+  } catch {
+    pageBitmapCacheStatus.textContent = '0.0 MB / 150 MB'
+  }
+}
+
+// 브라우저 PDF 렌더링 캐시(IndexedDB) 비우기
+if (clearPageBitmapCacheBtn) {
+  clearPageBitmapCacheBtn.addEventListener('click', async () => {
+    const ok = await showCustomConfirm(
+      t('settings:pageBitmapCache.confirmMessage'),
+      {
+        title: t('settings:pageBitmapCache.confirmTitle'),
+        confirmText: t('settings:pageBitmapCache.confirmAction'),
+        danger: true,
+      }
+    )
+    if (!ok) return
+    try {
+      const prev = await clearAllPageCaches()
+      const freedMb = ((prev?.totalBytes || 0) / (1024 * 1024)).toFixed(1)
+      await refreshPageBitmapCacheStatus()
+      showToast(
+        t('settings:pageBitmapCache.clearedToast', {
+          pages: prev?.pageCount || 0,
+          freedMb,
+        }),
+        'success'
+      )
+    } catch (err) {
+      showToast(err.message || t('settings:pageBitmapCache.clearFailed'), 'error')
+    }
+  })
+}
+
 // 로컬 캐시 비우기
 clearCacheBtn.addEventListener('click', async () => {
   const ok = await showCustomConfirm('브라우저에 저장된 PDF 어노테이션(밑줄, 하이라이트) 정보 및 설정을 모두 초기화하시겠습니까?', { title: '캐시 및 설정 초기화', confirmText: '초기화', danger: true })
   if (ok) {
+    await clearAllPageCaches().catch(() => {})
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('easypaper_')) {
         localStorage.removeItem(key)

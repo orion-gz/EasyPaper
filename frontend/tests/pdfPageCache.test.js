@@ -4,6 +4,10 @@ import assert from 'node:assert/strict'
 // Minimal mock for localStorage & IndexedDB in Node test environment
 const storageMap = new Map()
 globalThis.localStorage = {
+  get length() {
+    return storageMap.size
+  },
+  key: index => [...storageMap.keys()][index] ?? null,
   getItem: key => (storageMap.has(key) ? storageMap.get(key) : null),
   setItem: (key, val) => storageMap.set(key, String(val)),
   removeItem: key => storageMap.delete(key),
@@ -127,6 +131,8 @@ const {
   setCachedDocDimensions,
   clearDocumentPageCache,
   clearAllPageCaches,
+  getPageCacheStats,
+  MAX_CACHE_BYTES,
   _getL1CacheSizeForTest,
 } = await import('../src/pdfPageCache.js')
 
@@ -199,6 +205,24 @@ test('caches and restores document page dimensions in localStorage and clears pe
   assert.equal(getCachedDocDimensions('doc-dims'), null)
   assert.equal(await getCachedPageBlob('doc-dims', 1, 600, 800), null)
   assert.ok(await getCachedPageBlob('doc-other', 1, 600, 800))
+
+  // getPageCacheStats & clearAllPageCaches
+  setCachedDocDimensions('doc-other', dims)
+  await putCachedPageBlob('doc-other', 2, 600, 800, new Blob([new Uint8Array(1536)]))
+  const stats = await getPageCacheStats()
+  assert.equal(stats.totalBytes, 512 + 1536)
+  assert.equal(stats.maxBytes, MAX_CACHE_BYTES)
+  assert.equal(stats.pageCount, 2)
+  assert.equal(stats.docCount, 1)
+
+  const clearedStats = await clearAllPageCaches()
+  assert.equal(clearedStats.totalBytes, 2048)
+  assert.equal(clearedStats.pageCount, 2)
+  assert.equal(getCachedDocDimensions('doc-other'), null)
+  const afterStats = await getPageCacheStats()
+  assert.equal(afterStats.totalBytes, 0)
+  assert.equal(afterStats.pageCount, 0)
+  assert.equal(afterStats.docCount, 0)
 })
 
 test('scheduleStoreRenderedPageCanvas skips zeroed or resized canvases safely and drawCachedPageToCanvas draws on 2d context', async () => {

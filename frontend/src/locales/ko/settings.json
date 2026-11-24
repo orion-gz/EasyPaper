@@ -520,5 +520,13 @@
   "sharedModelsDeleteHelp": "파일 삭제는 공유 비활성화 후, 운영자가 격리된 유지보수 서버를 설정한 경우에 가능합니다.",
   "field.required": "이 항목을 입력해 주세요.",
   "field.port": "포트 번호는 1~65535 사이의 정수로 입력해 주세요.",
-  "field.correct": "표시된 입력 항목을 확인해 주세요."
+  "field.correct": "표시된 입력 항목을 확인해 주세요.",
+  "pageBitmapCache.label": "PDF 렌더링 캐시 (IndexedDB)",
+  "pageBitmapCache.usage": "{{usedMb}} MB / {{maxMb}} MB ({{docs}}개 문서 · {{pages}}페이지)",
+  "pageBitmapCache.clearBtn": "브라우저 PDF 렌더링 캐시 비우기",
+  "pageBitmapCache.confirmTitle": "PDF 렌더링 캐시 비우기",
+  "pageBitmapCache.confirmMessage": "브라우저(IndexedDB)에 저장된 PDF 페이지 렌더링 이미지 캐시와 페이지 규격 캐시를 모두 삭제하시겠습니까?\n원본 문서나 하이라이트·메모는 영향을 받지 않으며, 다음 열람 시 자동으로 다시 캐싱됩니다.",
+  "pageBitmapCache.confirmAction": "비우기",
+  "pageBitmapCache.clearedToast": "PDF 렌더링 캐시 {{pages}}페이지를 비웠습니다. ({{freedMb}}MB 확보)",
+  "pageBitmapCache.clearFailed": "PDF 렌더링 캐시 삭제에 실패했습니다."
 }
