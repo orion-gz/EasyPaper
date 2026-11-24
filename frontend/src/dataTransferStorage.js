@@ -7,6 +7,7 @@ const DOC_PREFIXES = [
 
 export function portableKey(key) {
   return (key.startsWith('easypaper_') || ['trans-pane-width', 'trans-pane-collapsed'].includes(key))
+    && !key.startsWith('easypaper_pdf_dims_')
     && !/password|token|secret|api_key|credential|annotation_sync_client_id/.test(key.toLowerCase())
 }
 

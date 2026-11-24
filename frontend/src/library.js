@@ -1,3 +1,5 @@
+import { clearDocumentPageCache } from './pdfPageCache.js'
+
 const API_BASE = '/api'
 const SHARED_GET_TTL_MS = 5000
 const sharedGetCache = new Map()
@@ -91,6 +93,7 @@ export async function deleteLibraryDoc(docId) {
   const res = await fetch(`${API_BASE}/library/${docId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('삭제 실패')
   invalidateLibraryGetCache()
+  void clearDocumentPageCache(docId)
   return res.json()
 }
 
@@ -438,6 +441,7 @@ export async function deleteLibraryDocPermanently(docId) {
   const res = await fetch(`${API_BASE}/library/${docId}/permanent`, { method: 'DELETE' })
   if (!res.ok) throw new Error('영구 삭제 실패')
   invalidateLibraryGetCache()
+  void clearDocumentPageCache(docId)
   return res.json()
 }
 
