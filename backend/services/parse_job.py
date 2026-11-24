@@ -107,10 +107,15 @@ async def finalize_deferred_document(doc_id: str) -> None:
         from services.pdf_diagnostics import diagnose_pages
         from services.pdf_parser import extract_pdf_images
         images = []
+        is_long_document = len(pages) > LONG_DOCUMENT_PAGE_THRESHOLD
         try:
-            cached = get_cached_images(doc_id, pdf_path, engine, version) if engine in {"marker", "mineru"} else None
+            cached = get_cached_images(doc_id, pdf_path, engine, version)
             if cached is not None:
                 images = cached
+            elif is_long_document:
+                # 대용량 문서(전공 서적 등)는 초기 오픈 시 전체 페이지 이미지 추출을
+                # 동기 대기하지 않고 뷰어의 페이지 윈도우 추출에 위임한다.
+                images = []
             elif engine in {"marker", "mineru"}:
                 from services.reparse import load_document_parse
                 images = (await asyncio.to_thread(load_document_parse, doc_id, doc, pdf_path)).get("images") or []

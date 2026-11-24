@@ -256,5 +256,11 @@
   "memoAlignment.pageRight": "이 페이지 메모 전체를 오른쪽 여백에 정렬",
   "citationCard.title": "참고문헌",
   "citationCard.close": "출처 미리보기 닫기",
-  "outline.navigation": "문서 목차"
+  "outline.navigation": "문서 목차",
+  "extractDot.idle": "이미지 추출 작업 없음",
+  "extractDot.runningSingle": "이미지 추출 진행 중 · {{page}}페이지 ({{percent}}%)",
+  "extractDot.runningRange": "이미지 추출 진행 중 · {{start}}–{{end}}페이지 중 {{page}}페이지 ({{percent}}%)",
+  "extractDot.stoppingSingle": "추출 중단 중 · {{page}}페이지 ({{percent}}%)",
+  "extractDot.stoppingRange": "추출 중단 중 · {{start}}–{{end}}페이지 중 {{page}}페이지 ({{percent}}%)",
+  "extractDot.error": "이미지 추출 오류 · {{page}}페이지 ({{percent}}%)"
 }

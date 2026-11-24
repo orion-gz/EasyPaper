@@ -3,7 +3,7 @@ import fitz  # PyMuPDF
 import os
 import re
 from functools import lru_cache
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Sequence, Tuple
 
 
 def extract_pages(
@@ -2196,10 +2196,15 @@ def _attach_pdf_figure_captions(pdf_path, regions):
     return regions
 
 
-def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict[str, Any]]:
+def extract_pdf_images(
+    pdf_path: str,
+    engine: Optional[str] = None,
+    page_numbers: Optional[Sequence[int]] = None,
+) -> List[Dict[str, Any]]:
     """
     PDF의 각 페이지에서 실제 그림/이미지(Figure) 및 테이블(Table)의 영역 정보를 추출합니다.
     선택된 파서 엔진(pymupdf, pdfplumber, marker, mineru)에 맞춰 유연하게 영역 정보를 수집합니다.
+    page_numbers(1-based)가 지정되면 pymupdf/pdfplumber에서 해당 페이지만 선택적으로 추출합니다.
     """
     if engine is None:
         try:
@@ -2240,12 +2245,17 @@ def extract_pdf_images(pdf_path: str, engine: Optional[str] = None) -> List[Dict
 
     doc = fitz.open(pdf_path)
     try:
-        return _extract_pdf_images_from_doc(doc, pdf_path, engine)
+        return _extract_pdf_images_from_doc(doc, pdf_path, engine, page_numbers=page_numbers)
     finally:
         doc.close()
 
 
-def _extract_pdf_images_from_doc(doc, pdf_path: str, engine: str) -> List[Dict[str, Any]]:
+def _extract_pdf_images_from_doc(
+    doc,
+    pdf_path: str,
+    engine: str,
+    page_numbers: Optional[Sequence[int]] = None,
+) -> List[Dict[str, Any]]:
     # Open pdfplumber once instead of once per page (O(n^2) on long documents).
     pl_pdf = None
     if engine == "pdfplumber":
@@ -2255,18 +2265,28 @@ def _extract_pdf_images_from_doc(doc, pdf_path: str, engine: str) -> List[Dict[s
         except Exception:
             pl_pdf = None
     try:
-        return _extract_pdf_images_impl(doc, pdf_path, engine, pl_pdf)
+        return _extract_pdf_images_impl(doc, pdf_path, engine, pl_pdf, page_numbers=page_numbers)
     finally:
         if pl_pdf is not None:
             pl_pdf.close()
 
 
-def _extract_pdf_images_impl(doc, pdf_path: str, engine: str, pl_pdf) -> List[Dict[str, Any]]:
+def _extract_pdf_images_impl(
+    doc,
+    pdf_path: str,
+    engine: str,
+    pl_pdf,
+    page_numbers: Optional[Sequence[int]] = None,
+) -> List[Dict[str, Any]]:
     images_data = []
+    if page_numbers is not None:
+        target_pages = [p - 1 for p in page_numbers if 1 <= p <= len(doc)]
+    else:
+        target_pages = list(range(len(doc)))
 
-    # ── 1단계: 모든 페이지의 캡션과 후보 사각형을 먼저 수집 ──
+    # ── 1단계: 대상 페이지의 캡션과 후보 사각형을 먼저 수집 ──
     pages_data = []
-    for page_num in range(len(doc)):
+    for page_num in target_pages:
         page = doc[page_num]
         page_width = page.rect.width
         page_height = page.rect.height

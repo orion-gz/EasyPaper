@@ -174,3 +174,40 @@ async def test_ai_classification_upload_is_deferred_and_reports_progress_on_open
     assert classify_calls == [(doc_id, 3)]
 
 
+@pytest.mark.asyncio
+async def test_long_document_finalize_skips_full_upfront_image_extraction(isolated_dirs, monkeypatch):
+    """50페이지 초과 대용량 문서는 초기 오픈(finalize_deferred_document) 시
+    전체 페이지에 대한 extract_pdf_images 동기 추출을 건너뛰고 즉시 ready가 되어야 한다."""
+    from routers import upload
+    from services import parse_job, pdf_parser
+    from services.db import db_get_document
+    from services.document_tasks import create_task
+
+    doc_id = "deferred-long-book"
+    source_dir = isolated_dirs["upload_dir"] / doc_id
+    source_dir.mkdir()
+    _make_pdf(source_dir / "document.pdf", pages=55)
+    monkeypatch.setattr(upload, "sessions", {})
+    monkeypatch.setattr(parse_job, "UPLOAD_DIR", str(isolated_dirs["upload_dir"]))
+    monkeypatch.setattr(parse_job, "start_processing_after_classification", lambda *a: None)
+
+    task = create_task(doc_id, "parse", {
+        "filename": "book.pdf", "username": "testuser", "document_mode": "general",
+        "document_type": "report", "source_lang": "en", "target_lang": "ko",
+        "classification_method": "manual", "defer_extraction": True, "parser_engine": "pymupdf",
+    })
+    await parse_job.execute_parse_task(
+        task["id"], upload.sessions, upload_root=str(isolated_dirs["upload_dir"]),
+        metadata_reader=pdf_parser.get_pdf_metadata, page_extractor=pdf_parser.extract_pages,
+    )
+    assert upload.ensure_session(doc_id)
+    monkeypatch.setattr(
+        pdf_parser, "extract_pdf_images",
+        lambda *a, **k: pytest.fail("full extract_pdf_images should not run upfront for >50p book"),
+    )
+    await parse_job.finalize_deferred_document(doc_id)
+    document = db_get_document(doc_id)
+    assert parse_job.EXTRACTION_DEFERRED not in document["metadata"]
+
+
+

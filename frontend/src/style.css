@@ -4930,6 +4930,170 @@ body.toolbar-pos-bottom .kebab-menu {
   bottom: calc(100% + 8px);
 }
 
+/* ── macOS 스타일 상단 툴바 이미지 추출 상태 Dot 인디케이터 ── */
+.extract-status-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 2px;
+  border-radius: 999px;
+  cursor: default;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.extract-status-indicator:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.extract-status-dot,
+.extract-tooltip-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+/* 빈 dot: 아무 작업 없음 */
+.extract-status-indicator[data-state="idle"] .extract-status-dot,
+.extract-status-indicator[data-state="idle"] .extract-tooltip-dot {
+  background-color: transparent;
+  border: 1.5px solid var(--text-muted);
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+/* 초록색 dot: 추출 진행 중 (macOS Camera Green) */
+.extract-status-indicator[data-state="running"] .extract-status-dot,
+.extract-status-indicator[data-state="running"] .extract-tooltip-dot {
+  background-color: #30d158;
+  border: 1.5px solid #30d158;
+  opacity: 1;
+  box-shadow: 0 0 7px rgba(48, 209, 88, 0.75);
+  animation: extract-dot-pulse 1.6s ease-in-out infinite;
+}
+
+/* 주황색 dot: 추출 중단 중 (macOS Mic Orange) */
+.extract-status-indicator[data-state="stopping"] .extract-status-dot,
+.extract-status-indicator[data-state="stopping"] .extract-tooltip-dot {
+  background-color: #ff9f0a;
+  border: 1.5px solid #ff9f0a;
+  opacity: 1;
+  box-shadow: 0 0 7px rgba(255, 159, 10, 0.75);
+  animation: extract-dot-pulse 0.9s ease-in-out infinite;
+}
+
+/* 빨간색 dot: 오류 */
+.extract-status-indicator[data-state="error"] .extract-status-dot,
+.extract-status-indicator[data-state="error"] .extract-tooltip-dot {
+  background-color: #ff453a;
+  border: 1.5px solid #ff453a;
+  opacity: 1;
+  box-shadow: 0 0 7px rgba(255, 69, 58, 0.75);
+}
+
+@keyframes extract-dot-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.16); }
+}
+
+.extract-status-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 9999;
+  min-width: 210px;
+  max-width: 320px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: var(--bg-panel, #1e2028);
+  color: var(--text-primary, #f3f4f6);
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.14));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+}
+
+body.toolbar-pos-bottom .extract-status-tooltip {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+body.toolbar-pos-left .extract-status-tooltip {
+  top: auto;
+  bottom: 0;
+  left: calc(100% + 8px);
+  right: auto;
+}
+
+body.toolbar-pos-right .extract-status-tooltip {
+  top: auto;
+  bottom: 0;
+  right: calc(100% + 8px);
+  left: auto;
+}
+
+.extract-status-indicator:hover .extract-status-tooltip,
+.extract-status-indicator:focus-visible .extract-status-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.extract-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.extract-tooltip-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  animation: none !important;
+}
+
+.extract-tooltip-text {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.extract-tooltip-bar-wrap {
+  margin-top: 6px;
+  height: 4px;
+  width: 100%;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.22);
+  overflow: hidden;
+}
+
+.extract-tooltip-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: #30d158;
+  transition: width 0.25s ease, background-color 0.2s ease;
+}
+
+.extract-status-indicator[data-state="stopping"] .extract-tooltip-bar {
+  background: #ff9f0a;
+}
+
+.extract-status-indicator[data-state="error"] .extract-tooltip-bar {
+  background: #ff453a;
+}
+
 /* ── 툴바 추가 메뉴(케밥) ─────────────────────────── */
 .kebab-wrapper {
   position: relative;

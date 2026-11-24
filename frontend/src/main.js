@@ -29,7 +29,7 @@ import { createReaderCommandActions } from './readerCommandActions.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
 import { initializeDesktopWindow } from './desktopWindow.js'
 import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './documentWorkspaceRuntime.js'
-import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail, getPDFPageText, getPDFPageWidth } from './pdfViewer.js'
+import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail, getPDFPageText, getPDFPageWidth, isActivelyScrolling, waitForScrollSettled } from './pdfViewer.js'
 import { translationFeedback } from './translationFeedback.js'
 import './style.css'
 import './styles/status-states.css'
@@ -11283,54 +11283,322 @@ if (viewerPrimerBtn) {
 
 let imageWindow = null
 
+function updateImageExtractIndicator(status = { state: 'idle' }) {
+  const indicator = $('image-extract-indicator')
+  if (!indicator) return
+  const nextState = status.state || 'idle'
+  const page = Number(status.page) || state.currentPage || 1
+  const startPage = Number(status.start_page) || page
+  const endPage = Number(status.end_page) || page
+  const percent = Math.max(0, Math.min(100, Math.round(Number(status.percent) || 0)))
+  const isRange = endPage > startPage
+
+  let labelText
+  if (nextState === 'running') {
+    labelText = isRange
+      ? t('viewer:extractDot.runningRange', { page, start: startPage, end: endPage, percent })
+      : t('viewer:extractDot.runningSingle', { page, percent })
+  } else if (nextState === 'stopping') {
+    labelText = isRange
+      ? t('viewer:extractDot.stoppingRange', { page, start: startPage, end: endPage, percent })
+      : t('viewer:extractDot.stoppingSingle', { page, percent })
+  } else if (nextState === 'error') {
+    labelText = t('viewer:extractDot.error', { page, percent })
+  } else {
+    labelText = t('viewer:extractDot.idle')
+  }
+
+  indicator.dataset.state = nextState
+  indicator.dataset.page = String(page)
+  indicator.dataset.percent = String(percent)
+  indicator.setAttribute('aria-label', labelText)
+
+  const textEl = $('image-extract-tooltip-text')
+  if (textEl) textEl.textContent = labelText
+
+  const barWrap = $('image-extract-tooltip-bar-wrap')
+  const bar = $('image-extract-tooltip-bar')
+  if (barWrap && bar) {
+    if (nextState === 'idle') {
+      barWrap.classList.add('hidden')
+      bar.style.width = '0%'
+    } else {
+      barWrap.classList.remove('hidden')
+      bar.style.width = `${percent}%`
+    }
+  }
+}
+
+document.addEventListener('easypaper:locale-changed', () => {
+  updateImageExtractIndicator(imageWindow?.activeExtract || { state: 'idle' })
+})
+
 function resetImageWindow() {
   clearTimeout(imageWindow?.timer)
+  clearTimeout(imageWindow?.provisionalTimer)
+  clearTimeout(imageWindow?.statusTransitionTimer)
+  clearInterval(imageWindow?.progressTickTimer)
+  if (imageWindow?.rafId) cancelAnimationFrame(imageWindow.rafId)
   imageWindow = null
   state.documentImages = []
+  updateImageExtractIndicator({ state: 'idle' })
+}
+
+function scheduleImageOverlayDomRefresh(windowState, docId, start, end) {
+  windowState.dirtyStart = Math.min(windowState.dirtyStart ?? start, start)
+  windowState.dirtyEnd = Math.max(windowState.dirtyEnd ?? end, end)
+
+  const applyForLayer = (textLayerDiv, rangeStart, rangeEnd) => {
+    const pageWrapper = textLayerDiv.closest('.pdf-page-wrapper')
+    if (!pageWrapper) return
+    const pageNum = parseInt(pageWrapper.dataset.page, 10)
+    if (!Number.isFinite(pageNum)) return
+    if (pageNum >= rangeStart && pageNum <= rangeEnd) {
+      renderImageOverlayLayer(textLayerDiv, pageNum)
+    }
+    renderFigureRefOverlayLayer(textLayerDiv, pageNum)
+  }
+
+  if (!isActivelyScrolling()) {
+    if (windowState.rafId) {
+      cancelAnimationFrame(windowState.rafId)
+      windowState.rafId = null
+    }
+    const rStart = windowState.dirtyStart
+    const rEnd = windowState.dirtyEnd
+    windowState.dirtyStart = undefined
+    windowState.dirtyEnd = undefined
+    document.querySelectorAll('.textLayer').forEach(textLayerDiv => {
+      applyForLayer(textLayerDiv, rStart, rEnd)
+    })
+    return
+  }
+
+  if (windowState.awaitingSettle) return
+  windowState.awaitingSettle = true
+  void waitForScrollSettled().then(() => {
+    windowState.awaitingSettle = false
+    if (imageWindow !== windowState || state.currentDocId !== docId) return
+    if (windowState.dirtyStart === undefined || windowState.dirtyEnd === undefined) return
+    if (windowState.rafId) {
+      cancelAnimationFrame(windowState.rafId)
+      windowState.rafId = null
+    }
+    const rStart = windowState.dirtyStart
+    const rEnd = windowState.dirtyEnd
+    windowState.dirtyStart = undefined
+    windowState.dirtyEnd = undefined
+    const layers = Array.from(document.querySelectorAll('.textLayer'))
+    let idx = 0
+    const step = () => {
+      windowState.rafId = null
+      if (imageWindow !== windowState || state.currentDocId !== docId) return
+      if (isActivelyScrolling()) {
+        scheduleImageOverlayDomRefresh(windowState, docId, rStart, rEnd)
+        return
+      }
+      const limit = Math.min(layers.length, idx + 2)
+      for (; idx < limit; idx++) {
+        if (layers[idx].isConnected) applyForLayer(layers[idx], rStart, rEnd)
+      }
+      if (idx < layers.length) {
+        windowState.rafId = requestAnimationFrame(step)
+      }
+    }
+    windowState.rafId = requestAnimationFrame(step)
+  })
+}
+
+const MAX_PROVISIONAL_POLL_ATTEMPTS = 60
+
+function _startExtractProgressTicker(windowState) {
+  clearInterval(windowState.progressTickTimer)
+  windowState.progressTickTimer = setInterval(() => {
+    if (imageWindow !== windowState || !windowState.activeExtract || windowState.activeExtract.state !== 'running') {
+      clearInterval(windowState.progressTickTimer)
+      return
+    }
+    const info = windowState.activeExtract
+    if (info.percent < 92) {
+      info.percent = Math.min(92, info.percent + 3)
+      const span = Math.max(1, info.end_page - info.start_page + 1)
+      const offset = Math.min(span - 1, Math.floor((info.percent / 100) * span))
+      info.page = info.start_page + offset
+      updateImageExtractIndicator(info)
+    }
+  }, 450)
 }
 
 function loadDocumentImages(docId, page = state.currentPage) {
   if (!docId || state.currentDocId !== docId) return
-  imageWindow ??= { loaded: new Set(), pending: new Set() }
+  imageWindow ??= { loaded: new Set(), provisional: new Set(), pending: new Set(), pollAttempts: 0, activeExtract: null }
   const windowState = imageWindow
+  if (windowState.target !== page) {
+    windowState.pollAttempts = 0
+  }
   windowState.target = page
   clearTimeout(windowState.timer)
-  const margin = 4
-  const covered = windowState.loaded.has(Math.max(1, page - margin))
-    && windowState.loaded.has(Math.min(state.totalPages || page, page + margin))
-    && windowState.loaded.has(page)
-  if (covered || windowState.pending.size >= 2) return
+  const margin = 2
+  const minP = Math.max(1, page - margin)
+  const maxP = Math.min(state.totalPages || page, page + margin)
+  const hasPage = n => windowState.loaded.has(n) || windowState.provisional.has(n)
+  const covered = hasPage(minP) && hasPage(maxP) && hasPage(page)
+  if (covered) {
+    const fullyLoaded = windowState.loaded.has(minP)
+      && windowState.loaded.has(maxP)
+      && windowState.loaded.has(page)
+    if (fullyLoaded && windowState.pending.size === 0 && windowState.activeExtract?.state !== 'error') {
+      clearInterval(windowState.progressTickTimer)
+      windowState.activeExtract = null
+      updateImageExtractIndicator({ state: 'idle' })
+    }
+    return
+  }
+  if (windowState.pending.size >= 2) return
   if ([...windowState.pending].some(center => Math.abs(center - page) <= 15)) return
-  windowState.timer = setTimeout(() => fetchImageWindow(docId, page, windowState), 180)
+  clearTimeout(windowState.provisionalTimer)
+
+  // 이전 윈도우 추출이 진행 중일 때 다른 페이지 구간으로 이동하면 즉시 주황색(추출 중단 중) 표시
+  if (
+    windowState.activeExtract
+    && windowState.activeExtract.state === 'running'
+    && (page < windowState.activeExtract.start_page || page > windowState.activeExtract.end_page)
+  ) {
+    clearInterval(windowState.progressTickTimer)
+    windowState.activeExtract = { ...windowState.activeExtract, state: 'stopping' }
+    updateImageExtractIndicator(windowState.activeExtract)
+  }
+
+  const delay = isActivelyScrolling() ? 350 : 180
+  windowState.timer = setTimeout(() => fetchImageWindow(docId, page, windowState), delay)
 }
 
 async function fetchImageWindow(docId, page, windowState) {
+  if (windowState.pending.has(page)) return
   windowState.pending.add(page)
-  const single = !windowState.loaded.has(page)
+  const single = !windowState.loaded.has(page) && !windowState.provisional.has(page)
   let succeeded = false
+  let isProvisional = false
+
+  clearTimeout(windowState.statusTransitionTimer)
+  const prevExtract = windowState.activeExtract
+  const estStart = single ? page : Math.max(1, page - 4)
+  const estEnd = single ? page : Math.min(state.totalPages || page, page + 4)
+  const isSameWindowPoll = prevExtract
+    && page >= prevExtract.start_page
+    && page <= prevExtract.end_page
+
+  windowState.activeExtract = {
+    state: 'running',
+    page: isSameWindowPoll ? prevExtract.page : page,
+    start_page: isSameWindowPoll ? prevExtract.start_page : estStart,
+    end_page: isSameWindowPoll ? prevExtract.end_page : estEnd,
+    percent: isSameWindowPoll ? Math.max(15, prevExtract.percent) : 12,
+  }
+  updateImageExtractIndicator(windowState.activeExtract)
+  _startExtractProgressTicker(windowState)
+
   try {
     const imgRes = await fetchLibraryDocImages(docId, page, single)
     if (imageWindow !== windowState || state.currentDocId !== docId) return
     succeeded = true
-    const { start = 1, end = state.totalPages, images } = imgRes
-    for (let n = start; n <= end; n++) windowState.loaded.add(n)
+    const { start = 1, end = state.totalPages, images, provisional = false, extraction_status: serverStatus } = imgRes
+    isProvisional = Boolean(provisional)
+    for (let n = start; n <= end; n++) {
+      if (isProvisional) {
+        if (!windowState.loaded.has(n)) windowState.provisional.add(n)
+      } else {
+        windowState.loaded.add(n)
+        windowState.provisional.delete(n)
+      }
+    }
     state.documentImages = state.documentImages.filter(img => img.page < start || img.page > end)
       .concat(images)
 
-    // 이미 렌더링되어 있는 페이지들의 오버레이 레이어 갱신
-    document.querySelectorAll('.textLayer').forEach(textLayerDiv => {
-      const pageWrapper = textLayerDiv.closest('.pdf-page-wrapper')
-      if (pageWrapper) {
-        const pageNum = parseInt(pageWrapper.dataset.page)
-        renderImageOverlayLayer(textLayerDiv, pageNum)
-        // Figure/Table 라벨은 documentImages가 로드되어야 알 수 있으므로,
-        // 이미 렌더링된 페이지들의 본문 참조 오버레이도 여기서 함께 다시 그린다.
-        renderFigureRefOverlayLayer(textLayerDiv, pageNum)
+    // 이미 렌더링되어 있는 페이지들의 오버레이 레이어 갱신 (스크롤 중이면 정지 후 분할 렌더링)
+    scheduleImageOverlayDomRefresh(windowState, docId, start, end)
+
+    clearTimeout(windowState.provisionalTimer)
+    if (serverStatus?.state === 'error') {
+      clearInterval(windowState.progressTickTimer)
+      windowState.activeExtract = {
+        state: 'error',
+        page: serverStatus.page || page,
+        start_page: serverStatus.start_page || start,
+        end_page: serverStatus.end_page || end,
+        percent: serverStatus.percent || 0,
       }
-    })
+      updateImageExtractIndicator(windowState.activeExtract)
+    } else if (isProvisional && windowState.pollAttempts < MAX_PROVISIONAL_POLL_ATTEMPTS) {
+      windowState.pollAttempts++
+      const nextRunning = {
+        state: 'running',
+        page: serverStatus?.page || page,
+        start_page: serverStatus?.start_page || start,
+        end_page: serverStatus?.end_page || end,
+        percent: Math.max(windowState.activeExtract?.percent || 15, serverStatus?.percent || 20),
+      }
+      if (serverStatus?.preempted) {
+        updateImageExtractIndicator({
+          state: 'stopping',
+          page: serverStatus.stopped_page || prevExtract?.page || page,
+          start_page: serverStatus.stopped_start_page || prevExtract?.start_page || start,
+          end_page: serverStatus.stopped_end_page || prevExtract?.end_page || end,
+          percent: serverStatus.stopped_percent || prevExtract?.percent || 30,
+        })
+        windowState.statusTransitionTimer = setTimeout(() => {
+          if (imageWindow === windowState && state.currentDocId === docId) {
+            windowState.activeExtract = nextRunning
+            updateImageExtractIndicator(nextRunning)
+            _startExtractProgressTicker(windowState)
+          }
+        }, 450)
+      } else {
+        windowState.activeExtract = nextRunning
+        updateImageExtractIndicator(nextRunning)
+        _startExtractProgressTicker(windowState)
+      }
+      windowState.provisionalTimer = setTimeout(() => {
+        if (imageWindow === windowState && state.currentDocId === docId && windowState.pending.size === 0) {
+          fetchImageWindow(docId, windowState.target || page, windowState)
+        }
+      }, 1200)
+    } else {
+      windowState.pollAttempts = 0
+      clearInterval(windowState.progressTickTimer)
+      // single=true 직후 주변 윈도우 요청이 곧바로 이어질 예정이면 running 유지, 아니면 완료 후 빈 dot(idle) 전환
+      const willFollowUp = windowState.target !== page || single
+      if (willFollowUp) {
+        windowState.activeExtract = {
+          state: 'running',
+          page,
+          start_page: start,
+          end_page: end,
+          percent: 45,
+        }
+        updateImageExtractIndicator(windowState.activeExtract)
+      } else {
+        updateImageExtractIndicator({ state: 'running', page, start_page: start, end_page: end, percent: 100 })
+        windowState.activeExtract = null
+        windowState.statusTransitionTimer = setTimeout(() => {
+          if (imageWindow === windowState && windowState.pending.size === 0 && !windowState.activeExtract) {
+            updateImageExtractIndicator({ state: 'idle' })
+          }
+        }, 350)
+      }
+    }
   } catch (e) {
     if (state.currentDocId !== docId) return
     console.warn("이미지 좌표 로드 실패:", e)
+    clearInterval(windowState.progressTickTimer)
+    windowState.activeExtract = {
+      state: 'error',
+      page,
+      start_page: page,
+      end_page: page,
+      percent: windowState.activeExtract?.percent || 0,
+    }
+    updateImageExtractIndicator(windowState.activeExtract)
   } finally {
     windowState.pending.delete(page)
     if (imageWindow === windowState && (windowState.target !== page || (single && succeeded))) {

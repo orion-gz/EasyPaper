@@ -67,6 +67,14 @@ function waitForScrollSettleOrImmediate(isUrgent, signal) {
   })
 }
 
+export function isActivelyScrolling() {
+  return activeScrolling
+}
+
+export function waitForScrollSettled(signal) {
+  return waitForScrollSettleOrImmediate(false, signal)
+}
+
 // Desktop WebViews can lag behind browser releases. Use the matching
 // compatibility builds for both the main module and its worker.
 async function loadPDFJS() {
