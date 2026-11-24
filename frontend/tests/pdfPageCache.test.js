@@ -121,6 +121,8 @@ const {
   getCachedPageBlob,
   putCachedPageBlob,
   evictIfNeeded,
+  drawCachedPageToCanvas,
+  scheduleStoreRenderedPageCanvas,
   getCachedDocDimensions,
   setCachedDocDimensions,
   clearDocumentPageCache,
@@ -198,3 +200,69 @@ test('caches and restores document page dimensions in localStorage and clears pe
   assert.equal(await getCachedPageBlob('doc-dims', 1, 600, 800), null)
   assert.ok(await getCachedPageBlob('doc-other', 1, 600, 800))
 })
+
+test('scheduleStoreRenderedPageCanvas skips zeroed or resized canvases safely and drawCachedPageToCanvas draws on 2d context', async () => {
+  await clearAllPageCaches()
+  idbRecords.clear()
+
+  let toBlobCalls = 0
+  const fakeCanvas = {
+    width: 800,
+    height: 1000,
+    toBlob(cb) {
+      toBlobCalls++
+      cb(new Blob([new Uint8Array(256)], { type: 'image/webp' }))
+    },
+  }
+
+  // Zero out canvas before idle task fires -> should skip without calling toBlob
+  scheduleStoreRenderedPageCanvas('doc-race', 1, fakeCanvas, 800, 1000)
+  fakeCanvas.width = 0
+  fakeCanvas.height = 0
+  await new Promise(r => setTimeout(r, 50))
+  assert.equal(toBlobCalls, 0)
+  assert.equal(await getCachedPageBlob('doc-race', 1, 800, 1000), null)
+
+  // Valid canvas dimensions -> stores in cache
+  const validCanvas = {
+    width: 800,
+    height: 1000,
+    toBlob(cb) {
+      toBlobCalls++
+      cb(new Blob([new Uint8Array(256)], { type: 'image/webp' }))
+    },
+  }
+  scheduleStoreRenderedPageCanvas('doc-race', 2, validCanvas, 800, 1000)
+  await new Promise(r => setTimeout(r, 50))
+  assert.equal(toBlobCalls, 1)
+  assert.ok(await getCachedPageBlob('doc-race', 2, 800, 1000))
+
+  // Verify drawCachedPageToCanvas uses 2d context
+  let drawn = false
+  const prevCreateImageBitmap = globalThis.createImageBitmap
+  globalThis.createImageBitmap = async () => ({
+    close() {},
+  })
+  try {
+    const targetCanvas = {
+      width: 0,
+      height: 0,
+      getContext(type) {
+        if (type !== '2d') return null
+        return {
+          drawImage() {
+            drawn = true
+          },
+        }
+      },
+    }
+    const ok = await drawCachedPageToCanvas('doc-race', 2, targetCanvas, 800, 1000)
+    assert.equal(ok, true)
+    assert.equal(drawn, true)
+    assert.equal(targetCanvas.width, 800)
+    assert.equal(targetCanvas.height, 1000)
+  } finally {
+    globalThis.createImageBitmap = prevCreateImageBitmap
+  }
+})
+

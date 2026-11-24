@@ -444,11 +444,16 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
       const pageNum = Number(target.dataset.page)
       next.add(pageNum)
       if (!jobs.has(pageNum)) {
-        queue.set(pageNum, target.matches('.pdf-page-wrapper') ? target : target.querySelector('.pdf-page-wrapper'))
+        const wrapperEl = target.matches('.pdf-page-wrapper') ? target : target.querySelector('.pdf-page-wrapper')
+        if (wrapperEl && !wrapperEl.querySelector('canvas[data-rendered]')) {
+          wrapperEl.querySelector('.pdf-page-inner')?.replaceChildren()
+        }
+        queue.set(pageNum, wrapperEl)
       } else if (isLargeDocument) {
         const existingJob = jobs.get(pageNum)
-        if (existingJob && existingJob.done && Math.abs(pageNum - (firstVisible ?? currentPage)) <= 1) {
-          if (existingJob.needsHiResUpgrade && !existingJob.upgradingHiRes) {
+        const distFromVisible = Math.abs(pageNum - (firstVisible ?? currentPage))
+        if (existingJob && existingJob.done && distFromVisible <= 3) {
+          if (distFromVisible <= 1 && existingJob.needsHiResUpgrade && !existingJob.upgradingHiRes) {
             existingJob.upgradingHiRes = true
             _upgradeDeferredHiResCanvas(existingJob, myGeneration).finally(() => {
               existingJob.upgradingHiRes = false
@@ -863,12 +868,20 @@ async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument 
     job.page = page
     const baseViewport = page.getViewport({ scale: 1 })
     const prevDim = pageDimensions.get(pageNum)
-    if (!prevDim || prevDim.width !== baseViewport.width || prevDim.height !== baseViewport.height) {
+    const dimMismatch = !prevDim
+      || Math.abs(prevDim.width - baseViewport.width) > 0.5
+      || Math.abs(prevDim.height - baseViewport.height) > 0.5
+    if (dimMismatch) {
       pageDimensions.set(pageNum, { width: baseViewport.width, height: baseViewport.height })
       if (docId) setCachedDocDimensions(docId, pageDimensions)
     }
     const viewport = page.getViewport({ scale: currentScale })
     job.viewport = viewport
+
+    if (earlyCacheRendered && dimMismatch) {
+      // Page dimensions differed from fallback page 1 dimension; sync layout & re-render at exact viewport
+      earlyCacheRendered = false
+    }
 
     if (!earlyCacheRendered) {
       // 캔버스
@@ -929,14 +942,13 @@ async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument 
             await job.renderTask.promise
             if (stale()) return false
             const bitmap = offscreen.transferToImageBitmap()
-            const bitmapCtx = targetCanvas.getContext('bitmaprenderer')
-            if (bitmapCtx) {
-              bitmapCtx.transferFromImageBitmap(bitmap)
-              renderedOffscreen = true
-            } else {
-              targetCanvas.getContext('2d').drawImage(bitmap, 0, 0)
+            const ctx = targetCanvas.getContext('2d')
+            if (ctx) {
+              ctx.drawImage(bitmap, 0, 0)
               bitmap.close?.()
               renderedOffscreen = true
+            } else {
+              bitmap.close?.()
             }
           }
         } catch {

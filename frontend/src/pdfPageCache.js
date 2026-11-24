@@ -58,7 +58,17 @@ function openCacheDB() {
           store.createIndex('lastAccessedAt', 'lastAccessedAt', { unique: false })
         }
       }
-      req.onsuccess = () => resolve(req.result)
+      req.onsuccess = () => {
+        const db = req.result
+        db.onversionchange = () => {
+          try { db.close() } catch {}
+          dbPromise = null
+        }
+        db.onclose = () => {
+          dbPromise = null
+        }
+        resolve(db)
+      }
       req.onerror = () => resolve(null)
       req.onblocked = () => resolve(null)
     } catch {
@@ -226,16 +236,30 @@ export async function drawCachedPageToCanvas(docId, pageNum, targetCanvas, width
   try {
     targetCanvas.width = Math.round(width)
     targetCanvas.height = Math.round(height)
+    const ctx = targetCanvas.getContext('2d')
+    if (!ctx) return false
     if (typeof createImageBitmap === 'function') {
       const bitmap = await createImageBitmap(blob)
-      const ctx = targetCanvas.getContext('2d')
-      if (!ctx) {
-        bitmap.close?.()
-        return false
-      }
       ctx.drawImage(bitmap, 0, 0, targetCanvas.width, targetCanvas.height)
       bitmap.close?.()
       return true
+    }
+    if (typeof Image === 'function' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      const objectUrl = URL.createObjectURL(blob)
+      try {
+        await new Promise((resolve, reject) => {
+          const img = new Image()
+          img.onload = () => {
+            ctx.drawImage(img, 0, 0, targetCanvas.width, targetCanvas.height)
+            resolve()
+          }
+          img.onerror = reject
+          img.src = objectUrl
+        })
+        return true
+      } finally {
+        URL.revokeObjectURL(objectUrl)
+      }
     }
   } catch {
     return false
@@ -282,10 +306,13 @@ export function scheduleStoreRenderedPageCanvas(docId, pageNum, sourceCanvas, wi
   if (l1Cache.has(key)) return
 
   const task = async () => {
+    if (l1Cache.has(key)) return
     if (!sourceCanvas.width || !sourceCanvas.height) return
     if (sourceCanvas.width !== Math.round(width) || sourceCanvas.height !== Math.round(height)) return
     const blob = await canvasToBlob(sourceCanvas)
     if (!blob) return
+    if (!sourceCanvas.width || !sourceCanvas.height) return
+    if (sourceCanvas.width !== Math.round(width) || sourceCanvas.height !== Math.round(height)) return
     await putCachedPageBlob(docId, pageNum, width, height, blob)
   }
 
