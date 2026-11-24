@@ -47,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
         "parser_version": version,
         "pages": pages,
         "images": images,
+        "images_extracted": include_images,
         "diagnostics": diagnose_pages(pages, images, args.engine, version),
     }
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
