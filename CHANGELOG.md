@@ -2,6 +2,20 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.6.6 - 2026-11-24
+
+### 한국어 (1.6.5 → 1.6.6)
+
+- 현재 읽는 페이지 주변의 그림 오버레이를 점진적으로 추출하고 진행 상태를 표시
+- 렌더링한 PDF 페이지 비트맵을 세션 간에 캐시하고 스크롤 중 렌더링된 페이지를 유지해 문서 다시 열기와 페이지 이동 속도를 개선
+- 설정의 데이터 탭에서 PDF 페이지 캐시 상태를 확인하고 캐시를 삭제하는 기능을 추가
+
+### English (1.6.5 → 1.6.6)
+
+- Extract figure overlays progressively around the current reading page and show extraction status.
+- Cache rendered PDF page bitmaps across sessions and retain rendered pages while scrolling for faster document reopening and navigation.
+- View the PDF page cache status and clear the cache from the Data tab in Settings.
+
 ## 1.6.5 - 2026-11-23
 
 ### 한국어 (1.6.4 → 1.6.5)
