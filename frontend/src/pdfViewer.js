@@ -8,6 +8,13 @@ import { projectSourceRects, sourceMappingMatchesRevision, mergePdfSentenceLineR
 
 import { alignTextLayer, collectTextContent, recoveredTextContent } from './pdfTextLayer.js'
 import { pdfResources } from './pdfResources.js'
+import {
+  drawCachedPageToCanvas,
+  scheduleStoreRenderedPageCanvas,
+  getCachedDocDimensions,
+  setCachedDocDimensions,
+  clearDocumentPageCache,
+} from './pdfPageCache.js'
 import { t } from './i18n.js'
 
 import './pdfCompatibility.js'
@@ -15,6 +22,7 @@ import pdfWorkerUrl from './pdfWorker.js?worker&url'
 
 let pdfjsLib = null
 let pdfDoc = null
+let currentDocId = null
 let widestPageWidth = 0
 let pageDimensions = new Map()
 let pdfLoadingTask = null
@@ -109,9 +117,18 @@ export async function loadPDF(url, onProgress) {
   renderGeneration++
   pdfDoc = nextPdfDoc
   widestPageWidth = 0
-  pageDimensions = new Map()
   const match = String(url).match(/\/api\/(?:pdf-file\/([^/?]+)|library\/([^/?]+)\/pdf)(?:\?|$)/)
-  pdfTextUrl = match ? `/api/pdf-text/${match[1] || match[2]}` : null
+  currentDocId = match ? (match[1] || match[2]) : null
+  const cachedDims = currentDocId ? getCachedDocDimensions(currentDocId) : null
+  pageDimensions = cachedDims || new Map()
+  if (cachedDims && cachedDims.size > 0) {
+    let maxW = 0
+    for (const dim of cachedDims.values()) {
+      if (dim.width > maxW) maxW = dim.width
+    }
+    widestPageWidth = maxW
+  }
+  pdfTextUrl = currentDocId ? `/api/pdf-text/${currentDocId}` : null
   pdfTextRecoveryCache.clear()
   pdfNativeTextContentCache.clear()
   figureCropCache.clear()
@@ -247,7 +264,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
 
   const isLargeDocument = numPages > 48
   const preRenderRadius = isLargeDocument ? 15 : numPages
-  const maxRetainedPages = isLargeDocument ? 40 : numPages
+  const maxRetainedPages = isLargeDocument ? 250 : numPages
   const eagerRenderAll = !isLargeDocument
   let initialPageReadyResolve = null
   const initialPageReadyPromise = new Promise(resolve => {
@@ -283,6 +300,37 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
     }
   }
 
+  function downgradeCanvasTo1x(job) {
+    if (!job || !job.hiResRendered || !job.viewport) return
+    const inner = job.wrapper.querySelector('.pdf-page-inner')
+    const currentCanvas = inner?.querySelector('canvas[data-rendered]')
+    if (!currentCanvas) return
+    const w1x = Math.floor(job.viewport.width)
+    const h1x = Math.floor(job.viewport.height)
+    if (currentCanvas.width <= w1x && currentCanvas.height <= h1x) {
+      job.hiResRendered = false
+      job.needsHiResUpgrade = (job.dpr || 1) > 1.15
+      return
+    }
+    try {
+      const downscaled = document.createElement('canvas')
+      downscaled.width = w1x
+      downscaled.height = h1x
+      downscaled.style.width = `${job.viewport.width}px`
+      downscaled.style.height = `${job.viewport.height}px`
+      downscaled.dataset.rendered = 'true'
+      const ctx = downscaled.getContext('2d')
+      if (ctx) {
+        ctx.drawImage(currentCanvas, 0, 0, w1x, h1x)
+        inner.replaceChild(downscaled, currentCanvas)
+        currentCanvas.width = 0
+        currentCanvas.height = 0
+        job.hiResRendered = false
+        job.needsHiResUpgrade = (job.dpr || 1) > 1.15
+      }
+    } catch {}
+  }
+
   function trimPages() {
     const selection = window.getSelection()
     if (isLargeDocument) {
@@ -296,10 +344,15 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
       }
       // In textbook-sized documents, strip heavy textLayer/overlay DOM (thousands of spans)
       // from pages that are more than 3 pages away from the current reading position,
-      // while keeping their lightweight rendered <canvas> bitmap cached across ±15 pages!
+      // and downgrade off-screen Retina (2x) canvases to 1x to save 75% VRAM while keeping
+      // the rendered <canvas> bitmap alive across the session (up to 250 pages)!
       for (const job of jobs.values()) {
-        if (!job.done || !job.textLayerMounted) continue
-        if (Math.abs(job.pageNum - renderPriorityPage) <= 3) continue
+        if (!job.done) continue
+        const dist = Math.abs(job.pageNum - renderPriorityPage)
+        if (job.hiResRendered && dist > 2) {
+          downgradeCanvasTo1x(job)
+        }
+        if (!job.textLayerMounted || dist <= 3) continue
         if (job.wrapper.contains(document.activeElement)) continue
         if (selection?.rangeCount && !selection.isCollapsed && selection.getRangeAt(0).intersectsNode(job.wrapper)) continue
         const hasMemos = Boolean(job.wrapper.querySelector('.floating-memo'))
@@ -469,15 +522,20 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
   }
 
   // Reserve each page's real dimensions before restoring a saved position.
-  // For textbook-sized documents (>32 pages), sample the first 8 pages immediately
-  // and reuse the primary page dimensions so opening a 600-page book does not
-  // block on 600 sequential worker getPage() calls.
+  // If localStorage already has page 1's dimensions for this document, compute all
+  // viewports synchronously in 0ms without awaiting any PDF.js worker getPage() calls!
+  // On first-ever open of a large document (>32 pages), measure only page 1 immediately
+  // so first screen paint is not delayed by 8 sequential worker round-trips.
   const renderingDoc = pdfDoc
   let viewports
   try {
     const dimensions = pageDimensions
     viewports = []
-    const sampleLimit = numPages > 32 ? Math.min(8, numPages) : numPages
+    let dimensionsChanged = false
+    const hasCachedPrimaryDim = dimensions.has(1)
+    const sampleLimit = hasCachedPrimaryDim
+      ? 0
+      : (numPages > 32 ? 1 : numPages)
     for (let start = 1; start <= sampleLimit; start += 16) {
       if (!isCurrent()) return
       let requested = false
@@ -488,6 +546,7 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
           const page = await renderingDoc.getPage(pageNum)
           const { width, height } = page.getViewport({ scale: 1 })
           dimensions.set(pageNum, { width, height })
+          dimensionsChanged = true
         }
         const { width, height } = dimensions.get(pageNum)
         return { width: width * zoom, height: height * zoom }
@@ -501,6 +560,9 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         const dim = dimensions.get(pageNum) || fallbackDim
         viewports.push({ width: dim.width * zoom, height: dim.height * zoom })
       }
+    }
+    if (dimensionsChanged && currentDocId) {
+      setCachedDocDimensions(currentDocId, dimensions)
     }
   } catch (error) {
     if (!isCurrent()) return
@@ -565,14 +627,6 @@ export async function renderScrollView(container, zoom, { onPageVisible, preserv
         nearby.delete(pageNum)
         if (!eagerRenderAll) {
           queue.delete(pageNum)
-          // A retained bitmap may not have a job in this generation yet.
-          if (!jobs.has(pageNum)) {
-            entry.target.querySelectorAll('.pdf-page-inner canvas').forEach(canvas => {
-              canvas.width = 0
-              canvas.height = 0
-              canvas.remove()
-            })
-          }
         }
       }
     })
@@ -740,6 +794,7 @@ async function _upgradeDeferredHiResCanvas(job, generation) {
       currentCanvas.height = 0
     }
     job.needsHiResUpgrade = false
+    job.hiResRendered = true
   } catch {}
 }
 
@@ -747,56 +802,126 @@ async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument 
   const stale = () => generation !== renderGeneration || job.cancelled
   if (stale()) return
   const inner = wrapper.querySelector('.pdf-page-inner')
+  const docId = currentDocId
   // Paint offscreen; the previous bitmap remains visible until replacement.
   try {
+    const dpr = window.devicePixelRatio || 1
+    const useTwoStagePreview = isLargeDocument && dpr > 1.15
+    const firstPassRatio = useTwoStagePreview ? 1 : dpr
+    const cachedDim = pageDimensions.get(pageNum) || pageDimensions.get(1)
+    let earlyCacheRendered = false
+    let canvas = null
+    let textLayerDiv = null
+
+    // Fast path: if we know the page dimensions and have a cached bitmap in L1/IndexedDB,
+    // draw and mount the cached canvas BEFORE awaiting pdfDoc.getPage(pageNum) from the worker!
+    if (docId && cachedDim) {
+      const estWidth = cachedDim.width * currentScale
+      const estHeight = cachedDim.height * currentScale
+      const targetPixelW = Math.floor(estWidth * firstPassRatio)
+      const targetPixelH = Math.floor(estHeight * firstPassRatio)
+      const fastCanvas = document.createElement('canvas')
+      fastCanvas.style.width = `${estWidth}px`
+      fastCanvas.style.height = `${estHeight}px`
+      const hit = await drawCachedPageToCanvas(docId, pageNum, fastCanvas, targetPixelW, targetPixelH)
+      if (stale()) {
+        fastCanvas.width = 0
+        fastCanvas.height = 0
+        return
+      }
+      if (hit) {
+        earlyCacheRendered = true
+        canvas = fastCanvas
+        textLayerDiv = document.createElement('div')
+        textLayerDiv.className = 'textLayer'
+        textLayerDiv.style.width = `${estWidth}px`
+        textLayerDiv.style.height = `${estHeight}px`
+        textLayerDiv.style.setProperty('--scale-factor', currentScale)
+        textLayerDiv.style.setProperty('--user-unit', 1)
+        job.textLayerDiv = textLayerDiv
+
+        inner.style.width = `${estWidth}px`
+        inner.style.height = `${estHeight}px`
+        wrapper.style.minHeight = ''
+        const transBlock = wrapper.parentElement?.querySelector('.trans-page-block')
+        if (transBlock) transBlock.style.height = `${Math.floor(estHeight)}px`
+
+        canvas.dataset.rendered = 'true'
+        job.canvasRendered = true
+        job.dpr = dpr
+        job.needsHiResUpgrade = useTwoStagePreview
+        job.hiResRendered = !useTwoStagePreview && dpr > 1.15
+        window.onTextLayerReleased?.(inner.querySelector('.textLayer'), pageNum)
+        inner.querySelectorAll('canvas').forEach(previous => { previous.width = 0; previous.height = 0 })
+        inner.replaceChildren(canvas, textLayerDiv)
+        onCanvasReady?.()
+      }
+    }
+
     const page = await pdfDoc.getPage(pageNum)
     if (stale()) return
     job.page = page
     const baseViewport = page.getViewport({ scale: 1 })
-    pageDimensions.set(pageNum, { width: baseViewport.width, height: baseViewport.height })
+    const prevDim = pageDimensions.get(pageNum)
+    if (!prevDim || prevDim.width !== baseViewport.width || prevDim.height !== baseViewport.height) {
+      pageDimensions.set(pageNum, { width: baseViewport.width, height: baseViewport.height })
+      if (docId) setCachedDocDimensions(docId, pageDimensions)
+    }
     const viewport = page.getViewport({ scale: currentScale })
     job.viewport = viewport
-    const dpr = window.devicePixelRatio || 1
 
-    // 캔버스
-    const canvas = document.createElement('canvas')
-    canvas.width  = Math.floor(viewport.width  * dpr)
-    canvas.height = Math.floor(viewport.height * dpr)
-    canvas.style.width  = `${viewport.width}px`
-    canvas.style.height = `${viewport.height}px`
+    if (!earlyCacheRendered) {
+      // 캔버스
+      canvas = document.createElement('canvas')
+      canvas.width  = Math.floor(viewport.width  * dpr)
+      canvas.height = Math.floor(viewport.height * dpr)
+      canvas.style.width  = `${viewport.width}px`
+      canvas.style.height = `${viewport.height}px`
 
-    // 텍스트 레이어 (드래그 선택)
-    const textLayerDiv = document.createElement('div')
-    textLayerDiv.className = 'textLayer'
-    textLayerDiv.style.width  = `${viewport.width}px`
-    textLayerDiv.style.height = `${viewport.height}px`
-    textLayerDiv.style.setProperty('--scale-factor', viewport.scale)
-    textLayerDiv.style.setProperty('--user-unit', viewport.userUnit)
-    job.textLayerDiv = textLayerDiv
+      // 텍스트 레이어 (드래그 선택)
+      textLayerDiv = document.createElement('div')
+      textLayerDiv.className = 'textLayer'
+      textLayerDiv.style.width  = `${viewport.width}px`
+      textLayerDiv.style.height = `${viewport.height}px`
+      textLayerDiv.style.setProperty('--scale-factor', viewport.scale)
+      textLayerDiv.style.setProperty('--user-unit', viewport.userUnit)
+      job.textLayerDiv = textLayerDiv
 
-    inner.style.width = `${viewport.width}px`
-    inner.style.height = `${viewport.height}px`
-    wrapper.style.minHeight = ''
+      inner.style.width = `${viewport.width}px`
+      inner.style.height = `${viewport.height}px`
+      wrapper.style.minHeight = ''
 
-    // 번역 블록의 높이를 실제 렌더링된 PDF 높이와 동기화
-    const transBlock = wrapper.parentElement?.querySelector('.trans-page-block')
-    if (transBlock) {
-      transBlock.style.height = `${Math.floor(viewport.height)}px`
+      // 번역 블록의 높이를 실제 렌더링된 PDF 높이와 동기화
+      const transBlock = wrapper.parentElement?.querySelector('.trans-page-block')
+      if (transBlock) {
+        transBlock.style.height = `${Math.floor(viewport.height)}px`
+      }
+    } else if (textLayerDiv) {
+      textLayerDiv.style.setProperty('--scale-factor', viewport.scale)
+      textLayerDiv.style.setProperty('--user-unit', viewport.userUnit)
     }
 
     // 캔버스 렌더링: 전공서적 등 대형 문서에서는 1x 해상도(픽셀 수 1/4, 약 4배 빠른 속도)로
     // 먼저 즉시 화면에 띄워 빈 페이지 대기 시간을 없애고, 스크롤이 멈춘 뒤 현재 보고 있는
     // 페이지일 때만 Retina(dpr) 고해상도로 조용히 업그레이드한다 (네이티브 PDF 뷰어 2단계 타일링 원리).
     const renderCanvasAtScale = async (targetCanvas, pixelRatio) => {
-      targetCanvas.width = Math.floor(viewport.width * pixelRatio)
-      targetCanvas.height = Math.floor(viewport.height * pixelRatio)
+      const targetW = Math.floor(viewport.width * pixelRatio)
+      const targetH = Math.floor(viewport.height * pixelRatio)
+      targetCanvas.width = targetW
+      targetCanvas.height = targetH
       targetCanvas.style.width = `${viewport.width}px`
       targetCanvas.style.height = `${viewport.height}px`
+
+      if (docId) {
+        const cachedHit = await drawCachedPageToCanvas(docId, pageNum, targetCanvas, targetW, targetH)
+        if (stale()) return false
+        if (cachedHit) return true
+      }
 
       let renderedOffscreen = false
       if (typeof OffscreenCanvas === 'function') {
         try {
-          const offscreen = new OffscreenCanvas(targetCanvas.width, targetCanvas.height)
+          const offscreen = new OffscreenCanvas(targetW, targetH)
           const offCtx = offscreen.getContext('2d')
           if (offCtx) {
             offCtx.scale(pixelRatio, pixelRatio)
@@ -824,23 +949,28 @@ async function _renderPage(wrapper, pageNum, generation, job, { isLargeDocument 
         job.renderTask = page.render({ canvasContext: ctx, viewport })
         await job.renderTask.promise
       }
-      return !stale()
+      if (stale()) return false
+      if (docId) {
+        scheduleStoreRenderedPageCanvas(docId, pageNum, targetCanvas, targetW, targetH)
+      }
+      return true
     }
 
-    const useTwoStagePreview = isLargeDocument && dpr > 1.15
-    const firstPassRatio = useTwoStagePreview ? 1 : dpr
     job.renderCanvasAtScale = renderCanvasAtScale
     job.dpr = dpr
     job.needsHiResUpgrade = useTwoStagePreview
-    const firstOk = await renderCanvasAtScale(canvas, firstPassRatio)
-    if (!firstOk || stale()) { canvas.width = 0; canvas.height = 0; return }
+    if (!earlyCacheRendered) {
+      const firstOk = await renderCanvasAtScale(canvas, firstPassRatio)
+      if (!firstOk || stale()) { canvas.width = 0; canvas.height = 0; return }
 
-    canvas.dataset.rendered = 'true'
-    job.canvasRendered = true
-    window.onTextLayerReleased?.(inner.querySelector('.textLayer'), pageNum)
-    inner.querySelectorAll('canvas').forEach(previous => { previous.width = 0; previous.height = 0 })
-    inner.replaceChildren(canvas, textLayerDiv)
-    onCanvasReady?.()
+      canvas.dataset.rendered = 'true'
+      job.canvasRendered = true
+      job.hiResRendered = !useTwoStagePreview && dpr > 1.15
+      window.onTextLayerReleased?.(inner.querySelector('.textLayer'), pageNum)
+      inner.querySelectorAll('canvas').forEach(previous => { previous.width = 0; previous.height = 0 })
+      inner.replaceChildren(canvas, textLayerDiv)
+      onCanvasReady?.()
+    }
 
     // 전공서적 등 대형 문서(>48p)에서는 ±15페이지 전체는 1x 해상도로 초고속 프리렌더링만 해두고,
     // 스크롤이 멈춘 뒤 현재 실제로 눈앞에 보이는 페이지(±1p)만 Retina(dpr) 고해상도 업그레이드하고
@@ -888,8 +1018,11 @@ export async function reRenderAll(container, newZoom, callbacks) {
   await renderScrollView(container, newZoom, { ...callbacks, preserveCanvas: true })
 }
 
-export function clearPdfTextRecoveryCache() {
+export function clearPdfTextRecoveryCache(docId = null) {
   pdfTextRecoveryCache.clear()
+  if (docId) {
+    void clearDocumentPageCache(docId)
+  }
 }
 
 export function setScale(s) { currentScale = s }

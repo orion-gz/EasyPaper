@@ -11644,10 +11644,11 @@ async function openFromLibrary(doc, shouldPushState = true) {
 
     // 이 지점 이후로는 gating 리다이렉트 없이 실제로 이 문서를 열 것이 확정된
     // 상태다. loadAnnotations/loadMemos가 이 문서 데이터를 처음 읽기 전에
-    // (아래 loadPDF에서 페이지를 렌더링하며 바로 참조한다) 서버 미러 데이터를
-    // 먼저 끌어와야 다른 기기에서 저장한 하이라이트/메모가 반영된다.
-    await hydrateAnnotationsAndMemosFromServer(doc.id)
-    if (!isCurrentOpen()) return
+    // (아래 initScrollViewer에서 페이지를 렌더링하며 바로 참조한다) 서버 미러 데이터를
+    // 끌어와야 다른 기기에서 저장한 하이라이트/메모가 반영된다.
+    // PDF 파일 로딩(loadPDF)과 서로 독립된 네트워크 요청이므로 병렬(Promise.all)로
+    // 동시에 시작해 문서 오픈 대기 시간을 단축한다.
+    const hydrateAnnotationsPromise = hydrateAnnotationsAndMemosFromServer(doc.id)
 
     // 논문을 여는 시점 자체를 "마지막으로 읽은 시각"으로 기록한다(fire-and-forget).
     // 스크롤로 페이지가 바뀔 때만 last_read_at이 갱신되면, 열자마자 바로 나가거나
@@ -11691,6 +11692,8 @@ async function openFromLibrary(doc, shouldPushState = true) {
     })
 
     if (doc.content_kind === "html_article") {
+      await hydrateAnnotationsPromise
+      if (!isCurrentOpen()) return
       docTitle.textContent = displayTitle
       docTitle.title = doc.filename
       pageTotal.textContent = `/ ${doc.total_units || doc.total_pages}`
@@ -11706,9 +11709,12 @@ async function openFromLibrary(doc, shouldPushState = true) {
     }
 
     notifyWorkspace('load-progress', { stage: 'loading', percent: 25 })
-    const loadedPages = await loadPDF(`/api/library/${doc.id}/pdf`, ({ loaded, total }) => {
-      if (isCurrentOpen() && total > 0) notifyWorkspace('load-progress', { stage: 'loading', percent: 25 + Math.min(1, loaded / total) * 40 })
-    })
+    const [loadedPages] = await Promise.all([
+      loadPDF(`/api/library/${doc.id}/pdf`, ({ loaded, total }) => {
+        if (isCurrentOpen() && total > 0) notifyWorkspace('load-progress', { stage: 'loading', percent: 25 + Math.min(1, loaded / total) * 40 })
+      }),
+      hydrateAnnotationsPromise,
+    ])
     if (!isCurrentOpen() || loadedPages === null) return
     docTitle.textContent  = displayTitle
     docTitle.title        = doc.filename
