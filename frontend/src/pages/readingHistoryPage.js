@@ -13,6 +13,7 @@ import { fetchLibraryTimeline, fetchLibraryDashboard, fetchLibrary, fetchReading
 import { icon } from '../icons.js'
 import { countUniqueVerifiedPages, readPageCount, lastActivityIso, lastActivityDateKey, isoToLocalDateKey } from '../readPages.js'
 import { t, formatDate, formatNumber } from '../i18n.js'
+import { bindSlidingIndicator, enableAutoAnimate, enableAutoAnimateAll } from '../interactiveUi.js'
 import '../styles/reading-history.css'
 import '../styles/dashboard.css'
 
@@ -1012,6 +1013,7 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
     }
     const shown = dayGroups.slice(0, visibleGroups)
     timelineListEl.innerHTML = `<div class="rh-timeline">${shown.map(renderTimelineDay).join('')}</div>`
+    enableAutoAnimate(timelineListEl.querySelector('.rh-timeline'))
     updateMoreButton(dayGroups)
   }
 
@@ -1105,5 +1107,8 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
   }
 
   renderTimeline()
+  bindSlidingIndicator(periodChipsEl, { itemSelector: '.rh-chip', variant: 'pill' })
+  bindSlidingIndicator(tabsEl, { itemSelector: '.rh-tab-btn', variant: 'pill' })
+  enableAutoAnimateAll(['#rh-stat-grid', '#rh-timeline-list', '.rh-top-list'], el)
 }
 
