@@ -293,3 +293,37 @@ def test_strict_marker_regions_do_not_silently_fall_back(monkeypatch):
     monkeypatch.setattr(pdf_parser, "_build_marker_document", fail)
     with pytest.raises(RuntimeError, match="missing parser dependency"):
         pdf_parser.extract_pdf_images("unused.pdf", engine="marker")
+
+
+def test_build_marker_document_falls_back_to_disable_ocr_when_llama_server_missing(monkeypatch):
+    import sys
+    import types
+    from services import pdf_parser
+
+    pdf_parser.clear_parser_memory_cache()
+    monkeypatch.setattr(pdf_parser, "_get_marker_artifacts", lambda: {"dummy": True})
+    monkeypatch.setattr(pdf_parser, "_marker_ocr_backend_unavailable", lambda: False)
+
+    calls = []
+
+    class FakePdfConverter:
+        def __init__(self, artifact_dict, config=None):
+            self.artifact_dict = artifact_dict
+            self.config = config or {}
+            calls.append(dict(self.config))
+
+        def build_document(self, path):
+            if not self.config.get("disable_ocr"):
+                raise RuntimeError("llama-server binary not found. Install with brew install llama.cpp")
+            return {"doc": path, "disable_ocr": True}
+
+    mod = types.ModuleType("marker.converters.pdf")
+    mod.PdfConverter = FakePdfConverter
+    monkeypatch.setitem(sys.modules, "marker.converters.pdf", mod)
+
+    doc, conv = pdf_parser._build_marker_document("sample.pdf")
+    assert doc == {"doc": "sample.pdf", "disable_ocr": True}
+    assert conv.config == {"disable_ocr": True}
+    assert calls == [{}, {"disable_ocr": True}]
+    pdf_parser.clear_parser_memory_cache()
+

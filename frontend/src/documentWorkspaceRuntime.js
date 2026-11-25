@@ -214,7 +214,10 @@ export function installDocumentRuntime(adapter) {
   refreshButton.setAttribute('aria-label', t('navigation:tabs.refresh'))
   refreshButton.title = t('navigation:tabs.refresh')
   refreshButton.addEventListener('click', () => notifyWorkspace('refresh'))
-  $('viewer-topbar').querySelector('.topbar-right').prepend(refreshButton)
+  const topbarRight = $('viewer-topbar').querySelector('.topbar-right')
+  topbarRight.prepend(refreshButton)
+  const extractIndicator = $('image-extract-indicator')
+  if (extractIndicator) refreshButton.before(extractIndicator)
   const refreshResources = () => { if (active && panel !== 'chat') showResources() }
   document.addEventListener('easypaper:resources-changed', refreshResources)
   const refreshStorage = event => { if (event.key?.includes(adapter.state.sessionId)) refreshResources() }
