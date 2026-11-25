@@ -52,7 +52,7 @@ body[data-theme-id] .doc-card :is(h3, .doc-title) { color: var(--card-text); }
 body[data-theme-id] .trans-page-block .trans-text { color: var(--translation-text); }
 body[data-theme-id] .trans-sentence.sentence-highlight:not(.focus-mode-active *) {
   background-color: var(--translation-selected) !important;
-  box-shadow: 0 0 0 2px var(--translation-selected);
+  box-shadow: none;
   color: var(--translation-text) !important;
 }
 body[data-theme-id] :is(.doc-delete-btn:hover, .lib-select-action-btn.danger:hover) { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }

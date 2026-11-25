@@ -1,4 +1,5 @@
 import { t } from './i18n.js'
+import { bindSlidingIndicator } from './interactiveUi.js'
 
 export function buildTextAnchor(text, start, end, metadata = {}) {
   return { ...metadata, start, end, exact: text.slice(start, end), prefix: text.slice(Math.max(0, start - 32), start), suffix: text.slice(end, end + 32) }
@@ -99,6 +100,7 @@ export async function mountArticleViewer(options) {
   const toolbar = document.createElement('div'); toolbar.className = 'article-toolbar'
   toolbar.innerHTML = `<div class="article-tabs" role="tablist"><button type="button" class="active" data-tab="snapshot">${labels.snapshot}</button><button type="button" data-tab="original">${labels.original}</button></div><label class="article-search"><span>${labels.search}</span><input type="search" autocomplete="off"></label><button type="button" data-zoom="out" aria-label="${labels.zoomOut}">−</button><button type="button" data-zoom="in" aria-label="${labels.zoomIn}">+</button><button type="button" data-capture>${labels.capture}</button><a class="btn btn-secondary" target="_blank" rel="noopener noreferrer">${labels.openOriginal}</a>`
   toolbar.querySelector('a').href = manifest.source_url
+  bindSlidingIndicator(toolbar.querySelector('.article-tabs'), { variant: 'pill' })
   const snapshot = document.createElement('div'); snapshot.className = 'article-snapshot'
   const original = document.createElement('div'); original.className = 'article-original-site hidden'
   if (manifest.embed_allowed && new URL(manifest.source_url).protocol === 'https:') {

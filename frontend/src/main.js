@@ -29,7 +29,7 @@ import { createReaderCommandActions } from './readerCommandActions.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
 import { initializeDesktopWindow } from './desktopWindow.js'
 import { initUiStyleSync } from './themes/uiStyleEngine.js'
-import { installProximitySpotlight } from './interactiveUi.js'
+import { installProximitySpotlight, bindSlidingIndicator } from './interactiveUi.js'
 
 initUiStyleSync(document)
 installProximitySpotlight(document)
@@ -1999,6 +1999,7 @@ function createTransBlock(pageNum) {
   block.querySelectorAll('.trans-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchTransTab(pageNum, btn.dataset.tab))
   })
+  bindSlidingIndicator(block.querySelector('.trans-tabs'), { itemSelector: '.trans-tab-btn', variant: 'pill' })
   block.querySelector('.trans-tab-refresh-btn').addEventListener('click', (e) => {
     const tab = e.currentTarget.dataset.tab
     if (tab) loadPageInsight(pageNum, tab, true)

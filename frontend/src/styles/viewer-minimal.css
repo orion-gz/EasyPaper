@@ -1,0 +1,543 @@
+/* ==========================================================================
+   EasyPaper Minimalist Viewer Redesign (WT-2)
+   Applies identically to Research Mode and General Document Mode
+   Covers: PDF Pane, Translation Pane, Article Viewer, Minimal Toolbar & Dock,
+   Outline Sidebar, and Borderless AI Assistant Panel.
+   ========================================================================== */
+
+@keyframes minimalPopoverIn {
+  from { opacity: 0; transform: scale(0.97) translateY(3px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── 1. Zero-Chrome Reading Canvas & Document Sheets ── */
+.viewer-scroll-container {
+  padding: 28px 20px 72px;
+  gap: 28px;
+}
+
+/* Dissolve outer nested card box around each page pair while keeping fitWidth geometry */
+.page-pair,
+.document-workspace-runtime .page-pair {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+.page-pair:hover,
+.document-workspace-runtime .page-pair:hover {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.pdf-page-inner {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-minimal);
+}
+.document-workspace-runtime .pdf-page-wrapper {
+  box-shadow: none;
+}
+
+/* Editorial stacked paper sheet edge on light/paper surfaces */
+body[data-ui-style="editorial"] .pdf-page-inner,
+body[data-ui-style="editorial"] .trans-page-block {
+  box-shadow:
+    2px 0 0 var(--bg-surface),
+    3px 0 0 var(--border-strong),
+    var(--shadow-minimal);
+}
+
+/* ── 2. Minimalist Translation Pane ── */
+.trans-page-block {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-minimal);
+}
+
+.trans-page-label {
+  padding: 8px 20px;
+  min-height: 34px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+}
+
+.trans-page-status {
+  font-size: 11px;
+  font-weight: 500;
+  text-shadow: none !important;
+}
+.trans-page-status.done {
+  color: var(--success);
+  text-shadow: none !important;
+}
+
+.cached-badge {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 1px 7px;
+}
+
+.trans-tabs {
+  padding: 4px 14px;
+  min-height: 36px;
+  gap: 2px;
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+}
+
+.trans-tab-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+.trans-tab-btn.active {
+  color: var(--text-primary);
+  font-weight: 600;
+  background: var(--bg-elevated);
+}
+
+.trans-page-content,
+.trans-insight-content {
+  padding: 24px 26px;
+}
+
+.trans-text {
+  font-family: var(--font-reading);
+  font-size: 15px;
+  line-height: 1.86;
+  letter-spacing: -0.008em;
+}
+
+/* Clean marker highlight without boxy outer ring */
+.trans-sentence.sentence-highlight {
+  background-color: color-mix(in srgb, var(--control-accent) 16%, transparent) !important;
+  box-shadow: none !important;
+  border-radius: 3px;
+}
+body.light-theme .trans-sentence.sentence-highlight {
+  background-color: color-mix(in srgb, var(--control-accent) 14%, transparent) !important;
+  box-shadow: none !important;
+  color: var(--text-primary) !important;
+}
+body[data-ui-style="editorial"] .trans-sentence.sentence-highlight {
+  background-color: color-mix(in srgb, var(--warning) 22%, transparent) !important;
+}
+
+/* Glossary & Summary without one-sided thick bars */
+.insight-keyword-list {
+  gap: 8px;
+}
+.insight-keyword-item {
+  padding: 12px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.insight-keyword-term {
+  color: var(--text-primary);
+  text-decoration-color: var(--border-strong);
+}
+.insight-summary-box {
+  padding: 18px 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-reading);
+  font-size: 14.5px;
+  line-height: 1.85;
+}
+
+/* General Document Mode HTML Article Viewer parity */
+.article-viewer {
+  padding: 20px 24px 64px;
+}
+.article-toolbar {
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-minimal);
+}
+.article-tabs button,
+.article-toolbar > button,
+.article-selection-tools button {
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: transparent;
+}
+.article-tabs button.active {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.article-pane {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-reading);
+  line-height: 1.82;
+  box-shadow: var(--shadow-minimal);
+}
+.article-memo {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+/* ── 3. Ultra-Clean Viewer Toolbar & Unified Minimal Floating Dock ── */
+.topbar,
+.document-workspace-runtime #viewer-topbar {
+  box-shadow: none !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--bg-topbar) 92%, transparent);
+  border-color: var(--border);
+}
+
+.document-workspace-runtime #viewer-topbar {
+  height: 42px;
+  min-height: 42px;
+  border-radius: var(--radius-md);
+  padding: 0 10px;
+}
+.document-workspace-runtime .panels {
+  top: 56px;
+  border-radius: var(--radius-md);
+  border-color: transparent;
+}
+.document-workspace-runtime #outline-sidebar {
+  top: 56px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-minimal);
+}
+
+/* Remove box wrapper around document title in viewer toolbar */
+.doc-title {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 2px 4px !important;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+body[data-ui-style="editorial"] #doc-title {
+  font-family: var(--font-serif-editorial);
+  font-size: 13.5px;
+}
+
+#doc-title-edit-btn {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.topbar-left:hover #doc-title-edit-btn,
+#doc-title-edit-btn:focus-visible {
+  opacity: 0.85;
+}
+
+/* Dissolve nested toolbar-group pill chrome in topbar */
+.topbar .toolbar-group {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0;
+  gap: 2px;
+}
+.topbar .toolbar-divider {
+  height: 14px;
+  opacity: 0.35;
+}
+
+/* Unified Minimal Bottom Floating Dock */
+.document-workspace-runtime #floating-scroll-nav {
+  padding: 4px 6px;
+  gap: 3px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 94%, transparent);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--surface-hairline), var(--shadow-floating);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.document-workspace-runtime #floating-scroll-nav .floating-nav-btn,
+.document-workspace-runtime #floating-scroll-nav .icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+}
+.document-workspace-runtime #floating-scroll-nav .page-display {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+}
+.document-workspace-runtime #floating-scroll-nav #page-input {
+  height: 22px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+/* Crisp Non-Bouncy Menus, Search Popover & Floating Memos */
+.kebab-menu,
+.selection-menu,
+.article-selection-tools,
+.floating-memo,
+.document-search {
+  animation: minimalPopoverIn 150ms var(--ease-out-expo) !important;
+  box-shadow: var(--surface-hairline), var(--shadow-floating) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.floating-memo {
+  border: 1px solid var(--border-strong);
+}
+.floating-memo-header {
+  background: transparent;
+  padding: 7px 10px;
+}
+
+/* Outline Sidebar Minimalism */
+.outline-header {
+  padding: 10px 12px;
+  min-height: 42px;
+}
+.document-outline-tabs button {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+}
+.document-outline-tabs button[aria-pressed="true"] {
+  box-shadow: none !important;
+  font-weight: 600;
+}
+.outline-summary-btn {
+  border-radius: var(--radius-sm);
+  box-shadow: none !important;
+}
+.outline-summary-btn:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+/* ── 4. Minimalist Borderless AI Assistant Panel ── */
+.chat-sidebar,
+.document-workspace-runtime #viewer-screen > #chat-sidebar {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  box-shadow: none;
+}
+
+.chat-header-icon {
+  filter: none !important;
+}
+
+.document-panel-tabs {
+  min-height: 42px;
+  height: 42px;
+  padding: 0 36px 0 12px;
+  gap: 4px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.document-panel-tabs button {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+}
+.document-panel-tabs button[aria-selected="true"] {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+.document-workspace-runtime #chat-close-btn {
+  top: -35px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+}
+
+.chat-messages {
+  padding: 16px 18px;
+  gap: 16px;
+}
+
+/* Assistant message: borderless clean editorial/technical typography */
+.chat-message.assistant {
+  max-width: 100%;
+  width: 100%;
+}
+.chat-message.assistant .message-bubble {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 2px 0 !important;
+  box-shadow: none !important;
+  font-size: 13.2px;
+  line-height: 1.68;
+}
+
+/* User message: restrained neutral surface pill/card instead of loud royal-blue bubble */
+.chat-message.user {
+  max-width: 88%;
+}
+.chat-message.user .message-bubble,
+body.light-theme .chat-message.user .message-bubble {
+  background: var(--bg-elevated) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 9px 13px !important;
+  font-size: 13px;
+  line-height: 1.55;
+  box-shadow: var(--surface-hairline);
+}
+
+/* Message quote inside user message without thick left bar */
+.message-quote {
+  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 7px 10px;
+  font-family: var(--font-reading);
+}
+.message-quote .quote-symbol {
+  display: none;
+}
+
+/* Code blocks inside assistant responses */
+.chat-code-block {
+  margin: 10px 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+.chat-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-hover) 45%, transparent);
+}
+.chat-code-copy {
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.chat-code-copy:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.chat-code-block pre {
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+/* Single-Layer Minimal Floating Composer */
+.chat-input-area,
+body.light-theme .chat-input-area {
+  background: transparent !important;
+  border-top: 0 !important;
+  backdrop-filter: none !important;
+  padding: 8px 14px 14px;
+}
+
+.chat-input-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--surface-hairline), var(--shadow-minimal);
+  overflow: hidden;
+}
+.chat-input-box:focus-within,
+#chat-sidebar .chat-input-box:focus-within {
+  border-color: var(--control-accent);
+  box-shadow: var(--focus-ring-minimal);
+}
+
+/* Quoted context strip inside composer: clean full divider, no giant quote glyph */
+.chat-quote-area,
+.chat-input-box .chat-quote-area,
+body.light-theme .chat-quote-area,
+body.light-theme .chat-input-box .chat-quote-area {
+  border: 0 !important;
+  border-bottom: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+  background: color-mix(in srgb, var(--bg-hover) 50%, transparent) !important;
+  padding: 8px 12px !important;
+  margin: 0 !important;
+}
+.chat-quote-symbol {
+  display: none !important;
+}
+.chat-quote-text {
+  font-family: var(--font-reading);
+  font-size: 11.8px;
+}
+
+.chat-input-expand-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border-color: transparent;
+}
+.chat-send-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+}
+.chat-input-footer .provider-picker-btn {
+  height: 26px !important;
+  border-radius: var(--radius-sm) !important;
+  background: transparent !important;
+}
+
+/* Notes & Annotations resource items inside #chat-sidebar */
+.document-resource {
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.document-resource:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+}
+.document-resource small {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
