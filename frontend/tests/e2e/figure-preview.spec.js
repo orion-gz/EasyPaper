@@ -186,6 +186,9 @@ test('bookmark overlay appears before neighboring pages finish', async ({ page }
     expect(requests[0]).toEqual([20, true])
     // In-progress extraction shows green dot with page and percent in tooltip
     await expect(indicator).toHaveAttribute('data-state', 'running')
+    const refreshBox = await activeReader(page).locator('#viewer-refresh-btn').boundingBox()
+    const dotBox = await indicator.boundingBox()
+    expect(dotBox.x + dotBox.width).toBeLessThanOrEqual(refreshBox.x + 1)
     await indicator.hover()
     await expect(indicator.locator('#image-extract-tooltip')).toBeVisible()
     await expect(indicator.locator('#image-extract-tooltip-text')).toContainText('20')

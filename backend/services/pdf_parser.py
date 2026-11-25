@@ -1253,11 +1253,38 @@ def _get_marker_artifacts():
     return _marker_artifacts
 
 
+def _marker_ocr_backend_unavailable() -> bool:
+    """surya 0.22+ VLM OCR on CPU/MPS requires an external llama-server binary
+    (or SURYA_INFERENCE_URL). When neither is present, disable VLM OCR upfront so
+    Marker uses its RF-DETR layout model + pdftext without raising SpawnError."""
+    import shutil
+    try:
+        from surya.inference import _autodetect_backend
+        from surya.settings import settings as surya_settings
+        if getattr(surya_settings, "SURYA_INFERENCE_URL", None):
+            return False
+        if _autodetect_backend() == "llamacpp":
+            binary = getattr(surya_settings, "LLAMA_CPP_BINARY", None) or "llama-server"
+            if not (os.path.isfile(binary) or shutil.which(binary)):
+                return True
+    except Exception:
+        pass
+    return False
+
+
 @lru_cache(maxsize=2)
 def _build_marker_document(pdf_path: str):
     from marker.converters.pdf import PdfConverter
-    converter = PdfConverter(artifact_dict=_get_marker_artifacts())
-    document = converter.build_document(pdf_path)
+    artifacts = _get_marker_artifacts()
+    config = {"disable_ocr": True} if _marker_ocr_backend_unavailable() else None
+    converter = PdfConverter(artifact_dict=artifacts, **({"config": config} if config else {}))
+    try:
+        document = converter.build_document(pdf_path)
+    except Exception as exc:
+        if "llama-server" not in str(exc) or (config and config.get("disable_ocr")):
+            raise
+        converter = PdfConverter(artifact_dict=artifacts, config={"disable_ocr": True})
+        document = converter.build_document(pdf_path)
     return document, converter
 
 
