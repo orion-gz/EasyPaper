@@ -28,6 +28,11 @@ import { createReadingClock, createReadingOutbox, isReadingWindowActive } from '
 import { createReaderCommandActions } from './readerCommandActions.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
 import { initializeDesktopWindow } from './desktopWindow.js'
+import { initUiStyleSync } from './themes/uiStyleEngine.js'
+import { installProximitySpotlight } from './interactiveUi.js'
+
+initUiStyleSync(document)
+installProximitySpotlight(document)
 import { isDocumentRuntime, installDocumentRuntime, notifyWorkspace } from './documentWorkspaceRuntime.js'
 import { suspendPDFRendering, resumePDFRendering, renderPDFThumbnail, getPDFPageText, getPDFPageWidth, isActivelyScrolling, waitForScrollSettled } from './pdfViewer.js'
 import { translationFeedback } from './translationFeedback.js'
@@ -860,7 +865,6 @@ const sidebarNav          = $('app-sidebar-nav')
 const sidebarSettingsBtn  = $('sidebar-settings-btn')
 const sidebarLogoutBtn    = $('sidebar-logout-btn')
 const workspacePageTitle  = $('workspace-page-title')
-const workspaceSearchInput = $('workspace-search-input')
 const pageOutlet          = $('page-outlet')
 const workspaceLibraryState = {
   research: { tab: 'archive', category: 'ALL', status: 'all', search: '' },
@@ -879,7 +883,7 @@ const workspaceModeController = createWorkspaceModeController({
     outgoing.status = activeStatusFilter
     outgoing.search = state.currentWorkspacePage === 'library'
       ? (librarySearchInput?.value || '')
-      : (workspaceSearchInput?.value || outgoing.search)
+      : outgoing.search
 
     const incoming = workspaceLibraryState[mode]
     lastWorkspaceMode = mode
@@ -890,7 +894,6 @@ const workspaceModeController = createWorkspaceModeController({
     state.currentLibraryTab = incoming.tab
     activeCategoryFilter = incoming.category
     activeStatusFilter = incoming.status
-    if (workspaceSearchInput) workspaceSearchInput.value = incoming.search
     // 모드 전환은 열려 있던 문서를 재분류하지 않고 대상 워크스페이스 홈으로 이동한다.
     state.currentWorkspacePage = 'dashboard'
     if (tabWorkspace) {
@@ -6583,22 +6586,6 @@ if (sidebarNav) {
 // global-logout-btn 클릭 핸들러에 위임한다.
 if (sidebarSettingsBtn) sidebarSettingsBtn.addEventListener('click', () => globalSettingsBtn?.click())
 if (sidebarLogoutBtn) sidebarLogoutBtn.addEventListener('click', () => globalLogoutBtn?.click())
-
-// 탑네비 검색창은 새 검색 기능이 아니라 기존 라이브러리 검색으로 그대로 위임한다
-// (Global Search는 기존 검색 기능을 그대로 사용 - 동작 변경 금지 원칙).
-if (workspaceSearchInput) {
-  workspaceSearchInput.addEventListener('input', async () => {
-    const query = workspaceSearchInput.value
-    if (state.currentWorkspacePage !== 'library' || tabWorkspace?.active?.kind === 'document') {
-      await showWorkspacePage('library')
-    }
-    if (query !== workspaceSearchInput.value) return
-    if (librarySearchInput) {
-      librarySearchInput.value = workspaceSearchInput.value
-      librarySearchInput.dispatchEvent(new Event('input'))
-    }
-  })
-}
 
 let activeCategoryFilter = 'ALL'
 const LIBRARY_FILTERS_COLLAPSED_KEY = 'easypaper_library_category_filters_collapsed'

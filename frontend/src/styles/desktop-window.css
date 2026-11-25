@@ -18,7 +18,3 @@ body.desktop-windows #tab-workspace .workspace-topnav { padding-right: 0; gap: 8
 /* Native traffic lights use physical logical pixels, independently of UI zoom. */
 body.desktop-macos:not(.desktop-fullscreen) #tab-workspace .workspace-topnav { padding-left: calc(88px / var(--desktop-ui-scale, 1)); }
 body.desktop-macos:not(.desktop-fullscreen) .desktop-window-titlebar { padding-left: calc(88px / var(--desktop-ui-scale, 1)); }
-/* Keep the legacy search input inside its wrapper when focused, so it
-   cannot cover the adjacent native window controls. */
-body.desktop-window #tab-workspace .workspace-search-box input,
-body.desktop-window #tab-workspace .workspace-search-box input:focus { width: 100%; min-width: 0; }

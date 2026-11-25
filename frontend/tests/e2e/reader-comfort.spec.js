@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A, openReaderTools } from './helpers.js'
 
 const doc = { id: 'comfort', filename: 'Attention.pdf', total_pages: 1, metadata: { primer_shown: true }, translated_pages: [] }
-const features = ['quickActions', 'restoreReading', 'referenceReturn', 'focusReading', 'taskProgress', 'commandSearch']
+const features = ['quickActions', 'restoreReading', 'referenceReturn', 'focusReading', 'commandSearch']
 const reader = page => page.frameLocator('iframe[data-document-id="comfort"]')
 async function setup(page) {
   await mockBaseRoutes(page, { documents: [doc] })
@@ -20,7 +20,7 @@ async function settings(page) {
   await page.locator('#settings-nav-viewer').click()
 }
 
-test('all six controls persist independently and apply to open readers', async ({ page }) => {
+test('all five controls persist independently and apply to open readers', async ({ page }) => {
   await setup(page); await open(page); await settings(page)
   for (const feature of features) {
     const toggle = page.locator(`#setting-reader-${feature}`)
@@ -28,8 +28,7 @@ test('all six controls persist independently and apply to open readers', async (
     await toggle.locator('..').click()
   }
   await expect(reader(page).locator('#reader-focus')).toBeHidden()
-  await expect(page.locator('#reader-tasks')).toBeHidden()
-  await expect(page.locator('#reader-command-search')).toBeHidden()
+  await expect(page.locator('#reader-tasks, #reader-command-search')).toHaveCount(0)
   await page.locator('#close-settings-btn').click()
   await page.keyboard.press('Control+k')
   await expect(page.locator('#reader-command-dialog')).not.toBeVisible()
@@ -93,20 +92,6 @@ test('selection quick actions can be disabled without disabling text selection',
   await select()
   await expect(reader(page).locator('#selection-menu')).toBeHidden()
   expect(await reader(page).locator('body').evaluate(() => window.getSelection().toString().length)).toBeGreaterThan(0)
-})
-
-test('task center uses server counts and cancelling does not erase completed work', async ({ page }) => {
-  await setup(page)
-  const task = { id: 'task-1', doc_id: doc.id, filename: doc.filename, kind: 'translate', status: 'running', total_pages: 3, completed_pages: [1], failed_pages: [] }
-  await page.route('**/api/tasks', route => route.fulfill({ json: { tasks: [task] } }))
-  let cancelled = false
-  await page.route('**/api/tasks/task-1/cancel', async route => { cancelled = true; task.status = 'cancelled'; await route.fulfill({ json: task }) })
-  await page.locator('#reader-tasks').click()
-  await expect(page.locator('#reader-task-list')).toContainText('1 / 3페이지 완료')
-  await page.locator('#reader-task-list').getByRole('button', { name: '취소', exact: true }).click()
-  await expect(page.locator('#reader-task-list')).toContainText('취소됨')
-  expect(cancelled).toBe(true)
-  await expect(page.locator('#reader-task-list')).toContainText('1 / 3페이지 완료')
 })
 
 test('search memo results retain exact anchors', async ({ page }) => {
@@ -193,12 +178,10 @@ test('slash lists commands, disables reader actions, and navigates pages', async
 })
 
 
-test('command search exposes its shortcut and supports Korean keyboard keys', async ({ page }) => {
+test('command search shortcut supports Korean keyboard keys without topbar search icon', async ({ page }) => {
   await setup(page)
-  const button = page.locator('#reader-command-search')
+  await expect(page.locator('#reader-command-search')).toHaveCount(0)
   const dialog = page.locator('#reader-command-dialog')
-  await expect(button).toHaveAttribute('title', /Ctrl\/Cmd\+K/)
-  await expect(button).toHaveAttribute('aria-keyshortcuts', 'Control+K Meta+K')
   for (const modifier of ['ctrlKey', 'metaKey']) {
     await page.evaluate(modifier => document.dispatchEvent(new KeyboardEvent('keydown', {
       key: 'ㅏ', code: 'KeyK', [modifier]: true, bubbles: true, cancelable: true,

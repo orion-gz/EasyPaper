@@ -34,7 +34,8 @@ async function setup(page, { minimal = false } = {}) {
     return route.fulfill({ json: { status: 'success', metadata: doc.metadata } })
   })
   await gotoApp(page, { navigateToLibrary: !minimal })
-  await expect(page.locator('#reader-command-search')).toBeVisible()
+  await expect(page.locator('#tab-workspace')).toBeVisible()
+  await expect(page.locator('#reader-command-search, #reader-tasks, #workspace-search-input')).toHaveCount(0)
   return doc
 }
 async function openReader(page) {
@@ -59,7 +60,7 @@ test('all commands are discoverable; help, document search and recent results wo
   await setup(page)
   await run(page, '/help')
   await expect(input(page)).toHaveValue('/')
-  await expect(options(page)).toHaveCount(44)
+  await expect(options(page)).toHaveCount(43)
   for (const id of ['upload', 'import-url', 'page', 'bookmark', 'summarize', 'copy-citation', 'reopen-tab']) await expect(page.locator('#reader-command-results')).toContainText(`/${id}`)
   await run(page, '/open')
   await expect(options(page)).toHaveCount(3)
@@ -94,8 +95,6 @@ test('global upload, import, task center, sidebar and explicit theme commands pe
   await query(page, '/theme invalid')
   await expect(options(page)).toHaveAttribute('aria-disabled', 'true')
   await input(page).press('Escape')
-  await run(page, '/tasks')
-  await expect(page.locator('#reader-task-list')).toBeVisible()
 })
 
 test('page commands navigate correctly and reject boundary and malformed arguments', async ({ page }) => {
