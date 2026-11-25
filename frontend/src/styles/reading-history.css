@@ -528,10 +528,7 @@ body.light-theme {
   font-family: var(--font-mono);
   font-size: 32px;
   font-weight: 800;
-  background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-primary);
 }
 .rh-streak-unit { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
 .rh-streak-week {

@@ -62,7 +62,7 @@
 .desktop-connection-dialog [data-preview-warning] { font-size: 13px; }
 .desktop-delete-ack { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; font-size: 13px; cursor: pointer; }
 .desktop-preview-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.desktop-connection-dialog [data-conflicts] { border-left: 3px solid #c98028; }
+.desktop-connection-dialog [data-conflicts] { border-color: #c98028; }
 .desktop-connection-dialog [data-conflicts] ul { padding-left: 20px; font-size: 13px; overflow-wrap: anywhere; }
 .desktop-connection-dialog [data-conflicts] p { font-size: 12px; }
 .desktop-copy-option { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border, #454552); font-size: 12px; }
