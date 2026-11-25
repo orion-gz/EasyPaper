@@ -16,6 +16,7 @@ import { documentTypeLabel } from '../documentModes.js'
 import { t } from '../i18n.js'
 import { getModeSetting } from '../modeSettings.js'
 import { hasAdaptiveBriefing, renderAdaptiveBriefingHtml } from '../adaptiveBriefing.js'
+import { bindSlidingIndicator, enableAutoAnimate } from '../interactiveUi.js'
 
 let renderGeneration = 0
 let activeDocumentMode = 'research'
@@ -291,8 +292,26 @@ function renderPaperList(root) {
     listEl.innerHTML = `<div class="notes-empty">${icon('fileText', 24, 'aria-hidden="true"')}<p>${allPapers.length === 0 ? notesCopy('저장된 논문이 없습니다', '저장된 문서가 없습니다') : notesCopy('조건에 맞는 논문이 없습니다', '조건에 맞는 문서가 없습니다')}</p></div>`
     return
   }
-  listEl.innerHTML = filtered.map(renderPaperRow).join('')
-  bindThumbFallback(listEl)
+  const existingById = new Map(
+    Array.from(listEl.querySelectorAll('.notes-paper-row[data-doc-id]'), row => [row.dataset.docId, row])
+  )
+  const canReuseAll = existingById.size === filtered.length && filtered.every(entry => existingById.has(entry.doc.id))
+  if (canReuseAll) {
+    for (const entry of filtered) {
+      const row = existingById.get(entry.doc.id)
+      row.classList.toggle('selected', entry.doc.id === selectedDocId)
+      const favBtn = row.querySelector('.notes-fav-btn')
+      if (favBtn) {
+        favBtn.classList.toggle('active', entry.favorite)
+        favBtn.title = entry.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'
+      }
+      listEl.appendChild(row)
+    }
+  } else {
+    listEl.innerHTML = filtered.map(renderPaperRow).join('')
+    bindThumbFallback(listEl)
+  }
+  enableAutoAnimate(listEl)
 }
 
 function bindThumbFallback(container) {
@@ -575,6 +594,8 @@ function renderDetail(root) {
   `
   bindThumbFallback(detailEl)
   applyKatexToElement(detailEl)
+  bindSlidingIndicator(detailEl.querySelector('.notes-tabs'), { itemSelector: '.notes-tab-btn', variant: 'underline' })
+  enableAutoAnimate(detailEl.querySelector('.notes-card-list'))
 
   if (activeSubtab === 'summary') ensureSummaryLoaded(root, entry.doc.id)
 }
@@ -608,6 +629,7 @@ function attachListeners(root) {
       renderPaperList(root)
     })
   })
+  bindSlidingIndicator(root.querySelector('.notes-filter-tabs'), { itemSelector: '.notes-filter-tab-btn', variant: 'pill' })
 
   if (listenerRoots.has(root)) return
   listenerRoots.add(root)

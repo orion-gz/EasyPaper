@@ -1,8 +1,5 @@
 /* ============================================================
-   Notes 페이지 — 논문별 메모 / 하이라이트 / 언더라인 읽기 전용 뷰어
-   좌: 논문 목록, 우: 선택한 논문의 주석 목록(서브탭). 색/간격/모서리는
-   전부 앱 전역 디자인 토큰(--bg-*, --text-*, --border*, --radius-*,
-   --control-accent* 등)을 그대로 재사용해 라이트/다크 테마에 자동 대응한다.
+   Notes 페이지 — 논문/문서별 메모·하이라이트·언더라인 뷰어 (Minimal Craft)
    ============================================================ */
 
 .notes-page-inner {
@@ -16,14 +13,14 @@
 .notes-page-subtitle {
   margin: 0;
   font-size: 13px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .notes-layout {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
-  gap: 20px;
+  gap: 16px;
 }
 
 /* ── 좌측: 논문 목록 ── */
@@ -33,8 +30,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -45,8 +42,9 @@
 }
 .notes-sidebar-header h3 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 
@@ -55,7 +53,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  margin: 12px 16px;
+  margin: 10px 14px;
   color: var(--text-muted);
 }
 .notes-search-box svg { position: absolute; left: 10px; pointer-events: none; }
@@ -64,10 +62,10 @@
   padding: 8px 10px 8px 32px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   color: var(--text-primary);
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: 12.5px;
   outline: none;
   transition: border-color 0.15s ease;
 }
@@ -77,18 +75,19 @@
 .notes-sort-box {
   flex-shrink: 0;
   position: relative;
-  margin: 0 16px 12px;
+  margin: 0 14px 10px;
 }
 .notes-sort-select {
   width: 100%;
   appearance: none;
-  padding: 8px 30px 8px 10px;
+  padding: 7px 30px 7px 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: 12.5px;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   outline: none;
   transition: border-color 0.15s ease, color 0.15s ease;
@@ -107,11 +106,14 @@
 
 .notes-filter-tabs {
   flex-shrink: 0;
-  display: flex;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 2px;
-  padding: 0 8px 12px;
-  border-bottom: 1px solid var(--border);
+  margin: 0 14px 10px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
 }
 .notes-filter-tab-btn {
   display: flex;
@@ -119,7 +121,7 @@
   justify-content: center;
   gap: 3px;
   min-width: 0;
-  padding: 6px 4px;
+  padding: 5px 4px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -129,15 +131,16 @@
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
-.notes-filter-tab-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.notes-filter-tab-btn.active { background: var(--control-accent-soft); color: var(--control-accent-text); }
+.notes-filter-tab-btn:hover { color: var(--text-primary); }
+.notes-filter-tab-btn.active { background: var(--bg-elevated); color: var(--text-primary); }
 .notes-filter-tab-btn span {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   color: inherit;
-  opacity: 0.8;
+  opacity: 0.78;
 }
 
 .notes-paper-list-items {
@@ -145,26 +148,30 @@
   min-height: 0;
   overflow-y: auto;
   padding: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .notes-paper-row {
   display: flex;
   gap: 10px;
-  padding: 10px;
+  padding: 9px 10px;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
   border: 1px solid transparent;
 }
 .notes-paper-row:hover { background: var(--bg-hover); }
 .notes-paper-row.selected {
-  background: var(--control-accent-soft);
-  border-color: var(--control-accent);
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
 }
 .notes-paper-row-body { min-width: 0; flex: 1 1 auto; }
 .notes-paper-row-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 650;
   color: var(--text-primary);
   line-height: 1.35;
   display: -webkit-box;
@@ -174,7 +181,7 @@
 }
 .notes-paper-row-meta {
   margin-top: 3px;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -201,6 +208,7 @@
   gap: 3px;
   font-size: 11px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--text-tertiary);
 }
 .notes-count-chip svg { flex-shrink: 0; }
@@ -211,9 +219,9 @@
   flex-shrink: 0;
   width: var(--notes-thumb-size, 40px);
   height: var(--notes-thumb-size, 40px);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs, 5px);
   overflow: hidden;
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -235,8 +243,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -259,80 +267,91 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 20px 22px;
+  padding: 18px 22px;
   border-bottom: 1px solid var(--border);
 }
 .notes-paper-header-info { min-width: 0; flex: 1 1 auto; }
 .notes-paper-header-title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 15.5px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
   color: var(--text-primary);
-  line-height: 1.4;
+  line-height: 1.38;
 }
 .notes-paper-header-meta {
   margin-top: 4px;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-tertiary);
 }
 .notes-paper-header-actions {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 .notes-read-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 650;
   color: var(--success);
 }
 .notes-open-viewer-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 12px;
-  border-radius: var(--radius-md);
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   color: var(--text-primary);
   font-family: var(--font-body);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
 }
-.notes-open-viewer-btn:hover { border-color: var(--control-accent); color: var(--control-accent-text); }
+.notes-open-viewer-btn:hover { background: var(--bg-hover); border-color: var(--control-accent); color: var(--control-accent-text); }
 
 .notes-tabs {
   flex-shrink: 0;
   display: flex;
-  gap: 4px;
-  padding: 10px 22px 0;
+  gap: 16px;
+  padding: 0 22px;
   border-bottom: 1px solid var(--border);
 }
 .notes-tab-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 12px;
+  padding: 11px 2px;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 650;
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
 }
 .notes-tab-btn:hover { color: var(--text-primary); }
-.notes-tab-btn.active { color: var(--control-accent-text); background: var(--bg-elevated); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); }
+.notes-tab-btn.active {
+  color: var(--text-primary);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  border-bottom-color: var(--control-accent);
+}
+.notes-tabs.ui-sliding-host .notes-tab-btn.active {
+  border-bottom-color: transparent;
+}
 .notes-tab-count {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
 .notes-tab-btn.active .notes-tab-count { color: var(--control-accent-text); }
@@ -360,14 +379,16 @@
 .notes-annotation-sort-select {
   min-width: 138px;
   padding: 6px 28px 6px 9px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   font-family: var(--font-body);
   font-size: 11.5px;
+  font-weight: 600;
   cursor: pointer;
   appearance: none;
+  outline: none;
 }
 .notes-annotation-sort-select:hover,
 .notes-annotation-sort-select:focus {
@@ -387,22 +408,22 @@
 .notes-card-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .notes-annotation-card {
   --notes-item-accent: var(--control-accent);
   position: relative;
-  padding: 12px 14px 12px 16px;
+  padding: 12px 14px;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--notes-item-accent) 10%, var(--bg-elevated));
-  border: 1px solid color-mix(in srgb, var(--notes-item-accent) 35%, var(--border));
-  border-left: 3px solid var(--notes-item-accent);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 .notes-annotation-card:hover {
-  background: color-mix(in srgb, var(--notes-item-accent) 16%, var(--bg-elevated));
+  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--notes-item-accent) 48%, var(--border-strong));
 }
 .notes-card-memo { --notes-item-accent: var(--control-accent); }
 .notes-card-highlight { --notes-item-accent: #eab308; }
@@ -419,12 +440,22 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--notes-item-accent);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+.notes-card-badge::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--notes-item-accent);
+  flex-shrink: 0;
 }
 .notes-card-ts {
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
 .notes-card-text {
@@ -483,13 +514,12 @@
   text-align: center;
 }
 
-/* ── 좁은 화면: 좌우 2열 대신 위/아래 스택 ── */
 @media (max-width: 900px) {
   .notes-layout { flex-direction: column; }
   .notes-sidebar { width: 100%; flex: 0 0 auto; max-height: 260px; }
 }
 
-/* ── 즐겨찾기 별 토글 (목록 행 / 상세 헤더 공용) ── */
+/* ── 즐겨찾기 별 토글 ── */
 .notes-fav-btn {
   flex-shrink: 0;
   display: flex;
@@ -503,17 +533,17 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 .notes-fav-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
-.notes-fav-btn.active { color: #f59e0b; }
-.notes-fav-btn.active svg { fill: #f59e0b; }
+.notes-fav-btn.active { color: var(--warning); }
+.notes-fav-btn.active svg { fill: var(--warning); }
 .notes-fav-btn-lg {
   width: 32px;
   height: 32px;
   align-self: center;
   border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
 }
 
 /* ── 요약 탭 ── */
@@ -535,13 +565,10 @@
   white-space: pre-wrap;
 }
 
-/* 읽기 전 브리핑(primer) 전체 내용 - 뷰어의 브리핑 모달과 같은 .primer-*
-   컴포넌트를 그대로 재사용하되, 탭으로 나누지 않고 섹션을 세로로 쭉 이어
-   붙인다(Notes는 탭 하나짜리 읽기 전용 뷰라 모달의 소탭 구조가 필요 없음). */
 .notes-primer-content {
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  gap: 24px;
   padding: 4px;
 }
 .notes-primer-section:empty { display: none; }
