@@ -8723,7 +8723,12 @@ function ensureGraphLayout() {
     if (btn) btn.innerHTML = `${icon(iconName, 13)}<span>${btn.textContent}</span>`
   })
   const tabsRow = libraryGraphViewToggleGraph?.parentElement
-  if (tabsRow) tabsRow.classList.add('rg-view-tabs')
+  if (tabsRow) {
+    tabsRow.classList.add('rg-view-tabs')
+    bindSlidingIndicator(tabsRow, { itemSelector: '.library-tab-btn', variant: 'pill' })
+  }
+  enableAutoAnimate(libraryHeatmapList)
+  enableAutoAnimate(libraryRecommendationsList)
 
   // 기존 추천 박스(안내 문구용 테두리 박스)를 해체하고, 그 안의 버튼/목록
   // (id 보유, 리스너가 이미 달려 있음)만 새 툴바로 옮긴다.
