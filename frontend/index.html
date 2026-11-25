@@ -46,23 +46,23 @@
         <span class="logo-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M12 9 Q12 13 16 13 Q12 13 12 17 Q12 13 8 13 Q12 13 12 9 Z" fill="currentColor"/></svg></span>
         <span class="logo-text">EasyPaper</span>
       </div>
-      <h1 class="upload-title"><span data-i18n="login.heading">Academic paper translation</span><br /><span class="gradient-text" data-i18n="login.secure">Secure sign-in</span></h1>
+      <h1 class="upload-title"><span data-i18n="login.heading">Academic paper translation</span><br /><span data-i18n="login.secure">Secure sign-in</span></h1>
       
-      <div class="drop-zone" style="max-width: 400px; cursor: default; border: 1px solid var(--border-strong);">
-        <form id="login-form" class="drop-zone-inner" style="padding: 36px 32px; gap: 20px; width: 100%;">
-          <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
-            <label for="login-username" data-i18n="login.username" style="font-size: 13px; color: var(--text-secondary); font-weight: 500; text-align: left; width: 100%;">아이디</label>
-            <input type="text" id="login-username" placeholder="아이디 입력" data-i18n-placeholder="login.usernamePlaceholder" required style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text-primary); outline: none; font-size: 14px;" />
+      <div class="login-card">
+        <form id="login-form" class="login-form">
+          <div class="login-field">
+            <label for="login-username" data-i18n="login.username">아이디</label>
+            <input type="text" id="login-username" placeholder="아이디 입력" data-i18n-placeholder="login.usernamePlaceholder" required />
           </div>
-          <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
-            <label for="login-password" data-i18n="login.password" style="font-size: 13px; color: var(--text-secondary); font-weight: 500; text-align: left; width: 100%;">비밀번호</label>
-            <input type="password" id="login-password" placeholder="••••••••" required style="width: 100%; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text-primary); outline: none; font-size: 14px;" />
+          <div class="login-field">
+            <label for="login-password" data-i18n="login.password">비밀번호</label>
+            <input type="password" id="login-password" placeholder="••••••••" required />
           </div>
-          <label style="width: 100%; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer;">
-            <input type="checkbox" id="login-remember-checkbox" style="width: 16px; height: 16px; cursor: pointer;" />
+          <label class="login-remember">
+            <input type="checkbox" id="login-remember-checkbox" />
             <span data-i18n="login.remember">로그인 상태 유지 (이 기기에서 자동 로그인)</span>
           </label>
-          <button type="submit" class="file-btn" data-i18n="login.submit" style="width: 100%; justify-content: center; margin-top: 10px; padding: 12px 28px; border-radius: 12px; border: none;">로그인</button>
+          <button type="submit" class="file-btn login-submit-btn" data-i18n="login.submit">로그인</button>
         </form>
       </div>
     </div>

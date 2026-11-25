@@ -932,6 +932,7 @@ const chatDrawerSendBtn    = $('chat-drawer-send-btn')
 
 enableAutoAnimate(compareChatMessages)
 enableAutoAnimate(chatDrawerMessages)
+bindSlidingIndicator(document.querySelector('.settings-nav.modal-tabs'), { itemSelector: '.tab-btn', variant: 'pill' })
 
 const docPreviewOverlay  = $('doc-preview-overlay')
 const docPreviewClose    = $('doc-preview-close')

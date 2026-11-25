@@ -341,8 +341,8 @@ body[data-ui-style="editorial"] #doc-title {
 .chat-sidebar,
 .document-workspace-runtime #viewer-screen > #chat-sidebar {
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--bg-surface);
+  border: 1px solid var(--chat-border, var(--border));
+  background: var(--chat-bg, var(--bg-surface));
   box-shadow: none;
 }
 

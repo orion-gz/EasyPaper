@@ -312,3 +312,28 @@ test('preview preserves workspace and parallel reader geometry at desktop and ph
     await page.locator('[data-theme-preview]').screenshot({ path: testInfo.outputPath(`preview-library-${width}.png`), style: '.theme-footer { visibility: hidden; }' })
   }
 })
+
+test('UI craft style preview stays isolated until applied and syncs identically across research, general, and reader frames', async ({ page }) => {
+  const doc = { id: 'craft-doc', filename: 'craft.pdf', total_pages: 1, metadata: { primer_shown: true }, translated_pages: [1] }
+  await mockBaseRoutes(page, { documents: [doc] })
+  await page.route('**/api/library/*/pdf', route => route.fulfill({ contentType: 'application/pdf', body: SAMPLE_PDF_A }))
+  await page.route('**/api/library/*/translation/1**', route => route.fulfill({ json: { translation: 'Craft style check', sentences: [] } }))
+  await gotoApp(page)
+  await page.evaluate(() => { location.hash = '#viewer?id=craft-doc' })
+  const frame = page.frameLocator('iframe[data-document-id="craft-doc"]')
+  await expect(frame.locator('#viewer-scroll-container')).toBeVisible({ timeout: 20000 })
+
+  await page.locator('#sidebar-settings-btn').click()
+  await expect(page.locator('body')).toHaveAttribute('data-ui-style', 'precision')
+  await page.locator('[data-ui-style-option="editorial"]').click()
+  await expect(page.locator('[data-theme-preview]')).toHaveAttribute('data-ui-style', 'editorial')
+  await expect(page.locator('body')).toHaveAttribute('data-ui-style', 'precision')
+
+  await page.locator('[data-theme-apply]').click()
+  await expect(page.locator('body')).toHaveAttribute('data-ui-style', 'editorial')
+  await expect(frame.locator('body')).toHaveAttribute('data-ui-style', 'editorial')
+  await page.locator('#close-settings-btn').click()
+
+  await page.locator('#workspace-mode-switch [data-workspace-mode="general"]').click()
+  await expect(page.locator('body')).toHaveAttribute('data-ui-style', 'editorial')
+})

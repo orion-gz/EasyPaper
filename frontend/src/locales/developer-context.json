@@ -5108,6 +5108,15 @@
   "settings:customTheme.dark": {
     "description": "Custom theme settings: Dark"
   },
+  "settings:customTheme.craftStyle": {
+    "description": "Custom theme settings: UI craft archetype group label"
+  },
+  "settings:customTheme.precision": {
+    "description": "Custom theme settings: Linear/Raycast precision craft archetype"
+  },
+  "settings:customTheme.editorial": {
+    "description": "Custom theme settings: Academic editorial paper craft archetype"
+  },
   "settings:customTheme.search": {
     "description": "Custom theme settings: Search themes"
   },

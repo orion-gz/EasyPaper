@@ -175,12 +175,78 @@ button, input, select, textarea {
 
 .upload-title {
   text-align: center;
-  font-size: clamp(32px, 6vw, 48px);
-  font-weight: 800;
-  line-height: 1.2;
-  letter-spacing: -0.04em;
+  font-size: clamp(24px, 3.6vw, 34px);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
   color: var(--text-primary);
-  font-family: 'Outfit', var(--font-body);
+  font-family: var(--font-body);
+}
+
+#login-screen .upload-bg {
+  display: none;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 390px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 26px;
+  gap: 16px;
+  width: 100%;
+}
+.login-field {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.login-field label {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+  width: 100%;
+}
+.login-field input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  outline: none;
+  font-size: 13.5px;
+  transition: border-color 0.15s ease;
+}
+.login-field input:focus {
+  border-color: var(--control-accent);
+}
+.login-remember {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.login-remember input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--control-accent);
+  cursor: pointer;
+}
+.login-submit-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 6px;
 }
 
 .gradient-text {
@@ -235,14 +301,14 @@ button, input, select, textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 32px;
-  border-radius: 100px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
   background: var(--control-accent);
   color: #fff;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: filter 0.15s ease, transform 0.15s ease;
+  transition: filter 0.15s ease, transform 0.12s ease;
   border: none;
 }
 .file-btn:hover {
@@ -2449,16 +2515,16 @@ body.light-theme .pdf-annotation-underline {
   position: fixed;
   inset: 0;
   padding: 16px;
-  background: rgba(10, 11, 15, 0.75);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+  background: rgba(10, 11, 15, 0.62);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.16s ease;
 }
 
 .modal-overlay.is-visible {
@@ -2475,16 +2541,16 @@ body.light-theme .pdf-annotation-underline {
   max-height: 100%;
   box-shadow: var(--shadow-md);
   overflow: hidden;
-  transform: scale(0.95);
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform: scale(0.98) translateY(4px);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .modal-overlay.is-visible .modal-content {
-  transform: scale(1);
+  transform: scale(1) translateY(0);
 }
 
 .modal-header {
-  padding: 24px 28px 16px;
+  padding: 20px 24px 15px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2492,12 +2558,10 @@ body.light-theme .pdf-annotation-underline {
 }
 
 .modal-header h2 {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
   color: var(--text-primary);
-  background: linear-gradient(135deg, var(--text-primary) 30%, var(--text-secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .onboarding-header-actions,
@@ -2759,10 +2823,11 @@ body.light-theme .pdf-annotation-underline {
 
 .tab-btn.active {
   color: var(--text-primary);
-  background: var(--bg-elevated);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-md);
-  font-weight: 600;
+  background: transparent;
+  border-bottom-color: var(--control-accent);
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 650;
 }
 
 .tab-pane {
@@ -6983,30 +7048,30 @@ body.light-theme .figure-preview-tooltip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
-  border-radius: 100px;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
   background: var(--bg-elevated);
   color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   border: 1px solid var(--border-strong);
 }
 .file-btn-outline:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: var(--border-glow);
+  border-color: var(--control-accent);
 }
 .file-btn-outline.active {
-  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
-  color: var(--control-accent);
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
   border-color: var(--control-accent);
 }
 .file-btn-outline.compact,
 .file-btn.compact {
-  padding: 9px 18px;
-  font-size: 13px;
+  padding: 7px 14px;
+  font-size: 12.5px;
 }
 .file-btn.compact:disabled {
   opacity: 0.45;
@@ -7960,8 +8025,9 @@ body.light-theme .chat-drawer {
 }
 
 .settings-nav .tab-btn.active {
-  background: var(--control-accent-soft);
-  color: var(--control-accent);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
 }
 
 .settings-content {
