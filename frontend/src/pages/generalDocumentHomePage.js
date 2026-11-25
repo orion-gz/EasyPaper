@@ -1,6 +1,7 @@
 import { icon } from '../icons.js'
 import { t } from '../i18n.js'
 import { fetchLibrary } from '../library.js'
+import { enableAutoAnimateAll } from '../interactiveUi.js'
 import '../styles/general-document-home.css'
 
 
@@ -104,9 +105,8 @@ export async function renderGeneralDocumentHomePage() {
   root.innerHTML = `
     <div class="document-home">
       <header class="document-home-hero">
-        <span class="document-home-hero-icon" aria-hidden="true">${icon('bookOpen', 25)}</span>
+        <span class="document-home-hero-icon" aria-hidden="true">${icon('bookOpen', 22)}</span>
         <div>
-          <p class="document-home-eyebrow">GENERAL DOCUMENTS</p>
           <h2>내 문서 한눈에 보기</h2>
           <p>최근 문서를 이어 읽고, 문서 종류별 자료를 빠르게 찾아보세요.</p>
         </div>
@@ -118,10 +118,7 @@ export async function renderGeneralDocumentHomePage() {
 
       <section class="document-home-section" aria-labelledby="document-home-types-title">
         <div class="document-home-section-heading">
-          <div>
-            <p>COLLECTION</p>
-            <h3 id="document-home-types-title">문서 종류</h3>
-          </div>
+          <h3 id="document-home-types-title">문서 종류</h3>
         </div>
         <div class="document-home-stat-grid">
           ${Object.keys(DOCUMENT_TYPES)
@@ -132,23 +129,22 @@ export async function renderGeneralDocumentHomePage() {
 
       <section class="document-home-section" aria-labelledby="document-home-recent-title">
         <div class="document-home-section-heading">
-          <div>
-            <p>CONTINUE READING</p>
-            <h3 id="document-home-recent-title">최근 문서</h3>
-          </div>
+          <h3 id="document-home-recent-title">최근 문서</h3>
           <span>${recent.length ? t('library:document.count', { count: recent.length }) : t('dashboard:generalDocumentsEmpty')}</span>
         </div>
         <div class="document-home-recent-list">
           ${recent.length
             ? recent.map(renderRecentDocument).join('')
             : `<div class="document-home-empty">
-                ${icon('folderPlus', 24)}
+                ${icon('folderPlus', 22)}
                 <strong>${t('dashboard:generalDocumentsEmpty')}</strong>
                 <span>PDF를 업로드하면 최근 문서가 여기에 표시됩니다.</span>
               </div>`}
         </div>
       </section>
     </div>`
+
+  enableAutoAnimateAll(['.document-home-stat-grid', '.document-home-recent-list'], root)
 
   root.querySelectorAll('[data-doc-id]').forEach(button => {
     button.addEventListener('click', () => {
