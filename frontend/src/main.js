@@ -930,6 +930,9 @@ const chatDrawerMessages   = $('chat-drawer-messages')
 const chatDrawerInput      = $('chat-drawer-input')
 const chatDrawerSendBtn    = $('chat-drawer-send-btn')
 
+enableAutoAnimate(compareChatMessages)
+enableAutoAnimate(chatDrawerMessages)
+
 const docPreviewOverlay  = $('doc-preview-overlay')
 const docPreviewClose    = $('doc-preview-close')
 const docPreviewCoverImg = $('doc-preview-cover-img')

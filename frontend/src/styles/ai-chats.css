@@ -1,13 +1,11 @@
 /* ============================================================
-   AI Chats 페이지 — 논문별 AI 채팅 세션 목록
-   기존 디자인 토큰(--bg-*, --accent-*, --border-*, --radius-*, --shadow-*, --text-*)만
-   사용하며 색상을 하드코딩하지 않는다 (라이트/다크 테마 자동 대응).
+   AI Chats 페이지 — 논문/문서별 AI 채팅 세션 목록 (Minimal Craft)
    ============================================================ */
 
 .aic-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 /* ── 헤더 ── */
@@ -15,18 +13,18 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 .aic-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 680;
   color: var(--text-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   margin: 0 0 4px;
 }
 .aic-subtitle {
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--text-secondary);
   margin: 0;
 }
@@ -44,21 +42,20 @@
   pointer-events: none;
 }
 .aic-search-box input {
-  width: 280px;
+  width: 260px;
   max-width: 100%;
-  padding: 9px 12px 9px 34px;
+  padding: 8px 12px 8px 34px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
   color: var(--text-primary);
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: 12.5px;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 .aic-search-box input:focus {
   border-color: var(--control-accent);
-  box-shadow: 0 0 0 3px var(--control-accent-soft);
 }
 .aic-search-box input::placeholder { color: var(--text-muted); }
 
@@ -67,15 +64,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 .aic-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
-  background: var(--bg-surface);
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
@@ -83,34 +80,35 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 12px;
+  padding: 6px 11px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
   white-space: nowrap;
 }
 .aic-tab-btn:hover { color: var(--text-primary); }
 .aic-tab-btn.active {
-  background: var(--control-accent-soft);
-  color: var(--control-accent-text);
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 .aic-tab-count {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
-.aic-tab-btn.active .aic-tab-count { color: var(--control-accent-text); opacity: 0.85; }
+.aic-tab-btn.active .aic-tab-count { color: var(--control-accent-text); }
 
 .aic-controls-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .aic-sort-wrap { position: relative; }
@@ -118,14 +116,14 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 7px 11px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
   white-space: nowrap;
@@ -136,7 +134,7 @@
   top: calc(100% + 6px);
   right: 0;
   min-width: 170px;
-  padding: 6px;
+  padding: 5px;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -147,16 +145,16 @@
 .aic-sort-option {
   display: block;
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: 12.5px;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 .aic-sort-option:hover { background: var(--bg-hover); color: var(--text-primary); }
 .aic-sort-option.active { color: var(--control-accent-text); font-weight: 600; background: var(--control-accent-soft); }
@@ -164,68 +162,62 @@
 .aic-view-toggle {
   display: flex;
   align-items: center;
-  border: 1px solid var(--border-strong);
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  overflow: hidden;
   background: var(--bg-elevated);
 }
 .aic-view-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 28px;
   border: none;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
-.aic-view-btn + .aic-view-btn { border-left: 1px solid var(--border-strong); }
 .aic-view-btn:hover { color: var(--text-primary); }
-.aic-view-btn.active { background: var(--control-accent-soft); color: var(--control-accent-text); }
+.aic-view-btn.active { background: var(--bg-surface); color: var(--text-primary); }
 
 /* ── 본문 영역 ── */
 .aic-body { min-height: 240px; }
 
 /* 표 보기 */
 .aic-table-wrap {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  background: var(--bg-surface);
-  /* 아주 좁은 창(1024px 미만 등)에 대한 최후의 안전판일 뿐, 일반적인 데스크톱
-     너비에서는 아래 table-layout:fixed + 컬럼 폭 조정만으로 스크롤 없이 다 보인다. */
+  background: var(--bg-elevated);
   overflow-x: auto;
 }
 .aic-table {
   width: 100%;
   min-width: 720px;
-  /* 잘림의 실제 원인 - table-layout이 기본값(auto)이면 브라우저가 셀
-     내용(특히 줄바꿈 없는 논문 제목)의 "선호 폭"을 기준으로 컬럼 폭을
-     재배분해서, 아래 %가 있어도 Action 컬럼이 밀려 잘렸다. fixed로
-     고정해 %가 항상 그대로 지켜지게 하고, 넘치는 텍스트는 ellipsis로
-     줄인다(논문 제목/미리보기 모두 이미 text-overflow:ellipsis 적용됨). */
   table-layout: fixed;
   border-collapse: collapse;
 }
 .aic-table thead th {
   text-align: left;
-  padding: 12px 16px;
-  font-size: 12px;
+  padding: 11px 16px;
+  font-size: 11.5px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
   white-space: nowrap;
 }
 .aic-table tbody tr {
   border-bottom: 1px solid var(--border);
-  transition: background 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 .aic-table tbody tr:last-child { border-bottom: none; }
 .aic-table tbody tr:hover { background: var(--bg-hover); }
 .aic-table td {
-  padding: 12px 16px;
+  padding: 11px 16px;
   vertical-align: middle;
   font-size: 13px;
   color: var(--text-secondary);
@@ -233,13 +225,13 @@
 .aic-col-paper { width: 28%; }
 .aic-col-type { width: 14%; }
 .aic-col-message { width: 22%; color: var(--text-secondary); }
-.aic-col-updated { width: 12%; white-space: nowrap; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; }
+.aic-col-updated { width: 12%; white-space: nowrap; color: var(--text-tertiary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
 .aic-col-actions { width: 24%; }
 
 .aic-paper-cell {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   min-width: 0;
 }
 .aic-paper-icon {
@@ -247,15 +239,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-sm);
-  background: var(--control-accent-soft);
-  color: var(--control-accent-text);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
 }
 .aic-paper-title {
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 650;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -299,7 +292,7 @@
 .aic-preview img,
 .aic-card-preview img { width: auto; max-width: 2em; height: 1em; vertical-align: -0.1em; }
 
-.aic-preview-loading { color: var(--text-muted); font-style: italic; }
+.aic-preview-loading { color: var(--text-muted); }
 .aic-preview-empty { color: var(--text-muted); }
 
 .aic-actions { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
@@ -307,56 +300,60 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 9px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   font-family: var(--font-body);
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-.aic-action-btn:hover { color: var(--text-primary); border-color: var(--control-accent); }
+.aic-action-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--control-accent); }
 .aic-action-btn.aic-action-primary {
-  background: var(--control-accent-soft);
-  color: var(--control-accent-text);
-  border-color: transparent;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }
-.aic-action-btn.aic-action-primary:hover { box-shadow: 0 0 0 3px var(--control-accent-soft); }
+.aic-action-btn.aic-action-primary:hover {
+  background: var(--bg-hover);
+  color: var(--control-accent-text);
+  border-color: var(--control-accent);
+}
 
 /* 카드 보기 */
 .aic-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 12px;
 }
 .aic-card {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 16px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  background: var(--bg-surface);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  background: var(--bg-elevated);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
 }
 .aic-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--control-accent) 44%, var(--border-strong));
 }
 .aic-card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-.aic-card-updated { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+.aic-card-updated { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .aic-card-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 650;
   color: var(--text-primary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -383,9 +380,9 @@
   padding: 70px 20px;
   text-align: center;
   color: var(--text-secondary);
-  border: 1px dashed var(--border);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
 }
 .aic-state p { margin: 0; font-size: 13.5px; }
 .aic-state-sub { color: var(--text-muted); font-size: 12.5px !important; }
@@ -393,24 +390,24 @@
 .aic-state-error p { color: var(--error); }
 .aic-retry-btn {
   margin-top: 6px;
-  padding: 8px 16px;
+  padding: 7px 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   color: var(--text-primary);
   font-family: var(--font-body);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
-.aic-retry-btn:hover { border-color: var(--control-accent); }
+.aic-retry-btn:hover { background: var(--bg-hover); border-color: var(--control-accent); }
 
 .aic-spinner {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  border: 2.5px solid var(--border-strong);
+  border: 2px solid var(--border-strong);
   border-top-color: var(--control-accent);
   animation: aic-spin 0.7s linear infinite;
   margin-bottom: 6px;
@@ -436,16 +433,17 @@
   background: var(--bg-elevated);
   color: var(--text-secondary);
   font-family: var(--font-body);
+  font-variant-numeric: tabular-nums;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .aic-page-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--control-accent); }
 .aic-page-btn.active {
   background: var(--control-accent-soft);
   color: var(--control-accent-text);
-  border-color: transparent;
+  border-color: color-mix(in srgb, var(--control-accent) 32%, var(--border));
 }
 .aic-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .aic-page-nav { font-size: 15px; }
