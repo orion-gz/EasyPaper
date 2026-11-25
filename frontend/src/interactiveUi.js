@@ -20,7 +20,7 @@ export function enableAutoAnimate(container, options = {}) {
   if (!container || !(container instanceof HTMLElement)) return null
   if (autoAnimatedElements.has(container)) return autoAnimatedElements.get(container)
   const controller = autoAnimate(container, {
-    duration: prefersReducedMotion() ? 0 : (options.duration ?? 190),
+    duration: prefersReducedMotion() ? 0 : (options.duration ?? 180),
     easing: options.easing ?? 'cubic-bezier(0.16, 1, 0.3, 1)',
     disrespectUserMotionPreference: false,
   })
@@ -33,7 +33,8 @@ export function enableAutoAnimate(container, options = {}) {
  */
 export function enableAutoAnimateAll(selectors, root = document, options = {}) {
   if (!root) return
-  for (const selector of selectors) {
+  const list = Array.isArray(selectors) ? selectors : String(selectors).split(',').map(s => s.trim()).filter(Boolean)
+  for (const selector of list) {
     root.querySelectorAll(selector).forEach(el => enableAutoAnimate(el, options))
   }
 }
@@ -46,7 +47,8 @@ function findActiveControl(container, itemSelector, activePredicate) {
 }
 
 /**
- * Binds a shared-element GSAP Flip / smooth sliding indicator pill or underline to a tab/segment bar.
+ * Binds a shared-element GSAP Flip sliding indicator pill or underline to a tab/segment bar.
+ * Resilient to innerHTML re-renders by tracking previous bounds and re-attaching the indicator.
  */
 export function bindSlidingIndicator(container, {
   itemSelector = 'button, [role="tab"]',
@@ -59,7 +61,7 @@ export function bindSlidingIndicator(container, {
   if (!container || !(container instanceof HTMLElement)) return null
   if (slidingIndicators.has(container)) {
     const existing = slidingIndicators.get(container)
-    existing.sync(false)
+    existing.sync(true)
     return existing
   }
 
@@ -70,17 +72,29 @@ export function bindSlidingIndicator(container, {
   container.prepend(indicator)
 
   let initialized = false
-  let lastTarget = null
+  let lastBounds = null
   let syncing = false
+
+  const applyBounds = (bounds) => {
+    indicator.style.opacity = '1'
+    indicator.style.width = `${bounds.w}px`
+    indicator.style.height = variant === 'underline' ? '2px' : `${bounds.h}px`
+    indicator.style.transform = variant === 'underline'
+      ? `translate3d(${bounds.x}px, ${bounds.y + bounds.h - 2}px, 0)`
+      : `translate3d(${bounds.x}px, ${bounds.y}px, 0)`
+  }
 
   const sync = (shouldAnimate = true) => {
     if (syncing) return
     syncing = true
     try {
+      if (indicator.parentElement !== container) {
+        container.prepend(indicator)
+      }
       const target = findActiveControl(container, itemSelector, activePredicate)
       if (!target) {
         indicator.style.opacity = '0'
-        lastTarget = null
+        lastBounds = null
         return
       }
       const hostRect = container.getBoundingClientRect()
@@ -90,30 +104,36 @@ export function bindSlidingIndicator(container, {
         return
       }
       const scale = Number(document.documentElement.style.zoom) || 1
-      const x = (targetRect.left - hostRect.left + container.scrollLeft) / scale
-      const y = (targetRect.top - hostRect.top + container.scrollTop) / scale
-      const w = targetRect.width / scale
-      const h = targetRect.height / scale
+      const nextBounds = {
+        x: (targetRect.left - hostRect.left + container.scrollLeft) / scale,
+        y: (targetRect.top - hostRect.top + container.scrollTop) / scale,
+        w: targetRect.width / scale,
+        h: targetRect.height / scale,
+      }
 
-      const canAnimate = initialized && shouldAnimate && !prefersReducedMotion() && lastTarget && lastTarget !== target
-      const flipState = canAnimate ? Flip.getState(indicator) : null
+      const moved = Boolean(
+        lastBounds &&
+        (Math.abs(nextBounds.x - lastBounds.x) > 1 ||
+          Math.abs(nextBounds.y - lastBounds.y) > 1 ||
+          Math.abs(nextBounds.w - lastBounds.w) > 1)
+      )
+      const canAnimate = initialized && shouldAnimate && !prefersReducedMotion() && moved
 
-      indicator.style.opacity = '1'
-      indicator.style.width = `${w}px`
-      indicator.style.height = variant === 'underline' ? '2px' : `${h}px`
-      indicator.style.transform = variant === 'underline'
-        ? `translate3d(${x}px, ${y + h - 2}px, 0)`
-        : `translate3d(${x}px, ${y}px, 0)`
-
-      if (flipState) {
+      if (canAnimate && lastBounds) {
+        applyBounds(lastBounds)
+        const flipState = Flip.getState(indicator)
+        applyBounds(nextBounds)
         Flip.from(flipState, {
           duration: 0.22,
           ease: 'power3.out',
           overwrite: true,
         })
+      } else {
+        applyBounds(nextBounds)
       }
+
       initialized = true
-      lastTarget = target
+      lastBounds = nextBounds
     } finally {
       syncing = false
     }
@@ -176,7 +196,7 @@ export async function openFloatingElement(referenceEl, floatingEl, {
 }
 
 /**
- * Animates a subtle blur-scale icon swap for copy/save feedback buttons.
+ * Animates a subtle tactile pulse for copy/save feedback buttons.
  */
 export function pulseActionFeedback(buttonEl) {
   if (!buttonEl || prefersReducedMotion()) return

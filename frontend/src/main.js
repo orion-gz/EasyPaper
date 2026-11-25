@@ -29,7 +29,7 @@ import { createReaderCommandActions } from './readerCommandActions.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
 import { initializeDesktopWindow } from './desktopWindow.js'
 import { initUiStyleSync } from './themes/uiStyleEngine.js'
-import { installProximitySpotlight, bindSlidingIndicator } from './interactiveUi.js'
+import { installProximitySpotlight, bindSlidingIndicator, enableAutoAnimate } from './interactiveUi.js'
 
 initUiStyleSync(document)
 installProximitySpotlight(document)
@@ -7635,6 +7635,7 @@ function renderLibraryStatusTabs(docs) {
       renderLibraryStatusTabs(currentLibraryDocs)
     })
   })
+  bindSlidingIndicator(el, { itemSelector: '.lib-status-tab', variant: 'pill' })
 }
 
 function sortDocsByMode(docs) {
@@ -8184,6 +8185,15 @@ function ensureLibraryChrome() {
   }
 
   const viewToggleEl = $('library-view-toggle')
+  if (viewToggleEl) {
+    bindSlidingIndicator(viewToggleEl, { itemSelector: '.view-toggle-btn', variant: 'pill' })
+  }
+  if (libraryGrid) {
+    enableAutoAnimate(libraryGrid)
+  }
+  document.querySelectorAll('.workspace-mode-switch').forEach(sw => {
+    bindSlidingIndicator(sw, { itemSelector: 'button[data-workspace-mode]', variant: 'pill' })
+  })
   if (viewToggleEl && !$('library-sort-select')) {
     viewToggleEl.insertAdjacentHTML('beforebegin', `
       <div class="lib-sort-dropdown">
@@ -10314,6 +10324,13 @@ function ensureLibraryDetailPanel() {
   document.querySelectorAll('#lib-detail-panel .lib-detail-tab').forEach(btn => {
     btn.addEventListener('click', () => switchLibraryDetailTab(btn.dataset.tab))
   })
+  bindSlidingIndicator(document.querySelector('#lib-detail-panel .lib-detail-tabs'), {
+    itemSelector: '.lib-detail-tab',
+    variant: 'underline',
+  })
+  enableAutoAnimate($('lib-detail-panel-notes'))
+  enableAutoAnimate($('lib-detail-panel-questions'))
+  enableAutoAnimate($('lib-detail-panel-related'))
 
   $('lib-detail-open-btn')?.addEventListener('click', () => {
     if (!libraryDetailDoc) return
