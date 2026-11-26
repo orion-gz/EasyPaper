@@ -7117,7 +7117,7 @@
     "description": "First-run translation setup. Set up later"
   },
   "onboarding:restart": {
-    "description": "First-run translation setup. Run translation setup"
+    "description": "First-run translation setup. Onboarding"
   },
   "onboarding:login": {
     "description": "First-run translation setup. Sign in from your terminal, then test a translation to verify the connection."

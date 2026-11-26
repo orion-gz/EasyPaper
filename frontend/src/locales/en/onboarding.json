@@ -34,7 +34,7 @@
   "ready": "Ready for your first document",
   "open": "Open first document",
   "skip": "Set up later",
-  "restart": "Run translation setup",
+  "restart": "Onboarding",
   "login": "Sign in from your terminal, then test a translation to verify the connection.",
   "logs": "Details",
   "working": "Checking…",
