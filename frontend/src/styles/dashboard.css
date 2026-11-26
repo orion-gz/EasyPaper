@@ -644,25 +644,17 @@
 .dash-legend-dot.is-paper { background: var(--success); }
 .dash-legend-dot.is-concept { background: var(--control-accent-text); }
 
-/* ── 카드 내 스크롤바 슬림 스타일 ── */
-.dash-paper-list::-webkit-scrollbar,
-.dash-question-list::-webkit-scrollbar,
-.dash-rec-list::-webkit-scrollbar,
-.dash-timeline-list::-webkit-scrollbar {
-  width: 4px;
+/* ── 대시보드 화면 내 가로/세로 스크롤바 숨김 ── */
+#page-outlet:has(#page-dashboard.active),
+#page-dashboard,
+#page-dashboard * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-.dash-paper-list::-webkit-scrollbar-thumb,
-.dash-question-list::-webkit-scrollbar-thumb,
-.dash-rec-list::-webkit-scrollbar-thumb,
-.dash-timeline-list::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 4px;
-}
-.dash-paper-list::-webkit-scrollbar-track,
-.dash-question-list::-webkit-scrollbar-track,
-.dash-rec-list::-webkit-scrollbar-track,
-.dash-timeline-list::-webkit-scrollbar-track {
-  background: transparent;
+#page-outlet:has(#page-dashboard.active)::-webkit-scrollbar,
+#page-dashboard::-webkit-scrollbar,
+#page-dashboard *::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── Reading Analytics System Cards & Badges ── */
