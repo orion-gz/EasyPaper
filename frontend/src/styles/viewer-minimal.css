@@ -119,19 +119,19 @@ body[data-ui-style="editorial"] .trans-page-block {
   letter-spacing: -0.008em;
 }
 
-/* Clean marker highlight without boxy outer ring */
-.trans-sentence.sentence-highlight {
-  background-color: color-mix(in srgb, var(--control-accent) 16%, transparent) !important;
+/* Clean marker highlight without boxy outer ring (yields to Focus Mode & custom theme tokens) */
+.trans-sentence.sentence-highlight:not(.focus-mode-active *) {
+  background-color: var(--translation-selected, color-mix(in srgb, var(--control-accent) 16%, transparent));
   box-shadow: none !important;
   border-radius: 3px;
 }
-body.light-theme .trans-sentence.sentence-highlight {
-  background-color: color-mix(in srgb, var(--control-accent) 14%, transparent) !important;
+body.light-theme:not([data-theme-id]) .trans-sentence.sentence-highlight:not(.focus-mode-active *) {
+  background-color: color-mix(in srgb, var(--control-accent) 14%, transparent);
   box-shadow: none !important;
-  color: var(--text-primary) !important;
+  color: var(--text-primary);
 }
-body[data-ui-style="editorial"] .trans-sentence.sentence-highlight {
-  background-color: color-mix(in srgb, var(--warning) 22%, transparent) !important;
+body[data-ui-style="editorial"]:not([data-theme-id]) .trans-sentence.sentence-highlight:not(.focus-mode-active *) {
+  background-color: color-mix(in srgb, var(--warning) 22%, transparent);
 }
 
 /* Glossary & Summary without one-sided thick bars */
@@ -205,7 +205,7 @@ body[data-ui-style="editorial"] .trans-sentence.sentence-highlight {
   box-shadow: none !important;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  background: color-mix(in srgb, var(--bg-topbar) 92%, transparent);
+  background: color-mix(in srgb, var(--topbar-bg, var(--bg-panel)) 92%, transparent);
   border-color: var(--border);
 }
 
@@ -218,7 +218,7 @@ body[data-ui-style="editorial"] .trans-sentence.sentence-highlight {
 .document-workspace-runtime .panels {
   top: 56px;
   border-radius: var(--radius-md);
-  border-color: transparent;
+  border: 1px solid var(--viewer-border, var(--border));
 }
 .document-workspace-runtime #outline-sidebar {
   top: 56px;
@@ -285,11 +285,14 @@ body[data-ui-style="editorial"] #doc-title {
   padding: 0 8px;
   border-radius: var(--radius-sm);
   font-size: 11.5px;
+  color: var(--text-primary);
 }
 .document-workspace-runtime #floating-scroll-nav #page-input {
   height: 22px;
   border-radius: 4px;
   background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 11.5px;
 }
@@ -403,9 +406,9 @@ body[data-ui-style="editorial"] #doc-title {
 }
 .chat-message.user .message-bubble,
 body.light-theme .chat-message.user .message-bubble {
-  background: var(--bg-elevated) !important;
-  color: var(--text-primary) !important;
-  border: 1px solid var(--border-strong) !important;
+  background: var(--chat-selected, var(--bg-elevated)) !important;
+  color: var(--chat-text, var(--text-primary)) !important;
+  border: 1px solid var(--chat-border, var(--border-strong)) !important;
   border-radius: var(--radius-md) !important;
   padding: 9px 13px !important;
   font-size: 13px;

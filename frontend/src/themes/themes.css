@@ -193,7 +193,7 @@ body[data-theme-id] :is(#pdf-parser-inline-log, #pdf-parser-install-log) { backg
 .theme-sample-composer { margin-top: auto; border: 1px solid var(--chat-border); border-radius: 1cqw; padding: 1cqw; }
 .theme-sample-page-controls { position: absolute; bottom: 2cqw; left: 16%; padding: .8cqw 2cqw; border: 1px solid var(--viewer-border); border-radius: 1.2cqw; background: var(--viewer-bg); font-size: 1.5cqw; }
 [data-theme-preview][data-ui-style="editorial"] :is(.theme-sample-paper, .theme-sample-translation, .theme-preview h4) {
-  font-family: var(--font-editorial-serif, Georgia, serif);
+  font-family: var(--font-serif-editorial, Georgia, serif);
 }
 [data-theme-preview][data-ui-style="editorial"] .theme-sample-tab {
   border-top: 2px solid var(--control-accent);

@@ -39,6 +39,64 @@ export function enableAutoAnimateAll(selectors, root = document, options = {}) {
   }
 }
 
+/**
+ * Runs a synchronous DOM reset/view-mode swap with auto-animate temporarily paused
+ * so outgoing clone nodes are not kept alive during full container replacement.
+ */
+export function withoutAutoAnimate(container, fn) {
+  const controller = container ? autoAnimatedElements.get(container) : null
+  if (!controller || typeof controller.disable !== 'function') {
+    return fn()
+  }
+  controller.disable()
+  try {
+    return fn()
+  } finally {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => controller.enable?.())
+    } else {
+      controller.enable?.()
+    }
+  }
+}
+
+/**
+ * Performs a zero-clone FLIP transition across full innerHTML/replaceChildren rebuilds
+ * by matching elements via a key attribute (default: data-id). Never leaves duplicate
+ * outgoing DOM clones behind, keeping selectors and strict E2E queries deterministic.
+ */
+export function flipKeyedRebuild(container, renderFn, {
+  itemSelector = '[data-id]',
+  keyAttr = 'data-id',
+} = {}) {
+  if (!container || !(container instanceof HTMLElement) || prefersReducedMotion()) {
+    return renderFn()
+  }
+  const prevRects = new Map()
+  for (const el of container.querySelectorAll(itemSelector)) {
+    const key = el.getAttribute(keyAttr)
+    if (key && el.offsetWidth > 0) prevRects.set(key, el.getBoundingClientRect())
+  }
+  const result = renderFn()
+  if (!prevRects.size) return result
+  for (const el of container.querySelectorAll(itemSelector)) {
+    const key = el.getAttribute(keyAttr)
+    const prev = key ? prevRects.get(key) : null
+    if (!prev) continue
+    const next = el.getBoundingClientRect()
+    const dx = prev.left - next.left
+    const dy = prev.top - next.top
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+      animate(
+        el,
+        { transform: [`translate3d(${dx}px, ${dy}px, 0)`, 'translate3d(0, 0, 0)'] },
+        { duration: 0.2, easing: [0.16, 1, 0.3, 1] }
+      )
+    }
+  }
+  return result
+}
+
 function findActiveControl(container, itemSelector, activePredicate) {
   const items = [...container.querySelectorAll(itemSelector)].filter(
     el => el instanceof HTMLElement && !el.hidden && !el.classList.contains('hidden') && el.offsetWidth > 0
@@ -207,14 +265,14 @@ export function pulseActionFeedback(buttonEl) {
   )
 }
 
-let spotlightInstalled = false
+const spotlightDocs = new WeakSet()
 export function installProximitySpotlight(doc = globalThis.document) {
-  if (spotlightInstalled || !doc) return
-  spotlightInstalled = true
+  if (!doc || spotlightDocs.has(doc)) return
+  spotlightDocs.add(doc)
   doc.addEventListener('pointermove', event => {
     if (prefersReducedMotion() || doc.body?.dataset.uiStyle === 'editorial') return
     const card = event.target instanceof Element
-      ? event.target.closest('.doc-card, .dash-stat-card, .aic-card, .notes-doc-item')
+      ? event.target.closest('.doc-card, .dash-stat-card, .aic-card, .notes-paper-row')
       : null
     if (!card) return
     const rect = card.getBoundingClientRect()

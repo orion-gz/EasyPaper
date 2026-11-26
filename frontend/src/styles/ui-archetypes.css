@@ -54,7 +54,8 @@ body[data-ui-style="editorial"] :is(
   .trans-text,
   .insight-summary-box,
   .aic-title,
-  .notes-doc-title
+  .notes-paper-row-title,
+  .notes-paper-header-title
 ) {
   font-family: var(--font-serif-editorial);
 }
@@ -67,7 +68,7 @@ body[data-ui-style="precision"] {
   --radius-xl: 12px;
 }
 
-body[data-ui-style="precision"] :is(.doc-card, .dash-stat-card, .aic-card) {
+body[data-ui-style="precision"] :is(.doc-card, .dash-stat-card, .aic-card, .notes-paper-row) {
   background-image: radial-gradient(
     240px circle at var(--ui-mx, -999px) var(--ui-my, -999px),
     color-mix(in srgb, var(--text-primary) 4.5%, transparent),

@@ -29,7 +29,7 @@ import { createReaderCommandActions } from './readerCommandActions.js'
 import { createWorkspaceTabs } from './workspaceTabs.js'
 import { initializeDesktopWindow } from './desktopWindow.js'
 import { initUiStyleSync } from './themes/uiStyleEngine.js'
-import { installProximitySpotlight, bindSlidingIndicator, enableAutoAnimate } from './interactiveUi.js'
+import { installProximitySpotlight, bindSlidingIndicator, enableAutoAnimate, withoutAutoAnimate, flipKeyedRebuild } from './interactiveUi.js'
 
 initUiStyleSync(document)
 installProximitySpotlight(document)
@@ -48,6 +48,8 @@ import './styles/shell.css'
 import './styles/library-page.css'
 import './styles/research-graph.css'
 import "./styles/document-modes.css"
+import './styles/ui-archetypes.css'
+import './styles/viewer-minimal.css'
 import { marked } from 'marked'
 import { createWorkspaceModeController } from "./workspaceModeController.js"
 import { getModeSetting, normalizeSettingsMode, setModeSetting } from './modeSettings.js'
@@ -6435,7 +6437,7 @@ document.querySelectorAll('.view-toggle-btn').forEach(btn => {
     libraryViewMode = btn.dataset.view
     localStorage.setItem('easypaper_library_view', libraryViewMode)
     updateViewToggleUI()
-    filterLibraryCards(currentLibraryDocs)
+    withoutAutoAnimate(libraryGrid, () => filterLibraryCards(currentLibraryDocs))
   })
 })
 updateViewToggleUI()
@@ -6612,7 +6614,7 @@ const selectedDocIds = new Set()
 
 function getVisibleDocIds() {
   if (!libraryGrid) return []
-  return Array.from(libraryGrid.querySelectorAll('.doc-card[data-id], .doc-list-row[data-id]'), el => el.dataset.id)
+  return [...new Set(Array.from(libraryGrid.querySelectorAll('.doc-card[data-id], .doc-list-row[data-id]'), el => el.dataset.id))]
 }
 
 function toggleDocSelection(docId) {
@@ -6868,10 +6870,14 @@ function initLibraryDragSelection() {
       height: `${selectionRect.height}px`,
     })
 
-    const items = Array.from(
-      libraryGrid.querySelectorAll('.doc-card[data-id], .doc-list-row[data-id]'),
-      element => ({ id: element.dataset.id, rect: element.getBoundingClientRect() }),
-    )
+    const seenIds = new Set()
+    const items = []
+    for (const element of libraryGrid.querySelectorAll('.doc-card[data-id], .doc-list-row[data-id]')) {
+      const id = element.dataset.id
+      if (!id || seenIds.has(id)) continue
+      seenIds.add(id)
+      items.push({ id, rect: element.getBoundingClientRect() })
+    }
     replaceDocSelection(resolveDragSelection(
       dragState.baseIds,
       items,
@@ -8192,9 +8198,6 @@ function ensureLibraryChrome() {
   if (viewToggleEl) {
     bindSlidingIndicator(viewToggleEl, { itemSelector: '.view-toggle-btn', variant: 'pill' })
   }
-  if (libraryGrid) {
-    enableAutoAnimate(libraryGrid)
-  }
   document.querySelectorAll('.workspace-mode-switch').forEach(sw => {
     bindSlidingIndicator(sw, { itemSelector: 'button[data-workspace-mode]', variant: 'pill' })
   })
@@ -9354,55 +9357,59 @@ function updateDocItemProgress(container, doc) {
   if (text) text.textContent = `${translated}/${total} · ${pct}%`
 }
 
-function filterLibraryCards(docs) {
-  const category = isMinimalUi() ? 'ALL' : activeCategoryFilter
-  const status = isMinimalUi() ? 'all' : activeStatusFilter
-  currentLibraryDocs = docs
-  libraryGrid.innerHTML = ''
-  libraryGrid.classList.toggle('list-view', !isMinimalUi() && libraryViewMode === 'list')
+function filterLibraryCards(docs, { animateFlip = true } = {}) {
+  const run = () => {
+    const category = isMinimalUi() ? 'ALL' : activeCategoryFilter
+    const status = isMinimalUi() ? 'all' : activeStatusFilter
+    currentLibraryDocs = docs
+    libraryGrid.innerHTML = ''
+    libraryGrid.classList.toggle('list-view', !isMinimalUi() && libraryViewMode === 'list')
 
-  libraryGrid.classList.toggle('compact-view', !isMinimalUi() && libraryViewMode === 'compact')
-  // Update filter buttons active class
-  document.querySelectorAll('.category-filter-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.category === category)
-  })
-  $('library-breadcrumb')?.classList.toggle('global-filter-active', category !== 'ALL')
+    libraryGrid.classList.toggle('compact-view', !isMinimalUi() && libraryViewMode === 'compact')
+    // Update filter buttons active class
+    document.querySelectorAll('.category-filter-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.category === category)
+    })
+    $('library-breadcrumb')?.classList.toggle('global-filter-active', category !== 'ALL')
 
-  // 카테고리 칩은 폴더 경계를 무시한 전역 필터다. '전체'일 때만 현재 폴더를 적용한다.
-  let filteredDocs = state.currentLibraryTab === 'trash' || category !== 'ALL'
-    ? docs
-    : docs.filter(doc => (doc.folder_id || null) === activeLibraryFolderId)
+    // 카테고리 칩은 폴더 경계를 무시한 전역 필터다. '전체'일 때만 현재 폴더를 적용한다.
+    let filteredDocs = state.currentLibraryTab === 'trash' || category !== 'ALL'
+      ? docs
+      : docs.filter(doc => (doc.folder_id || null) === activeLibraryFolderId)
 
-  if (category.startsWith('type:')) {
-    const selectedType = category.slice(5)
-    filteredDocs = filteredDocs.filter(doc => (doc.document_type || 'other') === selectedType)
-  } else if (category !== 'ALL') {
-    filteredDocs = filteredDocs.filter(doc => (doc.metadata?.categories || []).includes(category))
+    if (category.startsWith('type:')) {
+      const selectedType = category.slice(5)
+      filteredDocs = filteredDocs.filter(doc => (doc.document_type || 'other') === selectedType)
+    } else if (category !== 'ALL') {
+      filteredDocs = filteredDocs.filter(doc => (doc.metadata?.categories || []).includes(category))
+    }
+
+    // 상태 필터(전체/읽지 않음/읽는 중/완료/즐겨찾기) 적용 - 휴지통 탭에는 없는 개념이라 건너뛴다.
+    if (state.currentLibraryTab !== 'trash' && status !== 'all') {
+      const favIds = getFavoriteIds()
+      filteredDocs = filteredDocs.filter(doc => (
+        status === 'favorites' ? favIds.has(doc.id) : getLibraryDocStatus(doc) === status
+      ))
+    }
+
+    filteredDocs = sortLibraryDocs(filteredDocs)
+
+    const childFolders = state.currentLibraryTab === 'trash' || category !== 'ALL'
+      ? []
+      : libraryFolders.filter(folder => (folder.parent_id || null) === activeLibraryFolderId)
+    if (filteredDocs.length === 0 && childFolders.length === 0) {
+      const variant = state.currentLibraryTab === 'trash'
+        ? 'trash'
+        : (status !== 'all' ? status : (docs.length > 0 ? 'filtered' : 'library'))
+      libraryGrid.appendChild(createEmptyState(variant)); return
+    }
+
+    childFolders.forEach(folder => libraryGrid.appendChild(createFolderCard(folder)))
+    const createItem = !isMinimalUi() && libraryViewMode === 'list' ? createDocListRow : createDocCard
+    filteredDocs.forEach(doc => libraryGrid.appendChild(createItem(doc)))
   }
-
-  // 상태 필터(전체/읽지 않음/읽는 중/완료/즐겨찾기) 적용 - 휴지통 탭에는 없는 개념이라 건너뛴다.
-  if (state.currentLibraryTab !== 'trash' && status !== 'all') {
-    const favIds = getFavoriteIds()
-    filteredDocs = filteredDocs.filter(doc => (
-      status === 'favorites' ? favIds.has(doc.id) : getLibraryDocStatus(doc) === status
-    ))
-  }
-
-  filteredDocs = sortLibraryDocs(filteredDocs)
-
-  const childFolders = state.currentLibraryTab === 'trash' || category !== 'ALL'
-    ? []
-    : libraryFolders.filter(folder => (folder.parent_id || null) === activeLibraryFolderId)
-  if (filteredDocs.length === 0 && childFolders.length === 0) {
-    const variant = state.currentLibraryTab === 'trash'
-      ? 'trash'
-      : (status !== 'all' ? status : (docs.length > 0 ? 'filtered' : 'library'))
-    libraryGrid.appendChild(createEmptyState(variant)); return
-  }
-
-  childFolders.forEach(folder => libraryGrid.appendChild(createFolderCard(folder)))
-  const createItem = !isMinimalUi() && libraryViewMode === 'list' ? createDocListRow : createDocCard
-  filteredDocs.forEach(doc => libraryGrid.appendChild(createItem(doc)))
+  if (!animateFlip || !libraryGrid) return run()
+  return flipKeyedRebuild(libraryGrid, run, { itemSelector: '.doc-card[data-id], .doc-list-row[data-id]' })
 }
 
 // ── 라이브러리 전체 검색 (파일명/제목/카테고리 + 번역된 본문 텍스트) ──────
@@ -12015,7 +12022,9 @@ async function openFromLibrary(doc, shouldPushState = true) {
 
     // 채팅 내역 초기화
     state.chatHistory = []
-    chatMessages.innerHTML = buildChatWelcomeHtml()
+    withoutAutoAnimate(chatMessages, () => {
+      chatMessages.innerHTML = buildChatWelcomeHtml()
+    })
 
     // 채팅 기록 조회는 PDF 로딩과 서로 무관한 별개의 요청이므로, 기다리지 않고
     // 병렬로 시작해 전체 대기 시간을 줄인다 (완료되면 아래에서 반영).
@@ -16558,7 +16567,9 @@ function renderVerificationBadge(messageElement, verification) {
 }
 
 function resetChatUI() {
-  chatMessages.innerHTML = buildChatWelcomeHtml()
+  withoutAutoAnimate(chatMessages, () => {
+    chatMessages.innerHTML = buildChatWelcomeHtml()
+  })
   chatInput.value = ''
   chatInput.style.height = 'auto'
 }

@@ -237,7 +237,13 @@ export function createThemeEditor({ host, t, onApply }) {
     state = next; dirty = false; loadSelection(); onApply(state)
   }, { 'data-theme-delete': '' })
   nameActions.append(deleteButton)
-  fieldHeading.append(button(labels.reset, () => { draft.overrides = {}; markDirty(); renderFields() }))
+  fieldHeading.append(button(labels.reset, () => {
+    draft.overrides = {}
+    craftStyle = loadUiStyle()
+    for (const [k, node] of Object.entries(craftButtons)) node.setAttribute('aria-pressed', String(k === craftStyle))
+    markDirty()
+    renderFields()
+  }))
   utilities.append(button(labels.export, () => {
     const theme = resolveTheme(selection, state, draft)
     const url = URL.createObjectURL(new Blob([exportTheme(theme)], { type: 'application/json' }))
@@ -253,11 +259,19 @@ export function createThemeEditor({ host, t, onApply }) {
     } catch { status.textContent = labels.invalidTheme }
   })
   utilities.append(button(labels.import, () => file.click()), file,
-    button(labels.reload, () => guard(() => { state = loadThemes(); conflict = false; loadSelection() })))
+    button(labels.reload, () => guard(() => { state = loadThemes(); craftStyle = loadUiStyle(); conflict = false; loadSelection() })))
   actions.append(button(labels.apply, commit, { class: 'theme-apply', 'data-theme-apply': '' }))
   const source = el('a', labels.source, { href: '/theme-licenses/index.html', target: '_blank', rel: 'noopener' }); utilities.append(source)
   window.addEventListener('storage', event => {
-    if (event.key !== THEME_STORAGE_KEY && event.key !== UI_STYLE_STORAGE_KEY && event.key !== null) return
+    if (event.key === UI_STYLE_STORAGE_KEY) {
+      if (!dirty) {
+        craftStyle = loadUiStyle()
+        for (const [k, node] of Object.entries(craftButtons)) node.setAttribute('aria-pressed', String(k === craftStyle))
+        renderPreview()
+      }
+      return
+    }
+    if (event.key !== THEME_STORAGE_KEY && event.key !== null) return
     if (dirty) { conflict = true; status.textContent = labels.external }
     else { state = loadThemes(); craftStyle = loadUiStyle(); loadSelection() }
     onApply(loadThemes())

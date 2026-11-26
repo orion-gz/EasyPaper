@@ -1109,6 +1109,6 @@ export async function renderReadingHistoryPage(documentMode = 'research') {
   renderTimeline()
   bindSlidingIndicator(periodChipsEl, { itemSelector: '.rh-chip', variant: 'pill' })
   bindSlidingIndicator(tabsEl, { itemSelector: '.rh-tab-btn', variant: 'pill' })
-  enableAutoAnimateAll(['#rh-stat-grid', '#rh-timeline-list', '.rh-top-list'], el)
+  enableAutoAnimateAll(['.rh-top-list'], el)
 }
 

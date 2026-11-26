@@ -48,8 +48,14 @@ export function syncDocumentUiStyle(styleId = loadUiStyle(), doc = globalThis.do
   return normalized
 }
 
+const syncedDocs = new WeakMap()
+
 export function initUiStyleSync(doc = globalThis.document) {
   if (!doc || typeof window === 'undefined') return () => {}
+  if (syncedDocs.has(doc)) {
+    syncDocumentUiStyle(loadUiStyle(), doc)
+    return syncedDocs.get(doc)
+  }
   const sync = () => syncDocumentUiStyle(loadUiStyle(), doc)
   sync()
   const onStorage = event => {
@@ -57,8 +63,11 @@ export function initUiStyleSync(doc = globalThis.document) {
   }
   window.addEventListener('storage', onStorage)
   window.addEventListener('easypaper:ui-style-changed', sync)
-  return () => {
+  const cleanup = () => {
     window.removeEventListener('storage', onStorage)
     window.removeEventListener('easypaper:ui-style-changed', sync)
+    syncedDocs.delete(doc)
   }
+  syncedDocs.set(doc, cleanup)
+  return cleanup
 }

@@ -168,7 +168,7 @@
   width: 52px;
   height: 68px;
   border-radius: var(--radius-sm);
-  overflow: hidden;
+  overflow: visible;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
 }
@@ -177,6 +177,8 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  border-radius: calc(var(--radius-sm) - 1px);
+  overflow: hidden;
 }
 .lib-card-thumb-fallback {
   position: absolute;
@@ -186,6 +188,8 @@
   justify-content: center;
   color: var(--text-muted);
   background: linear-gradient(160deg, var(--bg-elevated), var(--bg-hover));
+  border-radius: calc(var(--radius-sm) - 1px);
+  overflow: hidden;
 }
 .lib-card-thumb.cover-fallback img { display: none; }
 .lib-card-thumb.cover-fallback .lib-card-thumb-fallback { display: flex; }
