@@ -208,7 +208,7 @@ test('sync conflicts stop automatic progress and preserve an explicit choice', a
   await page.goto(remoteOrigin + '/index.html')
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
-  await expect(dialog.locator('[data-status]')).toContainText('양쪽 변경이 충돌')
+  await expect(dialog.locator('[data-status]')).toContainText('동시에 수정된 항목이 있어 자동 동기화를 멈췄습니다')
   await expect(page.getByRole('dialog').locator('[data-action]')).toBeEnabled()
   await expect(page.getByRole('dialog').locator('[data-automatic]')).not.toBeChecked()
   await expect(page.getByRole('dialog').locator('[data-conflicts]')).toContainText('메모·주석 · <script>Paper A</script>')
