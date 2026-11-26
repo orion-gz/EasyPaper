@@ -101,26 +101,30 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   width: 100%;
-  padding: 9px 10px;
-  border: none;
+  padding: 8px 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   text-align: left;
   white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
 }
-.sidebar-nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sidebar-nav-item:hover { background: color-mix(in srgb, var(--bg-hover) 70%, transparent); color: var(--text-primary); }
 .sidebar-nav-item.active {
-  background: var(--control-accent-soft);
-  color: var(--control-accent-text);
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: var(--surface-hairline);
 }
+.sidebar-nav-item.active .sidebar-nav-icon { color: var(--control-accent); }
 .sidebar-nav-icon {
   display: flex;
   align-items: center;
@@ -128,7 +132,10 @@
   width: 18px;
   height: 18px;
   flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color 140ms ease;
 }
+.sidebar-nav-item:hover .sidebar-nav-icon { color: var(--text-primary); }
 .sidebar-nav-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -136,7 +143,7 @@
 .app-sidebar.collapsed .sidebar-nav-item { justify-content: center; padding: 9px; }
 .app-sidebar.collapsed .sidebar-nav-label { display: none; }
 
-/* Hover 시 Tooltip - 접힌 상태에서만 노출 */
+/* Hover 시 Tooltip - 접힌 상태에서만 노출 (진입 딜레이로 스침 플리커 방지) */
 .sidebar-tooltip {
   position: absolute;
   left: calc(100% + 10px);
@@ -150,14 +157,15 @@
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-floating);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease;
+  transition: opacity 110ms ease 0ms;
   z-index: 40;
 }
 .app-sidebar.collapsed .sidebar-nav-item:hover .sidebar-tooltip {
   opacity: 1;
+  transition-delay: 140ms;
 }
 .app-sidebar:not(.collapsed) .sidebar-tooltip { display: none; }
 
@@ -182,41 +190,14 @@
 }
 .workspace-page-title {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--text-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 .workspace-topnav-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-.workspace-search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.workspace-search-icon {
-  position: absolute;
-  left: 12px;
-  color: var(--text-muted);
-  display: flex;
-  pointer-events: none;
-}
-.workspace-search-box input {
-  width: 260px;
-  padding: 8px 12px 8px 34px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.15s ease, width 0.15s ease;
-}
-.workspace-search-box input:focus {
-  border-color: var(--control-accent);
-  width: 300px;
+  gap: 10px;
 }
 
 .page-outlet {

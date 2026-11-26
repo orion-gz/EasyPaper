@@ -1,11 +1,12 @@
 import { installCommandSearch } from './commandSearch.js'
-import { installTaskCenter } from './taskCenter.js'
 import { isMinimalUi, isMinimalTabAllowed } from './minimalUi.js'
 import { createTabsStore, tabKey, WORKSPACE_PAGES, workspaceStorageKey } from './workspaceTabsStore.js'
 import { t } from './i18n.js'
 import { icon } from './icons.js'
 import './styles/workspace-tabs.css'
 import { attachDesktopWindow } from './desktopWindow.js'
+import { initUiStyleSync, syncDocumentUiStyle } from './themes/uiStyleEngine.js'
+import { bindSlidingIndicator } from './interactiveUi.js'
 
 // The legacy reader's DOM IDs and module globals are scoped to one same-origin
 // browsing context per document. The host owns navigation, auth and persistence.
@@ -86,7 +87,9 @@ export function createWorkspaceTabs(adapter) {
   })
   tabResize.observe(tablist)
   shell.hidden = true
-  installTaskCenter({ shell, mount: topnav.querySelector('.workspace-topnav-actions'), navigate: hash => { location.hash = hash }, toast: adapter.toast })
+  initUiStyleSync(document)
+  bindSlidingIndicator(document.getElementById('workspace-mode-switch'))
+  bindSlidingIndicator(document.getElementById('workspace-mode-switch-compact'))
   attachDesktopWindow(shell, topnav, controls, tablist)
   document.body.classList.add('has-tab-workspace')
 
@@ -102,7 +105,7 @@ export function createWorkspaceTabs(adapter) {
   const allFrames = () => [...scopes.values()].flatMap(value => [...value.frames])
   let visibleId = null
   const commandSearch = installCommandSearch({
-    shell, mount: topnav.querySelector('.workspace-topnav-actions'), mode: adapter.mode,
+    shell, mode: adapter.mode,
     runtime: () => frames.get(visibleId)?.frame.contentWindow?.__easypaperDocument,
     navigate: hash => { location.hash = hash }, toast: adapter.toast,
     actions: {
@@ -122,6 +125,7 @@ export function createWorkspaceTabs(adapter) {
   function syncScale() {
     const scale = Number(document.documentElement.style.zoom) || 1
     shell.style.setProperty('--workspace-ui-scale', scale)
+    syncDocumentUiStyle(undefined, document)
     for (const [, record] of allFrames()) {
       const runtime = record.frame.contentWindow?.__easypaperDocument
       runtime?.syncScale(scale)

@@ -10,6 +10,7 @@ import { icon } from '../icons.js'
 import { getChatSessionsAPI, getChatHistoryAPI } from '../api.js'
 import { formatMarkdownLatexHtml, applyKatexToElement } from '../textFormat.js'
 import { documentTypeLabel } from '../documentModes.js'
+import { bindSlidingIndicator, enableAutoAnimate } from '../interactiveUi.js'
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return ''
@@ -178,6 +179,7 @@ export async function renderAiChatsPage(documentMode = 'research') {
         renderPagination()
       })
     })
+    bindSlidingIndicator(tabsEl, { itemSelector: '.aic-tab-btn', variant: 'pill' })
   }
 
   function previewCellHtml(session) {
@@ -318,6 +320,7 @@ export async function renderAiChatsPage(documentMode = 'research') {
     const pageItems = filteredSorted.slice(start, start + PAGE_SIZE)
 
     bodyEl.innerHTML = state.viewMode === 'table' ? renderTable(pageItems) : renderCards(pageItems)
+    enableAutoAnimate(bodyEl.querySelector('.aic-card-grid') || bodyEl.querySelector('.aic-table tbody'))
     bindActionButtons(bodyEl)
     applyKatexToElement(bodyEl)
   }
@@ -470,6 +473,7 @@ export async function renderAiChatsPage(documentMode = 'research') {
     if (option.dataset.sort === state.sortMode) sortLabel.textContent = option.textContent
   })
   viewToggle.querySelectorAll('.aic-view-btn').forEach(button => button.classList.toggle('active', button.dataset.view === state.viewMode))
+  bindSlidingIndicator(viewToggle, { itemSelector: '.aic-view-btn', variant: 'pill' })
   renderTabs()
   await load()
 }

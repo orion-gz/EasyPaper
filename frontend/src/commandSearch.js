@@ -8,8 +8,7 @@ import { isMinimalUi } from './minimalUi.js'
 import { t, loadFeatureNamespaces } from './i18n.js'
 import { readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 
-export function installCommandSearch({ shell, mount, mode, runtime, navigate, actions, toast }) {
-  const button = document.createElement('button'); button.type = 'button'; button.id = 'reader-command-search'; button.className = 'icon-btn'
+export function installCommandSearch({ shell, mode, runtime, navigate, actions, toast }) {
   const dialog = document.createElement('dialog'); dialog.id = 'reader-command-dialog'
   const input = document.createElement('input'); input.type = 'search'; input.maxLength = 200
   input.setAttribute('role', 'combobox'); input.setAttribute('aria-expanded', 'true'); input.setAttribute('aria-controls', 'reader-command-results'); input.setAttribute('aria-autocomplete', 'list')
@@ -21,7 +20,7 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate, ac
   const help = document.createElement('p'); help.id = 'reader-command-help'
   input.setAttribute('aria-describedby', help.id)
   searchBar.append(searchIcon, input, escapeHint)
-  dialog.append(searchBar, help, status, list); document.body.append(dialog); mount?.append(button)
+  dialog.append(searchBar, help, status, list); document.body.append(dialog)
   let previous; let items = []; let selected = 0; let controller; let revision = 0; let timer
   function resetResults() { items = []; selected = 0; list.replaceChildren(); input.removeAttribute('aria-activedescendant') }
   function close() { resetResults(); revision++; controller?.abort(); clearTimeout(timer); dialog.close(); previous?.focus?.({ preventScroll: true }) }
@@ -59,7 +58,6 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate, ac
       { id: 'help', text: t('viewer:commands.help'), global: true, keepOpen: true, run: () => setQuery('/') },
       { id: 'upload', text: t('viewer:commands.upload'), global: true, run: actions.upload },
       { id: 'import-url', text: t('viewer:commands.importUrl'), global: true, run: actions.importUrl },
-      { id: 'tasks', text: t('viewer:commands.tasks'), global: true, disabled: !readerFeatureEnabled('taskProgress') ? t('viewer:comfort.featureDisabled') : '', run: () => document.getElementById('reader-tasks')?.click() },
       { id: 'sidebar', text: t('viewer:commands.sidebar'), global: true, disabled: isMinimalUi() ? t('viewer:commands.minimalUnavailable') : '', run: actions.sidebar },
       { id: 'fullscreen', text: t('navigation:tabs.fullscreen'), global: true, run: actions.fullscreen },
       { id: 'close-tab', text: t('viewer:commands.closeTab'), global: true, disabled: !actions.canClose() ? t('viewer:commands.cannotClose') : '', run: actions.closeTab },
@@ -159,7 +157,6 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate, ac
     if (event.isComposing || event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || (event.code !== 'KeyK' && event.key.toLowerCase() !== 'k') || !readerFeatureEnabled('commandSearch') || shell.hidden) return
     event.preventDefault(); event.stopPropagation(); if (dialog.open) close(); else open()
   }
-  button.addEventListener('click', open)
   document.addEventListener('keydown', handleShortcut)
   input.addEventListener('input', () => { items = []; list.replaceChildren(); input.removeAttribute('aria-activedescendant'); setStatusState(status, t('viewer:comfort.searchLoading'), 'loading'); revision++; controller?.abort(); clearTimeout(timer); timer = setTimeout(search, 200) })
   input.addEventListener('keydown', event => {
@@ -171,10 +168,9 @@ export function installCommandSearch({ shell, mount, mode, runtime, navigate, ac
   dialog.addEventListener('cancel', event => { event.preventDefault(); close() })
   dialog.addEventListener('click', event => { if (event.target === dialog) { const r = dialog.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) close() } })
   const sync = () => {
-    button.hidden = !readerFeatureEnabled('commandSearch'); button.innerHTML = icon('search', 18); button.title = `${t('viewer:comfort.commandSearch')} (Ctrl/Cmd+K)`; button.setAttribute('aria-label', t('viewer:comfort.commandSearch')); button.setAttribute('aria-keyshortcuts', 'Control+K Meta+K')
     help.textContent = t('viewer:comfort.commandHint')
     input.placeholder = t('viewer:comfort.searchHint'); input.setAttribute('aria-label', input.placeholder); dialog.setAttribute('aria-label', t('viewer:comfort.commandSearch'))
-    if (button.hidden && dialog.open) close()
+    if (!readerFeatureEnabled('commandSearch') && dialog.open) close()
   }
   new MutationObserver(() => { if (shell.hidden && dialog.open) close() }).observe(shell, { attributes: true, attributeFilter: ['hidden'] })
   document.addEventListener('easypaper:locale-changed', sync)

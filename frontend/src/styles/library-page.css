@@ -51,9 +51,9 @@
   align-items: center;
   gap: 5px;
   flex: 0 0 auto;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border: 1px solid var(--border-strong);
-  border-radius: 100px;
+  border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   color: var(--text-secondary);
   font-family: var(--font-body);
@@ -61,12 +61,12 @@
   font-weight: 600;
   line-height: 1.35;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   white-space: nowrap;
 }
 .library-category-filter-toggle:hover {
   background: var(--bg-hover);
-  border-color: var(--border-glow);
+  border-color: var(--control-accent);
   color: var(--text-primary);
 }
 .library-category-filter-toggle:focus-visible {
@@ -79,42 +79,42 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 4px;
+  padding: 3px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   width: fit-content;
   flex-wrap: wrap;
 }
 .lib-status-tab {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 14px;
+  gap: 6px;
+  padding: 6px 12px;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
   white-space: nowrap;
 }
-.lib-status-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+.lib-status-tab:hover { color: var(--text-primary); }
 .lib-status-tab.active {
   background: var(--bg-surface);
-  color: var(--control-accent-text);
-  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
 }
 .lib-status-tab-count {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   color: var(--text-tertiary);
   background: var(--bg-hover);
-  border-radius: 100px;
-  padding: 1px 6px;
+  border-radius: var(--radius-xs, 5px);
+  padding: 1px 5px;
   min-width: 18px;
   text-align: center;
 }
@@ -168,7 +168,7 @@
   width: 52px;
   height: 68px;
   border-radius: var(--radius-sm);
-  overflow: hidden;
+  overflow: visible;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
 }
@@ -177,6 +177,8 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  border-radius: calc(var(--radius-sm) - 1px);
+  overflow: hidden;
 }
 .lib-card-thumb-fallback {
   position: absolute;
@@ -186,6 +188,8 @@
   justify-content: center;
   color: var(--text-muted);
   background: linear-gradient(160deg, var(--bg-elevated), var(--bg-hover));
+  border-radius: calc(var(--radius-sm) - 1px);
+  overflow: hidden;
 }
 .lib-card-thumb.cover-fallback img { display: none; }
 .lib-card-thumb.cover-fallback .lib-card-thumb-fallback { display: flex; }
@@ -248,13 +252,14 @@
 .lib-card-progress-bar {
   height: 100%;
   border-radius: 4px;
-  background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
-  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--control-accent);
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .lib-card-progress-pct {
   font-size: 11px;
-  font-weight: 700;
-  color: var(--accent-mid);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 .lib-card-progress-done { min-height: 5px; }
@@ -273,7 +278,7 @@
   gap: 12px;
 }
 .library-grid.compact-view .doc-card {
-  border-radius: 14px;
+  border-radius: var(--radius-md);
 }
 .library-grid.compact-view .doc-card-zone {
   padding: 12px 13px 9px;
@@ -351,20 +356,20 @@
   bottom: 0;
   width: 420px;
   max-width: 94vw;
-  background: #0f0d1b;
-  border-left: 1px solid var(--border);
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -8px 0 28px rgba(0, 0, 0, 0.22);
   z-index: 46;
   display: flex;
   flex-direction: column;
   transform: translateX(100%);
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .lib-detail-panel.open { transform: translateX(0); }
 
 body.light-theme .lib-detail-panel {
-  background: #ffffff;
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+  background: var(--bg-panel);
+  box-shadow: -6px 0 20px rgba(0, 0, 0, 0.06);
 }
 
 .lib-detail-close-btn {
@@ -374,7 +379,7 @@ body.light-theme .lib-detail-panel {
   width: 28px;
   height: 28px;
   flex-shrink: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text-secondary);
@@ -383,7 +388,7 @@ body.light-theme .lib-detail-panel {
   justify-content: center;
   cursor: pointer;
   z-index: 2;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 .lib-detail-close-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
 
@@ -537,37 +542,48 @@ body.light-theme .lib-detail-panel {
 
 .lib-detail-tabs {
   display: flex;
+  gap: 18px;
   padding: 0 24px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   overflow-x: auto;
 }
 .lib-detail-tab {
-  padding: 12px 4px;
-  margin-right: 18px;
+  padding: 11px 2px;
+  margin-right: 0;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
   font-family: var(--font-body);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 650;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   display: flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 .lib-detail-tab:hover { color: var(--text-primary); }
-.lib-detail-tab.active { color: var(--control-accent-text); background: var(--bg-elevated); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); }
+.lib-detail-tab.active {
+  color: var(--text-primary);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  border-bottom-color: var(--control-accent);
+}
+.lib-detail-tabs.ui-sliding-host .lib-detail-tab.active {
+  border-bottom-color: transparent;
+}
 .lib-detail-tab-count {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   color: var(--text-tertiary);
   background: var(--bg-hover);
-  border-radius: 100px;
-  padding: 1px 6px;
+  border-radius: var(--radius-xs, 5px);
+  padding: 1px 5px;
 }
 .lib-detail-tab.active .lib-detail-tab-count { color: var(--control-accent-text); background: var(--control-accent-soft); }
 
@@ -628,11 +644,12 @@ body.light-theme .lib-detail-panel {
 .lib-detail-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .lib-detail-tag {
   font-size: 11px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 100px;
-  background: var(--control-accent-soft);
-  color: var(--control-accent-text);
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs, 5px);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
 }
 .lib-detail-tag small { opacity: .68; margin-right: 4px; font-size: 9px; text-transform: uppercase; }
 .paper-tag-editor { width: min(680px, calc(100vw - 32px)); }
@@ -668,25 +685,25 @@ body.light-theme .lib-detail-panel {
 
 
 /* ── 라이브러리 내부 폴더 카드와 경로 ── */
-.library-folder-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 14px; padding:10px 12px; border:1px solid var(--border-strong); border-left:3px solid var(--control-accent); border-radius:var(--radius-md); background:linear-gradient(90deg, var(--control-accent-soft), var(--bg-elevated) 58%); box-shadow:var(--shadow-sm); }
-.library-breadcrumb { display:flex; align-items:center; min-width:0; gap:5px; overflow:auto; white-space:nowrap; color:var(--text-muted); font-size:13px; font-weight:600; }
-.library-breadcrumb button { display:inline-flex; align-items:center; gap:6px; border:0; padding:6px 9px; background:transparent; color:var(--text-secondary); border-radius:var(--radius-sm); cursor:pointer; font:inherit; }
+.library-folder-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 14px; padding:8px 12px; border:1px solid var(--border-strong); border-radius:var(--radius-md); background:var(--bg-elevated); }
+.library-breadcrumb { display:flex; align-items:center; min-width:0; gap:5px; overflow:auto; white-space:nowrap; color:var(--text-muted); font-size:12.5px; font-weight:600; }
+.library-breadcrumb button { display:inline-flex; align-items:center; gap:6px; border:0; padding:5px 8px; background:transparent; color:var(--text-secondary); border-radius:var(--radius-sm); cursor:pointer; font:inherit; transition:background-color .15s ease, color .15s ease; }
 .library-breadcrumb button:hover { background:var(--bg-hover); color:var(--text-primary); }
-.library-breadcrumb button[aria-current="page"] { background:var(--bg-surface); color:var(--control-accent-text); box-shadow:var(--shadow-sm); }
+.library-breadcrumb button[aria-current="page"] { background:var(--bg-surface); color:var(--text-primary); border:1px solid var(--border); }
 .library-breadcrumb-root { color:var(--text-primary)!important; }
-.library-breadcrumb-separator { color:var(--text-muted); font-size:18px; font-weight:400; }
-.library-breadcrumb.global-filter-active::after { content:'전체 폴더에서 필터링 중'; margin-left:8px; padding:3px 8px; border-radius:999px; background:var(--control-accent); color:#fff; font-size:10.5px; font-weight:700; }
-.library-new-folder-btn { display:inline-flex; align-items:center; gap:6px; flex:0 0 auto; padding:7px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-md); background:var(--bg-elevated); color:var(--text-primary); cursor:pointer; font:inherit; font-size:12.5px; font-weight:600; }
-.library-new-folder-btn:hover { border-color:var(--control-accent); background:var(--control-accent-soft); }
-.library-folder-card { position:relative; min-height:178px; padding:20px; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg-elevated); cursor:pointer; transition:transform .15s ease, border-color .15s ease, background .15s ease; }
-.library-folder-card:hover { transform:translateY(-2px); border-color:var(--folder-color); background:var(--bg-hover); }
+.library-breadcrumb-separator { color:var(--text-muted); font-size:15px; font-weight:400; }
+.library-breadcrumb.global-filter-active::after { content:'전체 폴더에서 필터링 중'; margin-left:8px; padding:2px 7px; border-radius:var(--radius-xs, 5px); background:var(--control-accent-soft); border:1px solid color-mix(in srgb, var(--control-accent) 30%, var(--border)); color:var(--control-accent-text); font-size:10.5px; font-weight:650; }
+.library-new-folder-btn { display:inline-flex; align-items:center; gap:6px; flex:0 0 auto; padding:6px 10px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--bg-surface); color:var(--text-primary); cursor:pointer; font:inherit; font-size:12px; font-weight:600; transition:border-color .15s ease, background-color .15s ease; }
+.library-new-folder-btn:hover { border-color:var(--control-accent); background:var(--bg-hover); }
+.library-folder-card { position:relative; min-height:178px; padding:18px; border:1px solid var(--border-strong); border-radius:var(--radius-lg); background:var(--bg-elevated); cursor:pointer; transition:border-color .15s ease, background-color .15s ease; }
+.library-folder-card:hover { border-color:color-mix(in srgb, var(--folder-color, var(--control-accent)) 55%, var(--border-strong)); background:var(--bg-hover); }
 .library-folder-card:focus-visible { outline:2px solid var(--control-accent); outline-offset:2px; border-color:var(--folder-color); }
-.folder-card-icon { color:var(--folder-color); margin-bottom:22px; filter:drop-shadow(0 3px 7px color-mix(in srgb, var(--folder-color) 30%, transparent)); }
-.folder-card-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-primary); font-size:14px; font-weight:700; }
-.folder-card-meta { margin-top:6px; color:var(--text-muted); font-size:12px; }
+.folder-card-icon { color:var(--folder-color); margin-bottom:20px; filter:none; }
+.folder-card-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-primary); font-size:13.5px; font-weight:650; }
+.folder-card-meta { margin-top:6px; color:var(--text-muted); font-size:11.5px; font-variant-numeric:tabular-nums; }
 .folder-card-menu { position:absolute; top:12px; right:12px; padding:5px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--text-muted); cursor:pointer; }
 .folder-card-menu:hover { color:var(--text-primary); background:var(--bg-surface); }
-.library-grid.compact-view .library-folder-card { min-height:0; padding:12px 13px; border-radius:14px; }
+.library-grid.compact-view .library-folder-card { min-height:0; padding:12px 13px; border-radius:var(--radius-md); }
 .library-grid.compact-view .folder-card-icon { margin-bottom:10px; filter:none; }
 .library-grid.compact-view .folder-card-icon svg { width:26px; height:26px; }
 .library-grid.compact-view .folder-card-name { font-size:12.5px; }
@@ -715,15 +732,13 @@ body.light-theme .lib-detail-panel {
   display:flex;
   align-items:center;
   gap:12px;
-  border-radius:14px;
+  border-radius:var(--radius-md);
   background:var(--bg-card);
-  transition:background .2s ease, border-color .2s ease, transform .2s ease;
+  transition:background-color .15s ease, border-color .15s ease;
 }
 .library-grid.list-view .library-folder-card:hover {
-  transform:translateX(2px);
   border-color:var(--border-strong);
   background:var(--bg-card-hover);
-  box-shadow:0 5px 18px -14px color-mix(in srgb, var(--folder-color) 65%, transparent);
 }
 .library-grid.list-view .library-folder-card:focus-visible {
   border-color:var(--control-accent);
@@ -803,14 +818,15 @@ body.light-theme .lib-detail-panel {
   color:var(--text-primary);
 }
 .library-grid.list-view .folder-card-open-btn {
-  border-color:var(--control-accent);
-  border-radius:50%;
-  background:var(--control-accent);
-  color:#fff;
+  border-color:var(--border-strong);
+  border-radius:var(--radius-sm);
+  background:var(--bg-elevated);
+  color:var(--text-primary);
 }
 .library-grid.list-view .folder-card-open-btn:hover {
-  filter:brightness(1.1);
-  transform:scale(1.04);
+  border-color:var(--control-accent);
+  background:var(--bg-hover);
+  color:var(--control-accent-text);
 }
 .library-grid.list-view .folder-card-actions { position:fixed; top:auto; right:auto; z-index:100001; }
 @media (max-width:900px) {

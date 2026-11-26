@@ -3,6 +3,8 @@ import { installFocusReading } from './focusReading.js'
 import { createReadingTrail } from './readingTrail.js'
 import { readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { applyTheme, THEME_TOKEN_NAMES } from './themes/themeEngine.js'
+import { initUiStyleSync } from './themes/uiStyleEngine.js'
+import { enableAutoAnimate, bindSlidingIndicator } from './interactiveUi.js'
 import { installReaderTools } from './documentReaderTools.js'
 import { sanitizeReading } from './workspaceTabsStore.js'
 import { t, changeLocale, getLocale } from './i18n.js'
@@ -17,6 +19,7 @@ export function notifyWorkspace(type, payload) {
 export function installDocumentRuntime(adapter) {
   const $ = id => document.getElementById(id)
   document.body.classList.add('document-workspace-runtime')
+  initUiStyleSync(document)
   const viewer = $('viewer-screen')
   viewer.classList.add('document-workspace-loading')
   const scroll = $('viewer-scroll-container')
@@ -78,6 +81,9 @@ export function installDocumentRuntime(adapter) {
   list.hidden = true
   sidebar.prepend(tabs)
   sidebar.append(list)
+  enableAutoAnimate(list)
+  enableAutoAnimate($('chat-messages'))
+  enableAutoAnimate($('outline-content'))
   function showResources() {
     list.replaceChildren()
     const resources = panel === 'notes' ? adapter.memos() : adapter.annotations()
@@ -185,6 +191,8 @@ export function installDocumentRuntime(adapter) {
     button.addEventListener('click', () => setNavigation(name))
     outlineTabs.append(button)
   }
+  bindSlidingIndicator(tabs, { variant: 'underline' })
+  bindSlidingIndicator(outlineTabs, { variant: 'pill' })
   $('back-btn').remove()
   const floating = $('floating-scroll-nav')
   floating.append($('viewer-topbar').querySelector('.page-display'))

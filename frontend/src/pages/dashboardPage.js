@@ -15,6 +15,7 @@ import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, tod
 import { periodStats, sumSecondsByDayRange, formatDuration, deltaDurationHtml, CATEGORY_LABEL, CATEGORY_COLOR_VAR, CATEGORY_ORDER } from './readingHistoryPage.js'
 import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
 import { t, formatNumber as intlFormatNumber, formatRelativeTime } from '../i18n.js'
+import { enableAutoAnimateAll } from '../interactiveUi.js'
 
 let renderGeneration = 0
 
@@ -258,25 +259,19 @@ function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySec
       <div class="dash-card-head">
         <h3>${icon('award', 15)}활동 요약</h3>
       </div>
-      <div class="dash-score-pie-container" style="display: flex; align-items: center; gap: 14px; padding: 12px; margin-bottom: 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
-        <div style="position: relative; width: 64px; height: 64px; flex-shrink: 0;">
-          <svg width="64" height="64" viewBox="0 0 36 36" style="transform: rotate(-90deg);">
-            <path stroke="var(--bg-hover)" stroke-width="3.6" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-            <path stroke="url(#dashReadingScoreGrad)" stroke-width="3.6" stroke-dasharray="${scorePct.toFixed(1)}, 100" stroke-linecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-            <defs>
-              <linearGradient id="dashReadingScoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#3b82f6" />
-                <stop offset="100%" stop-color="#8b5cf6" />
-              </linearGradient>
-            </defs>
+      <div class="dash-score-pie-container">
+        <div class="dash-score-ring-wrap">
+          <svg width="56" height="56" viewBox="0 0 36 36" class="dash-score-ring-svg">
+            <path stroke="var(--bg-hover)" stroke-width="3.2" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            <path stroke="var(--control-accent)" stroke-width="3.2" stroke-dasharray="${scorePct.toFixed(1)}, 100" stroke-linecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
           </svg>
-          <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: var(--text-primary);">
+          <div class="dash-score-ring-value">
             ${score.toFixed(1)}
           </div>
         </div>
-        <div style="flex: 1;">
-          <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Reading Score Engine</div>
-          <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">정독 패턴, verified pages & interaction 종합 평가</div>
+        <div class="dash-score-copy">
+          <div class="dash-score-title">Reading Score Engine</div>
+          <div class="dash-score-desc">정독 패턴, verified pages & interaction 종합 평가</div>
         </div>
       </div>
       ${depthRatio ? `
@@ -797,6 +792,7 @@ export async function renderDashboardPage(documentMode = 'research') {
     `
 
     applyKatexToElement(el.querySelector('.dash-insight-list'))
+    enableAutoAnimateAll(['.dash-insight-list', '.dash-activity-list', '.dash-paper-list', '.dash-question-list', '.dash-timeline-list', '[data-recs-body]'], el)
     attachHandlers(el)
   } catch (renderErr) {
     console.error('대시보드 렌더링 예외 발생:', renderErr)

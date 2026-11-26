@@ -173,12 +173,78 @@ button, input, select, textarea {
 
 .upload-title {
   text-align: center;
-  font-size: clamp(32px, 6vw, 48px);
-  font-weight: 800;
-  line-height: 1.2;
-  letter-spacing: -0.04em;
+  font-size: clamp(24px, 3.6vw, 34px);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
   color: var(--text-primary);
-  font-family: 'Outfit', var(--font-body);
+  font-family: var(--font-body);
+}
+
+#login-screen .upload-bg {
+  display: none;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 390px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 26px;
+  gap: 16px;
+  width: 100%;
+}
+.login-field {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.login-field label {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+  width: 100%;
+}
+.login-field input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  outline: none;
+  font-size: 13.5px;
+  transition: border-color 0.15s ease;
+}
+.login-field input:focus {
+  border-color: var(--control-accent);
+}
+.login-remember {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.login-remember input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--control-accent);
+  cursor: pointer;
+}
+.login-submit-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 6px;
 }
 
 .gradient-text {
@@ -233,14 +299,14 @@ button, input, select, textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 32px;
-  border-radius: 100px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
   background: var(--control-accent);
   color: #fff;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: filter 0.15s ease, transform 0.15s ease;
+  transition: filter 0.15s ease, transform 0.12s ease;
   border: none;
 }
 .file-btn:hover {
@@ -1381,25 +1447,23 @@ body.light-theme .toast.error { color: #dc2626; }
    색만 사용)으로 통일. 카테고리별로 색이 달라지는 장식은 쓰지 않는다. */
 .doc-card {
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
   padding: 0;
   display: flex;
   flex-direction: column;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
   box-sizing: border-box;
 }
 .doc-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.35);
+  border-color: color-mix(in srgb, var(--control-accent) 44%, var(--border-strong));
 }
 
 .doc-card-zone {
-  padding: 17px 18px;
+  padding: 16px 17px 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1408,9 +1472,9 @@ body.light-theme .toast.error { color: #dc2626; }
 
 .doc-card-title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: 1.35;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1420,9 +1484,9 @@ body.light-theme .toast.error { color: #dc2626; }
   padding-right: 28px;
 }
 
-/* 푸터: 미리보기 팝업의 "열기" 버튼과 동일한 전체 너비 버튼 + 편집/삭제 아이콘 */
+/* 푸터: 절제된 미니멀 액션 버튼 + 케밥 아이콘 */
 .doc-card-footer {
-  padding: 0 18px 17px;
+  padding: 0 17px 15px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1490,26 +1554,30 @@ body.light-theme .toast.error { color: #dc2626; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 10px;
-  border-radius: 12px;
-  background: var(--control-accent);
-  color: #fff;
-  border: none;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  transition: filter 0.15s ease, transform 0.15s ease;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
 }
-.doc-open-btn:hover, .doc-restore-btn:hover { filter: brightness(1.1); }
+.doc-open-btn:hover, .doc-restore-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--control-accent);
+  color: var(--control-accent-text);
+}
 .doc-open-btn:active, .doc-restore-btn:active { transform: scale(0.98); }
 
-/* 리스트 뷰용 컴팩트 변형 - 텍스트 없이 아이콘만, 원형으로 축소 */
+/* 리스트 뷰용 컴팩트 변형 */
 .doc-open-btn.doc-cta-compact, .doc-restore-btn.doc-cta-compact {
   flex: none;
   width: 28px;
   height: 28px;
   padding: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
 }
 .doc-cta-compact span { display: none; }
 
@@ -1570,13 +1638,12 @@ body.light-theme .toast.error { color: #dc2626; }
   flex-direction: column;
   gap: 2px;
   min-width: 140px;
-  padding: 6px;
+  padding: 5px;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25), 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
-  animation: popupScale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: var(--shadow-md);
+  animation: popupScale 0.14s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .doc-card-kebab-menu.hidden {
   display: none;
@@ -1618,51 +1685,49 @@ body.light-theme .toast.error { color: #dc2626; }
   padding: 3px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   flex-shrink: 0;
 }
 .view-toggle-btn {
-  width: 32px;
-  height: 30px;
+  width: 30px;
+  height: 28px;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 .view-toggle-btn:hover { color: var(--text-primary); }
 .view-toggle-btn.active {
   background: var(--bg-card);
-  color: var(--control-accent);
-  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
 }
 
 /* ── 라이브러리 리스트 뷰 ── */
 .library-grid.list-view {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .doc-list-row {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  padding: 11px 15px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   cursor: pointer;
   position: relative;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 .doc-list-row:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-strong);
-  transform: translateX(2px);
 }
 .doc-list-row .doc-card-check-btn {
   position: static;
@@ -2448,16 +2513,16 @@ body.light-theme .pdf-annotation-underline {
   position: fixed;
   inset: 0;
   padding: 16px;
-  background: rgba(10, 11, 15, 0.75);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+  background: rgba(10, 11, 15, 0.62);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.16s ease;
 }
 
 .modal-overlay.is-visible {
@@ -2474,16 +2539,16 @@ body.light-theme .pdf-annotation-underline {
   max-height: 100%;
   box-shadow: var(--shadow-md);
   overflow: hidden;
-  transform: scale(0.95);
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform: scale(0.98) translateY(4px);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .modal-overlay.is-visible .modal-content {
-  transform: scale(1);
+  transform: scale(1) translateY(0);
 }
 
 .modal-header {
-  padding: 24px 28px 16px;
+  padding: 20px 24px 15px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2491,12 +2556,10 @@ body.light-theme .pdf-annotation-underline {
 }
 
 .modal-header h2 {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
   color: var(--text-primary);
-  background: linear-gradient(135deg, var(--text-primary) 30%, var(--text-secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .onboarding-header-actions,
@@ -2758,10 +2821,11 @@ body.light-theme .pdf-annotation-underline {
 
 .tab-btn.active {
   color: var(--text-primary);
-  background: var(--bg-elevated);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-md);
-  font-weight: 600;
+  background: transparent;
+  border-bottom-color: var(--control-accent);
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 650;
 }
 
 .tab-pane {
@@ -3861,12 +3925,12 @@ body.light-theme .provider-picker-panel {
 }
 .doc-card-tag {
   font-size: 10.5px;
-  font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 100px;
-  background: var(--control-accent-soft);
-  color: var(--control-accent-text);
-  border: 1px solid transparent;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs, 5px);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
 }
 .doc-card .doc-card-tag {
   min-width: 0;
@@ -6982,30 +7046,30 @@ body.light-theme .figure-preview-tooltip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
-  border-radius: 100px;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
   background: var(--bg-elevated);
   color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   border: 1px solid var(--border-strong);
 }
 .file-btn-outline:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: var(--border-glow);
+  border-color: var(--control-accent);
 }
 .file-btn-outline.active {
-  background: color-mix(in srgb, var(--control-accent) 16%, transparent);
-  color: var(--control-accent);
+  background: var(--control-accent-soft);
+  color: var(--control-accent-text);
   border-color: var(--control-accent);
 }
 .file-btn-outline.compact,
 .file-btn.compact {
-  padding: 9px 18px;
-  font-size: 13px;
+  padding: 7px 14px;
+  font-size: 12.5px;
 }
 .file-btn.compact:disabled {
   opacity: 0.45;
@@ -7143,23 +7207,22 @@ body.light-theme .figure-preview-tooltip {
 .compare-select-bar {
   position: fixed;
   left: 50%;
-  bottom: 28px;
+  bottom: 24px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px 12px 22px;
-  background: var(--bg-surface);
+  gap: 14px;
+  padding: 9px 14px 9px 16px;
+  background: var(--bg-panel);
   border: 1px solid var(--border-strong);
-  border-radius: 100px;
-  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0,0,0,0.35));
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   z-index: 30;
 }
 #compare-select-count {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   color: var(--text-primary);
   white-space: nowrap;
 }
@@ -7170,12 +7233,12 @@ body.light-theme .figure-preview-tooltip {
 
 /* ── 비교 채팅 화면 ── */
 .compare-topbar {
-  height: var(--panel-header-h, 56px);
+  height: var(--panel-header-h, 52px);
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--border-strong);
+  gap: 12px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
   flex-shrink: 0;
 }
@@ -7183,26 +7246,26 @@ body.light-theme .figure-preview-tooltip {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13.5px;
+  font-weight: 650;
   color: var(--text-primary);
   flex-shrink: 0;
 }
 .compare-doc-chips {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   overflow-x: auto;
   flex: 1;
   min-width: 0;
 }
 .compare-doc-chip {
   flex-shrink: 0;
-  padding: 5px 12px;
-  border-radius: 100px;
+  padding: 3px 9px;
+  border-radius: var(--radius-xs, 5px);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -7258,20 +7321,20 @@ body.sidebar-collapsed .chat-drawer-overlay { left: var(--sidebar-w-collapsed); 
   bottom: 0;
   width: auto;
   max-width: none;
-  background: #0f0d1b;
+  background: var(--bg-panel);
   border-left: 1px solid var(--border);
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
+  box-shadow: -6px 0 24px rgba(0, 0, 0, 0.22);
   z-index: 46;
   display: flex;
   flex-direction: column;
   transform: translateX(100%);
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), left 0.22s ease;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), left 0.22s ease;
 }
 .chat-drawer.open { transform: translateX(0); }
 body.sidebar-collapsed .chat-drawer { left: var(--sidebar-w-collapsed); }
 body.light-theme .chat-drawer {
-  background: #ffffff;
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+  background: var(--bg-panel);
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.06);
 }
 .chat-drawer .compare-chat-body { height: 0; flex: 1 1 auto; min-height: 0; }
 /* 비교 화면(.compare-topbar-title)은 전체 화면 폭을 쓸 수 있어 제목이 안
@@ -7550,24 +7613,23 @@ body.light-theme .chat-drawer {
   background: var(--bg-hover);
 }
 
-/* ── 하단 중앙 알약 모양 선택 툴바 ── */
+/* ── 하단 중앙 플로팅 선택 툴바 ── */
 .lib-select-toolbar {
   position: fixed;
-  bottom: 28px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1100;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 14px 8px 18px;
+  gap: 10px;
+  padding: 7px 12px 7px 14px;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
-  border-radius: 9999px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(16px);
-  animation: pillSlideUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  animation: pillSlideUp 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.16s ease, transform 0.16s ease;
 }
 .lib-select-toolbar.hidden {
   display: none !important;
@@ -7576,7 +7638,7 @@ body.light-theme .chat-drawer {
 @keyframes pillSlideUp {
   from {
     opacity: 0;
-    transform: translate(-50%, 20px) scale(0.95);
+    transform: translate(-50%, 10px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -7591,30 +7653,31 @@ body.light-theme .chat-drawer {
   flex-shrink: 0;
 }
 .lib-select-count {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   color: var(--text-primary);
 }
 .lib-select-text-btn {
   background: transparent;
   border: none;
-  color: var(--accent-mid);
+  color: var(--control-accent-text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 9999px;
-  transition: background 0.15s ease;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s ease;
 }
 .lib-select-text-btn:hover {
-  background: color-mix(in srgb, var(--accent-mid) 15%, transparent);
+  background: var(--bg-hover);
 }
 
 .lib-select-toolbar-divider {
   width: 1px;
-  height: 20px;
+  height: 18px;
   background: var(--border-strong);
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 .lib-select-toolbar-actions {
@@ -7627,15 +7690,15 @@ body.light-theme .chat-drawer {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 6px 10px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 9999px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   white-space: nowrap;
 }
 .lib-select-action-btn:hover {
@@ -7651,14 +7714,14 @@ body.light-theme .chat-drawer {
   color: var(--error);
 }
 .lib-select-action-btn.danger:hover {
-  background: color-mix(in srgb, var(--error) 15%, transparent);
-  border-color: color-mix(in srgb, var(--error) 30%, transparent);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  border-color: color-mix(in srgb, var(--error) 28%, transparent);
 }
 
 .lib-select-close-btn {
   width: 26px;
   height: 26px;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -7666,8 +7729,8 @@ body.light-theme .chat-drawer {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.15s ease;
-  margin-left: 4px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  margin-left: 2px;
 }
 .lib-select-close-btn:hover {
   background: var(--bg-hover);
@@ -7676,9 +7739,9 @@ body.light-theme .chat-drawer {
 
 /* 선택된 논문 카드 / 리스트 행 하이라이트 */
 .doc-card.doc-card-selected, .doc-list-row.doc-card-selected {
-  border-color: var(--accent-mid) !important;
-  box-shadow: 0 0 0 1px var(--accent-mid), 0 8px 24px rgba(126, 196, 232, 0.15) !important;
-  background: color-mix(in srgb, var(--accent-mid) 4%, var(--bg-panel)) !important;
+  border-color: var(--control-accent) !important;
+  box-shadow: inset 0 0 0 1px var(--control-accent) !important;
+  background: color-mix(in srgb, var(--control-accent) 6%, var(--bg-card)) !important;
 }
 
 .doc-card-check-btn.checked {
@@ -7687,21 +7750,17 @@ body.light-theme .chat-drawer {
   color: #ffffff !important;
 }
 
-
-.lib-add-fab-wrap { position:fixed; bottom:40px; right:40px; z-index:999; display:flex; flex-direction:column-reverse; align-items:flex-end; gap:12px; }
-.lib-add-fab-wrap #lib-upload-btn.lib-add-main-btn { position:static; width:58px; height:58px; padding:0; border-radius:50%; display:flex; align-items:center; justify-content:center; background:var(--control-accent); box-shadow:0 8px 24px rgba(0,0,0,.22); }
-.lib-add-main-btn > svg { display:block; width:30px; height:30px; flex:none; transition:transform .2s ease; }
+.lib-add-fab-wrap { position:fixed; bottom:28px; right:28px; z-index:999; display:flex; flex-direction:column-reverse; align-items:flex-end; gap:8px; }
+.lib-add-fab-wrap #lib-upload-btn.lib-add-main-btn { position:static; width:46px; height:46px; padding:0; border-radius:var(--radius-lg); display:flex; align-items:center; justify-content:center; background:var(--control-accent); border:1px solid color-mix(in srgb, var(--control-accent) 70%, #fff); box-shadow:var(--shadow-md); }
+.lib-add-main-btn > svg { display:block; width:22px; height:22px; flex:none; transition:transform .18s cubic-bezier(0.16, 1, 0.3, 1); }
 .lib-add-fab-wrap.open .lib-add-main-btn > svg { transform:rotate(45deg); }
-.lib-add-sub-btn { display:flex; align-items:center; justify-content:flex-end; gap:12px; margin-right:4px; padding:0; border:0; background:transparent; color:var(--text-primary); cursor:pointer; opacity:0; visibility:hidden; transform:translateY(12px) scale(.94); transition:opacity .18s ease, transform .18s ease, visibility .18s; }
+.lib-add-sub-btn { display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-right:0; padding:7px 12px; border:1px solid var(--border-strong); border-radius:var(--radius-md); background:var(--bg-panel); box-shadow:var(--shadow-md); color:var(--text-primary); cursor:pointer; opacity:0; visibility:hidden; transform:translateY(8px) scale(.97); transition:opacity .15s cubic-bezier(0.16, 1, 0.3, 1), transform .15s cubic-bezier(0.16, 1, 0.3, 1), visibility .15s, background-color .15s ease; }
 .lib-add-fab-wrap.open .lib-add-sub-btn { opacity:1; visibility:visible; transform:translateY(0) scale(1); }
-.lib-add-label { padding:5px 9px; border-radius:7px; background:var(--bg-surface); box-shadow:var(--shadow-sm); font-size:12.5px; font-weight:650; white-space:nowrap; }
-.lib-add-circle { width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:var(--bg-surface); color:var(--text-primary); box-shadow:0 5px 16px rgba(0,0,0,.18); }
-.lib-add-circle svg { display:block; flex:none; }
-.lib-add-sub-btn:hover .lib-add-circle { transform:translateY(-1px); filter:brightness(1.06); }
-#lib-add-paper-btn .lib-add-circle { background:#4f8ef7; color:#fff; }
-#lib-add-folder-btn .lib-add-circle { background:#f59e0b; color:#fff; }
-#lib-add-paper-btn .lib-add-label { color:#4f8ef7; }
-#lib-add-folder-btn .lib-add-label { color:#d97706; }
+.lib-add-sub-btn:hover { background:var(--bg-hover); border-color:var(--control-accent); }
+.lib-add-label { padding:0; background:transparent; box-shadow:none; font-size:12.5px; font-weight:600; color:var(--text-primary) !important; white-space:nowrap; }
+.lib-add-circle { width:26px; height:26px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; background:var(--bg-elevated) !important; border:1px solid var(--border); color:var(--text-secondary) !important; box-shadow:none; }
+.lib-add-circle svg { display:block; width:15px; height:15px; flex:none; }
+.lib-add-sub-btn:hover .lib-add-circle { color:var(--control-accent-text) !important; transform:none; filter:none; }
 .settings-mode-context {
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--control-accent) 34%, var(--border-strong));
@@ -7964,8 +8023,9 @@ body.light-theme .chat-drawer {
 }
 
 .settings-nav .tab-btn.active {
-  background: var(--control-accent-soft);
-  color: var(--control-accent);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
 }
 
 .settings-content {

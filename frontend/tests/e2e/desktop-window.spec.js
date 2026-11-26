@@ -48,7 +48,7 @@ test('Windows integrates controls, preserves tab clicks, and tracks native maxim
   expect(sidebar.y).toBe(nav.y + nav.height)
   await page.evaluate(() => { window.windowCommands = [] })
   await page.locator('.workspace-tab [role=tab]').first().click()
-  await page.locator('.workspace-topnav-actions').click({ position: { x: 1, y: 1 } })
+  await page.locator('.workspace-tab').first().click({ position: { x: 2, y: 2 } })
   expect(await commands(page)).toEqual([])
   await page.locator('.desktop-workspace-drag').dblclick()
   await expect(controls.locator('[data-window-action=maximize]')).toHaveAttribute('aria-label', '창 복원')
@@ -56,7 +56,7 @@ test('Windows integrates controls, preserves tab clicks, and tracks native maxim
   await expect(controls.locator('[data-window-action=maximize]')).toHaveAttribute('aria-label', '창 최대화')
   await page.evaluate(() => { window.nativeWindowState.maximized = true; window.emitWindowResize() })
   await expect(controls.locator('[data-window-action=maximize]')).toHaveAttribute('aria-label', '창 복원')
-  await page.locator('#workspace-search-input').focus()
+  await page.locator('.workspace-tab [role=tab]').first().focus()
   await page.screenshot({ path: '/tmp/easypaper-window-windows.png' })
   await controls.locator('[data-window-action=minimize]').click()
   await controls.locator('[data-window-action=close]').click()
@@ -115,12 +115,12 @@ test('backend loading screen supports native Windows window actions', async ({ p
   expect(await commands(page)).toEqual(['plugin:window|start_dragging', 'plugin:window|toggle_maximize', 'plugin:window|minimize', 'plugin:window|toggle_maximize', 'plugin:window|close'])
 })
 
-for (const scale of [0.8, 1.25]) test(`Windows keeps buttons reachable with a focused search at UI scale ${scale}`, async ({ page }) => {
+for (const scale of [0.8, 1.25]) test(`Windows keeps buttons reachable in minimal tabbar at UI scale ${scale}`, async ({ page }) => {
   await mockDesktop(page, 'windows', scale)
   await page.setViewportSize({ width: 800, height: 600 })
   await mockBaseRoutes(page)
   await gotoApp(page)
-  await page.locator('#workspace-search-input').focus()
+  await expect(page.locator('#workspace-search-input, #reader-tasks, #reader-command-search')).toHaveCount(0)
   const controls = page.locator('#tab-workspace .desktop-window-controls')
   await controls.locator('[data-window-action=minimize]').click()
   const bounds = await controls.boundingBox()

@@ -1,10 +1,12 @@
 import { PRESETS, COLOR_GROUPS, EDITABLE_TOKENS, THEME_STORAGE_KEY, loadThemes, saveThemes, resolveTheme, applyTheme, deleteTheme, exportTheme, importTheme, contrast, isColor } from './themeEngine.js'
+import { loadUiStyle, saveUiStyle, applyUiStyle, UI_STYLE_STORAGE_KEY } from './uiStyleEngine.js'
+import { bindSlidingIndicator } from '../interactiveUi.js'
 import { themeLabels } from './themeLabels.js'
 import { renderThemePreview } from './themePreview.js'
 import './themes.css'
 
 export function createThemeEditor({ host, t, onApply }) {
-  let labels = themeLabels(t), state = loadThemes(), mode = 'research', scheme = 'dark'
+  let labels = themeLabels(t), state = loadThemes(), mode = 'research', scheme = 'dark', craftStyle = loadUiStyle()
   let draft, selection, dirty = false, conflict = false, previewTab = 'library', pending = false
   const el = (tag, text, attrs = {}) => {
     const node = document.createElement(tag)
@@ -38,8 +40,9 @@ export function createThemeEditor({ host, t, onApply }) {
   const choices = el('div', '', { class: 'theme-targets' })
   const modeGroup = el('div', '', { class: 'theme-segment', role: 'group', 'aria-label': labels.mode })
   const schemeGroup = el('div', '', { class: 'theme-segment', role: 'group', 'aria-label': labels.scheme })
-  choices.append(modeGroup, schemeGroup)
-  const modeButtons = {}, schemeButtons = {}
+  const craftGroup = el('div', '', { class: 'theme-segment', role: 'group', 'aria-label': labels.craftStyle })
+  choices.append(modeGroup, schemeGroup, craftGroup)
+  const modeButtons = {}, schemeButtons = {}, craftButtons = {}
   for (const value of ['research', 'general']) {
     modeButtons[value] = button(labels[value], () => guard(() => { mode = value; loadSelection() }), { 'data-theme-mode': value })
     modeGroup.append(modeButtons[value])
@@ -47,6 +50,15 @@ export function createThemeEditor({ host, t, onApply }) {
   for (const value of ['light', 'dark']) {
     schemeButtons[value] = button(labels[value], () => guard(() => { scheme = value; loadSelection() }), { 'data-theme-scheme': value })
     schemeGroup.append(schemeButtons[value])
+  }
+  for (const value of ['precision', 'editorial']) {
+    craftButtons[value] = button(labels[value], () => {
+      if (craftStyle === value) return
+      craftStyle = value
+      for (const [k, node] of Object.entries(craftButtons)) node.setAttribute('aria-pressed', String(k === craftStyle))
+      markDirty()
+    }, { 'data-ui-style-option': value })
+    craftGroup.append(craftButtons[value])
   }
   const search = el('input', '', { type: 'search', placeholder: labels.search, 'aria-label': labels.search, 'data-theme-search': '' })
   const cards = el('div', '', { class: 'theme-presets', 'aria-label': labels.search })
@@ -107,6 +119,7 @@ export function createThemeEditor({ host, t, onApply }) {
   }
   function markDirty() { dirty = true; status.textContent = labels.draft; renderPreview() }
   function loadSelection(id) {
+    if (!id) craftStyle = loadUiStyle()
     selection = id || state.selections[mode][scheme]
     const existing = state.themes.find(theme => theme.id === selection)
     const preset = PRESETS.find(theme => theme.id === selection)
@@ -117,6 +130,7 @@ export function createThemeEditor({ host, t, onApply }) {
     renderCards(); renderFields(); renderPreview()
     for (const [value, node] of Object.entries(modeButtons)) node.setAttribute('aria-pressed', String(value === mode))
     for (const [value, node] of Object.entries(schemeButtons)) node.setAttribute('aria-pressed', String(value === scheme))
+    for (const [value, node] of Object.entries(craftButtons)) node.setAttribute('aria-pressed', String(value === craftStyle))
     const uses = []
     for (const [m, slots] of Object.entries(state.selections)) for (const [s, id] of Object.entries(slots)) if (id === selection) uses.push(`${labels[m]} / ${labels[s]}`)
     usage.textContent = uses.length ? `${labels.usedBy} ${uses.join(', ')}` : ''
@@ -168,7 +182,7 @@ export function createThemeEditor({ host, t, onApply }) {
   }
   function renderPreview() {
     const theme = resolveTheme(selection, state, draft)
-    for (const node of previewNav.children) node.setAttribute('aria-pressed', String(node.dataset.previewTab === previewTab))
+    for (const node of previewNav.querySelectorAll('[data-preview-tab]')) node.setAttribute('aria-pressed', String(node.dataset.previewTab === previewTab))
     for (const input of fields.querySelectorAll('[data-color-token]')) {
       if (input === document.activeElement || input.getAttribute('aria-invalid') === 'true') continue
       const key = input.dataset.colorToken, value = theme.tokens[key]
@@ -178,6 +192,7 @@ export function createThemeEditor({ host, t, onApply }) {
       row.querySelector('[type=range]').value = Math.round((value.length === 9 ? parseInt(value.slice(7), 16) : 255) / 255 * 100)
     }
     applyTheme(preview, theme)
+    applyUiStyle(preview, craftStyle)
     renderThemePreview(preview, { labels, t, mode, tab: previewTab })
     const pairs = [['text-primary', 'bg-base'], ['text-secondary', 'bg-base'], ['on-accent', 'accent-mid'], ...['sidebar', 'topbar', 'card', 'viewer', 'translation', 'chat'].map(r => [r + '-text', r + '-bg'])]
     const low = pairs.filter(([fg, bg]) => contrast(theme.tokens[fg], theme.tokens[bg], theme.tokens['bg-base']) < 4.5).map(([fg]) => fg)
@@ -203,7 +218,9 @@ export function createThemeEditor({ host, t, onApply }) {
       next.themes.push(saved)
     }
     next.selections[mode][scheme] = saved.id
-    try { saveThemes(next) } catch { status.textContent = labels.saveError; return false }
+    try { saveThemes(next); saveUiStyle(craftStyle) } catch { status.textContent = labels.saveError; return false }
+    applyUiStyle(document.body, craftStyle)
+    applyUiStyle(document.documentElement, craftStyle)
     state = next; dirty = false; loadSelection(); status.textContent = labels.saved; onApply(state)
     return true
   }
@@ -220,7 +237,13 @@ export function createThemeEditor({ host, t, onApply }) {
     state = next; dirty = false; loadSelection(); onApply(state)
   }, { 'data-theme-delete': '' })
   nameActions.append(deleteButton)
-  fieldHeading.append(button(labels.reset, () => { draft.overrides = {}; markDirty(); renderFields() }))
+  fieldHeading.append(button(labels.reset, () => {
+    draft.overrides = {}
+    craftStyle = loadUiStyle()
+    for (const [k, node] of Object.entries(craftButtons)) node.setAttribute('aria-pressed', String(k === craftStyle))
+    markDirty()
+    renderFields()
+  }))
   utilities.append(button(labels.export, () => {
     const theme = resolveTheme(selection, state, draft)
     const url = URL.createObjectURL(new Blob([exportTheme(theme)], { type: 'application/json' }))
@@ -236,13 +259,21 @@ export function createThemeEditor({ host, t, onApply }) {
     } catch { status.textContent = labels.invalidTheme }
   })
   utilities.append(button(labels.import, () => file.click()), file,
-    button(labels.reload, () => guard(() => { state = loadThemes(); conflict = false; loadSelection() })))
+    button(labels.reload, () => guard(() => { state = loadThemes(); craftStyle = loadUiStyle(); conflict = false; loadSelection() })))
   actions.append(button(labels.apply, commit, { class: 'theme-apply', 'data-theme-apply': '' }))
   const source = el('a', labels.source, { href: '/theme-licenses/index.html', target: '_blank', rel: 'noopener' }); utilities.append(source)
   window.addEventListener('storage', event => {
+    if (event.key === UI_STYLE_STORAGE_KEY) {
+      if (!dirty) {
+        craftStyle = loadUiStyle()
+        for (const [k, node] of Object.entries(craftButtons)) node.setAttribute('aria-pressed', String(k === craftStyle))
+        renderPreview()
+      }
+      return
+    }
     if (event.key !== THEME_STORAGE_KEY && event.key !== null) return
     if (dirty) { conflict = true; status.textContent = labels.external }
-    else { state = loadThemes(); loadSelection() }
+    else { state = loadThemes(); craftStyle = loadUiStyle(); loadSelection() }
     onApply(loadThemes())
   })
   // Capture close gestures before the modal manager can discard the draft.
@@ -259,6 +290,9 @@ export function createThemeEditor({ host, t, onApply }) {
     event.preventDefault(); event.stopImmediatePropagation(); guard(() => document.getElementById('close-settings-btn').click())
   }, true)
   loadSelection()
+  for (const seg of [modeGroup, schemeGroup, craftGroup, previewNav]) {
+    bindSlidingIndicator(seg, { itemSelector: 'button', variant: 'pill' })
+  }
   return {
     setMode(nextMode, nextScheme) {
       if (dirty) return
@@ -271,7 +305,7 @@ export function createThemeEditor({ host, t, onApply }) {
       }
       search.placeholder = labels.search; search.setAttribute('aria-label', labels.search)
       root.setAttribute('aria-label', labels.title); preview.setAttribute('aria-label', labels.preview)
-      modeGroup.setAttribute('aria-label', labels.mode); schemeGroup.setAttribute('aria-label', labels.scheme); previewNav.setAttribute('aria-label', labels.preview)
+      modeGroup.setAttribute('aria-label', labels.mode); schemeGroup.setAttribute('aria-label', labels.scheme); craftGroup.setAttribute('aria-label', labels.craftStyle); previewNav.setAttribute('aria-label', labels.preview)
       renderCards(); renderFields(true); renderPreview()
     },
   }

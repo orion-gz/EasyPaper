@@ -98,7 +98,6 @@ export function createWorkspaceModeController({
         tooltip.textContent = label
       }
     })
-    const search = document.getElementById('workspace-search-input')
     const librarySearch = document.getElementById('library-search-input')
     if (librarySearch) {
       librarySearch.placeholder = mode === 'general'
@@ -106,10 +105,6 @@ export function createWorkspaceModeController({
         : '논문 제목, 파일명, 번역된 내용 검색...'
     }
 
-    if (search) {
-      search.dataset.i18nPlaceholder = copy.search.key
-      search.placeholder = copy.search.value
-    }
     const addLabel = document.querySelector('#lib-add-paper-btn .lib-add-label')
     if (addLabel) {
       addLabel.dataset.i18n = copy.add.key

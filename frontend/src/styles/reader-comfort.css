@@ -15,14 +15,7 @@
 #reader-return, #reader-resume-notice { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; background: var(--bg-surface); color: var(--text-primary); }
 .document-workspace-runtime #floating-scroll-nav { max-width: max(200px, calc(100% - var(--document-panel-space, 0px) - var(--document-outline-space, 0px) - 32px)); flex-wrap: wrap; height: auto; }
 #reader-focus[hidden], #reader-focus-view[hidden], #reader-return[hidden], #reader-resume-notice[hidden] { display: none !important; }
-#reader-tasks[hidden], #reader-task-list[hidden] { display: none !important; }
-#reader-task-list { position: absolute; right: 12px; top: 52px; width: min(420px, calc(100vw - 24px)); max-height: 70vh; overflow: auto; z-index: 100; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-panel); box-shadow: 0 8px 32px #0003; }
-#reader-task-list article { padding: 12px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
-#reader-tasks { flex: 0 0 32px; width: 32px; height: 32px; }
-#tab-workspace .workspace-search-box input,
-#tab-workspace .workspace-search-box input:focus { width: 100%; min-width: 0; box-sizing: border-box; }
-/* Shared text hierarchy for the task popover and workspace search dialog. */
-#reader-task-list,
+/* Shared text hierarchy for workspace command dialog. */
 #reader-command-dialog {
   font-family: var(--font-body);
   font-size: 12.5px;
@@ -32,7 +25,6 @@
   letter-spacing: -0.02em;
 }
 
-#reader-task-list article > strong,
 #reader-command-results strong {
   display: block;
   font-size: 13px;
@@ -40,23 +32,6 @@
   line-height: 1.5;
   color: var(--text-primary);
 }
-
-#reader-task-list p { margin: 6px 0; }
-#reader-task-list button {
-  font-family: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
-  line-height: 1.5;
-}
-#reader-task-list button:not(:disabled):hover { background: var(--bg-hover); }
-#reader-task-list button:disabled { opacity: .55; cursor: default; }
-#reader-task-list button:focus-visible {
-  outline: 2px solid var(--control-accent);
-  outline-offset: 2px;
-}
-#reader-task-list button { padding: 6px 10px; margin: 3px; color: var(--text-primary); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; }
-#reader-task-list progress { display: block; width: 100%; }
-#reader-command-search[hidden] { display: none !important; }
 #reader-command-dialog {
   position: fixed;
   inset: 0;
@@ -101,8 +76,6 @@
   #reader-command-help { padding: 0 16px 12px; }
   .reader-command-bar kbd { display: none; }
 }
-
-#reader-command-search { flex: 0 0 32px; width: 32px; height: 32px; }
 
 .memo-layout-preferences { gap: 0; }
 .memo-layout-preferences legend { color: var(--text-primary); font-weight: 600; }

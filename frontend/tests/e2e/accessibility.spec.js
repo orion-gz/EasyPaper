@@ -47,6 +47,7 @@ test("뷰어 툴바를 Tab만으로 논리적인 순서로 이동하고 포커�
   const tabOrder = [
     "#outline-toggle-btn",
     "#doc-title-edit-btn",
+    "#image-extract-indicator",
     "#viewer-refresh-btn",
     "#capture-area-btn",
     "#chat-toggle-btn",

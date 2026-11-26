@@ -1,4 +1,5 @@
 import { t } from './i18n.js'
+import { pulseActionFeedback } from './interactiveUi.js'
 // Called only after Markdown sanitization. Text is never interpolated into HTML.
 export function decorateCodeBlocks(html) {
   const template = document.createElement('template'); template.innerHTML = html
@@ -22,7 +23,7 @@ export function installCodeCopy(root) {
     const code = button.closest('.chat-code-block')?.querySelector('pre code')
     if (!code) return
     button.disabled = true
-    try { await navigator.clipboard.writeText(code.textContent); button.textContent = t('chat:code.copied') }
+    try { await navigator.clipboard.writeText(code.textContent); button.textContent = t('chat:code.copied'); pulseActionFeedback(button) }
     catch { button.textContent = t('chat:code.failed') }
     finally { button.disabled = false }
   })

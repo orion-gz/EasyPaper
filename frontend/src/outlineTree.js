@@ -1,4 +1,5 @@
 import { t } from './i18n.js'
+import { enableAutoAnimate } from './interactiveUi.js'
 // Nested native disclosures preserve keyboard and screen-reader semantics.
 export function renderOutlineTree(container, items, navigate) {
   const root = document.createElement('nav'); root.className = 'outline-tree'
@@ -9,6 +10,7 @@ export function renderOutlineTree(container, items, navigate) {
   }
   function render(parent, nodes) {
     const list = document.createElement('ul'); parent.append(list)
+    enableAutoAnimate(list, { duration: 160 })
     for (const item of nodes) {
       const entry = document.createElement('li'); list.append(entry)
       const hasChildren = item.items?.length > 0
