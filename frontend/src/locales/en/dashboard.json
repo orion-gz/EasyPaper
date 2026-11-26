@@ -15,5 +15,10 @@
   "daysCount_other": "{{count}} days",
   "activeTotalDays": "Active for {{count}} days total",
   "activityDaysLongest": "{{active}} active days • longest streak {{longest}} days",
-  "dayUnit": "days"
+  "dayUnit": "days",
+  "readingScoreTitle": "Reading Score",
+  "deepReadTitle": "Deep read: {{count}}",
+  "skimReadTitle": "Skimmed: {{count}}",
+  "deepReadLegend": "Deep read {{percent}}% ({{count}})",
+  "skimReadLegend": "Skimmed {{percent}}% ({{count}})"
 }

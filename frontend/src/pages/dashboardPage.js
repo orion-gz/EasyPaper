@@ -270,19 +270,19 @@ function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySec
           </div>
         </div>
         <div class="dash-score-copy">
-          <div class="dash-score-title">Reading Score Engine</div>
+          <div class="dash-score-title">${escapeHtml(t('dashboard:readingScoreTitle'))}</div>
           <div class="dash-score-desc">정독 패턴, verified pages & interaction 종합 평가</div>
         </div>
       </div>
       ${depthRatio ? `
       <div class="dash-depth-ratio">
         <div class="dash-depth-ratio-bar">
-          <div class="dash-depth-ratio-seg is-deep" style="width:${depthRatio.deepPct}%" title="정독 ${depthRatio.deepCount}편"></div>
-          <div class="dash-depth-ratio-seg is-skim" style="width:${depthRatio.skimPct}%" title="스키밍 ${depthRatio.skimCount}편"></div>
+          <div class="dash-depth-ratio-seg is-deep" style="width:${depthRatio.deepPct}%" title="${escapeHtml(t('dashboard:deepReadTitle', { count: formatNumber(depthRatio.deepCount) }))}"></div>
+          <div class="dash-depth-ratio-seg is-skim" style="width:${depthRatio.skimPct}%" title="${escapeHtml(t('dashboard:skimReadTitle', { count: formatNumber(depthRatio.skimCount) }))}"></div>
         </div>
         <div class="dash-depth-ratio-legend">
-          <span><i class="dash-depth-dot is-deep"></i>정독 ${depthRatio.deepPct}% (${formatNumber(depthRatio.deepCount)}편)</span>
-          <span><i class="dash-depth-dot is-skim"></i>스키밍 ${depthRatio.skimPct}% (${formatNumber(depthRatio.skimCount)}편)</span>
+          <span><i class="dash-depth-dot is-deep"></i>${escapeHtml(t('dashboard:deepReadLegend', { percent: depthRatio.deepPct, count: formatNumber(depthRatio.deepCount) }))}</span>
+          <span><i class="dash-depth-dot is-skim"></i>${escapeHtml(t('dashboard:skimReadLegend', { percent: depthRatio.skimPct, count: formatNumber(depthRatio.skimCount) }))}</span>
         </div>
       </div>
       ` : ''}

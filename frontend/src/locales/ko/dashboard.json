@@ -15,5 +15,10 @@
   "daysCount_other": "{{count}}일",
   "activeTotalDays": "총 {{count}}일 동안 활동",
   "activityDaysLongest": "{{active}}일 활동 • 최장 연속 {{longest}}일",
-  "dayUnit": "일"
+  "dayUnit": "일",
+  "readingScoreTitle": "읽기 활동 점수",
+  "deepReadTitle": "정독 {{count}}편",
+  "skimReadTitle": "훑어보기 {{count}}편",
+  "deepReadLegend": "정독 {{percent}}% ({{count}}편)",
+  "skimReadLegend": "훑어보기 {{percent}}% ({{count}}편)"
 }
