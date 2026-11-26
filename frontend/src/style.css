@@ -8386,6 +8386,11 @@ body.light-theme .chat-drawer {
   margin-top: 12px;
 }
 
+#restart-onboarding {
+  align-self: flex-end;
+  margin: 4px 0 16px;
+}
+
 #setting-prompt-template {
   box-sizing: border-box;
 }

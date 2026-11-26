@@ -26,11 +26,6 @@
   border-radius: var(--radius-sm);
 }
 
-#restart-onboarding {
-  margin-block-end: 12px;
-  align-self: flex-end;
-}
-
 .onboarding-body {
   padding: clamp(16px, 4vw, 24px);
   overflow-y: auto;
