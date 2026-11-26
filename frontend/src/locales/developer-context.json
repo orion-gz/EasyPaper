@@ -7232,5 +7232,20 @@
   },
   "viewer:extractDot.error": {
     "description": "Viewer image extraction failure with the page and last progress percentage."
+  },
+  "dashboard:readingScoreTitle": {
+    "description": "Dashboard activity summary card title for the overall reading score."
+  },
+  "dashboard:deepReadTitle": {
+    "description": "Tooltip on the deep-reading ratio bar segment showing the count of deeply read documents."
+  },
+  "dashboard:skimReadTitle": {
+    "description": "Tooltip on the skimmed-reading ratio bar segment showing the count of skimmed documents."
+  },
+  "dashboard:deepReadLegend": {
+    "description": "Legend label showing percentage and count of deeply read documents."
+  },
+  "dashboard:skimReadLegend": {
+    "description": "Legend label showing percentage and count of skimmed documents."
   }
 }

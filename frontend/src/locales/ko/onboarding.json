@@ -11,7 +11,7 @@
   "title": "번역 환경 설정",
   "location": "어디에서 번역할까요?",
   "local": "이 컴퓨터에 엔진 설치",
-  "localHelp": "EasyPaper가 실행 중인 컴퓨터에 설치해요. CLI는 제공업체에 문서를 전송해요.",
+  "localHelp": "EasyPaper가 실행 중인 컴퓨터에 설치해요. CLI 도구는 해당 AI 서비스로 문서를 전송해요.",
   "remote": "모델 서버에 연결",
   "remoteHelp": "문서는 여기에 보관하고 번역할 내용만 서버에 보내요.",
   "team": "팀의 EasyPaper에 접속",

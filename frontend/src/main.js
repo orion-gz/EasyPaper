@@ -4586,7 +4586,7 @@ function renderOllamaInstalledModels() {
 
     deleteBtn.addEventListener('click', async (e) => {
       e.stopPropagation()
-      const confirm = await showCustomConfirm(`'${modelName}' 모델을 진짜로 삭제하시겠습니까?\n(Ollama 서버 디스크 공간에서 해당 모델 파일이 삭제됩니다)`, {
+      const confirm = await showCustomConfirm(`'${modelName}' 모델을 삭제하시겠습니까?\n(저장 공간에서 해당 모델 파일이 영구 삭제됩니다)`, {
         title: 'Ollama 모델 삭제',
         confirmText: '삭제',
         danger: true
@@ -5780,7 +5780,7 @@ if (systemUpdateCheckBtn && !isTauriDesktop) {
 if (systemUpdateRunBtn && !isTauriDesktop) {
   systemUpdateRunBtn.addEventListener('click', async () => {
     if (!pendingSystemUpdateAvailable) return
-    const ok = await showCustomConfirm('정말 깃허브 최신 코드로 자동 업데이트를 실행하시겠습니까?\n업데이트가 완료되면 서비스 데몬이 자동으로 재기동되며 약 3~5초간 접속이 중단될 수 있습니다.', { title: '시스템 업데이트', confirmText: '업데이트', danger: true })
+    const ok = await showCustomConfirm('정말 GitHub 최신 코드로 자동 업데이트를 실행하시겠습니까?\n업데이트가 완료되면 서버가 자동으로 다시 시작되며 약 3~5초 동안 연결이 끊길 수 있습니다.', { title: '시스템 업데이트', confirmText: '업데이트', danger: true })
     if (!ok) return
 
     systemUpdateRunBtn.disabled = true
@@ -7856,7 +7856,7 @@ function showFolderContentsDeleteDialog(paperCount) {
   return new Promise(resolve => {
     const modal = document.createElement('div')
     modal.className = 'custom-confirm-modal-wrapper'
-    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 안 ${documentUiCopy('논문을', workspaceModeController.getMode())} 처리</span></div><div class="custom-confirm-modal-body">이 폴더와 하위 폴더에 ${documentUiCopy('논문', workspaceModeController.getMode())} ${paperCount}개가 있습니다.<br>폴더 트리 삭제 후 ${documentUiCopy('논문', workspaceModeController.getMode())} 어떻게 처리할까요?</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn keep-btn">루트에 유지</button><button class="custom-confirm-btn confirm-btn">함께 휴지통으로 이동</button></div></div>`
+    modal.innerHTML = `<div class="custom-confirm-modal"><div class="custom-confirm-modal-header"><span class="custom-confirm-modal-title">폴더 안 ${documentUiCopy('논문', workspaceModeController.getMode())} 처리</span></div><div class="custom-confirm-modal-body">이 폴더와 하위 폴더에 ${documentUiCopy('논문', workspaceModeController.getMode())} ${paperCount}개가 있습니다.<br>폴더를 삭제한 뒤 안에 있는 ${documentUiCopy('논문을', workspaceModeController.getMode())} 어떻게 할까요?</div><div class="custom-confirm-modal-footer"><button class="custom-confirm-btn cancel-btn">취소</button><button class="custom-confirm-btn keep-btn">루트에 유지</button><button class="custom-confirm-btn confirm-btn">함께 휴지통으로 이동</button></div></div>`
     document.body.appendChild(modal)
     const close = value => { modal.classList.remove('active'); setTimeout(() => { modal.remove(); resolve(value) }, 200) }
     modal.querySelector('.cancel-btn').addEventListener('click', () => close(null))
@@ -12696,8 +12696,8 @@ function undoLastAnnotationAction() {
   if (action.kind === 'annotation') {
     restoreAnnotationItems(action.pageNum, action.items)
     if (textLayerDiv) reRenderPageAnnotations(textLayerDiv, action.pageNum)
-    const label = action.items.length > 1 ? '어노테이션' : (action.items[0].type === 'highlight' ? '하이라이트' : '밑줄')
-    showToast(`${label}가 복원되었습니다 ✓`, 'success')
+    const restoredMsg = action.items.length > 1 ? '선택 영역의 표시가 복원되었습니다 ✓' : (action.items[0].type === 'highlight' ? '하이라이트가 복원되었습니다 ✓' : '밑줄이 복원되었습니다 ✓')
+    showToast(restoredMsg, 'success')
   } else if (action.kind === 'memo') {
     restoreMemoItems(action.pageNum, [action.memo])
     renderPageMemos(action.pageNum)
@@ -14306,7 +14306,7 @@ function createAnnHoverTooltip() {
         if (removed.length > 0) {
           saveAnnotations(state.sessionId, annotations)
           pushAnnotationUndo({ kind: 'annotation', pageNum, items: removed })
-          showToast('어노테이션이 삭제되었습니다 ✓', 'success')
+          showToast('표시가 삭제되었습니다 ✓', 'success')
           reRenderPageAnnotations(textLayerDiv, pageNum)
         }
       }
@@ -14347,7 +14347,7 @@ function createAnnHoverTooltip() {
                 if (removed.length > 0) {
                   saveAnnotations(state.sessionId, annotations)
                   pushAnnotationUndo({ kind: 'annotation', pageNum, items: removed })
-                  showToast('어노테이션이 삭제되었습니다 ✓', 'success')
+                  showToast('표시가 삭제되었습니다 ✓', 'success')
                   reRenderPageAnnotations(textLayerDiv, pageNum)
                 }
               }
@@ -16770,7 +16770,7 @@ function regenerateResponse(assistantMsgEl) {
   state.chatHistory = state.chatHistory.slice(0, expectedHistoryLength);
 
   if (state.chatHistory.length === 0 || state.chatHistory[state.chatHistory.length - 1].role !== 'user') {
-    showToast('대화 기록 싱크 오류', 'error');
+    showToast('대화 기록 동기화 오류', 'error');
     return;
   }
 
