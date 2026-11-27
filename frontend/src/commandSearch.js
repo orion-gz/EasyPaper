@@ -47,7 +47,6 @@ export function installCommandSearch({ shell, mode, runtime, navigate, actions, 
       .filter(page => !isMinimalUi() || page === 'library')
       .map(page => ({ id: page, text: t(`navigation:${page}`), global: true, run: () => document.querySelector(`.sidebar-nav-item[data-page="${page}"]`)?.click() }))
     return [
-      { id: 'focus', text: t('viewer:comfort.focusReading'), feature: 'focusReading', run: () => reader.toggleFocusReading() },
       { id: 'translate', text: t('viewer:comfort.translationCommand'), run: () => reader.toggleTranslation() },
       { id: 'find', text: t('viewer:comfort.findCommand'), run: () => reader.find() },
       { id: 'settings', text: t('viewer:comfort.settingsCommand'), global: true, run: () => openSettings('tab-general') },

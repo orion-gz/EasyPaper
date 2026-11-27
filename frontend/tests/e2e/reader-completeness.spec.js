@@ -27,17 +27,6 @@ async function mockChat(page, onRequest = () => {}) {
   })
 }
 
-test('REVIEW-1 collapsed translation remains readable in focus translation view', async ({ page }) => {
-  await setup(page)
-  await reader(page).locator('.trans-collapse-btn').first().click()
-  await expect(reader(page).locator('body')).toHaveClass(/collapse-translation/)
-  await reader(page).locator('#reader-focus').click()
-  await reader(page).locator('#reader-focus-view [data-view="translation"]').click()
-  await expect(reader(page).locator('.trans-page-content').first()).toBeVisible({ timeout: 1500 })
-  await reader(page).locator('#reader-focus').click()
-  await expect(reader(page).locator('body')).toHaveClass(/collapse-translation/)
-})
-
 test('REVIEW-2 explaining a selection from notes switches to the chat panel', async ({ page }) => {
   await setup(page); await mockChat(page)
   await openReaderTools(reader(page))
@@ -77,13 +66,12 @@ test('REVIEW-4 reopening search must not execute a stale result while loading', 
   await expect(page.locator('#reader-command-dialog')).toBeVisible({ timeout: 1500 })
 })
 
-test('REVIEW-5 new focus controls update when UI language changes', async ({ page }) => {
+test('REVIEW-5 command search controls update when UI language changes', async ({ page }) => {
   await setup(page)
   await page.locator('#sidebar-settings-btn').click()
   await page.locator('#settings-nav-general').click()
   await page.locator('#setting-ui-locale').evaluate(el => { el.value = 'en'; el.dispatchEvent(new Event('change', { bubbles: true })) })
   await expect(page.locator('#reader-command-dialog')).toHaveAttribute('aria-label', 'Search and commands')
-  await expect(reader(page).locator('#reader-focus')).toHaveAttribute('aria-label', 'Focus reading', { timeout: 1500 })
 })
 
 test('REVIEW-6 HTML quick actions obey the same setting and expose AI actions', async ({ page }) => {
@@ -120,23 +108,4 @@ test('REVIEW-7 Escape closes a nonempty command search', async ({ page }) => {
   await input.fill('nonempty query')
   await input.press('Escape')
   await expect(page.locator('#reader-command-dialog')).not.toBeVisible({ timeout: 1500 })
-})
-
-test('REVIEW-8 translation-only focus keeps tracking the visible page', async ({ page }) => {
-  const { readFileSync } = await import('node:fs')
-  await mockBaseRoutes(page, { documents: [{ ...doc, total_pages: 3 }] })
-  await page.route('**/api/library/review/pdf', route => route.fulfill({ contentType: 'application/pdf', body: readFileSync(new URL('./fixtures/three-pages.pdf', import.meta.url)) }))
-  await page.route('**/api/tasks', route => route.fulfill({ json: { tasks: [] } }))
-  await gotoApp(page); await page.evaluate(() => { location.hash = '#viewer?id=review' })
-  await expect(reader(page).locator('#document-find')).toBeVisible({ timeout: 20000 })
-  const scrollTo = async n => reader(page).locator(`.page-pair[data-page="${n}"]`).evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'instant' }))
-  await scrollTo(3)
-  await expect(reader(page).locator('#page-input')).toHaveValue('3')
-  await scrollTo(1)
-  await expect(reader(page).locator('#page-input')).toHaveValue('1')
-  await reader(page).locator('#reader-focus').click()
-  await reader(page).locator('#reader-focus-view [data-view="translation"]').click()
-  await scrollTo(3)
-  await expect.poll(() => reader(page).locator('body').evaluate(() => window.__easypaperDocument.snapshot().page)).toBe(3)
-  await expect(reader(page).locator('#page-input')).toHaveValue('3', { timeout: 2000 })
 })
