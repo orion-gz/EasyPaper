@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { mockBaseRoutes, gotoApp, SAMPLE_PDF_A, openReaderTools } from './helpers.js'
 
 const doc = { id: 'comfort', filename: 'Attention.pdf', total_pages: 1, metadata: { primer_shown: true }, translated_pages: [] }
-const features = ['quickActions', 'restoreReading', 'referenceReturn', 'focusReading', 'commandSearch']
+const features = ['quickActions', 'restoreReading', 'referenceReturn', 'commandSearch']
 const reader = page => page.frameLocator('iframe[data-document-id="comfort"]')
 async function setup(page) {
   await mockBaseRoutes(page, { documents: [doc] })
@@ -20,14 +20,13 @@ async function settings(page) {
   await page.locator('#settings-nav-viewer').click()
 }
 
-test('all five controls persist independently and apply to open readers', async ({ page }) => {
+test('all four controls persist independently and apply to open readers', async ({ page }) => {
   await setup(page); await open(page); await settings(page)
   for (const feature of features) {
     const toggle = page.locator(`#setting-reader-${feature}`)
     await expect(toggle).toBeChecked()
     await toggle.locator('..').click()
   }
-  await expect(reader(page).locator('#reader-focus')).toBeHidden()
   await expect(page.locator('#reader-tasks, #reader-command-search')).toHaveCount(0)
   await page.locator('#close-settings-btn').click()
   await page.keyboard.press('Control+k')
@@ -35,27 +34,21 @@ test('all five controls persist independently and apply to open readers', async 
   await page.reload(); await expect(reader(page).locator('#document-find')).toBeVisible({ timeout: 20000 })
   await settings(page)
   for (const feature of features) await expect(page.locator(`#setting-reader-${feature}`)).not.toBeChecked()
-  await page.locator('#setting-reader-focusReading').locator('..').click()
-  await expect(reader(page).locator('#reader-focus')).toBeVisible()
+  await page.locator('#setting-reader-referenceReturn').locator('..').click()
+  await expect(page.locator('#setting-reader-referenceReturn')).toBeChecked()
   await expect(page.locator('#setting-reader-commandSearch')).not.toBeChecked()
 })
 
-test('command palette works from iframe and focus restores panels', async ({ page }) => {
+test('command palette works from iframe and toggles translation', async ({ page }) => {
   await setup(page); await open(page)
-  await openReaderTools(reader(page))
-  await expect(reader(page).locator('#chat-sidebar')).toBeVisible()
-  await reader(page).locator('#reader-focus').click()
-  await expect(reader(page).locator('#chat-sidebar')).toBeHidden()
-  await expect(page.locator('#app-sidebar')).toBeHidden()
   await reader(page).locator('#viewer-scroll-container').focus()
   await page.keyboard.press('Control+k')
   const input = page.locator('#reader-command-dialog input')
   await expect(input).toBeFocused()
-  await input.fill('/ 집중')
+  await input.fill('/ 번역 표시 전환')
   await expect(page.locator('#reader-command-results [role="option"]')).toHaveCount(1)
   await input.press('Enter')
-  await expect(reader(page).locator('#chat-sidebar')).toBeVisible()
-  await expect(page.locator('#app-sidebar')).toBeVisible()
+  await expect(reader(page).locator('body')).toHaveClass(/collapse-translation/)
 })
 
 test('reference return restores the previous position and disabling clears the trail', async ({ page }) => {

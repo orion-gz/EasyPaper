@@ -1,5 +1,4 @@
 import { findReadingAnchor } from './readingAnchor.js'
-import { installFocusReading } from './focusReading.js'
 import { createReadingTrail } from './readingTrail.js'
 import { readerFeatureEnabled, onReaderPreferences } from './readerPreferences.js'
 import { applyTheme, THEME_TOKEN_NAMES } from './themes/themeEngine.js'
@@ -291,11 +290,6 @@ export function installDocumentRuntime(adapter) {
   }
   window.addEventListener('resize', syncViewport)
   syncViewport()
-  const focusReading = installFocusReading({
-    floating, panels: () => ({ panel: !sidebar.classList.contains('hidden'), outline: !outline.classList.contains('hidden') }),
-    translationCollapsed: adapter.translationCollapsed, setTranslationCollapsed: adapter.setTranslationCollapsed,
-    restorePanels: adapter.setPanels, changed: () => { updateLayout(); publishSnapshot() },
-  })
   let lastTitle = adapter.state.title
   const statusTimer = setInterval(() => {
     if (adapter.state.title !== lastTitle) { lastTitle = adapter.state.title; notifyWorkspace('title', lastTitle) }
@@ -335,7 +329,6 @@ export function installDocumentRuntime(adapter) {
       if (['ask', 'new-chat', 'summarize'].includes(name)) runtime.activateChat()
       return adapter.commandActions(name, { argument, page, context })
     },
-    toggleFocusReading: () => focusReading.toggle(),
     toggleTranslation: () => adapter.setTranslationCollapsed?.(!adapter.translationCollapsed?.()),
     attention: active => adapter.attention?.(active),
     finish: () => adapter.finish?.(),
@@ -423,7 +416,6 @@ export function installDocumentRuntime(adapter) {
       if (active === next) return
       if (!next) suspendedSnapshot = snapshot()
       active = next
-      focusReading.setActive(next)
       if (!next) readerTools.setActive(false)
       document.body.dataset.workspaceInactive = String(!next)
       if (next) {
@@ -498,7 +490,7 @@ export function installDocumentRuntime(adapter) {
   }
   window.__easypaperDocument = runtime
   window.addEventListener('pagehide', () => {
-    focusReading.destroy(); stopReturnPreferences(); readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); window.removeEventListener('storage', refreshStorage)
+    stopReturnPreferences(); readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); window.removeEventListener('storage', refreshStorage)
     clearInterval(statusTimer); clearTimeout(snapshotTimer); window.removeEventListener('resize', syncViewport)
     panelResize.disconnect(); panelObserver.disconnect(); errors.disconnect(); thumbnailObserver?.disconnect()
   }, { once: true })
