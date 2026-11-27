@@ -2,6 +2,22 @@
 
 EasyPaper의 변경 이력입니다. 데스크톱 릴리스는 버전별로, 이전 변경 사항은 병합된 날짜별로 정리합니다.
 
+## 1.6.7 - 2026-11-27
+
+### 한국어 (1.6.6 → 1.6.7)
+
+- 워크스페이스(대시보드·라이브러리·읽기 기록·AI 채팅·노트·연구 그래프)와 뷰어 전반에 미니멀리스트 듀얼 아키타입 UI 리디자인 및 설정의 UI 스타일 선택 기능을 추가
+- 한국어·영어 UI 문구를 다듬어 가독성과 맞춤법을 개선
+- 온보딩 안내 버튼을 설정의 정보 탭으로 이동하고 여백 스타일을 수정하며, 대시보드의 가로·세로 스크롤바를 숨김
+- 추출 상태 표시 점을 새로고침 버튼 왼쪽으로 배치하고, `llama-server`가 없을 때 Marker OCR로 폴백하도록 수정
+
+### English (1.6.6 → 1.6.7)
+
+- Redesign workspace (dashboard, library, reading history, AI chats, notes, research graph) and viewer with a minimalist dual-archetype UI and add a UI style selector in Settings.
+- Polish English and Korean UI copy for clarity and fix Korean grammar.
+- Move the onboarding guide button to the Info tab in Settings with fixed spacing, and hide horizontal and vertical scrollbars in the dashboard.
+- Place the extraction status dot to the left of the refresh button and fall back to Marker OCR when `llama-server` is missing.
+
 ## 1.6.6 - 2026-11-24
 
 ### 한국어 (1.6.5 → 1.6.6)
