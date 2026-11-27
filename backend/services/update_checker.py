@@ -47,10 +47,24 @@ def _commits_match(sha_a: str, sha_b: str) -> bool:
 
 async def _run_git(*args: str, timeout: float = 30.0) -> tuple[int, str, str]:
     """git 명령을 프로젝트 루트에서 실행하고 (returncode, stdout, stderr)를 반환합니다."""
+    import os
+
+    project_root = get_project_root()
+    git_env = os.environ.copy()
+    git_env["GIT_TERMINAL_PROMPT"] = "0"
+    try:
+        cfg_count = int(git_env.get("GIT_CONFIG_COUNT", "0"))
+    except ValueError:
+        cfg_count = 0
+    git_env[f"GIT_CONFIG_KEY_{cfg_count}"] = "safe.directory"
+    git_env[f"GIT_CONFIG_VALUE_{cfg_count}"] = project_root
+    git_env["GIT_CONFIG_COUNT"] = str(cfg_count + 1)
+
     try:
         proc = await asyncio.create_subprocess_exec(
             "git", *args,
-            cwd=get_project_root(),
+            cwd=project_root,
+            env=git_env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

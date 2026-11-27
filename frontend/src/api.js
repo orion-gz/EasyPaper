@@ -5,7 +5,9 @@ const API_BASE = '/api'
 
 async function apiError(response, fallback = '') {
   const payload = await response.json().catch(() => ({}))
-  return new Error(errorMessage(payload, fallback))
+  const err = new Error(errorMessage(payload, fallback))
+  err.status = response.status
+  return err
 }
 
 export async function getLanguagesAPI() {
@@ -422,7 +424,7 @@ export async function logoutAPI() {
  * 로그인 상태를 검증합니다.
  */
 export async function checkAuthAPI() {
-  const res = await fetch(`${API_BASE}/auth/check`)
+  const res = await fetch(`${API_BASE}/auth/check`, { cache: 'no-store' })
   if (!res.ok) return null
   return res.json()
 }
@@ -921,6 +923,12 @@ export async function triggerSystemUpdateAPI() {
     method: 'POST'
   })
   if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export async function getSystemUpdateStatusAPI() {
+  const res = await fetch(`${API_BASE}/settings/update-status`, { cache: 'no-store' })
+  if (!res.ok) return null
   return res.json()
 }
 

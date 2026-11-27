@@ -298,3 +298,198 @@ def test_restart_server_process_checks_systemctl_returncode_and_uses_non_interac
 
     assert recorded_args[0] == ("sudo", "-n", "systemctl", "restart", "easypaper")
     assert exit_codes == [1]
+
+
+def test_system_update_uses_npm_ci_with_lockfile_and_resets_dirty_lockfile(test_client, tmp_path, monkeypatch):
+    """frontend/package-lock.json이 존재하면 npm ci를 쓰고, 과거 npm install로 인해
+    package-lock.json만 단독 수정된 상태라면 git pull 전 자동 복원해야 한다."""
+    frontend_dir = tmp_path / "frontend"
+    (frontend_dir / "node_modules").mkdir(parents=True)
+    (frontend_dir / "package.json").write_text('{"name":"test"}', encoding="utf-8")
+    (frontend_dir / "package-lock.json").write_text('{"lockfileVersion":3}', encoding="utf-8")
+    dist_dir = frontend_dir / "dist"
+    dist_dir.mkdir(parents=True)
+    (dist_dir / "index.html").write_text("<html>old</html>", encoding="utf-8")
+
+    monkeypatch.setattr("routers.auth.get_project_root", lambda: str(tmp_path))
+
+    old_sha = "1111111111111111111111111111111111111111"
+    new_sha = "2222222222222222222222222222222222222222"
+    rev_calls = {"count": 0}
+    executed_args = []
+
+    async def fake_exec(*args, **kwargs):
+        executed_args.append(args)
+        if args[0] == "git":
+            if args[1] == "status":
+                return _make_subprocess_mock(0, b" M frontend/package-lock.json\n", b"")
+            if args[1] == "checkout":
+                return _make_subprocess_mock(0, b"", b"")
+            if args[1] == "rev-parse":
+                rev_calls["count"] += 1
+                sha = old_sha if rev_calls["count"] == 1 else new_sha
+                return _make_subprocess_mock(0, f"{sha}\n".encode(), b"")
+            if args[1] == "pull":
+                return _make_subprocess_mock(0, b"Updating 111..222\n", b"")
+            if args[1] == "diff":
+                return _make_subprocess_mock(0, b"frontend/package-lock.json\n", b"")
+        return _make_subprocess_mock(0, b"ok\n", b"")
+
+    with patch("asyncio.create_subprocess_exec", new=fake_exec), \
+         patch("routers.auth._restart_server_process", new=AsyncMock()):
+        res = test_client.post("/api/settings/update")
+
+    assert res.status_code == 200
+    assert res.json()["ok"] is True
+    assert ("git", "checkout", "--", "frontend/package-lock.json") in executed_args
+    assert any("ci" in call for call in executed_args)
+
+
+def test_system_update_stages_build_atomically_preserving_dist_on_failure(test_client, tmp_path, monkeypatch):
+    """스테이징 디렉터리(.dist-staging) 빌드가 실패하면 기존 dist/index.html이 절대
+    삭제·훼손되지 않아야 하며, 성공 시에만 새 산출물과 .build-commit으로 교체된다."""
+    frontend_dir = tmp_path / "frontend"
+    (frontend_dir / "node_modules").mkdir(parents=True)
+    (frontend_dir / "package.json").write_text('{"name":"test"}', encoding="utf-8")
+    dist_dir = frontend_dir / "dist"
+    (dist_dir / "assets").mkdir(parents=True)
+    (dist_dir / "index.html").write_text("<html>working-old-ui</html>", encoding="utf-8")
+    (dist_dir / "assets" / "app.js").write_text("console.log('old')", encoding="utf-8")
+
+    monkeypatch.setattr("routers.auth.get_project_root", lambda: str(tmp_path))
+
+    old_sha = "aaaaaaa111111111111111111111111111111111"
+    new_sha = "bbbbbbb222222222222222222222222222222222"
+    state = {"head": old_sha, "fail_build": True}
+
+    async def fake_exec(*args, **kwargs):
+        if args[0] == "git":
+            if args[1] == "status":
+                return _make_subprocess_mock(0, b"", b"")
+            if args[1] == "rev-parse":
+                return _make_subprocess_mock(0, f"{state['head']}\n".encode(), b"")
+            if args[1] == "pull":
+                state["head"] = new_sha
+                return _make_subprocess_mock(0, b"Updating aaa..bbb\n", b"")
+            if args[1] == "diff":
+                return _make_subprocess_mock(0, b"frontend/src/main.js\n", b"")
+            if args[1] == "reset":
+                state["head"] = args[3]
+                return _make_subprocess_mock(0, b"", b"")
+
+        # vite build --outDir .dist-staging 시뮬레이션
+        assert "--outDir" in args and ".dist-staging" in args
+        staging = frontend_dir / ".dist-staging"
+        staging.mkdir(parents=True, exist_ok=True)
+        if state["fail_build"]:
+            (staging / "partial.txt").write_text("broken", encoding="utf-8")
+            return _make_subprocess_mock(1, b"", b"Build OOM error")
+
+        (staging / "assets").mkdir(parents=True, exist_ok=True)
+        (staging / "index.html").write_text("<html>new-ui</html>", encoding="utf-8")
+        (staging / "assets" / "app-new.js").write_text("console.log('new')", encoding="utf-8")
+        return _make_subprocess_mock(0, b"built\n", b"")
+
+    with patch("asyncio.create_subprocess_exec", new=fake_exec), \
+         patch("routers.auth._restart_server_process", new=AsyncMock()):
+        failed = test_client.post("/api/settings/update").json()
+        assert failed["ok"] is False
+        assert (dist_dir / "index.html").read_text(encoding="utf-8") == "<html>working-old-ui</html>"
+        assert (dist_dir / "assets" / "app.js").is_file()
+        assert not (frontend_dir / ".dist-staging").exists()
+
+        state["fail_build"] = False
+        succeeded = test_client.post("/api/settings/update").json()
+        assert succeeded["ok"] is True
+        assert (dist_dir / "index.html").read_text(encoding="utf-8") == "<html>new-ui</html>"
+        assert (dist_dir / "assets" / "app-new.js").is_file()
+        assert (dist_dir / ".build-commit").read_text(encoding="utf-8").strip() == new_sha
+        assert not (frontend_dir / ".dist-staging").exists()
+
+
+def test_system_update_rejects_concurrent_duplicate_invocation(test_client, monkeypatch):
+    """이미 업데이트가 진행 중일 때 중복 요청이 들어오면 즉시 in_progress 응답을 반환한다."""
+    import routers.auth as auth_mod
+
+    monkeypatch.setattr(auth_mod, "_system_update_in_progress", True)
+    with patch("asyncio.create_subprocess_exec", new=AsyncMock()) as exec_mock:
+        res = test_client.post("/api/settings/update")
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is False
+    assert body["in_progress"] is True
+    exec_mock.assert_not_awaited()
+
+
+def test_auth_check_and_update_status_expose_boot_id_and_git_support(test_client, tmp_path, monkeypatch):
+    """/api/auth/check는 boot_id, is_admin, system_update_supported를 반환해 Docker/비관리자
+    환경에서 프론트가 업데이트 UI를 안전하게 숨기고 재시작 완료를 정확히 판별하게 한다."""
+    import routers.auth as auth_mod
+
+    # .git이 없는 디렉터리(Docker/아카이브 배포 시뮬레이션)
+    monkeypatch.setattr(auth_mod, "get_project_root", lambda: str(tmp_path))
+    check_no_git = test_client.get("/api/auth/check").json()
+    assert check_no_git["is_admin"] is True
+    assert check_no_git["system_update_supported"] is False
+    assert check_no_git["boot_id"] == auth_mod.SERVER_BOOT_ID
+
+    # .git이 존재하는 일반 Git 배포
+    (tmp_path / ".git").mkdir()
+    check_with_git = test_client.get("/api/auth/check").json()
+    assert check_with_git["system_update_supported"] is True
+
+    status_body = test_client.get("/api/settings/update-status").json()
+    assert status_body["boot_id"] == auth_mod.SERVER_BOOT_ID
+    assert status_body["in_progress"] is False
+
+
+def test_system_update_updates_both_default_venv_and_active_interpreter(test_client, tmp_path, monkeypatch):
+    """MinerU(.venv-mineru) 등 별도 인터프리터로 실행 중일 때 requirements.txt가 바뀌면
+    서비스 진입점인 기본 backend/.venv와 현재 sys.executable 모두에 pip install을 수행한다."""
+    from venv_manager import venv_python
+
+    backend_dir = tmp_path / "backend"
+    backend_dir.mkdir(parents=True)
+    (backend_dir / "requirements.txt").write_text("fastapi\n", encoding="utf-8")
+
+    default_py = venv_python(str(backend_dir / ".venv"))
+    os.makedirs(os.path.dirname(default_py), exist_ok=True)
+    with open(default_py, "w", encoding="utf-8") as f:
+        f.write("#!/bin/sh\n")
+
+    active_py = str(tmp_path / ".venv-mineru" / "bin" / "python")
+    os.makedirs(os.path.dirname(active_py), exist_ok=True)
+    with open(active_py, "w", encoding="utf-8") as f:
+        f.write("#!/bin/sh\n")
+
+    monkeypatch.setattr("routers.auth.get_project_root", lambda: str(tmp_path))
+    monkeypatch.setattr("sys.executable", active_py)
+
+    old_sha = "1111111111111111111111111111111111111111"
+    new_sha = "2222222222222222222222222222222222222222"
+    rev_calls = {"count": 0}
+    pip_interpreters = []
+
+    async def fake_exec(*args, **kwargs):
+        if args[0] == "git":
+            if args[1] == "status":
+                return _make_subprocess_mock(0, b"", b"")
+            if args[1] == "rev-parse":
+                rev_calls["count"] += 1
+                sha = old_sha if rev_calls["count"] == 1 else new_sha
+                return _make_subprocess_mock(0, f"{sha}\n".encode(), b"")
+            if args[1] == "pull":
+                return _make_subprocess_mock(0, b"Updating 111..222\n", b"")
+            if args[1] == "diff":
+                return _make_subprocess_mock(0, b"backend/requirements.txt\n", b"")
+        if "pip" in args:
+            pip_interpreters.append(args[0])
+        return _make_subprocess_mock(0, b"ok\n", b"")
+
+    with patch("asyncio.create_subprocess_exec", new=fake_exec), \
+         patch("routers.auth._restart_server_process", new=AsyncMock()):
+        res = test_client.post("/api/settings/update")
+
+    assert res.json()["ok"] is True
+    assert pip_interpreters == [default_py, active_py]

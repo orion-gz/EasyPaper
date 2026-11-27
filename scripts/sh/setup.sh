@@ -29,8 +29,12 @@ cd ..
 # 2. Setup Frontend
 echo "🌐 2. Setting up Frontend..."
 cd frontend
-echo "   Installing frontend dependencies (npm install)..."
-npm install
+echo "   Installing frontend dependencies..."
+if [ -f package-lock.json ]; then
+    npm ci
+else
+    npm install
+fi
 echo "   Building frontend production assets..."
 npm run build
 git -C .. rev-parse HEAD > dist/.build-commit 2>/dev/null || true
