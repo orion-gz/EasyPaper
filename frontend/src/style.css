@@ -8401,7 +8401,7 @@ body.light-theme .chat-drawer {
 }
 
 #restart-onboarding {
-  align-self: flex-end;
+  width: 100%;
   margin: 4px 0 16px;
 }
 
