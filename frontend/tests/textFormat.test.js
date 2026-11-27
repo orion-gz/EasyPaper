@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { formatMarkdownLatexHtml, linkPageCitations } from '../src/textFormat.js'
-import { prepareMemoMarkdown } from '../src/memoMarkdown.js'
+import { normalizeMemoColor, prepareMemoMarkdown, renderMemoMarkdownHtml } from '../src/memoMarkdown.js'
 
 const passthrough = html => html
 
@@ -90,4 +90,49 @@ test('코드 블록 안의 콜아웃 문법은 변환하지 않는다', () => {
 
   assert.match(prepared, /```md\n> \[!NOTE\] 예시\n```/)
   assert.match(prepared, /data-callout="tip"/)
+})
+
+test('사이드바 메모 Markdown은 콜아웃·표·코드·수식을 렌더링하고 코드 내부 $는 보존한다', () => {
+  const calls = []
+  const katex = {
+    renderToString(formula, options) {
+      calls.push({ formula, displayMode: options.displayMode })
+      return `<math>${formula}</math>`
+    },
+  }
+  const html = renderMemoMarkdownHtml(
+    [
+      '> [!IMPORTANT] 핵심 요약',
+      '> - **굵은 항목**과 $x_1 + x_2$',
+      '',
+      '인라인 코드 `$raw_code$` 유지',
+      '',
+      '```js',
+      'const price = "$10 + $20"',
+      '```',
+      '',
+      '| 열 | 값 |',
+      '| --- | --- |',
+      '| A | 1 |',
+    ].join('\n'),
+    { katex, sanitize: value => value.replace(/<script[\s\S]*?<\/script>/gi, '') },
+  )
+
+  assert.match(html, /class="memo-callout-marker" data-callout="important"/)
+  assert.match(html, /<strong>굵은 항목<\/strong>/)
+  assert.match(html, /class="katex-inline-wrap"/)
+  assert.match(html, /<code>\$raw_code\$<\/code>/)
+  assert.match(html, /const price = &quot;\$10 \+ \$20&quot;/)
+  assert.match(html, /<table>/)
+  assert.deepEqual(calls, [{ formula: 'x_1 + x_2', displayMode: false }])
+})
+
+test('알 수 없는 메모 색상은 default로 정규화한다', () => {
+  assert.equal(normalizeMemoColor('yellow'), 'yellow')
+  assert.equal(normalizeMemoColor('green'), 'green')
+  assert.equal(normalizeMemoColor('blue'), 'blue')
+  assert.equal(normalizeMemoColor('red'), 'red')
+  assert.equal(normalizeMemoColor('default'), 'default')
+  assert.equal(normalizeMemoColor(undefined), 'default')
+  assert.equal(normalizeMemoColor('purple" onclick="alert(1)'), 'default')
 })

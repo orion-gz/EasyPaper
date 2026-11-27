@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 import { activeReader, evaluateReader, mockBaseRoutes, gotoApp, SAMPLE_PDF_A, waitForReaderReady } from './helpers.js'
 
 async function openViewerWithMemo(page, memoOverrides = {}, extraMemos = []) {
@@ -689,4 +690,101 @@ test('페이지 메모 전체 정렬은 숨김 상태와 다른 페이지를 보
   await memo.locator('textarea').fill('Edited after alignment')
   const saved = await evaluateReader(page, () => JSON.parse(localStorage.getItem('easypaper_memos_doc-memo')))
   expect(saved.page_1.every(memo => memo.alignment === 'right')).toBe(true)
+})
+
+test('AI 어시스턴트 패널 메모 탭에서 Markdown과 각 메모의 실제 색상을 렌더링하고 실시간 반영한다', async ({ page }) => {
+  await openViewerWithMemo(
+    page,
+    {
+      color: 'yellow',
+      content: [
+        '## 핵심 메모',
+        '',
+        '> [!TIP] 재확인',
+        '> - **중요** 항목과 `코드`',
+        '',
+        '[참고 링크](https://example.com)',
+      ].join('\n'),
+    },
+    [
+      {
+        id: 'memo-green',
+        pageNum: 1,
+        sentenceIdx: 1,
+        sentenceText: 'second anchor',
+        color: 'green',
+        content: '| 항목 | 값 |\n| --- | --- |\n| 정확도 | 99% |',
+        x: 55,
+        y: 10,
+      },
+      {
+        id: 'memo-default',
+        pageNum: 1,
+        sentenceIdx: 2,
+        sentenceText: 'third anchor',
+        content: '기본 색상 *기울임* 메모',
+        x: 55,
+        y: 65,
+      },
+    ],
+  )
+
+  const reader = activeReader(page)
+  await reader.locator('#chat-toggle-btn').click()
+  await expect(reader.locator('#chat-sidebar')).toBeVisible()
+  await reader.locator('#document-tool-notes').click()
+
+  const list = reader.locator('#document-resource-list')
+  await expect(list).toBeVisible()
+  await expect(list.locator('.document-resource-memo')).toHaveCount(3)
+
+  const yellowCard = list.locator('.document-resource-memo[data-memo-id="memo-regression"]')
+  const greenCard = list.locator('.document-resource-memo[data-memo-id="memo-green"]')
+  const defaultCard = list.locator('.document-resource-memo[data-memo-id="memo-default"]')
+
+  await expect(yellowCard).toHaveClass(/color-yellow/)
+  await expect(yellowCard.locator('.document-resource-color-dot')).toHaveClass(/color-yellow/)
+  await expect(yellowCard.locator('h2')).toHaveText('핵심 메모')
+  await expect(yellowCard.locator('blockquote .memo-callout-marker')).toHaveText('재확인')
+  await expect(yellowCard.locator('strong')).toHaveText('중요')
+  await expect(yellowCard.locator('code')).toHaveText('코드')
+  await expect(yellowCard.locator('a')).toHaveAttribute('href', 'https://example.com')
+  await expect(yellowCard.locator('a')).toHaveAttribute('target', '_blank')
+
+  await expect(greenCard).toHaveClass(/color-green/)
+  await expect(greenCard.locator('.document-resource-color-dot')).toHaveClass(/color-green/)
+  await expect(greenCard.locator('table')).toContainText('정확도')
+
+  await expect(defaultCard).toHaveClass(/color-default/)
+  await expect(defaultCard.locator('em')).toHaveText('기울임')
+
+  const colorsDiffer = await list.evaluate(el => {
+    const y = getComputedStyle(el.querySelector('[data-memo-id="memo-regression"]'))
+    const g = getComputedStyle(el.querySelector('[data-memo-id="memo-green"]'))
+    const d = getComputedStyle(el.querySelector('[data-memo-id="memo-default"]'))
+    return y.backgroundColor !== g.backgroundColor && y.backgroundColor !== d.backgroundColor && y.borderColor !== g.borderColor
+  })
+  expect(colorsDiffer).toBe(true)
+
+  // 플로팅 메모에서 색상을 바꾸면 사이드바 메모 리스트에도 즉시 반영된다.
+  const floatingMemo = reader.locator('.floating-memo[data-id="memo-default"]')
+  await floatingMemo.locator('.floating-memo-format-bar .color-dot.red').click()
+  await expect(defaultCard).toHaveClass(/color-red/)
+  await expect(defaultCard.locator('.document-resource-color-dot')).toHaveClass(/color-red/)
+
+  const darkA11y = await new AxeBuilder({ page })
+    .include(['.workspace-document-frame:not([hidden])', '#chat-sidebar'])
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze()
+  expect(darkA11y.violations).toEqual([])
+
+  // 라이트 테마에서도 각 메모 색상과 대비가 정상 반영된다.
+  await page.locator('#sidebar-theme-toggle-btn').click()
+  await expect(reader.locator('body')).toHaveClass(/light-theme/)
+
+  const lightA11y = await new AxeBuilder({ page })
+    .include(['.workspace-document-frame:not([hidden])', '#chat-sidebar'])
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze()
+  expect(lightA11y.violations).toEqual([])
 })

@@ -544,3 +544,187 @@ body.light-theme .chat-input-box .chat-quote-area {
   font-size: 10.5px;
   color: var(--text-muted);
 }
+.document-resource:focus-visible,
+.document-resource-memo:has(.document-resource-jump:focus-visible) {
+  outline: 2px solid var(--control-accent, #4e6aff);
+  outline-offset: -2px;
+}
+.document-resource-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.document-resource-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.document-resource-jump:focus-visible {
+  outline: none;
+}
+.document-resource-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+.document-resource-color-dot.color-yellow { background: #eab308; }
+.document-resource-color-dot.color-green  { background: #10b981; }
+.document-resource-color-dot.color-blue   { background: #3b82f6; }
+.document-resource-color-dot.color-red    { background: #f43f5e; }
+
+.document-resource-markdown {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+#document-resource-list .document-resource-markdown a {
+  color: var(--control-accent-text, #93c5fd);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.document-resource-markdown .katex-display {
+  margin: 6px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Memo color themes inside #document-resource-list (aligned with .floating-memo.color-*) */
+.document-resource-memo.color-yellow {
+  background: rgba(234, 179, 8, 0.1);
+  border-color: rgba(234, 179, 8, 0.35);
+}
+.document-resource-memo.color-yellow:hover {
+  background: rgba(234, 179, 8, 0.16);
+  border-color: rgba(234, 179, 8, 0.52);
+}
+.document-resource-memo.color-yellow .document-resource-jump small {
+  color: #fde047;
+}
+
+.document-resource-memo.color-green {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.document-resource-memo.color-green:hover {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.52);
+}
+.document-resource-memo.color-green .document-resource-jump small {
+  color: #6ee7b7;
+}
+
+.document-resource-memo.color-blue {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+.document-resource-memo.color-blue:hover {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.52);
+}
+.document-resource-memo.color-blue .document-resource-jump small {
+  color: #93c5fd;
+}
+
+.document-resource-memo.color-red {
+  background: rgba(244, 63, 94, 0.1);
+  border-color: rgba(244, 63, 94, 0.35);
+}
+.document-resource-memo.color-red:hover {
+  background: rgba(244, 63, 94, 0.16);
+  border-color: rgba(244, 63, 94, 0.52);
+}
+.document-resource-memo.color-red .document-resource-jump small {
+  color: #fda4af;
+}
+
+body.light-theme .document-resource-memo.color-yellow {
+  background: #fef9c3;
+  border-color: rgba(234, 179, 8, 0.38);
+  color: #713f12;
+}
+body.light-theme .document-resource-memo.color-yellow:hover {
+  background: #fef08a;
+  border-color: rgba(202, 138, 4, 0.55);
+}
+
+body.light-theme .document-resource-memo.color-green {
+  background: #d1fae5;
+  border-color: rgba(16, 185, 129, 0.38);
+  color: #065f46;
+}
+body.light-theme .document-resource-memo.color-green:hover {
+  background: #a7f3d0;
+  border-color: rgba(5, 150, 105, 0.55);
+}
+
+body.light-theme .document-resource-memo.color-blue {
+  background: #dbeafe;
+  border-color: rgba(59, 130, 246, 0.38);
+  color: #1e40af;
+}
+body.light-theme .document-resource-memo.color-blue:hover {
+  background: #bfdbfe;
+  border-color: rgba(37, 99, 235, 0.55);
+}
+
+body.light-theme .document-resource-memo.color-red {
+  background: #ffe4e6;
+  border-color: rgba(244, 63, 94, 0.38);
+  color: #9f1239;
+}
+body.light-theme .document-resource-memo.color-red:hover {
+  background: #fecdd3;
+  border-color: rgba(225, 29, 72, 0.55);
+}
+
+body.light-theme #document-resource-list .document-resource-memo.color-default .document-resource-markdown a {
+  color: var(--control-accent-text, #1e40af);
+}
+body.light-theme .document-resource-markdown blockquote:has(.memo-callout-marker) {
+  background: rgba(255, 255, 255, 0.62);
+}
+body.light-theme .document-resource-markdown .memo-callout-marker {
+  color: #1d4ed8;
+}
+body.light-theme .document-resource-markdown blockquote:has(.memo-callout-marker[data-callout="tip"]) .memo-callout-marker {
+  color: #047857;
+}
+body.light-theme .document-resource-markdown blockquote:has(.memo-callout-marker[data-callout="important"]) .memo-callout-marker {
+  color: #6d28d9;
+}
+body.light-theme .document-resource-markdown blockquote:has(.memo-callout-marker[data-callout="warning"]) .memo-callout-marker {
+  color: #92400e;
+}
+body.light-theme .document-resource-markdown blockquote:has(.memo-callout-marker[data-callout="caution"]) .memo-callout-marker {
+  color: #9f1239;
+}
+body.light-theme .document-resource-memo:not(.color-default) .document-resource-jump small,
+body.light-theme .document-resource-memo:not(.color-default) .document-resource-markdown,
+body.light-theme .document-resource-memo:not(.color-default) .document-resource-markdown :is(h1, h2, h3, h4, h5, h6, p, li, blockquote, th, td) {
+  color: inherit;
+}
+body.light-theme #document-resource-list .document-resource-memo:not(.color-default) .document-resource-markdown a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+body.light-theme .document-resource-memo:not(.color-default) .document-resource-markdown :is(pre, th) {
+  background: rgba(255, 255, 255, 0.55);
+}
+body.light-theme .document-resource-memo:not(.color-default) .document-resource-markdown blockquote:not(:has(.memo-callout-marker)) {
+  background: rgba(255, 255, 255, 0.45);
+  border-left-color: color-mix(in srgb, currentColor 35%, transparent);
+}
+body.light-theme .document-resource-memo:not(.color-default) .document-resource-markdown :is(pre, th, td, hr) {
+  border-color: color-mix(in srgb, currentColor 22%, transparent);
+}
