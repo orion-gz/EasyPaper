@@ -111,3 +111,190 @@ def test_restart_server_process_computes_correct_backend_dir(monkeypatch):
 
     assert captured["cwd"] == os.path.join(config.get_project_root(), "backend")
     assert os.path.isdir(captured["cwd"])
+
+
+def test_get_npm_exec_env_discovers_nvm_npm_and_injects_path(tmp_path, monkeypatch):
+    """systemd 서비스처럼 PATH에 /usr/bin:/bin만 있는 환경에서도 ~/.nvm 하위의
+    최신 node/npm을 찾아 PATH 맨 앞에 주입해야 한다."""
+    nvm_v18 = tmp_path / ".nvm" / "versions" / "node" / "v18.20.0" / "bin"
+    nvm_v25 = tmp_path / ".nvm" / "versions" / "node" / "v25.9.0" / "bin"
+    for bdir in (nvm_v18, nvm_v25):
+        bdir.mkdir(parents=True)
+        for tool in ("node", "npm"):
+            exe = bdir / tool
+            exe.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            exe.chmod(0o755)
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("NVM_DIR", str(tmp_path / ".nvm"))
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.delenv("NPM_PATH", raising=False)
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+
+    npm_bin, env = config.get_npm_exec_env()
+    assert npm_bin == str(nvm_v25 / "npm")
+    assert env["PATH"].split(os.pathsep)[0] == str(nvm_v25)
+
+
+def test_system_update_rolls_back_git_when_npm_missing_and_retries_cleanly(test_client, tmp_path, monkeypatch):
+    """1차 실행에서 git pull 후 npm 미탐색(FileNotFoundError)으로 실패하면 이전 HEAD로
+    롤백되어야 하며, 이후 npm이 준비된 2차 실행에서 빌드가 정상 수행되어야 한다."""
+    frontend_dir = tmp_path / "frontend"
+    (frontend_dir / "node_modules").mkdir(parents=True)
+    (frontend_dir / "package.json").write_text('{"name":"test"}', encoding="utf-8")
+    dist_dir = frontend_dir / "dist"
+    dist_dir.mkdir(parents=True)
+    (dist_dir / "index.html").write_text("<html>old</html>", encoding="utf-8")
+
+    monkeypatch.setattr("routers.auth.get_project_root", lambda: str(tmp_path))
+
+    old_sha = "78299dec84d72a9f2d0b04eb42d213ef03a623d6"
+    new_sha = "bd125aa011111111111111111111111111111111"
+    state = {"head": old_sha, "npm_available": False}
+    reset_targets = []
+    build_runs = []
+
+    async def fake_exec(*args, **kwargs):
+        if args[0] == "git":
+            if args[1] == "status":
+                return _make_subprocess_mock(0, b"", b"")
+            if args[1] == "rev-parse":
+                return _make_subprocess_mock(0, f"{state['head']}\n".encode(), b"")
+            if args[1] == "pull":
+                if state["head"] == new_sha:
+                    return _make_subprocess_mock(0, b"Already up to date.\n", b"")
+                state["head"] = new_sha
+                return _make_subprocess_mock(0, b"Updating 78299dec..bd125aa0\n", b"")
+            if args[1] == "diff":
+                return _make_subprocess_mock(0, b"frontend/src/main.js\n", b"")
+            if args[1] == "reset" and args[2] == "--hard":
+                reset_targets.append(args[3])
+                state["head"] = args[3]
+                return _make_subprocess_mock(0, b"", b"")
+        if not state["npm_available"]:
+            raise FileNotFoundError(2, "No such file or directory", "npm")
+        build_runs.append({"args": args, "cwd": kwargs.get("cwd"), "env": kwargs.get("env")})
+        return _make_subprocess_mock(0, b"built\n", b"")
+
+    with patch("asyncio.create_subprocess_exec", new=fake_exec), \
+         patch("routers.auth._restart_server_process", new=AsyncMock()):
+        first = test_client.post("/api/settings/update").json()
+        assert first["ok"] is False
+        assert "npm" in first["message"]
+        assert reset_targets == [old_sha]
+        assert state["head"] == old_sha
+
+        state["npm_available"] = True
+        second = test_client.post("/api/settings/update").json()
+        assert second["ok"] is True
+        assert len(build_runs) == 1
+        assert (dist_dir / ".build-commit").read_text(encoding="utf-8").strip() == new_sha
+
+
+def test_system_update_rebuilds_when_already_up_to_date_but_dist_commit_stale(test_client, tmp_path, monkeypatch):
+    """이미 git pull은 되어 'Already up to date'를 반환하더라도 dist/.build-commit이
+    현재 HEAD와 다르면 프론트엔드 빌드를 건너뛰지 않고 수행해야 한다."""
+    frontend_dir = tmp_path / "frontend"
+    (frontend_dir / "node_modules").mkdir(parents=True)
+    (frontend_dir / "package.json").write_text('{"name":"test"}', encoding="utf-8")
+    dist_dir = frontend_dir / "dist"
+    dist_dir.mkdir(parents=True)
+    (dist_dir / "index.html").write_text("<html>stale</html>", encoding="utf-8")
+    (dist_dir / ".build-commit").write_text("78299dec84d72a9f2d0b04eb42d213ef03a623d6\n", encoding="utf-8")
+
+    monkeypatch.setattr("routers.auth.get_project_root", lambda: str(tmp_path))
+    head_sha = "bd125aa011111111111111111111111111111111"
+    npm_calls = []
+
+    async def fake_exec(*args, **kwargs):
+        if args[0] == "git":
+            if args[1] == "status":
+                return _make_subprocess_mock(0, b"", b"")
+            if args[1] == "rev-parse":
+                return _make_subprocess_mock(0, f"{head_sha}\n".encode(), b"")
+            if args[1] == "pull":
+                return _make_subprocess_mock(0, b"Already up to date.\n", b"")
+        npm_calls.append(args)
+        return _make_subprocess_mock(0, b"built\n", b"")
+
+    with patch("asyncio.create_subprocess_exec", new=fake_exec), \
+         patch("routers.auth._restart_server_process", new=AsyncMock()):
+        res = test_client.post("/api/settings/update")
+
+    assert res.status_code == 200
+    assert res.json()["ok"] is True
+    assert any("build" in call for call in npm_calls)
+    assert (dist_dir / ".build-commit").read_text(encoding="utf-8").strip() == head_sha
+
+
+def test_system_update_installs_changed_backend_and_frontend_dependencies(test_client, tmp_path, monkeypatch):
+    """requirements.txt와 package-lock.json이 변경된 업데이트면 pip install과
+    npm install을 각각 수행한 뒤 npm run build를 실행해야 한다."""
+    backend_dir = tmp_path / "backend"
+    backend_dir.mkdir(parents=True)
+    (backend_dir / "requirements.txt").write_text("fastapi\n", encoding="utf-8")
+
+    frontend_dir = tmp_path / "frontend"
+    (frontend_dir / "node_modules").mkdir(parents=True)
+    (frontend_dir / "package.json").write_text('{"name":"test"}', encoding="utf-8")
+    dist_dir = frontend_dir / "dist"
+    dist_dir.mkdir(parents=True)
+    (dist_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
+
+    monkeypatch.setattr("routers.auth.get_project_root", lambda: str(tmp_path))
+
+    old_sha = "1111111111111111111111111111111111111111"
+    new_sha = "2222222222222222222222222222222222222222"
+    rev_calls = {"count": 0}
+    executed = []
+
+    async def fake_exec(*args, **kwargs):
+        executed.append((args, kwargs.get("cwd")))
+        if args[0] == "git":
+            if args[1] == "status":
+                return _make_subprocess_mock(0, b"", b"")
+            if args[1] == "rev-parse":
+                rev_calls["count"] += 1
+                sha = old_sha if rev_calls["count"] == 1 else new_sha
+                return _make_subprocess_mock(0, f"{sha}\n".encode(), b"")
+            if args[1] == "pull":
+                return _make_subprocess_mock(0, b"Updating 1111111..2222222\n", b"")
+            if args[1] == "diff":
+                return _make_subprocess_mock(0, b"backend/requirements.txt\nfrontend/package-lock.json\n", b"")
+        return _make_subprocess_mock(0, b"ok\n", b"")
+
+    with patch("asyncio.create_subprocess_exec", new=fake_exec), \
+         patch("routers.auth._restart_server_process", new=AsyncMock()):
+        res = test_client.post("/api/settings/update")
+
+    assert res.status_code == 200
+    assert res.json()["ok"] is True
+    assert any("pip" in args and cwd == str(backend_dir) for args, cwd in executed)
+    assert any("install" in args and cwd == str(frontend_dir) for args, cwd in executed)
+    assert any("build" in args and cwd == str(frontend_dir) for args, cwd in executed)
+
+
+def test_restart_server_process_checks_systemctl_returncode_and_uses_non_interactive_sudo(monkeypatch):
+    """systemd 환경에서 sudo -n systemctl restart가 실패(returncode != 0)하면
+    조용히 무시하지 않고 대체 재시작으로 이어져야 한다."""
+    from routers.auth import _restart_server_process
+
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+    monkeypatch.setattr("routers.auth._is_running_under_systemd", lambda: True)
+    monkeypatch.setattr("routers.auth._is_in_systemd_service_cgroup", lambda: True)
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/systemctl")
+
+    recorded_args = []
+    exit_codes = []
+
+    async def fake_exec(*args, **kwargs):
+        recorded_args.append(args)
+        return _make_subprocess_mock(1, b"", b"sudo: a password is required")
+
+    with patch("asyncio.create_subprocess_exec", new=fake_exec), \
+         patch("os._exit", side_effect=lambda code: exit_codes.append(code)):
+        import asyncio
+        asyncio.run(_restart_server_process(config.get_project_root()))
+
+    assert recorded_args[0] == ("sudo", "-n", "systemctl", "restart", "easypaper")
+    assert exit_codes == [1]

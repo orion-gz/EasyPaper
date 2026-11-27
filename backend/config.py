@@ -154,6 +154,187 @@ def find_ollama_binary():
             return path
     return None
 
+
+def _node_version_sort_key(version_dir_name: str) -> tuple:
+    cleaned = version_dir_name.lstrip("vV")
+    parts = []
+    for segment in cleaned.split("."):
+        digits = ""
+        for ch in segment:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+def _iter_node_bin_candidates(env: dict) -> list[str]:
+    """systemd 서비스 등 비로그인 셸 환경에서 PATH에 빠지기 쉬운 Node.js/npm
+    설치 경로 후보(nvm, fnm, volta, asdf, mise, OS 기본 경로)를 순서대로 반환한다."""
+    import platform
+
+    home = env.get("HOME") or os.path.expanduser("~")
+    candidates: list[str] = []
+
+    # 1. nvm (~/.nvm 또는 $NVM_DIR)
+    nvm_dir = env.get("NVM_DIR") or os.path.join(home, ".nvm")
+    candidates.append(os.path.join(nvm_dir, "current", "bin"))
+    nvm_versions_dir = os.path.join(nvm_dir, "versions", "node")
+    if os.path.isdir(nvm_versions_dir):
+        try:
+            version_names = [
+                name for name in os.listdir(nvm_versions_dir)
+                if os.path.isdir(os.path.join(nvm_versions_dir, name))
+            ]
+        except OSError:
+            version_names = []
+        version_names.sort(key=_node_version_sort_key, reverse=True)
+
+        default_alias = ""
+        alias_file = os.path.join(nvm_dir, "alias", "default")
+        if os.path.isfile(alias_file):
+            try:
+                with open(alias_file, "r", encoding="utf-8") as f:
+                    default_alias = f.read().strip().lstrip("vV")
+            except OSError:
+                default_alias = ""
+
+        if default_alias and not default_alias.startswith("lts/"):
+            preferred = [n for n in version_names if n.lstrip("vV").startswith(default_alias)]
+            others = [n for n in version_names if n not in preferred]
+            version_names = preferred + others
+
+        for name in version_names:
+            candidates.append(os.path.join(nvm_versions_dir, name, "bin"))
+
+    # 2. fnm
+    for fnm_root in (
+        env.get("FNM_DIR"),
+        os.path.join(home, ".local", "share", "fnm"),
+        os.path.join(home, ".fnm"),
+    ):
+        if not fnm_root:
+            continue
+        candidates.append(os.path.join(fnm_root, "aliases", "default", "bin"))
+        fnm_versions_dir = os.path.join(fnm_root, "node-versions")
+        if os.path.isdir(fnm_versions_dir):
+            try:
+                fnm_names = sorted(
+                    os.listdir(fnm_versions_dir),
+                    key=_node_version_sort_key,
+                    reverse=True,
+                )
+            except OSError:
+                fnm_names = []
+            for name in fnm_names:
+                candidates.append(os.path.join(fnm_versions_dir, name, "installation", "bin"))
+
+    # 3. volta / asdf / mise / n
+    candidates.append(os.path.join(env.get("VOLTA_HOME") or os.path.join(home, ".volta"), "bin"))
+    candidates.append(os.path.join(env.get("ASDF_DATA_DIR") or os.path.join(home, ".asdf"), "shims"))
+    candidates.append(os.path.join(home, ".local", "share", "mise", "shims"))
+    if env.get("N_PREFIX"):
+        candidates.append(os.path.join(env["N_PREFIX"], "bin"))
+
+    # 4. OS별 표준 설치 위치
+    system = platform.system()
+    if system == "Windows":
+        for win_dir in (
+            env.get("NVM_SYMLINK"),
+            os.path.join(env.get("ProgramFiles", ""), "nodejs") if env.get("ProgramFiles") else "",
+            os.path.join(env.get("ProgramFiles(x86)", ""), "nodejs") if env.get("ProgramFiles(x86)") else "",
+            os.path.join(env.get("LOCALAPPDATA", ""), "Programs", "nodejs") if env.get("LOCALAPPDATA") else "",
+        ):
+            if win_dir:
+                candidates.append(win_dir)
+    elif system == "Darwin":
+        candidates += ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+    else:
+        candidates += ["/usr/local/bin", "/usr/bin", "/snap/bin", os.path.join(home, ".local", "bin")]
+
+    return candidates
+
+
+def find_npm_binary(env: dict | None = None) -> str | None:
+    """서버에서 실행 가능한 npm 바이너리 경로를 탐색한다.
+
+    systemd 유닛(easypaper.service) 등 비대화형 프로세스는 ~/.bashrc를 읽지 않아
+    nvm/fnm/volta 경로가 PATH에서 빠진다. PATH 조회를 우선 시도하되 node까지 함께
+    실행 가능한지 확인하고, 실패하면 잘 알려진 설치 위치를 직접 탐색한다.
+    """
+    import platform
+    import shutil
+
+    effective_env = env if env is not None else get_agy_env()
+    search_path = effective_env.get("PATH", "")
+
+    configured = effective_env.get("NPM_PATH") or os.getenv("NPM_PATH", "")
+    if configured and os.path.isfile(configured):
+        return configured
+
+    found_npm = shutil.which("npm", path=search_path)
+    if found_npm:
+        npm_dir = os.path.dirname(os.path.abspath(found_npm))
+        combined_path = f"{npm_dir}{os.pathsep}{search_path}" if search_path else npm_dir
+        if shutil.which("node", path=combined_path):
+            return found_npm
+
+    is_windows = platform.system() == "Windows"
+    npm_names = ("npm.cmd", "npm.exe", "npm") if is_windows else ("npm",)
+    node_names = ("node.exe", "node") if is_windows else ("node",)
+
+    fallback_npm = found_npm
+    for bin_dir in _iter_node_bin_candidates(effective_env):
+        if not bin_dir or not os.path.isdir(bin_dir):
+            continue
+        npm_candidate = next(
+            (
+                os.path.join(bin_dir, name)
+                for name in npm_names
+                if os.path.isfile(os.path.join(bin_dir, name))
+                and (is_windows or os.access(os.path.join(bin_dir, name), os.X_OK))
+            ),
+            None,
+        )
+        if not npm_candidate:
+            continue
+        has_node = any(
+            os.path.isfile(os.path.join(bin_dir, node_name))
+            and (is_windows or os.access(os.path.join(bin_dir, node_name), os.X_OK))
+            for node_name in node_names
+        )
+        if has_node:
+            return npm_candidate
+        if fallback_npm is None:
+            fallback_npm = npm_candidate
+
+    return fallback_npm
+
+
+def get_npm_exec_env() -> tuple[str | None, dict]:
+    """npm/vite 서브프로세스 실행을 위한 (npm_path, env) 튜플을 반환한다.
+
+    npm 및 vite의 엔트리 스크립트는 `#!/usr/bin/env node`로 시작하므로, npm의
+    절대경로만 넘기면 PATH에 node가 없어 여전히 실패한다. 찾은 npm 디렉터리를
+    env["PATH"] 맨 앞에 주입해 하위 스크립트 전체가 동일한 node/npm을 쓰게 한다.
+    """
+    env = get_agy_env()
+    npm_bin = find_npm_binary(env)
+    if npm_bin:
+        bin_dirs = [os.path.dirname(os.path.abspath(npm_bin))]
+        real_dir = os.path.dirname(os.path.realpath(npm_bin))
+        if real_dir not in bin_dirs and os.path.isfile(os.path.join(real_dir, "node")):
+            bin_dirs.append(real_dir)
+        existing_path = env.get("PATH", "")
+        path_parts = [p for p in existing_path.split(os.pathsep) if p]
+        for bdir in reversed(bin_dirs):
+            if bdir in path_parts:
+                path_parts.remove(bdir)
+            path_parts.insert(0, bdir)
+        env["PATH"] = os.pathsep.join(path_parts)
+    return npm_bin, env
+
 def get_trans_provider() -> str:
     from services.lab import selection
     lab = selection()

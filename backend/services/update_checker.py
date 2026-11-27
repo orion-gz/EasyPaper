@@ -19,9 +19,30 @@ from services.db import db_get_meta, db_set_meta
 
 VALID_INTERVALS = ("daily", "weekly", "never")
 DEFAULT_INTERVAL = "weekly"
+FRONTEND_BUILD_COMMIT_FILENAME = ".build-commit"
 
 _current_version_cache: Optional[str] = None
 _current_version_date_cache: Optional[str] = None
+
+
+def get_frontend_build_commit() -> Optional[str]:
+    """frontend/dist/.build-commit에 기록된 프론트엔드 빌드 커밋 해시를 반환한다."""
+    if getattr(sys, "frozen", False):
+        return None
+    marker_path = Path(get_project_root()) / "frontend" / "dist" / FRONTEND_BUILD_COMMIT_FILENAME
+    try:
+        sha = marker_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if 7 <= len(sha) <= 40 and all(ch in "0123456789abcdef" for ch in sha.lower()):
+        return sha
+    return None
+
+
+def _commits_match(sha_a: str, sha_b: str) -> bool:
+    a = sha_a.strip().lower()
+    b = sha_b.strip().lower()
+    return bool(a and b and (a.startswith(b) or b.startswith(a)))
 
 
 async def _run_git(*args: str, timeout: float = 30.0) -> tuple[int, str, str]:
@@ -131,23 +152,36 @@ async def check_for_update() -> dict:
 
     db_set_meta("last_update_checked_at", datetime.now(timezone.utc).isoformat())
 
-    if latest_version == current_version:
+    effective_current = current_version
+    effective_current_date = current_version_date
+    changelog_base = current_version
+
+    # git HEAD는 최신인데 프론트엔드 dist가 이전 커밋에서 멈춰 있는 경우(.build-commit 불일치)
+    # 업데이트 가능 상태로 보고해 웹 UI에서 재빌드·적용을 실행할 수 있게 한다.
+    built_commit = get_frontend_build_commit()
+    if built_commit and _commits_match(current_version, latest_version) and not _commits_match(built_commit, latest_version):
+        short_code, short_out, _ = await _run_git("rev-parse", "--short", built_commit)
+        effective_current = short_out if short_code == 0 and short_out else built_commit[:len(latest_version)]
+        effective_current_date = await _get_commit_date(built_commit) or current_version_date
+        changelog_base = built_commit
+
+    if _commits_match(effective_current, latest_version):
         return {
             "ok": True,
-            "current_version": current_version,
-            "current_version_date": current_version_date,
+            "current_version": effective_current,
+            "current_version_date": effective_current_date,
             "latest_version": latest_version,
-            "latest_version_date": current_version_date,
+            "latest_version_date": effective_current_date,
             "update_available": False,
             "changelog": [],
         }
 
     latest_version_date = await _get_commit_date("origin/main")
-    changelog = await _get_changelog(current_version, "origin/main")
+    changelog = await _get_changelog(changelog_base, "origin/main")
     return {
         "ok": True,
-        "current_version": current_version,
-        "current_version_date": current_version_date,
+        "current_version": effective_current,
+        "current_version_date": effective_current_date,
         "latest_version": latest_version,
         "latest_version_date": latest_version_date,
         "update_available": True,

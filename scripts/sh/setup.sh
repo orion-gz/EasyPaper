@@ -33,6 +33,7 @@ echo "   Installing frontend dependencies (npm install)..."
 npm install
 echo "   Building frontend production assets..."
 npm run build
+git -C .. rev-parse HEAD > dist/.build-commit 2>/dev/null || true
 cd ..
 
 echo "========================================="
