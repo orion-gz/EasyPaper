@@ -20,8 +20,13 @@ for /f "usebackq delims=" %%R in (`powershell -NoProfile -Command ^
 if "%BUILD_CHECK_RESULT%"=="BUILD" (
     echo Warning: frontend build output is missing or out of date, rebuilding...
     pushd "%REPO_ROOT%\frontend"
-    call npm install
+    if exist package-lock.json (
+        call npm ci
+    ) else (
+        call npm install
+    )
     call npm run build
+    git -C "%REPO_ROOT%" rev-parse HEAD > dist\.build-commit 2>nul
     popd
 )
 

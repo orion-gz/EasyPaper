@@ -51,6 +51,7 @@ jobs:
         run: |
           npm ci
           npm run build
+          git -C .. rev-parse HEAD > dist/.build-commit
 
       - name: Restart easypaper.service
         run: sudo systemctl restart easypaper

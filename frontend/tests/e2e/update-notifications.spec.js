@@ -193,3 +193,56 @@ test('현재 버전 텍스트를 클릭하면 CHANGELOG.md 전체 내용을 보�
   await page.click('#full-changelog-close-btn')
   await expect(page.locator('#full-changelog-modal')).toHaveClass(/hidden/)
 })
+
+test('Docker 등 Git 미지원 배포(system_update_supported=false)에서는 시스템 업데이트 섹션을 숨기고 자동 확인을 생략한다', async ({ page }) => {
+  await mockBaseRoutes(page, { documents: [] })
+  await page.route('**/api/auth/check', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ status: 'authenticated', username: 'admin', is_admin: true, system_update_supported: false, boot_id: 'boot-1' }),
+  }))
+  let updateChecked = false
+  await page.route('**/api/settings/update-check', route => {
+    updateChecked = true
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, update_available: false, changelog: [] }) })
+  })
+
+  await gotoApp(page)
+  await page.waitForTimeout(600)
+  await page.click('#sidebar-settings-btn')
+  await page.click('.tab-btn[data-tab="tab-info"]')
+  await page.waitForTimeout(300)
+
+  await expect(page.locator('#system-update-section')).toHaveClass(/hidden/)
+  expect(updateChecked).toBe(false)
+})
+
+test('업데이트 실행 API가 500 HTTP 오류를 반환하면 재시작으로 오판하지 않고 실제 오류 메시지를 표시한다', async ({ page }) => {
+  await mockBaseRoutes(page, { documents: [] })
+  await mockUpdateEndpoints(page, { postUpdateShow: false, updateAvailable: true })
+  await page.route('**/api/settings/update-check-config', route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ interval: 'never', last_checked_at: null }),
+  }))
+  await page.route('**/api/settings/update', route => route.fulfill({
+    status: 500,
+    contentType: 'application/json',
+    body: JSON.stringify({ detail: '내부 서버 빌드 오류' }),
+  }))
+
+  await gotoApp(page)
+  await page.waitForTimeout(600)
+  await page.click('#sidebar-settings-btn')
+  await page.click('.tab-btn[data-tab="tab-info"]')
+  await page.waitForTimeout(300)
+
+  await page.click('#system-update-check-btn')
+  await expect(page.locator('#system-update-run-btn')).toBeEnabled()
+
+  await page.click('#system-update-run-btn')
+  await page.click('.custom-confirm-modal .confirm-btn')
+  await page.waitForTimeout(400)
+
+  await expect(page.locator('#system-update-status')).toContainText('내부 서버 빌드 오류')
+  await expect(page.locator('#system-update-status')).not.toContainText('서버 재시작을 감지했습니다')
+  await expect(page.locator('#system-update-run-btn')).toBeEnabled()
+})

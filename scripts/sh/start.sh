@@ -23,7 +23,8 @@ fi
 
 if [ "$NEEDS_BUILD" = "1" ]; then
     echo "⚠️  프론트엔드 빌드 산출물이 없거나 최신 소스와 어긋나 다시 빌드합니다..."
-    (cd "$REPO_ROOT/frontend" && npm install && npm run build)
+    (cd "$REPO_ROOT/frontend" && (if [ -f package-lock.json ]; then npm ci; else npm install; fi) && npm run build)
+    git -C "$REPO_ROOT" rev-parse HEAD > "$REPO_ROOT/frontend/dist/.build-commit" 2>/dev/null || true
 fi
 
 # Ensure we run from backend folder with .venv python (이 스크립트는 scripts/sh/ 하위에 있음)

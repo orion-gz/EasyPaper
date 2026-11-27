@@ -150,9 +150,23 @@ async def logout(response: Response):
 
 @router.get("/auth/check")
 async def check_auth(username: str = Depends(get_current_user)):
+    import hmac
+    from services import auth as auth_service
     from services.lab import account
     profile = account(username) or {}
-    return {"status": "authenticated", "username": username, "account_id": profile.get("id"), "must_change_password": bool(profile.get("must_change_password"))}
+    is_admin = hmac.compare_digest(
+        username.encode("utf-8"),
+        auth_service.get_app_username().encode("utf-8"),
+    )
+    return {
+        "status": "authenticated",
+        "username": username,
+        "account_id": profile.get("id"),
+        "must_change_password": bool(profile.get("must_change_password")),
+        "is_admin": is_admin,
+        "system_update_supported": is_git_system_update_supported(),
+        "boot_id": SERVER_BOOT_ID,
+    }
 
 @router.post("/auth/change-credentials")
 async def change_credentials(
@@ -1063,6 +1077,44 @@ async def delete_model(data: DeleteModelRequest, current_user: str = Depends(req
 
 
 
+import uuid as _uuid
+
+SERVER_BOOT_ID = _uuid.uuid4().hex
+_system_update_in_progress = False
+_last_system_update_result: dict | None = None
+
+
+def is_git_system_update_supported() -> bool:
+    """현재 실행 환경이 웹 Git 기반 자동 업데이트(/settings/update)를 지원하는지 반환한다.
+
+    Docker 이미지(git/.git 미포함), PyInstaller 번들, 읽기 전용 Lab 러너 배포에서는
+    git pull + npm build 방식 업데이트가 불가능하므로 프론트에서 섹션을 숨길 수 있게 한다.
+    """
+    import shutil
+    if getattr(sys, "frozen", False):
+        return False
+    if os.getenv("EASYPAPER_LAB_RUNNER_SOCKET"):
+        return False
+    if not os.path.exists(os.path.join(get_project_root(), ".git")):
+        return False
+    return shutil.which("git") is not None
+
+
+def _build_git_subprocess_env(project_dir: str) -> dict:
+    """HTTPS 자격증명 만료 시 무한 프롬프트 대기를 막고, 소유자 불일치 저장소에서도
+    안전하게 동작하도록 Git 전용 환경변수를 구성한다."""
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    try:
+        existing_count = int(env.get("GIT_CONFIG_COUNT", "0"))
+    except ValueError:
+        existing_count = 0
+    env[f"GIT_CONFIG_KEY_{existing_count}"] = "safe.directory"
+    env[f"GIT_CONFIG_VALUE_{existing_count}"] = project_dir
+    env["GIT_CONFIG_COUNT"] = str(existing_count + 1)
+    return env
+
+
 def _is_running_under_systemd() -> bool:
     """이 프로세스가 systemd 유닛으로 실행 중인지 확인합니다.
 
@@ -1073,6 +1125,15 @@ def _is_running_under_systemd() -> bool:
     """
     import os
     return bool(os.environ.get("INVOCATION_ID"))
+
+
+def _is_in_systemd_service_cgroup() -> bool:
+    """현재 프로세스가 실제로 systemd .service 유닛 cgroup 소속인지 확인한다."""
+    try:
+        with open("/proc/self/cgroup", "r", encoding="utf-8") as f:
+            return any(line.strip().endswith(".service") for line in f)
+    except OSError:
+        return False
 
 
 async def _restart_server_process(project_dir: str):
@@ -1094,32 +1155,60 @@ async def _restart_server_process(project_dir: str):
     import shutil
     import subprocess
     import sys
+    from config import get_app_port
 
     await asyncio.sleep(1.0)
 
     if platform.system() == "Linux" and _is_running_under_systemd() and shutil.which("systemctl"):
         try:
             proc = await asyncio.create_subprocess_exec(
-                "sudo", "systemctl", "restart", "easypaper",
+                "sudo", "-n", "systemctl", "restart", "easypaper",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
-            await proc.communicate()
-            return
+            _, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                return
+            err_msg = stderr.decode("utf-8", errors="replace").strip()
+            print(
+                f"[system_update] sudo systemctl restart 실패(code={proc.returncode}), 대체 재시작 시도: {err_msg}",
+                flush=True,
+            )
         except Exception as e:
-            print(f"[system_update] systemctl restart 실패, 자체 재시작으로 대체: {e}", flush=True)
+            print(f"[system_update] systemctl restart 실패, 대체 재시작 시도: {e}", flush=True)
 
-    # systemd가 아닌 환경 - 같은 명령으로 새 프로세스를 미리(포트가 풀릴 시간을
-    # 두고) 띄워둔 뒤 현재 프로세스를 종료해 사실상 스스로를 재시작한다.
+        # 실제 systemd .service 유닛(Restart=always/on-failure) 소속인데 sudo만 실패한
+        # 경우, 비정상 종료 코드로 프로세스를 종료해 systemd가 유닛 환경변수를 유지한 채
+        # 다시 띄우도록 한다.
+        if _is_in_systemd_service_cgroup():
+            os._exit(1)
+            return
+
+    # systemd가 아닌 환경 - 이전 프로세스의 포트가 실제로 닫힐 때까지 대기한 뒤 새
+    # 프로세스를 띄운다. Windows DETACHED_PROCESS에서 부모 콘솔 종료 후 표준 핸들
+    # 오류([WinError 6])가 발생하지 않도록 DEVNULL로 분리한다.
     backend_dir = os.path.join(project_dir, "backend")
     python_exe = sys.executable
+    app_port = int(get_app_port())
     delay_launch_script = (
-        "import subprocess, sys, time\n"
-        "time.sleep(3)\n"
-        f"subprocess.Popen([{python_exe!r}, 'main.py'], cwd={backend_dir!r})\n"
+        "import socket, subprocess, time\n"
+        "time.sleep(0.8)\n"
+        "for _ in range(40):\n"
+        "    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:\n"
+        "        s.settimeout(0.2)\n"
+        f"        if s.connect_ex(('127.0.0.1', {app_port})) != 0:\n"
+        "            break\n"
+        "    time.sleep(0.25)\n"
+        f"subprocess.Popen([{python_exe!r}, 'main.py'], cwd={backend_dir!r}, "
+        "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
     )
 
-    popen_kwargs = {"cwd": backend_dir}
+    popen_kwargs = {
+        "cwd": backend_dir,
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
     if platform.system() == "Windows":
         popen_kwargs["creationflags"] = (
             subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
@@ -1139,73 +1228,347 @@ async def _restart_server_process(project_dir: str):
     os._exit(0)
 
 
+def _is_git_commit_sha(value: str) -> bool:
+    return (
+        isinstance(value, str)
+        and 7 <= len(value) <= 40
+        and all(ch in "0123456789abcdef" for ch in value.lower())
+    )
+
+
+def _read_frontend_build_commit(marker_path: str) -> str | None:
+    try:
+        with open(marker_path, "r", encoding="utf-8") as f:
+            sha = f.read().strip()
+        return sha if _is_git_commit_sha(sha) else None
+    except OSError:
+        return None
+
+
+def _swap_frontend_dist_atomically(staging_dir: str, dist_dir: str, frontend_dir: str) -> None:
+    """스테이징 디렉터리(.dist-staging)에 완성된 빌드 산출물을 기존 dist와 원자적으로 교체한다.
+    교체 실패 시 백업해둔 기존 dist를 복원해 서비스 화면이 깨지지 않도록 보장한다."""
+    import shutil
+
+    backup_dir = os.path.join(frontend_dir, ".dist-prev")
+    shutil.rmtree(backup_dir, ignore_errors=True)
+    had_existing_dist = os.path.exists(dist_dir)
+    if had_existing_dist:
+        os.replace(dist_dir, backup_dir)
+    try:
+        os.replace(staging_dir, dist_dir)
+    except BaseException:
+        if had_existing_dist and os.path.exists(backup_dir) and not os.path.exists(dist_dir):
+            os.replace(backup_dir, dist_dir)
+        raise
+    shutil.rmtree(backup_dir, ignore_errors=True)
+
+
+@router.get("/settings/update-status")
+async def get_system_update_status(current_user: str = Depends(require_admin_user)):
+    """진행 중인 웹 시스템 업데이트 상태와 마지막 결과, 현재 서버 부팅 ID를 반환합니다."""
+    return {
+        "in_progress": _system_update_in_progress,
+        "last_result": _last_system_update_result,
+        "boot_id": SERVER_BOOT_ID,
+    }
+
+
 @router.post("/settings/update")
 async def system_update(current_user: str = Depends(require_admin_user)):
-    """깃허브 최신 커밋을 풀(pull) 받고, 프론트엔드를 빌드한 뒤 서버를 재기동합니다."""
-    import subprocess
+    """깃허브 최신 커밋을 풀(pull) 받고, 의존성 및 프론트엔드를 원자적으로 빌드한 뒤 서버를 재기동합니다."""
     import asyncio
     import os
+    import shutil
+    import subprocess
+    import sys
+    from config import get_npm_exec_env, windows_safe_exec_args
+    from services.update_checker import FRONTEND_BUILD_COMMIT_FILENAME
 
-    try:
-        # 프로젝트 루트 디렉토리 찾기. os.path.dirname(__file__)로 직접 계산하면
-        # 이 파일(routers/auth.py)이 backend/ 밑 한 단계 더 깊은 routers/ 안에
-        # 있다는 걸 놓치기 쉬워, 실제로 project_dir이 backend/를 가리키게 되는
-        # 버그가 있었다(그 결과 frontend_dir이 backend/frontend로 계산되어
-        # 존재하지 않으니 프론트엔드 빌드가 조용히 스킵되고, _restart_server_process
-        # 에서도 backend_dir이 backend/backend로 계산되어 재시작이
-        # "No such file or directory"로 실패했다). config.py의 검증된
-        # get_project_root()를 그대로 재사용해 이런 계산 실수를 원천 차단한다.
-        project_dir = get_project_root()
+    global _system_update_in_progress, _last_system_update_result
 
-        # 1. git pull origin main
-        pull_proc = await asyncio.create_subprocess_exec(
-            "git", "pull", "origin", "main",
-            cwd=project_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        stdout, stderr = await pull_proc.communicate()
-        if pull_proc.returncode != 0:
-            return {
-                "ok": False,
-                "message": f"Git pull 실패: {stderr.decode('utf-8', errors='replace')}"
-            }
-        
-        pull_output = stdout.decode('utf-8', errors='replace')
-        
-        # 2. 만약 pull 된 내용이 있으면 (또는 무조건 안전하게) 프론트엔드를 빌드합니다.
-        if "Already up-to-date" not in pull_output and "Already up to date" not in pull_output:
-            frontend_dir = os.path.join(project_dir, "frontend")
-            if os.path.exists(frontend_dir):
-                # npm install && npm run build
-                from config import windows_safe_exec_args
-                build_proc = await asyncio.create_subprocess_exec(
-                    *windows_safe_exec_args(["npm", "run", "build"]),
-                    cwd=frontend_dir,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                build_stdout, build_stderr = await build_proc.communicate()
-                if build_proc.returncode != 0:
-                    return {
-                        "ok": False,
-                        "message": f"프론트엔드 빌드 실패: {build_stderr.decode('utf-8', errors='replace')}"
-                    }
-        
-        # 3. 비동기로 1초 후에 서버 재시작 (OS/실행 방식에 맞춰 자동 판단)
-        asyncio.create_task(_restart_server_process(project_dir))
-        
-        return {
-            "ok": True,
-            "message": "업데이트가 성공적으로 적용되었습니다. 서버가 1초 후에 재시작됩니다.",
-            "output": pull_output
-        }
-        
-    except Exception as e:
+    if _system_update_in_progress:
         return {
             "ok": False,
-            "message": f"업데이트 중 알 수 없는 오류 발생: {str(e)}"
+            "in_progress": True,
+            "boot_id": SERVER_BOOT_ID,
+            "message": "이미 시스템 업데이트가 진행 중입니다. 잠시만 기다려주세요.",
         }
+
+    async def _exec_step(args: list[str], *, cwd: str, env: dict | None = None) -> tuple[int, str, str]:
+        kwargs = {
+            "cwd": cwd,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+        }
+        if env is not None:
+            kwargs["env"] = env
+        proc = await asyncio.create_subprocess_exec(*args, **kwargs)
+        stdout, stderr = await proc.communicate()
+        return (
+            proc.returncode,
+            stdout.decode("utf-8", errors="replace"),
+            stderr.decode("utf-8", errors="replace"),
+        )
+
+    async def _perform_update() -> dict:
+        global _system_update_in_progress, _last_system_update_result
+        _system_update_in_progress = True
+        try:
+            project_dir = get_project_root()
+            git_env = _build_git_subprocess_env(project_dir)
+
+            try:
+                status_rc, status_out, _ = await _exec_step(
+                    ["git", "status", "--porcelain", "--untracked-files=no"],
+                    cwd=project_dir,
+                    env=git_env,
+                )
+            except FileNotFoundError:
+                res = {
+                    "ok": False,
+                    "boot_id": SERVER_BOOT_ID,
+                    "message": (
+                        "이 배포 환경에서는 Git을 찾을 수 없어 자동 업데이트를 실행할 수 없습니다. "
+                        "Docker 이미지 재배포 또는 배포 스크립트를 이용해 업데이트해주세요."
+                    ),
+                }
+                _last_system_update_result = res
+                return res
+
+            dirty_paths = [
+                line[3:].strip().replace("\\", "/")
+                for line in status_out.splitlines()
+                if len(line) > 3
+            ]
+            # 과거 npm install 실행으로 frontend/package-lock.json만 단독 변경된 경우
+            # 다음 릴리스 git pull이 충돌하지 않도록 자동 복원한다.
+            if status_rc == 0 and dirty_paths == ["frontend/package-lock.json"]:
+                await _exec_step(
+                    ["git", "checkout", "--", "frontend/package-lock.json"],
+                    cwd=project_dir,
+                    env=git_env,
+                )
+                dirty_paths = []
+
+            was_clean = status_rc == 0 and len(dirty_paths) == 0
+
+            prev_rc, prev_out, _ = await _exec_step(
+                ["git", "rev-parse", "HEAD"],
+                cwd=project_dir,
+                env=git_env,
+            )
+            prev_head = prev_out.strip() if prev_rc == 0 and _is_git_commit_sha(prev_out.strip()) else None
+
+            # 1. git pull origin main
+            pull_rc, pull_output, pull_stderr = await _exec_step(
+                ["git", "pull", "origin", "main"],
+                cwd=project_dir,
+                env=git_env,
+            )
+            if pull_rc != 0:
+                res = {
+                    "ok": False,
+                    "boot_id": SERVER_BOOT_ID,
+                    "message": f"Git pull 실패: {(pull_stderr or pull_output).strip()}",
+                }
+                _last_system_update_result = res
+                return res
+
+            new_rc, new_out, _ = await _exec_step(
+                ["git", "rev-parse", "HEAD"],
+                cwd=project_dir,
+                env=git_env,
+            )
+            new_head = new_out.strip() if new_rc == 0 and _is_git_commit_sha(new_out.strip()) else None
+            head_changed = bool(prev_head and new_head and prev_head != new_head)
+
+            changed_files: set[str] | None = None
+            if head_changed:
+                diff_rc, diff_out, _ = await _exec_step(
+                    ["git", "diff", "--name-only", prev_head, new_head],
+                    cwd=project_dir,
+                    env=git_env,
+                )
+                if diff_rc == 0:
+                    changed_files = {
+                        line.strip().replace("\\", "/")
+                        for line in diff_out.splitlines()
+                        if line.strip()
+                    }
+
+            async def _rollback_git_if_needed():
+                if was_clean and head_changed and prev_head:
+                    try:
+                        await _exec_step(
+                            ["git", "reset", "--hard", prev_head],
+                            cwd=project_dir,
+                            env=git_env,
+                        )
+                    except Exception as rollback_err:
+                        print(f"[system_update] 빌드 실패 후 Git 롤백 실패({prev_head}): {rollback_err}", flush=True)
+
+            # 2. backend/requirements.txt 변경 시 파이썬 의존성 설치
+            #    MinerU(.venv-mineru) 활성 상태에서는 서비스 진입점인 기본 .venv도 함께 갱신한다.
+            backend_dir = os.path.join(project_dir, "backend")
+            requirements_path = os.path.join(backend_dir, "requirements.txt")
+            if (
+                not getattr(sys, "frozen", False)
+                and head_changed
+                and os.path.isfile(requirements_path)
+                and (changed_files is None or "backend/requirements.txt" in changed_files)
+            ):
+                from venv_manager import venv_python
+
+                python_targets: list[str] = []
+                default_venv_py = venv_python(os.path.join(backend_dir, ".venv"))
+                if os.path.isfile(default_venv_py):
+                    python_targets.append(default_venv_py)
+                if not any(os.path.realpath(p) == os.path.realpath(sys.executable) for p in python_targets):
+                    python_targets.append(sys.executable)
+
+                for py_bin in python_targets:
+                    pip_rc, pip_out, pip_err = await _exec_step(
+                        [py_bin, "-m", "pip", "install", "-r", "requirements.txt"],
+                        cwd=backend_dir,
+                    )
+                    if pip_rc != 0:
+                        await _rollback_git_if_needed()
+                        res = {
+                            "ok": False,
+                            "boot_id": SERVER_BOOT_ID,
+                            "message": f"백엔드 의존성 설치 실패: {(pip_err or pip_out).strip()}",
+                        }
+                        _last_system_update_result = res
+                        return res
+
+            # 3. 새 커밋이 반영되었거나, 이전 빌드 산출물(dist)이 현재 HEAD와 일치하지 않으면
+            #    임시 디렉터리(.dist-staging)에 먼저 빌드한 뒤 성공 시에만 dist와 교체한다.
+            frontend_dir = os.path.join(project_dir, "frontend")
+            if os.path.exists(frontend_dir):
+                dist_dir = os.path.join(frontend_dir, "dist")
+                dist_index = os.path.join(dist_dir, "index.html")
+                build_marker = os.path.join(dist_dir, FRONTEND_BUILD_COMMIT_FILENAME)
+                built_commit = _read_frontend_build_commit(build_marker)
+
+                pull_reported_changes = (
+                    "Already up-to-date" not in pull_output
+                    and "Already up to date" not in pull_output
+                )
+                dist_out_of_sync = (
+                    not os.path.isfile(dist_index)
+                    or (new_head is not None and built_commit != new_head)
+                )
+
+                if pull_reported_changes or head_changed or dist_out_of_sync:
+                    npm_bin, npm_env = get_npm_exec_env()
+                    npm_cmd = npm_bin or "npm"
+
+                    package_json = os.path.join(frontend_dir, "package.json")
+                    package_lock = os.path.join(frontend_dir, "package-lock.json")
+                    node_modules_dir = os.path.join(frontend_dir, "node_modules")
+                    frontend_deps_changed = head_changed and (
+                        changed_files is None
+                        or bool(changed_files & {"frontend/package.json", "frontend/package-lock.json"})
+                    )
+                    staging_rel = ".dist-staging"
+                    staging_dir = os.path.join(frontend_dir, staging_rel)
+                    shutil.rmtree(staging_dir, ignore_errors=True)
+
+                    try:
+                        if os.path.isfile(package_json) and (not os.path.isdir(node_modules_dir) or frontend_deps_changed):
+                            # package-lock.json이 있으면 npm ci를 사용해 lockfile 로컬 오염을 방지한다.
+                            install_subcmd = (
+                                ["ci", "--no-audit", "--no-fund"]
+                                if os.path.isfile(package_lock)
+                                else ["install", "--no-audit", "--no-fund"]
+                            )
+                            install_rc, install_out, install_err = await _exec_step(
+                                windows_safe_exec_args([npm_cmd, *install_subcmd]),
+                                cwd=frontend_dir,
+                                env=npm_env,
+                            )
+                            if install_rc != 0:
+                                await _rollback_git_if_needed()
+                                res = {
+                                    "ok": False,
+                                    "boot_id": SERVER_BOOT_ID,
+                                    "message": f"프론트엔드 패키지 설치 실패: {(install_err or install_out).strip()}",
+                                }
+                                _last_system_update_result = res
+                                return res
+
+                        build_rc, build_out, build_err = await _exec_step(
+                            windows_safe_exec_args([npm_cmd, "run", "build", "--", "--outDir", staging_rel]),
+                            cwd=frontend_dir,
+                            env=npm_env,
+                        )
+                    except FileNotFoundError:
+                        shutil.rmtree(staging_dir, ignore_errors=True)
+                        await _rollback_git_if_needed()
+                        res = {
+                            "ok": False,
+                            "boot_id": SERVER_BOOT_ID,
+                            "message": (
+                                "프론트엔드 빌드에 필요한 npm(Node.js)을 찾을 수 없습니다. "
+                                "서버에 Node.js/npm이 설치되어 있는지 확인해주세요."
+                            ),
+                        }
+                        _last_system_update_result = res
+                        return res
+
+                    if build_rc != 0:
+                        shutil.rmtree(staging_dir, ignore_errors=True)
+                        await _rollback_git_if_needed()
+                        res = {
+                            "ok": False,
+                            "boot_id": SERVER_BOOT_ID,
+                            "message": f"프론트엔드 빌드 실패: {(build_err or build_out).strip()}",
+                        }
+                        _last_system_update_result = res
+                        return res
+
+                    if os.path.isdir(staging_dir):
+                        if new_head:
+                            try:
+                                with open(os.path.join(staging_dir, FRONTEND_BUILD_COMMIT_FILENAME), "w", encoding="utf-8") as f:
+                                    f.write(f"{new_head}\n")
+                            except OSError as marker_err:
+                                print(f"[system_update] 스테이징 빌드 마커 기록 실패: {marker_err}", flush=True)
+                        _swap_frontend_dist_atomically(staging_dir, dist_dir, frontend_dir)
+                    elif new_head and os.path.isdir(dist_dir):
+                        try:
+                            with open(build_marker, "w", encoding="utf-8") as f:
+                                f.write(f"{new_head}\n")
+                        except OSError as marker_err:
+                            print(f"[system_update] 빌드 커밋 마커 기록 실패: {marker_err}", flush=True)
+
+            # 4. 비동기로 1초 후에 서버 재시작 (OS/실행 방식에 맞춰 자동 판단)
+            asyncio.create_task(_restart_server_process(project_dir))
+
+            res = {
+                "ok": True,
+                "boot_id": SERVER_BOOT_ID,
+                "message": "업데이트가 성공적으로 적용되었습니다. 서버가 1초 후에 재시작됩니다.",
+                "output": pull_output,
+            }
+            _last_system_update_result = res
+            return res
+
+        except Exception as e:
+            res = {
+                "ok": False,
+                "boot_id": SERVER_BOOT_ID,
+                "message": f"업데이트 중 알 수 없는 오류 발생: {str(e)}",
+            }
+            _last_system_update_result = res
+            return res
+        finally:
+            _system_update_in_progress = False
+
+    # 리버스 프록시(Nginx 60초 타임아웃 등)가 중간에 클라이언트 연결을 끊더라도
+    # 진행 중인 업데이트·원자적 dist 교체·재기동 태스크가 중간에 취소되지 않도록 보호한다.
+    return await asyncio.shield(_perform_update())
 
 
 class UpdateCheckConfigRequest(BaseModel):

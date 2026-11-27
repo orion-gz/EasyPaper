@@ -58,7 +58,7 @@ import { parseStructuredVocabulary, renderStructuredVocabulary } from "./vocabul
 import { defaultDocumentType, loadDocumentTypeOptions, saveDocumentTypeOptions, CURRENT_ONBOARDING_VERSION, ONBOARDING_VERSION_KEY } from "./documentModes.js"
 import DOMPurify from 'dompurify'
 import { mountArticleViewer } from './articleViewer.js'
-import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
+import { uploadPDF, importURL, getArticleAPI, checkHealth, streamTranslation, getJobStatus, getPageTranslation, loginAPI, logoutAPI, checkAuthAPI, changeCredentialsAPI, getSkipLoginAPI, setSkipLoginAPI, getSystemSettingsAPI, saveSystemSettingsAPI, restartJobAPI, streamPullModelAPI, deleteModelAPI, streamChatAPI, clearTranslationCacheAPI, clearPagesCacheAPI, clearSingleDocCacheAPI, getChatHistoryAPI, cancelJobAPI, triggerSystemUpdateAPI, getSystemUpdateStatusAPI, checkForUpdateAPI, streamPageInsightAPI, getOllamaStatusAPI, streamInstallOllamaAPI, fetchCliAvailability, getUpdateCheckConfigAPI, setUpdateCheckConfigAPI, getPostUpdateNoticeAPI, streamCompareChatAPI, getCompareChatHistoryAPI, getFullChangelogAPI, getChatSessionsAPI, getCompareChatSessionsAPI, getSuggestedQuestionsAPI, fetchPdfParsersInfoAPI, installPdfParserAPI, uninstallPdfParserAPI, fetchDocumentTypesAPI, getWorkspaceSettingsAPI, patchWorkspaceSettingsAPI, patchDocumentClassificationAPI, getDocumentClassificationAPI, confirmDocumentClassificationAPI, estimateInsightJobAPI, startInsightJobAPI, getInsightJobStatusAPI, cancelInsightJobAPI, getLanguagesAPI, getLanguageSettingsAPI, saveLanguageSettingsAPI, patchDocumentLanguagesAPI, patchDocumentProcessingPolicyAPI, retryDocumentTaskAPI, cancelDocumentTaskAPI, createReparsePreviewAPI, getReparsePreviewAPI, applyReparsePreviewAPI, getDocumentChaptersAPI, getChapterSummaryAPI, getFullSummaryEstimateAPI, startFullSummaryAPI, getFullSummaryStatusAPI } from './api.js'
 import { sourceMappingRects, refreshTextLayerGeometry, loadPDF, renderScrollView, scrollToPage, reRenderAll, clearPdfTextRecoveryCache, getScale, getTotalPages, getPDFOutline, renderFigureCrop } from './pdfViewer.js'
 import { getPageCacheStats, clearAllPageCaches } from './pdfPageCache.js'
 import { invalidateLibraryGetCache, fetchLibrary, fetchLibraryDoc, fetchLibraryFolders, createLibraryFolder, updateLibraryFolder, deleteLibraryFolder, moveLibraryDocuments, deleteLibraryDoc, fetchLibraryTranslation, fetchLibraryDocImages, resolveFigureReference, updateLibraryDocMetadata, updateLibraryDocTitle, updateLibraryTranslation, fetchLibraryTrash, restoreLibraryDoc, emptyLibraryTrash, deleteLibraryDocPermanently, searchLibrary, exportAnnotatedPdf, fetchLibraryReferences, resolveLibraryReference, fetchPrimer, regeneratePrimer, fetchLibraryBibliography, fetchLibraryGraph, fetchGraphNodeQuestions, searchGraphNodes, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibraryHeatmapMatrix, sendReadingHeartbeat, fetchPaperTagOntology, updatePaperTags, reclassifyPaperTags } from './library.js'
@@ -3511,15 +3511,20 @@ async function checkAuthentication() {
       return
     }
     await maybeShowOnboarding()
+    lastKnownServerBootId = auth.boot_id || lastKnownServerBootId
+    systemUpdateAllowed = !isTauriDesktop && auth.is_admin !== false && auth.system_update_supported !== false
+    if (systemUpdateSection) {
+      systemUpdateSection.classList.toggle('hidden', !systemUpdateAllowed)
+    }
     // 업데이트 직후(방금 재시작됨) 안내가 있으면 그것부터 먼저 보여주고, 없을
     // 때만 "새 업데이트가 있는지" 확인 - 두 팝업이 동시에 겹쳐 뜨지 않도록 함.
-    // git pull 기반이라 git 저장소 없이 배포되는 Tauri 데스크탑 빌드에서는
-    // 애초에 의미가 없으므로 건너뛴다(데스크탑 자체 업데이트는 Tauri updater가
-    // 별도로 담당).
+    // Tauri 데스크탑, Docker/읽기전용 Lab 배포, 비관리자 계정에서는 건너뛴다.
     if (!isTauriDesktop) {
-      checkPostUpdateNoticeOnce().then((shown) => {
-        if (!shown) maybeAutoCheckForUpdate()
-      })
+      if (systemUpdateAllowed) {
+        checkPostUpdateNoticeOnce().then((shown) => {
+          if (!shown) maybeAutoCheckForUpdate()
+        })
+      }
     } else {
       loadTauriAppVersion()
       maybeCheckTauriUpdateIfDue()
@@ -5485,6 +5490,8 @@ function resetSystemUpdateCheckState() {
 // 라우트는 서버/Docker 배포에서 계속 써야 하므로 그대로 둔다(변경 없음).
 // window.__TAURI_INTERNALS__는 Tauri v2 webview에서만 주입되는 전역 값이다.
 const isTauriDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+let systemUpdateAllowed = !isTauriDesktop
+let lastKnownServerBootId = null
 const systemUpdateSection = $('system-update-section')
 if (isTauriDesktop && systemUpdateSection) {
   systemUpdateSection.classList.add('hidden')
@@ -5789,26 +5796,38 @@ if (systemUpdateRunBtn && !isTauriDesktop) {
     systemUpdateStatus.style.color = 'var(--text-secondary)'
     systemUpdateStatus.textContent = 'GitHub 코드 가져오는 중...'
 
+    const restoreRunButtonsWithError = (msg) => {
+      systemUpdateRunBtn.disabled = false
+      if (systemUpdateCheckBtn) systemUpdateCheckBtn.disabled = false
+      systemUpdateRunBtn.innerHTML = icon('download', 13, 'style="vertical-align:-2px;margin-right:4px"') + '최신 업데이트 실행'
+      systemUpdateStatus.style.color = '#ef4444' // 빨간색
+      systemUpdateStatus.textContent = msg || '업데이트 실패'
+      showToast(msg || '업데이트 실패', 'error')
+    }
+
     try {
       const res = await triggerSystemUpdateAPI()
+      const prevBootId = res.boot_id || lastKnownServerBootId
       if (res.ok) {
         systemUpdateStatus.style.color = '#10b981' // 초록색
         systemUpdateStatus.textContent = '업데이트 성공! 서버 재시작을 기다리는 중...'
         showToast(res.message, 'success')
-        await waitForServerRestartAndReload()
+        await waitForServerRestartAndReload(prevBootId, { onFailure: restoreRunButtonsWithError })
       } else {
-        systemUpdateRunBtn.disabled = false
-        if (systemUpdateCheckBtn) systemUpdateCheckBtn.disabled = false
-        systemUpdateRunBtn.innerHTML = icon('download', 13, 'style="vertical-align:-2px;margin-right:4px"') + '최신 업데이트 실행'
-        systemUpdateStatus.style.color = '#ef4444' // 빨간색
-        systemUpdateStatus.textContent = res.message
-        showToast(res.message, 'error')
+        restoreRunButtonsWithError(res.message)
       }
     } catch (err) {
+      // 401/403/400/500 등 명확한 HTTP 에러는 서버 재시작이 아니라 요청 실패다.
+      // 네트워크 단절(!err.status)이나 리버스 프록시 게이트웨이 타임아웃(502/504)만
+      // 빌드 진행 중 또는 재기동 구간으로 간주해 상태 폴링으로 넘긴다.
+      if (err?.status && err.status !== 502 && err.status !== 504) {
+        restoreRunButtonsWithError(err.message)
+        return
+      }
       systemUpdateStatus.style.color = '#ef4444'
       systemUpdateStatus.textContent = '서버 재시작을 감지했습니다. 잠시 후 새로고침합니다...'
       showToast('서버 재기동을 감지했습니다. 잠시 후 새로고침합니다.', 'info')
-      await waitForServerRestartAndReload()
+      await waitForServerRestartAndReload(lastKnownServerBootId, { onFailure: restoreRunButtonsWithError })
     }
   })
 }
@@ -5913,7 +5932,7 @@ function renderChangelogList(ulEl, changelog) {
 
 // 설정 화면에서 자동 업데이트 확인 주기를 로드/저장
 async function initUpdateCheckSettingUI() {
-  if (!settingUpdateCheckInterval) return
+  if (!settingUpdateCheckInterval || !systemUpdateAllowed) return
   try {
     const cfg = await getUpdateCheckConfigAPI()
     syncSelectValue(settingUpdateCheckInterval, cfg.interval || 'weekly')
@@ -5957,18 +5976,29 @@ if (updateCompleteModal) {
   })
 }
 
-// 서버가 재시작할 시간을 준 뒤, 응답이 돌아올 때까지 짧게 폴링하고 새로고침한다.
-// (git pull 직후 서버가 스스로 프로세스를 내렸다 올리는 구간이라, 그 사이의
-// 연결 실패는 실패가 아니라 재시작 중이라는 정상 신호로 취급해야 한다)
-async function waitForServerRestartAndReload() {
+// 서버가 실제로 새 프로세스(새 boot_id)로 재시작될 때까지 폴링한 뒤 새로고침한다.
+// 이전 프로세스가 종료되기 전(1초 대기 구간 또는 프록시 504 타임아웃 후 백그라운드 빌드 중)에
+// 200 OK를 반환하더라도 boot_id가 그대로면 조기 새로고침(Nginx 502 고착)하지 않고 계속 대기한다.
+async function waitForServerRestartAndReload(previousBootId = null, { onFailure } = {}) {
   await new Promise(resolve => setTimeout(resolve, 2000))
-  const maxAttempts = 24 // 약 2초 + 24 * 1.5초 = 최대 약 38초 대기
+  let maxAttempts = 30
   for (let i = 0; i < maxAttempts; i++) {
     try {
       const auth = await checkAuthAPI()
       if (auth) {
-        location.reload()
-        return
+        if (!previousBootId || !auth.boot_id || auth.boot_id !== previousBootId) {
+          location.reload()
+          return
+        }
+        const updateStatus = await getSystemUpdateStatusAPI()
+        if (updateStatus) {
+          if (updateStatus.in_progress && maxAttempts < 80) {
+            maxAttempts = 80 // 의존성 설치 + 프론트엔드 장기 빌드 시 최대 약 2분 대기
+          } else if (!updateStatus.in_progress && updateStatus.last_result && updateStatus.last_result.ok === false) {
+            if (onFailure) onFailure(updateStatus.last_result.message)
+            return
+          }
+        }
       }
     } catch (err) {
       // 아직 재시작 중 - 계속 폴링
@@ -5994,22 +6024,30 @@ if (updateAvailableNowBtn) {
     if (updateAvailableActions) updateAvailableActions.style.display = 'none'
     if (updateAvailableStatus) updateAvailableStatus.textContent = 'GitHub 코드 가져오는 중...'
 
+    const restoreModalActionsWithError = (msg) => {
+      if (updateAvailableStatus) updateAvailableStatus.textContent = msg || '업데이트 실패'
+      showToast(msg || '업데이트 실패', 'error')
+      updateAvailableNowBtn.disabled = false
+      if (updateAvailableLaterBtn) updateAvailableLaterBtn.disabled = false
+      if (updateAvailableActions) updateAvailableActions.style.display = 'flex'
+    }
+
     try {
       const res = await triggerSystemUpdateAPI()
+      const prevBootId = res.boot_id || lastKnownServerBootId
       if (res.ok) {
         if (updateAvailableStatus) updateAvailableStatus.textContent = '업데이트 성공! 서버 재시작을 기다리는 중...'
-        await waitForServerRestartAndReload()
+        await waitForServerRestartAndReload(prevBootId, { onFailure: restoreModalActionsWithError })
       } else {
-        if (updateAvailableStatus) updateAvailableStatus.textContent = res.message || '업데이트 실패'
-        showToast(res.message || '업데이트 실패', 'error')
-        updateAvailableNowBtn.disabled = false
-        if (updateAvailableLaterBtn) updateAvailableLaterBtn.disabled = false
-        if (updateAvailableActions) updateAvailableActions.style.display = 'flex'
+        restoreModalActionsWithError(res.message)
       }
     } catch (err) {
-      // 요청 도중 서버가 이미 재시작을 시작해 연결이 끊겼을 가능성이 높다
+      if (err?.status && err.status !== 502 && err.status !== 504) {
+        restoreModalActionsWithError(err.message)
+        return
+      }
       if (updateAvailableStatus) updateAvailableStatus.textContent = '서버 재시작을 감지했습니다. 잠시 후 새로고침합니다...'
-      await waitForServerRestartAndReload()
+      await waitForServerRestartAndReload(lastKnownServerBootId, { onFailure: restoreModalActionsWithError })
     }
   })
 }

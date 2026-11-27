@@ -206,5 +206,43 @@ async def test_post_update_notice_shows_once_after_version_change(isolated_dirs,
     assert third["show"] is False
 
 
+@pytest.mark.asyncio
+async def test_check_for_update_detects_stale_frontend_build_commit(tmp_path, monkeypatch):
+    """git HEAD와 origin/main이 같더라도 frontend/dist/.build-commit이 이전 커밋을
+    가리키고 있으면 업데이트가 필요한 것으로 판단해야 한다."""
+    import services.update_checker as uc
+
+    dist_dir = tmp_path / "frontend" / "dist"
+    dist_dir.mkdir(parents=True)
+    (dist_dir / ".build-commit").write_text("78299dec84d72a9f2d0b04eb42d213ef03a623d6\n", encoding="utf-8")
+
+    monkeypatch.setattr(uc, "get_project_root", lambda: str(tmp_path))
+    monkeypatch.setattr(uc, "get_current_version", lambda: _async_return("bd125aa"))
+    monkeypatch.setattr(uc, "get_current_version_date", lambda: _async_return("2026-11-27"))
+    monkeypatch.setattr(uc, "db_set_meta", lambda k, v: None)
+
+    async def fake_run_git(*args, timeout=30.0):
+        if args[0] == "fetch":
+            return 0, "", ""
+        if args == ("rev-parse", "--short", "origin/main"):
+            return 0, "bd125aa", ""
+        if args == ("rev-parse", "--short", "78299dec84d72a9f2d0b04eb42d213ef03a623d6"):
+            return 0, "78299de", ""
+        if args[0] == "log" and args[1] == "-1":
+            return 0, "2026-11-27", ""
+        if args[0] == "log" and "--no-merges" in args:
+            return 0, "bd125aa|fix(viewer): render markdown", ""
+        return 0, "", ""
+
+    monkeypatch.setattr(uc, "_run_git", fake_run_git)
+
+    result = await check_for_update()
+    assert result["ok"] is True
+    assert result["update_available"] is True
+    assert result["current_version"] == "78299de"
+    assert result["latest_version"] == "bd125aa"
+    assert len(result["changelog"]) == 1
+
+
 async def _async_return(value):
     return value

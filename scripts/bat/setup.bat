@@ -84,13 +84,18 @@ cd ..
 echo 2. Setting up Frontend...
 cd frontend
 
-echo    Installing frontend dependencies ^(npm install^)...
-call npm install
+echo    Installing frontend dependencies...
+if exist package-lock.json (
+    call npm ci
+) else (
+    call npm install
+)
 if errorlevel 1 goto :error
 
 echo    Building frontend production assets...
 call npm run build
 if errorlevel 1 goto :error
+git -C .. rev-parse HEAD > dist\.build-commit 2>nul
 
 cd ..
 

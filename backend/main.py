@@ -208,8 +208,9 @@ def frontend_file_response(path: str):
 
 FRONTEND_DIST = os.getenv("EASYPAPER_FRONTEND_DIST") or os.path.join(os.path.dirname(__file__), "../frontend/dist")
 if os.path.exists(FRONTEND_DIST):
-    # /assets 등 정적 자산
-    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")), name="assets")
+    # check_dir=False: 빌드 중단 등으로 dist 폴더만 있고 dist/assets가 일시적으로 없더라도
+    # 백엔드 기동 자체가 RuntimeError로 크래시하지 않고 API(업데이트 복구 등)가 살아있게 한다.
+    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets"), check_dir=False), name="assets")
 
     @app.get("/", include_in_schema=False)
     @app.get("/{full_path:path}", include_in_schema=False)
@@ -231,6 +232,11 @@ if os.path.exists(FRONTEND_DIST):
                 return frontend_file_response(file_path)
 
         index = os.path.join(FRONTEND_DIST, "index.html")
+        if not os.path.isfile(index):
+            return JSONResponse(
+                {"message": "EasyPaper API is running — 프론트엔드 빌드 필요 (npm run build)", "docs": "/docs"},
+                status_code=503,
+            )
         return frontend_file_response(index)
 else:
     @app.get("/")
