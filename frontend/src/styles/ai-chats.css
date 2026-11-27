@@ -193,6 +193,12 @@
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.aic-table-wrap::-webkit-scrollbar {
+  display: none;
+  height: 0;
 }
 .aic-table {
   width: 100%;

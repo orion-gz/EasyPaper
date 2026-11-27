@@ -3136,6 +3136,7 @@ body.light-theme .pdf-annotation-underline {
 .chat-messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -3163,6 +3164,19 @@ body.light-theme .chat-messages::-webkit-scrollbar-thumb {
 }
 body.light-theme .chat-messages::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.12);
+}
+
+/* AI 어시스턴트 탭 내 가로 스크롤 바 숨김 */
+.chat-messages::-webkit-scrollbar:horizontal,
+#chat-sidebar *::-webkit-scrollbar:horizontal {
+  display: none;
+  height: 0;
+}
+#chat-sidebar pre,
+#chat-sidebar table,
+#chat-sidebar .katex-display {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 @keyframes chatBubbleFade {
