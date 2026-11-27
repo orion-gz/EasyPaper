@@ -59,9 +59,9 @@ body[data-ui-style="editorial"] .workspace-tab.active::before { content: ''; pos
 .document-workspace-runtime #chat-sidebar[data-tool-panel=annotations] > :not(.document-panel-tabs):not(.chat-header):not(.document-resource-list) { display: none !important; }
 .document-resource-list { overflow: auto; padding: 12px; flex: 1; }
 .document-resource-list[hidden], .document-thumbnails[hidden], .document-workspace-runtime #outline-content[hidden] { display: none !important; }
-.document-resource { width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px; margin-bottom: 8px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; text-align: left; cursor: pointer; }
+.document-resource { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; margin-bottom: 8px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; text-align: left; cursor: pointer; }
 .document-resource small { color: var(--control-accent, #4e6aff); }
-.document-resource span { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.document-resource > span { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
 .document-resources-empty { color: var(--text-muted); font-size: 13px; line-height: 1.6; padding: 14px; }
 .document-thumbnails { overflow: auto; padding: 12px; }
 .document-thumbnails button { display: flex; gap: 8px; width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--text-secondary); cursor: pointer; }

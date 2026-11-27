@@ -6,6 +6,8 @@ import { initUiStyleSync } from './themes/uiStyleEngine.js'
 import { enableAutoAnimate, bindSlidingIndicator } from './interactiveUi.js'
 import { installReaderTools } from './documentReaderTools.js'
 import { sanitizeReading } from './workspaceTabsStore.js'
+import { normalizeMemoColor, renderMemoMarkdownHtml } from './memoMarkdown.js'
+import { applyKatexToElement } from './textFormat.js'
 import { t, changeLocale, getLocale } from './i18n.js'
 import { icon } from './icons.js'
 import './styles/workspace-tabs.css'
@@ -83,33 +85,122 @@ export function installDocumentRuntime(adapter) {
   enableAutoAnimate(list)
   enableAutoAnimate($('chat-messages'))
   enableAutoAnimate($('outline-content'))
+  function syncListChildren(nextNodes) {
+    const keep = new Set(nextNodes)
+    for (const child of [...list.children]) {
+      if (!keep.has(child)) child.remove()
+    }
+    nextNodes.forEach((node, index) => {
+      if (list.children[index] !== node) list.insertBefore(node, list.children[index] || null)
+    })
+  }
+  function updateMemoCard(card, item, page, navigate) {
+    const color = normalizeMemoColor(item.color)
+    card.className = `document-resource document-resource-memo color-${color}`
+    card.dataset.color = color
+    if (item.id) card.dataset.memoId = String(item.id)
+    card._navigate = navigate
+
+    let top = card.querySelector(':scope > .document-resource-top')
+    let body = card.querySelector(':scope > .document-resource-markdown')
+    if (!top || !body) {
+      card.replaceChildren()
+      top = document.createElement('div')
+      top.className = 'document-resource-top'
+      const jump = document.createElement('button')
+      jump.type = 'button'
+      jump.className = 'document-resource-jump'
+      const dot = document.createElement('span')
+      dot.setAttribute('aria-hidden', 'true')
+      const label = document.createElement('small')
+      jump.append(dot, label)
+      top.append(jump)
+      body = document.createElement('div')
+      body.className = 'document-resource-markdown floating-memo-render'
+      card.append(top, body)
+      card.addEventListener('click', event => {
+        if (event.target.closest('a[href]')) return
+        card._navigate?.()
+      })
+    }
+
+    const dot = top.querySelector('span')
+    dot.className = `document-resource-color-dot color-${color}`
+    top.querySelector('small').textContent = t('viewer:pageLabel', { page })
+
+    const rawMarkdown = typeof item.content === 'string' ? item.content.trim() : ''
+    const fallbackText = item.sentenceText || item.text || item.quote || t('navigation:tabs.notes')
+    const renderKey = rawMarkdown ? `md:${item.content}` : `fb:${fallbackText}`
+    if (card._renderKey !== renderKey) {
+      card._renderKey = renderKey
+      if (rawMarkdown) {
+        body.innerHTML = renderMemoMarkdownHtml(item.content)
+        applyKatexToElement(body)
+        body.querySelectorAll('a[href]').forEach(link => {
+          link.target = '_blank'
+          link.rel = 'noopener noreferrer'
+        })
+        body.querySelectorAll('input[type="checkbox"]').forEach(input => {
+          input.disabled = true
+          if (!input.getAttribute('aria-label')) {
+            input.setAttribute('aria-label', input.closest('li')?.textContent?.trim() || t('navigation:tabs.notes'))
+          }
+        })
+      } else {
+        const fallback = document.createElement('p')
+        fallback.className = 'document-resource-fallback'
+        fallback.textContent = fallbackText
+        body.replaceChildren(fallback)
+      }
+    }
+    return card
+  }
   function showResources() {
-    list.replaceChildren()
-    const resources = panel === 'notes' ? adapter.memos() : adapter.annotations()
-    let count = 0
+    const isNotes = panel === 'notes'
+    const resources = isNotes ? adapter.memos() : adapter.annotations()
+    const existingMemos = isNotes
+      ? new Map(Array.from(list.querySelectorAll(':scope > .document-resource-memo[data-memo-id]'), el => [el.dataset.memoId, el]))
+      : null
+    const nextNodes = []
     for (const [pageKey, items] of Object.entries(resources || {})) {
       const page = Number(pageKey.replace(/^(page|section)_/, ''))
       if (!Array.isArray(items) || !Number.isInteger(page)) continue
       for (const item of items) {
-        const button = document.createElement('button')
-        button.type = 'button'
-        button.className = 'document-resource'
-        const label = document.createElement('small')
-        label.textContent = t('viewer:pageLabel', { page })
-        const text = document.createElement('span')
-        text.textContent = item.content || item.sentenceText || item.text || item.quote || t('navigation:tabs.annotation')
-        button.append(label, text)
-        button.addEventListener('click', () => adapter.navigateAnnotation({ page, memoId: panel === 'notes' ? item.id : null, kind: item.type || null, startOffset: item.startOffset ?? item.start_offset ?? null, endOffset: item.endOffset ?? item.end_offset ?? null, quote: panel === 'notes' && item.id ? null : item.type ? null : item.sentenceText || item.text || '', occurrence: 1 }))
-        list.append(button)
-        count++
+        const navigate = () => adapter.navigateAnnotation({
+          page,
+          memoId: isNotes ? item.id : null,
+          kind: item.type || null,
+          startOffset: item.startOffset ?? item.start_offset ?? null,
+          endOffset: item.endOffset ?? item.end_offset ?? null,
+          quote: isNotes && item.id ? null : item.type ? null : item.sentenceText || item.text || '',
+          occurrence: 1,
+        })
+        if (isNotes) {
+          const id = item.id ? String(item.id) : null
+          const reused = id ? existingMemos.get(id) : null
+          if (id && reused) existingMemos.delete(id)
+          nextNodes.push(updateMemoCard(reused || document.createElement('div'), item, page, navigate))
+        } else {
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.className = 'document-resource'
+          const label = document.createElement('small')
+          label.textContent = t('viewer:pageLabel', { page })
+          const text = document.createElement('span')
+          text.textContent = item.content || item.sentenceText || item.text || item.quote || t('navigation:tabs.annotation')
+          button.append(label, text)
+          button.addEventListener('click', navigate)
+          nextNodes.push(button)
+        }
       }
     }
-    if (!count) {
-      const empty = document.createElement('p')
+    if (!nextNodes.length) {
+      const empty = list.querySelector(':scope > .document-resources-empty') || document.createElement('p')
       empty.className = 'document-resources-empty'
-      empty.textContent = panel === 'notes' ? t('navigation:tabs.noNotes') : t('navigation:tabs.noAnnotations')
-      list.append(empty)
+      empty.textContent = isNotes ? t('navigation:tabs.noNotes') : t('navigation:tabs.noAnnotations')
+      nextNodes.push(empty)
     }
+    syncListChildren(nextNodes)
   }
   function setPanel(next) {
     panel = next
@@ -226,7 +317,9 @@ export function installDocumentRuntime(adapter) {
   const extractIndicator = $('image-extract-indicator')
   if (extractIndicator) refreshButton.before(extractIndicator)
   const refreshResources = () => { if (active && panel !== 'chat') showResources() }
+  const refreshResourceMath = () => { if (active && panel === 'notes') applyKatexToElement(list) }
   document.addEventListener('easypaper:resources-changed', refreshResources)
+  document.addEventListener('katex-ready', refreshResourceMath)
   const refreshStorage = event => { if (event.key?.includes(adapter.state.sessionId)) refreshResources() }
   window.addEventListener('storage', refreshStorage)
 
@@ -490,7 +583,7 @@ export function installDocumentRuntime(adapter) {
   }
   window.__easypaperDocument = runtime
   window.addEventListener('pagehide', () => {
-    stopReturnPreferences(); readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); window.removeEventListener('storage', refreshStorage)
+    stopReturnPreferences(); readerTools.destroy(); document.removeEventListener('easypaper:resources-changed', refreshResources); document.removeEventListener('katex-ready', refreshResourceMath); window.removeEventListener('storage', refreshStorage)
     clearInterval(statusTimer); clearTimeout(snapshotTimer); window.removeEventListener('resize', syncViewport)
     panelResize.disconnect(); panelObserver.disconnect(); errors.disconnect(); thumbnailObserver?.disconnect()
   }, { once: true })
