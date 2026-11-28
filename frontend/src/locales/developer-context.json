@@ -7292,5 +7292,23 @@
   },
   "viewer:comfort.paletteClose": {
     "description": "Footer keyboard legend label for Escape dismissal in the command palette."
+  },
+  "library:addAction": {
+    "description": "Primary label on the library toolbar Add dropdown button."
+  },
+  "library:emptyDropHint": {
+    "description": "Format and drag-and-drop hint shown inside the empty library dropzone."
+  },
+  "library:statusFiltersAria": {
+    "description": "Accessible group label for library reading-status filter buttons."
+  },
+  "library:searchAria": {
+    "description": "Accessible label for the library search input."
+  },
+  "library:bulkToolbarAria": {
+    "description": "Accessible toolbar label for the library multi-select action bar."
+  },
+  "library:clearSelectionAria": {
+    "description": "Accessible label for the close button that clears library multi-selection."
   }
 }

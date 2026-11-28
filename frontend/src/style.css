@@ -131,7 +131,7 @@ button, input, select, textarea {
 .screen.active {
   opacity: 1;
   pointer-events: all;
-  transform: scale(1);
+  transform: none;
 }
 
 /* ============================================================
@@ -1429,18 +1429,118 @@ body.light-theme .toast.error { color: #dc2626; }
 #library-graph-section::-webkit-scrollbar-track { background: transparent; }
 #library-graph-section::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 100px; }
 
-/* 빈 상태 */
+/* 빈 상태 & 드롭존 (21st.dev File Dropzone 패턴) */
 .lib-empty {
   grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 100px 40px;
-  color: var(--text-muted);
+  padding: 56px 28px;
+  color: var(--text-secondary);
   text-align: center;
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 500;
+  gap: 6px;
+  box-sizing: border-box;
+}
+.lib-empty.lib-empty-dropzone {
+  width: min(100%, 540px);
+  margin: 12px auto;
+  padding: 40px 28px;
+  border: 1px dashed color-mix(in srgb, var(--text-secondary) 48%, var(--border-strong));
+  border-radius: var(--radius-lg, 14px);
+  background: color-mix(in srgb, var(--bg-elevated) 58%, transparent);
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+#library-screen.drag-over .lib-empty.lib-empty-dropzone,
+.lib-empty.lib-empty-dropzone.is-dragover {
+  border-style: solid;
+  border-color: var(--control-accent);
+  background: var(--control-accent-soft);
+}
+.lib-empty-icon {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.lib-empty-title,
+.lib-empty > p:first-of-type {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+  line-height: 1.45;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.lib-empty-desc {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: 450;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 42ch;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.lib-empty-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.lib-empty .status-action {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.lib-empty .status-action:hover {
+  background: var(--bg-hover);
+  border-color: var(--control-accent);
+}
+.lib-empty .lib-empty-primary-btn {
+  background: var(--control-accent);
+  border-color: color-mix(in srgb, var(--control-accent) 76%, #fff);
+  color: var(--on-accent, #ffffff);
+}
+.lib-empty .lib-empty-primary-btn:hover {
+  background: color-mix(in srgb, var(--control-accent) 88%, #000);
+  border-color: var(--control-accent);
+}
+.lib-empty .lib-empty-primary-btn:focus-visible {
+  outline: 2px solid var(--text-primary) !important;
+  outline-offset: 2px !important;
+}
+.lib-empty-hint {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /* 문서 카드 - 미리보기 팝업과 동일한 톤(중립 배경, 굵은 산세리프 제목, 단일 브랜드
@@ -4058,8 +4158,12 @@ body.light-theme .provider-picker-panel {
 }
 .category-filter-btn.active {
   background: var(--control-accent);
-  color: #fff;
+  color: var(--on-accent, #ffffff);
   border-color: transparent;
+}
+.category-filter-btn.active:focus-visible {
+  outline: 2px solid var(--text-primary) !important;
+  outline-offset: 2px !important;
 }
 
 /* Card Category Tag - 미리보기 팝업 태그와 톤을 맞춘 중립 필(pill). 카테고리마다
@@ -6551,58 +6655,58 @@ body.light-theme .library-tab-btn.active {
   z-index: 10;
 }
 .doc-card-expand-btn {
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--text-secondary) 46%, var(--border-strong));
   background: var(--bg-elevated);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
   opacity: 0;
-  transform: scale(0.85);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: none;
+  transition: opacity 0.16s ease, color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease;
 }
-.doc-card:hover .doc-card-expand-btn {
+.doc-card:hover .doc-card-expand-btn,
+.doc-card:focus-within .doc-card-expand-btn,
+.doc-card-expand-btn:focus-visible {
   opacity: 1;
-  transform: scale(1);
 }
 .doc-card-expand-btn:hover {
-  color: var(--accent-mid);
-  background: color-mix(in srgb, var(--accent-mid) 14%, var(--bg-elevated));
-  border-color: var(--accent-mid);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--control-accent);
 }
 
 .doc-card-check-btn {
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--text-secondary) 48%, var(--border-strong));
   background: var(--bg-elevated);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  color: var(--text-muted);
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+  color: var(--text-secondary);
 }
 .doc-card-check-btn svg {
   opacity: 0;
-  transform: scale(0.5);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: scale(0.75);
+  transition: opacity 0.16s ease, transform 0.16s ease;
 }
 .doc-card-check-btn:hover {
-  border-color: var(--accent-mid);
-  background: rgba(126, 196, 232, 0.05);
-  color: var(--accent-mid);
-  transform: scale(1.05);
+  border-color: var(--control-accent);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 .doc-card-check-btn:hover svg {
-  opacity: 0.6;
+  opacity: 0.7;
   transform: scale(1);
 }
 .doc-card-check-btn.checked {
@@ -7545,93 +7649,87 @@ body.light-theme .chat-drawer {
   opacity: 0.35;
 }
 
-/* 라이브러리 화면 새 논문 추가 플로팅 버튼 */
+/* 라이브러리 상단 툴바 추가/휴지통 버튼 (21st.dev Split/Menu 패턴) */
 #lib-upload-btn {
-  position: fixed;
-  bottom: 40px;
-  right: 40px;
-  z-index: 999;
-  padding: 14px 28px;
-  font-size: 14px;
-  font-weight: 700;
-  border-radius: 50px;
+  position: static;
+  min-height: 36px;
+  padding: 0 11px 0 12px;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 650;
+  border-radius: var(--radius-md);
   background: var(--control-accent);
-  color: #fff;
-  border: none;
-  box-shadow: var(--shadow-md);
-  transition: filter 0.15s ease, transform 0.15s ease;
-  display: flex;
+  color: var(--on-accent, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--control-accent) 76%, #fff);
+  box-shadow: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
+  white-space: nowrap;
 }
-
 #lib-upload-btn:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.06);
+  background: color-mix(in srgb, var(--control-accent) 88%, #000);
+  border-color: var(--control-accent);
+}
+#lib-upload-btn:focus-visible {
+  outline: 2px solid var(--text-primary) !important;
+  outline-offset: 2px !important;
 }
 
-#lib-upload-btn:active {
-  transform: translateY(0) scale(0.98);
-}
-
-/* 휴지통 비우기 우하단 플로팅 버튼 스타일 */
 #lib-empty-trash-btn {
-  position: fixed;
-  bottom: 40px;
-  right: 40px;
-  z-index: 999;
-  padding: 14px 28px;
-  font-size: 14px;
-  font-weight: 700;
-  border-radius: 50px;
-  background: #e5484d;
-  color: #fff;
-  border: none;
-  box-shadow: var(--shadow-md);
-  transition: filter 0.15s ease, transform 0.15s ease;
-  display: flex;
+  position: static;
+  min-height: 36px;
+  padding: 0 12px;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 650;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--error) 10%, var(--bg-elevated));
+  color: color-mix(in srgb, var(--error) 62%, var(--text-primary));
+  border: 1px solid color-mix(in srgb, var(--error) 42%, var(--border-strong));
+  box-shadow: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
+  white-space: nowrap;
 }
-
 #lib-empty-trash-btn:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.06);
+  background: color-mix(in srgb, var(--error) 15%, var(--bg-elevated));
+  border-color: var(--error);
 }
 
-#lib-empty-trash-btn:active {
-  transform: translateY(0) scale(0.98);
-}
-
-/* 우측 상단 플로팅 패널 내 휴지통 버튼 스타일 */
+/* 툴바 휴지통 토글 버튼 */
 #lib-tab-trash {
   position: relative;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: var(--bg-surface);
+  min-width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
   color: var(--text-secondary);
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-md);
-  font-size: 16px;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  padding: 0;
+  box-shadow: none;
+  font-size: 14px;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  padding: 0 9px;
 }
 
 .lib-tab-trash-count {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  background: #ef4444;
+  top: -5px;
+  right: -5px;
+  background: color-mix(in srgb, var(--error) 76%, #000000);
   color: #ffffff;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   min-width: 18px;
   height: 18px;
   border-radius: 9px;
@@ -7639,31 +7737,25 @@ body.light-theme .chat-drawer {
   align-items: center;
   justify-content: center;
   padding: 0 4px;
-  border: 2px solid var(--bg-surface);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  border: 2px solid var(--bg-base);
   line-height: 1;
 }
 
 #lib-tab-trash:hover {
-  transform: scale(1.08);
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.3);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
 #lib-tab-trash.active {
-  background: #ef4444;
-  color: white;
-  border-color: #ef4444;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+  background: color-mix(in srgb, var(--error) 12%, var(--bg-elevated));
+  color: color-mix(in srgb, var(--error) 62%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--error) 44%, var(--border-strong));
+  box-shadow: none;
 }
 
 #lib-tab-trash.active:hover {
-  background: #dc2626;
-}
-
-#lib-tab-trash:active {
-  transform: scale(0.95);
+  background: color-mix(in srgb, var(--error) 18%, var(--bg-elevated));
 }
 
 /* ── 채팅 세션 조회 (AI 어시스턴트 / 논문 비교 대화 목록) ── */
@@ -7771,7 +7863,7 @@ body.light-theme .chat-drawer {
   background: var(--bg-hover);
 }
 
-/* ── 하단 중앙 플로팅 선택 툴바 ── */
+/* ── 하단 중앙 플로팅 선택 툴바 (21st.dev Data Table Toolbar 패턴) ── */
 .lib-select-toolbar {
   position: fixed;
   bottom: 24px;
@@ -7780,14 +7872,19 @@ body.light-theme .chat-drawer {
   z-index: 1100;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 12px 7px 14px;
-  background: var(--bg-panel);
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  padding: 6px 10px 6px 14px;
+  background: linear-gradient(var(--bg-panel), var(--bg-panel)), var(--bg-base);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--surface-hairline), var(--shadow-floating, 0 14px 36px rgba(0, 0, 0, 0.28));
   animation: pillSlideUp 0.16s cubic-bezier(0.16, 1, 0.3, 1);
   transition: opacity 0.16s ease, transform 0.16s ease;
+  box-sizing: border-box;
 }
 .lib-select-toolbar.hidden {
   display: none !important;
@@ -7807,7 +7904,7 @@ body.light-theme .chat-drawer {
 .lib-select-toolbar-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
 }
 .lib-select-count {
@@ -7818,11 +7915,15 @@ body.light-theme .chat-drawer {
 }
 .lib-select-text-btn {
   background: transparent;
-  border: none;
-  color: var(--control-accent-text);
+  border: 1px solid transparent;
+  color: var(--text-primary);
+  font-family: var(--font-body);
   font-size: 12px;
   font-weight: 600;
+  text-decoration: underline 1px color-mix(in srgb, var(--control-accent) 65%, var(--border-strong));
+  text-underline-offset: 2px;
   cursor: pointer;
+  min-height: 28px;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
   transition: background-color 0.15s ease;
@@ -7835,12 +7936,13 @@ body.light-theme .chat-drawer {
   width: 1px;
   height: 18px;
   background: var(--border-strong);
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .lib-select-toolbar-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -7848,11 +7950,13 @@ body.light-theme .chat-drawer {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  min-height: 30px;
+  padding: 5px 10px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
+  font-family: var(--font-body);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -7864,31 +7968,32 @@ body.light-theme .chat-drawer {
   color: var(--text-primary);
 }
 .lib-select-action-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;
 }
 .lib-select-action-btn.danger {
-  color: var(--error);
+  color: color-mix(in srgb, var(--error) 62%, var(--text-primary));
 }
 .lib-select-action-btn.danger:hover {
   background: color-mix(in srgb, var(--error) 12%, transparent);
-  border-color: color-mix(in srgb, var(--error) 28%, transparent);
+  border-color: color-mix(in srgb, var(--error) 34%, transparent);
 }
 
 .lib-select-close-btn {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
   margin-left: 2px;
+  flex-shrink: 0;
 }
 .lib-select-close-btn:hover {
   background: var(--bg-hover);
@@ -7905,20 +8010,118 @@ body.light-theme .chat-drawer {
 .doc-card-check-btn.checked {
   background: var(--control-accent) !important;
   border-color: var(--control-accent) !important;
-  color: #ffffff !important;
+  color: var(--on-accent, #ffffff) !important;
+}
+.doc-card-check-btn.checked:focus-visible {
+  outline: 2px solid var(--text-primary) !important;
+  outline-offset: 2px !important;
 }
 
-.lib-add-fab-wrap { position:fixed; bottom:28px; right:28px; z-index:999; display:flex; flex-direction:column-reverse; align-items:flex-end; gap:8px; }
-.lib-add-fab-wrap #lib-upload-btn.lib-add-main-btn { position:static; width:46px; height:46px; padding:0; border-radius:var(--radius-lg); display:flex; align-items:center; justify-content:center; background:var(--control-accent); border:1px solid color-mix(in srgb, var(--control-accent) 70%, #fff); box-shadow:var(--shadow-md); }
-.lib-add-main-btn > svg { display:block; width:22px; height:22px; flex:none; transition:transform .18s cubic-bezier(0.16, 1, 0.3, 1); }
-.lib-add-fab-wrap.open .lib-add-main-btn > svg { transform:rotate(45deg); }
-.lib-add-sub-btn { display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-right:0; padding:7px 12px; border:1px solid var(--border-strong); border-radius:var(--radius-md); background:var(--bg-panel); box-shadow:var(--shadow-md); color:var(--text-primary); cursor:pointer; opacity:0; visibility:hidden; transform:translateY(8px) scale(.97); transition:opacity .15s cubic-bezier(0.16, 1, 0.3, 1), transform .15s cubic-bezier(0.16, 1, 0.3, 1), visibility .15s, background-color .15s ease; }
-.lib-add-fab-wrap.open .lib-add-sub-btn { opacity:1; visibility:visible; transform:translateY(0) scale(1); }
-.lib-add-sub-btn:hover { background:var(--bg-hover); border-color:var(--control-accent); }
-.lib-add-label { padding:0; background:transparent; box-shadow:none; font-size:12.5px; font-weight:600; color:var(--text-primary) !important; white-space:nowrap; }
-.lib-add-circle { width:26px; height:26px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; background:var(--bg-elevated) !important; border:1px solid var(--border); color:var(--text-secondary) !important; box-shadow:none; }
-.lib-add-circle svg { display:block; width:15px; height:15px; flex:none; }
-.lib-add-sub-btn:hover .lib-add-circle { color:var(--control-accent-text) !important; transform:none; filter:none; }
+.lib-add-fab-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  z-index: 35;
+}
+.lib-add-fab-wrap:has(#lib-upload-btn.hidden) {
+  display: none;
+}
+.lib-add-fab-wrap .lib-add-chevron-icon {
+  opacity: 0.86;
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lib-add-fab-wrap.open .lib-add-chevron-icon {
+  transform: rotate(180deg);
+}
+.lib-add-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 198px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: linear-gradient(var(--bg-panel), var(--bg-panel)), var(--bg-base);
+  box-shadow: var(--surface-hairline), var(--shadow-floating, 0 14px 36px rgba(0, 0, 0, 0.28));
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 60;
+}
+.lib-add-fab-wrap.open .lib-add-menu {
+  display: flex;
+}
+.lib-add-sub-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  width: 100%;
+  min-height: 36px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+.lib-add-sub-btn:hover {
+  background: var(--bg-hover);
+}
+.lib-add-sub-btn:focus-visible {
+  background: var(--bg-hover);
+  outline: 2px solid var(--focus-ring, var(--control-accent)) !important;
+  outline-offset: -2px !important;
+}
+.lib-add-label {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary) !important;
+  white-space: nowrap;
+}
+.lib-add-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border);
+  color: var(--text-secondary) !important;
+  box-shadow: none;
+  flex-shrink: 0;
+}
+.lib-add-circle svg { display: block; width: 14px; height: 14px; flex: none; }
+.lib-add-sub-btn:hover .lib-add-circle {
+  color: var(--text-primary) !important;
+  border-color: var(--border-strong);
+  transform: none;
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lib-select-toolbar {
+    animation: none;
+    transition: none;
+  }
+  .lib-add-fab-wrap .lib-add-chevron-icon,
+  .lib-add-sub-btn,
+  #lib-upload-btn,
+  #lib-tab-trash,
+  #lib-empty-trash-btn,
+  .lib-empty.lib-empty-dropzone {
+    transition: none;
+  }
+}
 .settings-mode-context {
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--control-accent) 34%, var(--border-strong));

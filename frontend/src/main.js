@@ -6383,6 +6383,7 @@ function updateTrashTabVisibility(trashDocs) {
     }
   }
   libTabTrash.title = `휴지통${trashCount > 0 ? ` (${trashCount}개 문서)` : ''}`
+  libTabTrash.setAttribute('aria-label', libTabTrash.title)
   if (trashCount > 0 || state.currentLibraryTab === 'trash') {
     libTabTrash.classList.remove('hidden')
   } else {
@@ -6436,9 +6437,15 @@ function syncLibraryTabUI(activeTab, { resetFilters = true } = {}) {
     subtitleEl.textContent = subtitles[mode][activeTab === 'trash' ? 'trash' : 'archive']
   }
 
-  if (libTabTrash) libTabTrash.classList.toggle('active', activeTab === 'trash')
+  if (libTabTrash) {
+    libTabTrash.classList.toggle('active', activeTab === 'trash')
+    libTabTrash.setAttribute('aria-pressed', String(activeTab === 'trash'))
+  }
   if (libEmptyTrashBtn) libEmptyTrashBtn.classList.toggle('hidden', activeTab !== 'trash')
-  if (libUploadBtn) libUploadBtn.classList.toggle('hidden', activeTab === 'trash')
+  if (libUploadBtn) {
+    libUploadBtn.classList.toggle('hidden', activeTab === 'trash')
+    if (activeTab === 'trash') setLibraryAddMenuOpen(false)
+  }
   if (libCompareToggleBtn) libCompareToggleBtn.classList.toggle('hidden', activeTab === 'trash')
   clearDocSelection()
 }
@@ -6674,17 +6681,23 @@ function updateDocCardSelectionVisuals(docId) {
     const checkBtn = el.querySelector('.doc-card-check-btn')
     if (checkBtn) {
       checkBtn.classList.toggle('checked', isSelected)
-      checkBtn.title = isSelected ? '선택 해제' : '선택'
+      checkBtn.setAttribute('aria-pressed', String(isSelected))
+      const checkLabel = isSelected ? '선택 해제' : '선택'
+      checkBtn.title = checkLabel
+      checkBtn.setAttribute('aria-label', checkLabel)
     }
   })
 }
 
 function clearDocSelection() {
   selectedDocIds.clear()
+  libraryGrid?.classList.remove('selection-mode')
   document.querySelectorAll('.doc-card-selected').forEach(el => el.classList.remove('doc-card-selected'))
   document.querySelectorAll('.doc-card-check-btn.checked').forEach(el => {
     el.classList.remove('checked')
+    el.setAttribute('aria-pressed', 'false')
     el.title = '선택'
+    el.setAttribute('aria-label', '선택')
   })
   updateSelectToolbarUI()
 }
@@ -6819,9 +6832,11 @@ function initSelectToolbarEvents() {
   if (libCompareToggleBtn) {
     libCompareToggleBtn.addEventListener('click', () => {
       if (selectedDocIds.size === 0) {
+        libraryGrid?.classList.add('selection-mode')
         showToast(documentUiCopy('카드 우상단 체크 버튼을 눌러 비교할 논문을 선택하세요.', workspaceModeController.getMode()), 'info')
       } else if (selectedDocIds.size >= 2 && selectedDocIds.size <= 5) {
         const ids = Array.from(selectedDocIds)
+        libraryGrid?.classList.remove('selection-mode')
         clearDocSelection()
         location.hash = `#compare?ids=${ids.map(encodeURIComponent).join(',')}`
       } else {
@@ -7710,7 +7725,7 @@ function renderLibraryStatusTabs(docs) {
   })
 
   el.innerHTML = LIBRARY_STATUS_TABS.map(t => `
-    <button type="button" class="lib-status-tab ${activeStatusFilter === t.key ? 'active' : ''}" data-status="${t.key}">
+    <button type="button" class="lib-status-tab ${activeStatusFilter === t.key ? 'active' : ''}" data-status="${t.key}" aria-pressed="${activeStatusFilter === t.key}">
       <span>${t.label}</span><span class="lib-status-tab-count">${counts[t.key]}</span>
     </button>
   `).join('')
@@ -8410,8 +8425,10 @@ async function renderLibrary() {
     }
     if (filterDefs.length > 0) {
       const allBtn = document.createElement('button')
+      allBtn.type = 'button'
       allBtn.className = `category-filter-btn ${activeCategoryFilter === 'ALL' ? 'active' : ''}`
       allBtn.dataset.category = 'ALL'
+      allBtn.setAttribute('aria-pressed', String(activeCategoryFilter === 'ALL'))
       allBtn.innerHTML = `${icon('book', 13, 'style="vertical-align:-2px;margin-right:3px"')}전체 (${docs.length})`
       allBtn.addEventListener('click', () => {
         if (!isMinimalUi()) activeCategoryFilter = 'ALL'
@@ -8421,8 +8438,10 @@ async function renderLibrary() {
 
       filterDefs.forEach(item => {
         const btn = document.createElement('button')
+        btn.type = 'button'
         btn.className = `category-filter-btn ${activeCategoryFilter === item.value ? 'active' : ''}`
         btn.dataset.category = item.value
+        btn.setAttribute('aria-pressed', String(activeCategoryFilter === item.value))
         btn.innerHTML = `${icon(isGeneralLibrary ? 'fileText' : 'tag', 13, 'style="vertical-align:-2px;margin-right:3px"')}${escapeHtml(item.label)} (${item.count})`
         btn.addEventListener('click', () => {
           activeCategoryFilter = item.value
@@ -9445,7 +9464,9 @@ function filterLibraryCards(docs, { animateFlip = true } = {}) {
     libraryGrid.classList.toggle('compact-view', !isMinimalUi() && libraryViewMode === 'compact')
     // Update filter buttons active class
     document.querySelectorAll('.category-filter-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.category === category)
+      const isActive = btn.dataset.category === category
+      btn.classList.toggle('active', isActive)
+      btn.setAttribute('aria-pressed', String(isActive))
     })
     $('library-breadcrumb')?.classList.toggle('global-filter-active', category !== 'ALL')
 
@@ -9508,9 +9529,12 @@ function renderLibrarySearchResults(docs, query) {
   if (docs.length === 0) {
     const el = document.createElement('div')
     el.className = 'lib-empty'
-    el.innerHTML = `<div style="margin-bottom:16px;color:var(--text-muted)">${icon('book', 48)}</div>
-      <p>"${escapeHtml(query)}"에 대한 검색 결과가 없습니다</p>
-      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">${workspaceModeController.getMode() === 'general' ? '문서 제목, 파일명, 번역된 본문 내용을 검색합니다' : '논문 제목, 파일명, 번역된 본문 내용을 검색합니다'}</p>`
+    const subtitle = workspaceModeController.getMode() === 'general'
+      ? '문서 제목, 파일명, 번역된 본문 내용을 검색합니다'
+      : '논문 제목, 파일명, 번역된 본문 내용을 검색합니다'
+    el.innerHTML = `<div class="lib-empty-icon" aria-hidden="true">${icon('search', 20)}</div>
+      <p class="lib-empty-title">"${escapeHtml(query)}"에 대한 검색 결과가 없습니다</p>
+      <p class="lib-empty-desc">${subtitle}</p>`
     libraryGrid.appendChild(el)
   } else {
     const createItem = !isMinimalUi() && libraryViewMode === 'list' ? createDocListRow : createDocCard
@@ -9553,6 +9577,15 @@ function exitLibrarySearch() {
 }
 
 if (librarySearchInput) {
+  librarySearchInput.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && librarySearchInput.value) {
+      event.preventDefault()
+      event.stopPropagation()
+      librarySearchInput.value = ''
+      librarySearchClearBtn?.classList.add('hidden')
+      exitLibrarySearch()
+    }
+  })
   librarySearchInput.addEventListener('input', () => {
     const query = librarySearchInput.value.trim()
     if (librarySearchClearBtn) librarySearchClearBtn.classList.toggle('hidden', !query)
@@ -9598,17 +9631,31 @@ const LIBRARY_EMPTY_STATE_VARIANTS = {
 function createEmptyState(variant = 'library') {
   if (variant === true) variant = 'finished'
   if (variant === false) variant = 'library'
+  const isLibraryDropzone = variant === 'library'
   const el = document.createElement('div')
-  el.className = 'lib-empty'
+  el.className = isLibraryDropzone ? 'lib-empty lib-empty-dropzone' : 'lib-empty'
   const c = LIBRARY_EMPTY_STATE_VARIANTS[variant] || LIBRARY_EMPTY_STATE_VARIANTS.library
-  el.innerHTML = `<div style="margin-bottom:16px;color:var(--text-muted)">${icon(c.iconName, 48)}</div>
-    <p>${documentUiCopy(c.title, workspaceModeController.getMode())}</p>
-    <p style="font-size:13px;color:var(--text-muted);margin-top:8px">${documentUiCopy(c.desc, workspaceModeController.getMode())}</p>`
-  if (variant === 'library') {
+  const emptyIconName = isLibraryDropzone ? 'upload' : c.iconName
+  el.innerHTML = `<div class="lib-empty-icon" aria-hidden="true">${icon(emptyIconName, 20)}</div>
+    <p class="lib-empty-title">${documentUiCopy(c.title, workspaceModeController.getMode())}</p>
+    <p class="lib-empty-desc">${documentUiCopy(c.desc, workspaceModeController.getMode())}</p>`
+  if (isLibraryDropzone) {
+    const actionsWrap = document.createElement('div')
+    actionsWrap.className = 'lib-empty-actions'
     const button = document.createElement('button')
-    button.type = 'button'; button.className = 'status-action'; button.textContent = t('common:status.upload')
+    button.type = 'button'
+    button.className = 'status-action lib-empty-primary-btn'
+    button.textContent = t('common:status.upload')
     button.addEventListener('click', () => fileInput.click())
-    el.append(button)
+    actionsWrap.append(button)
+    const hint = document.createElement('p')
+    hint.className = 'lib-empty-hint'
+    hint.textContent = t('library:emptyDropHint')
+    el.append(actionsWrap, hint)
+    el.addEventListener('dragenter', e => { e.preventDefault(); el.classList.add('is-dragover') })
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('is-dragover') })
+    el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget)) el.classList.remove('is-dragover') })
+    el.addEventListener('drop', () => el.classList.remove('is-dragover'))
   }
   return el
 }
@@ -9644,8 +9691,8 @@ function prepareDocItemHtml(doc) {
   const compareCheckHtml = ''
 
   const checkBtnHtml = state.currentLibraryTab === 'trash' ? '' : `
-    <button class="doc-card-check-btn ${isSelected ? 'checked' : ''}" data-id="${doc.id}" title="${isSelected ? '선택 해제' : '선택'}">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <button type="button" class="doc-card-check-btn ${isSelected ? 'checked' : ''}" data-id="${doc.id}" aria-pressed="${isSelected}" title="${isSelected ? '선택 해제' : '선택'}" aria-label="${isSelected ? '선택 해제' : '선택'}">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
     </button>
@@ -9653,7 +9700,7 @@ function prepareDocItemHtml(doc) {
 
 
   const expandBtnHtml = state.currentLibraryTab === 'trash' ? '' : `
-    <button class="doc-card-expand-btn" data-id="${doc.id}" title="미리보기">${icon('expand', 12)}</button>
+    <button type="button" class="doc-card-expand-btn" data-id="${doc.id}" title="미리보기" aria-label="미리보기">${icon('expand', 12, 'aria-hidden="true"')}</button>
   `
 
   let progressHtml = ''
@@ -9688,20 +9735,20 @@ function prepareDocItemHtml(doc) {
     ctaBtnFullHtml = `<button class="doc-restore-btn" data-id="${doc.id}"><span>복원</span>${icon('refreshCw', 15)}</button>`
   } else {
     iconActionsHtml = `
-      <button class="doc-edit-btn" data-id="${doc.id}" title="제목 수정">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg>
+      <button type="button" class="doc-edit-btn" data-id="${doc.id}" title="제목 수정" aria-label="제목 수정">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg>
       </button>
       <div class="doc-card-kebab-wrapper">
-        <button class="doc-card-kebab-btn" data-id="${doc.id}" title="더보기">
-          ${icon('moreVertical', 14)}
+        <button type="button" class="doc-card-kebab-btn" data-id="${doc.id}" title="더보기" aria-label="더보기" aria-haspopup="menu" aria-expanded="false">
+          ${icon('moreVertical', 14, 'aria-hidden="true"')}
         </button>
-        <div class="doc-card-kebab-menu hidden" data-id="${doc.id}">
-          <button class="doc-card-kebab-item doc-card-delete-btn" data-id="${doc.id}">
-            ${icon('trash2', 13)}
+        <div class="doc-card-kebab-menu hidden" role="menu" data-id="${doc.id}">
+          <button type="button" class="doc-card-kebab-item doc-card-delete-btn" role="menuitem" data-id="${doc.id}">
+            ${icon('trash2', 13, 'aria-hidden="true"')}
             <span>삭제하기</span>
           </button>
-          <button class="doc-card-kebab-item doc-card-clear-cache-btn" data-id="${doc.id}">
-            ${icon('refreshCw', 13)}
+          <button type="button" class="doc-card-kebab-item doc-card-clear-cache-btn" role="menuitem" data-id="${doc.id}">
+            ${icon('refreshCw', 13, 'aria-hidden="true"')}
             <span>캐시 삭제</span>
           </button>
         </div>
@@ -12233,7 +12280,7 @@ function sanitizeMarkedHtml(html) {
   return DOMPurify.sanitize(html)
 }
 
-function setLibraryAddMenuOpen(open) {
+function setLibraryAddMenuOpen(open, { restoreFocus = false } = {}) {
   const wrap = document.querySelector('.lib-add-fab-wrap')
   if (!wrap) return
   wrap.classList.toggle('open', open)
@@ -12242,8 +12289,55 @@ function setLibraryAddMenuOpen(open) {
   const label = open ? t('common:addMenu.close') : t('common:addMenu.open')
   libUploadBtn.dataset.i18nAriaLabel = labelKey
   libUploadBtn.setAttribute('aria-label', label)
+  if (!open && restoreFocus) libUploadBtn.focus({ preventScroll: true })
 }
-libUploadBtn.addEventListener('click', () => setLibraryAddMenuOpen(!document.querySelector('.lib-add-fab-wrap')?.classList.contains('open')))
+libUploadBtn.addEventListener('click', event => {
+  const nextOpen = !document.querySelector('.lib-add-fab-wrap')?.classList.contains('open')
+  setLibraryAddMenuOpen(nextOpen)
+  if (nextOpen && event.detail === 0) {
+    window.requestAnimationFrame(() => document.querySelector('#lib-add-menu [role="menuitem"]')?.focus())
+  }
+})
+libUploadBtn.addEventListener('keydown', event => {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    setLibraryAddMenuOpen(true)
+    const items = [...document.querySelectorAll('#lib-add-menu [role="menuitem"]')]
+    ;(event.key === 'ArrowUp' ? items.at(-1) : items[0])?.focus()
+  }
+})
+document.getElementById('lib-add-menu')?.addEventListener('keydown', event => {
+  const items = [...document.querySelectorAll('#lib-add-menu [role="menuitem"]')]
+  if (!items.length) return
+  const idx = items.indexOf(document.activeElement)
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    const next = (Math.max(idx, 0) + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+    items[next]?.focus()
+  } else if (event.key === 'Home') {
+    event.preventDefault()
+    items[0]?.focus()
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    items.at(-1)?.focus()
+  } else if (event.key === 'Tab') {
+    setLibraryAddMenuOpen(false)
+  }
+})
+document.addEventListener('pointerdown', event => {
+  const wrap = document.querySelector('.lib-add-fab-wrap')
+  if (wrap?.classList.contains('open') && !wrap.contains(event.target)) {
+    setLibraryAddMenuOpen(false)
+  }
+})
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return
+  const wrap = document.querySelector('.lib-add-fab-wrap')
+  if (wrap?.classList.contains('open')) {
+    event.stopPropagation()
+    setLibraryAddMenuOpen(false, { restoreFocus: wrap.contains(document.activeElement) })
+  }
+})
 $('lib-add-paper-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); openDocumentSourceModal() })
 $('lib-add-folder-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); openCreateFolderDialog() })
 
