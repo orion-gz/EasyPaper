@@ -6957,6 +6957,7 @@ function renderCompareChatMessage(role, content, isHtml = false) {
 
   if (content) appendCompareActionButtons(msgEl, role, content)
 
+  compareChatMessages?.querySelector('[data-compare-starter]')?.remove()
   compareChatMessages.appendChild(msgEl)
   compareChatMessages.scrollTop = compareChatMessages.scrollHeight
   return msgEl
@@ -6999,6 +7000,7 @@ function appendCompareTypingIndicator() {
   bubbleEl.className = 'message-bubble'
   bubbleEl.innerHTML = `<div class="typing-container" style="display: flex; align-items: center; gap: 8px;"><span class="typing-text" style="font-size: 12px; color: var(--text-secondary);">AI가 답변을 준비하고 있습니다</span><div class="typing-indicator" style="display: flex; gap: 3px; align-items: center;"><span></span><span></span><span></span></div></div>`
   msgEl.appendChild(bubbleEl)
+  compareChatMessages?.querySelector('[data-compare-starter]')?.remove()
   compareChatMessages.appendChild(msgEl)
   compareChatMessages.scrollTop = compareChatMessages.scrollHeight
   return msgEl
@@ -7008,27 +7010,44 @@ function removeCompareTypingIndicator() {
   compareChatMessages.querySelectorAll('.temp-typing').forEach(el => el.remove())
 }
 
+function setPromptSubmitBtnState(btn, isGenerating) {
+  if (!btn) return
+  const labelKey = isGenerating ? 'chat:composer.stop' : 'chat:composer.send'
+  const label = (isGenerating ? t('chat:composer.stop') : t('chat:composer.send')) || (isGenerating ? '답변 생성 중단' : '전송')
+  btn.dataset.state = isGenerating ? 'streaming' : 'idle'
+  btn.dataset.i18nTitle = labelKey
+  btn.dataset.i18nAriaLabel = labelKey
+  btn.title = label
+  btn.setAttribute('aria-label', label)
+  btn.innerHTML = isGenerating
+    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>`
+    : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>`
+}
+
 function updateCompareChatSendBtnIcon(isGenerating) {
-  if (!compareChatSendBtn) return
-  if (isGenerating) {
-    compareChatSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /></svg>`
-    compareChatSendBtn.title = '답변 생성 중단'
-  } else {
-    compareChatSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`
-    compareChatSendBtn.title = '전송'
-  }
+  setPromptSubmitBtnState(compareChatSendBtn, isGenerating)
 }
 
 function renderCompareGreeting() {
-  const titles = compareChatState.docs
-    .map((d, i) => `${i + 1}. ${escapeHtml((d.metadata && d.metadata.title) ? d.metadata.title : d.filename)}`)
-    .join('<br>')
-  renderCompareChatMessage('assistant',
-    `선택하신 ${compareChatState.docs.length}편의 ${documentUiCopy('논문을', workspaceModeController.getMode())} 비교해서 답변해 드릴게요.<br><br>` +
-    `<strong>비교 대상:</strong><br>${titles}<br><br>` +
-    `<strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong>` +
-    `<ul><li>두 ${documentUiCopy('논문', workspaceModeController.getMode())}의 핵심 방법론 차이가 뭐야?</li><li>실험 결과를 비교했을 때 어느 쪽이 더 우수해?</li><li>공통적으로 다루는 한계점이 있어?</li></ul>`,
-    true)
+  if (!compareChatMessages) return
+  const titlesHtml = compareChatState.docs
+    .map((d, i) => `<span class="chat-empty-compare-doc">${i + 1}. ${escapeHtml((d.metadata && d.metadata.title) ? d.metadata.title : d.filename)}</span>`)
+    .join('')
+  const prompts = [
+    t('chat:compare.promptMethod'),
+    t('chat:compare.promptResults'),
+    t('chat:compare.promptLimits'),
+  ]
+  compareChatMessages.innerHTML = `
+    <div class="chat-empty-starter" data-compare-starter>
+      <p class="chat-empty-lead">${escapeHtml(t('chat:compare.lead', { count: compareChatState.docs.length }))}</p>
+      <div class="chat-empty-compare-docs">${titlesHtml}</div>
+      <span class="chat-empty-label">${escapeHtml(t('chat:suggestions.label'))}</span>
+      <div class="chat-starter-chips">
+        ${prompts.map(item => `<button type="button" class="chat-starter-chip" data-compare-prompt="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join('')}
+      </div>
+    </div>
+  `
 }
 
 // location.hash 대입은 브라우저에 따라 popstate와 hashchange를 둘 다 발생시켜,
@@ -7148,6 +7167,16 @@ async function sendCompareChatMessage() {
   )
 }
 
+if (compareChatMessages) {
+  compareChatMessages.addEventListener('click', (event) => {
+    const starterBtn = event.target.closest('[data-compare-prompt]')
+    if (starterBtn && !compareChatState.activeStream) {
+      compareChatInput.value = starterBtn.dataset.comparePrompt || ''
+      sendCompareChatMessage()
+    }
+  })
+}
+
 if (compareChatSendBtn) {
   compareChatSendBtn.addEventListener('click', () => {
     if (compareChatState.activeStream) {
@@ -7206,6 +7235,7 @@ if (compareBackBtn) {
 let chatDrawerState = { docId: null, doc: null, history: [], activeStream: null, currentText: '' }
 
 function renderChatDrawerMessage(role, content, isHtml = false, showActions = true) {
+  chatDrawerMessages?.querySelector('[data-drawer-starter]')?.remove()
   const msgEl = document.createElement('div')
   msgEl.className = `chat-message ${role}`
 
@@ -7290,23 +7320,26 @@ function removeChatDrawerTypingIndicator() {
 }
 
 function updateChatDrawerSendBtnIcon(isGenerating) {
-  if (!chatDrawerSendBtn) return
-  if (isGenerating) {
-    chatDrawerSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /></svg>`
-    chatDrawerSendBtn.title = '답변 생성 중단'
-  } else {
-    chatDrawerSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`
-    chatDrawerSendBtn.title = '전송'
-  }
+  setPromptSubmitBtnState(chatDrawerSendBtn, isGenerating)
 }
 
 function renderChatDrawerGreeting(doc) {
+  if (!chatDrawerMessages) return
   const title = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
-  renderChatDrawerMessage('assistant',
-    `<strong>${escapeHtml(title)}</strong>에 대해 무엇이든 물어보세요.<br><br>` +
-    `<strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong>` +
-    `<ul><li>이 ${documentUiCopy('논문', doc.document_mode)}의 핵심 기여는 무엇인가요?</li><li>실험 설정을 요약해줄 수 있나요?</li><li>이 방법론의 한계점은 뭔가요?</li></ul>`,
-    true, false)
+  const isResearch = doc.document_mode !== 'general'
+  const examples = isResearch
+    ? [t('chat:suggestions.research.summary'), t('chat:suggestions.research.method'), t('chat:suggestions.research.results')]
+    : [t('chat:suggestions.general.summary'), t('chat:suggestions.general.procedure'), t('chat:suggestions.general.cautions')]
+  chatDrawerMessages.innerHTML = `
+    <div class="chat-empty-starter" data-drawer-starter>
+      <strong class="chat-empty-doc-title">${escapeHtml(title)}</strong>
+      <p class="chat-empty-lead">${escapeHtml(isResearch ? t('chat:welcome.research') : t('chat:welcome.general'))}</p>
+      <span class="chat-empty-label">${escapeHtml(t('chat:suggestions.label'))}</span>
+      <div class="chat-starter-chips">
+        ${examples.map(item => `<button type="button" class="chat-starter-chip" data-drawer-prompt="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join('')}
+      </div>
+    </div>
+  `
 }
 
 // location.hash 대입은 popstate/hashchange를 둘 다 발생시킬 수 있어(openCompareScreen과
@@ -7472,6 +7505,12 @@ async function sendChatDrawerMessage({ verifyEvidence = false } = {}) {
 
 if (chatDrawerMessages) {
   chatDrawerMessages.addEventListener('click', event => {
+    const starterBtn = event.target.closest('[data-drawer-prompt]')
+    if (starterBtn && !chatDrawerState.activeStream) {
+      chatDrawerInput.value = starterBtn.dataset.drawerPrompt || ''
+      sendChatDrawerMessage()
+      return
+    }
     const retryButton = event.target.closest('[data-chat-drawer-retry]')
     if (retryButton) {
       const question = decodeURIComponent(retryButton.dataset.chatDrawerRetry || '')
@@ -16556,7 +16595,15 @@ function buildChatWelcomeHtml() {
     ? [t('chat:suggestions.research.summary'), t('chat:suggestions.research.method'), t('chat:suggestions.research.results')]
     : [t('chat:suggestions.general.summary'), t('chat:suggestions.general.procedure'), t('chat:suggestions.general.cautions')]
   const welcome = isResearch ? t('chat:welcome.research') : t('chat:welcome.general')
-  return `<div class="chat-message assistant"><div class="message-bubble">${escapeHtml(welcome)}<br><br><strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}${escapeHtml(t('chat:suggestions.label'))}</strong><ul>${examples.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div></div>`
+  return `
+    <div class="chat-empty-starter" data-chat-starter>
+      <p class="chat-empty-lead">${escapeHtml(welcome)}</p>
+      <span class="chat-empty-label">${escapeHtml(t('chat:suggestions.label'))}</span>
+      <div class="chat-starter-chips">
+        ${examples.map(item => `<button type="button" class="chat-starter-chip" data-chat-prompt="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join('')}
+      </div>
+    </div>
+  `
 }
 
 function attachEvidenceToBubble(bubble, evidenceItems = []) {
@@ -16764,22 +16811,7 @@ function parseQuotedTextChatPayload(content) {
 }
 
 function updateChatSendBtnIcon(isGenerating) {
-  if (isGenerating) {
-    chatSendBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
-      </svg>
-    `;
-    chatSendBtn.title = '답변 생성 중단';
-  } else {
-    chatSendBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="22" y1="2" x2="11" y2="13"/>
-        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-      </svg>
-    `;
-    chatSendBtn.title = '전송';
-  }
+  setPromptSubmitBtnState(chatSendBtn, isGenerating)
 }
 
 function regenerateResponse(assistantMsgEl) {
@@ -16803,7 +16835,8 @@ function regenerateResponse(assistantMsgEl) {
   }
 
   const remainingUserCount = chatMessages.querySelectorAll('.chat-message.user').length;
-  const remainingAssistantCount = chatMessages.querySelectorAll('.chat-message.assistant').length - 1;
+  const hasLegacyWelcome = Boolean(chatMessages.querySelector('.chat-message.assistant[data-chat-welcome]'));
+  const remainingAssistantCount = chatMessages.querySelectorAll('.chat-message.assistant:not(.temp-typing)').length - (hasLegacyWelcome ? 1 : 0);
   const expectedHistoryLength = remainingUserCount + Math.max(0, remainingAssistantCount);
   state.chatHistory = state.chatHistory.slice(0, expectedHistoryLength);
 
@@ -17083,6 +17116,7 @@ async function renderSuggestedQuestions(msgEl) {
 }
 
 function appendChatMessage(role, content, isHtml = false, quotedMemoContext = null) {
+  chatMessages?.querySelector('[data-chat-starter]')?.remove()
   const msgEl = document.createElement('div')
   msgEl.className = `chat-message ${role}`
 
@@ -17294,6 +17328,15 @@ async function sendChatMessage({ verifyEvidence = false } = {}) {
 
 function initChatListeners() {
   chatMessages?.addEventListener('click', event => {
+    const starterBtn = event.target.closest('[data-chat-prompt], [data-chat-prompt-key]')
+    if (starterBtn && !state.chatActiveStream) {
+      const promptText = starterBtn.dataset.chatPrompt || (starterBtn.dataset.chatPromptKey ? t(starterBtn.dataset.chatPromptKey) : '')
+      if (promptText) {
+        chatInput.value = promptText
+        sendChatMessage()
+      }
+      return
+    }
     const retryButton = event.target.closest('[data-chat-retry]')
     if (retryButton) {
       chatInput.value = decodeURIComponent(retryButton.dataset.chatRetry || '')

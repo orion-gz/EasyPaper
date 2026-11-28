@@ -347,11 +347,10 @@
         <div class="chat-input-box">
           <textarea id="compare-chat-input" class="chat-input-textarea" placeholder="선택한 논문들에 대해 비교 질문을 해보세요..." rows="1" data-document-copy-placeholder="legacy.documentCopy.compare-chat-input"></textarea>
           <div class="chat-input-footer">
-            <span class="compare-chat-hint">Enter로 전송 · Shift+Enter로 줄바꿈</span>
-            <button id="compare-chat-send-btn" class="chat-send-btn" title="전송">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            <span class="compare-chat-hint" data-i18n="chat:composer.shortcutHint">Enter to send · Shift+Enter for new line</span>
+            <button id="compare-chat-send-btn" class="chat-send-btn" type="button" data-state="idle" title="Send message" aria-label="Send message" data-i18n-title="chat:composer.send" data-i18n-aria-label="chat:composer.send">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>
               </svg>
             </button>
           </div>
@@ -384,11 +383,10 @@
         <div class="chat-input-box">
           <textarea id="chat-drawer-input" class="chat-input-textarea" placeholder="이 논문에 대해 질문해보세요..." rows="1" data-document-copy-placeholder="legacy.documentCopy.chat-drawer-input"></textarea>
           <div class="chat-input-footer">
-            <span class="compare-chat-hint">Enter로 전송 · Shift+Enter로 줄바꿈</span>
-            <button id="chat-drawer-send-btn" class="chat-send-btn" title="전송">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            <span class="compare-chat-hint" data-i18n="chat:composer.shortcutHint">Enter to send · Shift+Enter for new line</span>
+            <button id="chat-drawer-send-btn" class="chat-send-btn" type="button" data-state="idle" title="Send message" aria-label="Send message" data-i18n-title="chat:composer.send" data-i18n-aria-label="chat:composer.send">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>
               </svg>
             </button>
           </div>
@@ -645,39 +643,48 @@
             <span class="chat-header-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></svg></span>
             <span class="chat-title">AI 어시스턴트</span>
           </div>
-          <button id="chat-close-btn" class="chat-close-btn" title="닫기">&times;</button>
+          <button type="button" id="chat-close-btn" class="chat-close-btn" title="Close" aria-label="Close" data-i18n-title="viewer:figurePreview.close" data-i18n-aria-label="viewer:figurePreview.close">&times;</button>
         </div>
         <!-- AI Chat Loading Progress Bar -->
         <div class="chat-loading-progress" id="chat-loading-progress">
           <div class="chat-loading-progress-bar"></div>
         </div>
         <div class="chat-messages" id="chat-messages">
-          <div class="chat-message assistant">
-            <div class="message-bubble">안녕하세요! 이 논문의 내용에 대해 궁금한 점을 질문하시면 해당 분야의 전문가로서 답변해 드립니다.<br><br><strong><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>질문 예시:</strong><ul><li>이 논문의 핵심 연구 내용과 기여도를 요약해줘.</li><li>본문에서 제안하는 알고리즘/방법론의 상세 과정을 설명해줘.</li><li>실험 결과에서 제시된 주요 수치와 의의는 무엇이야?</li></ul></div>
+          <div class="chat-empty-starter" data-chat-starter>
+            <p class="chat-empty-lead" data-i18n="chat:welcome.research">Ask directly about findings, equations, or experimental evidence.</p>
+            <span class="chat-empty-label" data-i18n="chat:suggestions.label">Quick prompts</span>
+            <div class="chat-starter-chips">
+              <button type="button" class="chat-starter-chip" data-chat-prompt-key="chat:suggestions.research.summary" data-i18n="chat:suggestions.research.summary">Summarize the main findings and contributions.</button>
+              <button type="button" class="chat-starter-chip" data-chat-prompt-key="chat:suggestions.research.method" data-i18n="chat:suggestions.research.method">Explain the proposed methodology.</button>
+              <button type="button" class="chat-starter-chip" data-chat-prompt-key="chat:suggestions.research.results" data-i18n="chat:suggestions.research.results">What are the key results and why do they matter?</button>
+            </div>
           </div>
         </div>
         <div class="chat-input-area">
-          <div class="chat-input-box">
-            <!-- 인용 박스 -->
-            <div id="chat-quote-area" class="chat-quote-area hidden">
-              <span class="chat-quote-symbol">❝</span>
+          <div class="chat-input-box" data-slot="prompt-input">
+            <!-- 인용 컨텍스트 칩 (21st.dev PromptInputAttachment 패턴) -->
+            <div id="chat-quote-area" class="chat-quote-area hidden" data-slot="prompt-input-attachment">
+              <span class="chat-quote-icon" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+              </span>
               <div id="chat-quote-text" class="chat-quote-text"></div>
-              <img id="chat-quote-img" class="chat-quote-img hidden" alt="Quoted Figure" />
-              <button id="chat-quote-close-btn" class="chat-quote-close-btn" title="인용 취소">&times;</button>
+              <img id="chat-quote-img" class="chat-quote-img hidden" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Quoted Figure" />
+              <button type="button" id="chat-quote-close-btn" class="chat-quote-close-btn" title="Remove quoted context" aria-label="Remove quoted context" data-i18n-title="chat:composer.removeQuote" data-i18n-aria-label="chat:composer.removeQuote">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
             </div>
-            <textarea id="chat-input" class="chat-input-textarea" placeholder="논문에 대해 궁금한 점을 질문하세요..." data-i18n-placeholder="chat:placeholder" rows="1"></textarea>
-            <div class="chat-input-footer">
+            <textarea id="chat-input" class="chat-input-textarea" data-slot="prompt-input-textarea" placeholder="논문에 대해 궁금한 점을 질문하세요..." data-i18n-placeholder="chat:placeholder" rows="1"></textarea>
+            <div class="chat-input-footer" data-slot="prompt-input-toolbar">
               <div id="chat-sidebar-provider"></div>
               <div class="chat-input-actions">
-                <button type="button" id="chat-input-expand-btn" class="chat-input-expand-btn" title="입력창 확장" aria-label="입력창 확장" aria-controls="chat-input" aria-expanded="false">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button type="button" id="chat-input-expand-btn" class="chat-input-expand-btn" title="Expand input" aria-label="Expand input" data-i18n-title="common:chatInput.expand" data-i18n-aria-label="common:chatInput.expand" aria-controls="chat-input" aria-expanded="false">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/>
                   </svg>
                 </button>
-                <button id="chat-send-btn" class="chat-send-btn" title="전송">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="22" y1="2" x2="11" y2="13"/>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                <button id="chat-send-btn" class="chat-send-btn" type="button" data-slot="prompt-input-submit" data-state="idle" title="Send message" aria-label="Send message" data-i18n-title="chat:composer.send" data-i18n-aria-label="chat:composer.send">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>
                   </svg>
                 </button>
               </div>

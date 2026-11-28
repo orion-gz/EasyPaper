@@ -38,8 +38,8 @@ test('논문 2편을 선택해 비교 채팅을 시작하고, 질문에 대한 �
   await expect(chips.nth(0)).toHaveText('Attention Is All You Need')
   await expect(chips.nth(1)).toHaveText('GAN Paper')
 
-  // 인사말에 두 논문이 모두 언급된다 (중복 렌더링되지 않아야 함)
-  await expect(page.locator('#compare-chat-messages .chat-message.assistant')).toHaveCount(1)
+  // 빈 대화 초기 화면에 두 논문이 모두 표시된다 (중복 렌더링되지 않아야 함)
+  await expect(page.locator('#compare-chat-messages [data-compare-starter]')).toHaveCount(1)
   await expect(page.locator('#compare-chat-messages')).toContainText('Attention Is All You Need')
   await expect(page.locator('#compare-chat-messages')).toContainText('GAN Paper')
 

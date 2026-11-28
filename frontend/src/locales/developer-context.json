@@ -7259,5 +7259,29 @@
   },
   "dashboard:heatmapNoActivity": {
     "description": "Live readout and aria-label when a heatmap day has zero recorded activity."
+  },
+  "chat:composer.removeQuote": {
+    "description": "Accessible label for removing an attached passage or figure chip in the chat composer."
+  },
+  "chat:composer.send": {
+    "description": "Accessible label and tooltip for the chat prompt submit button."
+  },
+  "chat:composer.stop": {
+    "description": "Accessible label and tooltip for stopping an active streaming AI response."
+  },
+  "chat:composer.shortcutHint": {
+    "description": "Keyboard shortcut hint shown in compare and drawer chat composers."
+  },
+  "chat:compare.lead": {
+    "description": "Empty-state lead copy in multi-document compare chat."
+  },
+  "chat:compare.promptMethod": {
+    "description": "Starter prompt chip in compare chat comparing methodologies."
+  },
+  "chat:compare.promptResults": {
+    "description": "Starter prompt chip in compare chat comparing results and metrics."
+  },
+  "chat:compare.promptLimits": {
+    "description": "Starter prompt chip in compare chat asking about shared limitations."
   }
 }
