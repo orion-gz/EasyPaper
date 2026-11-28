@@ -275,6 +275,8 @@ body.light-theme .dash-stat-delta.is-up {
 }
 
 .dash-contrib-canvas {
+  /* Weekday label plus one cell and gap per week. */
+  width: min(100%, calc(22px + var(--contrib-weeks, 16) * (14px + 3px)));
   display: flex;
   flex-direction: column;
   gap: 4px;
