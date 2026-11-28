@@ -16601,6 +16601,8 @@ function renderVerificationBadge(messageElement, verification) {
   if (!messageElement || !verification) return
   const badge = document.createElement("div")
   const hasRisk = Array.isArray(verification.risks) && verification.risks.length > 0
+  const linked = messageElement.querySelector('.chat-page-citation[data-evidence-quote]:not([data-evidence-quote=""])')
+  if (!hasRisk && !linked) return
   badge.className = "chat-verification-badge " + (hasRisk ? "risk" : "verified")
   badge.textContent = hasRisk
     ? t("chat:evidence.risk", { count: verification.risks.length })

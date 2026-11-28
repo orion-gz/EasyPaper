@@ -12,7 +12,7 @@
   "retrySameQuestion": "Send same question again",
   "staleRevision": "Based on an earlier document analysis",
   "evidence.source": "Document evidence",
-  "evidence.verified": "Evidence structure verified",
+  "evidence.verified": "Source citation linked",
   "evidence.risk": "{{count}} evidence risk signals",
   "evidence.translation": "Translation evidence",
   "evidence.verifyAction": "Verify evidence",

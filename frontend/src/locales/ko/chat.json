@@ -12,7 +12,7 @@
   "retrySameQuestion": "동일 질문 다시 보내기",
   "staleRevision": "재분석 이전의 문서 내용을 바탕으로 한 답변",
   "evidence.source": "문서 원문 근거",
-  "evidence.verified": "근거 확인됨",
+  "evidence.verified": "원문 인용 연결됨",
   "evidence.risk": "근거 확인 필요 {{count}}건",
   "evidence.translation": "번역 근거",
   "evidence.verifyAction": "근거 검증",
