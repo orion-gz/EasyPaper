@@ -1723,7 +1723,7 @@ function installCompactReadingSwitch() {
     const button = document.createElement('button')
     button.type = 'button'
     button.dataset.side = side
-    button.textContent = t(`viewer:readingPane.${side}`)
+    button.textContent = side === 'source' ? t('viewer:readingPane.source') : t('viewer:readingPane.translation')
     button.addEventListener('click', event => {
       event.stopPropagation()
       if (scroll.dataset.readingPane === side) return
