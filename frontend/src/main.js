@@ -1706,9 +1706,53 @@ function getCachedPageWrapper(pageNum) {
   return found
 }
 
+// Keep the same page pair and its PDF text map mounted while switching sides.
+function installCompactReadingSwitch() {
+  const controls = document.createElement('div')
+  controls.className = 'compact-reading-switch'
+  controls.setAttribute('role', 'group')
+  controls.setAttribute('aria-label', t('viewer:readingPane.label'))
+  const scroll = viewerScrollContainer
+  function selectPane(side) {
+    scroll.dataset.readingPane = side
+    for (const button of controls.children) {
+      button.setAttribute('aria-pressed', String(button.dataset.side === side))
+    }
+  }
+  for (const side of ['source', 'translation']) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.dataset.side = side
+    button.textContent = t(`viewer:readingPane.${side}`)
+    button.addEventListener('click', event => {
+      event.stopPropagation()
+      if (scroll.dataset.readingPane === side) return
+      const pair = pagePairByNum.get(state.currentPage)
+      const top = pair?.getBoundingClientRect().top
+      if (side === 'translation' && isTransPaneCollapsed) pair?.querySelector('.trans-collapse-btn')?.click()
+      selectPane(side)
+      scroll.scrollLeft = 0
+      if (!pair) return
+      const selected = pair.querySelector('.active-mapped-sentence')
+      if (selected) {
+        const page = Number(pair.dataset.page)
+        const matched = mappedSentenceRange(state.pdfPageSentences?.[page] || [], Number(selected.dataset.sentenceIdx))
+        if (matched) applyActiveHighlight(page, matched)
+        const target = side === 'translation' ? selected : pair.querySelector('.sentence-active-box')
+        if (target) { target.scrollIntoView({ block: 'center', inline: 'nearest' }); return }
+      }
+      scroll.scrollTop += pair.getBoundingClientRect().top - top
+    })
+    controls.append(button)
+  }
+  scroll.prepend(controls)
+  selectPane('source')
+}
+
 async function initScrollViewer() {
   easyEnglishController?.reset()
   viewerScrollContainer.innerHTML = ''
+  installCompactReadingSwitch()
   pagePairByNum.clear()
   pageWrapperByNum.clear()
   visibleTranslationTimers.forEach(timer => clearTimeout(timer))
@@ -17333,6 +17377,8 @@ function initChatListeners() {
     const page = Number(citation.dataset.pageCitation)
     if (Number.isInteger(page) && page >= 1 && page <= state.totalPages) {
       window.__easypaperDocument?.rememberReference()
+      const sourceButton = viewerScrollContainer.querySelector('.compact-reading-switch [data-side=source]')
+      if (sourceButton?.offsetWidth) sourceButton.click()
       const quote = citation.dataset.evidenceQuote
       const occurrence = Number(citation.dataset.evidenceOccurrence || 1)
       if (quote) locateTermInPdf(page, quote, occurrence)

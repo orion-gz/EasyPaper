@@ -1,4 +1,7 @@
 {
+  "readingPane.label": "Reading pane",
+  "readingPane.source": "Original",
+  "readingPane.translation": "Translation",
   "preparation.running": "Preparing analysis. You can read the PDF now.",
   "preparation.failed": "Analysis unavailable. You can still read the PDF; refresh to retry.",
   "translation.reset": "Reset translations",
