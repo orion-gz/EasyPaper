@@ -76,6 +76,15 @@ def test_evidence_ids_are_deterministic_and_invalid_ids_are_removed(isolated_dir
     assert "invalid_evidence_id" in verification["risks"]
 
 
+def test_repeated_citations_keep_identity_in_table():
+    from services.context_retrieval import validate_evidence_citations
+    items = [{"page_num": 3, "evidence_id": key} for key in ("A", "B")]
+    answer, cited, info = validate_evidence_citations("🔎 [p.3]\n| [E:A] | [E:A] | [E:B] |", items)
+    positions = [pos for pos in range(len(answer)) if answer.startswith("[p.3]", pos)]
+    assert info["citation_links"] == dict(zip(positions[1:], ["A", "A", "B"]))
+    assert cited == items
+
+
 @pytest.mark.parametrize("question,screen_context,expect_visual", [
     ("이 페이지 그림을 설명해줘", {"mode": "viewer", "page_num": 1, "include_visual": None}, True),
     ("핵심 내용을 설명해줘", {"mode": "viewer", "page_num": 1, "include_visual": None}, False),

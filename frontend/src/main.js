@@ -7345,7 +7345,7 @@ async function openChatDrawer(doc) {
     } else {
       savedHistory.forEach(msg => {
         const isAssistant = msg.role === 'assistant'
-        let renderedContent = isAssistant ? formatChatHtml(msg.content, Number(doc.total_pages) || 0) : formatUserChatHtml(msg.content, doc.id)
+        let renderedContent = isAssistant ? formatChatHtml(msg.content, Number(doc.total_pages) || 0, msg.verification) : formatUserChatHtml(msg.content, doc.id)
         if (isAssistant && msg.stale) {
           renderedContent = `<span class="chat-stale-revision-badge">${t("chat:staleRevision")}</span>${renderedContent}`
         }
@@ -7432,7 +7432,7 @@ async function sendChatDrawerMessage({ verifyEvidence = false } = {}) {
       chatDrawerState.activeStream = null
       chatDrawerState.history.push({ role: 'assistant', content: accumulatedText })
       if (replyBubble) {
-        replyBubble.innerHTML = formatChatHtml(accumulatedText, Number(chatDrawerState.doc?.total_pages) || 0)
+        replyBubble.innerHTML = formatChatHtml(accumulatedText, Number(chatDrawerState.doc?.total_pages) || 0, responseVerification)
         attachEvidenceToBubble(replyBubble, responseEvidence)
         if (replyBubble.parentElement) {
           renderVerificationBadge(replyBubble.parentElement, responseVerification)
@@ -12137,7 +12137,7 @@ async function openFromLibrary(doc, shouldPushState = true) {
       for (const msg of chatHistoryList) {
         state.chatHistory.push({ role: msg.role, content: msg.content })
         const isAssistant = msg.role === 'assistant'
-        let renderedContent = isAssistant ? formatChatHtml(msg.content) : formatUserChatHtml(msg.content)
+        let renderedContent = isAssistant ? formatChatHtml(msg.content, undefined, msg.verification) : formatUserChatHtml(msg.content)
         if (isAssistant && msg.stale) {
           renderedContent = `<span class="chat-stale-revision-badge">${t("chat:staleRevision")}</span>${renderedContent}`
         }
@@ -16561,15 +16561,19 @@ function buildChatWelcomeHtml() {
 
 function attachEvidenceToBubble(bubble, evidenceItems = []) {
   if (!bubble || !evidenceItems.length) return
+  const byId = new Map(evidenceItems.map(item => [item.evidence_id, item]))
   const byPage = new Map()
   evidenceItems.forEach(item => {
     const page = Number(item.page_num)
     if (!byPage.has(page)) byPage.set(page, [])
     byPage.get(page).push(item)
   })
+  const hasExplicitLinks = Boolean(bubble.querySelector("[data-evidence-id]"))
   bubble.querySelectorAll("[data-page-citation]").forEach(button => {
     const page = Number(button.dataset.pageCitation)
-    const item = byPage.get(page)?.shift()
+    const candidates = byPage.get(page)
+    const item = button.dataset.evidenceId ? byId.get(button.dataset.evidenceId)
+      : !hasExplicitLinks && candidates?.length === 1 ? candidates[0] : null
     if (!item) return
     button.dataset.evidenceId = item.evidence_id
     button.dataset.evidenceQuote = item.quote || ""
@@ -16612,10 +16616,25 @@ function resetChatUI() {
   chatInput.style.height = 'auto'
 }
 
-function formatChatHtml(text, totalPages = state.totalPages) {
+function formatChatHtml(text, totalPages = state.totalPages, verification = null) {
   if (!text) return ''
 
   // 0. 문장 정렬용 태그([S0], [S1] 등) 제거
+  let marker = 'EASYPAPERCITATION'
+  while (text.includes(marker)) marker += 'X'
+  const linkedCitations = []
+  if (verification?.citation_links) {
+    const chars = Array.from(text)
+    for (const [offset, id] of Object.entries(verification.citation_links)) {
+      const start = Number(offset)
+      const citation = chars.slice(start, start + 24).join('').match(/^\[p\.\d+\]/)?.[0]
+      if (!citation || !/^[A-Za-z0-9_-]+$/.test(id)) continue
+      const index = linkedCitations.push({ citation, id }) - 1
+      chars[start] = `${marker}${index}END`
+      chars.fill('', start + 1, start + citation.length)
+    }
+    text = chars.join('')
+  }
   let t = text.replace(/\[[sS]\d+\]/g, '')
 
   const mathBlocks = []
@@ -16684,7 +16703,14 @@ function formatChatHtml(text, totalPages = state.totalPages) {
   })
 
   // sanitizer를 통과한 뒤 숫자로 검증한 단일·범위 페이지 근거만 링크한다.
-  return decorateCodeBlocks(linkPageCitations(html, totalPages))
+  html = linkPageCitations(html, totalPages)
+  if (linkedCitations.length) {
+    html = html.replace(new RegExp(`${marker}(\\d+)END`, 'g'), (_, index) => {
+      const { citation, id } = linkedCitations[Number(index)]
+      return linkPageCitations(citation, totalPages, id)
+    })
+  }
+  return decorateCodeBlocks(html)
 }
 
 // 인용 이미지를 로컬/서버 어디서도 복원하지 못했을 때(<img onerror>에서 호출)
@@ -16844,7 +16870,7 @@ function regenerateResponse(assistantMsgEl) {
       state.chatActiveStream = null;
 
       if (replyBubble) {
-        replyBubble.innerHTML = formatChatHtml(accumulatedText);
+        replyBubble.innerHTML = formatChatHtml(accumulatedText, undefined, responseVerification);
         attachEvidenceToBubble(replyBubble, responseEvidence);
         applyKatexToElement(replyBubble);
         if (replyBubble.parentElement) {
@@ -17246,7 +17272,7 @@ async function sendChatMessage({ verifyEvidence = false } = {}) {
       state.chatHistory.push({ role: 'assistant', content: accumulatedText })
 
       if (replyBubble) {
-        replyBubble.innerHTML = formatChatHtml(accumulatedText)
+        replyBubble.innerHTML = formatChatHtml(accumulatedText, undefined, responseVerification)
         attachEvidenceToBubble(replyBubble, responseEvidence)
         if (replyBubble.parentElement) {
           renderVerificationBadge(replyBubble.parentElement, responseVerification)
@@ -20439,7 +20465,7 @@ async function restoreArticleChatHistory(chatRes, doc) {
   for (const msg of messages) {
     state.chatHistory.push({ role: msg.role, content: msg.content })
     const assistant = msg.role === 'assistant'
-    let rendered = assistant ? formatChatHtml(msg.content) : formatUserChatHtml(msg.content)
+    let rendered = assistant ? formatChatHtml(msg.content, undefined, msg.verification) : formatUserChatHtml(msg.content)
     if (assistant && msg.stale) rendered = `<span class="chat-stale-revision-badge">${t("chat:staleRevision")}</span>${rendered}`
     const quotedMemoContext = assistant ? null : parseQuotedTextChatPayload(msg.content)
     const element = appendChatMessage(msg.role, rendered, true, quotedMemoContext)
