@@ -1,4 +1,5 @@
 {
+  "sourceLocation.missing": "{{page}}쪽에서 일치하는 구절을 찾지 못했습니다. 원문과 대조할 인용문: “{{quote}}”",
   "readingPane.label": "읽기 영역",
   "readingPane.source": "원문",
   "readingPane.translation": "번역",

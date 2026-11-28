@@ -17381,8 +17381,11 @@ function initChatListeners() {
       if (sourceButton?.offsetWidth) sourceButton.click()
       const quote = citation.dataset.evidenceQuote
       const occurrence = Number(citation.dataset.evidenceOccurrence || 1)
-      if (quote) locateTermInPdf(page, quote, occurrence)
-      else scrollToPage(viewerScrollContainer, page)
+      if (quote) locateTermInPdf(page, quote, occurrence, citation)
+      else {
+        clearLocatedPassage()
+        scrollToPage(viewerScrollContainer, page)
+      }
     }
   })
 
@@ -18418,36 +18421,40 @@ function isVtmFresh(vtm) {
   return !!(vtm && vtm.nodeRanges && vtm.nodeRanges.length > 0 && document.contains(vtm.nodeRanges[0].node))
 }
 
-// 요소가 스크롤 컨테이너 뷰포트 안에 이미 충분히 들어와 있는지 확인 - 이미 보이는
-// 위치라면 scrollIntoView가 사실상 아무것도 하지 않으므로 굳이 스크롤 완료를 기다릴
-// 필요가 없다(불필요한 지연 방지).
-function isElementReasonablyInView(el, container, marginPx = 40) {
-  const elRect = el.getBoundingClientRect()
-  const contRect = container.getBoundingClientRect()
-  return elRect.top >= contRect.top - marginPx && elRect.bottom <= contRect.bottom + marginPx
+let passageRequest = 0
+let passageFeedback = null
+function clearLocatedPassage() {
+  passageRequest++
+  viewerScrollContainer?.querySelectorAll('.sentence-located-box').forEach(box => box.remove())
+  passageFeedback?.remove()
+  passageFeedback = null
 }
 
-// 'scrollend' 이벤트로 부드러운 스크롤이 실제로 끝나는 시점을 기다린다. 브라우저 지원이
-// 없거나 스크롤이 예상보다 오래 걸리는 경우를 대비해 최대 대기 시간을 둔다.
-function waitForScrollSettle(container, timeoutMs = 1000) {
-  return new Promise(resolve => {
-    let done = false
-    const finish = () => {
-      if (done) return
-      done = true
-      container.removeEventListener('scrollend', finish)
-      clearTimeout(timer)
-      resolve()
-    }
-    container.addEventListener('scrollend', finish, { once: true })
-    const timer = setTimeout(finish, timeoutMs)
-  })
-}
+viewerScrollContainer?.addEventListener('click', clearLocatedPassage, true)
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') clearLocatedPassage()
+})
 
-async function locateTermInPdf(pageNum, term, occurrence = 1) {
+async function locateTermInPdf(pageNum, term, occurrence = 1, citation = null) {
+  clearLocatedPassage()
+  const request = passageRequest
   const pw = viewerScrollContainer.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"]`)
+  function reportMissingPassage() {
+    if (request !== passageRequest) return
+    pw?.scrollIntoView({ block: 'start', inline: 'nearest' })
+    const message = t('viewer:sourceLocation.missing', { page: pageNum, quote: term })
+    if (citation?.isConnected) {
+      passageFeedback = document.createElement('span')
+      passageFeedback.className = 'source-location-feedback'
+      passageFeedback.setAttribute('role', 'status')
+      passageFeedback.textContent = message
+      citation.after(passageFeedback)
+    } else {
+      showToast(message, 'warning')
+    }
+  }
   if (!pw) {
-    showToast('원문 위치를 찾을 수 없습니다.', 'warning')
+    reportMissingPassage()
     return
   }
 
@@ -18455,17 +18462,18 @@ async function locateTermInPdf(pageNum, term, occurrence = 1) {
   if (!isVtmFresh(vtm)) {
     // 페이지로 스크롤해 지연 렌더링을 트리거한 뒤, 텍스트 레이어 재생성 및
     // 재세그멘테이션이 끝나 virtualTextMaps가 갱신될 때까지 잠시 대기한다.
-    pw.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    pw.scrollIntoView({ block: 'start', inline: 'nearest' })
     const deadline = Date.now() + 3000
     while (Date.now() < deadline) {
       await new Promise(resolve => setTimeout(resolve, 100))
+      if (request !== passageRequest || !pw.isConnected) return
       vtm = state.virtualTextMaps && state.virtualTextMaps[pageNum]
       if (isVtmFresh(vtm)) break
     }
   }
 
   if (!isVtmFresh(vtm)) {
-    showToast('원문 위치를 찾을 수 없습니다.', 'warning')
+    reportMissingPassage()
     return
   }
 
@@ -18493,7 +18501,7 @@ async function locateTermInPdf(pageNum, term, occurrence = 1) {
     searchFrom = cleanIdx + cleanTerm.length
   }
   if (cleanIdx === -1) {
-    showToast('원문에서 해당 단어를 찾지 못했습니다.', 'warning')
+    reportMissingPassage()
     return
   }
 
@@ -18502,27 +18510,18 @@ async function locateTermInPdf(pageNum, term, occurrence = 1) {
 
   const textLayer = pw.querySelector('.textLayer')
   if (!textLayer) {
-    showToast('원문 위치를 찾을 수 없습니다.', 'warning')
+    reportMissingPassage()
     return
   }
   const rects = getSentenceRects({ charStart: rawStart, charEnd: rawEnd }, vtm, textLayer)
   if (rects.length === 0) {
-    showToast('원문 위치를 하이라이트하지 못했습니다.', 'warning')
+    reportMissingPassage()
     return
   }
 
-  // 스크롤이 실제로 필요한 경우, 부드러운 스크롤 애니메이션이 끝나기 전에 하이라이트가
-  // 먼저 그려져서 화면 밖에 있는 동안 다 사라져버리는 문제(그래서 두 번 클릭해야 겨우
-  // 보이는 것처럼 느껴짐)를 막기 위해, 스크롤이 실제로 자리를 잡을 때까지 기다린 뒤에
-  // 하이라이트를 그린다. 이미 화면에 보이는 위치라면(스크롤이 사실상 필요 없다면) 바로 그린다.
-  const alreadyInView = isElementReasonablyInView(pw, viewerScrollContainer)
-  pw.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  if (!alreadyInView) {
-    await waitForScrollSettle(viewerScrollContainer)
-  }
   const overlay = getOrCreateOverlay(pw)
-  renderSentenceOverlay(overlay, rects, 'sentence-locate-pulse-box')
-  setTimeout(() => clearOverlayBoxes(overlay, 'sentence-locate-pulse-box'), 1800)
+  renderSentenceOverlay(overlay, rects, 'sentence-located-box')
+  overlay.querySelector('.sentence-located-box')?.scrollIntoView({ block: 'center', inline: 'nearest' })
 }
 
 // 메인 진입점: buildVirtualTextMap → alignSentencesToText → state 저장 → 메모 오버레이 렌더링
