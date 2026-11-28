@@ -301,6 +301,8 @@ body[data-ui-style="editorial"] #doc-title {
 .kebab-menu,
 .selection-menu,
 .article-selection-tools,
+.citation-tooltip,
+.figure-preview-tooltip,
 .floating-memo,
 .document-search {
   animation: minimalPopoverIn 150ms var(--ease-out-expo) !important;
@@ -482,7 +484,7 @@ body.light-theme .chat-input-area {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--surface-hairline), var(--shadow-minimal);
-  overflow: hidden;
+  overflow: visible;
 }
 .chat-input-box:focus-within,
 #chat-sidebar .chat-input-box:focus-within {
@@ -490,17 +492,16 @@ body.light-theme .chat-input-area {
   box-shadow: var(--focus-ring-minimal);
 }
 
-/* Quoted context strip inside composer: clean full divider, no giant quote glyph */
+/* Quoted context chip inside composer (21st.dev PromptInputAttachment) */
 .chat-quote-area,
 .chat-input-box .chat-quote-area,
 body.light-theme .chat-quote-area,
 body.light-theme .chat-input-box .chat-quote-area {
-  border: 0 !important;
-  border-bottom: 1px solid var(--border) !important;
-  border-radius: 0 !important;
-  background: color-mix(in srgb, var(--bg-hover) 50%, transparent) !important;
-  padding: 8px 12px !important;
-  margin: 0 !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--bg-surface) !important;
+  padding: 5px 6px 5px 9px !important;
+  margin: 2px 3px 0 !important;
 }
 .chat-quote-symbol {
   display: none !important;
@@ -511,8 +512,8 @@ body.light-theme .chat-input-box .chat-quote-area {
 }
 
 .chat-input-expand-btn {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   border-color: transparent;
 }
@@ -522,7 +523,7 @@ body.light-theme .chat-input-box .chat-quote-area {
   border-radius: var(--radius-sm);
 }
 .chat-input-footer .provider-picker-btn {
-  height: 26px !important;
+  height: 28px !important;
   border-radius: var(--radius-sm) !important;
   background: transparent !important;
 }

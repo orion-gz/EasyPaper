@@ -252,9 +252,33 @@ class CustomSelectPicker {
     this.button.setAttribute('aria-haspopup', 'listbox')
     this.button.setAttribute('aria-expanded', 'false')
     const pickerId = select.id || 'custom-select-' + CustomSelectPicker.nextId++
-    const label = select.id ? document.querySelector(`label[for="${CSS.escape(select.id)}"]`) : null
-    if (label && !label.id) label.id = pickerId + '-label'
-    const labelledBy = select.getAttribute('aria-labelledby') || label?.id || ''
+    const explicitLabel = select.id ? document.querySelector(`label[for="${CSS.escape(select.id)}"]`) : null
+    const wrappingLabel = select.closest('label')
+    let labelId = ''
+    if (explicitLabel && !explicitLabel.contains(this.container)) {
+      if (!explicitLabel.id) explicitLabel.id = pickerId + '-label'
+      labelId = explicitLabel.id
+    } else if (wrappingLabel) {
+      let labelTextEl = [...wrappingLabel.childNodes].find(node => node !== this.container && node.textContent?.trim())
+      if (labelTextEl?.nodeType === Node.TEXT_NODE) {
+        const span = document.createElement('span')
+        span.textContent = labelTextEl.textContent
+        wrappingLabel.replaceChild(span, labelTextEl)
+        labelTextEl = span
+      }
+      if (labelTextEl?.nodeType === Node.ELEMENT_NODE) {
+        if (!labelTextEl.id) labelTextEl.id = pickerId + '-label'
+        labelId = labelTextEl.id
+      }
+      wrappingLabel.addEventListener('click', (event) => {
+        if (!this.container.contains(event.target)) {
+          event.preventDefault()
+          this.button.focus()
+          if (!this.container.classList.contains('open')) this.open()
+        }
+      })
+    }
+    const labelledBy = select.getAttribute('aria-labelledby') || labelId || ''
     this.button.setAttribute('aria-labelledby', [labelledBy, pickerId + '-picker-value'].filter(Boolean).join(' '))
     this.button.innerHTML = '<span id="' + pickerId + '-picker-value" class="picker-label"></span><span class="picker-arrow" aria-hidden="true">▾</span>'
     this.panel = document.createElement('div')
@@ -268,6 +292,12 @@ class CustomSelectPicker {
       this.container.classList.contains('open') ? this.close() : this.open()
     })
     this.button.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && this.container.classList.contains('open')) {
+        event.preventDefault()
+        event.stopPropagation()
+        this.close()
+        return
+      }
       if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return
       event.preventDefault()
       this.open()
@@ -287,13 +317,28 @@ class CustomSelectPicker {
     document.querySelectorAll('.custom-select-picker.open .provider-picker-btn').forEach(button => {
       button.setAttribute('aria-expanded', 'false')
     })
-    document.querySelectorAll('.provider-picker.open').forEach(picker => picker.classList.remove('open'))
+    document.querySelectorAll('.provider-picker.open').forEach(picker => picker.classList.remove('open', 'open-upward'))
+    this.container.classList.remove('open-upward')
+    this.panel.style.maxHeight = ''
     this.rebuildPanel()
     this.container.classList.add('open')
     this.button.setAttribute('aria-expanded', 'true')
+    const btnRect = this.button.getBoundingClientRect()
+    if (btnRect.height > 0) {
+      const clipHost = this.button.closest('.onboarding-body, .modal-content, .tab-pane')
+      const hostRect = clipHost ? clipHost.getBoundingClientRect() : { top: 8, bottom: window.innerHeight - 8 }
+      const spaceBelow = hostRect.bottom - btnRect.bottom - 10
+      const spaceAbove = btnRect.top - hostRect.top - 10
+      if (spaceBelow < 210 && spaceAbove > spaceBelow) {
+        this.container.classList.add('open-upward')
+        this.panel.style.maxHeight = `${Math.max(120, Math.min(300, Math.floor(spaceAbove)))}px`
+      } else {
+        this.panel.style.maxHeight = `${Math.max(120, Math.min(320, Math.floor(spaceBelow)))}px`
+      }
+    }
   }
   close({ focus = false } = {}) {
-    this.container.classList.remove('open')
+    this.container.classList.remove('open', 'open-upward')
     this.button.setAttribute('aria-expanded', 'false')
     if (focus) this.button.focus()
   }
@@ -333,6 +378,7 @@ class CustomSelectPicker {
         else if (event.key === 'End') nextIndex = items.length - 1
         else if (event.key === 'Escape') {
           event.preventDefault()
+          event.stopPropagation()
           this.close({ focus: true })
           return
         }
@@ -473,13 +519,13 @@ async function handleLocaleSelector(event) {
 const modalTriggerElements = new WeakMap()
 const modalCloseTimers = new WeakMap()
 const modalFocusableSelector = [
-  '[autofocus]',
-  'button:not([disabled])',
-  'a[href]',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])'
+  '[autofocus]:not([disabled]):not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  'button:not([disabled]):not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  'a[href]:not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  'input:not([disabled]):not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  'select:not([disabled]):not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  'textarea:not([disabled]):not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  '[tabindex]:not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)'
 ].join(',')
 
 function openOverlayModal(modal) {
@@ -492,7 +538,7 @@ function openOverlayModal(modal) {
     modalCloseTimers.delete(modal)
   }
   const trigger = document.activeElement
-  if (trigger instanceof HTMLElement && trigger !== document.body) {
+  if (trigger instanceof HTMLElement && trigger !== document.body && !modal.contains(trigger)) {
     modalTriggerElements.set(modal, trigger)
   }
   modal.classList.remove('hidden')
@@ -500,6 +546,10 @@ function openOverlayModal(modal) {
   modal.classList.add('is-visible')
   window.requestAnimationFrame(() => {
     if (!modal.classList.contains('is-visible')) return
+    const active = document.activeElement
+    if (active instanceof HTMLElement && modal.contains(active) && active !== modal && active.getAttribute('aria-hidden') !== 'true' && !active.classList.contains('sr-only')) {
+      return
+    }
     const focusTarget = modal.querySelector(modalFocusableSelector)
     if (focusTarget instanceof HTMLElement) focusTarget.focus()
   })
@@ -577,7 +627,7 @@ async function maybeShowOnboarding(force = false) {
       },
     })
   }
-  onboardingController.maybeShowOnboarding()
+  onboardingController.maybeShowOnboarding({ restart: force })
 }
 
 $('restart-onboarding')?.addEventListener('click', () => {
@@ -2911,7 +2961,7 @@ exportBtn.addEventListener('click', (e) => {
 // "안쪽"으로 처리되고, 내보내기 팝업은 형식을 실제로 골라야 바깥 클릭으로
 // 잡혀 그때 케밥 메뉴도 함께 닫힌다.
 if (toolbarKebabBtn && toolbarKebabMenu) {
-  const getMenuItems = () => Array.from(toolbarKebabMenu.querySelectorAll('button:not([disabled]), select, [tabindex]:not([tabindex="-1"])'))
+  const getMenuItems = () => Array.from(toolbarKebabMenu.querySelectorAll('button:not([disabled]):not([tabindex="-1"]), select:not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])'))
   const syncMenuState = () => toolbarKebabBtn.setAttribute('aria-expanded', String(!toolbarKebabMenu.classList.contains('hidden')))
   const closeMenu = (restoreFocus = false) => {
     toolbarKebabMenu.classList.add('hidden')
@@ -2930,13 +2980,18 @@ if (toolbarKebabBtn && toolbarKebabMenu) {
   })
 
   toolbarKebabMenu.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented || event.target.closest('.provider-picker-panel, .custom-select-picker.open, .provider-picker.open')) return
     if (event.key === 'Escape') { event.preventDefault(); closeMenu(true); return }
-    if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
     const visibleItems = getMenuItems().filter(item => item.getClientRects().length > 0)
+    if (!visibleItems.length) return
+    event.preventDefault()
+    if (event.key === 'Home') { visibleItems[0].focus(); return }
+    if (event.key === 'End') { visibleItems.at(-1).focus(); return }
     const current = visibleItems.indexOf(document.activeElement)
     const delta = event.key === 'ArrowDown' ? 1 : -1
-    const next = visibleItems[(current + delta + visibleItems.length) % visibleItems.length]
-    if (next) { event.preventDefault(); next.focus() }
+    const next = visibleItems[(Math.max(current, 0) + delta + visibleItems.length) % visibleItems.length]
+    next?.focus()
   })
 
   document.addEventListener('click', (e) => {
@@ -6427,6 +6482,7 @@ function updateTrashTabVisibility(trashDocs) {
     }
   }
   libTabTrash.title = `휴지통${trashCount > 0 ? ` (${trashCount}개 문서)` : ''}`
+  libTabTrash.setAttribute('aria-label', libTabTrash.title)
   if (trashCount > 0 || state.currentLibraryTab === 'trash') {
     libTabTrash.classList.remove('hidden')
   } else {
@@ -6480,9 +6536,15 @@ function syncLibraryTabUI(activeTab, { resetFilters = true } = {}) {
     subtitleEl.textContent = subtitles[mode][activeTab === 'trash' ? 'trash' : 'archive']
   }
 
-  if (libTabTrash) libTabTrash.classList.toggle('active', activeTab === 'trash')
+  if (libTabTrash) {
+    libTabTrash.classList.toggle('active', activeTab === 'trash')
+    libTabTrash.setAttribute('aria-pressed', String(activeTab === 'trash'))
+  }
   if (libEmptyTrashBtn) libEmptyTrashBtn.classList.toggle('hidden', activeTab !== 'trash')
-  if (libUploadBtn) libUploadBtn.classList.toggle('hidden', activeTab === 'trash')
+  if (libUploadBtn) {
+    libUploadBtn.classList.toggle('hidden', activeTab === 'trash')
+    if (activeTab === 'trash') setLibraryAddMenuOpen(false)
+  }
   if (libCompareToggleBtn) libCompareToggleBtn.classList.toggle('hidden', activeTab === 'trash')
   clearDocSelection()
 }
@@ -6718,17 +6780,23 @@ function updateDocCardSelectionVisuals(docId) {
     const checkBtn = el.querySelector('.doc-card-check-btn')
     if (checkBtn) {
       checkBtn.classList.toggle('checked', isSelected)
-      checkBtn.title = isSelected ? '선택 해제' : '선택'
+      checkBtn.setAttribute('aria-pressed', String(isSelected))
+      const checkLabel = isSelected ? '선택 해제' : '선택'
+      checkBtn.title = checkLabel
+      checkBtn.setAttribute('aria-label', checkLabel)
     }
   })
 }
 
 function clearDocSelection() {
   selectedDocIds.clear()
+  libraryGrid?.classList.remove('selection-mode')
   document.querySelectorAll('.doc-card-selected').forEach(el => el.classList.remove('doc-card-selected'))
   document.querySelectorAll('.doc-card-check-btn.checked').forEach(el => {
     el.classList.remove('checked')
+    el.setAttribute('aria-pressed', 'false')
     el.title = '선택'
+    el.setAttribute('aria-label', '선택')
   })
   updateSelectToolbarUI()
 }
@@ -6863,9 +6931,11 @@ function initSelectToolbarEvents() {
   if (libCompareToggleBtn) {
     libCompareToggleBtn.addEventListener('click', () => {
       if (selectedDocIds.size === 0) {
+        libraryGrid?.classList.add('selection-mode')
         showToast(documentUiCopy('카드 우상단 체크 버튼을 눌러 비교할 논문을 선택하세요.', workspaceModeController.getMode()), 'info')
       } else if (selectedDocIds.size >= 2 && selectedDocIds.size <= 5) {
         const ids = Array.from(selectedDocIds)
+        libraryGrid?.classList.remove('selection-mode')
         clearDocSelection()
         location.hash = `#compare?ids=${ids.map(encodeURIComponent).join(',')}`
       } else {
@@ -7001,6 +7071,7 @@ function renderCompareChatMessage(role, content, isHtml = false) {
 
   if (content) appendCompareActionButtons(msgEl, role, content)
 
+  compareChatMessages?.querySelector('[data-compare-starter]')?.remove()
   compareChatMessages.appendChild(msgEl)
   compareChatMessages.scrollTop = compareChatMessages.scrollHeight
   return msgEl
@@ -7043,6 +7114,7 @@ function appendCompareTypingIndicator() {
   bubbleEl.className = 'message-bubble'
   bubbleEl.innerHTML = `<div class="typing-container" style="display: flex; align-items: center; gap: 8px;"><span class="typing-text" style="font-size: 12px; color: var(--text-secondary);">AI가 답변을 준비하고 있습니다</span><div class="typing-indicator" style="display: flex; gap: 3px; align-items: center;"><span></span><span></span><span></span></div></div>`
   msgEl.appendChild(bubbleEl)
+  compareChatMessages?.querySelector('[data-compare-starter]')?.remove()
   compareChatMessages.appendChild(msgEl)
   compareChatMessages.scrollTop = compareChatMessages.scrollHeight
   return msgEl
@@ -7052,27 +7124,44 @@ function removeCompareTypingIndicator() {
   compareChatMessages.querySelectorAll('.temp-typing').forEach(el => el.remove())
 }
 
+function setPromptSubmitBtnState(btn, isGenerating) {
+  if (!btn) return
+  const labelKey = isGenerating ? 'chat:composer.stop' : 'chat:composer.send'
+  const label = (isGenerating ? t('chat:composer.stop') : t('chat:composer.send')) || (isGenerating ? '답변 생성 중단' : '전송')
+  btn.dataset.state = isGenerating ? 'streaming' : 'idle'
+  btn.dataset.i18nTitle = labelKey
+  btn.dataset.i18nAriaLabel = labelKey
+  btn.title = label
+  btn.setAttribute('aria-label', label)
+  btn.innerHTML = isGenerating
+    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>`
+    : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>`
+}
+
 function updateCompareChatSendBtnIcon(isGenerating) {
-  if (!compareChatSendBtn) return
-  if (isGenerating) {
-    compareChatSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /></svg>`
-    compareChatSendBtn.title = '답변 생성 중단'
-  } else {
-    compareChatSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`
-    compareChatSendBtn.title = '전송'
-  }
+  setPromptSubmitBtnState(compareChatSendBtn, isGenerating)
 }
 
 function renderCompareGreeting() {
-  const titles = compareChatState.docs
-    .map((d, i) => `${i + 1}. ${escapeHtml((d.metadata && d.metadata.title) ? d.metadata.title : d.filename)}`)
-    .join('<br>')
-  renderCompareChatMessage('assistant',
-    `선택하신 ${compareChatState.docs.length}편의 ${documentUiCopy('논문을', workspaceModeController.getMode())} 비교해서 답변해 드릴게요.<br><br>` +
-    `<strong>비교 대상:</strong><br>${titles}<br><br>` +
-    `<strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong>` +
-    `<ul><li>두 ${documentUiCopy('논문', workspaceModeController.getMode())}의 핵심 방법론 차이가 뭐야?</li><li>실험 결과를 비교했을 때 어느 쪽이 더 우수해?</li><li>공통적으로 다루는 한계점이 있어?</li></ul>`,
-    true)
+  if (!compareChatMessages) return
+  const titlesHtml = compareChatState.docs
+    .map((d, i) => `<span class="chat-empty-compare-doc">${i + 1}. ${escapeHtml((d.metadata && d.metadata.title) ? d.metadata.title : d.filename)}</span>`)
+    .join('')
+  const prompts = [
+    t('chat:compare.promptMethod'),
+    t('chat:compare.promptResults'),
+    t('chat:compare.promptLimits'),
+  ]
+  compareChatMessages.innerHTML = `
+    <div class="chat-empty-starter" data-compare-starter>
+      <p class="chat-empty-lead">${escapeHtml(t('chat:compare.lead', { count: compareChatState.docs.length }))}</p>
+      <div class="chat-empty-compare-docs">${titlesHtml}</div>
+      <span class="chat-empty-label">${escapeHtml(t('chat:suggestions.label'))}</span>
+      <div class="chat-starter-chips">
+        ${prompts.map(item => `<button type="button" class="chat-starter-chip" data-compare-prompt="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join('')}
+      </div>
+    </div>
+  `
 }
 
 // location.hash 대입은 브라우저에 따라 popstate와 hashchange를 둘 다 발생시켜,
@@ -7192,6 +7281,16 @@ async function sendCompareChatMessage() {
   )
 }
 
+if (compareChatMessages) {
+  compareChatMessages.addEventListener('click', (event) => {
+    const starterBtn = event.target.closest('[data-compare-prompt]')
+    if (starterBtn && !compareChatState.activeStream) {
+      compareChatInput.value = starterBtn.dataset.comparePrompt || ''
+      sendCompareChatMessage()
+    }
+  })
+}
+
 if (compareChatSendBtn) {
   compareChatSendBtn.addEventListener('click', () => {
     if (compareChatState.activeStream) {
@@ -7250,6 +7349,7 @@ if (compareBackBtn) {
 let chatDrawerState = { docId: null, doc: null, history: [], activeStream: null, currentText: '' }
 
 function renderChatDrawerMessage(role, content, isHtml = false, showActions = true) {
+  chatDrawerMessages?.querySelector('[data-drawer-starter]')?.remove()
   const msgEl = document.createElement('div')
   msgEl.className = `chat-message ${role}`
 
@@ -7334,23 +7434,26 @@ function removeChatDrawerTypingIndicator() {
 }
 
 function updateChatDrawerSendBtnIcon(isGenerating) {
-  if (!chatDrawerSendBtn) return
-  if (isGenerating) {
-    chatDrawerSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /></svg>`
-    chatDrawerSendBtn.title = '답변 생성 중단'
-  } else {
-    chatDrawerSendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`
-    chatDrawerSendBtn.title = '전송'
-  }
+  setPromptSubmitBtnState(chatDrawerSendBtn, isGenerating)
 }
 
 function renderChatDrawerGreeting(doc) {
+  if (!chatDrawerMessages) return
   const title = (doc.metadata && doc.metadata.title) ? doc.metadata.title : doc.filename
-  renderChatDrawerMessage('assistant',
-    `<strong>${escapeHtml(title)}</strong>에 대해 무엇이든 물어보세요.<br><br>` +
-    `<strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}질문 예시:</strong>` +
-    `<ul><li>이 ${documentUiCopy('논문', doc.document_mode)}의 핵심 기여는 무엇인가요?</li><li>실험 설정을 요약해줄 수 있나요?</li><li>이 방법론의 한계점은 뭔가요?</li></ul>`,
-    true, false)
+  const isResearch = doc.document_mode !== 'general'
+  const examples = isResearch
+    ? [t('chat:suggestions.research.summary'), t('chat:suggestions.research.method'), t('chat:suggestions.research.results')]
+    : [t('chat:suggestions.general.summary'), t('chat:suggestions.general.procedure'), t('chat:suggestions.general.cautions')]
+  chatDrawerMessages.innerHTML = `
+    <div class="chat-empty-starter" data-drawer-starter>
+      <strong class="chat-empty-doc-title">${escapeHtml(title)}</strong>
+      <p class="chat-empty-lead">${escapeHtml(isResearch ? t('chat:welcome.research') : t('chat:welcome.general'))}</p>
+      <span class="chat-empty-label">${escapeHtml(t('chat:suggestions.label'))}</span>
+      <div class="chat-starter-chips">
+        ${examples.map(item => `<button type="button" class="chat-starter-chip" data-drawer-prompt="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join('')}
+      </div>
+    </div>
+  `
 }
 
 // location.hash 대입은 popstate/hashchange를 둘 다 발생시킬 수 있어(openCompareScreen과
@@ -7516,6 +7619,12 @@ async function sendChatDrawerMessage({ verifyEvidence = false } = {}) {
 
 if (chatDrawerMessages) {
   chatDrawerMessages.addEventListener('click', event => {
+    const starterBtn = event.target.closest('[data-drawer-prompt]')
+    if (starterBtn && !chatDrawerState.activeStream) {
+      chatDrawerInput.value = starterBtn.dataset.drawerPrompt || ''
+      sendChatDrawerMessage()
+      return
+    }
     const retryButton = event.target.closest('[data-chat-drawer-retry]')
     if (retryButton) {
       const question = decodeURIComponent(retryButton.dataset.chatDrawerRetry || '')
@@ -7715,7 +7824,7 @@ function renderLibraryStatusTabs(docs) {
   })
 
   el.innerHTML = LIBRARY_STATUS_TABS.map(t => `
-    <button type="button" class="lib-status-tab ${activeStatusFilter === t.key ? 'active' : ''}" data-status="${t.key}">
+    <button type="button" class="lib-status-tab ${activeStatusFilter === t.key ? 'active' : ''}" data-status="${t.key}" aria-pressed="${activeStatusFilter === t.key}">
       <span>${t.label}</span><span class="lib-status-tab-count">${counts[t.key]}</span>
     </button>
   `).join('')
@@ -8415,8 +8524,10 @@ async function renderLibrary() {
     }
     if (filterDefs.length > 0) {
       const allBtn = document.createElement('button')
+      allBtn.type = 'button'
       allBtn.className = `category-filter-btn ${activeCategoryFilter === 'ALL' ? 'active' : ''}`
       allBtn.dataset.category = 'ALL'
+      allBtn.setAttribute('aria-pressed', String(activeCategoryFilter === 'ALL'))
       allBtn.innerHTML = `${icon('book', 13, 'style="vertical-align:-2px;margin-right:3px"')}전체 (${docs.length})`
       allBtn.addEventListener('click', () => {
         if (!isMinimalUi()) activeCategoryFilter = 'ALL'
@@ -8426,8 +8537,10 @@ async function renderLibrary() {
 
       filterDefs.forEach(item => {
         const btn = document.createElement('button')
+        btn.type = 'button'
         btn.className = `category-filter-btn ${activeCategoryFilter === item.value ? 'active' : ''}`
         btn.dataset.category = item.value
+        btn.setAttribute('aria-pressed', String(activeCategoryFilter === item.value))
         btn.innerHTML = `${icon(isGeneralLibrary ? 'fileText' : 'tag', 13, 'style="vertical-align:-2px;margin-right:3px"')}${escapeHtml(item.label)} (${item.count})`
         btn.addEventListener('click', () => {
           activeCategoryFilter = item.value
@@ -9450,7 +9563,9 @@ function filterLibraryCards(docs, { animateFlip = true } = {}) {
     libraryGrid.classList.toggle('compact-view', !isMinimalUi() && libraryViewMode === 'compact')
     // Update filter buttons active class
     document.querySelectorAll('.category-filter-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.category === category)
+      const isActive = btn.dataset.category === category
+      btn.classList.toggle('active', isActive)
+      btn.setAttribute('aria-pressed', String(isActive))
     })
     $('library-breadcrumb')?.classList.toggle('global-filter-active', category !== 'ALL')
 
@@ -9513,9 +9628,12 @@ function renderLibrarySearchResults(docs, query) {
   if (docs.length === 0) {
     const el = document.createElement('div')
     el.className = 'lib-empty'
-    el.innerHTML = `<div style="margin-bottom:16px;color:var(--text-muted)">${icon('book', 48)}</div>
-      <p>"${escapeHtml(query)}"에 대한 검색 결과가 없습니다</p>
-      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">${workspaceModeController.getMode() === 'general' ? '문서 제목, 파일명, 번역된 본문 내용을 검색합니다' : '논문 제목, 파일명, 번역된 본문 내용을 검색합니다'}</p>`
+    const subtitle = workspaceModeController.getMode() === 'general'
+      ? '문서 제목, 파일명, 번역된 본문 내용을 검색합니다'
+      : '논문 제목, 파일명, 번역된 본문 내용을 검색합니다'
+    el.innerHTML = `<div class="lib-empty-icon" aria-hidden="true">${icon('search', 20)}</div>
+      <p class="lib-empty-title">"${escapeHtml(query)}"에 대한 검색 결과가 없습니다</p>
+      <p class="lib-empty-desc">${subtitle}</p>`
     libraryGrid.appendChild(el)
   } else {
     const createItem = !isMinimalUi() && libraryViewMode === 'list' ? createDocListRow : createDocCard
@@ -9558,6 +9676,15 @@ function exitLibrarySearch() {
 }
 
 if (librarySearchInput) {
+  librarySearchInput.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && librarySearchInput.value) {
+      event.preventDefault()
+      event.stopPropagation()
+      librarySearchInput.value = ''
+      librarySearchClearBtn?.classList.add('hidden')
+      exitLibrarySearch()
+    }
+  })
   librarySearchInput.addEventListener('input', () => {
     const query = librarySearchInput.value.trim()
     if (librarySearchClearBtn) librarySearchClearBtn.classList.toggle('hidden', !query)
@@ -9603,17 +9730,31 @@ const LIBRARY_EMPTY_STATE_VARIANTS = {
 function createEmptyState(variant = 'library') {
   if (variant === true) variant = 'finished'
   if (variant === false) variant = 'library'
+  const isLibraryDropzone = variant === 'library'
   const el = document.createElement('div')
-  el.className = 'lib-empty'
+  el.className = isLibraryDropzone ? 'lib-empty lib-empty-dropzone' : 'lib-empty'
   const c = LIBRARY_EMPTY_STATE_VARIANTS[variant] || LIBRARY_EMPTY_STATE_VARIANTS.library
-  el.innerHTML = `<div style="margin-bottom:16px;color:var(--text-muted)">${icon(c.iconName, 48)}</div>
-    <p>${documentUiCopy(c.title, workspaceModeController.getMode())}</p>
-    <p style="font-size:13px;color:var(--text-muted);margin-top:8px">${documentUiCopy(c.desc, workspaceModeController.getMode())}</p>`
-  if (variant === 'library') {
+  const emptyIconName = isLibraryDropzone ? 'upload' : c.iconName
+  el.innerHTML = `<div class="lib-empty-icon" aria-hidden="true">${icon(emptyIconName, 20)}</div>
+    <p class="lib-empty-title">${documentUiCopy(c.title, workspaceModeController.getMode())}</p>
+    <p class="lib-empty-desc">${documentUiCopy(c.desc, workspaceModeController.getMode())}</p>`
+  if (isLibraryDropzone) {
+    const actionsWrap = document.createElement('div')
+    actionsWrap.className = 'lib-empty-actions'
     const button = document.createElement('button')
-    button.type = 'button'; button.className = 'status-action'; button.textContent = t('common:status.upload')
+    button.type = 'button'
+    button.className = 'status-action lib-empty-primary-btn'
+    button.textContent = t('common:status.upload')
     button.addEventListener('click', () => fileInput.click())
-    el.append(button)
+    actionsWrap.append(button)
+    const hint = document.createElement('p')
+    hint.className = 'lib-empty-hint'
+    hint.textContent = t('library:emptyDropHint')
+    el.append(actionsWrap, hint)
+    el.addEventListener('dragenter', e => { e.preventDefault(); el.classList.add('is-dragover') })
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('is-dragover') })
+    el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget)) el.classList.remove('is-dragover') })
+    el.addEventListener('drop', () => el.classList.remove('is-dragover'))
   }
   return el
 }
@@ -9649,8 +9790,8 @@ function prepareDocItemHtml(doc) {
   const compareCheckHtml = ''
 
   const checkBtnHtml = state.currentLibraryTab === 'trash' ? '' : `
-    <button class="doc-card-check-btn ${isSelected ? 'checked' : ''}" data-id="${doc.id}" title="${isSelected ? '선택 해제' : '선택'}">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <button type="button" class="doc-card-check-btn ${isSelected ? 'checked' : ''}" data-id="${doc.id}" aria-pressed="${isSelected}" title="${isSelected ? '선택 해제' : '선택'}" aria-label="${isSelected ? '선택 해제' : '선택'}">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
     </button>
@@ -9658,7 +9799,7 @@ function prepareDocItemHtml(doc) {
 
 
   const expandBtnHtml = state.currentLibraryTab === 'trash' ? '' : `
-    <button class="doc-card-expand-btn" data-id="${doc.id}" title="미리보기">${icon('expand', 12)}</button>
+    <button type="button" class="doc-card-expand-btn" data-id="${doc.id}" title="미리보기" aria-label="미리보기">${icon('expand', 12, 'aria-hidden="true"')}</button>
   `
 
   let progressHtml = ''
@@ -9693,20 +9834,20 @@ function prepareDocItemHtml(doc) {
     ctaBtnFullHtml = `<button class="doc-restore-btn" data-id="${doc.id}"><span>복원</span>${icon('refreshCw', 15)}</button>`
   } else {
     iconActionsHtml = `
-      <button class="doc-edit-btn" data-id="${doc.id}" title="제목 수정">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg>
+      <button type="button" class="doc-edit-btn" data-id="${doc.id}" title="제목 수정" aria-label="제목 수정">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg>
       </button>
       <div class="doc-card-kebab-wrapper">
-        <button class="doc-card-kebab-btn" data-id="${doc.id}" title="더보기">
-          ${icon('moreVertical', 14)}
+        <button type="button" class="doc-card-kebab-btn" data-id="${doc.id}" title="더보기" aria-label="더보기" aria-haspopup="menu" aria-expanded="false">
+          ${icon('moreVertical', 14, 'aria-hidden="true"')}
         </button>
-        <div class="doc-card-kebab-menu hidden" data-id="${doc.id}">
-          <button class="doc-card-kebab-item doc-card-delete-btn" data-id="${doc.id}">
-            ${icon('trash2', 13)}
+        <div class="doc-card-kebab-menu hidden" role="menu" data-id="${doc.id}">
+          <button type="button" class="doc-card-kebab-item doc-card-delete-btn" role="menuitem" data-id="${doc.id}">
+            ${icon('trash2', 13, 'aria-hidden="true"')}
             <span>삭제하기</span>
           </button>
-          <button class="doc-card-kebab-item doc-card-clear-cache-btn" data-id="${doc.id}">
-            ${icon('refreshCw', 13)}
+          <button type="button" class="doc-card-kebab-item doc-card-clear-cache-btn" role="menuitem" data-id="${doc.id}">
+            ${icon('refreshCw', 13, 'aria-hidden="true"')}
             <span>캐시 삭제</span>
           </button>
         </div>
@@ -12238,7 +12379,7 @@ function sanitizeMarkedHtml(html) {
   return DOMPurify.sanitize(html)
 }
 
-function setLibraryAddMenuOpen(open) {
+function setLibraryAddMenuOpen(open, { restoreFocus = false } = {}) {
   const wrap = document.querySelector('.lib-add-fab-wrap')
   if (!wrap) return
   wrap.classList.toggle('open', open)
@@ -12247,8 +12388,55 @@ function setLibraryAddMenuOpen(open) {
   const label = open ? t('common:addMenu.close') : t('common:addMenu.open')
   libUploadBtn.dataset.i18nAriaLabel = labelKey
   libUploadBtn.setAttribute('aria-label', label)
+  if (!open && restoreFocus) libUploadBtn.focus({ preventScroll: true })
 }
-libUploadBtn.addEventListener('click', () => setLibraryAddMenuOpen(!document.querySelector('.lib-add-fab-wrap')?.classList.contains('open')))
+libUploadBtn.addEventListener('click', event => {
+  const nextOpen = !document.querySelector('.lib-add-fab-wrap')?.classList.contains('open')
+  setLibraryAddMenuOpen(nextOpen)
+  if (nextOpen && event.detail === 0) {
+    window.requestAnimationFrame(() => document.querySelector('#lib-add-menu [role="menuitem"]')?.focus())
+  }
+})
+libUploadBtn.addEventListener('keydown', event => {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    setLibraryAddMenuOpen(true)
+    const items = [...document.querySelectorAll('#lib-add-menu [role="menuitem"]')]
+    ;(event.key === 'ArrowUp' ? items.at(-1) : items[0])?.focus()
+  }
+})
+document.getElementById('lib-add-menu')?.addEventListener('keydown', event => {
+  const items = [...document.querySelectorAll('#lib-add-menu [role="menuitem"]')]
+  if (!items.length) return
+  const idx = items.indexOf(document.activeElement)
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    const next = (Math.max(idx, 0) + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+    items[next]?.focus()
+  } else if (event.key === 'Home') {
+    event.preventDefault()
+    items[0]?.focus()
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    items.at(-1)?.focus()
+  } else if (event.key === 'Tab') {
+    setLibraryAddMenuOpen(false)
+  }
+})
+document.addEventListener('pointerdown', event => {
+  const wrap = document.querySelector('.lib-add-fab-wrap')
+  if (wrap?.classList.contains('open') && !wrap.contains(event.target)) {
+    setLibraryAddMenuOpen(false)
+  }
+})
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return
+  const wrap = document.querySelector('.lib-add-fab-wrap')
+  if (wrap?.classList.contains('open')) {
+    event.stopPropagation()
+    setLibraryAddMenuOpen(false, { restoreFocus: wrap.contains(document.activeElement) })
+  }
+})
 $('lib-add-paper-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); openDocumentSourceModal() })
 $('lib-add-folder-btn')?.addEventListener('click', () => { setLibraryAddMenuOpen(false); openCreateFolderDialog() })
 
@@ -13974,48 +14162,50 @@ function createSelectionMenu() {
   const menu = document.createElement('div')
   menu.id = 'selection-menu'
   menu.className = 'selection-menu'
+  menu.setAttribute('role', 'toolbar')
+  menu.setAttribute('aria-label', t('viewer:comfort.quickActions'))
   menu.innerHTML = `
-    <div class="menu-annotate-group" style="display: flex; gap: 6px; align-items: center; padding: 2px 4px;">
+    <div class="menu-annotate-group">
       <!-- 하이라이트 그룹 -->
       <div class="expand-wrapper highlight-wrapper">
-        <button class="menu-btn highlight-btn" title="하이라이트 (우클릭: 색상 변경)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        <button type="button" class="menu-btn highlight-btn" title="하이라이트 (우클릭: 색상 변경)" aria-label="하이라이트 (우클릭: 색상 변경)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </button>
         <div class="expand-colors highlight-colors">
-          <span class="color-dot" data-color="#eab308" style="background: #eab308;" title="노랑"></span>
-          <span class="color-dot" data-color="#22c55e" style="background: #22c55e;" title="초록"></span>
-          <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
-          <span class="color-dot" data-color="#ec4899" style="background: #ec4899;" title="핑크"></span>
+          <button type="button" class="color-dot" data-color="#eab308" style="--dot-color: #eab308;" title="노랑" aria-label="노랑"></button>
+          <button type="button" class="color-dot" data-color="#22c55e" style="--dot-color: #22c55e;" title="초록" aria-label="초록"></button>
+          <button type="button" class="color-dot" data-color="#3b82f6" style="--dot-color: #3b82f6;" title="파랑" aria-label="파랑"></button>
+          <button type="button" class="color-dot" data-color="#ec4899" style="--dot-color: #ec4899;" title="핑크" aria-label="핑크"></button>
         </div>
       </div>
 
       <!-- 밑줄 그룹 -->
       <div class="expand-wrapper underline-wrapper">
-        <button class="menu-btn underline-btn" title="밑줄 (우클릭: 색상 변경)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
+        <button type="button" class="menu-btn underline-btn" title="밑줄 (우클릭: 색상 변경)" aria-label="밑줄 (우클릭: 색상 변경)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
         </button>
         <div class="expand-colors underline-colors">
-          <span class="color-dot" data-color="#ef4444" style="background: #ef4444;" title="빨강"></span>
-          <span class="color-dot" data-color="#f97316" style="background: #f97316;" title="주황"></span>
-          <span class="color-dot" data-color="#3b82f6" style="background: #3b82f6;" title="파랑"></span>
-          <span class="color-dot" data-color="#a855f7" style="background: #a855f7;" title="보라"></span>
+          <button type="button" class="color-dot" data-color="#ef4444" style="--dot-color: #ef4444;" title="빨강" aria-label="빨강"></button>
+          <button type="button" class="color-dot" data-color="#f97316" style="--dot-color: #f97316;" title="주황" aria-label="주황"></button>
+          <button type="button" class="color-dot" data-color="#3b82f6" style="--dot-color: #3b82f6;" title="파랑" aria-label="파랑"></button>
+          <button type="button" class="color-dot" data-color="#a855f7" style="--dot-color: #a855f7;" title="보라" aria-label="보라"></button>
         </div>
       </div>
 
       <!-- 지우기 버튼 -->
-      <button class="menu-btn clear-btn" title="지우기">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+      <button type="button" class="menu-btn clear-btn" title="지우기" aria-label="지우기">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
       </button>
 
       <!-- 메모 추가 버튼 -->
-      <button class="menu-btn memo-btn" title="메모 추가">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+      <button type="button" class="menu-btn memo-btn" title="메모 추가" aria-label="메모 추가">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
       </button>
 
-      <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
+      <div class="menu-divider" aria-hidden="true"></div>
     </div>
-    <button class="menu-btn ask-ai-btn" title="AI 어시스턴트에게 질문" style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--accent-mid); padding: 0 8px;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+    <button type="button" class="menu-btn ask-ai-btn" title="AI 어시스턴트에게 질문" aria-label="AI 어시스턴트에게 질문">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
       <span>Ask AI</span>
     </button>
   `
@@ -14082,17 +14272,33 @@ function createSelectionMenu() {
     })
   })
 
+  const syncColorExpanded = () => {
+    highlightBtn.setAttribute('aria-expanded', String(highlightWrapper.classList.contains('expanded')))
+    underlineBtn.setAttribute('aria-expanded', String(underlineWrapper.classList.contains('expanded')))
+  }
+  syncColorExpanded()
+
   // 메인 아이콘 좌클릭: 활성화된 기존 색상으로 즉시 마킹 처리 적용
   highlightBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
     handleAnnotate('highlight', state.activeHighlightColor)
   })
 
-  // 메인 아이콘 우클릭: 색상 선택기 확장 토글
+  // 메인 아이콘 우클릭 또는 ArrowDown: 색상 선택기 확장 토글
   highlightBtn.addEventListener('contextmenu', (e) => {
     e.preventDefault(); e.stopPropagation();
     underlineWrapper.classList.remove('expanded')
     highlightWrapper.classList.toggle('expanded')
+    syncColorExpanded()
+  })
+  highlightBtn.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); e.stopPropagation()
+      underlineWrapper.classList.remove('expanded')
+      highlightWrapper.classList.add('expanded')
+      syncColorExpanded()
+      window.requestAnimationFrame(() => highlightWrapper.querySelector('.color-dot')?.focus())
+    }
   })
 
   // 메인 밑줄 좌클릭: 활성화된 기존 색상으로 즉시 마킹 처리 적용
@@ -14101,11 +14307,34 @@ function createSelectionMenu() {
     handleAnnotate('underline', state.activeUnderlineColor)
   })
 
-  // 메인 밑줄 우클릭: 색상 선택기 확장 토글
+  // 메인 밑줄 우클릭 또는 ArrowDown: 색상 선택기 확장 토글
   underlineBtn.addEventListener('contextmenu', (e) => {
     e.preventDefault(); e.stopPropagation();
     highlightWrapper.classList.remove('expanded')
     underlineWrapper.classList.toggle('expanded')
+    syncColorExpanded()
+  })
+  underlineBtn.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); e.stopPropagation()
+      highlightWrapper.classList.remove('expanded')
+      underlineWrapper.classList.add('expanded')
+      syncColorExpanded()
+      window.requestAnimationFrame(() => underlineWrapper.querySelector('.color-dot')?.focus())
+    }
+  })
+
+  menu.addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return
+    const items = Array.from(menu.querySelectorAll('button:not([disabled])')).filter(btn => {
+      const style = window.getComputedStyle(btn)
+      return style.visibility !== 'hidden' && style.display !== 'none' && btn.getClientRects().length > 0
+    })
+    if (!items.length) return
+    e.preventDefault()
+    const idx = items.indexOf(document.activeElement)
+    const next = items[(Math.max(idx, 0) + (e.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length]
+    next?.focus()
   })
 
   menu.querySelector('.clear-btn').addEventListener('click', (e) => {
@@ -14306,10 +14535,13 @@ function updateAnnHoverTooltipButtons(tooltip) {
   const memoBtn = tooltip.querySelector('.memo-ann-btn')
   if (memoBtn) {
     const hasMemo = !!activeHoveredMemo
-    memoBtn.title = hasMemo ? '메모 삭제' : '메모 추가'
+    const memoLabel = hasMemo ? '메모 삭제' : '메모 추가'
+    memoBtn.title = memoLabel
+    memoBtn.setAttribute('aria-label', memoLabel)
+    memoBtn.classList.toggle('delete-ann-btn', hasMemo)
     memoBtn.innerHTML = hasMemo
-      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>'
-      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>'
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>'
   }
 }
 
@@ -14318,19 +14550,20 @@ function createAnnHoverTooltip() {
 
   const tooltip = document.createElement('div')
   tooltip.id = 'ann-hover-tooltip'
-  tooltip.className = 'selection-menu hidden'
-  tooltip.style.cssText = 'position: absolute; z-index: 10005;'
+  tooltip.className = 'selection-menu ann-hover-tooltip hidden'
+  tooltip.setAttribute('role', 'toolbar')
+  tooltip.setAttribute('aria-label', t('viewer:comfort.quickActions'))
   tooltip.innerHTML = `
-    <button class="menu-btn delete-ann-btn" title="삭제">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+    <button type="button" class="menu-btn delete-ann-btn" title="삭제" aria-label="삭제">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
     </button>
-    <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
-    <button class="menu-btn memo-ann-btn" title="메모 추가">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+    <div class="menu-divider" aria-hidden="true"></div>
+    <button type="button" class="menu-btn memo-ann-btn" title="메모 추가" aria-label="메모 추가">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
     </button>
-    <div class="menu-divider" style="width: 1px; background: var(--border-strong); height: 16px; margin: 0 2px;"></div>
-    <button class="menu-btn ask-ai-btn ask-ai-ann-btn" title="AI 어시스턴트에게 질문">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+    <div class="menu-divider" aria-hidden="true"></div>
+    <button type="button" class="menu-btn ask-ai-btn ask-ai-ann-btn" title="AI 어시스턴트에게 질문" aria-label="AI 어시스턴트에게 질문">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
       <span>Ask AI</span>
     </button>
   `
@@ -14487,12 +14720,18 @@ function positionAndShowAnnHoverTooltip(rect) {
   const tooltipHeight = tooltip.offsetHeight || 32
 
   const uiScale = Number(document.documentElement.style.zoom) || 1
-  const left = (rect.left + rect.width / 2) / uiScale - tooltipWidth / 2 + window.scrollX
-  const top = rect.top / uiScale - tooltipHeight - 6 + window.scrollY
+  const maxLeft = Math.max(8, window.innerWidth / uiScale - tooltipWidth - 8 + window.scrollX)
+  const left = Math.min(maxLeft, Math.max(8, (rect.left + rect.width / 2) / uiScale - tooltipWidth / 2 + window.scrollX))
+  const top = Math.max(8, rect.top / uiScale - tooltipHeight - 6 + window.scrollY)
 
-  tooltip.style.left = `${Math.max(8, left)}px`
-  tooltip.style.top = `${Math.max(8, top)}px`
+  tooltip.style.left = `${left}px`
+  tooltip.style.top = `${top}px`
 }
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && annHoverTooltip && !annHoverTooltip.classList.contains('hidden')) {
+    annHoverTooltip.classList.add('hidden')
+  }
+})
 
 // 하이라이트/밑줄 span 위에서 호버할 때 - 삭제 대상은 정확히 이 span의 타입으로 한정된다
 function showAnnHoverTooltipForSpan(annSpan) {
@@ -15975,9 +16214,11 @@ function getOrCreateFigurePreviewTooltip() {
   })
 
   el.querySelectorAll('.figure-preview-tooltip-resize-handle').forEach((handle) => {
-    handle.addEventListener('mousedown', (e) => {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return
       e.preventDefault()
       e.stopPropagation()
+      handle.setPointerCapture?.(e.pointerId)
 
       const corner = handle.dataset.corner || 'se'
       const startX = e.clientX
@@ -16037,8 +16278,11 @@ function getOrCreateFigurePreviewTooltip() {
       }
 
       const onUp = () => {
-        document.removeEventListener('mousemove', onMove)
-        document.removeEventListener('mouseup', onUp)
+        handle.removeEventListener('pointermove', onMove)
+        handle.removeEventListener('pointerup', onUp)
+        handle.removeEventListener('lostpointercapture', onUp)
+        document.removeEventListener('pointermove', onMove)
+        document.removeEventListener('pointerup', onUp)
         el.classList.remove('resizing')
         figurePreviewIsResizing = false
         el.style.height = ''
@@ -16046,8 +16290,11 @@ function getOrCreateFigurePreviewTooltip() {
         focusModeController?.scheduleRender()
       }
 
-      document.addEventListener('mousemove', onMove)
-      document.addEventListener('mouseup', onUp)
+      handle.addEventListener('pointermove', onMove)
+      handle.addEventListener('pointerup', onUp)
+      handle.addEventListener('lostpointercapture', onUp)
+      document.addEventListener('pointermove', onMove)
+      document.addEventListener('pointerup', onUp)
     })
 
     handle.addEventListener('keydown', (event) => {
@@ -16316,7 +16563,7 @@ function getOrCreateCitationTooltip() {
   el.setAttribute('role', 'dialog')
   el.setAttribute('aria-label', t('viewer:a11y.citationTrigger', { references: '' }))
   el.innerHTML = `
-    <div class="citation-card-header"><strong class="citation-card-title"></strong><button type="button" class="citation-card-close">×</button></div>
+    <div class="citation-card-header"><strong class="citation-card-title"></strong><button type="button" class="citation-card-close">${icon('x', 15, 'aria-hidden="true"')}</button></div>
     <div class="citation-tooltip-text"></div>
     <div class="citation-tooltip-analysis"></div>
     <div class="citation-tooltip-result hidden"></div>
@@ -16600,7 +16847,15 @@ function buildChatWelcomeHtml() {
     ? [t('chat:suggestions.research.summary'), t('chat:suggestions.research.method'), t('chat:suggestions.research.results')]
     : [t('chat:suggestions.general.summary'), t('chat:suggestions.general.procedure'), t('chat:suggestions.general.cautions')]
   const welcome = isResearch ? t('chat:welcome.research') : t('chat:welcome.general')
-  return `<div class="chat-message assistant"><div class="message-bubble">${escapeHtml(welcome)}<br><br><strong>${icon('info', 13, 'style="vertical-align:-2px;margin-right:3px"')}${escapeHtml(t('chat:suggestions.label'))}</strong><ul>${examples.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div></div>`
+  return `
+    <div class="chat-empty-starter" data-chat-starter>
+      <p class="chat-empty-lead">${escapeHtml(welcome)}</p>
+      <span class="chat-empty-label">${escapeHtml(t('chat:suggestions.label'))}</span>
+      <div class="chat-starter-chips">
+        ${examples.map(item => `<button type="button" class="chat-starter-chip" data-chat-prompt="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join('')}
+      </div>
+    </div>
+  `
 }
 
 function attachEvidenceToBubble(bubble, evidenceItems = []) {
@@ -16836,22 +17091,7 @@ function parseQuotedTextChatPayload(content) {
 }
 
 function updateChatSendBtnIcon(isGenerating) {
-  if (isGenerating) {
-    chatSendBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
-      </svg>
-    `;
-    chatSendBtn.title = '답변 생성 중단';
-  } else {
-    chatSendBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="22" y1="2" x2="11" y2="13"/>
-        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-      </svg>
-    `;
-    chatSendBtn.title = '전송';
-  }
+  setPromptSubmitBtnState(chatSendBtn, isGenerating)
 }
 
 function regenerateResponse(assistantMsgEl) {
@@ -16875,7 +17115,8 @@ function regenerateResponse(assistantMsgEl) {
   }
 
   const remainingUserCount = chatMessages.querySelectorAll('.chat-message.user').length;
-  const remainingAssistantCount = chatMessages.querySelectorAll('.chat-message.assistant').length - 1;
+  const hasLegacyWelcome = Boolean(chatMessages.querySelector('.chat-message.assistant[data-chat-welcome]'));
+  const remainingAssistantCount = chatMessages.querySelectorAll('.chat-message.assistant:not(.temp-typing)').length - (hasLegacyWelcome ? 1 : 0);
   const expectedHistoryLength = remainingUserCount + Math.max(0, remainingAssistantCount);
   state.chatHistory = state.chatHistory.slice(0, expectedHistoryLength);
 
@@ -17155,6 +17396,7 @@ async function renderSuggestedQuestions(msgEl) {
 }
 
 function appendChatMessage(role, content, isHtml = false, quotedMemoContext = null) {
+  chatMessages?.querySelector('[data-chat-starter]')?.remove()
   const msgEl = document.createElement('div')
   msgEl.className = `chat-message ${role}`
 
@@ -17366,6 +17608,15 @@ async function sendChatMessage({ verifyEvidence = false } = {}) {
 
 function initChatListeners() {
   chatMessages?.addEventListener('click', event => {
+    const starterBtn = event.target.closest('[data-chat-prompt], [data-chat-prompt-key]')
+    if (starterBtn && !state.chatActiveStream) {
+      const promptText = starterBtn.dataset.chatPrompt || (starterBtn.dataset.chatPromptKey ? t(starterBtn.dataset.chatPromptKey) : '')
+      if (promptText) {
+        chatInput.value = promptText
+        sendChatMessage()
+      }
+      return
+    }
     const retryButton = event.target.closest('[data-chat-retry]')
     if (retryButton) {
       chatInput.value = decodeURIComponent(retryButton.dataset.chatRetry || '')

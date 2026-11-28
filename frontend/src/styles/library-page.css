@@ -29,10 +29,108 @@
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  flex-wrap: wrap;
+}
+.library-toolbar-actions #lib-compare-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* ── 라이브러리 검색창 + 카테고리 필터 ── */
+.library-search-box {
+  position: relative;
+  margin-bottom: 14px;
+}
+.library-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+body.light-theme .library-search-icon {
+  color: var(--text-secondary);
+}
+.library-search-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 40px 9px 38px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-control, color-mix(in srgb, var(--text-secondary) 46%, var(--border-strong)));
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  line-height: 1.45;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.library-search-input::placeholder {
+  color: var(--text-tertiary);
+  opacity: 1;
+}
+body.light-theme .library-search-input::placeholder {
+  color: var(--text-secondary);
+}
+.library-search-input:hover {
+  border-color: color-mix(in srgb, var(--control-accent) 42%, var(--border-strong));
+}
+.library-search-input:focus {
+  border-color: var(--control-accent);
+  background: var(--bg-surface);
+}
+.library-search-clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.library-search-clear-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.library-search-status {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
 }
 
 /* ── 카테고리 필터 접기/펼치기 ── */
-#library-filter-row { flex-wrap: wrap; }
+#library-filter-row,
+.library-filter-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.library-category-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
 .library-category-filter-group {
   display: flex;
   align-items: flex-start;
@@ -51,6 +149,7 @@
   align-items: center;
   gap: 5px;
   flex: 0 0 auto;
+  min-height: 30px;
   padding: 5px 10px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -74,24 +173,26 @@
   outline-offset: 2px;
 }
 
-/* ── 상태 필터 탭 (전체 / 읽지 않음 / 읽는 중 / 완료 / 즐겨찾기) ── */
+/* ── 상태 필터 탭 (coss.com/tabs-count-badge 스타일) ── */
 .lib-status-tabs {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   padding: 3px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   width: fit-content;
+  max-width: 100%;
   flex-wrap: wrap;
 }
 .lib-status-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border: none;
+  min-height: 30px;
+  padding: 5px 11px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
@@ -99,28 +200,35 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   white-space: nowrap;
 }
 .lib-status-tab:hover { color: var(--text-primary); }
 .lib-status-tab.active {
   background: var(--bg-surface);
+  border-color: var(--border);
   color: var(--text-primary);
+}
+.lib-status-tabs.ui-sliding-host .lib-status-tab.active {
+  border-color: transparent;
 }
 .lib-status-tab-count {
   font-size: 10.5px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
-  color: var(--text-tertiary);
-  background: var(--bg-hover);
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-xs, 5px);
   padding: 1px 5px;
-  min-width: 18px;
+  min-width: 19px;
   text-align: center;
+  line-height: 1.35;
 }
 .lib-status-tab.active .lib-status-tab-count {
-  color: var(--control-accent-text);
+  color: var(--text-primary);
   background: var(--control-accent-soft);
+  border-color: color-mix(in srgb, var(--control-accent) 36%, var(--border-strong));
 }
 
 /* ── 정렬 드롭다운 ── */
@@ -216,12 +324,12 @@
   position: absolute;
   top: -6px;
   right: -6px;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   border: 1px solid var(--border-strong);
   background: var(--bg-surface);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,9 +337,9 @@
   box-shadow: var(--shadow-sm);
   z-index: 3;
   padding: 0;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
 }
-.doc-card-fav-btn:hover { color: var(--warning); border-color: var(--warning); transform: scale(1.08); }
+.doc-card-fav-btn:hover { color: var(--warning); border-color: var(--warning); background: var(--bg-hover); }
 .doc-card-fav-btn.active { color: var(--warning); border-color: var(--warning); }
 .doc-card-fav-btn.active svg { fill: var(--warning); }
 
@@ -847,8 +955,9 @@ body.light-theme .lib-detail-panel {
 .library-drag-stack-copy { display:grid; min-width:0; gap:2px; }
 .library-drag-stack-copy strong { font-size:13px; white-space:nowrap; }
 .library-drag-stack-copy small { color:var(--text-muted); font-size:10.5px; white-space:nowrap; }
-.library-drag-stack-count { display:grid; place-items:center; min-width:27px; height:27px; margin-left:auto; padding:0 7px; border-radius:999px; background:var(--control-accent); color:#fff; font-size:12px; font-weight:800; }
-.library-grid { cursor:crosshair; }
+.library-drag-stack-count { display:grid; place-items:center; min-width:27px; height:27px; margin-left:auto; padding:0 7px; border-radius:999px; background:var(--control-accent); color:var(--on-accent, #ffffff); font-size:12px; font-weight:800; }
+#page-library:has(#lib-select-toolbar:not(.hidden)) #library-grid { padding-bottom: 168px; }
+.library-grid.selection-mode .doc-card-check-btn:not(.checked) svg { opacity: 0.45; transform: scale(0.9); }
 .library-selection-marquee { position:fixed; z-index:99998; pointer-events:none; box-sizing:border-box; border:1px solid var(--control-accent); border-radius:5px; background:color-mix(in srgb, var(--control-accent) 14%, transparent); box-shadow:0 0 0 1px color-mix(in srgb, var(--control-accent) 18%, transparent); }
 body.library-marquee-selecting, body.library-marquee-selecting * { user-select:none!important; }
 body.library-marquee-selecting { cursor:crosshair!important; }
@@ -890,4 +999,17 @@ body.library-marquee-selecting { cursor:crosshair!important; }
   .doc-list-row > .document-type-chip,
   .doc-list-row > .doc-card-meta { display: none; }
   .doc-list-row .doc-list-title { flex: 1 1 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-search-input,
+  .library-search-clear-btn,
+  .library-category-filter-toggle,
+  .lib-status-tab,
+  .doc-card-fav-btn,
+  .lib-card-progress-bar,
+  .lib-detail-overlay,
+  .lib-detail-panel {
+    transition: none;
+  }
 }

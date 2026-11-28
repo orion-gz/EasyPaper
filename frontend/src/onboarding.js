@@ -86,10 +86,16 @@ export function createOnboarding({ openOverlayModal, closeOverlayModal, provider
     busy = true
     fields.inert = true
     action.disabled = back.disabled = true
+    delete feedback.dataset.state
+    feedback.setAttribute('role', 'status')
     feedback.textContent = label('working')
     try { await callback() } catch (error) {
       if (step === 'purpose') $('onboarding-purpose-error').textContent = error.message
-      else feedback.textContent = error.message
+      else {
+        feedback.dataset.state = 'error'
+        feedback.setAttribute('role', 'alert')
+        feedback.textContent = error.message
+      }
     }
     finally { busy = fields.inert = action.disabled = back.disabled = false }
   }
@@ -112,14 +118,20 @@ export function createOnboarding({ openOverlayModal, closeOverlayModal, provider
     fields.append(wrapper)
     return el
   }
+  let selectSeq = 0
   function select(title, values, current, change) {
-    const wrapper = node('label', title), el = node('select')
+    const wrapper = node('label'), labelText = node('span', title), el = node('select')
+    const id = 'onboarding-select-' + (++selectSeq)
+    labelText.id = id + '-label'
+    wrapper.htmlFor = id
+    el.id = id
     el.className = 'form-select'
+    el.setAttribute('aria-labelledby', labelText.id)
     for (const [value, name] of values) el.add(new Option(name, value))
     if (values.some(([value]) => value === current)) el.value = current
     change(el.value)
     el.onchange = () => change(el.value)
-    wrapper.append(el)
+    wrapper.append(labelText, el)
     fields.append(wrapper)
   }
   function go(next) {
@@ -205,7 +217,7 @@ export function createOnboarding({ openOverlayModal, closeOverlayModal, provider
       provider, model, server, target_lang: getLocale(),
     })
     verified = result.translation
-    render('model')
+    render('model', { preserveActionFocus: true })
   }
   async function save() {
     if (server && !savedId) {
@@ -219,13 +231,41 @@ export function createOnboarding({ openOverlayModal, closeOverlayModal, provider
     server = null
     go('ready')
   }
-  function render(next) {
+  function render(next, { preserveActionFocus = false } = {}) {
     step = next
     purpose.classList.toggle('hidden', next !== 'purpose')
     guide.classList.toggle('hidden', next === 'purpose')
-    $('onboarding-progress').value = next === 'purpose' ? 1 : next === 'location' ? 2 : ['model', 'ready'].includes(next) ? 4 : 3
-    if (next === 'purpose') { purpose.querySelector('h3').focus(); return }
+    const stepIndex = next === 'purpose' ? 1 : ['location', 'team'].includes(next) ? 2 : ['model', 'ready'].includes(next) ? 4 : 3
+    const footer = modal.querySelector('.onboarding-footer')
+    if (footer) footer.hidden = next === 'ready'
+    const stepper = $('onboarding-stepper')
+    if (stepper) {
+      for (const item of stepper.querySelectorAll('.onboarding-step')) {
+        const num = Number(item.dataset.step)
+        const isCompleted = num < stepIndex || (next === 'ready' && num === 4)
+        const isActive = num === stepIndex && !isCompleted
+        item.classList.toggle('is-completed', isCompleted)
+        item.classList.toggle('is-active', isActive)
+        if (isActive) item.setAttribute('aria-current', 'step')
+        else item.removeAttribute('aria-current')
+        const statusEl = item.querySelector('.onboarding-step-status')
+        if (statusEl) statusEl.textContent = isCompleted ? ' (' + t('onboarding:stepCompleted') + ')' : ''
+        const indicator = item.querySelector('.onboarding-step-indicator')
+        if (indicator) {
+          indicator.innerHTML = isCompleted
+            ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>'
+            : String(num)
+        }
+      }
+    }
+    if (next === 'purpose') {
+      $('onboarding-purpose-error').textContent = ''
+      purpose.querySelector('h3').focus()
+      return
+    }
     fields.replaceChildren()
+    delete feedback.dataset.state
+    feedback.setAttribute('role', 'status')
     feedback.textContent = ''
     details.hidden = true
     setAction('', null)
@@ -234,7 +274,7 @@ export function createOnboarding({ openOverlayModal, closeOverlayModal, provider
       location: 'location', team: 'team', model: 'model', ready: 'ready' }
     const heading = $('onboarding-question')
     heading.textContent = next === 'install' ? names[provider] : label(titles[next])
-    requestAnimationFrame(() => heading.focus())
+    requestAnimationFrame(() => (preserveActionFocus && !action.hidden ? action : heading).focus())
     if (next === 'location') {
       for (const id of ['local', 'remote', 'team']) card(label(id), label(id + 'Help'), async () => {
         server = savedId = model = verified = null
@@ -323,24 +363,62 @@ export function createOnboarding({ openOverlayModal, closeOverlayModal, provider
   back.onclick = () => { verified = null; render(history.pop() || 'location') }
   $('onboarding-close-btn').onclick = $('onboarding-skip-btn').onclick = close
   const purposeNext = $('onboarding-purpose-next-btn')
-  for (const button of purpose.querySelectorAll('[data-purpose-mode]')) button.onclick = () => {
+  const purposeRadios = Array.from(purpose.querySelectorAll('[data-purpose-mode]'))
+  function selectPurpose(button, shouldFocus = false) {
+    if (!button) return
     selectedPurpose = button.dataset.purposeMode
-    for (const item of purpose.querySelectorAll('[data-purpose-mode]')) item.setAttribute('aria-checked', String(item === button))
+    $('onboarding-purpose-error').textContent = ''
+    for (const item of purposeRadios) {
+      const checked = item === button
+      item.setAttribute('aria-checked', String(checked))
+      item.tabIndex = checked ? 0 : -1
+    }
     purposeNext.disabled = false
+    if (shouldFocus) button.focus()
+  }
+  for (const button of purposeRadios) {
+    button.onclick = () => selectPurpose(button)
+  }
+  const purposeGroup = purpose.querySelector('[role="radiogroup"]')
+  if (purposeGroup) {
+    purposeGroup.addEventListener('keydown', event => {
+      const currentIdx = Math.max(0, purposeRadios.indexOf(document.activeElement))
+      let nextIdx = -1
+      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') nextIdx = (currentIdx + 1) % purposeRadios.length
+      else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') nextIdx = (currentIdx - 1 + purposeRadios.length) % purposeRadios.length
+      else if (event.key === 'Home') nextIdx = 0
+      else if (event.key === 'End') nextIdx = purposeRadios.length - 1
+      if (nextIdx >= 0) {
+        event.preventDefault()
+        selectPurpose(purposeRadios[nextIdx], true)
+      }
+    })
   }
   purposeNext.onclick = () => run(async () => {
     await onWorkspaceSelected(selectedPurpose)
     localStorage.setItem(WORKSPACE_PURPOSE_SELECTED_KEY, '1')
     go('location')
   })
-  document.addEventListener('easypaper:locale-changed', () => { if (step && !busy) render(step) })
-  return { async maybeShowOnboarding() {
+  modal.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !busy && !modal.querySelector('.custom-select-picker.open, .provider-picker.open')) {
+      event.preventDefault()
+      close()
+    }
+  })
+  document.addEventListener('easypaper:locale-changed', () => {
+    if (step && !busy) {
+      verified = null
+      render(step)
+    }
+  })
+  return { async maybeShowOnboarding({ restart = false } = {}) {
     openOverlayModal(modal)
     if (busy) return
     server = savedId = verified = null
     key = ''
-    history = []
-    const initial = localStorage.getItem(WORKSPACE_PURPOSE_SELECTED_KEY) ? 'location' : 'purpose'
+    const hasSelectedPurpose = Boolean(localStorage.getItem(WORKSPACE_PURPOSE_SELECTED_KEY))
+    history = !restart && hasSelectedPurpose ? ['purpose'] : []
+    const initial = !restart && hasSelectedPurpose ? 'location' : 'purpose'
     render(initial)
     if (isRemoteDesktop()) {
       render('ready')

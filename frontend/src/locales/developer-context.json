@@ -7244,5 +7244,116 @@
   },
   "dashboard:skimReadLegend": {
     "description": "Legend label showing percentage and count of skimmed documents."
+  },
+  "dashboard:heatmapAriaLabel": {
+    "description": "Accessible label for the dashboard daily reading activity contribution heatmap grid."
+  },
+  "dashboard:heatmapFilterGroupAriaLabel": {
+    "description": "Accessible label for the button group that filters dashboard heatmap cells by activity intensity level."
+  },
+  "dashboard:heatmapLess": {
+    "description": "Low-end scale label on the dashboard activity heatmap legend."
+  },
+  "dashboard:heatmapMore": {
+    "description": "High-end scale label on the dashboard activity heatmap legend."
+  },
+  "dashboard:heatmapLevelFilter": {
+    "description": "Accessible label for each level swatch button on the dashboard activity heatmap legend."
+  },
+  "dashboard:heatmapDaySummary": {
+    "description": "Live readout and aria-label when a heatmap day has both reading duration and activity events."
+  },
+  "dashboard:heatmapDayDurationOnly": {
+    "description": "Live readout and aria-label when a heatmap day has reading duration only."
+  },
+  "dashboard:heatmapDayEventsOnly": {
+    "description": "Live readout and aria-label when a heatmap day has activity events only."
+  },
+  "dashboard:heatmapNoActivity": {
+    "description": "Live readout and aria-label when a heatmap day has zero recorded activity."
+  },
+  "chat:composer.removeQuote": {
+    "description": "Accessible label for removing an attached passage or figure chip in the chat composer."
+  },
+  "chat:composer.send": {
+    "description": "Accessible label and tooltip for the chat prompt submit button."
+  },
+  "chat:composer.stop": {
+    "description": "Accessible label and tooltip for stopping an active streaming AI response."
+  },
+  "chat:composer.shortcutHint": {
+    "description": "Keyboard shortcut hint shown in compare and drawer chat composers."
+  },
+  "chat:compare.lead": {
+    "description": "Empty-state lead copy in multi-document compare chat."
+  },
+  "chat:compare.promptMethod": {
+    "description": "Starter prompt chip in compare chat comparing methodologies."
+  },
+  "chat:compare.promptResults": {
+    "description": "Starter prompt chip in compare chat comparing results and metrics."
+  },
+  "chat:compare.promptLimits": {
+    "description": "Starter prompt chip in compare chat asking about shared limitations."
+  },
+  "viewer:comfort.paletteNavigate": {
+    "description": "Footer keyboard legend label for Up/Down navigation in the command palette."
+  },
+  "viewer:comfort.paletteSelect": {
+    "description": "Footer keyboard legend label for Enter execution in the command palette."
+  },
+  "viewer:comfort.paletteClose": {
+    "description": "Footer keyboard legend label for Escape dismissal in the command palette."
+  },
+  "library:addAction": {
+    "description": "Primary label on the library toolbar Add dropdown button."
+  },
+  "library:emptyDropHint": {
+    "description": "Format and drag-and-drop hint shown inside the empty library dropzone."
+  },
+  "library:statusFiltersAria": {
+    "description": "Accessible group label for library reading-status filter buttons."
+  },
+  "library:searchAria": {
+    "description": "Accessible label for the library search input."
+  },
+  "library:bulkToolbarAria": {
+    "description": "Accessible toolbar label for the library multi-select action bar."
+  },
+  "library:clearSelectionAria": {
+    "description": "Accessible label for the close button that clears library multi-selection."
+  },
+  "viewer:kebab.sectionTranslation": {
+    "description": "Section heading inside the viewer overflow menu for translation language and model settings."
+  },
+  "viewer:kebab.sectionDocument": {
+    "description": "Section heading inside the viewer overflow menu for document status and metadata."
+  },
+  "viewer:kebab.sectionActions": {
+    "description": "Section heading inside the viewer overflow menu for translation operations and cache management."
+  },
+  "viewer:kebab.sectionDisplay": {
+    "description": "Section heading inside the viewer overflow menu for memo visibility and theme toggle."
+  },
+  "onboarding:stepperAria": {
+    "description": "Accessible label for the horizontal onboarding step progress list."
+  },
+  "onboarding:stepPurpose": {
+    "description": "Step 1 label in the onboarding stepper for selecting default workspace purpose."
+  },
+  "onboarding:stepLocation": {
+    "description": "Step 2 label in the onboarding stepper for choosing local, remote, or team connection."
+  },
+  "onboarding:stepEngine": {
+    "description": "Step 3 label in the onboarding stepper for configuring or installing the inference engine."
+  },
+  "onboarding:stepModel": {
+    "description": "Step 4 label in the onboarding stepper for choosing and testing the translation model."
+  },
+  "onboarding:stepCompleted": {
+    "description": "Screen-reader status suffix announcing that an onboarding step has been completed."
+  },
+  "onboarding:close": {
+    "description": "Accessible label for the close button on the first-run onboarding dialog."
   }
 }

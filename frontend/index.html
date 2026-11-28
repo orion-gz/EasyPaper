@@ -14,7 +14,8 @@
   <link rel="manifest" href="/site.webmanifest?v=8" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Noto+Serif+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" crossorigin="anonymous" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Noto+Serif+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <!-- KaTeX for LaTeX rendering (defer 없이 동기 로드 - window.katex 즉시 사용 가능) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
@@ -166,102 +167,109 @@
           <!-- Library -->
           <section id="page-library" class="workspace-page">
             <div class="library-header">
-              <div>
-                <p class="library-header-subtitle" data-i18n="library:subtitle">보관함에 저장된 모든 논문을 한 곳에서 관리하세요</p>
-              </div>
-              <div>
+              <p class="library-header-subtitle" data-i18n="library:subtitle">Manage all saved papers in one place.</p>
+            </div>
+
+            <!-- 상태 필터 탭 + 비교하기/휴지통/추가 버튼 툴바 -->
+            <div class="library-toolbar-row">
+              <div id="library-status-tabs" class="lib-status-tabs" role="group" aria-label="Status filters" data-i18n-aria-label="library:statusFiltersAria"></div>
+              <div class="library-toolbar-actions">
+                <button id="lib-compare-toggle-btn" class="file-btn-outline" title="여러 논문을 선택해 비교 질문을 할 수 있습니다" data-document-copy-title="legacy.documentCopy.lib-compare-toggle-btn">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 3v18"/></svg>
+                  비교하기
+                </button>
+                <button id="lib-tab-trash" class="file-btn-outline compact" data-tab="trash" aria-pressed="false" title="휴지통" aria-label="휴지통">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <span id="lib-tab-trash-count" class="lib-tab-trash-count hidden"></span>
+                </button>
+                <button id="lib-empty-trash-btn" class="file-btn hidden" type="button">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>휴지통 비우기
+                </button>
                 <div class="lib-add-fab-wrap">
-                  <button id="lib-upload-btn" class="file-btn lib-add-main-btn" aria-expanded="false" aria-label="추가 메뉴 열기" data-i18n-aria-label="common:addMenu.open"><svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-                  <button id="lib-add-paper-btn" class="lib-add-sub-btn"><span class="lib-add-label" data-i18n="library:addDocument">논문 추가</span><span class="lib-add-circle" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z"/><path d="M14 2v6h6"/></svg></span></button>
-                  <button id="lib-add-folder-btn" class="lib-add-sub-btn"><span class="lib-add-label" data-i18n="library:addFolder">폴더 추가</span><span class="lib-add-circle" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/><path d="M12 11v6M9 14h6"/></svg></span></button>
+                  <button type="button" id="lib-upload-btn" class="file-btn lib-add-main-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="lib-add-menu" aria-label="Open add menu" data-i18n-aria-label="common:addMenu.open">
+                    <svg class="lib-add-plus-icon" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                    <span class="lib-upload-btn-text" data-i18n="library:addAction">Add</span>
+                    <svg class="lib-add-chevron-icon" aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
+                  <div id="lib-add-menu" class="lib-add-menu" role="menu" aria-labelledby="lib-upload-btn">
+                    <button type="button" id="lib-add-paper-btn" class="lib-add-sub-btn" role="menuitem" tabindex="-1">
+                      <span class="lib-add-circle" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z"/><path d="M14 2v6h6"/></svg></span>
+                      <span class="lib-add-label" data-i18n="library:addDocument">Add paper</span>
+                    </button>
+                    <button type="button" id="lib-add-folder-btn" class="lib-add-sub-btn" role="menuitem" tabindex="-1">
+                      <span class="lib-add-circle" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/><path d="M12 11v6M9 14h6"/></svg></span>
+                      <span class="lib-add-label" data-i18n="library:addFolder">Add folder</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- 상태 필터 탭 + 비교하기/휴지통 버튼 툴바 -->
-            <div class="library-toolbar-row">
-              <div id="library-status-tabs" class="lib-status-tabs"></div>
-              <div class="library-toolbar-actions">
-                <button id="lib-compare-toggle-btn" class="file-btn-outline" title="여러 논문을 선택해 비교 질문을 할 수 있습니다" data-document-copy-title="legacy.documentCopy.lib-compare-toggle-btn">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 3v18"/></svg>
-                  비교하기
-                </button>
-                <button id="lib-tab-trash" class="file-btn-outline compact" data-tab="trash" title="휴지통">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                  <span id="lib-tab-trash-count" class="lib-tab-trash-count hidden"></span>
-                </button>
-              </div>
-            </div>
-
             <!-- 라이브러리 전체 검색 (파일명/제목/카테고리 + 번역된 본문 텍스트) -->
-            <div id="library-search-box" style="position: relative; margin-bottom: 14px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              <input type="text" id="library-search-input" placeholder="논문 제목, 파일명, 번역된 내용 검색..." style="width: 100%; padding: 11px 40px 11px 38px; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text-primary); outline: none; font-size: 13.5px;" />
-              <button type="button" id="library-search-clear-btn" class="hidden" title="검색 지우기" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; display: flex;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            <div id="library-search-box" class="library-search-box">
+              <svg class="library-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="library-search-input" class="library-search-input" placeholder="논문 제목, 파일명, 번역된 내용 검색..." aria-label="Search library" data-i18n-aria-label="library:searchAria" />
+              <button type="button" id="library-search-clear-btn" class="library-search-clear-btn hidden" title="검색 지우기" aria-label="검색 지우기">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
               </button>
             </div>
-            <div id="library-search-status" class="hidden" style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 14px;"></div>
+            <div id="library-search-status" class="library-search-status hidden" role="status" aria-live="polite"></div>
 
             <!-- 카테고리 필터 + 보기 방식 전환 영역 -->
-            <div id="library-filter-row" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px;">
+            <div id="library-filter-row" class="library-filter-row">
               <div class="library-category-filter-group">
-                <div id="library-category-filters" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;"></div>
+                <div id="library-category-filters" class="library-category-filters"></div>
               </div>
               <div class="library-filter-actions">
                 <button type="button" id="library-category-filter-toggle" class="library-category-filter-toggle hidden" aria-controls="library-category-filters" aria-expanded="true"></button>
                 <div id="library-view-toggle" class="library-view-toggle" role="group" aria-label="논문 보기 방식" data-document-copy-aria-label="legacy.documentCopy.library-view-toggle">
-                  <button type="button" class="view-toggle-btn" data-view="card" title="큰 카드 보기" aria-label="큰 카드 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
-                  <button type="button" class="view-toggle-btn" data-view="compact" title="작은 카드 보기" aria-label="작은 카드 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="10" y="3" rx="1"/><rect width="5" height="5" x="17" y="3" rx="1"/><rect width="5" height="5" x="3" y="10" rx="1"/><rect width="5" height="5" x="10" y="10" rx="1"/><rect width="5" height="5" x="17" y="10" rx="1"/><rect width="5" height="5" x="3" y="17" rx="1"/><rect width="5" height="5" x="10" y="17" rx="1"/><rect width="5" height="5" x="17" y="17" rx="1"/></svg></button>
-                  <button type="button" class="view-toggle-btn" data-view="list" title="리스트 보기" aria-label="리스트 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg></button>
+                  <button type="button" class="view-toggle-btn" data-view="card" title="큰 카드 보기" aria-label="큰 카드 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
+                  <button type="button" class="view-toggle-btn" data-view="compact" title="작은 카드 보기" aria-label="작은 카드 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="10" y="3" rx="1"/><rect width="5" height="5" x="17" y="3" rx="1"/><rect width="5" height="5" x="3" y="10" rx="1"/><rect width="5" height="5" x="10" y="10" rx="1"/><rect width="5" height="5" x="17" y="10" rx="1"/><rect width="5" height="5" x="3" y="17" rx="1"/><rect width="5" height="5" x="10" y="17" rx="1"/><rect width="5" height="5" x="17" y="17" rx="1"/></svg></button>
+                  <button type="button" class="view-toggle-btn" data-view="list" title="리스트 보기" aria-label="리스트 보기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></svg></button>
                 </div>
               </div>
             </div>
 
             <div id="library-grid" class="library-grid">
-              <div class="lib-empty" id="lib-empty">
-                <div style="margin-bottom:16px;color:var(--text-muted)"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg></div>
-                <p>저장된 논문이 없습니다</p>
-                <p style="font-size:13px;color:var(--text-muted);margin-top:8px">PDF를 업로드하면 자동으로 저장됩니다</p>
+              <div class="lib-empty lib-empty-dropzone" id="lib-empty">
+                <div class="lib-empty-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></div>
+                <p class="lib-empty-title">저장된 논문이 없습니다</p>
+                <p class="lib-empty-desc">PDF를 업로드하면 자동으로 저장됩니다</p>
+                <p class="lib-empty-hint" data-i18n="library:emptyDropHint">PDF files or web articles · Drag and drop anywhere</p>
               </div>
             </div>
 
-            <!-- 우하단 휴지통 비우기 플로팅 버튼 -->
-            <button id="lib-empty-trash-btn" class="file-btn hidden">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>휴지통 비우기
-            </button>
-
             <!-- 하단 중앙 알약 모양 툴박스 (선택 모드 일괄 조작 툴바) -->
-            <div id="lib-select-toolbar" class="lib-select-toolbar hidden">
+            <div id="lib-select-toolbar" class="lib-select-toolbar hidden" role="toolbar" aria-label="Selection actions" data-i18n-aria-label="library:bulkToolbarAria">
               <div class="lib-select-toolbar-info">
-                <span id="lib-select-count" class="lib-select-count">0개 선택됨</span>
+                <span id="lib-select-count" class="lib-select-count" role="status" aria-live="polite">0개 선택됨</span>
                 <button type="button" id="lib-select-all-btn" class="lib-select-text-btn" title="전체 선택/해제">전체 선택</button>
               </div>
               <div class="lib-select-toolbar-divider"></div>
               <div class="lib-select-toolbar-actions">
                 <button type="button" id="lib-select-read-btn" class="lib-select-action-btn" title="선택한 논문 읽음 상태 변경" data-document-copy-title="legacy.documentCopy.lib-select-read-btn">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
                   <span>읽음 표시</span>
                 </button>
                 <button type="button" id="lib-select-fav-btn" class="lib-select-action-btn" title="선택한 논문 북마크 토글" data-document-copy-title="legacy.documentCopy.lib-select-fav-btn">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>
                   <span>북마크</span>
                 </button>
                 <button type="button" id="lib-select-cache-btn" class="lib-select-action-btn" title="선택한 논문의 PDF 추출 캐시 삭제" data-document-copy-title="legacy.documentCopy.lib-select-cache-btn">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
                   <span>캐시 삭제</span>
                 </button>
                 <button type="button" id="lib-select-compare-btn" class="lib-select-action-btn" title="선택한 논문들 비교 대화" data-document-copy-title="legacy.documentCopy.lib-select-compare-btn">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 3v18"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 3v18"/></svg>
                   <span data-document-copy="legacy.documentCopy.compareLabel">논문 비교</span>
                 </button>
                 <button type="button" id="lib-select-delete-btn" class="lib-select-action-btn danger" title="선택한 논문 삭제" data-document-copy-title="legacy.documentCopy.lib-select-delete-btn">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                   <span>삭제하기</span>
                 </button>
               </div>
-              <button type="button" id="lib-select-close-btn" class="lib-select-close-btn" title="선택 취소">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              <button type="button" id="lib-select-close-btn" class="lib-select-close-btn" title="선택 취소" aria-label="Clear selection" data-i18n-aria-label="library:clearSelectionAria">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
               </button>
             </div>
 
@@ -347,11 +355,10 @@
         <div class="chat-input-box">
           <textarea id="compare-chat-input" class="chat-input-textarea" placeholder="선택한 논문들에 대해 비교 질문을 해보세요..." rows="1" data-document-copy-placeholder="legacy.documentCopy.compare-chat-input"></textarea>
           <div class="chat-input-footer">
-            <span class="compare-chat-hint">Enter로 전송 · Shift+Enter로 줄바꿈</span>
-            <button id="compare-chat-send-btn" class="chat-send-btn" title="전송">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            <span class="compare-chat-hint" data-i18n="chat:composer.shortcutHint">Enter to send · Shift+Enter for new line</span>
+            <button id="compare-chat-send-btn" class="chat-send-btn" type="button" data-state="idle" title="Send message" aria-label="Send message" data-i18n-title="chat:composer.send" data-i18n-aria-label="chat:composer.send">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>
               </svg>
             </button>
           </div>
@@ -384,11 +391,10 @@
         <div class="chat-input-box">
           <textarea id="chat-drawer-input" class="chat-input-textarea" placeholder="이 논문에 대해 질문해보세요..." rows="1" data-document-copy-placeholder="legacy.documentCopy.chat-drawer-input"></textarea>
           <div class="chat-input-footer">
-            <span class="compare-chat-hint">Enter로 전송 · Shift+Enter로 줄바꿈</span>
-            <button id="chat-drawer-send-btn" class="chat-send-btn" title="전송">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            <span class="compare-chat-hint" data-i18n="chat:composer.shortcutHint">Enter to send · Shift+Enter for new line</span>
+            <button id="chat-drawer-send-btn" class="chat-send-btn" type="button" data-state="idle" title="Send message" aria-label="Send message" data-i18n-title="chat:composer.send" data-i18n-aria-label="chat:composer.send">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>
               </svg>
             </button>
           </div>
@@ -460,8 +466,8 @@
         <!-- 추가 메뉴(케밥): 번역 상태/모델, 번역 관리(다시 번역/중지/이어서/다운로드),
              메모 숨기기, 테마 전환을 한데 모아 툴바를 간결하게 유지한다. -->
         <div class="kebab-wrapper">
-          <button id="toolbar-kebab-btn" class="icon-btn" title="추가 메뉴" aria-haspopup="dialog" aria-expanded="false" aria-controls="toolbar-kebab-menu">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+          <button id="toolbar-kebab-btn" class="icon-btn" title="추가 메뉴" aria-label="Viewer more menu" data-i18n-aria-label="viewer:a11y.toolbarMenu" aria-haspopup="dialog" aria-expanded="false" aria-controls="toolbar-kebab-menu">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
           </button>
           <div id="toolbar-kebab-menu" class="kebab-menu hidden" role="dialog" aria-modal="false" aria-label="Viewer more menu" data-i18n-aria-label="viewer:a11y.toolbarMenu">
             <!-- 번역 작업 상태 정보 -->
@@ -469,6 +475,7 @@
               <div class="progress-mini-bar" id="progress-mini-bar"></div>
               <span id="progress-mini-text">0%</span>
             </div>
+            <div class="kebab-section-title" role="presentation" data-i18n="viewer:kebab.sectionTranslation">Translation</div>
             <div class="kebab-translation-grid">
               <div id="document-language-controls" class="document-language-controls" hidden>
                 <div class="kebab-menu-row">
@@ -489,60 +496,62 @@
             <span id="document-language-status" role="status" hidden></span>
 
             <div class="kebab-menu-divider"></div>
+            <div class="kebab-section-title" role="presentation" data-i18n="viewer:kebab.sectionDocument">Document</div>
 
-            <button id="viewer-read-toggle-btn" class="kebab-menu-item viewer-read-btn" title="독서 완료 상태 토글">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button type="button" id="viewer-read-toggle-btn" class="kebab-menu-item viewer-read-btn" title="독서 완료 상태 토글">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10"></circle>
                 <path d="m9 12 2 2 4-4"></path>
               </svg>
               <span class="read-btn-text">독서 완료</span>
             </button>
-            <button id="viewer-document-info-btn" class="kebab-menu-item" title="문서 정보 보기" data-i18n-title="viewer:documentInfo.open">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-              <span data-i18n="viewer:documentInfo.menu">정보</span>
+            <button type="button" id="viewer-document-info-btn" class="kebab-menu-item" title="Document information" data-i18n-title="viewer:documentInfo.open">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              <span data-i18n="viewer:documentInfo.menu">Information</span>
+            </button>
+            <button type="button" id="export-btn" class="kebab-menu-item" title="번역본 내보내기">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+              <span>번역본 다운로드</span>
             </button>
 
             <div class="kebab-menu-divider"></div>
+            <div class="kebab-section-title" role="presentation" data-i18n="viewer:kebab.sectionActions">Actions</div>
 
-            <button id="translation-scope-btn" class="kebab-menu-item" title="번역할 페이지 범위 선택">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+            <button type="button" id="translation-scope-btn" class="kebab-menu-item" title="번역할 페이지 범위 선택">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
               <span>번역 범위 선택</span>
             </button>
-            <button id="translate-document-btn" class="kebab-menu-item hidden" title="문서 전체 번역" data-i18n-title="viewer:translation.full">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              <span data-i18n="viewer:translation.full">문서 전체 번역</span>
+            <button type="button" id="translate-document-btn" class="kebab-menu-item hidden" title="Translate entire document" data-i18n-title="viewer:translation.full">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span data-i18n="viewer:translation.full">Translate entire document</span>
             </button>
-            <button id="retranslate-btn" class="kebab-menu-item" title="번역본 초기화" data-i18n-title="viewer:translation.reset">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              <span data-i18n="viewer:translation.reset">번역본 초기화</span>
-            </button>
-            <button id="cancel-trans-btn" class="kebab-menu-item hidden" title="번역 작업 중지" style="color: var(--error);">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+            <button type="button" id="cancel-trans-btn" class="kebab-menu-item kebab-menu-item--danger hidden" title="번역 작업 중지">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
               <span>번역 작업 중지</span>
             </button>
-            <button id="resume-trans-btn" class="kebab-menu-item hidden" title="중단된 부분부터 이어서 번역" style="color: var(--success);">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <button type="button" id="resume-trans-btn" class="kebab-menu-item kebab-menu-item--positive hidden" title="중단된 부분부터 이어서 번역">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               <span>이어서 번역하기</span>
             </button>
-            <button id="export-btn" class="kebab-menu-item" title="번역본 내보내기">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
-              <span>번역본 다운로드</span>
+            <button type="button" id="retranslate-btn" class="kebab-menu-item" title="Reset translations" data-i18n-title="viewer:translation.reset">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <span data-i18n="viewer:translation.reset">Reset translations</span>
             </button>
-            <button id="viewer-clear-cache-btn" class="kebab-menu-item" title="현재 논문의 PDF 추출 캐시 삭제" data-document-copy-title="legacy.documentCopy.viewer-clear-cache-btn">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+            <button type="button" id="viewer-clear-cache-btn" class="kebab-menu-item kebab-menu-item--danger" title="현재 논문의 PDF 추출 캐시 삭제" data-document-copy-title="legacy.documentCopy.viewer-clear-cache-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
               <span>PDF 추출 캐시 삭제</span>
             </button>
 
             <div class="kebab-menu-divider"></div>
+            <div class="kebab-section-title" role="presentation" data-i18n="viewer:kebab.sectionDisplay">Display</div>
 
-
-            <button id="memos-hide-all-btn" class="kebab-menu-item" title="작성된 모든 메모 숨기기 (하이라이트만 표시)">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+            <button type="button" id="memos-hide-all-btn" class="kebab-menu-item" title="작성된 모든 메모 숨기기 (하이라이트만 표시)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
               <span>메모 숨기기</span>
             </button>
-            <button id="theme-toggle-btn" class="kebab-menu-item" title="화이트/다크 테마 토글">
-              <svg class="sun-icon hidden" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-              <svg class="moon-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <button type="button" id="theme-toggle-btn" class="kebab-menu-item" title="화이트/다크 테마 토글">
+              <svg class="sun-icon hidden" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              <svg class="moon-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               <span>테마 전환</span>
             </button>
           </div>
@@ -645,39 +654,48 @@
             <span class="chat-header-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></svg></span>
             <span class="chat-title">AI 어시스턴트</span>
           </div>
-          <button id="chat-close-btn" class="chat-close-btn" title="닫기">&times;</button>
+          <button type="button" id="chat-close-btn" class="chat-close-btn" title="Close" aria-label="Close" data-i18n-title="viewer:figurePreview.close" data-i18n-aria-label="viewer:figurePreview.close">&times;</button>
         </div>
         <!-- AI Chat Loading Progress Bar -->
         <div class="chat-loading-progress" id="chat-loading-progress">
           <div class="chat-loading-progress-bar"></div>
         </div>
         <div class="chat-messages" id="chat-messages">
-          <div class="chat-message assistant">
-            <div class="message-bubble">안녕하세요! 이 논문의 내용에 대해 궁금한 점을 질문하시면 해당 분야의 전문가로서 답변해 드립니다.<br><br><strong><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>질문 예시:</strong><ul><li>이 논문의 핵심 연구 내용과 기여도를 요약해줘.</li><li>본문에서 제안하는 알고리즘/방법론의 상세 과정을 설명해줘.</li><li>실험 결과에서 제시된 주요 수치와 의의는 무엇이야?</li></ul></div>
+          <div class="chat-empty-starter" data-chat-starter>
+            <p class="chat-empty-lead" data-i18n="chat:welcome.research">Ask directly about findings, equations, or experimental evidence.</p>
+            <span class="chat-empty-label" data-i18n="chat:suggestions.label">Quick prompts</span>
+            <div class="chat-starter-chips">
+              <button type="button" class="chat-starter-chip" data-chat-prompt-key="chat:suggestions.research.summary" data-i18n="chat:suggestions.research.summary">Summarize the main findings and contributions.</button>
+              <button type="button" class="chat-starter-chip" data-chat-prompt-key="chat:suggestions.research.method" data-i18n="chat:suggestions.research.method">Explain the proposed methodology.</button>
+              <button type="button" class="chat-starter-chip" data-chat-prompt-key="chat:suggestions.research.results" data-i18n="chat:suggestions.research.results">What are the key results and why do they matter?</button>
+            </div>
           </div>
         </div>
         <div class="chat-input-area">
-          <div class="chat-input-box">
-            <!-- 인용 박스 -->
-            <div id="chat-quote-area" class="chat-quote-area hidden">
-              <span class="chat-quote-symbol">❝</span>
+          <div class="chat-input-box" data-slot="prompt-input">
+            <!-- 인용 컨텍스트 칩 (21st.dev PromptInputAttachment 패턴) -->
+            <div id="chat-quote-area" class="chat-quote-area hidden" data-slot="prompt-input-attachment">
+              <span class="chat-quote-icon" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+              </span>
               <div id="chat-quote-text" class="chat-quote-text"></div>
-              <img id="chat-quote-img" class="chat-quote-img hidden" alt="Quoted Figure" />
-              <button id="chat-quote-close-btn" class="chat-quote-close-btn" title="인용 취소">&times;</button>
+              <img id="chat-quote-img" class="chat-quote-img hidden" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Quoted Figure" />
+              <button type="button" id="chat-quote-close-btn" class="chat-quote-close-btn" title="Remove quoted context" aria-label="Remove quoted context" data-i18n-title="chat:composer.removeQuote" data-i18n-aria-label="chat:composer.removeQuote">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
             </div>
-            <textarea id="chat-input" class="chat-input-textarea" placeholder="논문에 대해 궁금한 점을 질문하세요..." data-i18n-placeholder="chat:placeholder" rows="1"></textarea>
-            <div class="chat-input-footer">
+            <textarea id="chat-input" class="chat-input-textarea" data-slot="prompt-input-textarea" placeholder="논문에 대해 궁금한 점을 질문하세요..." data-i18n-placeholder="chat:placeholder" rows="1"></textarea>
+            <div class="chat-input-footer" data-slot="prompt-input-toolbar">
               <div id="chat-sidebar-provider"></div>
               <div class="chat-input-actions">
-                <button type="button" id="chat-input-expand-btn" class="chat-input-expand-btn" title="입력창 확장" aria-label="입력창 확장" aria-controls="chat-input" aria-expanded="false">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button type="button" id="chat-input-expand-btn" class="chat-input-expand-btn" title="Expand input" aria-label="Expand input" data-i18n-title="common:chatInput.expand" data-i18n-aria-label="common:chatInput.expand" aria-controls="chat-input" aria-expanded="false">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/>
                   </svg>
                 </button>
-                <button id="chat-send-btn" class="chat-send-btn" title="전송">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="22" y1="2" x2="11" y2="13"/>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                <button id="chat-send-btn" class="chat-send-btn" type="button" data-slot="prompt-input-submit" data-state="idle" title="Send message" aria-label="Send message" data-i18n-title="chat:composer.send" data-i18n-aria-label="chat:composer.send">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>
                   </svg>
                 </button>
               </div>
@@ -738,26 +756,47 @@
   </div>
 
   <!-- 첫 실행 시 AI 엔진 자동 감지 / 설치 안내 모달 -->
-  <div id="onboarding-modal" class="modal-overlay hidden">
+  <div id="onboarding-modal" class="modal-overlay hidden" aria-labelledby="onboarding-title">
     <div class="modal-content">
       <div class="modal-header">
         <h2 id="onboarding-title" data-i18n="onboarding:title">번역 환경 설정</h2>
         <div class="onboarding-header-actions">
-          <label class="onboarding-locale-label"><span data-i18n="onboarding:uiLanguage">화면 언어</span>
+          <label class="onboarding-locale-label" for="onboarding-ui-locale"><span id="onboarding-ui-locale-label" data-i18n="onboarding:uiLanguage">화면 언어</span>
             <select id="onboarding-ui-locale" class="form-select"><option value="ko">한국어</option><option value="en">English</option></select>
           </label>
-          <button id="onboarding-close-btn" class="close-btn" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
+          <button id="onboarding-close-btn" class="close-btn" aria-label="Close" data-i18n-aria-label="onboarding:close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
         </div>
       </div>
 
       <div class="onboarding-body">
-        <progress id="onboarding-progress" max="4" value="1" aria-labelledby="onboarding-title"></progress>
+        <ol id="onboarding-stepper" class="onboarding-stepper" aria-label="Setup steps" data-i18n-aria-label="onboarding:stepperAria">
+          <li class="onboarding-step is-active" data-step="1" aria-current="step">
+            <span class="onboarding-step-indicator" aria-hidden="true">1</span>
+            <span class="onboarding-step-label" data-i18n="onboarding:stepPurpose">Workspace</span>
+            <span class="sr-only onboarding-step-status"></span>
+          </li>
+          <li class="onboarding-step" data-step="2">
+            <span class="onboarding-step-indicator" aria-hidden="true">2</span>
+            <span class="onboarding-step-label" data-i18n="onboarding:stepLocation">Connection</span>
+            <span class="sr-only onboarding-step-status"></span>
+          </li>
+          <li class="onboarding-step" data-step="3">
+            <span class="onboarding-step-indicator" aria-hidden="true">3</span>
+            <span class="onboarding-step-label" data-i18n="onboarding:stepEngine">Engine</span>
+            <span class="sr-only onboarding-step-status"></span>
+          </li>
+          <li class="onboarding-step" data-step="4">
+            <span class="onboarding-step-indicator" aria-hidden="true">4</span>
+            <span class="onboarding-step-label" data-i18n="onboarding:stepModel">Model</span>
+            <span class="sr-only onboarding-step-status"></span>
+          </li>
+        </ol>
         <div id="onboarding-purpose" class="hidden">
-          <h3 tabindex="-1" data-i18n="onboarding:purpose.heading">EasyPaper를 어떤 용도로 사용하시나요?</h3>
+          <h3 id="onboarding-purpose-heading" tabindex="-1" data-i18n="onboarding:purpose.heading">EasyPaper를 어떤 용도로 사용하시나요?</h3>
           <p class="onboarding-purpose-help" data-i18n="onboarding:purpose.help">기본 작업공간만 정하며 문서를 자동 분류하지 않습니다. 나중에 사이드바에서 언제든 변경할 수 있습니다.</p>
-          <div class="onboarding-purpose-cards" role="radiogroup">
+          <div class="onboarding-purpose-cards" role="radiogroup" aria-labelledby="onboarding-purpose-heading">
             <button type="button" class="onboarding-card" data-purpose-mode="research" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.research">연구 논문 중심</strong><span data-i18n="onboarding:purpose.researchHelp">논문 번역, 읽기 전 브리핑, 논문 비교, Research Graph</span></button>
-            <button type="button" class="onboarding-card" data-purpose-mode="general" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.general">일반 문서 중심</strong><span data-i18n="onboarding:purpose.generalHelp">기술 문서, 책, 아티클, 보고서, 매뉴얼 번역과 문서 AI</span></button>
+            <button type="button" class="onboarding-card" data-purpose-mode="general" role="radio" aria-checked="false" tabindex="-1"><strong data-i18n="onboarding:purpose.general">일반 문서 중심</strong><span data-i18n="onboarding:purpose.generalHelp">기술 문서, 책, 아티클, 보고서, 매뉴얼 번역과 문서 AI</span></button>
           </div>
           <p id="onboarding-purpose-error" role="alert"></p>
           <div class="onboarding-actions"><button type="button" id="onboarding-purpose-next-btn" class="btn btn-primary" disabled data-i18n="onboarding:next">다음</button></div>
@@ -1165,7 +1204,7 @@
         <div class="modal-form shortcut-settings">
           <p class="shortcut-note" data-i18n="settings:shortcutsBrowserNote">Ctrl/Cmd means Ctrl on Windows and Linux or Command on macOS. Browsers may handle some reserved shortcuts first. Shortcuts work in their respective screens; memo shortcuts take priority while editing. Workspace shortcuts are disabled while a modal is open.</p>
           <section class="shortcut-group" aria-labelledby="shortcut-workspace-heading">
-            <h4 id="shortcut-workspace-heading" data-i18n="settings:shortcutsWorkspace">Workspace and tabs</h4>
+            <h3 id="shortcut-workspace-heading" data-i18n="settings:shortcutsWorkspace">Workspace and tabs</h3>
             <dl>
               <div><dt data-i18n="viewer:comfort.commandSearch">Search and commands</dt><dd><kbd>Ctrl/Cmd+K</kbd></dd></div>
               <div><dt data-i18n="settings:shortcutSidebar">Collapse or expand sidebar</dt><dd><kbd>Ctrl/Cmd+B</kbd></dd></div>
@@ -1182,7 +1221,7 @@
             </dl>
           </section>
           <section class="shortcut-group" aria-labelledby="shortcut-viewer-heading">
-            <h4 id="shortcut-viewer-heading" data-i18n="settings:shortcutsViewer">Document viewer</h4>
+            <h3 id="shortcut-viewer-heading" data-i18n="settings:shortcutsViewer">Document viewer</h3>
             <dl>
               <div><dt data-i18n="settings:shortcutFind">Find in document</dt><dd><kbd>Ctrl/Cmd+F</kbd></dd></div>
               <div><dt data-i18n="settings:shortcutFindResults">Next or previous search result</dt><dd><kbd>Enter</kbd> <kbd>Shift+Enter</kbd></dd></div>
@@ -1196,7 +1235,7 @@
             </dl>
           </section>
           <section class="shortcut-group" aria-labelledby="shortcut-library-heading">
-            <h4 id="shortcut-library-heading" data-i18n="settings:shortcutsLibrary">Library</h4>
+            <h3 id="shortcut-library-heading" data-i18n="settings:shortcutsLibrary">Library</h3>
             <dl>
               <div><dt data-i18n="settings:shortcutHistory">Go back or forward</dt><dd><kbd>Ctrl/Cmd+[</kbd> <kbd>Ctrl/Cmd+]</kbd></dd></div>
               <div><dt data-i18n="settings:shortcutLibraryUndo">Undo recent action</dt><dd><kbd>Ctrl/Cmd+Z</kbd></dd></div>
@@ -1207,7 +1246,7 @@
             </dl>
           </section>
           <section class="shortcut-group" aria-labelledby="shortcut-memo-heading">
-            <h4 id="shortcut-memo-heading" data-i18n="settings:shortcutsMemo">Memo editing</h4>
+            <h3 id="shortcut-memo-heading" data-i18n="settings:shortcutsMemo">Memo editing</h3>
             <dl>
               <div><dt data-i18n="settings:shortcutMemoInline">Bold, italic, link, or inline code</dt><dd><kbd>Ctrl/Cmd+B</kbd> <kbd>Ctrl/Cmd+I</kbd> <kbd>Ctrl/Cmd+K</kbd> <kbd>Ctrl/Cmd+E</kbd></dd></div>
               <div><dt data-i18n="settings:shortcutMemoBlock">Strikethrough or code block</dt><dd><kbd>Ctrl/Cmd+Shift+X</kbd> <kbd>Ctrl/Cmd+Shift+C</kbd></dd></div>
@@ -1326,7 +1365,7 @@
                     <svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                     가상환경(.venv)에 설치 중입니다...
                   </div>
-                  <pre id="pdf-parser-inline-log" style="width: 100%; height: 140px; background: #0d1117; color: #c9d1d9; border-radius: 6px; padding: 10px; font-family: var(--font-mono); font-size: 11px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin: 0; border: 1px solid var(--border-strong); box-sizing: border-radius;"></pre>
+                  <pre id="pdf-parser-inline-log" style="width: 100%; height: 140px; background: #0d1117; color: #c9d1d9; border-radius: 6px; padding: 10px; font-family: var(--font-mono); font-size: 11px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin: 0; border: 1px solid var(--border-strong); box-sizing: border-box;"></pre>
                 </div>
               </div>
             </div>
@@ -1460,7 +1499,7 @@
               <span id="pull-pct-text" style="font-weight: 600; color: var(--accent-mid);">0%</span>
             </div>
             <div class="progress-bar-wrap" style="height: 6px; background: rgba(255, 255, 255, 0.05); border-radius: 3px; overflow: hidden;">
-              <div id="pull-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); transition: width 0.2s;"></div>
+              <div id="pull-progress-bar" style="width: 0%; height: 100%; background: var(--control-accent); transition: width 0.2s;"></div>
             </div>
           </div>
         </div>
@@ -1495,7 +1534,7 @@
           <!-- 로그인 생략 설정 -->
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
             <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>로그인 생략</h3>
-            <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
+            <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.32); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
               <strong>보안 경고:</strong> 켜면 이 서버에 네트워크로 접근 가능한 모든 사람이 로그인 없이 전체 기능을 쓸 수 있습니다.
               여기에는 논문 열람뿐 아니라 시스템 업데이트(서버 재시작)와 Ollama/CLI 원격 설치처럼 서버에 소프트웨어를 설치·재시작시킬 수 있는 관리 기능도 포함됩니다.
               다른 사람이 접근할 수 없는 개인 PC/로컬 환경에서만 켜세요.
@@ -1592,7 +1631,7 @@
 
           <div id="system-update-section" class="form-group">
             <label>시스템 업데이트 (System Update)</label>
-            <div style="background: rgba(139, 92, 246, 0.1); border-left: 4px solid var(--accent-mid); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
+            <div style="background: var(--control-accent-soft); border: 1px solid color-mix(in srgb, var(--control-accent) 32%, var(--border-strong)); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><strong>GitHub 최신 업데이트 확인 및 자동 빌드:</strong><br>
               아래 버튼을 누르면 GitHub 저장소로부터 최신 코드를 풀(Pull) 받고,<br>
               변경된 내용이 있을 경우 프론트엔드를 자동 빌드한 뒤 EasyPaper 데몬 서비스를 즉시 재기동합니다.
@@ -1625,7 +1664,7 @@
 
           <div id="tauri-update-section" class="form-group hidden">
             <label>앱 업데이트 (App Update)</label>
-            <div style="background: rgba(139, 92, 246, 0.1); border-left: 4px solid var(--accent-mid); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
+            <div style="background: var(--control-accent-soft); border: 1px solid color-mix(in srgb, var(--control-accent) 32%, var(--border-strong)); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><strong>데스크탑 앱 업데이트:</strong><br>
               아래 버튼을 누르면 새 버전이 있는지 확인합니다. 새 버전이 있으면 다운로드 후 설치하고 앱을 자동으로 재시작합니다.
             </div>
@@ -1681,7 +1720,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
       </button>
       <div class="doc-preview-hero">
-        <img id="doc-preview-cover-img" class="doc-preview-cover-img" alt="" />
+        <img id="doc-preview-cover-img" class="doc-preview-cover-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" />
         <div class="doc-preview-gradient"></div>
         <div class="doc-preview-hero-content">
           <div class="doc-preview-title-row">
@@ -1757,7 +1796,7 @@
                 <span class="primer-label-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span>
                 <span>핵심 그림 먼저 보기</span>
               </div>
-              <img id="primer-figure-img" class="primer-figure-img" src="" alt="대표 Figure" />
+              <img id="primer-figure-img" class="primer-figure-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="대표 Figure" />
             </div>
 
             <div id="primer-checklist-section" class="hidden">

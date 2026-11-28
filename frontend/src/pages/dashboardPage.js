@@ -11,10 +11,10 @@ import './../styles/dashboard.css'
 import '../styles/reading-history.css'
 import { fetchLibraryDashboard, fetchLibraryTimeline, fetchReadingRecommendations, fetchCachedReadingRecommendations, fetchLibrary, fetchLibraryGraph, fetchReadingTimeStats, fetchReadingAnalyticsSummary } from '../library.js'
 import { icon } from '../icons.js'
-import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, todayKey, addDaysKey, isWithinDaysLocal } from '../readPages.js'
+import { readPageCount, lastActivityIso, hasReadActivity, computeStreakDays, todayKey, addDaysKey, isWithinDaysLocal, isoToLocalDateKey, keyToLocalDate } from '../readPages.js'
 import { periodStats, sumSecondsByDayRange, formatDuration, deltaDurationHtml, CATEGORY_LABEL, CATEGORY_COLOR_VAR, CATEGORY_ORDER } from './readingHistoryPage.js'
 import { formatTranslationHtml, applyKatexToElement } from '../textFormat.js'
-import { t, formatNumber as intlFormatNumber, formatRelativeTime } from '../i18n.js'
+import { t, formatNumber as intlFormatNumber, formatDate, formatRelativeTime } from '../i18n.js'
 import { enableAutoAnimateAll } from '../interactiveUi.js'
 
 let renderGeneration = 0
@@ -90,27 +90,27 @@ function truncateLabel(s, n) {
 
 // ── 통계 카드 ──────────────────────────────────────────────────────────
 const STAT_DEFS = [
-  { key: 'total_papers', label: '논문', iconName: 'bookOpen', tint: 1, weekly: (c7) => c7?.uploadedPapers || 0 },
-  { key: 'read_papers', label: '읽은 논문', iconName: 'checkCircle', tint: 2, weekly: (c7) => c7?.papersRead || 0 },
-  { key: 'read_pages', label: '읽은 페이지 수', iconName: 'fileText', tint: 3, weekly: (c7, wp) => wp || 0 },
+  { key: 'total_papers', label: '논문', weekly: (c7) => c7?.uploadedPapers || 0 },
+  { key: 'read_papers', label: '읽은 논문', weekly: (c7) => c7?.papersRead || 0 },
+  { key: 'read_pages', label: '읽은 페이지 수', weekly: (c7, wp) => wp || 0 },
   // 개념은 생성 시각이 저장되지 않아 "이번 주 신규 개념 수"를 계산할 근거가
   // 없다 - 지어내지 않고 주간 델타 자체를 생략한다.
-  { key: 'total_concepts', label: '개념', iconName: 'layers', tint: 4, weekly: null },
-  { key: 'total_questions', label: '질문', iconName: 'messageCircle', tint: 5, weekly: (c7) => c7?.questions || 0 },
-  { key: 'total_notes', label: '메모', iconName: 'edit3', tint: 6, weekly: (c7) => c7?.notes || 0 },
+  { key: 'total_concepts', label: '개념', weekly: null },
+  { key: 'total_questions', label: '질문', weekly: (c7) => c7?.questions || 0 },
+  { key: 'total_notes', label: '메모', weekly: (c7) => c7?.notes || 0 },
 ]
 
 const GENERAL_STAT_DEFS = [
-  { key: 'total_papers', label: '문서', iconName: 'bookOpen', tint: 1, weekly: (c7) => c7?.uploadedPapers || 0 },
-  { key: 'read_papers', label: '읽은 문서', iconName: 'checkCircle', tint: 2, weekly: (c7) => c7?.papersRead || 0 },
-  { key: 'read_pages', label: '읽은 페이지 수', iconName: 'fileText', tint: 3, weekly: (c7, wp) => wp || 0 },
-  { key: 'total_questions', label: '질문', iconName: 'messageCircle', tint: 5, weekly: (c7) => c7?.questions || 0 },
-  { key: 'total_notes', label: '메모', iconName: 'edit3', tint: 6, weekly: (c7) => c7?.notes || 0 },
+  { key: 'total_papers', label: '문서', weekly: (c7) => c7?.uploadedPapers || 0 },
+  { key: 'read_papers', label: '읽은 문서', weekly: (c7) => c7?.papersRead || 0 },
+  { key: 'read_pages', label: '읽은 페이지 수', weekly: (c7, wp) => wp || 0 },
+  { key: 'total_questions', label: '질문', weekly: (c7) => c7?.questions || 0 },
+  { key: 'total_notes', label: '메모', weekly: (c7) => c7?.notes || 0 },
 ]
 
 function renderStatCard(def, value, curr7, weeklyPagesRead) {
   const delta = def.weekly ? def.weekly(curr7, weeklyPagesRead) : null
-  const deltaHtml = delta === null ? '' : `
+  const deltaHtml = delta === null ? '<span class="dash-stat-delta" aria-hidden="true"></span>' : `
     <div class="dash-stat-delta ${delta > 0 ? 'is-up' : ''}">
       ${delta > 0 ? icon('chevronUp', 11) : ''}
       <span>${t('dashboard:thisWeekDelta', { count: delta, value: delta > 0 ? `+${formatNumber(delta)}` : '0' })}</span>
@@ -119,12 +119,9 @@ function renderStatCard(def, value, curr7, weeklyPagesRead) {
   return `
     <div class="dash-stat-card">
       <div class="dash-stat-top">
-        <div class="dash-stat-icon dash-tint-${def.tint}">${icon(def.iconName, 18)}</div>
-        <div class="dash-stat-textwrap">
-          <div class="dash-stat-label">${escapeHtml(def.label)}</div>
-          <div class="dash-stat-value">${formatNumber(value)}</div>
-        </div>
+        <div class="dash-stat-label">${escapeHtml(def.label)}</div>
       </div>
+      <div class="dash-stat-value">${formatNumber(value)}</div>
       ${deltaHtml}
     </div>
   `
@@ -222,14 +219,129 @@ function computeDepthRatio(analyticsSummary) {
   return { deepCount, skimCount, deepPct, skimPct: 100 - deepPct }
 }
 
-function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySeconds, analyticsSummary, weeklyCategoryStats, docs = [], isGeneralDocumentMode = false) {
+const CONTRIB_WEEKS = 16
+
+function buildActivityHeatmapModel(events, secondsByDay = {}) {
+  const endKey = todayKey()
+  const endDate = keyToLocalDate(endKey)
+  const endDowMonday0 = (endDate.getDay() + 6) % 7
+  const totalDays = (CONTRIB_WEEKS - 1) * 7 + endDowMonday0 + 1
+  const startKey = addDaysKey(endKey, -(totalDays - 1))
+
+  const eventCounts = new Map()
+  for (const ev of events || []) {
+    const k = isoToLocalDateKey(ev?.timestamp)
+    if (k) eventCounts.set(k, (eventCounts.get(k) || 0) + 1)
+  }
+
+  const days = []
+  let maxSignal = 0
+  let activeDays = 0
+  for (let i = 0; i < totalDays; i++) {
+    const key = addDaysKey(startKey, i)
+    const seconds = Math.max(0, Number(secondsByDay?.[key]) || 0)
+    const evCount = eventCounts.get(key) || 0
+    const signal = Math.round(seconds / 60) + evCount * 4
+    if (seconds > 0 || evCount > 0) activeDays++
+    if (signal > maxSignal) maxSignal = signal
+    days.push({ key, seconds, evCount, signal, col: Math.floor(i / 7), row: i % 7 })
+  }
+
+  const b1 = Math.max(1, Math.ceil(maxSignal * 0.25))
+  const b2 = Math.max(2, Math.ceil(maxSignal * 0.5))
+  const b3 = Math.max(3, Math.ceil(maxSignal * 0.75))
+  for (const d of days) {
+    d.level = d.signal <= 0 ? 0 : d.signal <= b1 ? 1 : d.signal <= b2 ? 2 : d.signal <= b3 ? 3 : 4
+  }
+
+  const months = []
+  for (const d of days) {
+    const dt = keyToLocalDate(d.key)
+    if (d.col === 0 && d.row === 0 || dt.getDate() === 1) {
+      if (!months.length || d.col - months[months.length - 1].col >= 3) {
+        months.push({ col: d.col, label: formatDate(dt, { month: 'short' }) })
+      }
+    }
+  }
+
+  return { days, months, weeks: CONTRIB_WEEKS, totalDays, activeDays }
+}
+
+function formatHeatmapDayReadout(day) {
+  const dt = keyToLocalDate(day.key)
+  const dateLabel = formatDate(dt, { month: 'short', day: 'numeric' })
+  if (day.seconds > 0 && day.evCount > 0) {
+    return t('dashboard:heatmapDaySummary', { date: dateLabel, duration: formatDuration(day.seconds), events: formatNumber(day.evCount) })
+  }
+  if (day.seconds > 0) {
+    return t('dashboard:heatmapDayDurationOnly', { date: dateLabel, duration: formatDuration(day.seconds) })
+  }
+  if (day.evCount > 0) {
+    return t('dashboard:heatmapDayEventsOnly', { date: dateLabel, events: formatNumber(day.evCount) })
+  }
+  return t('dashboard:heatmapNoActivity', { date: dateLabel })
+}
+
+function renderActivityHeatmapHtml(events, secondsByDay, score) {
+  const model = buildActivityHeatmapModel(events, secondsByDay)
+  const activePct = model.totalDays > 0 ? Math.round((model.activeDays / model.totalDays) * 100) : 0
+  const defaultReadout = t('dashboard:activeDaysRatio', { days: model.totalDays, percent: activePct })
+  const weekdayRows = [t('dashboard:weekdayMon'), '', t('dashboard:weekdayWed'), '', t('dashboard:weekdayFri'), '', '']
+  const byRow = Array.from({ length: 7 }, () => Array(model.weeks).fill(null))
+  for (const d of model.days) byRow[d.row][d.col] = d
+  const lastIdx = Math.max(0, model.days.length - 1)
+
+  const gridRowsHtml = byRow.map((cols, rowIdx) => `
+    <div role="row" class="dash-contrib-row">
+      ${cols.map((cell, colIdx) => {
+        if (!cell) return `<span class="dash-contrib-cell is-future" data-empty aria-hidden="true"></span>`
+        const idx = colIdx * 7 + rowIdx
+        const readout = formatHeatmapDayReadout(cell)
+        return `<span role="gridcell" class="dash-contrib-cell" data-index="${idx}" data-level="${cell.level}" data-readout="${escapeHtml(readout)}" tabindex="${idx === lastIdx ? '0' : '-1'}" aria-label="${escapeHtml(readout)}"></span>`
+      }).join('')}
+    </div>
+  `).join('')
+
+  return `
+    <div class="dash-contrib" data-contrib-root data-default-readout="${escapeHtml(defaultReadout)}">
+      <div class="dash-contrib-meta">
+        <span class="dash-contrib-readout" data-contrib-readout aria-live="polite">${escapeHtml(defaultReadout)}</span>
+        <span class="dash-contrib-score-inline" title="${escapeHtml(t('dashboard:readingScoreTitle'))}">
+          <span class="dash-contrib-score-label">${escapeHtml(t('dashboard:readingScoreTitle'))}</span>
+          <strong class="dash-contrib-score-num">${score > 0 ? score.toFixed(1) : '—'}</strong>
+        </span>
+      </div>
+      <div class="dash-contrib-canvas" style="--contrib-weeks:${model.weeks}">
+        <div class="dash-contrib-months" aria-hidden="true">
+          ${model.months.map(m => `<span class="dash-contrib-month" style="--col:${m.col}">${escapeHtml(m.label)}</span>`).join('')}
+        </div>
+        <div class="dash-contrib-body">
+          <div class="dash-contrib-weekdays" aria-hidden="true">
+            ${weekdayRows.map(w => `<span class="dash-contrib-weekday">${escapeHtml(w)}</span>`).join('')}
+          </div>
+          <div role="grid" class="dash-contrib-grid" data-contrib-grid aria-label="${escapeHtml(t('dashboard:heatmapAriaLabel', { weeks: model.weeks }))}">
+            ${gridRowsHtml}
+          </div>
+        </div>
+      </div>
+      <div class="dash-contrib-legend">
+        <span class="dash-contrib-legend-text" aria-hidden="true">${escapeHtml(t('dashboard:heatmapLess'))}</span>
+        <div class="dash-contrib-swatches" role="group" aria-label="${escapeHtml(t('dashboard:heatmapFilterGroupAriaLabel'))}">
+          ${[0, 1, 2, 3, 4].map(lvl => `<button type="button" class="dash-contrib-swatch" data-level-key="${lvl}" data-level="${lvl}" aria-pressed="false" aria-label="${escapeHtml(t('dashboard:heatmapLevelFilter', { level: lvl }))}"></button>`).join('')}
+        </div>
+        <span class="dash-contrib-legend-text" aria-hidden="true">${escapeHtml(t('dashboard:heatmapMore'))}</span>
+      </div>
+    </div>
+  `
+}
+
+function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySeconds, analyticsSummary, weeklyCategoryStats, docs = [], isGeneralDocumentMode = false, secondsByDay = null) {
   const streak = computeStreakDays(events)
   const focusTopic = heatmap[0]
   const recentDocument = docs
     .filter(d => hasReadActivity(d?.metadata))
     .sort((a, b) => new Date(lastActivityIso(b.metadata, b.created_at)) - new Date(lastActivityIso(a.metadata, a.created_at)))[0]
   const score = analyticsSummary?.overall_avg_score || 0.0
-  const scorePct = Math.max(0, Math.min(100, score))
   const depthRatio = computeDepthRatio(analyticsSummary)
 
   const catTotal = CATEGORY_ORDER.reduce((s, c) => s + (weeklyCategoryStats?.[c] || 0), 0)
@@ -259,21 +371,7 @@ function renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySec
       <div class="dash-card-head">
         <h3>${icon('award', 15)}활동 요약</h3>
       </div>
-      <div class="dash-score-pie-container">
-        <div class="dash-score-ring-wrap">
-          <svg width="56" height="56" viewBox="0 0 36 36" class="dash-score-ring-svg">
-            <path stroke="var(--bg-hover)" stroke-width="3.2" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-            <path stroke="var(--control-accent)" stroke-width="3.2" stroke-dasharray="${scorePct.toFixed(1)}, 100" stroke-linecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-          </svg>
-          <div class="dash-score-ring-value">
-            ${score.toFixed(1)}
-          </div>
-        </div>
-        <div class="dash-score-copy">
-          <div class="dash-score-title">${escapeHtml(t('dashboard:readingScoreTitle'))}</div>
-          <div class="dash-score-desc">정독 패턴, verified pages & interaction 종합 평가</div>
-        </div>
-      </div>
+      ${renderActivityHeatmapHtml(events, secondsByDay, score)}
       ${depthRatio ? `
       <div class="dash-depth-ratio">
         <div class="dash-depth-ratio-bar">
@@ -663,6 +761,75 @@ function attachHandlers(root) {
     elm.addEventListener('click', () => goToGraphNode(elm.dataset.nodeId))
   })
 
+  // 일간 활동 히트맵 (21st.dev Activity Heatmap 패턴 — 키보드 그리드 탐색 & 레벨 필터 스와치)
+  root.querySelectorAll('[data-contrib-root]').forEach(contribRoot => {
+    const grid = contribRoot.querySelector('[data-contrib-grid]')
+    const readout = contribRoot.querySelector('[data-contrib-readout]')
+    const swatches = [...contribRoot.querySelectorAll('.dash-contrib-swatch')]
+    if (!grid || !readout) return
+    const defaultText = contribRoot.dataset.defaultReadout || ''
+    const cells = [...grid.querySelectorAll('.dash-contrib-cell[data-index]')]
+    let pinnedLevel = null
+
+    const showReadout = (cell) => {
+      readout.textContent = cell?.dataset?.readout || defaultText
+    }
+    const applyHighlight = (lvl) => {
+      if (lvl === null || lvl === undefined) delete grid.dataset.highlight
+      else grid.dataset.highlight = String(lvl)
+    }
+
+    grid.addEventListener('pointerover', (ev) => {
+      const cell = ev.target.closest('.dash-contrib-cell[data-index]')
+      if (cell) showReadout(cell)
+    })
+    grid.addEventListener('pointerleave', () => {
+      const focused = grid.querySelector('.dash-contrib-cell[data-index]:focus')
+      showReadout(focused || null)
+    })
+    grid.addEventListener('focusin', (ev) => {
+      const cell = ev.target.closest('.dash-contrib-cell[data-index]')
+      if (cell) showReadout(cell)
+    })
+    grid.addEventListener('focusout', (ev) => {
+      if (!grid.contains(ev.relatedTarget)) showReadout(null)
+    })
+    grid.addEventListener('keydown', (ev) => {
+      const active = ev.target.closest('.dash-contrib-cell[data-index]')
+      if (!active || !cells.length) return
+      const cur = Number(active.dataset.index)
+      const moves = {
+        ArrowUp: cur - 1,
+        ArrowDown: cur + 1,
+        ArrowLeft: cur - 7,
+        ArrowRight: cur + 7,
+        Home: 0,
+        End: cells.length - 1,
+      }
+      if (!(ev.key in moves)) return
+      ev.preventDefault()
+      const nextIdx = Math.min(Math.max(moves[ev.key], 0), cells.length - 1)
+      const target = grid.querySelector(`.dash-contrib-cell[data-index="${nextIdx}"]`)
+      if (target) {
+        cells.forEach(c => { c.tabIndex = c === target ? 0 : -1 })
+        target.focus()
+      }
+    })
+
+    swatches.forEach(btn => {
+      const lvl = Number(btn.dataset.levelKey)
+      btn.addEventListener('pointerenter', () => applyHighlight(lvl))
+      btn.addEventListener('pointerleave', () => applyHighlight(pinnedLevel))
+      btn.addEventListener('focus', () => applyHighlight(lvl))
+      btn.addEventListener('blur', () => applyHighlight(pinnedLevel))
+      btn.addEventListener('click', () => {
+        pinnedLevel = pinnedLevel === lvl ? null : lvl
+        swatches.forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.levelKey) === pinnedLevel)))
+        applyHighlight(pinnedLevel)
+      })
+    })
+  })
+
   const recsCard = root.querySelector('.dash-card-recs')
   if (recsCard) {
     const recsBody = recsCard.querySelector('[data-recs-body]')
@@ -776,7 +943,7 @@ export async function renderDashboardPage(documentMode = 'research') {
         <div class="dash-row dash-row-3">
           ${isGeneralDocumentMode ? '' : renderInsightsCard(insights)}
           ${renderWeeklyActivityCard(curr7, weeklyPagesRead, weeklySeconds, stats, readingStats, docs, isGeneralDocumentMode)}
-          ${renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySeconds, analyticsSummary, weeklyReadingStats?.total_seconds_by_category, docs, isGeneralDocumentMode)}
+          ${renderProgressSummaryCard(events, heatmap, weeklySeconds, prevWeeklySeconds, analyticsSummary, weeklyReadingStats?.total_seconds_by_category, docs, isGeneralDocumentMode, readingStats?.total_seconds_by_day)}
         </div>
         <div class="dash-row dash-row-recent">
           ${renderRecentPapersCard(docs, isGeneralDocumentMode)}

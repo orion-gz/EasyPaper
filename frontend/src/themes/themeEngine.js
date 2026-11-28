@@ -76,6 +76,26 @@ function shadeHex(hex, lightnessDelta) {
   return rgbToHex(rgb.r, rgb.g, rgb.b)
 }
 
+function compositeHex(front, back) {
+  return mix(back.slice(0, 7), front.slice(0, 7), front.length === 9 ? parseInt(front.slice(7), 16) / 255 : 1)
+}
+function ensureContrast(initialHex, backgrounds, minRatio, targetHex, extremePole) {
+  const start = initialHex.slice(0, 7), goal = targetHex.slice(0, 7)
+  if (backgrounds.every(bg => contrast(start, bg) >= minRatio)) return start
+  for (let step = 1; step <= 40; step++) {
+    const candidate = mix(start, goal, step / 40)
+    if (backgrounds.every(bg => contrast(candidate, bg) >= minRatio)) return candidate
+  }
+  if (extremePole) {
+    const pole = extremePole.slice(0, 7)
+    for (let step = 1; step <= 40; step++) {
+      const candidate = mix(goal, pole, step / 40)
+      if (backgrounds.every(bg => contrast(candidate, bg) >= minRatio)) return candidate
+    }
+    return pole
+  }
+  return goal
+}
 function cleanOverrides(value, strict = false) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) { if (strict) throw new Error('invalidTheme'); return {} }
   const result = {}
@@ -130,8 +150,19 @@ export function resolveTheme(id, state, draft) {
     Object.assign(tokens, light ? { 'topbar-bg': o['bg-panel'] || '#ffffffcc', 'card-bg': o['bg-elevated'] || tokens['bg-surface'], 'viewer-bg': tokens['bg-base'] } : { 'topbar-bg': o['bg-panel'] || '#0a0812bf', 'card-bg': o['bg-elevated'] || '#ffffff05' })
   }
   Object.assign(tokens, o)
+  const baseSolid = tokens['bg-base'].slice(0, 7)
+  const panelSolid = compositeHex(tokens['bg-panel'], baseSolid)
+  const surfaceSolid = compositeHex(tokens['bg-surface'], panelSolid)
+  const elevatedSolid = compositeHex(tokens['bg-elevated'], panelSolid)
+  const readableSurfaces = [panelSolid, surfaceSolid, elevatedSolid]
+  const fgSolid = fg.slice(0, 7)
+  const contrastPole = light ? '#0f172a' : '#f8fafc'
   Object.assign(tokens, {
     'bg-primary': tokens['bg-base'], danger: tokens.error,
+    'border-control': ensureContrast(compositeHex(tokens['border-strong'], elevatedSolid), readableSurfaces, 3.1, fgSolid, contrastPole),
+    'control-accent-border': ensureContrast(a, readableSurfaces, 3.1, fgSolid, contrastPole),
+    'text-subtle-readable': ensureContrast(tokens['text-secondary'], readableSurfaces, 4.6, fgSolid, contrastPole),
+    'danger-text': ensureContrast(tokens.error, readableSurfaces, 4.6, light ? '#450a0a' : '#fee2e2', contrastPole),
     'bg-topbar': tokens['topbar-bg'], 'bg-card': tokens['card-bg'], 'bg-card-hover': tokens['bg-hover'],
     'bg-trans-label': rgba(fg, 0.02), 'bg-page-pair': tokens['viewer-bg'], 'bg-page-pair-hover': tokens['bg-hover'],
     'bg-dropzone': tokens['bg-surface'], 'bg-page-block': tokens['translation-bg'],

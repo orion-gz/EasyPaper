@@ -20,5 +20,14 @@
   "deepReadTitle": "정독 {{count}}편",
   "skimReadTitle": "훑어보기 {{count}}편",
   "deepReadLegend": "정독 {{percent}}% ({{count}}편)",
-  "skimReadLegend": "훑어보기 {{percent}}% ({{count}}편)"
+  "skimReadLegend": "훑어보기 {{percent}}% ({{count}}편)",
+  "heatmapAriaLabel": "최근 {{weeks}}주 일간 읽기 활동",
+  "heatmapFilterGroupAriaLabel": "활동 강도별 날짜 필터",
+  "heatmapLess": "적음",
+  "heatmapMore": "많음",
+  "heatmapLevelFilter": "활동 단계 {{level}}에 해당하는 날짜 강조",
+  "heatmapDaySummary": "{{date}} · {{duration}} · 활동 {{events}}건",
+  "heatmapDayDurationOnly": "{{date}} · {{duration}} 읽기",
+  "heatmapDayEventsOnly": "{{date}} · 활동 {{events}}건",
+  "heatmapNoActivity": "{{date}} · 기록된 활동 없음"
 }
