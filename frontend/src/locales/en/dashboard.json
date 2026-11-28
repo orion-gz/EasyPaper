@@ -20,5 +20,14 @@
   "deepReadTitle": "Deep read: {{count}}",
   "skimReadTitle": "Skimmed: {{count}}",
   "deepReadLegend": "Deep read {{percent}}% ({{count}})",
-  "skimReadLegend": "Skimmed {{percent}}% ({{count}})"
+  "skimReadLegend": "Skimmed {{percent}}% ({{count}})",
+  "heatmapAriaLabel": "Daily reading activity over the last {{weeks}} weeks",
+  "heatmapFilterGroupAriaLabel": "Filter heatmap by activity intensity",
+  "heatmapLess": "Less",
+  "heatmapMore": "More",
+  "heatmapLevelFilter": "Filter days by activity level {{level}}",
+  "heatmapDaySummary": "{{date}} · {{duration}} · {{events}} events",
+  "heatmapDayDurationOnly": "{{date}} · {{duration}} read",
+  "heatmapDayEventsOnly": "{{date}} · {{events}} events",
+  "heatmapNoActivity": "{{date}} · No recorded activity"
 }
