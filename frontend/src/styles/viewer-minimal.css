@@ -728,3 +728,57 @@ body.light-theme .document-resource-memo:not(.color-default) .document-resource-
 body.light-theme .document-resource-memo:not(.color-default) .document-resource-markdown :is(pre, th, td, hr) {
   border-color: color-mix(in srgb, currentColor 22%, transparent);
 }
+
+.viewer-scroll-container { container: reading-area / inline-size; }
+.compact-reading-switch { display: none; }
+
+@container reading-area (max-width: 900px) {
+  .compact-reading-switch {
+    display: flex;
+    gap: 2px;
+    align-self: center;
+    position: sticky;
+    top: 0;
+    z-index: 7;
+    flex-shrink: 0;
+    padding: 3px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+  }
+  .compact-reading-switch button {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 0;
+    border-radius: var(--radius-sm);
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .compact-reading-switch button[aria-pressed="true"] {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  .viewer-scroll-container[data-reading-pane] > .page-pair {
+    flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    gap: 0;
+  }
+  [data-reading-pane="source"] .page-pair > .trans-page-block,
+  [data-reading-pane="translation"] .trans-resizer-handle { display: none; }
+  [data-reading-pane="translation"] .page-pair > .pdf-page-wrapper {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
+    inset-inline-start: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  [data-reading-pane="translation"] .page-pair > .trans-page-block {
+    width: 100% !important;
+    min-width: 0;
+    max-width: none;
+  }
+  [data-reading-pane="translation"] .trans-tabs { overflow-x: auto; }
+}
