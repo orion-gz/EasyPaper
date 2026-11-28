@@ -2545,43 +2545,61 @@ body.light-theme .pdf-annotation-underline {
   animation: viewer-note-jump-pulse 0.6s ease-in-out 3;
 }
 
-/* ── 텍스트 선택 팝업 메뉴 리파인 ── */
+/* ── 텍스트 선택 팝업 메뉴 (21st.dev Selection Bubble 패턴) ── */
 .selection-menu {
   position: absolute;
   width: max-content;
+  max-width: calc(100vw - 16px);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  background: var(--bg-panel);
+  background: linear-gradient(var(--bg-panel), var(--bg-panel)), var(--bg-base);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  padding: 3px 6px;
-  gap: 4px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 1px 0 rgba(255,255,255,0.05);
+  padding: 4px 6px;
+  gap: 3px;
+  box-shadow: var(--surface-hairline), var(--shadow-floating, 0 12px 32px rgba(0, 0, 0, 0.3));
   z-index: 9999;
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  height: 38px;
+  min-height: 38px;
   box-sizing: border-box;
-  animation: popupScale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: popupScale 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.selection-menu.ann-hover-tooltip {
+  z-index: 10005;
 }
 
 @keyframes popupScale {
-  from { transform: scale(0.8) translateY(8px); opacity: 0; }
+  from { transform: scale(0.96) translateY(4px); opacity: 0; }
   to { transform: scale(1) translateY(0); opacity: 1; }
 }
 
+.selection-menu .menu-annotate-group {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  padding: 0 2px;
+}
+
+.selection-menu .menu-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-strong);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
 .selection-menu .menu-btn {
-  width: 30px;
+  min-width: 30px;
   height: 30px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  transition: all 0.15s ease;
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
   padding: 0;
 }
 
@@ -2589,23 +2607,34 @@ body.light-theme .pdf-annotation-underline {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
+.selection-menu .menu-btn.delete-ann-btn {
+  color: color-mix(in srgb, var(--error) 62%, var(--text-primary));
+}
+.selection-menu .menu-btn.delete-ann-btn:hover {
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+}
 
 .selection-menu .menu-btn.text-action-btn,
 .selection-menu .menu-btn.ask-ai-btn {
   width: auto;
   flex-shrink: 0;
   white-space: nowrap;
-  padding: 0 8px;
+  gap: 5px;
+  padding: 0 9px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .selection-menu .menu-btn.ask-ai-btn {
-  color: var(--accent-mid) !important;
-  font-family: var(--font-body);
+  color: var(--text-primary);
+  background: var(--control-accent-soft);
+  border-color: color-mix(in srgb, var(--control-accent) 30%, var(--border-strong));
 }
 
 .selection-menu .menu-btn.ask-ai-btn:hover {
-  background: rgba(126, 196, 232, 0.15) !important;
-  color: var(--accent-mid) !important;
+  background: color-mix(in srgb, var(--control-accent) 24%, var(--bg-hover));
+  color: var(--text-primary);
 }
 
 /* ── 비밀번호 변경 모달 스타일 ── */
@@ -5100,8 +5129,8 @@ body.toolbar-pos-right .view-group #zoom-out-btn {
 /* "독서 완료" 버튼은 가로 배치 기준 좌우로 넓은 알약형(padding:0 12px)에
    테두리/배경이 있는데, 세로 컬럼에서는 텍스트가 숨겨져 아이콘만 남으므로
    다른 flat 아이콘 버튼과 동일하게(테두리/배경 제거) 맞춘다. */
-body.toolbar-pos-left .viewer-read-btn,
-body.toolbar-pos-right .viewer-read-btn {
+body.toolbar-pos-left .topbar .viewer-read-btn:not(.kebab-menu-item),
+body.toolbar-pos-right .topbar .viewer-read-btn:not(.kebab-menu-item) {
   width: var(--toolbar-v-btn);
   height: var(--toolbar-v-btn);
   padding: 0;
@@ -5111,13 +5140,13 @@ body.toolbar-pos-right .viewer-read-btn {
   border-radius: var(--radius-sm);
   gap: 0;
 }
-body.toolbar-pos-left .viewer-read-btn:hover,
-body.toolbar-pos-right .viewer-read-btn:hover {
+body.toolbar-pos-left .topbar .viewer-read-btn:not(.kebab-menu-item):hover,
+body.toolbar-pos-right .topbar .viewer-read-btn:not(.kebab-menu-item):hover {
   background: var(--bg-hover);
   border-color: transparent;
 }
-body.toolbar-pos-left .viewer-read-btn.active,
-body.toolbar-pos-right .viewer-read-btn.active {
+body.toolbar-pos-left .topbar .viewer-read-btn:not(.kebab-menu-item).active,
+body.toolbar-pos-right .topbar .viewer-read-btn:not(.kebab-menu-item).active {
   background: rgba(16, 185, 129, 0.12);
   border-color: transparent;
 }
@@ -5151,10 +5180,10 @@ body.toolbar-pos-right .logo-small-btn svg {
    자리에 목적 없는 편집 아이콘만 남는 버그) - !important로 확실히 덮어쓴다. */
 body.toolbar-pos-left .doc-title,
 body.toolbar-pos-left .doc-title-edit-btn,
-body.toolbar-pos-left .read-btn-text,
+body.toolbar-pos-left :not(.kebab-menu) > .viewer-read-btn .read-btn-text,
 body.toolbar-pos-right .doc-title,
 body.toolbar-pos-right .doc-title-edit-btn,
-body.toolbar-pos-right .read-btn-text {
+body.toolbar-pos-right :not(.kebab-menu) > .viewer-read-btn .read-btn-text {
   display: none !important;
 }
 /* "EasyPaper" 글자가 좁은 세로 컬럼 폭을 넘어 흘러나오는 것을 막는다 -
@@ -5241,13 +5270,13 @@ body.toolbar-hidden.toolbar-pos-left .outline-sidebar {
    화면 밖으로 잘리지 않는다. 케밥 버튼은 툴바 맨 아래쪽에 있으므로 top:0
    (버튼 위치에서 아래로 펼침)으로 두면 우측 하단 floating 스크롤 버튼과
    겹친다 - bottom:0(버튼 위치에서 위로 펼침)으로 띄운다. */
-body.toolbar-pos-left .kebab-menu {
+body:not(.document-workspace-runtime).toolbar-pos-left .kebab-menu {
   top: auto;
   bottom: 0;
   left: calc(100% + 8px);
   right: auto;
 }
-body.toolbar-pos-right .kebab-menu {
+body:not(.document-workspace-runtime).toolbar-pos-right .kebab-menu {
   top: auto;
   bottom: 0;
   right: calc(100% + 8px);
@@ -5255,7 +5284,7 @@ body.toolbar-pos-right .kebab-menu {
 }
 /* bottom 위치에서는 버튼이 화면 맨 아래에 붙어있으므로 기본값(top:100%)대로
    아래로 열면 뷰포트 밖으로 밀려나 보이지 않는다 - 위로 열리게 뒤집는다. */
-body.toolbar-pos-bottom .kebab-menu {
+body:not(.document-workspace-runtime).toolbar-pos-bottom .kebab-menu {
   top: auto;
   bottom: calc(100% + 8px);
 }
@@ -5435,32 +5464,60 @@ body.toolbar-pos-right .extract-status-tooltip {
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 260px;
-  padding: 10px;
-  background: var(--bg-panel);
+  gap: 2px;
+  min-width: 268px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - var(--topbar-h, 64px) - 20px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  padding: 8px;
+  background: linear-gradient(var(--bg-panel), var(--bg-panel)), var(--bg-base);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(3px);
-  animation: popupScale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: var(--surface-hairline), var(--shadow-floating, 0 14px 36px rgba(0, 0, 0, 0.3));
+  animation: popupScale 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
 }
 /* 상·하단 툴바에서 채팅 패널과 케밥 메뉴가 같은 우측 영역을 쓰면
    메뉴 안의 선택기와 채팅 닫기 버튼이 겹친다. 실측 패널 폭만큼 메뉴를 옮긴다. */
 body:not(.toolbar-pos-left):not(.toolbar-pos-right):has(.chat-sidebar:not(.hidden)) .kebab-menu {
   right: calc(var(--chat-sidebar-offset, 0px) + 8px);
 }
+@media (max-width: 480px) {
+  .kebab-menu,
+  body:not(.toolbar-pos-left):not(.toolbar-pos-right):has(.chat-sidebar:not(.hidden)) .kebab-menu {
+    position: fixed;
+    top: 58px;
+    left: 8px;
+    right: 8px;
+    bottom: auto;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+  }
+}
 .kebab-menu .progress-mini {
   width: 100%;
   box-sizing: border-box;
   justify-content: center;
+  margin-bottom: 4px;
+}
+.kebab-section-title {
+  padding: 4px 8px 2px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  user-select: none;
 }
 .kebab-translation-grid {
   display: grid;
   grid-template-columns: max-content minmax(0, 160px);
   align-items: center;
   gap: 8px 10px;
-  padding: 4px 8px;
+  padding: 4px 8px 6px;
 }
 .kebab-translation-grid .kebab-menu-row,
 .kebab-translation-grid .document-language-controls {
@@ -5472,8 +5529,8 @@ body:not(.toolbar-pos-left):not(.toolbar-pos-right):has(.chat-sidebar:not(.hidde
 .kebab-menu-label {
   flex-shrink: 0;
   font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 500;
+  color: var(--text-secondary);
+  font-weight: 550;
   white-space: nowrap;
 }
 .kebab-menu-row:has(> #viewer-trans-provider) > .kebab-menu-label {
@@ -5493,35 +5550,66 @@ body:not(.toolbar-pos-left):not(.toolbar-pos-right):has(.chat-sidebar:not(.hidde
 .kebab-menu-divider {
   height: 1px;
   background: var(--border-strong);
-  opacity: 0.5;
+  opacity: 0.75;
   margin: 4px 2px;
+  flex-shrink: 0;
 }
 .kebab-menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   width: 100%;
-  padding: 8px;
+  min-height: 34px;
+  padding: 7px 9px;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
   font-size: 12.5px;
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+  box-sizing: border-box;
 }
 .kebab-menu-item:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
+.kebab-menu-item:focus-visible {
+  background: var(--bg-hover);
+  outline: 2px solid var(--focus-ring, var(--control-accent)) !important;
+  outline-offset: -2px !important;
+}
 .kebab-menu-item.active {
-  background: rgba(126, 196, 232, 0.15);
-  color: var(--accent-mid);
+  background: var(--control-accent-soft);
+  border-color: color-mix(in srgb, var(--control-accent) 30%, var(--border-strong));
+  color: var(--text-primary);
 }
 .kebab-menu-item svg {
   flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.kebab-menu-item:hover svg,
+.kebab-menu-item.active svg {
+  color: currentColor;
+}
+.kebab-menu-item--danger {
+  color: color-mix(in srgb, var(--error) 62%, var(--text-primary));
+}
+.kebab-menu-item--danger svg {
+  color: currentColor;
+}
+.kebab-menu-item--danger:hover {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: color-mix(in srgb, var(--error) 68%, var(--text-primary));
+}
+.kebab-menu-item--positive {
+  color: color-mix(in srgb, var(--success) 55%, var(--text-primary));
+}
+.kebab-menu-item--positive svg {
+  color: currentColor;
 }
 
 /* ── 좌측 목차 사이드바 ── */
@@ -5666,49 +5754,76 @@ body.light-theme .expand-wrapper.expanded {
 
 .expand-colors {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   overflow: hidden;
   width: 0;
   opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
   height: 100%;
   align-items: center;
-  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, padding 0.2s ease;
+  transition: width 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease, padding 0.18s ease, visibility 0s linear 0.18s;
   box-sizing: border-box;
 }
 .expand-wrapper.expanded .expand-colors {
-  width: 82px;
+  width: 110px;
   opacity: 1;
-  padding: 0 6px;
+  visibility: visible;
+  pointer-events: auto;
+  padding: 0 4px;
+  transition: width 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease, padding 0.18s ease, visibility 0s linear 0s;
 }
 
-.color-dot {
+.selection-menu .color-dot {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  transform: none;
+  box-shadow: none;
+}
+.selection-menu .color-dot:hover,
+.selection-menu .color-dot.selected {
+  transform: none;
+  box-shadow: none;
+  border: 0;
+}
+.selection-menu .color-dot::before {
+  content: '';
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  cursor: pointer;
-  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: var(--dot-color, currentColor);
+  border: 1.5px solid rgba(255, 255, 255, 0.42);
+  transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.14s ease;
   box-sizing: border-box;
-  flex-shrink: 0;
 }
-.color-dot:hover {
-  transform: scale(1.25);
-  box-shadow: 0 0 5px rgba(255, 255, 255, 0.4);
+.selection-menu .color-dot:hover::before {
+  transform: scale(1.15);
 }
-.color-dot.selected {
-  transform: scale(1.25);
-  box-shadow: 0 0 0 1.5px var(--accent-mid);
-  border-color: #fff;
+.selection-menu .color-dot.selected::before {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 1.5px var(--text-primary);
+  border-color: var(--bg-base);
 }
-body.light-theme .color-dot {
-  border-color: rgba(0, 0, 0, 0.15);
+body.light-theme .selection-menu .color-dot::before {
+  border-color: rgba(15, 23, 42, 0.48);
 }
-body.light-theme .color-dot:hover {
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.25);
+body.light-theme .selection-menu .color-dot:hover::before {
+  box-shadow: none;
 }
-body.light-theme .color-dot.selected {
-  border-color: #fff;
-  box-shadow: 0 0 0 1.5px var(--accent-mid);
+body.light-theme .selection-menu .color-dot.selected::before {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 1.5px var(--text-primary);
 }
 
 /* 클릭으로 매칭/이동 시 고정 하이라이트 유지 스타일 */
@@ -6259,29 +6374,30 @@ body.light-theme .custom-confirm-modal {
   display: none;
 }
 
-.color-dot {
-  width: 10px;
-  height: 10px;
+.floating-memo .color-dot {
+  position: relative;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
-.color-dot:hover {
-  transform: scale(1.3);
+.floating-memo .color-dot:hover {
+  transform: scale(1.2);
   border-color: rgba(255, 255, 255, 0.6);
 }
-.color-dot.selected {
-  transform: scale(1.2);
-  box-shadow: 0 0 0 1.5px var(--accent-mid);
+.floating-memo .color-dot.selected {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 1.5px var(--text-primary);
   border-color: #fff;
 }
-body.light-theme .color-dot {
-  border: 1px solid rgba(0, 0, 0, 0.15);
+body.light-theme .floating-memo .color-dot {
+  border: 1px solid rgba(15, 23, 42, 0.35);
 }
-body.light-theme .color-dot.selected {
-  border-color: #000;
-  box-shadow: 0 0 0 1.5px var(--accent-mid);
+body.light-theme .floating-memo .color-dot.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 1.5px var(--text-primary);
 }
 
 /* Color dot themes */
@@ -6811,21 +6927,29 @@ body.light-theme .viewer-read-btn.active svg {
 .kebab-menu-item.viewer-read-btn {
   width: 100%;
   height: auto;
-  padding: 8px 10px;
-  border: 0;
+  min-height: 34px;
+  padding: 7px 9px;
+  gap: 9px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 500;
 }
 .kebab-menu-item.viewer-read-btn:hover {
   border-color: transparent;
   background: var(--bg-hover);
 }
-.kebab-menu-item.viewer-read-btn.active {
-  border-color: transparent;
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+.kebab-menu-item.viewer-read-btn.active,
+body.light-theme .kebab-menu-item.viewer-read-btn.active {
+  border-color: color-mix(in srgb, var(--success) 42%, var(--border-strong));
+  background: color-mix(in srgb, var(--success) 11%, transparent);
+  color: var(--text-primary);
+}
+.kebab-menu-item.viewer-read-btn.active svg,
+body.light-theme .kebab-menu-item.viewer-read-btn.active svg {
+  color: color-mix(in srgb, var(--success) 68%, var(--text-primary));
 }
 
 .viewer-document-info-dialog {
@@ -7023,26 +7147,26 @@ body.light-theme .citation-marker-box:hover {
    내부에 있으면 overflow:hidden에 잘릴 수 있어서). */
 .citation-tooltip {
   position: fixed;
-  z-index: 200;
+  z-index: 10002;
   width: 300px;
   max-width: calc(100vw - 16px);
   max-height: calc(100vh - 16px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: rgba(23, 20, 38, 0.97);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-base);
   color: var(--text-primary);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 12px 14px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  animation: fadeInTooltip 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--surface-hairline), var(--shadow-floating, 0 12px 32px rgba(0, 0, 0, 0.34));
+  animation: fadeInTooltip 0.14s cubic-bezier(0.16, 1, 0.3, 1);
 }
 body.light-theme .citation-tooltip {
-  background: rgba(255, 255, 255, 0.98);
+  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-base);
   border-color: var(--border-strong);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--surface-hairline), var(--shadow-floating, 0 12px 32px rgba(15, 23, 42, 0.14));
 }
 .citation-tooltip.hidden {
   display: none;
@@ -7050,7 +7174,7 @@ body.light-theme .citation-tooltip {
 .citation-tooltip-text {
   font-size: 12.5px;
   line-height: 1.55;
-  color: var(--text-secondary);
+  color: color-mix(in srgb, var(--text-secondary) 55%, var(--text-primary));
   margin-bottom: 10px;
 }
 .citation-tooltip-multi-item + .citation-tooltip-multi-item {
@@ -7073,18 +7197,25 @@ body.light-theme .citation-tooltip {
 .citation-tooltip-scholar-results.hidden {
   display: none;
 }
+body .citation-tooltip :is(.citation-tooltip-result, .citation-tooltip-scholar-results) a,
 .citation-tooltip-result a,
 .citation-tooltip-scholar-results a {
   display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  color: var(--control-accent);
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 0;
+  gap: 5px;
+  color: var(--text-primary);
   font-weight: 600;
-  text-decoration: none;
+  text-decoration: underline 1px color-mix(in srgb, var(--control-accent) 65%, var(--border-strong));
+  text-underline-offset: 2px;
+  box-sizing: border-box;
 }
+body .citation-tooltip :is(.citation-tooltip-result, .citation-tooltip-scholar-results) a:hover,
 .citation-tooltip-result a:hover,
 .citation-tooltip-scholar-results a:hover {
-  text-decoration: underline;
+  color: var(--text-primary);
+  text-decoration-thickness: 1.5px;
 }
 .citation-tooltip-result-item {
   display: flex;
@@ -7098,7 +7229,7 @@ body.light-theme .citation-tooltip {
   flex-shrink: 0;
 }
 .citation-tooltip-result-empty {
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text-secondary) 55%, var(--text-primary));
 }
 .citation-tooltip-actions {
   display: flex;
@@ -7148,7 +7279,7 @@ body.light-theme .figure-ref-marker-box:hover {
 }
 .figure-preview-tooltip {
   position: fixed;
-  z-index: 200;
+  z-index: 10002;
   display: flex;
   flex-direction: column;
   width: 380px;
@@ -7156,24 +7287,26 @@ body.light-theme .figure-ref-marker-box:hover {
   min-height: 140px;
   max-width: min(90vw, 900px);
   max-height: min(90vh, 900px);
-  background: rgba(23, 20, 38, 0.97);
+  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-base);
   color: var(--text-primary);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  animation: fadeInTooltip 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  box-shadow: var(--surface-hairline), var(--shadow-floating, 0 14px 36px rgba(0, 0, 0, 0.34));
+  animation: fadeInTooltip 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+.figure-preview-tooltip.pinned {
+  z-index: 110;
 }
 .figure-preview-tooltip.resizing {
   animation: none;
   user-select: none;
 }
 body.light-theme .figure-preview-tooltip {
-  background: rgba(255, 255, 255, 0.98);
+  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-base);
   border-color: var(--border-strong);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--surface-hairline), var(--shadow-floating, 0 12px 32px rgba(15, 23, 42, 0.14));
 }
 .figure-preview-tooltip.hidden {
   display: none;
@@ -7184,17 +7317,20 @@ body.light-theme .figure-preview-tooltip {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 .figure-preview-tooltip-resize-handle {
   position: absolute;
-  width: 16px;
-  height: 16px;
-  opacity: 0.45;
+  width: 24px;
+  height: 24px;
+  opacity: 0.55;
   transition: opacity 0.15s ease-in-out;
   background: transparent;
   border: none;
   padding: 0;
   z-index: 10;
+  touch-action: none;
 }
 .figure-preview-tooltip-resize-handle:hover,
 .figure-preview-tooltip.resizing .figure-preview-tooltip-resize-handle {
@@ -8204,13 +8340,14 @@ body.light-theme .chat-drawer {
 #document-language-status {
   align-self: stretch;
   min-width: 0;
-  max-width: 260px;
+  margin: 0 8px 4px;
+  max-width: none;
   box-sizing: border-box;
-  padding: 5px 8px;
-  border-left: 2px solid var(--warning);
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--warning) 62%, var(--text-primary));
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--warning) 12%, transparent);
-  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 11%, transparent);
+  color: color-mix(in srgb, var(--warning) 28%, var(--text-primary));
   font-size: 12px;
   font-weight: 700;
   line-height: 1.45;
@@ -8292,10 +8429,14 @@ body.light-theme .chat-drawer {
 }
 .color-dot.selected::after {
   content: "✓";
-  display: block;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
   color: #fff;
   font-size: 8px;
-  line-height: 8px;
+  line-height: 1;
   text-align: center;
   text-shadow: 0 1px 2px #000;
 }
@@ -9013,15 +9154,54 @@ body.light-theme .chat-drawer {
 .chat-question-tooltip[hidden] { display: none; }
 
 /* Pinned reference previews retain their own content and viewport position. */
-.figure-preview-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.figure-preview-toolbar button { color: inherit; background: transparent; border: 0; padding: 5px; border-radius: 4px; cursor: pointer; }
+.figure-preview-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.figure-preview-toolbar button {
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-body);
+}
 .figure-preview-toolbar button:hover,
-.figure-preview-pin[aria-pressed="true"] { background: var(--bg-hover); }
-.figure-preview-toolbar .figure-preview-drag { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.figure-preview-pin[aria-pressed="true"] {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.figure-preview-toolbar .figure-preview-drag {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
 .figure-preview-drag:disabled { opacity: 1; cursor: default; }
 .figure-preview-tooltip.pinned .figure-preview-drag { cursor: move; touch-action: none; }
 .figure-preview-tooltip.collapsed { min-height: 0; height: auto !important; }
-.figure-preview-tooltip.collapsed .figure-preview-toolbar { margin-bottom: 0; }
+.figure-preview-tooltip.collapsed .figure-preview-toolbar { margin-bottom: 0; padding-bottom: 0; border-bottom-color: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kebab-menu,
+  .selection-menu,
+  .citation-tooltip,
+  .figure-preview-tooltip,
+  .color-dot::before,
+  .expand-colors {
+    animation: none !important;
+    transition: none !important;
+  }
+}
 .figure-preview-tooltip.collapsed .figure-preview-tooltip-items,
 .figure-preview-tooltip.collapsed .figure-preview-tooltip-resize-handle { display: none; }
 
@@ -9751,8 +9931,7 @@ body.light-theme .chat-drawer {
 .citation-tooltip, body.light-theme .citation-tooltip {
   width: 380px; box-sizing: border-box;
   /* Composite translucent theme colors over an opaque base. */
-  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)),
-    linear-gradient(var(--bg-base), var(--bg-base)), #06050a;
+  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-base);
   border-radius: var(--radius-lg); padding: 16px;
 }
 .citation-card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }

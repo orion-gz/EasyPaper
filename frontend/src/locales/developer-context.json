@@ -7310,5 +7310,17 @@
   },
   "library:clearSelectionAria": {
     "description": "Accessible label for the close button that clears library multi-selection."
+  },
+  "viewer:kebab.sectionTranslation": {
+    "description": "Section heading inside the viewer overflow menu for translation language and model settings."
+  },
+  "viewer:kebab.sectionDocument": {
+    "description": "Section heading inside the viewer overflow menu for document status and metadata."
+  },
+  "viewer:kebab.sectionActions": {
+    "description": "Section heading inside the viewer overflow menu for translation operations and cache management."
+  },
+  "viewer:kebab.sectionDisplay": {
+    "description": "Section heading inside the viewer overflow menu for memo visibility and theme toggle."
   }
 }

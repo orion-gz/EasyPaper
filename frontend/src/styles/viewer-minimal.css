@@ -301,6 +301,8 @@ body[data-ui-style="editorial"] #doc-title {
 .kebab-menu,
 .selection-menu,
 .article-selection-tools,
+.citation-tooltip,
+.figure-preview-tooltip,
 .floating-memo,
 .document-search {
   animation: minimalPopoverIn 150ms var(--ease-out-expo) !important;

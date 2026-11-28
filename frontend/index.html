@@ -465,8 +465,8 @@
         <!-- 추가 메뉴(케밥): 번역 상태/모델, 번역 관리(다시 번역/중지/이어서/다운로드),
              메모 숨기기, 테마 전환을 한데 모아 툴바를 간결하게 유지한다. -->
         <div class="kebab-wrapper">
-          <button id="toolbar-kebab-btn" class="icon-btn" title="추가 메뉴" aria-haspopup="dialog" aria-expanded="false" aria-controls="toolbar-kebab-menu">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+          <button id="toolbar-kebab-btn" class="icon-btn" title="추가 메뉴" aria-label="Viewer more menu" data-i18n-aria-label="viewer:a11y.toolbarMenu" aria-haspopup="dialog" aria-expanded="false" aria-controls="toolbar-kebab-menu">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
           </button>
           <div id="toolbar-kebab-menu" class="kebab-menu hidden" role="dialog" aria-modal="false" aria-label="Viewer more menu" data-i18n-aria-label="viewer:a11y.toolbarMenu">
             <!-- 번역 작업 상태 정보 -->
@@ -474,6 +474,7 @@
               <div class="progress-mini-bar" id="progress-mini-bar"></div>
               <span id="progress-mini-text">0%</span>
             </div>
+            <div class="kebab-section-title" role="presentation" data-i18n="viewer:kebab.sectionTranslation">Translation</div>
             <div class="kebab-translation-grid">
               <div id="document-language-controls" class="document-language-controls" hidden>
                 <div class="kebab-menu-row">
@@ -494,60 +495,62 @@
             <span id="document-language-status" role="status" hidden></span>
 
             <div class="kebab-menu-divider"></div>
+            <div class="kebab-section-title" role="presentation" data-i18n="viewer:kebab.sectionDocument">Document</div>
 
-            <button id="viewer-read-toggle-btn" class="kebab-menu-item viewer-read-btn" title="독서 완료 상태 토글">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button type="button" id="viewer-read-toggle-btn" class="kebab-menu-item viewer-read-btn" title="독서 완료 상태 토글">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10"></circle>
                 <path d="m9 12 2 2 4-4"></path>
               </svg>
               <span class="read-btn-text">독서 완료</span>
             </button>
-            <button id="viewer-document-info-btn" class="kebab-menu-item" title="문서 정보 보기" data-i18n-title="viewer:documentInfo.open">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-              <span data-i18n="viewer:documentInfo.menu">정보</span>
+            <button type="button" id="viewer-document-info-btn" class="kebab-menu-item" title="Document information" data-i18n-title="viewer:documentInfo.open">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              <span data-i18n="viewer:documentInfo.menu">Information</span>
+            </button>
+            <button type="button" id="export-btn" class="kebab-menu-item" title="번역본 내보내기">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+              <span>번역본 다운로드</span>
             </button>
 
             <div class="kebab-menu-divider"></div>
+            <div class="kebab-section-title" role="presentation" data-i18n="viewer:kebab.sectionActions">Actions</div>
 
-            <button id="translation-scope-btn" class="kebab-menu-item" title="번역할 페이지 범위 선택">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+            <button type="button" id="translation-scope-btn" class="kebab-menu-item" title="번역할 페이지 범위 선택">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
               <span>번역 범위 선택</span>
             </button>
-            <button id="translate-document-btn" class="kebab-menu-item hidden" title="문서 전체 번역" data-i18n-title="viewer:translation.full">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              <span data-i18n="viewer:translation.full">문서 전체 번역</span>
+            <button type="button" id="translate-document-btn" class="kebab-menu-item hidden" title="Translate entire document" data-i18n-title="viewer:translation.full">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span data-i18n="viewer:translation.full">Translate entire document</span>
             </button>
-            <button id="retranslate-btn" class="kebab-menu-item" title="번역본 초기화" data-i18n-title="viewer:translation.reset">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              <span data-i18n="viewer:translation.reset">번역본 초기화</span>
-            </button>
-            <button id="cancel-trans-btn" class="kebab-menu-item hidden" title="번역 작업 중지" style="color: var(--error);">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+            <button type="button" id="cancel-trans-btn" class="kebab-menu-item kebab-menu-item--danger hidden" title="번역 작업 중지">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
               <span>번역 작업 중지</span>
             </button>
-            <button id="resume-trans-btn" class="kebab-menu-item hidden" title="중단된 부분부터 이어서 번역" style="color: var(--success);">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <button type="button" id="resume-trans-btn" class="kebab-menu-item kebab-menu-item--positive hidden" title="중단된 부분부터 이어서 번역">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               <span>이어서 번역하기</span>
             </button>
-            <button id="export-btn" class="kebab-menu-item" title="번역본 내보내기">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
-              <span>번역본 다운로드</span>
+            <button type="button" id="retranslate-btn" class="kebab-menu-item" title="Reset translations" data-i18n-title="viewer:translation.reset">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <span data-i18n="viewer:translation.reset">Reset translations</span>
             </button>
-            <button id="viewer-clear-cache-btn" class="kebab-menu-item" title="현재 논문의 PDF 추출 캐시 삭제" data-document-copy-title="legacy.documentCopy.viewer-clear-cache-btn">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+            <button type="button" id="viewer-clear-cache-btn" class="kebab-menu-item kebab-menu-item--danger" title="현재 논문의 PDF 추출 캐시 삭제" data-document-copy-title="legacy.documentCopy.viewer-clear-cache-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
               <span>PDF 추출 캐시 삭제</span>
             </button>
 
             <div class="kebab-menu-divider"></div>
+            <div class="kebab-section-title" role="presentation" data-i18n="viewer:kebab.sectionDisplay">Display</div>
 
-
-            <button id="memos-hide-all-btn" class="kebab-menu-item" title="작성된 모든 메모 숨기기 (하이라이트만 표시)">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+            <button type="button" id="memos-hide-all-btn" class="kebab-menu-item" title="작성된 모든 메모 숨기기 (하이라이트만 표시)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
               <span>메모 숨기기</span>
             </button>
-            <button id="theme-toggle-btn" class="kebab-menu-item" title="화이트/다크 테마 토글">
-              <svg class="sun-icon hidden" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-              <svg class="moon-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <button type="button" id="theme-toggle-btn" class="kebab-menu-item" title="화이트/다크 테마 토글">
+              <svg class="sun-icon hidden" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              <svg class="moon-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               <span>테마 전환</span>
             </button>
           </div>
