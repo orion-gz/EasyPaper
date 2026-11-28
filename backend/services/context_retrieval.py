@@ -407,16 +407,24 @@ def validate_evidence_citations(answer: str, evidence: tuple[dict, ...] | list[d
     by_id = {item["evidence_id"]: item for item in evidence}
     cited_ids = []
     invalid_ids = []
+    citation_links = {}
+    length_delta = 0
 
     def replace(match: re.Match) -> str:
+        nonlocal length_delta
         evidence_id = match.group(1)
         item = by_id.get(evidence_id)
         if item is None:
             invalid_ids.append(evidence_id)
-            return "[제공되지 않은 근거 ID 제거]"
+            replacement = "[제공되지 않은 근거 ID 제거]"
+            length_delta += len(replacement) - len(match.group())
+            return replacement
         cited_ids.append(evidence_id)
         page_num = item["page_num"]
-        return f"[p.{page_num}]"
+        replacement = f"[p.{page_num}]"
+        citation_links[match.start() + length_delta] = evidence_id
+        length_delta += len(replacement) - len(match.group())
+        return replacement
 
     displayed = _EVIDENCE_CITATION_RE.sub(replace, answer or "")
     cited = [by_id[evidence_id] for evidence_id in dict.fromkeys(cited_ids)]
@@ -440,6 +448,7 @@ def validate_evidence_citations(answer: str, evidence: tuple[dict, ...] | list[d
         "invalid_evidence_ids": list(dict.fromkeys(invalid_ids)),
         "uncited_numeric_claims": numeric_without_citation,
         "claim_count": claim_count,
+        "citation_links": citation_links,
         "citation_count": len(set(cited_ids)),
     }
     return displayed, cited, verification

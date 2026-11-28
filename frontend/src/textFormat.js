@@ -15,7 +15,7 @@ function escapeHtml(str) {
 
 
 /** 검증 가능한 단일·범위 페이지 인용만 클릭 가능한 버튼으로 바꾼다. */
-export function linkPageCitations(html, totalPages) {
+export function linkPageCitations(html, totalPages, id = null) {
   const maximum = Number(totalPages)
   if (!html || !Number.isInteger(maximum) || maximum < 1) return html || ''
   const rangeLinked = html.replace(/\[pp\.(\d+)\s*[-–]\s*(\d+)\]/gi, (match, startText, endText) => {
@@ -27,7 +27,7 @@ export function linkPageCitations(html, totalPages) {
   return rangeLinked.replace(/\[p\.(\d+)\]/gi, (match, pageText) => {
     const page = Number(pageText)
     if (!Number.isInteger(page) || page < 1 || page > maximum) return match
-    return `<button type="button" class="chat-page-citation" data-page-citation="${page}" title="${page}페이지로 이동">[p.${page}]</button>`
+    return `<button type="button" class="chat-page-citation" data-page-citation="${page}"${id ? ` data-evidence-id="${id}"` : ''} title="${page}페이지로 이동">[p.${page}]</button>`
   })
 }
 
