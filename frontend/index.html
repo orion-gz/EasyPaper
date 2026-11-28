@@ -14,7 +14,8 @@
   <link rel="manifest" href="/site.webmanifest?v=8" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Noto+Serif+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" crossorigin="anonymous" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Noto+Serif+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <!-- KaTeX for LaTeX rendering (defer 없이 동기 로드 - window.katex 즉시 사용 가능) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
@@ -755,26 +756,47 @@
   </div>
 
   <!-- 첫 실행 시 AI 엔진 자동 감지 / 설치 안내 모달 -->
-  <div id="onboarding-modal" class="modal-overlay hidden">
+  <div id="onboarding-modal" class="modal-overlay hidden" aria-labelledby="onboarding-title">
     <div class="modal-content">
       <div class="modal-header">
         <h2 id="onboarding-title" data-i18n="onboarding:title">번역 환경 설정</h2>
         <div class="onboarding-header-actions">
-          <label class="onboarding-locale-label"><span data-i18n="onboarding:uiLanguage">화면 언어</span>
+          <label class="onboarding-locale-label" for="onboarding-ui-locale"><span id="onboarding-ui-locale-label" data-i18n="onboarding:uiLanguage">화면 언어</span>
             <select id="onboarding-ui-locale" class="form-select"><option value="ko">한국어</option><option value="en">English</option></select>
           </label>
-          <button id="onboarding-close-btn" class="close-btn" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
+          <button id="onboarding-close-btn" class="close-btn" aria-label="Close" data-i18n-aria-label="onboarding:close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
         </div>
       </div>
 
       <div class="onboarding-body">
-        <progress id="onboarding-progress" max="4" value="1" aria-labelledby="onboarding-title"></progress>
+        <ol id="onboarding-stepper" class="onboarding-stepper" aria-label="Setup steps" data-i18n-aria-label="onboarding:stepperAria">
+          <li class="onboarding-step is-active" data-step="1" aria-current="step">
+            <span class="onboarding-step-indicator" aria-hidden="true">1</span>
+            <span class="onboarding-step-label" data-i18n="onboarding:stepPurpose">Workspace</span>
+            <span class="sr-only onboarding-step-status"></span>
+          </li>
+          <li class="onboarding-step" data-step="2">
+            <span class="onboarding-step-indicator" aria-hidden="true">2</span>
+            <span class="onboarding-step-label" data-i18n="onboarding:stepLocation">Connection</span>
+            <span class="sr-only onboarding-step-status"></span>
+          </li>
+          <li class="onboarding-step" data-step="3">
+            <span class="onboarding-step-indicator" aria-hidden="true">3</span>
+            <span class="onboarding-step-label" data-i18n="onboarding:stepEngine">Engine</span>
+            <span class="sr-only onboarding-step-status"></span>
+          </li>
+          <li class="onboarding-step" data-step="4">
+            <span class="onboarding-step-indicator" aria-hidden="true">4</span>
+            <span class="onboarding-step-label" data-i18n="onboarding:stepModel">Model</span>
+            <span class="sr-only onboarding-step-status"></span>
+          </li>
+        </ol>
         <div id="onboarding-purpose" class="hidden">
-          <h3 tabindex="-1" data-i18n="onboarding:purpose.heading">EasyPaper를 어떤 용도로 사용하시나요?</h3>
+          <h3 id="onboarding-purpose-heading" tabindex="-1" data-i18n="onboarding:purpose.heading">EasyPaper를 어떤 용도로 사용하시나요?</h3>
           <p class="onboarding-purpose-help" data-i18n="onboarding:purpose.help">기본 작업공간만 정하며 문서를 자동 분류하지 않습니다. 나중에 사이드바에서 언제든 변경할 수 있습니다.</p>
-          <div class="onboarding-purpose-cards" role="radiogroup">
+          <div class="onboarding-purpose-cards" role="radiogroup" aria-labelledby="onboarding-purpose-heading">
             <button type="button" class="onboarding-card" data-purpose-mode="research" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.research">연구 논문 중심</strong><span data-i18n="onboarding:purpose.researchHelp">논문 번역, 읽기 전 브리핑, 논문 비교, Research Graph</span></button>
-            <button type="button" class="onboarding-card" data-purpose-mode="general" role="radio" aria-checked="false"><strong data-i18n="onboarding:purpose.general">일반 문서 중심</strong><span data-i18n="onboarding:purpose.generalHelp">기술 문서, 책, 아티클, 보고서, 매뉴얼 번역과 문서 AI</span></button>
+            <button type="button" class="onboarding-card" data-purpose-mode="general" role="radio" aria-checked="false" tabindex="-1"><strong data-i18n="onboarding:purpose.general">일반 문서 중심</strong><span data-i18n="onboarding:purpose.generalHelp">기술 문서, 책, 아티클, 보고서, 매뉴얼 번역과 문서 AI</span></button>
           </div>
           <p id="onboarding-purpose-error" role="alert"></p>
           <div class="onboarding-actions"><button type="button" id="onboarding-purpose-next-btn" class="btn btn-primary" disabled data-i18n="onboarding:next">다음</button></div>
@@ -1182,7 +1204,7 @@
         <div class="modal-form shortcut-settings">
           <p class="shortcut-note" data-i18n="settings:shortcutsBrowserNote">Ctrl/Cmd means Ctrl on Windows and Linux or Command on macOS. Browsers may handle some reserved shortcuts first. Shortcuts work in their respective screens; memo shortcuts take priority while editing. Workspace shortcuts are disabled while a modal is open.</p>
           <section class="shortcut-group" aria-labelledby="shortcut-workspace-heading">
-            <h4 id="shortcut-workspace-heading" data-i18n="settings:shortcutsWorkspace">Workspace and tabs</h4>
+            <h3 id="shortcut-workspace-heading" data-i18n="settings:shortcutsWorkspace">Workspace and tabs</h3>
             <dl>
               <div><dt data-i18n="viewer:comfort.commandSearch">Search and commands</dt><dd><kbd>Ctrl/Cmd+K</kbd></dd></div>
               <div><dt data-i18n="settings:shortcutSidebar">Collapse or expand sidebar</dt><dd><kbd>Ctrl/Cmd+B</kbd></dd></div>
@@ -1199,7 +1221,7 @@
             </dl>
           </section>
           <section class="shortcut-group" aria-labelledby="shortcut-viewer-heading">
-            <h4 id="shortcut-viewer-heading" data-i18n="settings:shortcutsViewer">Document viewer</h4>
+            <h3 id="shortcut-viewer-heading" data-i18n="settings:shortcutsViewer">Document viewer</h3>
             <dl>
               <div><dt data-i18n="settings:shortcutFind">Find in document</dt><dd><kbd>Ctrl/Cmd+F</kbd></dd></div>
               <div><dt data-i18n="settings:shortcutFindResults">Next or previous search result</dt><dd><kbd>Enter</kbd> <kbd>Shift+Enter</kbd></dd></div>
@@ -1213,7 +1235,7 @@
             </dl>
           </section>
           <section class="shortcut-group" aria-labelledby="shortcut-library-heading">
-            <h4 id="shortcut-library-heading" data-i18n="settings:shortcutsLibrary">Library</h4>
+            <h3 id="shortcut-library-heading" data-i18n="settings:shortcutsLibrary">Library</h3>
             <dl>
               <div><dt data-i18n="settings:shortcutHistory">Go back or forward</dt><dd><kbd>Ctrl/Cmd+[</kbd> <kbd>Ctrl/Cmd+]</kbd></dd></div>
               <div><dt data-i18n="settings:shortcutLibraryUndo">Undo recent action</dt><dd><kbd>Ctrl/Cmd+Z</kbd></dd></div>
@@ -1224,7 +1246,7 @@
             </dl>
           </section>
           <section class="shortcut-group" aria-labelledby="shortcut-memo-heading">
-            <h4 id="shortcut-memo-heading" data-i18n="settings:shortcutsMemo">Memo editing</h4>
+            <h3 id="shortcut-memo-heading" data-i18n="settings:shortcutsMemo">Memo editing</h3>
             <dl>
               <div><dt data-i18n="settings:shortcutMemoInline">Bold, italic, link, or inline code</dt><dd><kbd>Ctrl/Cmd+B</kbd> <kbd>Ctrl/Cmd+I</kbd> <kbd>Ctrl/Cmd+K</kbd> <kbd>Ctrl/Cmd+E</kbd></dd></div>
               <div><dt data-i18n="settings:shortcutMemoBlock">Strikethrough or code block</dt><dd><kbd>Ctrl/Cmd+Shift+X</kbd> <kbd>Ctrl/Cmd+Shift+C</kbd></dd></div>
@@ -1343,7 +1365,7 @@
                     <svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                     가상환경(.venv)에 설치 중입니다...
                   </div>
-                  <pre id="pdf-parser-inline-log" style="width: 100%; height: 140px; background: #0d1117; color: #c9d1d9; border-radius: 6px; padding: 10px; font-family: var(--font-mono); font-size: 11px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin: 0; border: 1px solid var(--border-strong); box-sizing: border-radius;"></pre>
+                  <pre id="pdf-parser-inline-log" style="width: 100%; height: 140px; background: #0d1117; color: #c9d1d9; border-radius: 6px; padding: 10px; font-family: var(--font-mono); font-size: 11px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin: 0; border: 1px solid var(--border-strong); box-sizing: border-box;"></pre>
                 </div>
               </div>
             </div>
@@ -1477,7 +1499,7 @@
               <span id="pull-pct-text" style="font-weight: 600; color: var(--accent-mid);">0%</span>
             </div>
             <div class="progress-bar-wrap" style="height: 6px; background: rgba(255, 255, 255, 0.05); border-radius: 3px; overflow: hidden;">
-              <div id="pull-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); transition: width 0.2s;"></div>
+              <div id="pull-progress-bar" style="width: 0%; height: 100%; background: var(--control-accent); transition: width 0.2s;"></div>
             </div>
           </div>
         </div>
@@ -1512,7 +1534,7 @@
           <!-- 로그인 생략 설정 -->
           <div class="form-group" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
             <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>로그인 생략</h3>
-            <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
+            <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.32); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
               <strong>보안 경고:</strong> 켜면 이 서버에 네트워크로 접근 가능한 모든 사람이 로그인 없이 전체 기능을 쓸 수 있습니다.
               여기에는 논문 열람뿐 아니라 시스템 업데이트(서버 재시작)와 Ollama/CLI 원격 설치처럼 서버에 소프트웨어를 설치·재시작시킬 수 있는 관리 기능도 포함됩니다.
               다른 사람이 접근할 수 없는 개인 PC/로컬 환경에서만 켜세요.
@@ -1609,7 +1631,7 @@
 
           <div id="system-update-section" class="form-group">
             <label>시스템 업데이트 (System Update)</label>
-            <div style="background: rgba(139, 92, 246, 0.1); border-left: 4px solid var(--accent-mid); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
+            <div style="background: var(--control-accent-soft); border: 1px solid color-mix(in srgb, var(--control-accent) 32%, var(--border-strong)); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><strong>GitHub 최신 업데이트 확인 및 자동 빌드:</strong><br>
               아래 버튼을 누르면 GitHub 저장소로부터 최신 코드를 풀(Pull) 받고,<br>
               변경된 내용이 있을 경우 프론트엔드를 자동 빌드한 뒤 EasyPaper 데몬 서비스를 즉시 재기동합니다.
@@ -1642,7 +1664,7 @@
 
           <div id="tauri-update-section" class="form-group hidden">
             <label>앱 업데이트 (App Update)</label>
-            <div style="background: rgba(139, 92, 246, 0.1); border-left: 4px solid var(--accent-mid); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
+            <div style="background: var(--control-accent-soft); border: 1px solid color-mix(in srgb, var(--control-accent) 32%, var(--border-strong)); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><strong>데스크탑 앱 업데이트:</strong><br>
               아래 버튼을 누르면 새 버전이 있는지 확인합니다. 새 버전이 있으면 다운로드 후 설치하고 앱을 자동으로 재시작합니다.
             </div>
@@ -1698,7 +1720,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
       </button>
       <div class="doc-preview-hero">
-        <img id="doc-preview-cover-img" class="doc-preview-cover-img" alt="" />
+        <img id="doc-preview-cover-img" class="doc-preview-cover-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" />
         <div class="doc-preview-gradient"></div>
         <div class="doc-preview-hero-content">
           <div class="doc-preview-title-row">
@@ -1774,7 +1796,7 @@
                 <span class="primer-label-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span>
                 <span>핵심 그림 먼저 보기</span>
               </div>
-              <img id="primer-figure-img" class="primer-figure-img" src="" alt="대표 Figure" />
+              <img id="primer-figure-img" class="primer-figure-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="대표 Figure" />
             </div>
 
             <div id="primer-checklist-section" class="hidden">

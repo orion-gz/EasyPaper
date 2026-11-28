@@ -34,7 +34,7 @@ body[data-theme-id] .toast.success { border-color: var(--success); }
 body[data-theme-id] .toast.warning { border-color: var(--warning); }
 body[data-theme-id] .toast.error { color: var(--error); border-color: var(--error); }
 body[data-theme-id].document-workspace-runtime #chat-sidebar { background: var(--chat-bg); color: var(--chat-text); border-color: var(--chat-border); }
-body[data-theme-id] :is(.provider-picker-panel, .upload-popup-body) { background: var(--bg-panel); }
+body[data-theme-id] :is(.provider-picker-panel, .upload-popup-body) { background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-base); }
 body[data-theme-id] a:not([class]) { color: var(--link); }
 body[data-theme-id] :focus-visible, .theme-preview :focus-visible { outline-color: var(--focus-ring); }
 body[data-theme-id] ::selection, .theme-preview ::selection { background: var(--selection-bg); color: var(--selection-text); }

@@ -252,9 +252,33 @@ class CustomSelectPicker {
     this.button.setAttribute('aria-haspopup', 'listbox')
     this.button.setAttribute('aria-expanded', 'false')
     const pickerId = select.id || 'custom-select-' + CustomSelectPicker.nextId++
-    const label = select.id ? document.querySelector(`label[for="${CSS.escape(select.id)}"]`) : null
-    if (label && !label.id) label.id = pickerId + '-label'
-    const labelledBy = select.getAttribute('aria-labelledby') || label?.id || ''
+    const explicitLabel = select.id ? document.querySelector(`label[for="${CSS.escape(select.id)}"]`) : null
+    const wrappingLabel = select.closest('label')
+    let labelId = ''
+    if (explicitLabel && !explicitLabel.contains(this.container)) {
+      if (!explicitLabel.id) explicitLabel.id = pickerId + '-label'
+      labelId = explicitLabel.id
+    } else if (wrappingLabel) {
+      let labelTextEl = [...wrappingLabel.childNodes].find(node => node !== this.container && node.textContent?.trim())
+      if (labelTextEl?.nodeType === Node.TEXT_NODE) {
+        const span = document.createElement('span')
+        span.textContent = labelTextEl.textContent
+        wrappingLabel.replaceChild(span, labelTextEl)
+        labelTextEl = span
+      }
+      if (labelTextEl?.nodeType === Node.ELEMENT_NODE) {
+        if (!labelTextEl.id) labelTextEl.id = pickerId + '-label'
+        labelId = labelTextEl.id
+      }
+      wrappingLabel.addEventListener('click', (event) => {
+        if (!this.container.contains(event.target)) {
+          event.preventDefault()
+          this.button.focus()
+          if (!this.container.classList.contains('open')) this.open()
+        }
+      })
+    }
+    const labelledBy = select.getAttribute('aria-labelledby') || labelId || ''
     this.button.setAttribute('aria-labelledby', [labelledBy, pickerId + '-picker-value'].filter(Boolean).join(' '))
     this.button.innerHTML = '<span id="' + pickerId + '-picker-value" class="picker-label"></span><span class="picker-arrow" aria-hidden="true">▾</span>'
     this.panel = document.createElement('div')
@@ -268,6 +292,12 @@ class CustomSelectPicker {
       this.container.classList.contains('open') ? this.close() : this.open()
     })
     this.button.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && this.container.classList.contains('open')) {
+        event.preventDefault()
+        event.stopPropagation()
+        this.close()
+        return
+      }
       if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return
       event.preventDefault()
       this.open()
@@ -287,13 +317,28 @@ class CustomSelectPicker {
     document.querySelectorAll('.custom-select-picker.open .provider-picker-btn').forEach(button => {
       button.setAttribute('aria-expanded', 'false')
     })
-    document.querySelectorAll('.provider-picker.open').forEach(picker => picker.classList.remove('open'))
+    document.querySelectorAll('.provider-picker.open').forEach(picker => picker.classList.remove('open', 'open-upward'))
+    this.container.classList.remove('open-upward')
+    this.panel.style.maxHeight = ''
     this.rebuildPanel()
     this.container.classList.add('open')
     this.button.setAttribute('aria-expanded', 'true')
+    const btnRect = this.button.getBoundingClientRect()
+    if (btnRect.height > 0) {
+      const clipHost = this.button.closest('.onboarding-body, .modal-content, .tab-pane')
+      const hostRect = clipHost ? clipHost.getBoundingClientRect() : { top: 8, bottom: window.innerHeight - 8 }
+      const spaceBelow = hostRect.bottom - btnRect.bottom - 10
+      const spaceAbove = btnRect.top - hostRect.top - 10
+      if (spaceBelow < 210 && spaceAbove > spaceBelow) {
+        this.container.classList.add('open-upward')
+        this.panel.style.maxHeight = `${Math.max(120, Math.min(300, Math.floor(spaceAbove)))}px`
+      } else {
+        this.panel.style.maxHeight = `${Math.max(120, Math.min(320, Math.floor(spaceBelow)))}px`
+      }
+    }
   }
   close({ focus = false } = {}) {
-    this.container.classList.remove('open')
+    this.container.classList.remove('open', 'open-upward')
     this.button.setAttribute('aria-expanded', 'false')
     if (focus) this.button.focus()
   }
@@ -333,6 +378,7 @@ class CustomSelectPicker {
         else if (event.key === 'End') nextIndex = items.length - 1
         else if (event.key === 'Escape') {
           event.preventDefault()
+          event.stopPropagation()
           this.close({ focus: true })
           return
         }
@@ -473,13 +519,13 @@ async function handleLocaleSelector(event) {
 const modalTriggerElements = new WeakMap()
 const modalCloseTimers = new WeakMap()
 const modalFocusableSelector = [
-  '[autofocus]',
-  'button:not([disabled])',
-  'a[href]',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])'
+  '[autofocus]:not([disabled]):not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  'button:not([disabled]):not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  'a[href]:not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  'input:not([disabled]):not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  'select:not([disabled]):not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  'textarea:not([disabled]):not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)',
+  '[tabindex]:not([tabindex="-1"]):not([aria-hidden="true"]):not(.sr-only)'
 ].join(',')
 
 function openOverlayModal(modal) {
@@ -492,7 +538,7 @@ function openOverlayModal(modal) {
     modalCloseTimers.delete(modal)
   }
   const trigger = document.activeElement
-  if (trigger instanceof HTMLElement && trigger !== document.body) {
+  if (trigger instanceof HTMLElement && trigger !== document.body && !modal.contains(trigger)) {
     modalTriggerElements.set(modal, trigger)
   }
   modal.classList.remove('hidden')
@@ -500,6 +546,10 @@ function openOverlayModal(modal) {
   modal.classList.add('is-visible')
   window.requestAnimationFrame(() => {
     if (!modal.classList.contains('is-visible')) return
+    const active = document.activeElement
+    if (active instanceof HTMLElement && modal.contains(active) && active !== modal && active.getAttribute('aria-hidden') !== 'true' && !active.classList.contains('sr-only')) {
+      return
+    }
     const focusTarget = modal.querySelector(modalFocusableSelector)
     if (focusTarget instanceof HTMLElement) focusTarget.focus()
   })
@@ -577,7 +627,7 @@ async function maybeShowOnboarding(force = false) {
       },
     })
   }
-  onboardingController.maybeShowOnboarding()
+  onboardingController.maybeShowOnboarding({ restart: force })
 }
 
 $('restart-onboarding')?.addEventListener('click', () => {

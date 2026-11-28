@@ -7322,5 +7322,26 @@
   },
   "viewer:kebab.sectionDisplay": {
     "description": "Section heading inside the viewer overflow menu for memo visibility and theme toggle."
+  },
+  "onboarding:stepperAria": {
+    "description": "Accessible label for the horizontal onboarding step progress list."
+  },
+  "onboarding:stepPurpose": {
+    "description": "Step 1 label in the onboarding stepper for selecting default workspace purpose."
+  },
+  "onboarding:stepLocation": {
+    "description": "Step 2 label in the onboarding stepper for choosing local, remote, or team connection."
+  },
+  "onboarding:stepEngine": {
+    "description": "Step 3 label in the onboarding stepper for configuring or installing the inference engine."
+  },
+  "onboarding:stepModel": {
+    "description": "Step 4 label in the onboarding stepper for choosing and testing the translation model."
+  },
+  "onboarding:stepCompleted": {
+    "description": "Screen-reader status suffix announcing that an onboarding step has been completed."
+  },
+  "onboarding:close": {
+    "description": "Accessible label for the close button on the first-run onboarding dialog."
   }
 }
