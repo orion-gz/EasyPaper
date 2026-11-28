@@ -7378,19 +7378,18 @@ body.light-theme .chat-drawer {
   }
 }
 
-/* 키워드/단어 탭 용어 클릭 시 원문 위치 하이라이트 - 스크롤이 끝난 뒤에 표시되므로
-   citation 클릭용 pulse보다 오래 보이도록 별도 애니메이션을 둔다(일정 시간 유지 후 페이드) */
-@keyframes locateHighlightPulse {
-  0%   { background-color: rgba(74, 135, 181, 0.55); }
-  65%  { background-color: rgba(74, 135, 181, 0.55); }
-  100% { background-color: transparent; }
-}
-.sentence-locate-pulse-box {
+.sentence-located-box {
   position: absolute;
-  pointer-events: none !important;
+  pointer-events: none;
   border-radius: 2px;
-  outline: 2px solid rgba(74, 135, 181, 0.45);
-  animation: locateHighlightPulse 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  background: rgba(74, 135, 181, 0.35);
+  outline: 2px solid rgba(74, 135, 181, 0.8);
+}
+
+.source-location-feedback {
+  display: block;
+  margin-block: 0.5em;
+  overflow-wrap: anywhere;
 }
 
 /* 좌측 마진 줄 번호 노이즈 스팬 (선택/포인터 이벤트 비활성) */

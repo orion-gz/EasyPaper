@@ -1,4 +1,5 @@
 {
+  "sourceLocation.missing": "Could not locate this passage on page {{page}}. Compare the source with this quote: “{{quote}}”",
   "readingPane.label": "Reading pane",
   "readingPane.source": "Original",
   "readingPane.translation": "Translation",
