@@ -1,4 +1,16 @@
 {
+  "viewer:sourceLocation.missing": {
+    "description": "Message shown when a quoted passage cannot be located. Includes the page number and the quote for manual comparison."
+  },
+  "viewer:readingPane.label": {
+    "description": "Accessible name for the group of buttons that switch reading panes."
+  },
+  "viewer:readingPane.source": {
+    "description": "Button that displays the original document in the compact reader."
+  },
+  "viewer:readingPane.translation": {
+    "description": "Button that displays the translated document in the compact reader."
+  },
   "settings:reasoningEffort": {
     "description": "Label for the reasoning effort slider in model settings."
   },
