@@ -60,7 +60,7 @@ test('all commands are discoverable; help, document search and recent results wo
   await setup(page)
   await run(page, '/help')
   await expect(input(page)).toHaveValue('/')
-  await expect(options(page)).toHaveCount(43)
+  await expect(options(page)).toHaveCount(42)
   for (const id of ['upload', 'import-url', 'page', 'bookmark', 'summarize', 'copy-citation', 'reopen-tab']) await expect(page.locator('#reader-command-results')).toContainText(`/${id}`)
   await run(page, '/open')
   await expect(options(page)).toHaveCount(3)

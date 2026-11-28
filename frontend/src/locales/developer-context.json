@@ -7283,5 +7283,14 @@
   },
   "chat:compare.promptLimits": {
     "description": "Starter prompt chip in compare chat asking about shared limitations."
+  },
+  "viewer:comfort.paletteNavigate": {
+    "description": "Footer keyboard legend label for Up/Down navigation in the command palette."
+  },
+  "viewer:comfort.paletteSelect": {
+    "description": "Footer keyboard legend label for Enter execution in the command palette."
+  },
+  "viewer:comfort.paletteClose": {
+    "description": "Footer keyboard legend label for Escape dismissal in the command palette."
   }
 }
